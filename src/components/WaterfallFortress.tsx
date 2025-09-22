@@ -84,7 +84,14 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
         event.preventDefault();
         break;
       case 'KeyR':
-        setCrosshairsEnabled(!crosshairsEnabled);
+        const newCrosshairsState = !crosshairsEnabled;
+        setCrosshairsEnabled(newCrosshairsState);
+        
+        // Play appropriate gun sound
+        const soundFile = newCrosshairsState ? '/pistol_cocking_sound.mp3' : '/holster_pistol_sound.mp3';
+        const audio = new Audio(soundFile);
+        audio.volume = 0.5;
+        audio.play().catch(() => {});
         break;
       case 'Escape':
         if (isLocked.current) {
