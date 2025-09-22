@@ -486,7 +486,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                      onClick={() => savePendingChanges()}
                      size="sm"
                      variant="outline"
-                     className="border-primary/50 hover:bg-primary/10"
+                     className="border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white"
                    >
                      💾 Save Positions
                    </Button>
