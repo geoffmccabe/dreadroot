@@ -58,6 +58,7 @@ export const useBillboardData = () => {
 
   const fetchData = async () => {
     try {
+      console.log('🔄 Fetching billboard data from database...');
       setLoading(true);
       
       const { data: wallsData } = await supabase
@@ -76,6 +77,12 @@ export const useBillboardData = () => {
         .order('wall_id, slot_number');
 
       if (wallsData) {
+        console.log('📍 Loaded wall positions from database:', wallsData.map(w => ({
+          wall: w.wall_number,
+          position: { x: w.position_x, y: w.position_y, z: w.position_z },
+          rotation: { x: w.rotation_x, y: w.rotation_y, z: w.rotation_z }
+        })));
+        
         const typedWalls = wallsData.map(wall => ({
           ...wall,
           wall_type: wall.wall_type as 'screen' | 'media-grid'
@@ -89,6 +96,7 @@ export const useBillboardData = () => {
       }
       
       if (urlsData) {
+        console.log('🔗 Loaded screen URLs:', urlsData.length, 'records');
         setScreenUrls(urlsData as ScreenUrl[]);
         originalData.current.screenUrls.clear();
         urlsData.forEach(url => {
@@ -97,6 +105,7 @@ export const useBillboardData = () => {
       }
       
       if (mediaData) {
+        console.log('🖼️ Loaded media items:', mediaData.length, 'records');
         const typedMedia = mediaData.map(item => ({
           ...item,
           media_type: item.media_type as 'image' | 'video' | null
@@ -108,7 +117,7 @@ export const useBillboardData = () => {
         });
       }
     } catch (error) {
-      console.error('Error fetching billboard data:', error);
+      console.error('❌ Error fetching billboard data:', error);
     } finally {
       setLoading(false);
     }
@@ -121,6 +130,7 @@ export const useBillboardData = () => {
 
       // Save changed walls
       if (pendingChanges.current.walls.size > 0) {
+        console.log(`Saving ${pendingChanges.current.walls.size} wall position changes...`);
         const wallsToUpdate = walls.filter(wall => 
           pendingChanges.current.walls.has(wall.id)
         );
@@ -135,20 +145,30 @@ export const useBillboardData = () => {
             original.rotation_y !== wall.rotation_y ||
             original.rotation_z !== wall.rotation_z
           )) {
+            console.log(`Updating wall ${wall.wall_number} position:`, {
+              from: { x: original.position_x, y: original.position_y, z: original.position_z },
+              to: { x: wall.position_x, y: wall.position_y, z: wall.position_z }
+            });
+            
             promises.push(
-              Promise.resolve(
-                supabase
-                  .from('billboard_walls')
-                  .update({
-                    position_x: wall.position_x,
-                    position_y: wall.position_y,
-                    position_z: wall.position_z,
-                    rotation_x: wall.rotation_x,
-                    rotation_y: wall.rotation_y,
-                    rotation_z: wall.rotation_z
-                  })
-                  .eq('id', wall.id)
-              )
+              Promise.resolve(supabase
+                .from('billboard_walls')
+                .update({
+                  position_x: wall.position_x,
+                  position_y: wall.position_y,
+                  position_z: wall.position_z,
+                  rotation_x: wall.rotation_x,
+                  rotation_y: wall.rotation_y,
+                  rotation_z: wall.rotation_z
+                })
+                .eq('id', wall.id)
+                .then(({ error }) => {
+                  if (error) {
+                    console.error('Error updating wall position:', error);
+                  } else {
+                    console.log(`Wall ${wall.wall_number} position saved successfully`);
+                  }
+                }))
             );
             // Update original data
             originalData.current.walls.set(wall.id, { ...wall });
@@ -159,6 +179,7 @@ export const useBillboardData = () => {
 
       // Save changed screen URLs
       if (pendingChanges.current.screenUrls.size > 0) {
+        console.log(`Saving ${pendingChanges.current.screenUrls.size} screen URL changes...`);
         const urlsToUpdate = screenUrls.filter(url => 
           pendingChanges.current.screenUrls.has(url.id)
         );
@@ -167,12 +188,17 @@ export const useBillboardData = () => {
           const original = originalData.current.screenUrls.get(url.id);
           if (original && original.url !== url.url) {
             promises.push(
-              Promise.resolve(
-                supabase
-                  .from('screen_urls')
-                  .update({ url: url.url })
-                  .eq('id', url.id)
-              )
+              Promise.resolve(supabase
+                .from('screen_urls')
+                .update({ url: url.url })
+                .eq('id', url.id)
+                .then(({ error }) => {
+                  if (error) {
+                    console.error('Error updating screen URL:', error);
+                  } else {
+                    console.log('Screen URL saved successfully');
+                  }
+                }))
             );
             originalData.current.screenUrls.set(url.id, { ...url });
           }
@@ -182,6 +208,7 @@ export const useBillboardData = () => {
 
       // Save changed media items
       if (pendingChanges.current.mediaItems.size > 0) {
+        console.log(`Saving ${pendingChanges.current.mediaItems.size} media item changes...`);
         const itemsToUpdate = mediaItems.filter(item => 
           pendingChanges.current.mediaItems.has(item.id)
         );
@@ -193,15 +220,20 @@ export const useBillboardData = () => {
             original.media_type !== item.media_type
           )) {
             promises.push(
-              Promise.resolve(
-                supabase
-                  .from('media_grid_items')
-                  .update({ 
-                    media_url: item.media_url, 
-                    media_type: item.media_type 
-                  })
-                  .eq('id', item.id)
-              )
+              Promise.resolve(supabase
+                .from('media_grid_items')
+                .update({ 
+                  media_url: item.media_url, 
+                  media_type: item.media_type 
+                })
+                .eq('id', item.id)
+                .then(({ error }) => {
+                  if (error) {
+                    console.error('Error updating media item:', error);
+                  } else {
+                    console.log('Media item saved successfully');
+                  }
+                }))
             );
             originalData.current.mediaItems.set(item.id, { ...item });
           }
@@ -211,7 +243,9 @@ export const useBillboardData = () => {
 
       if (promises.length > 0) {
         await Promise.all(promises);
-        console.log(`Saved ${promises.length} changes to database`);
+        console.log(`✅ Saved ${promises.length} changes to database`);
+      } else {
+        console.log('No pending changes to save');
       }
     } catch (error) {
       console.error('Error saving pending changes:', error);
