@@ -423,7 +423,7 @@ export const useBillboardData = () => {
   useEffect(() => {
     fetchData();
 
-    // Set up real-time subscriptions
+    // Set up real-time subscriptions with debouncing to prevent flashing
     const wallsChannel = supabase
       .channel('billboard_walls_changes')
       .on('postgres_changes', 
@@ -435,15 +435,25 @@ export const useBillboardData = () => {
               position: { x: updatedWall.position_x, y: updatedWall.position_y, z: updatedWall.position_z }
             });
             
-            // Only update if we don't have pending changes for this wall
-            if (!pendingChanges.current.walls.has(updatedWall.id)) {
+            // Only update if we don't have pending changes for this wall AND position actually changed
+            const currentWall = walls.find(w => w.id === updatedWall.id);
+            const positionChanged = !currentWall || 
+              currentWall.position_x !== updatedWall.position_x ||
+              currentWall.position_y !== updatedWall.position_y ||
+              currentWall.position_z !== updatedWall.position_z ||
+              currentWall.rotation_x !== updatedWall.rotation_x ||
+              currentWall.rotation_y !== updatedWall.rotation_y ||
+              currentWall.rotation_z !== updatedWall.rotation_z;
+            
+            if (!pendingChanges.current.walls.has(updatedWall.id) && positionChanged) {
               setWalls(prev => prev.map(wall => 
                 wall.id === updatedWall.id ? updatedWall : wall
               ));
               originalData.current.walls.set(updatedWall.id, { ...updatedWall });
               console.log('📡 Applied real-time update for wall', updatedWall.wall_number);
             } else {
-              console.log('📡 Skipped real-time update for wall', updatedWall.wall_number, '(has pending changes)');
+              console.log('📡 Skipped real-time update for wall', updatedWall.wall_number, 
+                pendingChanges.current.walls.has(updatedWall.id) ? '(has pending changes)' : '(no position change)');
             }
           }
         }

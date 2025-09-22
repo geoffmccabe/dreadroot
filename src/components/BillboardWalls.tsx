@@ -162,7 +162,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     }, []);
 
     return (
-      <group key={`wall1-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
+      <group position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
@@ -231,7 +231,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     const slotHeight = wallHeight / 2; // 2 rows
     
     return (
-      <group key={`wall${wallNumber}-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
+      <group position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
@@ -257,7 +257,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     );
   };
 
-  // Individual media slot component with real-time texture loading
+  // Individual media slot component with stable texture loading
   const MediaSlot = ({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
@@ -267,51 +267,46 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     const [texture, setTexture] = useState<THREE.Texture | null>(null);
     const [loading, setLoading] = useState(false);
     
-    // Use useMemo to create a stable texture when URL doesn't change (prevents flashing)
-    const stableTexture = useMemo(() => {
+    // Only load texture when mediaUrl changes - prevent constant reloading
+    useEffect(() => {
       if (!mediaUrl || mediaType !== 'image') {
-        return null;
+        setTexture(null);
+        setLoading(false);
+        return;
       }
-
-      console.log('Loading new texture for:', mediaUrl);
+      
+      // Don't reload if we already have a texture for this URL
+      if (texture && texture.userData?.sourceUrl === mediaUrl) {
+        return;
+      }
+      
+      console.log('Loading texture for:', mediaUrl);
       setLoading(true);
       
       const loader = new THREE.TextureLoader();
       
-      // Create a promise to handle the loading
-      const texturePromise = new Promise<THREE.Texture>((resolve, reject) => {
-        loader.load(
-          mediaUrl,
-          (loadedTexture) => {
-            loadedTexture.needsUpdate = true;
-            loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
-            loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
-            loadedTexture.minFilter = THREE.LinearFilter;
-            loadedTexture.magFilter = THREE.LinearFilter;
-            resolve(loadedTexture);
-          },
-          undefined,
-          (error) => {
-            console.warn('Failed to load texture:', mediaUrl, error);
-            reject(error);
-          }
-        );
-      });
-
-      // Handle the promise
-      texturePromise
-        .then((loadedTexture) => {
+      loader.load(
+        mediaUrl,
+        (loadedTexture) => {
+          loadedTexture.needsUpdate = true;
+          loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
+          loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+          loadedTexture.minFilter = THREE.LinearFilter;
+          loadedTexture.magFilter = THREE.LinearFilter;
+          // Store source URL to prevent reloading
+          loadedTexture.userData = { sourceUrl: mediaUrl };
           setTexture(loadedTexture);
           setLoading(false);
           console.log('Texture loaded successfully:', mediaUrl);
-        })
-        .catch(() => {
+        },
+        undefined,
+        (error) => {
+          console.warn('Failed to load texture:', mediaUrl, error);
           setTexture(null);
           setLoading(false);
-        });
-
-      return texture; // Return current texture while loading
-    }, [mediaUrl, mediaType]); // Only recreate when URL or type changes
+        }
+      );
+    }, [mediaUrl, mediaType]);
     
     return (
       <mesh position={position}>
