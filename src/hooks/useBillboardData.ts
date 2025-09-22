@@ -296,17 +296,21 @@ export const useBillboardData = () => {
   };
 
   const updateMediaItem = async (wallId: string, slotNumber: number, mediaUrl: string | null, mediaType: 'image' | 'video' | null) => {
-    console.log('updateMediaItem called with:', { wallId, slotNumber, mediaUrl, mediaType });
-    console.log('Current mediaItems:', mediaItems.length, 'items');
+    console.log('🖼️ updateMediaItem called with:', { wallId, slotNumber, mediaUrl, mediaType });
+    console.log('🖼️ Current mediaItems:', mediaItems.length, 'items');
     
     // Find the media item record
     let mediaItem = mediaItems.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
-    console.log('Found mediaItem:', mediaItem);
+    console.log('🖼️ Found mediaItem:', mediaItem);
     
     if (!mediaItem) {
-      console.error('Media item not found for wallId:', wallId, 'slotNumber:', slotNumber);
-      console.log('Available media items:', mediaItems.map(m => ({ wall_id: m.wall_id, slot_number: m.slot_number })));
-      return;
+      console.error('❌ Media item not found for wallId:', wallId, 'slotNumber:', slotNumber);
+      console.log('🖼️ Available media items:', mediaItems.map(m => ({ 
+        id: m.id.substring(0, 8) + '...', 
+        wall_id: m.wall_id.substring(0, 8) + '...', 
+        slot_number: m.slot_number 
+      })));
+      return false;
     }
 
     // Update local state immediately  
@@ -314,13 +318,40 @@ export const useBillboardData = () => {
       const updated = prev.map(m => 
         m.id === mediaItem.id ? { ...m, media_url: mediaUrl, media_type: mediaType } : m
       );
-      console.log('Updated local mediaItems state');
+      console.log('✅ Updated local mediaItems state for slot', slotNumber);
       return updated;
     });
 
     // Mark as pending change
     pendingChanges.current.mediaItems.add(mediaItem.id);
-    console.log('Added to pending changes:', mediaItem.id);
+    console.log('📝 Added to pending changes:', mediaItem.id.substring(0, 8) + '...');
+    
+    // Immediately save the media item change
+    try {
+      console.log('💾 Immediately saving media item change...');
+      const { error } = await supabase
+        .from('media_grid_items')
+        .update({ 
+          media_url: mediaUrl, 
+          media_type: mediaType 
+        })
+        .eq('id', mediaItem.id);
+        
+      if (error) {
+        console.error('❌ Error saving media item:', error);
+        return false;
+      } else {
+        console.log('✅ Media item saved successfully to database');
+        // Update original data
+        originalData.current.mediaItems.set(mediaItem.id, { ...mediaItem, media_url: mediaUrl, media_type: mediaType });
+        // Remove from pending since it's saved
+        pendingChanges.current.mediaItems.delete(mediaItem.id);
+        return true;
+      }
+    } catch (error) {
+      console.error('❌ Exception saving media item:', error);
+      return false;
+    }
   };
 
   const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {

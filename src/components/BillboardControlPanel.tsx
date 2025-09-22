@@ -28,6 +28,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   // Ref to track active intervals for cleanup
   const activeIntervals = useRef<Set<NodeJS.Timeout>>(new Set());
 
+  // Move the visibility check after all hooks - CRITICAL for Rules of Hooks
   if (!isVisible) return null;
   
   const wall1 = walls.find(w => w.wall_number === 1);
@@ -62,28 +63,42 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   const handleFileUpload = async (wallNumber: number, slotNumber: number, file: File) => {
     const wall = walls.find(w => w.wall_number === wallNumber);
     if (!wall) {
-      console.error('Wall not found:', wallNumber);
+      console.error('❌ Wall not found:', wallNumber);
+      toast({
+        title: "Upload Failed",
+        description: `Wall ${wallNumber} not found.`,
+        variant: "destructive"
+      });
       return;
     }
 
-    console.log('Starting file upload for wall', wallNumber, 'slot', slotNumber);
+    console.log('🚀 Starting file upload for wall', wallNumber, 'slot', slotNumber);
     
     try {
       const mediaUrl = await uploadMedia(file);
-      console.log('Upload result:', mediaUrl);
+      console.log('📤 Upload result:', mediaUrl);
       
       if (mediaUrl) {
         const mediaType = file.type.startsWith('image/') ? 'image' : 'video';
-        console.log('Updating media item with:', { wallId: wall.id, slotNumber, mediaUrl, mediaType });
+        console.log('💾 Updating media item with:', { wallId: wall.id, slotNumber, mediaUrl, mediaType });
         
-        await updateMediaItem(wall.id, slotNumber, mediaUrl, mediaType);
+        const updateSuccess = await updateMediaItem(wall.id, slotNumber, mediaUrl, mediaType);
         
-        toast({
-          title: "Media Uploaded",
-          description: `Media has been uploaded to Wall ${wallNumber}, Slot ${slotNumber}.`
-        });
+        if (updateSuccess) {
+          toast({
+            title: "Media Uploaded",
+            description: `Media has been uploaded to Wall ${wallNumber}, Slot ${slotNumber}.`
+          });
+        } else {
+          console.error('❌ Failed to save media item to database');
+          toast({
+            title: "Save Failed",
+            description: "Media uploaded but failed to save to database.",
+            variant: "destructive"
+          });
+        }
       } else {
-        console.error('Upload failed - no URL returned');
+        console.error('❌ Upload failed - no URL returned');
         toast({
           title: "Upload Failed",
           description: "Failed to upload media file.",
@@ -91,7 +106,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
         });
       }
     } catch (error) {
-      console.error('File upload error:', error);
+      console.error('❌ File upload error:', error);
       toast({
         title: "Upload Error", 
         description: "An error occurred during upload.",

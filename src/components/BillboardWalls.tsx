@@ -266,46 +266,52 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   }) => {
     const [texture, setTexture] = useState<THREE.Texture | null>(null);
     const [loading, setLoading] = useState(false);
-    const [currentUrl, setCurrentUrl] = useState<string | null>(null);
     
-    // Only load texture when mediaUrl actually changes (prevent constant reloading)
-    useEffect(() => {
-      // Prevent unnecessary reloads if URL hasn't changed
-      if (currentUrl === mediaUrl) {
-        return;
-      }
-      
+    // Use useMemo to create a stable texture when URL doesn't change (prevents flashing)
+    const stableTexture = useMemo(() => {
       if (!mediaUrl || mediaType !== 'image') {
-        setTexture(null);
-        setLoading(false);
-        setCurrentUrl(null);
-        return;
+        return null;
       }
-      
+
       console.log('Loading new texture for:', mediaUrl);
       setLoading(true);
-      setCurrentUrl(mediaUrl);
       
       const loader = new THREE.TextureLoader();
       
-      loader.load(
-        mediaUrl,
-        (loadedTexture) => {
-          loadedTexture.needsUpdate = true;
-          loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
-          loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+      // Create a promise to handle the loading
+      const texturePromise = new Promise<THREE.Texture>((resolve, reject) => {
+        loader.load(
+          mediaUrl,
+          (loadedTexture) => {
+            loadedTexture.needsUpdate = true;
+            loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
+            loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+            loadedTexture.minFilter = THREE.LinearFilter;
+            loadedTexture.magFilter = THREE.LinearFilter;
+            resolve(loadedTexture);
+          },
+          undefined,
+          (error) => {
+            console.warn('Failed to load texture:', mediaUrl, error);
+            reject(error);
+          }
+        );
+      });
+
+      // Handle the promise
+      texturePromise
+        .then((loadedTexture) => {
           setTexture(loadedTexture);
           setLoading(false);
           console.log('Texture loaded successfully:', mediaUrl);
-        },
-        undefined,
-        (error) => {
-          console.warn('Failed to load texture:', mediaUrl, error);
+        })
+        .catch(() => {
           setTexture(null);
           setLoading(false);
-        }
-      );
-    }, [mediaUrl, mediaType, currentUrl]);
+        });
+
+      return texture; // Return current texture while loading
+    }, [mediaUrl, mediaType]); // Only recreate when URL or type changes
     
     return (
       <mesh position={position}>
