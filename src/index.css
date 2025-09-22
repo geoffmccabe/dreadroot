@@ -155,7 +155,7 @@ All colors MUST be HSL.
     transform: translateY(-50%);
     width: 6px;
     height: 2px;
-    box-shadow: 25px 0 0 #ff2431;
+    box-shadow: 24px 0 0 #ff2431;
   }
 
   /* Vertical line */
@@ -165,6 +165,6 @@ All colors MUST be HSL.
     transform: translateX(-50%);
     width: 2px;
     height: 6px;
-    box-shadow: 0 25px 0 #ff2431;
+    box-shadow: 0 24px 0 #ff2431;
   }
 }
