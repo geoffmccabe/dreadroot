@@ -43,6 +43,17 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
+    // Get the wall data and extract position values directly
+    const wall1 = walls.find(w => w.wall_number === 1);
+    const posX = wall1?.position_x ?? 0;
+    const posY = wall1?.position_y ?? 0;
+    const posZ = wall1?.position_z ?? 0;
+    const rotX = wall1?.rotation_x ?? 0;
+    const rotY = wall1?.rotation_y ?? 0;
+    const rotZ = wall1?.rotation_z ?? 0;
+
+    console.log('Wall1Screen rendering with position:', [posX, posY, posZ]);
+
     // Create URL text texture only when URL actually changes
     const urlTexture = useMemo(() => {
       const urlString = currentUrl?.url;
@@ -69,17 +80,8 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       return texture;
     }, [currentUrl?.url]);
 
-    // Get the wall data and extract position values directly
-    const wall1 = walls.find(w => w.wall_number === 1);
-    const posX = wall1?.position_x ?? 0;
-    const posY = wall1?.position_y ?? 0;
-    const posZ = wall1?.position_z ?? 0;
-    const rotX = wall1?.rotation_x ?? 0;
-    const rotY = wall1?.rotation_y ?? 0;
-    const rotZ = wall1?.rotation_z ?? 0;
-
     return (
-      <group position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
+      <group key={`wall1-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
@@ -131,6 +133,8 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const rotX = wall?.rotation_x ?? 0;
     const rotY = wall?.rotation_y ?? 0;
     const rotZ = wall?.rotation_z ?? 0;
+
+    console.log(`Wall${wallNumber} rendering with position:`, [posX, posY, posZ]);
     
     // Calculate dimensions based on wall type
     const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
@@ -139,7 +143,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const slotHeight = wallHeight / 2; // 2 rows
     
     return (
-      <group position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
+      <group key={`wall${wallNumber}-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
