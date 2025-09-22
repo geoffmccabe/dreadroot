@@ -291,10 +291,17 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
   const pickColor = useCallback(() => {
     const r = Math.random();
     for (let i = 0; i < cdf.length; i++) {
-      if (r <= cdf[i]) return new THREE.Color(palette[i].hex);
+      if (r <= cdf[i]) {
+        const color = new THREE.Color(palette[i].hex);
+        // Darken colors to compensate for additive blending and lighting
+        color.multiplyScalar(0.4);
+        return color;
+      }
     }
-    return new THREE.Color(palette[palette.length - 1].hex);
-  }, [cdf]);
+    const color = new THREE.Color(palette[palette.length - 1].hex);
+    color.multiplyScalar(0.4);
+    return color;
+  }, [cdf, palette]);
 
   // Halton sequence for better distribution (from original)
   const halton = useCallback((i: number, base: number) => {
@@ -402,7 +409,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
         velocitiesRef.current[i] = 0;
         
-        // Pick new color exactly like original
+        // Pick new color with darkening compensation
         const color = pickColor();
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
@@ -436,10 +443,11 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         size={0.16}
         vertexColors
         transparent
-        opacity={1.0}
+        opacity={0.9}
         depthWrite={false}
         depthTest={true}
-        blending={THREE.AdditiveBlending}
+        blending={THREE.NormalBlending}
+        alphaTest={0.1}
       />
     </points>
   );
