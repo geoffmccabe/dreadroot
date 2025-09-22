@@ -144,6 +144,20 @@ export const useBillboardData = () => {
 
         for (const wall of wallsToUpdate) {
           const original = originalData.current.walls.get(wall.id);
+          console.log('🔍 Checking wall', wall.wall_number, 'for changes:', {
+            wallId: wall.id,
+            original: original ? { x: original.position_x, y: original.position_y, z: original.position_z } : 'NOT_FOUND',
+            current: { x: wall.position_x, y: wall.position_y, z: wall.position_z },
+            hasChanged: original && (
+              original.position_x !== wall.position_x ||
+              original.position_y !== wall.position_y ||
+              original.position_z !== wall.position_z ||
+              original.rotation_x !== wall.rotation_x ||
+              original.rotation_y !== wall.rotation_y ||
+              original.rotation_z !== wall.rotation_z
+            )
+          });
+          
           if (original && (
             original.position_x !== wall.position_x ||
             original.position_y !== wall.position_y ||
@@ -310,10 +324,11 @@ export const useBillboardData = () => {
 
   const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
     console.log('🎯 updateWallPosition called:', { wallId, position, rotation });
+    console.log('🎯 Walls before update:', walls.map(w => ({ id: w.id, number: w.wall_number, pos: { x: w.position_x, y: w.position_y, z: w.position_z }})));
     
     // Update local state immediately
-    setWalls(prevWalls => 
-      prevWalls.map(wall => 
+    setWalls(prevWalls => {
+      const updated = prevWalls.map(wall => 
         wall.id === wallId 
           ? {
               ...wall,
@@ -325,12 +340,19 @@ export const useBillboardData = () => {
               rotation_z: rotation.z
             }
           : wall
-      )
-    );
+      );
+      console.log('🎯 Walls after update:', updated.map(w => ({ id: w.id, number: w.wall_number, pos: { x: w.position_x, y: w.position_y, z: w.position_z }})));
+      return updated;
+    });
 
     // Mark as pending change
     pendingChanges.current.walls.add(wallId);
-    console.log('📝 Added wall to pending changes. Pending walls:', pendingChanges.current.walls.size);
+    console.log('📝 Added wall to pending changes. Pending walls:', Array.from(pendingChanges.current.walls));
+    console.log('📝 Total pending changes:', {
+      walls: pendingChanges.current.walls.size,
+      screenUrls: pendingChanges.current.screenUrls.size,
+      mediaItems: pendingChanges.current.mediaItems.size
+    });
   };
 
   const uploadMedia = async (file: File): Promise<string | null> => {

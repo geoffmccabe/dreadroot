@@ -171,6 +171,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
 
   // Separate function for database updates to prevent UI blocking
   const updateDatabasePosition = useCallback(async (wall: any, newPosition: {x: number, y: number, z: number}) => {
+    console.log('🔄 updateDatabasePosition called for wall', wall.wall_number, 'with position:', newPosition);
     try {
       const currentRotation = {
         x: wall.rotation_x ?? 0,
@@ -180,8 +181,9 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
       
       // This runs in background and doesn't block UI
       await updateWallPosition(wall.id, newPosition, currentRotation);
+      console.log('✅ updateDatabasePosition completed for wall', wall.wall_number);
     } catch (error) {
-      console.error('Error updating wall position:', error);
+      console.error('❌ Error in updateDatabasePosition:', error);
     }
   }, [updateWallPosition]);
 
