@@ -235,19 +235,31 @@ export const useBillboardData = () => {
   };
 
   const updateMediaItem = async (wallId: string, slotNumber: number, mediaUrl: string | null, mediaType: 'image' | 'video' | null) => {
+    console.log('updateMediaItem called with:', { wallId, slotNumber, mediaUrl, mediaType });
+    console.log('Current mediaItems:', mediaItems.length, 'items');
+    
     // Find the media item record
-    const mediaItem = mediaItems.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
-    if (!mediaItem) return;
+    let mediaItem = mediaItems.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
+    console.log('Found mediaItem:', mediaItem);
+    
+    if (!mediaItem) {
+      console.error('Media item not found for wallId:', wallId, 'slotNumber:', slotNumber);
+      console.log('Available media items:', mediaItems.map(m => ({ wall_id: m.wall_id, slot_number: m.slot_number })));
+      return;
+    }
 
-    // Update local state immediately
-    setMediaItems(prev => 
-      prev.map(m => 
+    // Update local state immediately  
+    setMediaItems(prev => {
+      const updated = prev.map(m => 
         m.id === mediaItem.id ? { ...m, media_url: mediaUrl, media_type: mediaType } : m
-      )
-    );
+      );
+      console.log('Updated local mediaItems state');
+      return updated;
+    });
 
     // Mark as pending change
     pendingChanges.current.mediaItems.add(mediaItem.id);
+    console.log('Added to pending changes:', mediaItem.id);
   };
 
   const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
@@ -274,20 +286,30 @@ export const useBillboardData = () => {
 
   const uploadMedia = async (file: File): Promise<string | null> => {
     try {
+      console.log('Uploading file:', file.name, file.type, file.size, 'bytes');
+      
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
+      
+      console.log('Upload path:', filePath);
 
       const { error: uploadError } = await supabase.storage
         .from('billboard-media')
         .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Supabase upload error:', uploadError);
+        throw uploadError;
+      }
 
+      console.log('File uploaded successfully, getting public URL...');
+      
       const { data } = supabase.storage
         .from('billboard-media')
         .getPublicUrl(filePath);
 
+      console.log('Public URL generated:', data.publicUrl);
       return data.publicUrl;
     } catch (error) {
       console.error('Error uploading media:', error);

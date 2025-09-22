@@ -45,15 +45,41 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
 
   const handleFileUpload = async (wallNumber: number, slotNumber: number, file: File) => {
     const wall = walls.find(w => w.wall_number === wallNumber);
-    if (!wall) return;
+    if (!wall) {
+      console.error('Wall not found:', wallNumber);
+      return;
+    }
 
-    const mediaUrl = await uploadMedia(file);
-    if (mediaUrl) {
-      const mediaType = file.type.startsWith('image/') ? 'image' : 'video';
-      await updateMediaItem(wall.id, slotNumber, mediaUrl, mediaType);
+    console.log('Starting file upload for wall', wallNumber, 'slot', slotNumber);
+    
+    try {
+      const mediaUrl = await uploadMedia(file);
+      console.log('Upload result:', mediaUrl);
+      
+      if (mediaUrl) {
+        const mediaType = file.type.startsWith('image/') ? 'image' : 'video';
+        console.log('Updating media item with:', { wallId: wall.id, slotNumber, mediaUrl, mediaType });
+        
+        await updateMediaItem(wall.id, slotNumber, mediaUrl, mediaType);
+        
+        toast({
+          title: "Media Uploaded",
+          description: `Media has been uploaded to Wall ${wallNumber}, Slot ${slotNumber}.`
+        });
+      } else {
+        console.error('Upload failed - no URL returned');
+        toast({
+          title: "Upload Failed",
+          description: "Failed to upload media file.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
       toast({
-        title: "Media Uploaded",
-        description: `Media has been uploaded to Wall ${wallNumber}, Slot ${slotNumber}.`
+        title: "Upload Error", 
+        description: "An error occurred during upload.",
+        variant: "destructive"
       });
     }
   };
