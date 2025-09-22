@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -20,28 +20,44 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedWallForMoving, setSelectedWallForMoving] = useState<number>(1);
   const [tempPositions, setTempPositions] = useState<Record<number, {x: string, y: string, z: string}>>({});
+  const [isUpdatingPosition, setIsUpdatingPosition] = useState(false);
   
   // Local wall positions (override database positions for real-time control)
   const [localWallPositions, setLocalWallPositions] = useState<Record<number, {x: number, y: number, z: number}>>({});
+  
+  // Ref to track active intervals for cleanup
+  const activeIntervals = useRef<Set<NodeJS.Timeout>>(new Set());
 
   if (!isVisible) return null;
   
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
 
-  const handleUrlUpdate = async (slotNumber: number) => {
-    if (!wall1) return;
+  const handleUrlUpdate = useCallback(async (slotNumber: number) => {
+    if (!wall1 || isUpdatingPosition) return;
     
-    const newUrl = newUrls[slotNumber];
-    
-    if (newUrl !== undefined) {
-      await updateScreenUrl(wall1.id, slotNumber, newUrl);
+    setIsUpdatingPosition(true);
+    try {
+      const newUrl = newUrls[slotNumber];
+      
+      if (newUrl !== undefined) {
+        await updateScreenUrl(wall1.id, slotNumber, newUrl);
+        toast({
+          title: "URL Updated",
+          description: `Screen URL ${slotNumber} has been updated.`
+        });
+      }
+    } catch (error) {
+      console.error('Error updating URL:', error);
       toast({
-        title: "URL Updated",
-        description: `Screen URL ${slotNumber} has been updated.`
+        title: "Update Failed",
+        description: "Failed to update screen URL.",
+        variant: "destructive"
       });
+    } finally {
+      setIsUpdatingPosition(false);
     }
-  };
+  }, [wall1, newUrls, updateScreenUrl, toast, isUpdatingPosition]);
 
   const handleFileUpload = async (wallNumber: number, slotNumber: number, file: File) => {
     const wall = walls.find(w => w.wall_number === wallNumber);
@@ -92,9 +108,10 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
       .sort((a, b) => a.slot_number - b.slot_number);
   };
 
-  const handlePositionChange = async (axis: 'x' | 'y' | 'z', delta: number) => {
+  // Optimized position change handler - immediate UI feedback, debounced database updates
+  const handlePositionChange = useCallback((axis: 'x' | 'y' | 'z', delta: number) => {
     const wall = walls.find(w => w.wall_number === selectedWallForMoving);
-    if (!wall) return;
+    if (!wall || isUpdatingPosition) return;
 
     // Use local position if available, otherwise fall back to database position
     const currentLocalPos = localWallPositions[selectedWallForMoving];
@@ -109,13 +126,13 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
       [axis]: currentPosition[axis] + delta
     };
 
-    // Update local position immediately for real-time feedback
+    // Update local position immediately for real-time feedback (synchronous)
     setLocalWallPositions(prev => ({
       ...prev,
       [selectedWallForMoving]: newPosition
     }));
 
-    // Notify parent component about position changes
+    // Notify parent component about position changes (synchronous)
     if (onWallPositionsChange) {
       const allPositions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}> = {};
       walls.forEach(w => {
@@ -135,19 +152,62 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
       onWallPositionsChange(allPositions);
     }
 
-    // Update database (this will be batched and saved every 30 seconds)
-    const currentRotation = {
-      x: wall.rotation_x ?? 0,
-      y: wall.rotation_y ?? 0,
-      z: wall.rotation_z ?? 0
-    };
+    // Queue database update (non-blocking)
+    updateDatabasePosition(wall, newPosition);
+  }, [walls, selectedWallForMoving, localWallPositions, onWallPositionsChange, isUpdatingPosition]);
 
+  // Separate function for database updates to prevent UI blocking
+  const updateDatabasePosition = useCallback(async (wall: any, newPosition: {x: number, y: number, z: number}) => {
     try {
+      const currentRotation = {
+        x: wall.rotation_x ?? 0,
+        y: wall.rotation_y ?? 0,
+        z: wall.rotation_z ?? 0
+      };
+      
+      // This runs in background and doesn't block UI
       await updateWallPosition(wall.id, newPosition, currentRotation);
     } catch (error) {
       console.error('Error updating wall position:', error);
     }
-  };
+  }, [updateWallPosition]);
+
+  // Cleanup function for intervals
+  const cleanupIntervals = useCallback(() => {
+    activeIntervals.current.forEach(interval => clearInterval(interval));
+    activeIntervals.current.clear();
+  }, []);
+
+  // Improved mouse handlers with proper cleanup
+  const createMouseHandler = useCallback((axis: 'x' | 'y' | 'z', delta: number) => {
+    return () => {
+      if (isUpdatingPosition) return;
+      
+      cleanupIntervals(); // Clear any existing intervals
+      
+      const interval = setInterval(() => {
+        handlePositionChange(axis, delta);
+      }, 100); // Slower interval for better control
+      
+      activeIntervals.current.add(interval);
+      
+      const cleanup = () => {
+        clearInterval(interval);
+        activeIntervals.current.delete(interval);
+        document.removeEventListener('mouseup', cleanup);
+        document.removeEventListener('mouseleave', cleanup);
+      };
+      
+      document.addEventListener('mouseup', cleanup);
+      document.addEventListener('mouseleave', cleanup);
+    };
+  }, [handlePositionChange, isUpdatingPosition, cleanupIntervals]);
+
+  // Single click handler
+  const handleSingleClick = useCallback((axis: 'x' | 'y' | 'z', delta: number) => {
+    if (isUpdatingPosition) return;
+    handlePositionChange(axis, delta);
+  }, [handlePositionChange, isUpdatingPosition]);
 
   const handleDirectPositionChange = async (axis: 'x' | 'y' | 'z', value: number) => {
     const wall = walls.find(w => w.wall_number === selectedWallForMoving);
@@ -250,7 +310,14 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     };
     
     const config = wallConfigs[wallNumber as keyof typeof wallConfigs];
-    return (
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      cleanupIntervals();
+    };
+  }, [cleanupIntervals]);
+
+  return (
       <div className="flex flex-col items-center space-y-1 ml-4">
         <div 
           className="w-12 h-8 border border-gray-400 flex items-center justify-center text-xs rounded"
@@ -306,12 +373,13 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                           [urlData.slot_number]: e.target.value
                         }))}
                       />
-                      <Button 
-                        onClick={() => handleUrlUpdate(urlData.slot_number)}
-                        size="sm"
-                      >
-                        Update
-                      </Button>
+                       <Button 
+                         onClick={() => handleUrlUpdate(urlData.slot_number)}
+                         size="sm"
+                         disabled={isUpdatingPosition}
+                       >
+                         Update
+                       </Button>
                     </div>
                   </div>
                 ))}
@@ -442,154 +510,124 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                           {/* X Axis Controls - Increased increments for visibility */}
                           <div className="flex items-center space-x-2">
                             <span className="w-8 text-sm font-medium text-white">X:</span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('x', -1), 50);
-                                const stopInterval = () => {
-                                  clearInterval(interval);
-                                  document.removeEventListener('mouseup', stopInterval);
-                                };
-                                document.addEventListener('mouseup', stopInterval);
-                              }}
-                            >
-                              ←
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('x', -5)}
-                            >
-                              -5
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('x', 5)}
-                            >
-                              +5
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('x', 1), 50);
-                                const stopInterval = () => {
-                                  clearInterval(interval);
-                                  document.removeEventListener('mouseup', stopInterval);
-                                };
-                                document.addEventListener('mouseup', stopInterval);
-                              }}
-                            >
-                              →
-                            </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onMouseDown={createMouseHandler('x', -1)}
+                               disabled={isUpdatingPosition}
+                             >
+                               ←
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onClick={() => handleSingleClick('x', -5)}
+                               disabled={isUpdatingPosition}
+                             >
+                               -5
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onClick={() => handleSingleClick('x', 5)}
+                               disabled={isUpdatingPosition}
+                             >
+                               +5
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onMouseDown={createMouseHandler('x', 1)}
+                               disabled={isUpdatingPosition}
+                             >
+                               →
+                             </Button>
                           </div>
 
-                          {/* Y Axis Controls - Increased increments for visibility */}
-                          <div className="flex items-center space-x-2">
-                            <span className="w-8 text-sm font-medium text-white">Y:</span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('y', -1), 50);
-                                const stopInterval = () => {
-                                  clearInterval(interval);
-                                  document.removeEventListener('mouseup', stopInterval);
-                                };
-                                document.addEventListener('mouseup', stopInterval);
-                              }}
-                            >
-                              ↓
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('y', -5)}
-                            >
-                              -5
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('y', 5)}
-                            >
-                              +5
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('y', 1), 50);
-                                const stopInterval = () => {
-                                  clearInterval(interval);
-                                  document.removeEventListener('mouseup', stopInterval);
-                                };
-                                document.addEventListener('mouseup', stopInterval);
-                              }}
-                            >
-                              ↑
-                            </Button>
-                          </div>
+                           {/* Y Axis Controls - Increased increments for visibility */}
+                           <div className="flex items-center space-x-2">
+                             <span className="w-8 text-sm font-medium text-white">Y:</span>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onMouseDown={createMouseHandler('y', -1)}
+                               disabled={isUpdatingPosition}
+                             >
+                               ↓
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onClick={() => handleSingleClick('y', -5)}
+                               disabled={isUpdatingPosition}
+                             >
+                               -5
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onClick={() => handleSingleClick('y', 5)}
+                               disabled={isUpdatingPosition}
+                             >
+                               +5
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onMouseDown={createMouseHandler('y', 1)}
+                               disabled={isUpdatingPosition}
+                             >
+                               ↑
+                             </Button>
+                           </div>
 
-                          {/* Z Axis Controls - Increased increments for visibility */}
-                          <div className="flex items-center space-x-2">
-                            <span className="w-8 text-sm font-medium text-white">Z:</span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('z', -1), 50);
-                                const stopInterval = () => {
-                                  clearInterval(interval);
-                                  document.removeEventListener('mouseup', stopInterval);
-                                };
-                                document.addEventListener('mouseup', stopInterval);
-                              }}
-                            >
-                              ←
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('z', -5)}
-                            >
-                              -5
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('z', 5)}
-                            >
-                              +5
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('z', 1), 50);
-                                const stopInterval = () => {
-                                  clearInterval(interval);
-                                  document.removeEventListener('mouseup', stopInterval);
-                                };
-                                document.addEventListener('mouseup', stopInterval);
-                              }}
-                            >
-                              →
-                            </Button>
+                           {/* Z Axis Controls - Increased increments for visibility */}
+                           <div className="flex items-center space-x-2">
+                             <span className="w-8 text-sm font-medium text-white">Z:</span>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onMouseDown={createMouseHandler('z', -1)}
+                               disabled={isUpdatingPosition}
+                             >
+                               ←
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onClick={() => handleSingleClick('z', -5)}
+                               disabled={isUpdatingPosition}
+                             >
+                               -5
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onClick={() => handleSingleClick('z', 5)}
+                               disabled={isUpdatingPosition}
+                             >
+                               +5
+                             </Button>
+                             <Button
+                               size="sm"
+                               variant="outline"
+                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                               onMouseDown={createMouseHandler('z', 1)}
+                               disabled={isUpdatingPosition}
+                             >
+                               →
+                             </Button>
                           </div>
                         </div>
                         
