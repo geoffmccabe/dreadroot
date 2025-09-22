@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { useToast } from '@/hooks/use-toast';
 
-export const BillboardControlPanel: React.FC = () => {
+export const BillboardControlPanel: React.FC<{ isVisible: boolean }> = ({ isVisible }) => {
   const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, uploadMedia } = useBillboardData();
   const { toast } = useToast();
   const [newUrls, setNewUrls] = useState<{ [key: string]: string }>({});
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  if (!isVisible) return null;
   
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
@@ -52,11 +56,21 @@ export const BillboardControlPanel: React.FC = () => {
   };
 
   return (
-    <Card className="w-full max-w-2xl">
-      <CardHeader>
-        <CardTitle>Billboard Control Panel</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <Card className="waterfall-card max-w-2xl">
+      <div 
+        className="flex items-center justify-between mb-3 cursor-pointer"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
+        <h3 className="font-bold text-sm">BILLBOARD CONTROL PANEL</h3>
+        {isCollapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+      </div>
+      
+      {!isCollapsed && (
+        <CardContent className="p-0 animate-fade-in">
         <Tabs defaultValue="wall-1">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="wall-1">Wall 1 (Screen)</TabsTrigger>
@@ -151,7 +165,8 @@ export const BillboardControlPanel: React.FC = () => {
             </TabsContent>
           ))}
         </Tabs>
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   );
 };

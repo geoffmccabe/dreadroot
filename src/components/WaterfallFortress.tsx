@@ -1136,11 +1136,10 @@ export default function WaterfallFortress() {
       isVisible={panelsVisible}
     />
     
-    {panelsVisible && (
-      <div className="fixed bottom-4 left-80 z-20">
-        <BillboardControlPanel />
-      </div>
-    )}
+    {/* Billboard Control Panel - positioned below the Waterfall panel */}
+    <div className="fixed top-4 left-4 z-20 space-y-4 max-w-md" style={{ marginTop: '320px' }}>
+      <BillboardControlPanel isVisible={panelsVisible} />
+    </div>
     
     {/* Score display */}
     <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2 bg-black/50 text-white p-2 rounded">
