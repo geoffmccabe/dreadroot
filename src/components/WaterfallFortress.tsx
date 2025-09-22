@@ -326,44 +326,45 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     z: -5.95 // frontZ + frontT/2 + 0.05
   };
 
-  // Water drop colors from props
-  const palette = useMemo(() => {
-    // Calculate total weight to normalize
-    const totalWeight = colorPalette.reduce((sum, item) => sum + item.weight, 0);
+  // Water drop colors from props with proper normalization
+  const dropPaletteColors = useMemo(() => {
     return colorPalette.map(item => ({
-      hex: item.hex,
-      weight: totalWeight > 0 ? item.weight / totalWeight : 0
+      color: new THREE.Color(item.hex),
+      weight: item.weight,
+      hex: item.hex
     }));
   }, [colorPalette]);
 
-  // Create cumulative distribution function (matching original)
-  const cdf = useMemo(() => {
-    const result = [];
+  // Create cumulative distribution function (matching original HTML exactly)
+  const dropCDF = useMemo(() => {
+    const cdf = [];
     let sum = 0;
-    for (const p of palette) {
+    for (const p of dropPaletteColors) {
       sum += p.weight;
-      result.push(sum);
+      cdf.push(sum);
     }
-    for (let i = 0; i < result.length; i++) {
-      result[i] /= sum;
+    // Normalize to ensure total is 1
+    for (let i = 0; i < cdf.length; i++) {
+      cdf[i] /= sum;
     }
-    return result;
-  }, []);
+    return cdf;
+  }, [dropPaletteColors]);
 
   const pickColor = useCallback(() => {
     const r = Math.random();
-    for (let i = 0; i < cdf.length; i++) {
-      if (r <= cdf[i]) {
-        const color = new THREE.Color(palette[i].hex);
+    for (let i = 0; i < dropCDF.length; i++) {
+      if (r <= dropCDF[i]) {
+        const color = new THREE.Color(dropPaletteColors[i].hex);
         // Darken colors to compensate for additive blending and lighting
         color.multiplyScalar(0.4);
         return color;
       }
     }
-    const color = new THREE.Color(palette[palette.length - 1].hex);
+    // Fallback to last color
+    const color = new THREE.Color(dropPaletteColors[dropPaletteColors.length - 1].hex);
     color.multiplyScalar(0.4);
     return color;
-  }, [cdf, palette]);
+  }, [dropCDF, dropPaletteColors]);
 
   // Halton sequence for better distribution (from original)
   const halton = useCallback((i: number, base: number) => {

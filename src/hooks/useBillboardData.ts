@@ -95,6 +95,23 @@ export const useBillboardData = () => {
 
   const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
     try {
+      // Immediately update local state for real-time feedback
+      setWalls(prevWalls => 
+        prevWalls.map(wall => 
+          wall.id === wallId 
+            ? {
+                ...wall,
+                position_x: position.x,
+                position_y: position.y,
+                position_z: position.z,
+                rotation_x: rotation.x,
+                rotation_y: rotation.y,
+                rotation_z: rotation.z
+              }
+            : wall
+        )
+      );
+
       const { error } = await supabase
         .from('billboard_walls')
         .update({
@@ -107,10 +124,15 @@ export const useBillboardData = () => {
         })
         .eq('id', wallId);
 
-      if (error) throw error;
-      await fetchData();
+      if (error) {
+        // If database update fails, revert local state
+        await fetchData();
+        throw error;
+      }
     } catch (error) {
       console.error('Error updating wall position:', error);
+      // Revert to database state on error
+      await fetchData();
     }
   };
 
