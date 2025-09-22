@@ -413,7 +413,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
         transparent
         opacity={1.0}
         depthWrite={false}
-        depthTest={false}
+        depthTest={true}
         blending={THREE.AdditiveBlending}
       />
     </points>
@@ -481,14 +481,14 @@ function Fortress() {
         <meshStandardMaterial map={grassTexture} metalness={0} roughness={1} />
       </mesh>
 
-      {/* Front wall - Left pillar */}
-      <mesh position={[-cliffW/4 - openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
+      {/* Front wall - Left pillar (extended to connect with side wall) */}
+      <mesh position={[-(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
         <meshStandardMaterial map={frontTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
-      {/* Front wall - Right pillar */}
-      <mesh position={[cliffW/4 + openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
+      {/* Front wall - Right pillar (extended to connect with side wall) */}
+      <mesh position={[(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
         <meshStandardMaterial map={frontTexture} metalness={0.1} roughness={0.9} />
       </mesh>
@@ -499,15 +499,15 @@ function Fortress() {
         <meshStandardMaterial map={topTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
-      {/* Left wall */}
-      <mesh position={[-cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
-        <boxGeometry args={[2, cliffH, courtyardDepth]} />
+      {/* Left wall (adjusted to connect properly) */}
+      <mesh position={[-cliffW/2 + 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
+        <boxGeometry args={[2, cliffH, courtyardDepth + frontT]} />
         <meshStandardMaterial map={sideTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
-      {/* Right wall */}
-      <mesh position={[cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
-        <boxGeometry args={[2, cliffH, courtyardDepth]} />
+      {/* Right wall (adjusted to connect properly) */}
+      <mesh position={[cliffW/2 - 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
+        <boxGeometry args={[2, cliffH, courtyardDepth + frontT]} />
         <meshStandardMaterial map={sideTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
@@ -881,9 +881,11 @@ export default function WaterfallFortress() {
       </div>
       
       {/* Instructions */}
-      <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
-        Press R for crosshairs • Click to shoot
-      </div>
+      {panelsVisible && (
+        <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
+          Press R for crosshairs • Click to shoot
+        </div>
+      )}
       
       {/* Crosshair */}
       <div className="waterfall-crosshair" />
