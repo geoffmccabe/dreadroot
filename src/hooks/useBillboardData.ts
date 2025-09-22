@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface BillboardWall {
@@ -297,6 +297,8 @@ export const useBillboardData = () => {
   };
 
   const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
+    console.log('🔄 updateWallPosition called:', { wallId, position, rotation });
+    
     // Update local state immediately
     setWalls(prevWalls => 
       prevWalls.map(wall => 
@@ -316,7 +318,28 @@ export const useBillboardData = () => {
 
     // Mark as pending change
     pendingChanges.current.walls.add(wallId);
+    console.log('✅ Wall marked as pending change. Total pending walls:', pendingChanges.current.walls.size);
+    
+    // Also update the original data to reflect new values for comparison
+    const wall = walls.find(w => w.id === wallId);
+    if (wall) {
+      originalData.current.walls.set(wallId, {
+        ...wall,
+        position_x: position.x,
+        position_y: position.y,
+        position_z: position.z,
+        rotation_x: rotation.x,
+        rotation_y: rotation.y,
+        rotation_z: rotation.z
+      });
+    }
   };
+
+  // Manual save function for immediate saves
+  const saveChangesNow = useCallback(async () => {
+    console.log('🚀 Manual save triggered');
+    await savePendingChanges();
+  }, []);
 
   const uploadMedia = async (file: File): Promise<string | null> => {
     try {
@@ -425,6 +448,7 @@ export const useBillboardData = () => {
     updateMediaItem,
     updateWallPosition,
     uploadMedia,
+    saveChangesNow,
     refetch: fetchData
   };
 };

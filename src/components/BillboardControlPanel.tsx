@@ -14,7 +14,7 @@ interface BillboardControlPanelProps {
 }
 
 export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible, onWallPositionsChange }) => {
-  const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia } = useBillboardData();
+  const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia, saveChangesNow } = useBillboardData();
   const { toast } = useToast();
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -360,11 +360,25 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
         onClick={() => setIsCollapsed(!isCollapsed)}
       >
         <h3 className="font-bold text-sm">BILLBOARD CONTROL PANEL</h3>
-        {isCollapsed ? (
-          <ChevronRight className="h-4 w-4" />
-        ) : (
-          <ChevronDown className="h-4 w-4" />
-        )}
+        <div className="flex items-center space-x-2">
+          <Button 
+            size="sm"
+            variant="outline"
+            className="text-xs px-2 py-1"
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent panel collapse
+              console.log('🔥 Manual save button clicked');
+              saveChangesNow();
+            }}
+          >
+            💾 Save Now
+          </Button>
+          {isCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </div>
       </div>
         
         {!isCollapsed && (
