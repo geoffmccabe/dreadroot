@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -44,9 +44,14 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
-    // Create URL text texture
-    const urlTexture = useMemo(() => {
-      if (!currentUrl?.url) return null;
+    const [urlTexture, setUrlTexture] = useState<THREE.CanvasTexture | null>(null);
+    
+    // Update URL texture when currentUrl changes (real-time)
+    useEffect(() => {
+      if (!currentUrl?.url) {
+        setUrlTexture(null);
+        return;
+      }
       
       const canvas = document.createElement('canvas');
       canvas.width = 1024;
@@ -66,7 +71,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       
       const texture = new THREE.CanvasTexture(canvas);
       texture.needsUpdate = true;
-      return texture;
+      setUrlTexture(texture);
     }, [currentUrl?.url]);
 
     const { position, rotation } = getWallPositionAndRotation(1);
@@ -148,31 +153,49 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     );
   };
 
-  // Individual media slot component with improved texture loading
+  // Individual media slot component with real-time texture loading
   const MediaSlot = ({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
     mediaUrl?: string | null; 
     mediaType?: string | null; 
   }) => {
-    let texture = null;
+    const [texture, setTexture] = useState<THREE.Texture | null>(null);
+    const [loading, setLoading] = useState(false);
     
-    // Only try to load texture if we have a valid URL and it's an image
-    if (mediaUrl && mediaType === 'image') {
-      try {
-        texture = useLoader(THREE.TextureLoader, mediaUrl);
-      } catch (error) {
-        console.warn('Failed to load texture:', mediaUrl, error);
-        texture = null;
+    // Load texture when mediaUrl changes (real-time updates)
+    useEffect(() => {
+      if (!mediaUrl || mediaType !== 'image') {
+        setTexture(null);
+        setLoading(false);
+        return;
       }
-    }
+      
+      setLoading(true);
+      const loader = new THREE.TextureLoader();
+      
+      loader.load(
+        mediaUrl,
+        (loadedTexture) => {
+          loadedTexture.needsUpdate = true;
+          setTexture(loadedTexture);
+          setLoading(false);
+        },
+        undefined,
+        (error) => {
+          console.warn('Failed to load texture:', mediaUrl, error);
+          setTexture(null);
+          setLoading(false);
+        }
+      );
+    }, [mediaUrl, mediaType]);
     
     return (
       <mesh position={position}>
         <planeGeometry args={dimensions} />
         <meshBasicMaterial 
           map={texture}
-          color={texture ? "#ffffff" : "#374151"}
+          color={texture ? "#ffffff" : loading ? "#6b7280" : "#374151"}
           transparent={true}
           opacity={texture ? 1 : 0.25}
           side={THREE.DoubleSide}
