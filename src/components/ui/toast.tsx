@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as ToastPrimitives from "@radix-ui/react-toast";
 import { cva, type VariantProps } from "class-variance-authority";
-import { X } from "lucide-react";
+import { X, Copy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -88,10 +88,33 @@ ToastTitle.displayName = ToastPrimitives.Title.displayName;
 
 const ToastDescription = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Description>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>
->(({ className, ...props }, ref) => (
-  <ToastPrimitives.Description ref={ref} className={cn("text-sm opacity-90", className)} {...props} />
-));
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description> & {
+    copyable?: boolean;
+  }
+>(({ className, copyable, children, ...props }, ref) => {
+  const handleCopy = () => {
+    if (typeof children === 'string') {
+      navigator.clipboard.writeText(children);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between">
+      <ToastPrimitives.Description ref={ref} className={cn("text-sm opacity-90", className)} {...props}>
+        {children}
+      </ToastPrimitives.Description>
+      {copyable && (
+        <button
+          onClick={handleCopy}
+          className="ml-2 rounded p-1 opacity-50 hover:opacity-100 transition-opacity"
+          title="Copy to clipboard"
+        >
+          <Copy className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  );
+});
 ToastDescription.displayName = ToastPrimitives.Description.displayName;
 
 type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>;

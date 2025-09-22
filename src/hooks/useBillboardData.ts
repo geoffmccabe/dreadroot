@@ -188,6 +188,7 @@ export const useBillboardData = () => {
                     console.error('Error updating wall position:', error);
                   } else {
                     console.log(`Wall ${wall.wall_number} position saved successfully`);
+                    savedCount++;
                   }
                 }))
             );
@@ -270,7 +271,7 @@ export const useBillboardData = () => {
         return { success: true, count: savedCount };
       } else {
         console.log('No pending changes to save');
-        return { success: false, count: 0 };
+        return { success: true, count: 0 };
       }
     } catch (error) {
       console.error('Error saving pending changes:', error);
