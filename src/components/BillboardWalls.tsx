@@ -71,9 +71,12 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     }, [currentUrl?.url]); // Only depend on the actual URL string
 
     const { position, rotation } = getWallPositionAndRotation(1);
+    
+    // Force re-render when wall 1 data changes
+    const wall1 = walls.find(w => w.wall_number === 1);
 
     return (
-      <group position={position} rotation={rotation}>
+      <group key={`wall1-${wall1?.id}-${JSON.stringify(position)}`} position={position} rotation={rotation}>
         {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
@@ -118,6 +121,9 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const { position, rotation } = getWallPositionAndRotation(wallNumber);
     const mediaItems = getMediaItemsForWall(wallNumber);
     
+    // Force re-render when walls data changes by including walls in key
+    const wall = walls.find(w => w.wall_number === wallNumber);
+    
     // Calculate dimensions based on wall type
     const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
     const wallHeight = 20; // All walls are 20 units high
@@ -125,7 +131,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const slotHeight = wallHeight / 2; // 2 rows
     
     return (
-      <group position={position} rotation={rotation}>
+      <group key={`wall-${wallNumber}-${wall?.id}-${JSON.stringify(position)}`} position={position} rotation={rotation}>
         {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
