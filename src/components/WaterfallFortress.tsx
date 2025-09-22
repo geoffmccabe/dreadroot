@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { BillboardControlPanel } from '@/components/BillboardControlPanel';
+import { ScreenControls, BillboardWalls } from '@/components/BillboardWalls';
 
 // Sky component with beautiful gradient
 function SkyTexture() {
@@ -925,6 +927,7 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
 
       {/* Scene objects */}
       <Fortress />
+      <BillboardWalls />
       <Waterfall 
         flowSpeed={settings.flowSpeed} 
         dropCount={settings.dropCount} 
@@ -1132,6 +1135,14 @@ export default function WaterfallFortress() {
       onSettingsChange={handleSettingsChange}
       isVisible={panelsVisible}
     />
+    
+    {panelsVisible && (
+      <div className="fixed bottom-80 left-4 z-20">
+        <BillboardControlPanel />
+      </div>
+    )}
+    
+    <ScreenControls />
     
     {/* Score display */}
     <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2 bg-black/50 text-white p-2 rounded">

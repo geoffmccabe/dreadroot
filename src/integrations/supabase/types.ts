@@ -14,7 +14,103 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      billboard_walls: {
+        Row: {
+          created_at: string
+          id: string
+          updated_at: string
+          wall_number: number
+          wall_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          wall_number: number
+          wall_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          wall_number?: number
+          wall_type?: string
+        }
+        Relationships: []
+      }
+      media_grid_items: {
+        Row: {
+          created_at: string
+          id: string
+          media_type: string | null
+          media_url: string | null
+          slot_number: number
+          updated_at: string
+          wall_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          slot_number: number
+          updated_at?: string
+          wall_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          media_type?: string | null
+          media_url?: string | null
+          slot_number?: number
+          updated_at?: string
+          wall_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_grid_items_wall_id_fkey"
+            columns: ["wall_id"]
+            isOneToOne: false
+            referencedRelation: "billboard_walls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      screen_urls: {
+        Row: {
+          created_at: string
+          id: string
+          slot_number: number
+          updated_at: string
+          url: string | null
+          wall_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          slot_number: number
+          updated_at?: string
+          url?: string | null
+          wall_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          slot_number?: number
+          updated_at?: string
+          url?: string | null
+          wall_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "screen_urls_wall_id_fkey"
+            columns: ["wall_id"]
+            isOneToOne: false
+            referencedRelation: "billboard_walls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
