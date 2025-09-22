@@ -23,6 +23,20 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
   const yaw = useRef(0);
   const pitch = useRef(0);
 
+  // Preload audio files to eliminate delay
+  const audioRefs = useRef({
+    pistolCocking: new Audio('/pistol_cocking_sound.mp3'),
+    pistolHolster: new Audio('/holster_pistol_sound.mp3'),
+    gunshot: new Audio('/space_gunshot.mp3')
+  });
+
+  useEffect(() => {
+    // Set volumes for preloaded audio
+    audioRefs.current.pistolCocking.volume = 0.5;
+    audioRefs.current.pistolHolster.volume = 0.5;
+    audioRefs.current.gunshot.volume = 0.3;
+  }, []);
+
   // Collision boxes for fortress walls
   const colliders = useMemo(() => {
     const cliffW = 40, cliffH = 20, frontT = 2;
@@ -87,10 +101,9 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
         const newCrosshairsState = !crosshairsEnabled;
         setCrosshairsEnabled(newCrosshairsState);
         
-        // Play appropriate gun sound
-        const soundFile = newCrosshairsState ? '/pistol_cocking_sound.mp3' : '/holster_pistol_sound.mp3';
-        const audio = new Audio(soundFile);
-        audio.volume = 0.5;
+        // Play appropriate gun sound using preloaded audio
+        const audio = newCrosshairsState ? audioRefs.current.pistolCocking : audioRefs.current.pistolHolster;
+        audio.currentTime = 0; // Reset to beginning
         audio.play().catch(() => {});
         break;
       case 'Escape':
@@ -151,10 +164,9 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
       shootDirection.applyQuaternion(camera.quaternion);
       onShoot(camera.position.clone(), shootDirection);
       
-      // Play gunshot sound
-      const audio = new Audio('/space_gunshot.mp3');
-      audio.volume = 0.3;
-      audio.play().catch(() => {});
+      // Play gunshot sound using preloaded audio
+      audioRefs.current.gunshot.currentTime = 0; // Reset to beginning
+      audioRefs.current.gunshot.play().catch(() => {});
     }
   }, [gl, crosshairsEnabled, onShoot, camera]);
 
@@ -823,7 +835,7 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
                 value={[settings.coinRate]}
                 onValueChange={([value]) => onSettingsChange('coinRate', value)}
                 min={0}
-                max={150}
+                max={10}
                 step={1}
                 className="flex-1"
               />
@@ -835,7 +847,7 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
                 value={[settings.coinSize]}
                 onValueChange={([value]) => onSettingsChange('coinSize', value)}
                 min={0.2}
-                max={3}
+                max={1}
                 step={0.01}
                 className="flex-1"
               />
@@ -904,8 +916,8 @@ export default function WaterfallFortress() {
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
     dropCount: 6000,
-    coinRate: 60,
-    coinSize: 1.2,
+    coinRate: 6,
+    coinSize: 0.8,
     colorPalette: defaultColorPalette
   });
   const [panelsVisible, setPanelsVisible] = useState(true);

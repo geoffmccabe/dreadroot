@@ -136,4 +136,31 @@ All colors MUST be HSL.
     pointer-events: none;
     z-index: 50;
   }
+
+  .waterfall-crosshair::before,
+  .waterfall-crosshair::after {
+    content: '';
+    position: absolute;
+    background: hsl(var(--primary) / 0.6);
+  }
+
+  /* Horizontal line */
+  .waterfall-crosshair::before {
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 2px;
+    box-shadow: 16px 0 0 hsl(var(--primary) / 0.6);
+  }
+
+  /* Vertical line */
+  .waterfall-crosshair::after {
+    left: 50%;
+    top: -8px;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 6px;
+    box-shadow: 0 16px 0 hsl(var(--primary) / 0.6);
+  }
 }
