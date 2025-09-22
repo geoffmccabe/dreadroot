@@ -211,10 +211,10 @@ function FirstPersonControls() {
   return null;
 }
 
-// Waterfall component with improved physics matching original
+// Waterfall component matching original exactly
 function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; dropCount: number }) {
   const pointsRef = useRef<THREE.Points>(null);
-  const velocities = useRef<Float32Array>(new Float32Array(dropCount));
+  const velocitiesRef = useRef<Float32Array>();
   
   const fall = {
     width: 4,
@@ -234,41 +234,47 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
     { hex: '#103d6a', weight: 0.30 }
   ];
 
+  // Create cumulative distribution function once (matching original)
+  const cdf = useMemo(() => {
+    const result = [];
+    let sum = 0;
+    for (const p of palette) {
+      sum += p.weight;
+      result.push(sum);
+    }
+    for (let i = 0; i < result.length; i++) {
+      result[i] /= sum;
+    }
+    return result;
+  }, []);
+
+  const pickColor = useCallback(() => {
+    const r = Math.random();
+    for (let i = 0; i < cdf.length; i++) {
+      if (r <= cdf[i]) return new THREE.Color(palette[i].hex);
+    }
+    return new THREE.Color(palette[palette.length - 1].hex);
+  }, [cdf]);
+
+  // Halton sequence for better distribution (from original)
+  const halton = useCallback((i: number, base: number) => {
+    let result = 0;
+    let f = 1;
+    while (i > 0) {
+      f /= base;
+      result += f * (i % base);
+      i = Math.floor(i / base);
+    }
+    return result;
+  }, []);
+
   const { positions, colors } = useMemo(() => {
     const positions = new Float32Array(dropCount * 3);
     const colors = new Float32Array(dropCount * 3);
     
-    // Create cumulative distribution for color picking (matching original)
-    const cdf = [];
-    let sum = 0;
-    for (const p of palette) {
-      sum += p.weight;
-      cdf.push(sum);
-    }
-    for (let i = 0; i < cdf.length; i++) {
-      cdf[i] /= sum;
-    }
-
-    const pickColor = () => {
-      const r = Math.random();
-      for (let i = 0; i < cdf.length; i++) {
-        if (r <= cdf[i]) return new THREE.Color(palette[i].hex);
-      }
-      return new THREE.Color(palette[palette.length - 1].hex);
-    };
-
-    // Halton sequence for better distribution (from original)
-    const halton = (i: number, base: number) => {
-      let result = 0;
-      let f = 1;
-      while (i > 0) {
-        f /= base;
-        result += f * (i % base);
-        i = Math.floor(i / base);
-      }
-      return result;
-    };
-
+    // Create new velocities array
+    velocitiesRef.current = new Float32Array(dropCount);
+    
     const rangeY = fall.topY - fall.bottomY;
     
     for (let i = 0; i < dropCount; i++) {
@@ -285,14 +291,14 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
       
-      velocities.current[i] = 0;
+      velocitiesRef.current[i] = 0;
     }
     
     return { positions, colors };
-  }, [dropCount]);
+  }, [dropCount, halton, pickColor]);
 
   useFrame((state, delta) => {
-    if (!pointsRef.current) return;
+    if (!pointsRef.current || !velocitiesRef.current) return;
     
     const positionAttribute = pointsRef.current.geometry.attributes.position;
     const colorAttribute = pointsRef.current.geometry.attributes.color;
@@ -302,29 +308,18 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
     const gravity = 9.8 * flowSpeed;
     
     for (let i = 0; i < dropCount; i++) {
-      velocities.current[i] += gravity * delta;
-      let y = positions[i * 3 + 1] - velocities.current[i] * delta;
+      velocitiesRef.current[i] += gravity * delta;
+      let y = positions[i * 3 + 1] - velocitiesRef.current[i] * delta;
       
       if (y <= fall.bottomY) {
         // Reset drop exactly like original
         positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
         y = fall.topY - Math.random() * 0.3;
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
-        velocities.current[i] = 0;
+        velocitiesRef.current[i] = 0;
         
-        // Pick new color using the weighted system
-        const r = Math.random();
-        let selectedColor = palette[palette.length - 1];
-        let sum = 0;
-        for (const p of palette) {
-          sum += p.weight;
-          if (r <= sum / palette.reduce((acc, p) => acc + p.weight, 0)) {
-            selectedColor = p;
-            break;
-          }
-        }
-        
-        const color = new THREE.Color(selectedColor.hex);
+        // Pick new color using the weighted system (matching original exactly)
+        const color = pickColor();
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
         colors[i * 3 + 2] = color.b;
