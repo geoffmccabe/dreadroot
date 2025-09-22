@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Text, useTexture } from '@react-three/drei';
+import React, { useRef, useState, useMemo } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -155,70 +155,52 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
 
 // Fortress structure
 function Fortress() {
-  const [groundTexture, cliffTexture] = useTexture([
-    'https://i.imgur.com/Ic5FqI9.jpeg',
-    ''
-  ]);
-
-  // Configure textures
-  if (groundTexture) {
-    groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
-    groundTexture.repeat.set(40, 40);
-  }
-
   const cliffW = 40, cliffH = 20, frontT = 2;
   const courtyardDepth = 30, frontZ = -8;
   const openingHalfW = 2, openingH = 5;
-
-  // Create default cliff material
-  const wallMaterial = new THREE.MeshStandardMaterial({ 
-    color: '#8f98a5', 
-    metalness: 0.1, 
-    roughness: 0.9 
-  });
 
   return (
     <group>
       {/* Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[260, 260]} />
-        <meshStandardMaterial map={groundTexture} metalness={0} roughness={1} />
+        <meshStandardMaterial color="#4a7c59" metalness={0} roughness={1} />
       </mesh>
 
       {/* Fortress walls */}
       {/* Left pillar */}
       <mesh position={[-cliffW/4 - openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
-        <primitive object={wallMaterial} />
+        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Right pillar */}
       <mesh position={[cliffW/4 + openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
-        <primitive object={wallMaterial} />
+        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Header */}
       <mesh position={[0, openingH + (cliffH-openingH)/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[openingHalfW*2, cliffH-openingH, frontT]} />
-        <primitive object={wallMaterial} />
+        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Side walls */}
       <mesh position={[-cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
         <boxGeometry args={[2, cliffH, courtyardDepth]} />
-        <primitive object={wallMaterial} />
+        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
       </mesh>
 
       <mesh position={[cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
         <boxGeometry args={[2, cliffH, courtyardDepth]} />
-        <primitive object={wallMaterial} />
+        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Back wall */}
       <mesh position={[0, cliffH/2, frontZ - courtyardDepth - frontT]} castShadow receiveShadow>
         <boxGeometry args={[cliffW, cliffH, 2]} />
-        <primitive object={wallMaterial} />
+        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Courtyard floor */}
@@ -228,7 +210,7 @@ function Fortress() {
         receiveShadow
       >
         <planeGeometry args={[cliffW-4, courtyardDepth-2]} />
-        <meshStandardMaterial map={groundTexture} metalness={0} roughness={1} />
+        <meshStandardMaterial color="#4a7c59" metalness={0} roughness={1} />
       </mesh>
     </group>
   );
@@ -237,9 +219,8 @@ function Fortress() {
 // Coins component
 function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: number; coinSize: number; flowSpeed: number }) {
   const groupRef = useRef<THREE.Group>(null);
-  const [coinTexture] = useTexture(['https://i.imgur.com/MxbV343.png']);
   const coinAccumulator = useRef(0);
-  const maxCoins = 800;
+  const maxCoins = 200; // Reduced for better performance
   
   const coins = useMemo(() => {
     const coinsArray = [];
@@ -295,9 +276,10 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
     <group ref={groupRef}>
       {coins.map((coin, index) => 
         coin.visible && (
-          <sprite key={index} position={coin.position} scale={[coin.scale, coin.scale, 1]}>
-            <spriteMaterial map={coinTexture} transparent alphaTest={0.1} depthTest={false} rotation={coin.rotation} />
-          </sprite>
+          <mesh key={index} position={coin.position} scale={[coin.scale, coin.scale, 0.1]} rotation={[0, 0, coin.rotation]}>
+            <circleGeometry args={[0.5, 8]} />
+            <meshStandardMaterial color="#ffd700" metalness={0.8} roughness={0.2} />
+          </mesh>
         )
       )}
     </group>
@@ -343,9 +325,6 @@ function Scene({ settings }: { settings: any }) {
 
 // Control panel component
 function ControlPanel({ settings, onSettingsChange }: { settings: any; onSettingsChange: (key: string, value: any) => void }) {
-  const [groundUrl, setGroundUrl] = useState('https://i.imgur.com/Ic5FqI9.jpeg');
-  const [coinUrl, setCoinUrl] = useState('https://i.imgur.com/MxbV343.png');
-
   return (
     <div className="fixed top-4 left-4 z-20 space-y-4 max-w-md">
       <Card className="waterfall-card">
@@ -370,7 +349,7 @@ function ControlPanel({ settings, onSettingsChange }: { settings: any; onSetting
               value={[settings.dropCount]}
               onValueChange={([value]) => onSettingsChange('dropCount', value)}
               min={500}
-              max={20000}
+              max={10000}
               step={100}
               className="flex-1"
             />
@@ -381,7 +360,7 @@ function ControlPanel({ settings, onSettingsChange }: { settings: any; onSetting
               value={[settings.coinRate]}
               onValueChange={([value]) => onSettingsChange('coinRate', value)}
               min={0}
-              max={300}
+              max={150}
               step={1}
               className="flex-1"
             />
@@ -399,39 +378,7 @@ function ControlPanel({ settings, onSettingsChange }: { settings: any; onSetting
           </div>
         </div>
         <div className="mt-3 text-xs opacity-75">
-          Click and drag to rotate • Scroll to zoom • WASD move
-        </div>
-      </Card>
-
-      <Card className="waterfall-card">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-sm">TEXTURES</h3>
-        </div>
-        <div className="space-y-3">
-          <div className="grid grid-cols-[80px_1fr_auto] gap-2 items-center">
-            <Label className="text-xs opacity-85">Ground URL</Label>
-            <Input
-              value={groundUrl}
-              onChange={(e) => setGroundUrl(e.target.value)}
-              className="waterfall-input text-xs"
-              placeholder="Enter URL..."
-            />
-            <Button size="sm" className="waterfall-button text-xs px-2 py-1">
-              Load
-            </Button>
-          </div>
-          <div className="grid grid-cols-[80px_1fr_auto] gap-2 items-center">
-            <Label className="text-xs opacity-85">Coin URL</Label>
-            <Input
-              value={coinUrl}
-              onChange={(e) => setCoinUrl(e.target.value)}
-              className="waterfall-input text-xs"
-              placeholder="Enter URL..."
-            />
-            <Button size="sm" className="waterfall-button text-xs px-2 py-1">
-              Load
-            </Button>
-          </div>
+          Click and drag to rotate • Scroll to zoom • Right-click to pan
         </div>
       </Card>
     </div>
@@ -442,8 +389,8 @@ function ControlPanel({ settings, onSettingsChange }: { settings: any; onSetting
 export default function WaterfallFortress() {
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
-    dropCount: 6000,
-    coinRate: 60,
+    dropCount: 3000, // Reduced for better performance
+    coinRate: 30,
     coinSize: 1.2
   });
 
@@ -452,11 +399,12 @@ export default function WaterfallFortress() {
   };
 
   return (
-    <div className="w-full h-screen relative overflow-hidden">
+    <div className="w-full h-screen relative overflow-hidden bg-background">
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
         shadows
-        gl={{ antialias: true, outputColorSpace: THREE.SRGBColorSpace }}
+        gl={{ antialias: true }}
+        dpr={[1, 2]}
       >
         <Scene settings={settings} />
         <OrbitControls
@@ -467,11 +415,6 @@ export default function WaterfallFortress() {
           maxDistance={50}
           minPolarAngle={0}
           maxPolarAngle={Math.PI / 2}
-          mouseButtons={{
-            LEFT: THREE.MOUSE.ROTATE,
-            MIDDLE: THREE.MOUSE.DOLLY,
-            RIGHT: THREE.MOUSE.PAN
-          }}
         />
       </Canvas>
       
