@@ -113,8 +113,8 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   };
 
   return (
-    <div className="absolute top-[140px] left-4 z-50">
-      <Card className="waterfall-card max-w-2xl bg-slate-800/90 border-slate-600 text-white backdrop-blur-sm">
+    <div className="z-50">
+      <Card className="waterfall-card bg-slate-800/90 border-slate-600 text-white backdrop-blur-sm">
         <div 
           className="flex items-center justify-between p-3 cursor-pointer border-b border-slate-600"
           onClick={() => setIsCollapsed(!isCollapsed)}

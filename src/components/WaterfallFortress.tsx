@@ -397,12 +397,12 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         const rangeY = fall.topY - fall.bottomY;
         
         for (let i = 0; i < dropCount; i++) {
-          // Use proper random distribution for X and Z to avoid clustering
-          const u = Math.random();
-          const v = Math.random();
+          // Use Halton sequence for better X and Z distribution to avoid clustering
+          const u = halton(i, 2);
+          const v = halton(i, 3);
           
-          // Use time-based distribution for Y position
-          const timeOffset = (i / dropCount) * 2; // 2 second spread
+          // Use time-based distribution for Y position with better spacing
+          const timeOffset = (i / dropCount) * 3; // 3 second spread for smoother flow
           const fallTime = Math.sqrt(2 * rangeY / (9.8 * flowSpeed));
           const progress = (timeOffset % fallTime) / fallTime;
           
@@ -436,13 +436,13 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     const rangeY = fall.topY - fall.bottomY;
     
     for (let i = 0; i < dropCount; i++) {
-      // Use proper random distribution for X and Z to avoid clustering
-      const u = Math.random();
-      const v = Math.random();
+      // Use Halton sequence for better X and Z distribution to avoid clustering
+      const u = halton(i, 2);
+      const v = halton(i, 3);
       
       // Use time-based distribution for Y position instead of random height
       // This creates an even flow by spacing drops based on their fall time
-      const timeOffset = (i / dropCount) * 2; // 2 second spread
+      const timeOffset = (i / dropCount) * 3; // 3 second spread for smoother flow
       const fallTime = Math.sqrt(2 * rangeY / (9.8 * flowSpeed));
       const progress = (timeOffset % fallTime) / fallTime;
       
@@ -460,7 +460,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     }
     
     return { positions, colors };
-  }, []);
+  }, [halton, pickColor, dropCount, flowSpeed]);
 
   useFrame((state, delta) => {
     if (!pointsRef.current || !velocitiesRef.current) return;
