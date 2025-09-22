@@ -8,15 +8,16 @@ import { Slider } from '@/components/ui/slider';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 
 // First person controls component
-function FirstPersonControls() {
+function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; showCrosshairs: boolean }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
   const keys = useRef({
     w: false, s: false, a: false, d: false,
-    shift: false, space: false
+    shift: false, space: false, r: false
   });
+  const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const onGround = useRef(true);
   const yaw = useRef(0);
   const pitch = useRef(0);
@@ -81,13 +82,16 @@ function FirstPersonControls() {
         keys.current.space = true;
         event.preventDefault();
         break;
+      case 'KeyR':
+        setCrosshairsEnabled(!crosshairsEnabled);
+        break;
       case 'Escape':
         if (isLocked.current) {
           document.exitPointerLock();
         }
         break;
     }
-  }, []);
+  }, [crosshairsEnabled]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     switch (event.code) {
@@ -133,8 +137,18 @@ function FirstPersonControls() {
   const handleClick = useCallback(() => {
     if (!isLocked.current) {
       gl.domElement.requestPointerLock();
+    } else if (crosshairsEnabled && onShoot) {
+      // Fire bullet
+      const shootDirection = new THREE.Vector3(0, 0, -1);
+      shootDirection.applyQuaternion(camera.quaternion);
+      onShoot(camera.position.clone(), shootDirection);
+      
+      // Play gunshot sound
+      const audio = new Audio('/space_gunshot.mp3');
+      audio.volume = 0.3;
+      audio.play().catch(() => {});
     }
-  }, [gl]);
+  }, [gl, crosshairsEnabled, onShoot, camera]);
 
   const handlePointerLockChange = useCallback(() => {
     isLocked.current = document.pointerLockElement === gl.domElement;
@@ -517,7 +531,12 @@ function Fortress() {
 }
 
 // Coins component using sprites like the original
-function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: number; coinSize: number; flowSpeed: number }) {
+function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: { 
+  coinRate: number; 
+  coinSize: number; 
+  flowSpeed: number; 
+  onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
+}) {
   const groupRef = useRef<THREE.Group>(null);
   const coinAccumulator = useRef(0);
   const maxCoins = 800; // Match original
@@ -532,7 +551,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
     const coinsArray = [];
     for (let i = 0; i < maxCoins; i++) {
       coinsArray.push({
-        position: new THREE.Vector3(0, 20 + Math.random() * 2, -6 + (Math.random() - 0.5) * 0.6),
+        position: new THREE.Vector3(0, 20, -6 + (Math.random() - 0.5) * 0.6), // Start at fortress height
         velocity: 0,
         rotation: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() * 2 - 1) * Math.PI * 2,
@@ -555,7 +574,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
         availableCoin.visible = true;
         availableCoin.position.set(
           (Math.random() - 0.5) * 4, // fall.width
-          20 + Math.random() * 2,
+          20, // Start at fortress height
           -6 + (Math.random() - 0.5) * 0.6 // fall.z + fall.depth
         );
         availableCoin.velocity = 0;
@@ -580,9 +599,20 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
       
       if (coin.position.y <= 0.2) {
         coin.visible = false;
+        // Remove from rendering by clearing mesh reference
+        if (coin.mesh) {
+          coin.mesh.visible = false;
+        }
       }
     });
   });
+
+  // Expose coins for bullet collision detection
+  useEffect(() => {
+    if (onGetCoins) {
+      (window as any).getCoins = () => coins;
+    }
+  }, [coins, onGetCoins]);
 
   return (
     <group ref={groupRef}>
@@ -590,7 +620,10 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
         coin.visible && (
           <sprite 
             key={index} 
-            ref={(ref) => { coin.mesh = ref; }}
+            ref={(ref) => { 
+              coin.mesh = ref; 
+              if (ref) ref.visible = true;
+            }}
             position={[coin.position.x, coin.position.y, coin.position.z]} 
             scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
           >
@@ -602,11 +635,79 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
   );
 }
 
+// Bullet component
+function Bullets({ bullets }: { bullets: Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }> }) {
+  return (
+    <group>
+      {bullets.map((bullet, index) => (
+        <mesh key={index} position={[bullet.position.x, bullet.position.y, bullet.position.z]}>
+          <sphereGeometry args={[0.05]} />
+          <meshBasicMaterial color="#ffff00" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 // Scene component
-function Scene({ settings }: { settings: any }) {
+function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: THREE.Vector3) => void }) {
+  const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
+  const [showCrosshairs, setShowCrosshairs] = useState(false);
+
+  const handleShoot = useCallback((origin: THREE.Vector3, direction: THREE.Vector3) => {
+    setBullets(prev => [...prev, {
+      position: origin.clone(),
+      direction: direction.clone(),
+      speed: 100,
+      life: 3.0
+    }]);
+    setShowCrosshairs(true);
+  }, []);
+
+  useFrame((state, delta) => {
+    setBullets(prev => {
+      const newBullets = [];
+      
+      for (const bullet of prev) {
+        bullet.position.addScaledVector(bullet.direction, bullet.speed * delta);
+        bullet.life -= delta;
+        
+        if (bullet.life > 0) {
+          // Check collision with coins
+          const coins = (window as any).getCoins ? (window as any).getCoins() : [];
+          let hit = false;
+          
+          for (const coin of coins) {
+            if (coin.visible && coin.mesh) {
+              const distance = bullet.position.distanceTo(coin.position);
+              if (distance < 0.8) { // Collision threshold
+                coin.visible = false;
+                if (coin.mesh) coin.mesh.visible = false;
+                onCoinHit(coin.position.clone());
+                hit = true;
+                
+                // Play coin hit sound
+                const audio = new Audio('/coin_hit_sound.mp3');
+                audio.volume = 0.4;
+                audio.play().catch(() => {});
+                break;
+              }
+            }
+          }
+          
+          if (!hit) {
+            newBullets.push(bullet);
+          }
+        }
+      }
+      
+      return newBullets;
+    });
+  });
+
   return (
     <>
-      <FirstPersonControls />
+      <FirstPersonControls onShoot={handleShoot} showCrosshairs={showCrosshairs} />
       
       {/* Lighting */}
       <hemisphereLight args={['#ffffff', '#edfff6', 1.1]} />
@@ -636,7 +737,13 @@ function Scene({ settings }: { settings: any }) {
       {/* Scene objects */}
       <Fortress />
       <Waterfall flowSpeed={settings.flowSpeed} dropCount={settings.dropCount} />
-      <Coins coinRate={settings.coinRate} coinSize={settings.coinSize} flowSpeed={settings.flowSpeed} />
+      <Coins 
+        coinRate={settings.coinRate} 
+        coinSize={settings.coinSize} 
+        flowSpeed={settings.flowSpeed}
+        onGetCoins={() => []}
+      />
+      <Bullets bullets={bullets} />
     </>
   );
 }
@@ -731,10 +838,15 @@ export default function WaterfallFortress() {
     coinSize: 1.2
   });
   const [panelsVisible, setPanelsVisible] = useState(true);
+  const [coinScore, setCoinScore] = useState(0);
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
+
+  const handleCoinHit = useCallback((position: THREE.Vector3) => {
+    setCoinScore(prev => prev + 1);
+  }, []);
 
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
@@ -744,7 +856,7 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
-        <Scene settings={settings} />
+        <Scene settings={settings} onCoinHit={handleCoinHit} />
       </Canvas>
 
       {/* Panel visibility toggle button */}
@@ -761,6 +873,17 @@ export default function WaterfallFortress() {
         onSettingsChange={handleSettingsChange}
         isVisible={panelsVisible}
       />
+      
+      {/* Score display */}
+      <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2 bg-black/50 text-white p-2 rounded">
+        <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+        <span className="font-bold">x{coinScore}</span>
+      </div>
+      
+      {/* Instructions */}
+      <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
+        Press R for crosshairs • Click to shoot
+      </div>
       
       {/* Crosshair */}
       <div className="waterfall-crosshair" />
