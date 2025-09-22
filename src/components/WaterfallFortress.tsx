@@ -101,6 +101,12 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
         const newCrosshairsState = !crosshairsEnabled;
         setCrosshairsEnabled(newCrosshairsState);
         
+        // Dispatch custom event to notify parent component
+        const crosshairEvent = new CustomEvent('crosshairChange', { 
+          detail: { enabled: newCrosshairsState } 
+        });
+        window.dispatchEvent(crosshairEvent);
+        
         // Play appropriate gun sound using preloaded audio
         const audio = newCrosshairsState ? audioRefs.current.pistolCocking : audioRefs.current.pistolHolster;
         audio.currentTime = 0; // Reset to beginning
@@ -557,7 +563,17 @@ function Fortress() {
         receiveShadow
       >
         <planeGeometry args={[cliffW-4, courtyardDepth-2]} />
-        <meshStandardMaterial map={grassTexture} metalness={0} roughness={1} />
+        <meshStandardMaterial 
+          map={(() => {
+            const texture = grassTexture.clone();
+            // Calculate repeat based on the same scale as main ground (260x260 with 20x20 repeat = 13 units per repeat)
+            // For courtyard: (cliffW-4) = 36, (courtyardDepth-2) = 28
+            texture.repeat.set((cliffW-4)/13, (courtyardDepth-2)/13);
+            return texture;
+          })()} 
+          metalness={0} 
+          roughness={1} 
+        />
       </mesh>
     </group>
   );
@@ -741,7 +757,7 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
 
   return (
     <>
-      <FirstPersonControls onShoot={handleShoot} showCrosshairs={showCrosshairs} />
+      <FirstPersonControls onShoot={handleShoot} showCrosshairs={true} />
       
       {/* Lighting */}
       <hemisphereLight args={['#ffffff', '#edfff6', 1.1]} />
@@ -930,6 +946,7 @@ export default function WaterfallFortress() {
   });
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [coinScore, setCoinScore] = useState(0);
+  const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -947,39 +964,39 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
-        <Scene settings={settings} onCoinHit={handleCoinHit} />
-      </Canvas>
+      <Scene settings={settings} onCoinHit={handleCoinHit} />
+    </Canvas>
 
-      {/* Panel visibility toggle button */}
-      <Button
-        className="fixed top-4 right-4 z-30 waterfall-button"
-        size="sm"
-        onClick={() => setPanelsVisible(!panelsVisible)}
-      >
-        {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </Button>
-      
-      <ControlPanel 
-        settings={settings} 
-        onSettingsChange={handleSettingsChange}
-        isVisible={panelsVisible}
-      />
-      
-      {/* Score display */}
-      <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2 bg-black/50 text-white p-2 rounded">
-        <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
-        <span className="font-bold">x{coinScore}</span>
+    {/* Panel visibility toggle button */}
+    <Button
+      className="fixed top-4 right-4 z-30 waterfall-button"
+      size="sm"
+      onClick={() => setPanelsVisible(!panelsVisible)}
+    >
+      {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+    </Button>
+    
+    <ControlPanel 
+      settings={settings} 
+      onSettingsChange={handleSettingsChange}
+      isVisible={panelsVisible}
+    />
+    
+    {/* Score display */}
+    <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2 bg-black/50 text-white p-2 rounded">
+      <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+      <span className="font-bold">x{coinScore}</span>
+    </div>
+    
+    {/* Instructions */}
+    {panelsVisible && (
+      <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
+        Press R for crosshairs • Click to shoot
       </div>
-      
-      {/* Instructions */}
-      {panelsVisible && (
-        <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
-          Press R for crosshairs • Click to shoot
-        </div>
-      )}
-      
-      {/* Crosshair */}
-      <div className="waterfall-crosshair" />
+    )}
+    
+    {/* Crosshair - conditional class for active state */}
+    <div className={`waterfall-crosshair ${crosshairsEnabled ? 'active' : ''}`} />
     </div>
   );
 }
