@@ -137,11 +137,15 @@ All colors MUST be HSL.
     z-index: 50;
   }
 
+  .waterfall-crosshair.active {
+    border-color: #ff2431;
+  }
+
   .waterfall-crosshair.active::before,
   .waterfall-crosshair.active::after {
     content: '';
     position: absolute;
-    background: hsl(var(--primary) / 0.6);
+    background: #ff2431;
   }
 
   /* Horizontal line */
@@ -151,7 +155,7 @@ All colors MUST be HSL.
     transform: translateY(-50%);
     width: 6px;
     height: 2px;
-    box-shadow: 22px 0 0 hsl(var(--primary) / 0.6);
+    box-shadow: 25px 0 0 #ff2431;
   }
 
   /* Vertical line */
@@ -161,6 +165,6 @@ All colors MUST be HSL.
     transform: translateX(-50%);
     width: 2px;
     height: 6px;
-    box-shadow: 0 22px 0 hsl(var(--primary) / 0.6);
+    box-shadow: 0 25px 0 #ff2431;
   }
 }
