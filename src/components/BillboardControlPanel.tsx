@@ -10,15 +10,19 @@ import { useToast } from '@/hooks/use-toast';
 
 interface BillboardControlPanelProps {
   isVisible: boolean;
+  onWallPositionsChange?: (positions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>) => void;
 }
 
-export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible }) => {
+export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible, onWallPositionsChange }) => {
   const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia } = useBillboardData();
   const { toast } = useToast();
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedWallForMoving, setSelectedWallForMoving] = useState<number>(1);
   const [tempPositions, setTempPositions] = useState<Record<number, {x: string, y: string, z: string}>>({});
+  
+  // Local wall positions (override database positions for real-time control)
+  const [localWallPositions, setLocalWallPositions] = useState<Record<number, {x: number, y: number, z: number}>>({});
 
   if (!isVisible) return null;
   
@@ -66,16 +70,12 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     const wall = walls.find(w => w.wall_number === selectedWallForMoving);
     if (!wall) return;
 
-    const currentPosition = {
+    // Use local position if available, otherwise fall back to database position
+    const currentLocalPos = localWallPositions[selectedWallForMoving];
+    const currentPosition = currentLocalPos || {
       x: wall.position_x ?? 0,
       y: wall.position_y ?? 0,
       z: wall.position_z ?? 0
-    };
-
-    const currentRotation = {
-      x: wall.rotation_x ?? 0,
-      y: wall.rotation_y ?? 0,
-      z: wall.rotation_z ?? 0
     };
 
     const newPosition = {
@@ -83,9 +83,41 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
       [axis]: currentPosition[axis] + delta
     };
 
+    // Update local position immediately for real-time feedback
+    setLocalWallPositions(prev => ({
+      ...prev,
+      [selectedWallForMoving]: newPosition
+    }));
+
+    // Notify parent component about position changes
+    if (onWallPositionsChange) {
+      const allPositions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}> = {};
+      walls.forEach(w => {
+        const localPos = selectedWallForMoving === w.wall_number ? newPosition : localWallPositions[w.wall_number];
+        const pos = localPos || {
+          x: w.position_x ?? 0,
+          y: w.position_y ?? 0,
+          z: w.position_z ?? 0
+        };
+        allPositions[w.wall_number] = {
+          ...pos,
+          rotX: w.rotation_x ?? 0,
+          rotY: w.rotation_y ?? 0,
+          rotZ: w.rotation_z ?? 0
+        };
+      });
+      onWallPositionsChange(allPositions);
+    }
+
+    // Update database (this will be batched and saved every 30 seconds)
+    const currentRotation = {
+      x: wall.rotation_x ?? 0,
+      y: wall.rotation_y ?? 0,
+      z: wall.rotation_z ?? 0
+    };
+
     try {
       await updateWallPosition(wall.id, newPosition, currentRotation);
-      // No toast - real-time feedback through visual movement
     } catch (error) {
       console.error('Error updating wall position:', error);
     }
@@ -95,16 +127,49 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     const wall = walls.find(w => w.wall_number === selectedWallForMoving);
     if (!wall) return;
 
+    // Use local position if available, otherwise fall back to database position
+    const currentLocalPos = localWallPositions[selectedWallForMoving];
+    const currentPosition = currentLocalPos || {
+      x: wall.position_x ?? 0,
+      y: wall.position_y ?? 0,
+      z: wall.position_z ?? 0
+    };
+
+    const newPosition = {
+      ...currentPosition,
+      [axis]: value
+    };
+
+    // Update local position immediately for real-time feedback
+    setLocalWallPositions(prev => ({
+      ...prev,
+      [selectedWallForMoving]: newPosition
+    }));
+
+    // Notify parent component about position changes
+    if (onWallPositionsChange) {
+      const allPositions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}> = {};
+      walls.forEach(w => {
+        const localPos = selectedWallForMoving === w.wall_number ? newPosition : localWallPositions[w.wall_number];
+        const pos = localPos || {
+          x: w.position_x ?? 0,
+          y: w.position_y ?? 0,
+          z: w.position_z ?? 0
+        };
+        allPositions[w.wall_number] = {
+          ...pos,
+          rotX: w.rotation_x ?? 0,
+          rotY: w.rotation_y ?? 0,
+          rotZ: w.rotation_z ?? 0
+        };
+      });
+      onWallPositionsChange(allPositions);
+    }
+
     const currentRotation = {
       x: wall.rotation_x ?? 0,
       y: wall.rotation_y ?? 0,
       z: wall.rotation_z ?? 0
-    };
-
-    const newPosition = {
-      x: axis === 'x' ? value : (wall.position_x ?? 0),
-      y: axis === 'y' ? value : (wall.position_y ?? 0),
-      z: axis === 'z' ? value : (wall.position_z ?? 0)
     };
 
     try {
@@ -139,6 +204,13 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     if (tempValue !== undefined) {
       return tempValue;
     }
+    
+    // Use local position if available, otherwise fall back to database position
+    const localPos = localWallPositions[selectedWallForMoving];
+    if (localPos) {
+      return localPos[axis].toString();
+    }
+    
     const actualValue = axis === 'x' ? wall.position_x : axis === 'y' ? wall.position_y : wall.position_z;
     return (actualValue ?? 0).toString();
   };

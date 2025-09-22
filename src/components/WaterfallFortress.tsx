@@ -769,7 +769,11 @@ function Bullets({ bullets }: {
 
 // Scene component
 // Scene component with audio management
-function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: THREE.Vector3) => void }) {
+function Scene({ settings, onCoinHit, wallPositions }: { 
+  settings: any; 
+  onCoinHit: (position: THREE.Vector3) => void; 
+  wallPositions?: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
+}) {
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
   const [showCrosshairs, setShowCrosshairs] = useState(false);
 
@@ -920,8 +924,8 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
 
       {/* Scene objects */}
       <Fortress />
-      <BillboardWalls />
-      <Waterfall 
+      <BillboardWalls wallPositions={wallPositions} />
+      <Waterfall
         flowSpeed={settings.flowSpeed} 
         dropCount={settings.dropCount} 
         colorPalette={settings.colorPalette} 
@@ -1082,6 +1086,9 @@ export default function WaterfallFortress() {
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
+  
+  // Wall positions state for real-time control
+  const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -1111,7 +1118,7 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
-      <Scene settings={settings} onCoinHit={handleCoinHit} />
+      <Scene settings={settings} onCoinHit={handleCoinHit} wallPositions={wallPositions} />
     </Canvas>
 
     {/* Panel visibility toggle button */}
@@ -1131,7 +1138,10 @@ export default function WaterfallFortress() {
     
     {/* Billboard Control Panel - positioned below the Waterfall panel */}
     <div className="fixed top-4 left-4 z-20 space-y-4 max-w-md" style={{ marginTop: '320px' }}>
-      <BillboardControlPanel isVisible={panelsVisible} />
+      <BillboardControlPanel 
+        isVisible={panelsVisible} 
+        onWallPositionsChange={setWallPositions}
+      />
     </div>
     
     {/* Score display */}

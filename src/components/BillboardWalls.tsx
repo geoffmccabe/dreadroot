@@ -3,15 +3,24 @@ import { useBillboardData } from '@/hooks/useBillboardData';
 import * as THREE from 'three';
 
 interface BillboardWallsProps {
-  // These props will be passed from the 3D scene to position the walls
+  wallPositions?: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
 }
 
-const BillboardWalls: React.FC<BillboardWallsProps> = () => {
+const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   const { walls, screenUrls, mediaItems } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
 
-  // Get wall positions from Supabase data
+  // Get wall positions from local control or fallback to database
   const getWallPositionAndRotation = (wallNumber: number) => {
+    // Use local positions if available, otherwise fallback to database
+    if (wallPositions && wallPositions[wallNumber]) {
+      const pos = wallPositions[wallNumber];
+      return {
+        position: [pos.x, pos.y, pos.z] as [number, number, number],
+        rotation: [pos.rotX, pos.rotY, pos.rotZ] as [number, number, number]
+      };
+    }
+    
     const wall = walls.find(w => w.wall_number === wallNumber);
     if (!wall) return { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
     
@@ -43,21 +52,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
-    // Get the wall data and extract position values directly
-    const wall1 = walls.find(w => w.wall_number === 1);
-    const posX = wall1?.position_x ?? 0;
-    const posY = wall1?.position_y ?? 0;
-    const posZ = wall1?.position_z ?? 0;
-    const rotX = wall1?.rotation_x ?? 0;
-    const rotY = wall1?.rotation_y ?? 0;
-    const rotZ = wall1?.rotation_z ?? 0;
+    const { position, rotation } = getWallPositionAndRotation(1);
+    const [posX, posY, posZ] = position;
+    const [rotX, rotY, rotZ] = rotation;
 
     console.log('Wall1Screen rendering with position:', [posX, posY, posZ]);
-    
-    // EXTREME TEST - multiply positions by 5 to make changes obvious
-    const testPosX = posX * 5;
-    const testPosY = posY * 5; 
-    const testPosZ = posZ * 5;
 
     // Create URL text texture only when URL actually changes
     const urlTexture = useMemo(() => {
@@ -86,7 +85,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     }, [currentUrl?.url]);
 
     return (
-      <group key={`wall1-${posX}-${posY}-${posZ}`} position={[testPosX, testPosY, testPosZ]} rotation={[rotX, rotY, rotZ]}>
+      <group key={`wall1-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
@@ -129,22 +128,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     wallType: 'side' | 'back';
   }) => {
     const mediaItems = getMediaItemsForWall(wallNumber);
-    
-    // Get the wall data and extract position values directly
-    const wall = walls.find(w => w.wall_number === wallNumber);
-    const posX = wall?.position_x ?? 0;
-    const posY = wall?.position_y ?? 0;  
-    const posZ = wall?.position_z ?? 0;
-    const rotX = wall?.rotation_x ?? 0;
-    const rotY = wall?.rotation_y ?? 0;
-    const rotZ = wall?.rotation_z ?? 0;
+    const { position, rotation } = getWallPositionAndRotation(wallNumber);
+    const [posX, posY, posZ] = position;
+    const [rotX, rotY, rotZ] = rotation;
 
     console.log(`Wall${wallNumber} rendering with position:`, [posX, posY, posZ]);
-    
-    // EXTREME TEST - multiply positions by 5 to make changes obvious
-    const testPosX = posX * 5;
-    const testPosY = posY * 5; 
-    const testPosZ = posZ * 5;
     
     // Calculate dimensions based on wall type
     const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
@@ -153,7 +141,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const slotHeight = wallHeight / 2; // 2 rows
     
     return (
-      <group key={`wall${wallNumber}-${posX}-${posY}-${posZ}`} position={[testPosX, testPosY, testPosZ]} rotation={[rotX, rotY, rotZ]}>
+      <group key={`wall${wallNumber}-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
