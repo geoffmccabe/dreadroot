@@ -463,20 +463,20 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     const positions = positionAttribute.array as Float32Array;
     const colors = colorAttribute.array as Float32Array;
     
-    // Simple physics matching original HTML exactly
-    const fallSpeed = 5.5 * flowSpeed;
+    // EXACT physics from original HTML
+    const mul = flowSpeed; // This matches the original "mul" variable
     
     for (let i = 0; i < dropCount; i++) {
       let y = positions[i * 3 + 1];
-      y -= fallSpeed * delta;
+      y -= (5.5 * mul) * delta; // Exact formula from original
       
       if (y <= fall.bottomY) {
-        // Reset drop EXACTLY like original HTML - pure random positioning
+        // Reset drop EXACTLY like original HTML
         positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
-        y = fall.topY - Math.random() * (fall.topY - fall.bottomY);
+        y = fall.topY - Math.random() * (fall.topY - fall.bottomY); // Exact original formula
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
         
-        // Pick new color 
+        // Update color exactly like original (with needsUpdate check)
         const color = pickColor();
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
@@ -507,14 +507,14 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.16}
+        size={0.2}
         vertexColors
         transparent
-        opacity={0.9}
+        opacity={1.0}
         depthWrite={false}
-        depthTest={true}
-        blending={THREE.NormalBlending}
-        alphaTest={0.1}
+        depthTest={false}
+        blending={THREE.AdditiveBlending}
+        fog={false}
       />
     </points>
   );
