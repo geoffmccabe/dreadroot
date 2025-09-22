@@ -537,7 +537,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                                size="sm"
                                variant="outline"
                                className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onMouseDown={createMouseHandler('x', -1)}
+                               onClick={() => handleSingleClick('x', -1)}
                                disabled={isUpdatingPosition}
                              >
                                ←
@@ -564,7 +564,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                                size="sm"
                                variant="outline"
                                className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onMouseDown={createMouseHandler('x', 1)}
+                               onClick={() => handleSingleClick('x', 1)}
                                disabled={isUpdatingPosition}
                              >
                                →
@@ -578,7 +578,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                                size="sm"
                                variant="outline"
                                className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onMouseDown={createMouseHandler('y', -1)}
+                               onClick={() => handleSingleClick('y', -1)}
                                disabled={isUpdatingPosition}
                              >
                                ↓
@@ -605,7 +605,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                                size="sm"
                                variant="outline"
                                className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onMouseDown={createMouseHandler('y', 1)}
+                               onClick={() => handleSingleClick('y', 1)}
                                disabled={isUpdatingPosition}
                              >
                                ↑
@@ -619,7 +619,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                                size="sm"
                                variant="outline"
                                className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onMouseDown={createMouseHandler('z', -1)}
+                               onClick={() => handleSingleClick('z', -1)}
                                disabled={isUpdatingPosition}
                              >
                                ←
@@ -646,7 +646,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                                size="sm"
                                variant="outline"
                                className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onMouseDown={createMouseHandler('z', 1)}
+                               onClick={() => handleSingleClick('z', 1)}
                                disabled={isUpdatingPosition}
                              >
                                →

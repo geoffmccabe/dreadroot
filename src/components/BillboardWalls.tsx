@@ -58,31 +58,108 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
 
     console.log('Wall1Screen rendering with position:', [posX, posY, posZ]);
 
-    // Create URL text texture only when URL actually changes
-    const urlTexture = useMemo(() => {
+    // Create iframe texture for live website content
+    const [iframeTexture, setIframeTexture] = useState<THREE.Texture | null>(null);
+    
+    useEffect(() => {
       const urlString = currentUrl?.url;
-      if (!urlString) return null;
+      if (!urlString) {
+        setIframeTexture(null);
+        return;
+      }
+
+      // Check if URL is valid
+      try {
+        new URL(urlString);
+      } catch {
+        console.warn('Invalid URL:', urlString);
+        setIframeTexture(null);
+        return;
+      }
+
+      console.log('Creating iframe texture for:', urlString);
       
+      // Create iframe element
+      const iframe = document.createElement('iframe');
+      iframe.src = urlString;
+      iframe.width = '1024';
+      iframe.height = '768';
+      iframe.style.border = 'none';
+      iframe.style.position = 'absolute';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '-9999px';
+      
+      // Add iframe to document
+      document.body.appendChild(iframe);
+
+      // Create canvas and texture after iframe loads
+      const handleLoad = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1024;
+          canvas.height = 768;
+          const context = canvas.getContext('2d')!;
+          
+          // Create a simple loading/placeholder texture
+          context.fillStyle = '#1e293b';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          
+          // Add URL text
+          context.fillStyle = '#ffffff';
+          context.font = 'bold 40px Arial';
+          context.textAlign = 'center';
+          context.textBaseline = 'middle';
+          context.fillText('Loading...', canvas.width / 2, canvas.height / 2 - 50);
+          context.font = '30px Arial';
+          context.fillText(urlString, canvas.width / 2, canvas.height / 2 + 50);
+          
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.needsUpdate = true;
+          setIframeTexture(texture);
+        } catch (error) {
+          console.error('Error creating iframe texture:', error);
+        } finally {
+          // Clean up iframe
+          if (iframe.parentNode) {
+            iframe.parentNode.removeChild(iframe);
+          }
+        }
+      };
+
+      iframe.onload = handleLoad;
+      
+      // Fallback if iframe doesn't load in 3 seconds
+      setTimeout(() => {
+        handleLoad();
+      }, 3000);
+
+      return () => {
+        if (iframe.parentNode) {
+          iframe.parentNode.removeChild(iframe);
+        }
+      };
+    }, [currentUrl?.url]);
+
+    // Fallback texture for when no URL is set
+    const fallbackTexture = useMemo(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 1024;
-      canvas.height = 512;
+      canvas.height = 768;
       const context = canvas.getContext('2d')!;
       
-      // Black background
       context.fillStyle = '#1e293b';
       context.fillRect(0, 0, canvas.width, canvas.height);
       
-      // White text
-      context.fillStyle = '#ffffff';
-      context.font = 'bold 60px Arial';
+      context.fillStyle = '#6b7280';
+      context.font = 'bold 48px Arial';
       context.textAlign = 'center';
       context.textBaseline = 'middle';
-      context.fillText(urlString, canvas.width / 2, canvas.height / 2);
+      context.fillText('No URL Selected', canvas.width / 2, canvas.height / 2);
       
       const texture = new THREE.CanvasTexture(canvas);
       texture.needsUpdate = true;
       return texture;
-    }, [currentUrl?.url]);
+    }, []);
 
     return (
       <group key={`wall1-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
@@ -92,30 +169,43 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
           <meshBasicMaterial color="#000000" side={THREE.DoubleSide} />
         </mesh>
         
-        {/* Screen content - URL display - visible from both sides */}
+        {/* Screen content - Live website or fallback - visible from both sides */}
         <mesh position={[0, 1, 0.02]}>
-          <planeGeometry args={[17, 8]} />
+          <planeGeometry args={[17, 10]} />
           <meshBasicMaterial 
-            map={urlTexture}
-            color={currentUrl?.url ? "#ffffff" : "#1e293b"}
+            map={iframeTexture || fallbackTexture}
             side={THREE.DoubleSide}
           />
         </mesh>
         
         {/* URL buttons at bottom - visible from both sides */}
-        <group position={[-6.75, -4, 0.03]}>
+        <group position={[-6.75, -4.5, 0.03]}>
           {wall1Urls.slice(0, 4).map((urlData, index) => (
-            <mesh
-              key={urlData.slot_number}
-              position={[index * 4.5, 0, 0]}
-              onClick={() => setActiveScreenUrl(urlData.slot_number)}
-            >
-              <planeGeometry args={[4, 2]} />
-              <meshBasicMaterial 
-                color={activeScreenUrl === urlData.slot_number ? "#4f46e5" : "#6b7280"}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
+            <group key={urlData.slot_number}>
+              <mesh
+                position={[index * 4.5, 0, 0]}
+                onClick={() => {
+                  console.log('Switching to URL slot:', urlData.slot_number);
+                  setActiveScreenUrl(urlData.slot_number);
+                }}
+              >
+                <planeGeometry args={[4, 2]} />
+                <meshBasicMaterial 
+                  color={activeScreenUrl === urlData.slot_number ? "#4f46e5" : "#6b7280"}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+              {/* Button label */}
+              <mesh position={[index * 4.5, 0, 0.01]}>
+                <planeGeometry args={[3.8, 1.8]} />
+                <meshBasicMaterial 
+                  color="#ffffff"
+                  transparent
+                  opacity={0.9}
+                  side={THREE.DoubleSide}
+                />
+              </mesh>
+            </group>
           ))}
         </group>
       </group>
@@ -174,24 +264,37 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   }) => {
     const [texture, setTexture] = useState<THREE.Texture | null>(null);
     const [loading, setLoading] = useState(false);
+    const [currentUrl, setCurrentUrl] = useState<string | null>(null);
     
-    // Load texture when mediaUrl changes (real-time updates)
+    // Only load texture when mediaUrl actually changes (prevent constant reloading)
     useEffect(() => {
-      if (!mediaUrl || mediaType !== 'image') {
-        setTexture(null);
-        setLoading(false);
+      // Prevent unnecessary reloads if URL hasn't changed
+      if (currentUrl === mediaUrl) {
         return;
       }
       
+      if (!mediaUrl || mediaType !== 'image') {
+        setTexture(null);
+        setLoading(false);
+        setCurrentUrl(null);
+        return;
+      }
+      
+      console.log('Loading new texture for:', mediaUrl);
       setLoading(true);
+      setCurrentUrl(mediaUrl);
+      
       const loader = new THREE.TextureLoader();
       
       loader.load(
         mediaUrl,
         (loadedTexture) => {
           loadedTexture.needsUpdate = true;
+          loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
+          loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
           setTexture(loadedTexture);
           setLoading(false);
+          console.log('Texture loaded successfully:', mediaUrl);
         },
         undefined,
         (error) => {
@@ -200,7 +303,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
           setLoading(false);
         }
       );
-    }, [mediaUrl, mediaType]);
+    }, [mediaUrl, mediaType, currentUrl]);
     
     return (
       <mesh position={position}>
