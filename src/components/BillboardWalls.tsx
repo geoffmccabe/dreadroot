@@ -44,14 +44,10 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
-    const [urlTexture, setUrlTexture] = useState<THREE.CanvasTexture | null>(null);
-    
-    // Update URL texture when currentUrl changes (real-time)
-    useEffect(() => {
-      if (!currentUrl?.url) {
-        setUrlTexture(null);
-        return;
-      }
+    // Create URL text texture only when URL actually changes
+    const urlTexture = useMemo(() => {
+      const urlString = currentUrl?.url;
+      if (!urlString) return null;
       
       const canvas = document.createElement('canvas');
       canvas.width = 1024;
@@ -67,12 +63,12 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       context.font = 'bold 60px Arial';
       context.textAlign = 'center';
       context.textBaseline = 'middle';
-      context.fillText(currentUrl.url, canvas.width / 2, canvas.height / 2);
+      context.fillText(urlString, canvas.width / 2, canvas.height / 2);
       
       const texture = new THREE.CanvasTexture(canvas);
       texture.needsUpdate = true;
-      setUrlTexture(texture);
-    }, [currentUrl?.url]);
+      return texture;
+    }, [currentUrl?.url]); // Only depend on the actual URL string
 
     const { position, rotation } = getWallPositionAndRotation(1);
 
