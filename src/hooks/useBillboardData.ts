@@ -56,6 +56,17 @@ export const useBillboardData = () => {
     mediaItems: new Map()
   });
 
+  // Use refs to track last content for deep comparison
+  const lastContent = useRef<{
+    walls: string;
+    screenUrls: string;
+    mediaItems: string;
+  }>({
+    walls: '',
+    screenUrls: '',
+    mediaItems: ''
+  });
+
   // Track pending changes for batch saving
   const pendingChanges = useRef<{
     walls: Set<string>;
@@ -67,9 +78,14 @@ export const useBillboardData = () => {
     mediaItems: new Set()
   });
 
+  // Stable refs for arrays to prevent reference changes
+  const wallsRef = useRef<BillboardWall[]>([]);
+  const screenUrlsRef = useRef<ScreenUrl[]>([]);
+  const mediaItemsRef = useRef<MediaGridItem[]>([]);
+
   const fetchData = async () => {
     try {
-      console.log('🔄 Fetching billboard data from database...');
+      
       setLoading(true);
       
       const { data: wallsData } = await supabase
@@ -88,11 +104,6 @@ export const useBillboardData = () => {
         .order('wall_id, slot_number');
 
       if (wallsData) {
-        console.log('📍 Loaded wall positions from database:', wallsData.map(w => ({
-          wall: w.wall_number,
-          position: { x: w.position_x, y: w.position_y, z: w.position_z },
-          rotation: { x: w.rotation_x, y: w.rotation_y, z: w.rotation_z }
-        })));
         
         const typedWalls = wallsData.map(wall => ({
           ...wall,
@@ -107,7 +118,7 @@ export const useBillboardData = () => {
       }
       
       if (urlsData) {
-        console.log('🔗 Loaded screen URLs:', urlsData.length, 'records');
+        
         setScreenUrlsState(urlsData as ScreenUrl[]);
         originalData.current.screenUrls.clear();
         urlsData.forEach(url => {
@@ -116,7 +127,7 @@ export const useBillboardData = () => {
       }
       
       if (mediaData) {
-        console.log('🖼️ Loaded media items:', mediaData.length, 'records');
+        
         const typedMedia = mediaData.map(item => ({
           ...item,
           media_type: item.media_type as 'image' | 'video' | null
@@ -466,9 +477,8 @@ export const useBillboardData = () => {
                   wall.id === updatedWall.id ? updatedWall : wall
                 ));
                 originalData.current.walls.set(updatedWall.id, { ...updatedWall });
-                console.log('📡 Applied debounced real-time update for wall', updatedWall.wall_number);
               }
-            }, 100);
+            }, 1000);
           }
         }
       )
@@ -552,10 +562,69 @@ export const useBillboardData = () => {
     };
   }, []);
 
-  // Stabilize arrays using useMemo to prevent unnecessary re-renders
-  const walls = useMemo(() => wallsState, [wallsState]);
-  const screenUrls = useMemo(() => screenUrlsState, [screenUrlsState]);
-  const mediaItems = useMemo(() => mediaItemsState, [mediaItemsState]);
+  // Stabilized arrays with deep content comparison to prevent constant re-renders
+  const walls = useMemo(() => {
+    const sorted = wallsState.slice().sort((a, b) => a.wall_number - b.wall_number);
+    const contentHash = JSON.stringify(sorted.map(w => ({
+      id: w.id,
+      wall_number: w.wall_number,
+      wall_type: w.wall_type,
+      position_x: w.position_x,
+      position_y: w.position_y,
+      position_z: w.position_z,
+      rotation_x: w.rotation_x,
+      rotation_y: w.rotation_y,
+      rotation_z: w.rotation_z
+    })));
+    
+    if (lastContent.current.walls === contentHash) {
+      return wallsRef.current || sorted;
+    }
+    
+    lastContent.current.walls = contentHash;
+    wallsRef.current = sorted;
+    return sorted;
+  }, [wallsState]);
+
+  const screenUrls = useMemo(() => {
+    const sorted = screenUrlsState.slice().sort((a, b) => a.slot_number - b.slot_number);
+    const contentHash = JSON.stringify(sorted.map(s => ({
+      id: s.id,
+      wall_id: s.wall_id,
+      slot_number: s.slot_number,
+      url: s.url
+    })));
+    
+    if (lastContent.current.screenUrls === contentHash) {
+      return screenUrlsRef.current || sorted;
+    }
+    
+    lastContent.current.screenUrls = contentHash;
+    screenUrlsRef.current = sorted;
+    return sorted;
+  }, [screenUrlsState]);
+
+  const mediaItems = useMemo(() => {
+    const sorted = mediaItemsState.slice().sort((a, b) => {
+      if (a.wall_id !== b.wall_id) return a.wall_id.localeCompare(b.wall_id);
+      return a.slot_number - b.slot_number;
+    });
+    const contentHash = JSON.stringify(sorted.map(m => ({
+      id: m.id,
+      wall_id: m.wall_id,
+      slot_number: m.slot_number,
+      media_url: m.media_url,
+      media_type: m.media_type
+    })));
+    
+    if (lastContent.current.mediaItems === contentHash) {
+      return mediaItemsRef.current || sorted;
+    }
+    
+    lastContent.current.mediaItems = contentHash;
+    mediaItemsRef.current = sorted;
+    return sorted;
+  }, [mediaItemsState]);
 
   return {
     walls,

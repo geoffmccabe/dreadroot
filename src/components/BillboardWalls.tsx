@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import * as THREE from 'three';
 
@@ -10,74 +10,80 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   const { walls, screenUrls, mediaItems } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
 
-  // Memoized wall positions to prevent constant re-renders
-  const getWallPositionAndRotation = useMemo(() => {
-    const positionCache = new Map<number, { position: [number, number, number]; rotation: [number, number, number] }>();
+  // Stable cache using refs to prevent re-creation
+  const positionCacheRef = useRef(new Map<number, { position: [number, number, number]; rotation: [number, number, number] }>());
+  
+  const getWallPositionAndRotation = useCallback((wallNumber: number) => {
+    if (positionCacheRef.current.has(wallNumber)) {
+      return positionCacheRef.current.get(wallNumber)!;
+    }
     
-    return (wallNumber: number) => {
-      if (positionCache.has(wallNumber)) {
-        return positionCache.get(wallNumber)!;
-      }
-      
-      let result;
-      // Use local positions if available, otherwise fallback to database
-      if (wallPositions && wallPositions[wallNumber]) {
-        const pos = wallPositions[wallNumber];
-        result = {
-          position: [pos.x, pos.y, pos.z] as [number, number, number],
-          rotation: [pos.rotX, pos.rotY, pos.rotZ] as [number, number, number]
-        };
+    let result;
+    // Use local positions if available, otherwise fallback to database
+    if (wallPositions && wallPositions[wallNumber]) {
+      const pos = wallPositions[wallNumber];
+      result = {
+        position: [pos.x, pos.y, pos.z] as [number, number, number],
+        rotation: [pos.rotX, pos.rotY, pos.rotZ] as [number, number, number]
+      };
+    } else {
+      const wall = walls.find(w => w.wall_number === wallNumber);
+      if (!wall) {
+        result = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
       } else {
-        const wall = walls.find(w => w.wall_number === wallNumber);
-        if (!wall) {
-          result = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
-        } else {
-          result = {
-            position: [
-              wall.position_x ?? 0,
-              wall.position_y ?? 0,
-              wall.position_z ?? 0
-            ] as [number, number, number],
-            rotation: [
-              wall.rotation_x ?? 0,
-              wall.rotation_y ?? 0,
-              wall.rotation_z ?? 0
-            ] as [number, number, number]
-          };
-        }
+        result = {
+          position: [
+            wall.position_x ?? 0,
+            wall.position_y ?? 0,
+            wall.position_z ?? 0
+          ] as [number, number, number],
+          rotation: [
+            wall.rotation_x ?? 0,
+            wall.rotation_y ?? 0,
+            wall.rotation_z ?? 0
+          ] as [number, number, number]
+        };
       }
-      
-      positionCache.set(wallNumber, result);
-      return result;
-    };
+    }
+    
+    positionCacheRef.current.set(wallNumber, result);
+    return result;
+  }, [walls, wallPositions]);
+
+  // Clear cache when walls or wallPositions change
+  useEffect(() => {
+    positionCacheRef.current.clear();
   }, [walls, wallPositions]);
 
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
   const currentUrl = wall1Urls.find(url => url.slot_number === activeScreenUrl);
 
-  // Memoized media items to prevent constant re-renders
-  const getMediaItemsForWall = useMemo(() => {
-    const mediaCache = new Map<number, any[]>();
+  // Stable cache using refs to prevent re-creation
+  const mediaCacheRef = useRef(new Map<number, any[]>());
+  
+  const getMediaItemsForWall = useCallback((wallNumber: number) => {
+    if (mediaCacheRef.current.has(wallNumber)) {
+      return mediaCacheRef.current.get(wallNumber)!;
+    }
     
-    return (wallNumber: number) => {
-      if (mediaCache.has(wallNumber)) {
-        return mediaCache.get(wallNumber)!;
-      }
-      
-      const wall = walls.find(w => w.wall_number === wallNumber);
-      if (!wall) {
-        mediaCache.set(wallNumber, []);
-        return [];
-      }
-      
-      const items = mediaItems
-        .filter(item => item.wall_id === wall.id)
-        .sort((a, b) => a.slot_number - b.slot_number);
-      
-      mediaCache.set(wallNumber, items);
-      return items;
-    };
+    const wall = walls.find(w => w.wall_number === wallNumber);
+    if (!wall) {
+      mediaCacheRef.current.set(wallNumber, []);
+      return [];
+    }
+    
+    const items = mediaItems
+      .filter(item => item.wall_id === wall.id)
+      .sort((a, b) => a.slot_number - b.slot_number);
+    
+    mediaCacheRef.current.set(wallNumber, items);
+    return items;
+  }, [walls, mediaItems]);
+
+  // Clear cache when walls or mediaItems change
+  useEffect(() => {
+    mediaCacheRef.current.clear();
   }, [walls, mediaItems]);
 
   // Wall 1 - Screen with URL buttons (front wall inner)
@@ -86,7 +92,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     const [posX, posY, posZ] = position;
     const [rotX, rotY, rotZ] = rotation;
 
-    console.log('Wall1Screen rendering with position:', [posX, posY, posZ]);
+    
 
     // Create iframe texture for live website content
     const [iframeTexture, setIframeTexture] = useState<THREE.Texture | null>(null);
@@ -107,7 +113,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         return;
       }
 
-      console.log('Creating iframe texture for:', urlString);
+      
       
       // Create iframe element
       const iframe = document.createElement('iframe');
@@ -252,7 +258,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     const [posX, posY, posZ] = position;
     const [rotX, rotY, rotZ] = rotation;
 
-    console.log(`Wall${wallNumber} rendering with position:`, [posX, posY, posZ]);
+    
     
     // Calculate dimensions based on wall type
     const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
@@ -316,7 +322,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         return;
       }
       
-      console.log('Loading texture for MediaSlot:', mediaUrl);
+      
       setLoading(true);
       loadedUrlRef.current = mediaUrl;
       
@@ -334,7 +340,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
             loadedTexture.magFilter = THREE.LinearFilter;
             setTexture(loadedTexture);
             setLoading(false);
-            console.log('✅ Texture loaded successfully for MediaSlot:', mediaUrl);
+            
           }
         },
         undefined,
