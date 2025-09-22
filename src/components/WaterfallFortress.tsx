@@ -64,7 +64,22 @@ function SkyTexture() {
 }
 
 // First person controls component
-function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; showCrosshairs: boolean }) {
+function FirstPersonControls({ 
+  onShoot, 
+  showCrosshairs, 
+  audioRefs, 
+  playAudio 
+}: { 
+  onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
+  showCrosshairs: boolean;
+  audioRefs: {
+    pistolCocking: HTMLAudioElement;
+    pistolHolster: HTMLAudioElement;
+    gunshot: HTMLAudioElement;
+    coinHit: HTMLAudioElement;
+  };
+  playAudio: (audio: HTMLAudioElement) => Promise<void>;
+}) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
   const velocity = useRef(new THREE.Vector3());
@@ -77,20 +92,6 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
   const onGround = useRef(true);
   const yaw = useRef(0);
   const pitch = useRef(0);
-
-  // Preload audio files to eliminate delay
-  const audioRefs = useRef({
-    pistolCocking: new Audio('/pistol_cocking_sound.mp3'),
-    pistolHolster: new Audio('/holster_pistol_sound.mp3'),
-    gunshot: new Audio('/space_gunshot.mp3')
-  });
-
-  useEffect(() => {
-    // Set volumes for preloaded audio
-    audioRefs.current.pistolCocking.volume = 0.5;
-    audioRefs.current.pistolHolster.volume = 0.5;
-    audioRefs.current.gunshot.volume = 0.3;
-  }, []);
 
   // Collision boxes for fortress walls
   const colliders = useMemo(() => {
@@ -163,9 +164,8 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
         window.dispatchEvent(crosshairEvent);
         
         // Play appropriate gun sound using preloaded audio
-        const audio = newCrosshairsState ? audioRefs.current.pistolCocking : audioRefs.current.pistolHolster;
-        audio.currentTime = 0; // Reset to beginning
-        audio.play().catch(() => {});
+        const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
+        playAudio(audio);
         break;
       case 'Escape':
         if (isLocked.current) {
@@ -226,8 +226,7 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
       onShoot(camera.position.clone(), shootDirection);
       
       // Play gunshot sound using preloaded audio
-      audioRefs.current.gunshot.currentTime = 0; // Reset to beginning
-      audioRefs.current.gunshot.play().catch(() => {});
+      playAudio(audioRefs.gunshot);
     }
   }, [gl, crosshairsEnabled, onShoot, camera]);
 
@@ -752,8 +751,15 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   );
 }
 
-// Bullet component
-function Bullets({ bullets }: { bullets: Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }> }) {
+// Bullets component with collision detection and audio
+function Bullets({ bullets }: { 
+  bullets: Array<{ 
+    position: THREE.Vector3; 
+    direction: THREE.Vector3; 
+    speed: number; 
+    life: number; 
+  }>; 
+}) {
   return (
     <group>
       {bullets.map((bullet, index) => (
@@ -767,10 +773,70 @@ function Bullets({ bullets }: { bullets: Array<{ position: THREE.Vector3; direct
 }
 
 // Scene component
-// Scene component
+// Scene component with audio management
 function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: THREE.Vector3) => void }) {
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
   const [showCrosshairs, setShowCrosshairs] = useState(false);
+
+  // Audio context and preloaded audio management
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioRefs = useRef({
+    pistolCocking: new Audio('/pistol_cocking_sound.mp3'),
+    pistolHolster: new Audio('/holster_pistol_sound.mp3'),
+    gunshot: new Audio('/space_gunshot.mp3'),
+    coinHit: new Audio('/coin_hit_sound.mp3')
+  });
+
+  // Initialize audio context and preload sounds
+  useEffect(() => {
+    // Create audio context for managing audio state
+    try {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    } catch (e) {
+      console.warn('Web Audio API not supported');
+    }
+
+    // Set volumes for preloaded audio
+    audioRefs.current.pistolCocking.volume = 0.5;
+    audioRefs.current.pistolHolster.volume = 0.5;
+    audioRefs.current.gunshot.volume = 0.3;
+    audioRefs.current.coinHit.volume = 0.4;
+
+    // Preload all audio files
+    Object.values(audioRefs.current).forEach(audio => {
+      audio.preload = 'auto';
+      audio.load();
+    });
+
+    return () => {
+      // Cleanup audio context
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // Function to resume audio context if suspended
+  const resumeAudioContext = useCallback(async () => {
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+      try {
+        await audioContextRef.current.resume();
+      } catch (e) {
+        console.warn('Failed to resume audio context:', e);
+      }
+    }
+  }, []);
+
+  // Safe audio play function
+  const playAudio = useCallback(async (audio: HTMLAudioElement) => {
+    try {
+      await resumeAudioContext();
+      audio.currentTime = 0;
+      await audio.play();
+    } catch (e) {
+      console.warn('Audio play failed:', e);
+    }
+  }, [resumeAudioContext]);
 
   const handleShoot = useCallback((origin: THREE.Vector3, direction: THREE.Vector3) => {
     setBullets(prev => [...prev, {
@@ -781,6 +847,11 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
     }]);
     setShowCrosshairs(true);
   }, []);
+
+  // Audio callback for coin hits
+  const handleCoinHitSound = useCallback(() => {
+    playAudio(audioRefs.current.coinHit);
+  }, [playAudio]);
 
   useFrame((state, delta) => {
     setBullets(prev => {
@@ -804,10 +875,8 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
                 onCoinHit(coin.position.clone());
                 hit = true;
                 
-                // Play coin hit sound
-                const audio = new Audio('/coin_hit_sound.mp3');
-                audio.volume = 0.4;
-                audio.play().catch(() => {});
+                // Play coin hit sound using parent's audio system
+                handleCoinHitSound();
                 break;
               }
             }
@@ -825,7 +894,12 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
 
   return (
     <>
-      <FirstPersonControls onShoot={handleShoot} showCrosshairs={true} />
+      <FirstPersonControls 
+        onShoot={handleShoot} 
+        showCrosshairs={true}
+        audioRefs={audioRefs.current}
+        playAudio={playAudio}
+      />
       
       {/* Lighting */}
       <hemisphereLight args={['#ffffff', '#edfff6', 1.1]} />
