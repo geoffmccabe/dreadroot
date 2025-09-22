@@ -891,7 +891,7 @@ export default function WaterfallFortress() {
     { hex: '#194ca8', weight: 20 },
     { hex: '#18488a', weight: 30 },
     { hex: '#103d6a', weight: 30 },
-    { hex: '#0a2847', weight: 20 }
+    { hex: '#0a2847', weight: 15 }
   ];
 
   const [settings, setSettings] = useState({
