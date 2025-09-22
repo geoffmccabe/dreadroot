@@ -90,6 +90,29 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     }
   };
 
+  const handleDirectPositionChange = async (axis: 'x' | 'y' | 'z', value: number) => {
+    const wall = walls.find(w => w.wall_number === selectedWallForMoving);
+    if (!wall) return;
+
+    const currentRotation = {
+      x: wall.rotation_x ?? 0,
+      y: wall.rotation_y ?? 0,
+      z: wall.rotation_z ?? 0
+    };
+
+    const newPosition = {
+      x: axis === 'x' ? value : (wall.position_x ?? 0),
+      y: axis === 'y' ? value : (wall.position_y ?? 0),
+      z: axis === 'z' ? value : (wall.position_z ?? 0)
+    };
+
+    try {
+      await updateWallPosition(wall.id, newPosition, currentRotation);
+    } catch (error) {
+      console.error('Error updating wall position:', error);
+    }
+  };
+
   const getWallPreview = (wallNumber: number) => {
     const wallConfigs = {
       1: { name: "Screen Wall", color: "#4f46e5", icon: "📺" },
@@ -243,13 +266,46 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                   const wall = walls.find(w => w.wall_number === selectedWallForMoving);
                   return wall ? (
                     <div className="space-y-3">
-                      <div className="text-xs text-gray-300">
-                        Current Position: X:{wall.position_x?.toFixed(1) ?? 0}, Y:{wall.position_y?.toFixed(1) ?? 0}, Z:{wall.position_z?.toFixed(1) ?? 0}
+                      {/* Editable Position Fields */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium text-white">Current Position (editable):</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-gray-300">X:</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={wall.position_x?.toFixed(1) ?? '0'}
+                              onChange={(e) => handleDirectPositionChange('x', parseFloat(e.target.value) || 0)}
+                              className="h-8 text-xs bg-slate-700 text-white border-slate-600"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-gray-300">Y:</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={wall.position_y?.toFixed(1) ?? '0'}
+                              onChange={(e) => handleDirectPositionChange('y', parseFloat(e.target.value) || 0)}
+                              className="h-8 text-xs bg-slate-700 text-white border-slate-600"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-gray-300">Z:</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={wall.position_z?.toFixed(1) ?? '0'}
+                              onChange={(e) => handleDirectPositionChange('z', parseFloat(e.target.value) || 0)}
+                              className="h-8 text-xs bg-slate-700 text-white border-slate-600"
+                            />
+                          </div>
+                        </div>
                       </div>
                       
                       <div className="flex items-start space-x-4">
                         <div className="space-y-3 flex-1">
-                          {/* X Axis Controls */}
+                          {/* X Axis Controls - Increased increments for visibility */}
                           <div className="flex items-center space-x-2">
                             <span className="w-8 text-sm font-medium text-white">X:</span>
                             <Button
@@ -257,7 +313,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
                               onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('x', -0.1), 50);
+                                const interval = setInterval(() => handlePositionChange('x', -1), 50);
                                 const stopInterval = () => {
                                   clearInterval(interval);
                                   document.removeEventListener('mouseup', stopInterval);
@@ -271,24 +327,24 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('x', -1)}
+                              onClick={() => handlePositionChange('x', -5)}
                             >
-                              -1
+                              -5
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('x', 1)}
+                              onClick={() => handlePositionChange('x', 5)}
                             >
-                              +1
+                              +5
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
                               onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('x', 0.1), 50);
+                                const interval = setInterval(() => handlePositionChange('x', 1), 50);
                                 const stopInterval = () => {
                                   clearInterval(interval);
                                   document.removeEventListener('mouseup', stopInterval);
@@ -300,7 +356,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                             </Button>
                           </div>
 
-                          {/* Y Axis Controls */}
+                          {/* Y Axis Controls - Increased increments for visibility */}
                           <div className="flex items-center space-x-2">
                             <span className="w-8 text-sm font-medium text-white">Y:</span>
                             <Button
@@ -308,7 +364,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
                               onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('y', -0.1), 50);
+                                const interval = setInterval(() => handlePositionChange('y', -1), 50);
                                 const stopInterval = () => {
                                   clearInterval(interval);
                                   document.removeEventListener('mouseup', stopInterval);
@@ -322,24 +378,24 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('y', -1)}
+                              onClick={() => handlePositionChange('y', -5)}
                             >
-                              -1
+                              -5
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('y', 1)}
+                              onClick={() => handlePositionChange('y', 5)}
                             >
-                              +1
+                              +5
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
                               onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('y', 0.1), 50);
+                                const interval = setInterval(() => handlePositionChange('y', 1), 50);
                                 const stopInterval = () => {
                                   clearInterval(interval);
                                   document.removeEventListener('mouseup', stopInterval);
@@ -351,7 +407,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                             </Button>
                           </div>
 
-                          {/* Z Axis Controls */}
+                          {/* Z Axis Controls - Increased increments for visibility */}
                           <div className="flex items-center space-x-2">
                             <span className="w-8 text-sm font-medium text-white">Z:</span>
                             <Button
@@ -359,7 +415,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
                               onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('z', -0.1), 50);
+                                const interval = setInterval(() => handlePositionChange('z', -1), 50);
                                 const stopInterval = () => {
                                   clearInterval(interval);
                                   document.removeEventListener('mouseup', stopInterval);
@@ -373,24 +429,24 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('z', -1)}
+                              onClick={() => handlePositionChange('z', -5)}
                             >
-                              -1
+                              -5
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                              onClick={() => handlePositionChange('z', 1)}
+                              onClick={() => handlePositionChange('z', 5)}
                             >
-                              +1
+                              +5
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
                               onMouseDown={() => {
-                                const interval = setInterval(() => handlePositionChange('z', 0.1), 50);
+                                const interval = setInterval(() => handlePositionChange('z', 1), 50);
                                 const stopInterval = () => {
                                   clearInterval(interval);
                                   document.removeEventListener('mouseup', stopInterval);

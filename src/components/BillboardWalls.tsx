@@ -73,22 +73,23 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
     return (
       <group position={position} rotation={rotation}>
-        {/* Main screen plane */}
+        {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
-          <meshBasicMaterial color="#000000" />
+          <meshBasicMaterial color="#000000" side={THREE.DoubleSide} />
         </mesh>
         
-        {/* Screen content - URL display */}
+        {/* Screen content - URL display - visible from both sides */}
         <mesh position={[0, 1, 0.02]}>
           <planeGeometry args={[17, 8]} />
           <meshBasicMaterial 
             map={urlTexture}
-            color={currentUrl?.url ? "#ffffff" : "#1e293b"} 
+            color={currentUrl?.url ? "#ffffff" : "#1e293b"}
+            side={THREE.DoubleSide}
           />
         </mesh>
         
-        {/* URL buttons at bottom */}
+        {/* URL buttons at bottom - visible from both sides */}
         <group position={[-6.75, -4, 0.03]}>
           {wall1Urls.slice(0, 4).map((urlData, index) => (
             <mesh
@@ -98,7 +99,8 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
             >
               <planeGeometry args={[4, 2]} />
               <meshBasicMaterial 
-                color={activeScreenUrl === urlData.slot_number ? "#4f46e5" : "#6b7280"} 
+                color={activeScreenUrl === urlData.slot_number ? "#4f46e5" : "#6b7280"}
+                side={THREE.DoubleSide}
               />
             </mesh>
           ))}
@@ -146,7 +148,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     );
   };
 
-  // Individual media slot component with texture loading
+  // Individual media slot component with improved texture loading
   const MediaSlot = ({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
@@ -155,12 +157,14 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
   }) => {
     let texture = null;
     
-    try {
-      if (mediaUrl && mediaType === 'image') {
+    // Only try to load texture if we have a valid URL and it's an image
+    if (mediaUrl && mediaType === 'image') {
+      try {
         texture = useLoader(THREE.TextureLoader, mediaUrl);
+      } catch (error) {
+        console.warn('Failed to load texture:', mediaUrl, error);
+        texture = null;
       }
-    } catch (error) {
-      console.warn('Failed to load texture:', mediaUrl);
     }
     
     return (
@@ -168,9 +172,10 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
         <planeGeometry args={dimensions} />
         <meshBasicMaterial 
           map={texture}
-          color={mediaUrl ? "#ffffff" : "#374151"} 
+          color={texture ? "#ffffff" : "#374151"}
           transparent={true}
-          opacity={mediaUrl ? 1 : 0.25}
+          opacity={texture ? 1 : 0.25}
+          side={THREE.DoubleSide}
         />
       </mesh>
     );
