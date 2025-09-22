@@ -53,6 +53,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const rotZ = wall1?.rotation_z ?? 0;
 
     console.log('Wall1Screen rendering with position:', [posX, posY, posZ]);
+    
+    // EXTREME TEST - multiply positions by 5 to make changes obvious
+    const testPosX = posX * 5;
+    const testPosY = posY * 5; 
+    const testPosZ = posZ * 5;
 
     // Create URL text texture only when URL actually changes
     const urlTexture = useMemo(() => {
@@ -81,7 +86,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     }, [currentUrl?.url]);
 
     return (
-      <group key={`wall1-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
+      <group key={`wall1-${posX}-${posY}-${posZ}`} position={[testPosX, testPosY, testPosZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
@@ -136,6 +141,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
     console.log(`Wall${wallNumber} rendering with position:`, [posX, posY, posZ]);
     
+    // EXTREME TEST - multiply positions by 5 to make changes obvious
+    const testPosX = posX * 5;
+    const testPosY = posY * 5; 
+    const testPosZ = posZ * 5;
+    
     // Calculate dimensions based on wall type
     const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
     const wallHeight = 20; // All walls are 20 units high
@@ -143,7 +153,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const slotHeight = wallHeight / 2; // 2 rows
     
     return (
-      <group key={`wall${wallNumber}-${posX}-${posY}-${posZ}`} position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
+      <group key={`wall${wallNumber}-${posX}-${posY}-${posZ}`} position={[testPosX, testPosY, testPosZ]} rotation={[rotX, rotY, rotZ]}>
         {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
