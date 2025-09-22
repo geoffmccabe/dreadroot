@@ -377,7 +377,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     return result;
   }, []);
 
-  // Recreate drops when count changes with even time distribution
+  // Recreate drops when count changes - using original HTML method
   useEffect(() => {
     if (prevDropCount.current !== dropCount) {
       prevDropCount.current = dropCount;
@@ -391,23 +391,20 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         const positions = new Float32Array(dropCount * 3);
         const colors = new Float32Array(dropCount * 3);
         
-        // Create new velocities array
+        // Create new velocities array (not used in original simple method)
         velocitiesRef.current = new Float32Array(dropCount);
         
         const rangeY = fall.topY - fall.bottomY;
         
+        // EXACT method from working HTML version
         for (let i = 0; i < dropCount; i++) {
-          // Use Halton sequence for better X and Z distribution to avoid clustering
-          const u = halton(i, 2);
-          const v = halton(i, 3);
+          const u = halton(i + 1, 2);
+          const v = halton(i + 1, 3);  
+          const w = halton(i + 1, 5);
           
-          // Use time-based distribution for Y position with better spacing
-          const timeOffset = (i / dropCount) * 3; // 3 second spread for smoother flow
-          const fallTime = Math.sqrt(2 * rangeY / (9.8 * flowSpeed));
-          const progress = (timeOffset % fallTime) / fallTime;
-          
+          // Initial positioning exactly like original HTML
           positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-          positions[i * 3 + 1] = fall.topY - progress * rangeY;
+          positions[i * 3 + 1] = fall.bottomY + w * rangeY;  // Simple distribution like HTML
           positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
           
           const color = pickColor();
@@ -415,8 +412,8 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
           colors[i * 3 + 1] = color.g;
           colors[i * 3 + 2] = color.b;
           
-          // Initialize velocity based on progress
-          velocitiesRef.current[i] = Math.sqrt(2 * 9.8 * flowSpeed * progress * rangeY);
+          // Not used in simple method
+          velocitiesRef.current[i] = 0;
         }
         
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -424,9 +421,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         pointsRef.current.geometry = geometry;
       }
     }
-  }, [dropCount, halton, pickColor, flowSpeed]);
+  }, [dropCount, halton, pickColor]);
 
-  // Initial setup with time-based distribution for smooth flow
+  // Initial setup - using original HTML method for better distribution
   const { positions, colors } = useMemo(() => {
     const positions = new Float32Array(dropCount * 3);
     const colors = new Float32Array(dropCount * 3);
@@ -435,19 +432,15 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     
     const rangeY = fall.topY - fall.bottomY;
     
+    // EXACT method from working HTML version
     for (let i = 0; i < dropCount; i++) {
-      // Use Halton sequence for better X and Z distribution to avoid clustering
-      const u = halton(i, 2);
-      const v = halton(i, 3);
+      const u = halton(i + 1, 2);
+      const v = halton(i + 1, 3);  
+      const w = halton(i + 1, 5);
       
-      // Use time-based distribution for Y position instead of random height
-      // This creates an even flow by spacing drops based on their fall time
-      const timeOffset = (i / dropCount) * 3; // 3 second spread for smoother flow
-      const fallTime = Math.sqrt(2 * rangeY / (9.8 * flowSpeed));
-      const progress = (timeOffset % fallTime) / fallTime;
-      
+      // Initial positioning exactly like original HTML
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.topY - progress * rangeY; // Even distribution over time
+      positions[i * 3 + 1] = fall.bottomY + w * rangeY;  // Simple distribution like HTML
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
@@ -455,36 +448,35 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
       
-      // Initialize velocity based on progress through fall
-      velocitiesRef.current[i] = Math.sqrt(2 * 9.8 * flowSpeed * progress * rangeY);
+      // Not used in simple method
+      velocitiesRef.current[i] = 0;
     }
     
     return { positions, colors };
-  }, [halton, pickColor, dropCount, flowSpeed]);
+  }, [halton, pickColor, dropCount]);
 
   useFrame((state, delta) => {
-    if (!pointsRef.current || !velocitiesRef.current) return;
+    if (!pointsRef.current) return;
     
     const positionAttribute = pointsRef.current.geometry.attributes.position;
     const colorAttribute = pointsRef.current.geometry.attributes.color;
     const positions = positionAttribute.array as Float32Array;
     const colors = colorAttribute.array as Float32Array;
     
-    // Match original physics exactly
-    const gravity = 9.8 * flowSpeed;
+    // Simple physics matching original HTML exactly
+    const fallSpeed = 5.5 * flowSpeed;
     
     for (let i = 0; i < dropCount; i++) {
-      velocitiesRef.current[i] += gravity * delta;
-      let y = positions[i * 3 + 1] - velocitiesRef.current[i] * delta;
+      let y = positions[i * 3 + 1];
+      y -= fallSpeed * delta;
       
       if (y <= fall.bottomY) {
-        // Reset drop exactly like original
+        // Reset drop EXACTLY like original HTML - pure random positioning
         positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
-        y = fall.topY - Math.random() * 0.3;
+        y = fall.topY - Math.random() * (fall.topY - fall.bottomY);
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
-        velocitiesRef.current[i] = 0;
         
-        // Pick new color with darkening compensation
+        // Pick new color 
         const color = pickColor();
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;

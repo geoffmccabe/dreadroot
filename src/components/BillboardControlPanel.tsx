@@ -113,19 +113,18 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   };
 
   return (
-    <div className="z-50">
-      <Card className="waterfall-card bg-slate-800/90 border-slate-600 text-white backdrop-blur-sm">
-        <div 
-          className="flex items-center justify-between p-3 cursor-pointer border-b border-slate-600"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-        >
-          <h3 className="font-bold text-sm">BILLBOARD CONTROL PANEL</h3>
-          {isCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </div>
+    <Card className="waterfall-card bg-slate-800/90 border-slate-600 text-white backdrop-blur-sm">
+      <div 
+        className="flex items-center justify-between p-3 cursor-pointer border-b border-slate-600"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
+        <h3 className="font-bold text-sm">BILLBOARD CONTROL PANEL</h3>
+        {isCollapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+      </div>
         
         {!isCollapsed && (
           <CardContent className="p-4 animate-fade-in">
@@ -415,7 +414,6 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
           </Tabs>
           </CardContent>
         )}
-      </Card>
-    </div>
+    </Card>
   );
 };
