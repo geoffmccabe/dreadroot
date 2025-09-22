@@ -483,7 +483,29 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                    </div>
                    
                    <Button 
-                     onClick={() => savePendingChanges()}
+                     onClick={async () => {
+                       console.log('💾 Save button clicked');
+                       const result = await savePendingChanges();
+                       if (result.success) {
+                         if (result.count > 0) {
+                           toast({
+                             title: "Positions Saved",
+                             description: `Successfully saved ${result.count} wall position(s).`
+                           });
+                         } else {
+                           toast({
+                             title: "No Changes",
+                             description: "No position changes to save."
+                           });
+                         }
+                       } else {
+                         toast({
+                           title: "Save Failed",
+                           description: "Failed to save wall positions.",
+                           variant: "destructive"
+                         });
+                       }
+                     }}
                      size="sm"
                      variant="outline"
                      className="border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white"

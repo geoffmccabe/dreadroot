@@ -133,6 +133,7 @@ export const useBillboardData = () => {
     
     try {
       const promises: Promise<any>[] = [];
+      let savedCount = 0;
 
       // Save changed walls
       if (pendingChanges.current.walls.size > 0) {
@@ -203,6 +204,7 @@ export const useBillboardData = () => {
                     console.error('Error updating screen URL:', error);
                   } else {
                     console.log('Screen URL saved successfully');
+                    savedCount++;
                   }
                 }))
             );
@@ -238,6 +240,7 @@ export const useBillboardData = () => {
                     console.error('Error updating media item:', error);
                   } else {
                     console.log('Media item saved successfully');
+                    savedCount++;
                   }
                 }))
             );
@@ -249,12 +252,15 @@ export const useBillboardData = () => {
 
       if (promises.length > 0) {
         await Promise.all(promises);
-        console.log(`✅ Saved ${promises.length} changes to database`);
+        console.log(`✅ Saved ${savedCount} changes to database`);
+        return { success: true, count: savedCount };
       } else {
         console.log('No pending changes to save');
+        return { success: false, count: 0 };
       }
     } catch (error) {
       console.error('Error saving pending changes:', error);
+      return { success: false, error };
     }
   };
 
@@ -371,10 +377,20 @@ export const useBillboardData = () => {
         (payload) => {
           if (payload.eventType === 'UPDATE') {
             const updatedWall = payload.new as BillboardWall;
-            setWalls(prev => prev.map(wall => 
-              wall.id === updatedWall.id ? updatedWall : wall
-            ));
-            originalData.current.walls.set(updatedWall.id, { ...updatedWall });
+            console.log('📡 Real-time wall update received:', updatedWall.wall_number, {
+              position: { x: updatedWall.position_x, y: updatedWall.position_y, z: updatedWall.position_z }
+            });
+            
+            // Only update if we don't have pending changes for this wall
+            if (!pendingChanges.current.walls.has(updatedWall.id)) {
+              setWalls(prev => prev.map(wall => 
+                wall.id === updatedWall.id ? updatedWall : wall
+              ));
+              originalData.current.walls.set(updatedWall.id, { ...updatedWall });
+              console.log('📡 Applied real-time update for wall', updatedWall.wall_number);
+            } else {
+              console.log('📡 Skipped real-time update for wall', updatedWall.wall_number, '(has pending changes)');
+            }
           }
         }
       )
