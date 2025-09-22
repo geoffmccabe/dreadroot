@@ -51,16 +51,16 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     }, [currentUrl?.url]);
 
     return (
-      <group position={[0, 10, -6]} rotation={[0, 0, 0]}>
+      <group position={[0, 10, -9.5]} rotation={[0, 0, 0]}>
         {/* Main screen plane */}
         <mesh position={[0, 0, 0.01]}>
-          <planeGeometry args={[36, 18]} />
+          <planeGeometry args={[18, 12]} />
           <meshBasicMaterial color="#000000" />
         </mesh>
         
         {/* Screen content - URL display */}
-        <mesh position={[0, 2, 0.02]}>
-          <planeGeometry args={[35, 14]} />
+        <mesh position={[0, 1, 0.02]}>
+          <planeGeometry args={[17, 8]} />
           <meshBasicMaterial 
             map={urlTexture}
             color={currentUrl?.url ? "#ffffff" : "#1e293b"} 
@@ -68,14 +68,14 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
         </mesh>
         
         {/* URL buttons at bottom */}
-        <group position={[-13.5, -6, 0.03]}>
+        <group position={[-6.75, -4, 0.03]}>
           {wall1Urls.slice(0, 4).map((urlData, index) => (
             <mesh
               key={urlData.slot_number}
-              position={[index * 9, 0, 0]}
+              position={[index * 4.5, 0, 0]}
               onClick={() => setActiveScreenUrl(urlData.slot_number)}
             >
-              <planeGeometry args={[8.5, 3]} />
+              <planeGeometry args={[4, 2]} />
               <meshBasicMaterial 
                 color={activeScreenUrl === urlData.slot_number ? "#4f46e5" : "#6b7280"} 
               />
@@ -164,7 +164,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       {/* Wall 2 - Media Grid (right wall inner) */}
       <MediaGridWall 
         wallNumber={2} 
-        position={[18, 10, -23]} 
+        position={[17, 8, -23]} 
         rotation={[0, -Math.PI/2, 0]}
         wallType="side"
       />
@@ -172,7 +172,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       {/* Wall 3 - Media Grid (back wall inner) */}
       <MediaGridWall 
         wallNumber={3} 
-        position={[0, 10, -37]} 
+        position={[0, 8, -37]} 
         rotation={[0, Math.PI, 0]}
         wallType="back"
       />
@@ -180,7 +180,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       {/* Wall 4 - Media Grid (left wall inner) */}
       <MediaGridWall 
         wallNumber={4} 
-        position={[-18, 10, -23]} 
+        position={[-17, 8, -23]} 
         rotation={[0, Math.PI/2, 0]}
         wallType="side"
       />
