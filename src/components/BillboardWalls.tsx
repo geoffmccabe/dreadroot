@@ -16,6 +16,14 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const wall = walls.find(w => w.wall_number === wallNumber);
     if (!wall) return { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
     
+    // Debug logging to see if positions are updating
+    console.log(`Wall ${wallNumber} position:`, { 
+      x: wall.position_x, 
+      y: wall.position_y, 
+      z: wall.position_z,
+      id: wall.id 
+    });
+    
     return {
       position: [
         wall.position_x ?? 0,
