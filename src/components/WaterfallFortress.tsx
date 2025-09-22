@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 
 // First person controls component
@@ -226,7 +227,11 @@ function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: T
 }
 
 // Waterfall component matching original exactly
-function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; dropCount: number }) {
+function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: { 
+  flowSpeed: number; 
+  dropCount: number; 
+  colorPalette: Array<{ hex: string; weight: number; }>;
+}) {
   const pointsRef = useRef<THREE.Points>(null);
   const velocitiesRef = useRef<Float32Array>();
   const prevDropCount = useRef(dropCount);
@@ -240,14 +245,15 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
     z: -5.95 // frontZ + frontT/2 + 0.05
   };
 
-  // Water drop colors matching original exactly
-  const palette = [
-    { hex: '#06c8c0', weight: 0.10 },
-    { hex: '#028eef', weight: 0.10 },
-    { hex: '#194ca8', weight: 0.20 },
-    { hex: '#18488a', weight: 0.30 },
-    { hex: '#103d6a', weight: 0.30 }
-  ];
+  // Water drop colors from props
+  const palette = useMemo(() => {
+    // Calculate total weight to normalize
+    const totalWeight = colorPalette.reduce((sum, item) => sum + item.weight, 0);
+    return colorPalette.map(item => ({
+      hex: item.hex,
+      weight: totalWeight > 0 ? item.weight / totalWeight : 0
+    }));
+  }, [colorPalette]);
 
   // Create cumulative distribution function (matching original)
   const cdf = useMemo(() => {
@@ -650,6 +656,7 @@ function Bullets({ bullets }: { bullets: Array<{ position: THREE.Vector3; direct
 }
 
 // Scene component
+// Scene component
 function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: THREE.Vector3) => void }) {
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
   const [showCrosshairs, setShowCrosshairs] = useState(false);
@@ -736,7 +743,11 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
 
       {/* Scene objects */}
       <Fortress />
-      <Waterfall flowSpeed={settings.flowSpeed} dropCount={settings.dropCount} />
+      <Waterfall 
+        flowSpeed={settings.flowSpeed} 
+        dropCount={settings.dropCount} 
+        colorPalette={settings.colorPalette} 
+      />
       <Coins 
         coinRate={settings.coinRate} 
         coinSize={settings.coinSize} 
@@ -819,6 +830,46 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
                 className="flex-1"
               />
             </div>
+            
+            {/* Color/Weight Controls */}
+            <div className="mt-4 space-y-2">
+              <Label className="text-xs opacity-85 font-semibold">Drop Colors & Weights</Label>
+              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                {settings.colorPalette.map((colorWeight, index) => (
+                  <div key={index} className="flex items-center gap-2 text-xs">
+                    <div className="flex items-center gap-1 flex-1">
+                      <div 
+                        className="w-4 h-4 rounded border border-gray-300"
+                        style={{ backgroundColor: colorWeight.hex }}
+                      />
+                      <Input
+                        type="color"
+                        value={colorWeight.hex}
+                        onChange={(e) => {
+                          const newPalette = [...settings.colorPalette];
+                          newPalette[index] = { ...newPalette[index], hex: e.target.value };
+                          onSettingsChange('colorPalette', newPalette);
+                        }}
+                        className="w-8 h-6 p-0 border-0 cursor-pointer"
+                      />
+                      <Input
+                        type="number"
+                        value={colorWeight.weight}
+                        onChange={(e) => {
+                          const newPalette = [...settings.colorPalette];
+                          newPalette[index] = { ...newPalette[index], weight: parseInt(e.target.value) || 0 };
+                          onSettingsChange('colorPalette', newPalette);
+                        }}
+                        className="w-14 h-6 text-xs p-1"
+                        min="0"
+                        max="100"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="mt-3 text-xs opacity-75">
               Click to lock mouse • WASD move • Shift run • Space jump • ESC unlock
             </div>
@@ -831,11 +882,26 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
 
 // Main Waterfall Fortress component
 export default function WaterfallFortress() {
+  // Default color/weight pairs as requested by user
+  const defaultColorPalette = [
+    { hex: '#06c8c0', weight: 10 },
+    { hex: '#028eef', weight: 10 },
+    { hex: '#194ca8', weight: 20 },
+    { hex: '#18488a', weight: 30 },
+    { hex: '#103d6a', weight: 30 },
+    { hex: '#06c8c0', weight: 10 }, // Additional entries to make 10 total
+    { hex: '#028eef', weight: 10 },
+    { hex: '#194ca8', weight: 20 },
+    { hex: '#18488a', weight: 30 },
+    { hex: '#103d6a', weight: 30 }
+  ];
+
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
     dropCount: 6000,
     coinRate: 60,
-    coinSize: 1.2
+    coinSize: 1.2,
+    colorPalette: defaultColorPalette
   });
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [coinScore, setCoinScore] = useState(0);
