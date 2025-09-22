@@ -376,7 +376,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     return result;
   }, []);
 
-  // Recreate drops when count changes (like original)
+  // Recreate drops when count changes with even time distribution
   useEffect(() => {
     if (prevDropCount.current !== dropCount) {
       prevDropCount.current = dropCount;
@@ -398,10 +398,14 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         for (let i = 0; i < dropCount; i++) {
           const u = halton(i + 1, 2);
           const v = halton(i + 1, 3);
-          const w = halton(i + 1, 5);
+          
+          // Use time-based distribution for Y position
+          const timeOffset = (i / dropCount) * 2; // 2 second spread
+          const fallTime = Math.sqrt(2 * rangeY / (9.8 * flowSpeed));
+          const progress = (timeOffset % fallTime) / fallTime;
           
           positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-          positions[i * 3 + 1] = fall.bottomY + w * rangeY;
+          positions[i * 3 + 1] = fall.topY - progress * rangeY;
           positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
           
           const color = pickColor();
@@ -409,7 +413,8 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
           colors[i * 3 + 1] = color.g;
           colors[i * 3 + 2] = color.b;
           
-          velocitiesRef.current[i] = 0;
+          // Initialize velocity based on progress
+          velocitiesRef.current[i] = Math.sqrt(2 * 9.8 * flowSpeed * progress * rangeY);
         }
         
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -417,9 +422,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         pointsRef.current.geometry = geometry;
       }
     }
-  }, [dropCount, halton, pickColor]);
+  }, [dropCount, halton, pickColor, flowSpeed]);
 
-  // Initial setup
+  // Initial setup with time-based distribution for smooth flow
   const { positions, colors } = useMemo(() => {
     const positions = new Float32Array(dropCount * 3);
     const colors = new Float32Array(dropCount * 3);
@@ -431,10 +436,15 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     for (let i = 0; i < dropCount; i++) {
       const u = halton(i + 1, 2);
       const v = halton(i + 1, 3);
-      const w = halton(i + 1, 5);
+      
+      // Use time-based distribution for Y position instead of random height
+      // This creates an even flow by spacing drops based on their fall time
+      const timeOffset = (i / dropCount) * 2; // 2 second spread
+      const fallTime = Math.sqrt(2 * rangeY / (9.8 * flowSpeed));
+      const progress = (timeOffset % fallTime) / fallTime;
       
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.bottomY + w * rangeY;
+      positions[i * 3 + 1] = fall.topY - progress * rangeY; // Even distribution over time
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
@@ -442,7 +452,8 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
       
-      velocitiesRef.current[i] = 0;
+      // Initialize velocity based on progress through fall
+      velocitiesRef.current[i] = Math.sqrt(2 * 9.8 * flowSpeed * progress * rangeY);
     }
     
     return { positions, colors };
