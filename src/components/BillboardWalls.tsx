@@ -11,6 +11,25 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
   const { walls, screenUrls, mediaItems } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
 
+  // Get wall positions from Supabase data
+  const getWallPositionAndRotation = (wallNumber: number) => {
+    const wall = walls.find(w => w.wall_number === wallNumber);
+    if (!wall) return { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
+    
+    return {
+      position: [
+        wall.position_x ?? 0,
+        wall.position_y ?? 0,
+        wall.position_z ?? 0
+      ] as [number, number, number],
+      rotation: [
+        wall.rotation_x ?? 0,
+        wall.rotation_y ?? 0,
+        wall.rotation_z ?? 0
+      ] as [number, number, number]
+    };
+  };
+
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
   const currentUrl = wall1Urls.find(url => url.slot_number === activeScreenUrl);
@@ -50,8 +69,10 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       return texture;
     }, [currentUrl?.url]);
 
+    const { position, rotation } = getWallPositionAndRotation(1);
+
     return (
-      <group position={[0, 10, -9.5]} rotation={[0, 0, 0]}>
+      <group position={position} rotation={rotation}>
         {/* Main screen plane */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
@@ -87,12 +108,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
   };
 
   // Media Grid Wall Component
-  const MediaGridWall = ({ wallNumber, position, rotation, wallType }: { 
+  const MediaGridWall = ({ wallNumber, wallType }: { 
     wallNumber: number; 
-    position: [number, number, number]; 
-    rotation: [number, number, number];
     wallType: 'side' | 'back';
   }) => {
+    const { position, rotation } = getWallPositionAndRotation(wallNumber);
     const mediaItems = getMediaItemsForWall(wallNumber);
     
     // Calculate dimensions based on wall type
@@ -164,24 +184,18 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       {/* Wall 2 - Media Grid (right wall inner) */}
       <MediaGridWall 
         wallNumber={2} 
-        position={[17, 8, -23]} 
-        rotation={[0, -Math.PI/2, 0]}
         wallType="side"
       />
       
       {/* Wall 3 - Media Grid (back wall inner) */}
       <MediaGridWall 
         wallNumber={3} 
-        position={[0, 8, -37]} 
-        rotation={[0, Math.PI, 0]}
         wallType="back"
       />
       
       {/* Wall 4 - Media Grid (left wall inner) */}
       <MediaGridWall 
         wallNumber={4} 
-        position={[-17, 8, -23]} 
-        rotation={[0, Math.PI/2, 0]}
         wallType="side"
       />
     </>

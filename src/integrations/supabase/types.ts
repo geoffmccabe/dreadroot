@@ -18,6 +18,12 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          position_x: number | null
+          position_y: number | null
+          position_z: number | null
+          rotation_x: number | null
+          rotation_y: number | null
+          rotation_z: number | null
           updated_at: string
           wall_number: number
           wall_type: string
@@ -25,6 +31,12 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          position_x?: number | null
+          position_y?: number | null
+          position_z?: number | null
+          rotation_x?: number | null
+          rotation_y?: number | null
+          rotation_z?: number | null
           updated_at?: string
           wall_number: number
           wall_type: string
@@ -32,6 +44,12 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          position_x?: number | null
+          position_y?: number | null
+          position_z?: number | null
+          rotation_x?: number | null
+          rotation_y?: number | null
+          rotation_z?: number | null
           updated_at?: string
           wall_number?: number
           wall_type?: string

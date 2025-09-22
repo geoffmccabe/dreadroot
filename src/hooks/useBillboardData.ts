@@ -5,6 +5,12 @@ export interface BillboardWall {
   id: string;
   wall_number: number;
   wall_type: 'screen' | 'media-grid';
+  position_x?: number;
+  position_y?: number;
+  position_z?: number;
+  rotation_x?: number;
+  rotation_y?: number;
+  rotation_z?: number;
 }
 
 export interface ScreenUrl {
@@ -87,6 +93,27 @@ export const useBillboardData = () => {
     }
   };
 
+  const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
+    try {
+      const { error } = await supabase
+        .from('billboard_walls')
+        .update({
+          position_x: position.x,
+          position_y: position.y,
+          position_z: position.z,
+          rotation_x: rotation.x,
+          rotation_y: rotation.y,
+          rotation_z: rotation.z
+        })
+        .eq('id', wallId);
+
+      if (error) throw error;
+      await fetchData();
+    } catch (error) {
+      console.error('Error updating wall position:', error);
+    }
+  };
+
   const uploadMedia = async (file: File): Promise<string | null> => {
     try {
       const fileExt = file.name.split('.').pop();
@@ -121,6 +148,7 @@ export const useBillboardData = () => {
     loading,
     updateScreenUrl,
     updateMediaItem,
+    updateWallPosition,
     uploadMedia,
     refetch: fetchData
   };
