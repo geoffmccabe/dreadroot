@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useBillboardData } from '@/hooks/useBillboardData';
-import { useLoader } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 interface BillboardWallsProps {
@@ -15,14 +15,6 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
   const getWallPositionAndRotation = (wallNumber: number) => {
     const wall = walls.find(w => w.wall_number === wallNumber);
     if (!wall) return { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
-    
-    // Debug logging to see if positions are updating
-    console.log(`Wall ${wallNumber} position:`, { 
-      x: wall.position_x, 
-      y: wall.position_y, 
-      z: wall.position_z,
-      id: wall.id 
-    });
     
     return {
       position: [
@@ -52,6 +44,8 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
+    const groupRef = useRef<THREE.Group>(null);
+    
     // Create URL text texture only when URL actually changes
     const urlTexture = useMemo(() => {
       const urlString = currentUrl?.url;
@@ -80,11 +74,16 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
 
     const { position, rotation } = getWallPositionAndRotation(1);
     
-    // Force re-render when wall 1 data changes
-    const wall1 = walls.find(w => w.wall_number === 1);
+    // Force position update using useFrame
+    useFrame(() => {
+      if (groupRef.current) {
+        groupRef.current.position.set(position[0], position[1], position[2]);
+        groupRef.current.rotation.set(rotation[0], rotation[1], rotation[2]);
+      }
+    });
 
     return (
-      <group key={`wall1-${wall1?.id}-${JSON.stringify(position)}`} position={position} rotation={rotation}>
+      <group ref={groupRef}>
         {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
@@ -126,11 +125,17 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     wallNumber: number; 
     wallType: 'side' | 'back';
   }) => {
+    const groupRef = useRef<THREE.Group>(null);
     const { position, rotation } = getWallPositionAndRotation(wallNumber);
     const mediaItems = getMediaItemsForWall(wallNumber);
     
-    // Force re-render when walls data changes by including walls in key
-    const wall = walls.find(w => w.wall_number === wallNumber);
+    // Force position update using useFrame
+    useFrame(() => {
+      if (groupRef.current) {
+        groupRef.current.position.set(position[0], position[1], position[2]);
+        groupRef.current.rotation.set(rotation[0], rotation[1], rotation[2]);
+      }
+    });
     
     // Calculate dimensions based on wall type
     const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
@@ -139,7 +144,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     const slotHeight = wallHeight / 2; // 2 rows
     
     return (
-      <group key={`wall-${wallNumber}-${wall?.id}-${JSON.stringify(position)}`} position={position} rotation={rotation}>
+      <group ref={groupRef}>
         {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
