@@ -467,19 +467,30 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
 
             <TabsContent value="move" className="space-y-4">
               <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm font-medium">Select Wall:</label>
-                  <select 
-                    value={selectedWallForMoving}
-                    onChange={(e) => setSelectedWallForMoving(parseInt(e.target.value))}
-                    className="px-3 py-1 border rounded-md bg-slate-700 text-white border-slate-600"
-                  >
-                    <option value={1}>Screen (Wall 1)</option>
-                    <option value={2}>Wall 2</option>
-                    <option value={3}>Wall 3</option>
-                    <option value={4}>Wall 4</option>
-                  </select>
-                </div>
+                 <div className="flex items-center justify-between">
+                   <div className="flex items-center space-x-2">
+                     <label className="text-sm font-medium">Select Wall:</label>
+                     <select 
+                       value={selectedWallForMoving}
+                       onChange={(e) => setSelectedWallForMoving(parseInt(e.target.value))}
+                       className="px-3 py-1 border rounded-md bg-slate-700 text-white border-slate-600"
+                     >
+                       <option value={1}>Screen (Wall 1)</option>
+                       <option value={2}>Wall 2</option>
+                       <option value={3}>Wall 3</option>
+                       <option value={4}>Wall 4</option>
+                     </select>
+                   </div>
+                   
+                   <Button 
+                     onClick={() => savePendingChanges()}
+                     size="sm"
+                     variant="outline"
+                     className="border-primary/50 hover:bg-primary/10"
+                   >
+                     💾 Save Positions
+                   </Button>
+                 </div>
 
                 {(() => {
                   const wall = walls.find(w => w.wall_number === selectedWallForMoving);
@@ -654,17 +665,8 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                           </div>
                         </div>
                         
-                        {/* Wall Preview */}
-                <div className="flex items-center gap-4">
-                  {getWallPreview(selectedWallForMoving)}
-                  <Button 
-                    onClick={() => savePendingChanges()}
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    💾 Save Now
-                  </Button>
-                </div>
+                         {/* Wall Preview */}
+                         {getWallPreview(selectedWallForMoving)}
                       </div>
                     </div>
                   ) : null;
