@@ -236,8 +236,10 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
           const row = Math.floor(index / 3);
-          const x = (col - 1) * slotWidth; // Center the grid
-          const y = (1 - row) * slotHeight; // Center the grid vertically
+          
+          // Position slots to fill entire wall without gaps
+          const x = (col - 1) * slotWidth; // -slotWidth, 0, slotWidth
+          const y = (0.5 - row) * slotHeight; // slotHeight/2, -slotHeight/2
           
           const mediaItem = mediaItems.find(item => item.slot_number === index + 1);
           
