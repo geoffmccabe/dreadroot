@@ -310,14 +310,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     };
     
     const config = wallConfigs[wallNumber as keyof typeof wallConfigs];
-  // Cleanup intervals on unmount
-  useEffect(() => {
-    return () => {
-      cleanupIntervals();
-    };
-  }, [cleanupIntervals]);
-
-  return (
+    return (
       <div className="flex flex-col items-center space-y-1 ml-4">
         <div 
           className="w-12 h-8 border border-gray-400 flex items-center justify-center text-xs rounded"
@@ -329,6 +322,13 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
       </div>
     );
   };
+
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      cleanupIntervals();
+    };
+  }, [cleanupIntervals]);
 
   return (
     <Card className="waterfall-card bg-slate-800/90 border-slate-600 text-white backdrop-blur-sm">
