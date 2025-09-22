@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface BillboardWall {
@@ -33,6 +33,28 @@ export const useBillboardData = () => {
   const [screenUrls, setScreenUrls] = useState<ScreenUrl[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaGridItem[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Track original data to detect changes
+  const originalData = useRef<{
+    walls: Map<string, BillboardWall>;
+    screenUrls: Map<string, ScreenUrl>;
+    mediaItems: Map<string, MediaGridItem>;
+  }>({
+    walls: new Map(),
+    screenUrls: new Map(),
+    mediaItems: new Map()
+  });
+
+  // Track pending changes for batch saving
+  const pendingChanges = useRef<{
+    walls: Set<string>;
+    screenUrls: Set<string>;
+    mediaItems: Set<string>;
+  }>({
+    walls: new Set(),
+    screenUrls: new Set(),
+    mediaItems: new Set()
+  });
 
   const fetchData = async () => {
     try {
@@ -53,9 +75,38 @@ export const useBillboardData = () => {
         .select('*')
         .order('wall_id, slot_number');
 
-      if (wallsData) setWalls(wallsData as BillboardWall[]);
-      if (urlsData) setScreenUrls(urlsData as ScreenUrl[]);
-      if (mediaData) setMediaItems(mediaData as MediaGridItem[]);
+      if (wallsData) {
+        const typedWalls = wallsData.map(wall => ({
+          ...wall,
+          wall_type: wall.wall_type as 'screen' | 'media-grid'
+        }));
+        setWalls(typedWalls);
+        // Update original data reference
+        originalData.current.walls.clear();
+        typedWalls.forEach(wall => {
+          originalData.current.walls.set(wall.id, { ...wall });
+        });
+      }
+      
+      if (urlsData) {
+        setScreenUrls(urlsData as ScreenUrl[]);
+        originalData.current.screenUrls.clear();
+        urlsData.forEach(url => {
+          originalData.current.screenUrls.set(url.id, { ...url });
+        });
+      }
+      
+      if (mediaData) {
+        const typedMedia = mediaData.map(item => ({
+          ...item,
+          media_type: item.media_type as 'image' | 'video' | null
+        }));
+        setMediaItems(typedMedia);
+        originalData.current.mediaItems.clear();
+        typedMedia.forEach(item => {
+          originalData.current.mediaItems.set(item.id, { ...item });
+        });
+      }
     } catch (error) {
       console.error('Error fetching billboard data:', error);
     } finally {
@@ -63,77 +114,162 @@ export const useBillboardData = () => {
     }
   };
 
-  const updateScreenUrl = async (wallId: string, slotNumber: number, url: string) => {
+  // Batch save only changed data
+  const savePendingChanges = async () => {
     try {
-      const { error } = await supabase
-        .from('screen_urls')
-        .update({ url })
-        .eq('wall_id', wallId)
-        .eq('slot_number', slotNumber);
+      const promises: Promise<any>[] = [];
 
-      if (error) throw error;
-      await fetchData();
+      // Save changed walls
+      if (pendingChanges.current.walls.size > 0) {
+        const wallsToUpdate = walls.filter(wall => 
+          pendingChanges.current.walls.has(wall.id)
+        );
+
+        for (const wall of wallsToUpdate) {
+          const original = originalData.current.walls.get(wall.id);
+          if (original && (
+            original.position_x !== wall.position_x ||
+            original.position_y !== wall.position_y ||
+            original.position_z !== wall.position_z ||
+            original.rotation_x !== wall.rotation_x ||
+            original.rotation_y !== wall.rotation_y ||
+            original.rotation_z !== wall.rotation_z
+          )) {
+            promises.push(
+              Promise.resolve(
+                supabase
+                  .from('billboard_walls')
+                  .update({
+                    position_x: wall.position_x,
+                    position_y: wall.position_y,
+                    position_z: wall.position_z,
+                    rotation_x: wall.rotation_x,
+                    rotation_y: wall.rotation_y,
+                    rotation_z: wall.rotation_z
+                  })
+                  .eq('id', wall.id)
+              )
+            );
+            // Update original data
+            originalData.current.walls.set(wall.id, { ...wall });
+          }
+        }
+        pendingChanges.current.walls.clear();
+      }
+
+      // Save changed screen URLs
+      if (pendingChanges.current.screenUrls.size > 0) {
+        const urlsToUpdate = screenUrls.filter(url => 
+          pendingChanges.current.screenUrls.has(url.id)
+        );
+
+        for (const url of urlsToUpdate) {
+          const original = originalData.current.screenUrls.get(url.id);
+          if (original && original.url !== url.url) {
+            promises.push(
+              Promise.resolve(
+                supabase
+                  .from('screen_urls')
+                  .update({ url: url.url })
+                  .eq('id', url.id)
+              )
+            );
+            originalData.current.screenUrls.set(url.id, { ...url });
+          }
+        }
+        pendingChanges.current.screenUrls.clear();
+      }
+
+      // Save changed media items
+      if (pendingChanges.current.mediaItems.size > 0) {
+        const itemsToUpdate = mediaItems.filter(item => 
+          pendingChanges.current.mediaItems.has(item.id)
+        );
+
+        for (const item of itemsToUpdate) {
+          const original = originalData.current.mediaItems.get(item.id);
+          if (original && (
+            original.media_url !== item.media_url ||
+            original.media_type !== item.media_type
+          )) {
+            promises.push(
+              Promise.resolve(
+                supabase
+                  .from('media_grid_items')
+                  .update({ 
+                    media_url: item.media_url, 
+                    media_type: item.media_type 
+                  })
+                  .eq('id', item.id)
+              )
+            );
+            originalData.current.mediaItems.set(item.id, { ...item });
+          }
+        }
+        pendingChanges.current.mediaItems.clear();
+      }
+
+      if (promises.length > 0) {
+        await Promise.all(promises);
+        console.log(`Saved ${promises.length} changes to database`);
+      }
     } catch (error) {
-      console.error('Error updating screen URL:', error);
+      console.error('Error saving pending changes:', error);
     }
+  };
+
+  const updateScreenUrl = async (wallId: string, slotNumber: number, url: string) => {
+    // Find the screen URL record
+    const screenUrl = screenUrls.find(s => s.wall_id === wallId && s.slot_number === slotNumber);
+    if (!screenUrl) return;
+
+    // Update local state immediately
+    setScreenUrls(prev => 
+      prev.map(s => 
+        s.id === screenUrl.id ? { ...s, url } : s
+      )
+    );
+
+    // Mark as pending change
+    pendingChanges.current.screenUrls.add(screenUrl.id);
   };
 
   const updateMediaItem = async (wallId: string, slotNumber: number, mediaUrl: string | null, mediaType: 'image' | 'video' | null) => {
-    try {
-      const { error } = await supabase
-        .from('media_grid_items')
-        .update({ media_url: mediaUrl, media_type: mediaType })
-        .eq('wall_id', wallId)
-        .eq('slot_number', slotNumber);
+    // Find the media item record
+    const mediaItem = mediaItems.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
+    if (!mediaItem) return;
 
-      if (error) throw error;
-      await fetchData();
-    } catch (error) {
-      console.error('Error updating media item:', error);
-    }
+    // Update local state immediately
+    setMediaItems(prev => 
+      prev.map(m => 
+        m.id === mediaItem.id ? { ...m, media_url: mediaUrl, media_type: mediaType } : m
+      )
+    );
+
+    // Mark as pending change
+    pendingChanges.current.mediaItems.add(mediaItem.id);
   };
 
   const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
-    try {
-      // Immediately update local state for real-time feedback
-      setWalls(prevWalls => 
-        prevWalls.map(wall => 
-          wall.id === wallId 
-            ? {
-                ...wall,
-                position_x: position.x,
-                position_y: position.y,
-                position_z: position.z,
-                rotation_x: rotation.x,
-                rotation_y: rotation.y,
-                rotation_z: rotation.z
-              }
-            : wall
-        )
-      );
+    // Update local state immediately
+    setWalls(prevWalls => 
+      prevWalls.map(wall => 
+        wall.id === wallId 
+          ? {
+              ...wall,
+              position_x: position.x,
+              position_y: position.y,
+              position_z: position.z,
+              rotation_x: rotation.x,
+              rotation_y: rotation.y,
+              rotation_z: rotation.z
+            }
+          : wall
+      )
+    );
 
-      const { error } = await supabase
-        .from('billboard_walls')
-        .update({
-          position_x: position.x,
-          position_y: position.y,
-          position_z: position.z,
-          rotation_x: rotation.x,
-          rotation_y: rotation.y,
-          rotation_z: rotation.z
-        })
-        .eq('id', wallId);
-
-      if (error) {
-        // If database update fails, revert local state
-        await fetchData();
-        throw error;
-      }
-    } catch (error) {
-      console.error('Error updating wall position:', error);
-      // Revert to database state on error
-      await fetchData();
-    }
+    // Mark as pending change
+    pendingChanges.current.walls.add(wallId);
   };
 
   const uploadMedia = async (file: File): Promise<string | null> => {
@@ -161,6 +297,67 @@ export const useBillboardData = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Set up real-time subscriptions
+    const wallsChannel = supabase
+      .channel('billboard_walls_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'billboard_walls' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updatedWall = payload.new as BillboardWall;
+            setWalls(prev => prev.map(wall => 
+              wall.id === updatedWall.id ? updatedWall : wall
+            ));
+            originalData.current.walls.set(updatedWall.id, { ...updatedWall });
+          }
+        }
+      )
+      .subscribe();
+
+    const urlsChannel = supabase
+      .channel('screen_urls_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'screen_urls' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updatedUrl = payload.new as ScreenUrl;
+            setScreenUrls(prev => prev.map(url => 
+              url.id === updatedUrl.id ? updatedUrl : url
+            ));
+            originalData.current.screenUrls.set(updatedUrl.id, { ...updatedUrl });
+          }
+        }
+      )
+      .subscribe();
+
+    const mediaChannel = supabase
+      .channel('media_grid_items_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'media_grid_items' },
+        (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const updatedItem = payload.new as MediaGridItem;
+            setMediaItems(prev => prev.map(item => 
+              item.id === updatedItem.id ? updatedItem : item
+            ));
+            originalData.current.mediaItems.set(updatedItem.id, { ...updatedItem });
+          }
+        }
+      )
+      .subscribe();
+
+    // Set up batch saving every 30 seconds
+    const saveInterval = setInterval(savePendingChanges, 30000);
+
+    return () => {
+      supabase.removeChannel(wallsChannel);
+      supabase.removeChannel(urlsChannel);
+      supabase.removeChannel(mediaChannel);
+      clearInterval(saveInterval);
+      // Save any pending changes on cleanup
+      savePendingChanges();
+    };
   }, []);
 
   return {
