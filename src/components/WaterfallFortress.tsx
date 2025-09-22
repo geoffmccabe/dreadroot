@@ -415,11 +415,41 @@ function Fortress() {
   // Load textures
   const cliffTexture = useMemo(() => {
     const loader = new THREE.TextureLoader();
-    const texture = loader.load('/cliff_texture_seamless.webp');
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2, 2);
-    return texture;
+    return loader.load('/cliff_texture_seamless.webp');
   }, []);
+
+  // Create individual textures for each wall with proper scaling
+  const frontTexture = useMemo(() => {
+    if (!cliffTexture) return null;
+    const texture = cliffTexture.clone();
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(3.6, 4); // (cliffW/2 - openingHalfW) / 5, cliffH / 5
+    return texture;
+  }, [cliffTexture]);
+
+  const topTexture = useMemo(() => {
+    if (!cliffTexture) return null;
+    const texture = cliffTexture.clone();
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(0.8, 3); // (openingHalfW*2) / 5, (cliffH-openingH) / 5
+    return texture;
+  }, [cliffTexture]);
+
+  const sideTexture = useMemo(() => {
+    if (!cliffTexture) return null;
+    const texture = cliffTexture.clone();
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(6, 4); // courtyardDepth / 5, cliffH / 5
+    return texture;
+  }, [cliffTexture]);
+
+  const backTexture = useMemo(() => {
+    if (!cliffTexture) return null;
+    const texture = cliffTexture.clone();
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 4); // cliffW / 5, cliffH / 5
+    return texture;
+  }, [cliffTexture]);
 
   const grassTexture = useMemo(() => {
     const loader = new THREE.TextureLoader();
@@ -440,37 +470,37 @@ function Fortress() {
       {/* Front wall - Left pillar */}
       <mesh position={[-cliffW/4 - openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
-        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={frontTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Front wall - Right pillar */}
       <mesh position={[cliffW/4 + openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
-        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={frontTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Front wall - Top piece above opening */}
       <mesh position={[0, openingH + (cliffH-openingH)/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[openingHalfW*2, cliffH-openingH, frontT]} />
-        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={topTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Left wall */}
       <mesh position={[-cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
-        <boxGeometry args={[frontT, cliffH, courtyardDepth]} />
-        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
+        <boxGeometry args={[2, cliffH, courtyardDepth]} />
+        <meshStandardMaterial map={sideTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Right wall */}
       <mesh position={[cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
-        <boxGeometry args={[frontT, cliffH, courtyardDepth]} />
-        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
+        <boxGeometry args={[2, cliffH, courtyardDepth]} />
+        <meshStandardMaterial map={sideTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Back wall */}
       <mesh position={[0, cliffH/2, frontZ - courtyardDepth - frontT]} castShadow receiveShadow>
-        <boxGeometry args={[cliffW, cliffH, frontT]} />
-        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
+        <boxGeometry args={[cliffW, cliffH, 2]} />
+        <meshStandardMaterial map={backTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Courtyard floor */}
