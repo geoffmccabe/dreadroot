@@ -437,34 +437,39 @@ function Fortress() {
         <meshStandardMaterial map={grassTexture} metalness={0} roughness={1} />
       </mesh>
 
-      {/* Fortress walls */}
+      {/* Front wall - Left pillar */}
       <mesh position={[-cliffW/4 - openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
         <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
+      {/* Front wall - Right pillar */}
       <mesh position={[cliffW/4 + openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
         <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
+      {/* Front wall - Top piece above opening */}
       <mesh position={[0, openingH + (cliffH-openingH)/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[openingHalfW*2, cliffH-openingH, frontT]} />
         <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
+      {/* Left wall */}
       <mesh position={[-cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
-        <boxGeometry args={[2, cliffH, courtyardDepth]} />
+        <boxGeometry args={[frontT, cliffH, courtyardDepth]} />
         <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
+      {/* Right wall */}
       <mesh position={[cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
-        <boxGeometry args={[2, cliffH, courtyardDepth]} />
+        <boxGeometry args={[frontT, cliffH, courtyardDepth]} />
         <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
+      {/* Back wall */}
       <mesh position={[0, cliffH/2, frontZ - courtyardDepth - frontT]} castShadow receiveShadow>
-        <boxGeometry args={[cliffW, cliffH, 2]} />
+        <boxGeometry args={[cliffW, cliffH, frontT]} />
         <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
@@ -497,12 +502,13 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
     const coinsArray = [];
     for (let i = 0; i < maxCoins; i++) {
       coinsArray.push({
-        position: [0, 20 + Math.random() * 2, -6 + (Math.random() - 0.5) * 0.6] as [number, number, number],
+        position: new THREE.Vector3(0, 20 + Math.random() * 2, -6 + (Math.random() - 0.5) * 0.6),
         velocity: 0,
         rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() * 1) * Math.PI * 2 * (Math.random() < 0.5 ? -1 : 1),
+        rotSpeed: (Math.random() * 2 - 1) * Math.PI * 2,
         scaleJitter: 1 + (Math.random() * 0.4 - 0.2),
-        visible: false
+        visible: false,
+        mesh: null as THREE.Sprite | null
       });
     }
     return coinsArray;
@@ -517,14 +523,14 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
       const availableCoin = coins.find(c => !c.visible);
       if (availableCoin) {
         availableCoin.visible = true;
-        availableCoin.position = [
+        availableCoin.position.set(
           (Math.random() - 0.5) * 4, // fall.width
           20 + Math.random() * 2,
           -6 + (Math.random() - 0.5) * 0.6 // fall.z + fall.depth
-        ];
+        );
         availableCoin.velocity = 0;
         availableCoin.rotation = Math.random() * Math.PI * 2;
-        availableCoin.rotSpeed = (Math.random() * 1) * Math.PI * 2 * (Math.random() < 0.5 ? -1 : 1);
+        availableCoin.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 2;
       }
       coinAccumulator.current -= 1;
     }
@@ -532,13 +538,17 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
     // Update coin physics exactly like original
     const gravity = 9.8 * flowSpeed;
     coins.forEach((coin) => {
-      if (!coin.visible) return;
+      if (!coin.visible || !coin.mesh) return;
       
       coin.velocity += gravity * delta;
-      coin.position[1] -= coin.velocity * delta;
+      coin.position.y -= coin.velocity * delta;
       coin.rotation += coin.rotSpeed * delta;
       
-      if (coin.position[1] <= 0.2) {
+      // Update mesh position and rotation
+      coin.mesh.position.copy(coin.position);
+      coin.mesh.material.rotation = coin.rotation;
+      
+      if (coin.position.y <= 0.2) {
         coin.visible = false;
       }
     });
@@ -548,7 +558,12 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
     <group ref={groupRef}>
       {coins.map((coin, index) => 
         coin.visible && (
-          <sprite key={index} position={coin.position} scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}>
+          <sprite 
+            key={index} 
+            ref={(ref) => { coin.mesh = ref; }}
+            position={[coin.position.x, coin.position.y, coin.position.z]} 
+            scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
+          >
             <spriteMaterial map={coinTexture} transparent />
           </sprite>
         )
