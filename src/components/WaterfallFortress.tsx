@@ -956,6 +956,18 @@ export default function WaterfallFortress() {
     setCoinScore(prev => prev + 1);
   }, []);
 
+  // Listen for crosshair state changes from FirstPersonControls
+  useEffect(() => {
+    const handleCrosshairChange = (event: CustomEvent) => {
+      setCrosshairsEnabled(event.detail.enabled);
+    };
+
+    window.addEventListener('crosshairChange', handleCrosshairChange as EventListener);
+    return () => {
+      window.removeEventListener('crosshairChange', handleCrosshairChange as EventListener);
+    };
+  }, []);
+
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
       <Canvas
