@@ -110,8 +110,13 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
 
   // Optimized position change handler - immediate UI feedback, debounced database updates
   const handlePositionChange = useCallback((axis: 'x' | 'y' | 'z', delta: number) => {
+    console.log('handlePositionChange called:', { axis, delta, selectedWallForMoving });
+    
     const wall = walls.find(w => w.wall_number === selectedWallForMoving);
-    if (!wall || isUpdatingPosition) return;
+    if (!wall || isUpdatingPosition) {
+      console.log('handlePositionChange early return:', { wall: !!wall, isUpdatingPosition });
+      return;
+    }
 
     // Use local position if available, otherwise fall back to database position
     const currentLocalPos = localWallPositions[selectedWallForMoving];
@@ -121,16 +126,24 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
       z: wall.position_z ?? 0
     };
 
+    console.log('Current position before change:', currentPosition);
+
     const newPosition = {
       ...currentPosition,
       [axis]: currentPosition[axis] + delta
     };
 
+    console.log('New position after change:', newPosition);
+
     // Update local position immediately for real-time feedback (synchronous)
-    setLocalWallPositions(prev => ({
-      ...prev,
-      [selectedWallForMoving]: newPosition
-    }));
+    setLocalWallPositions(prev => {
+      const updated = {
+        ...prev,
+        [selectedWallForMoving]: newPosition
+      };
+      console.log('Updating localWallPositions:', updated);
+      return updated;
+    });
 
     // Notify parent component about position changes (synchronous)
     if (onWallPositionsChange) {
@@ -293,11 +306,21 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     
     // Use local position if available, otherwise fall back to database position
     const localPos = localWallPositions[selectedWallForMoving];
+    console.log('getTempOrActualPosition:', { 
+      selectedWallForMoving, 
+      axis, 
+      localPos, 
+      localWallPositions,
+      wallDbPos: { x: wall.position_x, y: wall.position_y, z: wall.position_z }
+    });
+    
     if (localPos) {
+      console.log('Using local position:', localPos[axis]);
       return localPos[axis].toString();
     }
     
     const actualValue = axis === 'x' ? wall.position_x : axis === 'y' ? wall.position_y : wall.position_z;
+    console.log('Using database position:', actualValue);
     return (actualValue ?? 0).toString();
   };
 
