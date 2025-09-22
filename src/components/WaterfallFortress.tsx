@@ -215,14 +215,15 @@ function FirstPersonControls() {
 function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; dropCount: number }) {
   const pointsRef = useRef<THREE.Points>(null);
   const velocitiesRef = useRef<Float32Array>();
+  const prevDropCount = useRef(dropCount);
   
   const fall = {
     width: 4,
     depth: 0.6,
-    topY: 19.95,
+    topY: 19.95, // cliffH - 0.05
     bottomY: 0.2,
     centerX: 0,
-    z: -5.95
+    z: -5.95 // frontZ + frontT/2 + 0.05
   };
 
   // Water drop colors matching original exactly
@@ -234,7 +235,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
     { hex: '#103d6a', weight: 0.30 }
   ];
 
-  // Create cumulative distribution function once (matching original)
+  // Create cumulative distribution function (matching original)
   const cdf = useMemo(() => {
     const result = [];
     let sum = 0;
@@ -258,8 +259,8 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
 
   // Halton sequence for better distribution (from original)
   const halton = useCallback((i: number, base: number) => {
-    let result = 0;
     let f = 1;
+    let result = 0;
     while (i > 0) {
       f /= base;
       result += f * (i % base);
@@ -268,11 +269,54 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
     return result;
   }, []);
 
+  // Recreate drops when count changes (like original)
+  useEffect(() => {
+    if (prevDropCount.current !== dropCount) {
+      prevDropCount.current = dropCount;
+      
+      if (pointsRef.current) {
+        // Dispose old geometry
+        pointsRef.current.geometry.dispose();
+        
+        // Create new geometry
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(dropCount * 3);
+        const colors = new Float32Array(dropCount * 3);
+        
+        // Create new velocities array
+        velocitiesRef.current = new Float32Array(dropCount);
+        
+        const rangeY = fall.topY - fall.bottomY;
+        
+        for (let i = 0; i < dropCount; i++) {
+          const u = halton(i + 1, 2);
+          const v = halton(i + 1, 3);
+          const w = halton(i + 1, 5);
+          
+          positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
+          positions[i * 3 + 1] = fall.bottomY + w * rangeY;
+          positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
+          
+          const color = pickColor();
+          colors[i * 3] = color.r;
+          colors[i * 3 + 1] = color.g;
+          colors[i * 3 + 2] = color.b;
+          
+          velocitiesRef.current[i] = 0;
+        }
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        pointsRef.current.geometry = geometry;
+      }
+    }
+  }, [dropCount, halton, pickColor]);
+
+  // Initial setup
   const { positions, colors } = useMemo(() => {
     const positions = new Float32Array(dropCount * 3);
     const colors = new Float32Array(dropCount * 3);
     
-    // Create new velocities array
     velocitiesRef.current = new Float32Array(dropCount);
     
     const rangeY = fall.topY - fall.bottomY;
@@ -295,7 +339,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
     }
     
     return { positions, colors };
-  }, [dropCount, halton, pickColor]);
+  }, []);
 
   useFrame((state, delta) => {
     if (!pointsRef.current || !velocitiesRef.current) return;
@@ -305,6 +349,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
     const positions = positionAttribute.array as Float32Array;
     const colors = colorAttribute.array as Float32Array;
     
+    // Match original physics exactly
     const gravity = 9.8 * flowSpeed;
     
     for (let i = 0; i < dropCount; i++) {
@@ -318,7 +363,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000 }: { flowSpeed: number; d
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
         velocitiesRef.current[i] = 0;
         
-        // Pick new color using the weighted system (matching original exactly)
+        // Pick new color exactly like original
         const color = pickColor();
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
@@ -419,11 +464,11 @@ function Fortress() {
   );
 }
 
-// Coins component
+// Coins component using sprites like the original
 function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: number; coinSize: number; flowSpeed: number }) {
   const groupRef = useRef<THREE.Group>(null);
   const coinAccumulator = useRef(0);
-  const maxCoins = 200;
+  const maxCoins = 800; // Match original
   
   const coins = useMemo(() => {
     const coinsArray = [];
@@ -432,37 +477,38 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
         position: [0, 20 + Math.random() * 2, -6 + (Math.random() - 0.5) * 0.6] as [number, number, number],
         velocity: 0,
         rotation: Math.random() * Math.PI * 2,
-        rotSpeed: (Math.random() * 2 - 1) * Math.PI * 2,
-        scale: coinSize * (1 + (Math.random() * 0.4 - 0.2)),
+        rotSpeed: (Math.random() * 1) * Math.PI * 2 * (Math.random() < 0.5 ? -1 : 1),
+        scaleJitter: 1 + (Math.random() * 0.4 - 0.2),
         visible: false
       });
     }
     return coinsArray;
-  }, [coinSize, maxCoins]);
+  }, [maxCoins]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     
-    // Spawn coins
+    // Spawn coins exactly like original
     coinAccumulator.current += coinRate * delta;
     while (coinAccumulator.current >= 1) {
       const availableCoin = coins.find(c => !c.visible);
       if (availableCoin) {
         availableCoin.visible = true;
         availableCoin.position = [
-          (Math.random() - 0.5) * 4,
+          (Math.random() - 0.5) * 4, // fall.width
           20 + Math.random() * 2,
-          -6 + (Math.random() - 0.5) * 0.6
+          -6 + (Math.random() - 0.5) * 0.6 // fall.z + fall.depth
         ];
         availableCoin.velocity = 0;
         availableCoin.rotation = Math.random() * Math.PI * 2;
+        availableCoin.rotSpeed = (Math.random() * 1) * Math.PI * 2 * (Math.random() < 0.5 ? -1 : 1);
       }
       coinAccumulator.current -= 1;
     }
 
-    // Update coin physics
+    // Update coin physics exactly like original
     const gravity = 9.8 * flowSpeed;
-    coins.forEach((coin, index) => {
+    coins.forEach((coin) => {
       if (!coin.visible) return;
       
       coin.velocity += gravity * delta;
@@ -479,10 +525,9 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
     <group ref={groupRef}>
       {coins.map((coin, index) => 
         coin.visible && (
-          <mesh key={index} position={coin.position} scale={[coin.scale, coin.scale, 0.1]} rotation={[0, 0, coin.rotation]}>
-            <circleGeometry args={[0.5, 8]} />
-            <meshStandardMaterial color="#ffd700" metalness={0.8} roughness={0.2} />
-          </mesh>
+          <sprite key={index} position={coin.position} scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}>
+            <spriteMaterial color="#ffd700" />
+          </sprite>
         )
       )}
     </group>
