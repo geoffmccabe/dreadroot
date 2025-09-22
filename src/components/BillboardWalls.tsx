@@ -257,66 +257,75 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     );
   };
 
-  // Individual media slot component with completely stable texture loading
+  // Individual media slot component with stable texture loading that actually works
   const MediaSlot = React.memo(({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
     mediaUrl?: string | null; 
     mediaType?: string | null; 
   }) => {
-    const textureRef = useRef<THREE.Texture | null>(null);
-    const currentUrlRef = useRef<string | null>(null);
+    const [texture, setTexture] = useState<THREE.Texture | null>(null);
+    const [loading, setLoading] = useState(false);
+    const loadedUrlRef = useRef<string | null>(null);
     
-    // Use useMemo for completely stable texture - only changes when URL actually changes
-    const stableTexture = useMemo(() => {
-      // If no URL or not an image, return null
+    // Only load texture when URL actually changes
+    useEffect(() => {
+      // If no URL or not an image, clear texture
       if (!mediaUrl || mediaType !== 'image') {
-        currentUrlRef.current = null;
-        textureRef.current = null;
-        return null;
+        if (loadedUrlRef.current) {
+          console.log('Clearing texture - no URL or not image');
+          setTexture(null);
+          setLoading(false);
+          loadedUrlRef.current = null;
+        }
+        return;
       }
       
-      // If URL hasn't changed, return existing texture
-      if (currentUrlRef.current === mediaUrl && textureRef.current) {
-        return textureRef.current;
+      // Don't reload if URL hasn't changed
+      if (loadedUrlRef.current === mediaUrl) {
+        return;
       }
       
-      // Only create new texture if URL actually changed
-      if (currentUrlRef.current !== mediaUrl) {
-        console.log('Creating stable texture for:', mediaUrl);
-        currentUrlRef.current = mediaUrl;
-        
-        const loader = new THREE.TextureLoader();
-        loader.load(
-          mediaUrl,
-          (loadedTexture) => {
+      console.log('Loading texture for MediaSlot:', mediaUrl);
+      setLoading(true);
+      loadedUrlRef.current = mediaUrl;
+      
+      const loader = new THREE.TextureLoader();
+      
+      loader.load(
+        mediaUrl,
+        (loadedTexture) => {
+          // Only set texture if this URL is still current (prevents race conditions)
+          if (loadedUrlRef.current === mediaUrl) {
             loadedTexture.needsUpdate = true;
             loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
             loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
             loadedTexture.minFilter = THREE.LinearFilter;
             loadedTexture.magFilter = THREE.LinearFilter;
-            textureRef.current = loadedTexture;
-            console.log('Stable texture loaded:', mediaUrl);
-          },
-          undefined,
-          (error) => {
-            console.warn('Failed to load stable texture:', mediaUrl, error);
-            textureRef.current = null;
+            setTexture(loadedTexture);
+            setLoading(false);
+            console.log('✅ Texture loaded successfully for MediaSlot:', mediaUrl);
           }
-        );
-      }
-      
-      return textureRef.current;
+        },
+        undefined,
+        (error) => {
+          console.warn('❌ Failed to load texture for MediaSlot:', mediaUrl, error);
+          if (loadedUrlRef.current === mediaUrl) {
+            setTexture(null);
+            setLoading(false);
+          }
+        }
+      );
     }, [mediaUrl, mediaType]);
     
     return (
       <mesh position={position}>
         <planeGeometry args={dimensions} />
         <meshBasicMaterial 
-          map={stableTexture}
-          color={stableTexture ? "#ffffff" : "#374151"}
+          map={texture}
+          color={texture ? "#ffffff" : loading ? "#6b7280" : "#374151"}
           transparent={true}
-          opacity={stableTexture ? 1 : 0.25}
+          opacity={texture ? 1 : 0.25}
           side={THREE.DoubleSide}
         />
       </mesh>
