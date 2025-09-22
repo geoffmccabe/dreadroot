@@ -396,8 +396,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         const rangeY = fall.topY - fall.bottomY;
         
         for (let i = 0; i < dropCount; i++) {
-          const u = halton(i + 1, 2);
-          const v = halton(i + 1, 3);
+          // Use proper random distribution for X and Z to avoid clustering
+          const u = Math.random();
+          const v = Math.random();
           
           // Use time-based distribution for Y position
           const timeOffset = (i / dropCount) * 2; // 2 second spread
@@ -434,8 +435,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     const rangeY = fall.topY - fall.bottomY;
     
     for (let i = 0; i < dropCount; i++) {
-      const u = halton(i + 1, 2);
-      const v = halton(i + 1, 3);
+      // Use proper random distribution for X and Z to avoid clustering
+      const u = Math.random();
+      const v = Math.random();
       
       // Use time-based distribution for Y position instead of random height
       // This creates an even flow by spacing drops based on their fall time
