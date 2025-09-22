@@ -412,43 +412,60 @@ function Fortress() {
   const courtyardDepth = 30, frontZ = -8;
   const openingHalfW = 2, openingH = 5;
 
+  // Load textures
+  const cliffTexture = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    const texture = loader.load('/cliff_texture_seamless.webp');
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2, 2);
+    return texture;
+  }, []);
+
+  const grassTexture = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    const texture = loader.load('/grass_texture_seamless.webp');
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(20, 20);
+    return texture;
+  }, []);
+
   return (
     <group>
       {/* Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[260, 260]} />
-        <meshStandardMaterial color="#4a7c59" metalness={0} roughness={1} />
+        <meshStandardMaterial map={grassTexture} metalness={0} roughness={1} />
       </mesh>
 
       {/* Fortress walls */}
       <mesh position={[-cliffW/4 - openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
-        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       <mesh position={[cliffW/4 + openingHalfW/2, cliffH/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW/2 - openingHalfW, cliffH, frontT]} />
-        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       <mesh position={[0, openingH + (cliffH-openingH)/2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[openingHalfW*2, cliffH-openingH, frontT]} />
-        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       <mesh position={[-cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
         <boxGeometry args={[2, cliffH, courtyardDepth]} />
-        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       <mesh position={[cliffW/2, cliffH/2, frontZ - courtyardDepth/2 - frontT/2]} castShadow receiveShadow>
         <boxGeometry args={[2, cliffH, courtyardDepth]} />
-        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       <mesh position={[0, cliffH/2, frontZ - courtyardDepth - frontT]} castShadow receiveShadow>
         <boxGeometry args={[cliffW, cliffH, 2]} />
-        <meshStandardMaterial color="#8f98a5" metalness={0.1} roughness={0.9} />
+        <meshStandardMaterial map={cliffTexture} metalness={0.1} roughness={0.9} />
       </mesh>
 
       {/* Courtyard floor */}
@@ -458,7 +475,7 @@ function Fortress() {
         receiveShadow
       >
         <planeGeometry args={[cliffW-4, courtyardDepth-2]} />
-        <meshStandardMaterial color="#4a7c59" metalness={0} roughness={1} />
+        <meshStandardMaterial map={grassTexture} metalness={0} roughness={1} />
       </mesh>
     </group>
   );
@@ -469,6 +486,12 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
   const groupRef = useRef<THREE.Group>(null);
   const coinAccumulator = useRef(0);
   const maxCoins = 800; // Match original
+  
+  // Load coin texture
+  const coinTexture = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    return loader.load('/waterfall_coin.png');
+  }, []);
   
   const coins = useMemo(() => {
     const coinsArray = [];
@@ -526,7 +549,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2 }: { coinRate: n
       {coins.map((coin, index) => 
         coin.visible && (
           <sprite key={index} position={coin.position} scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}>
-            <spriteMaterial color="#ffd700" />
+            <spriteMaterial map={coinTexture} transparent />
           </sprite>
         )
       )}
