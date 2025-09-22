@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import * as THREE from 'three';
 
@@ -245,7 +245,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
           
           return (
             <MediaSlot 
-              key={index} 
+              key={`${wallNumber}-slot-${index + 1}`} 
               position={[x, y, 0.01]} 
               dimensions={[slotWidth, slotHeight]}
               mediaUrl={mediaItem?.media_url} 
@@ -257,70 +257,71 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     );
   };
 
-  // Individual media slot component with stable texture loading
-  const MediaSlot = ({ position, dimensions, mediaUrl, mediaType }: { 
+  // Individual media slot component with completely stable texture loading
+  const MediaSlot = React.memo(({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
     mediaUrl?: string | null; 
     mediaType?: string | null; 
   }) => {
-    const [texture, setTexture] = useState<THREE.Texture | null>(null);
-    const [loading, setLoading] = useState(false);
+    const textureRef = useRef<THREE.Texture | null>(null);
+    const currentUrlRef = useRef<string | null>(null);
     
-    // Only load texture when mediaUrl changes - prevent constant reloading
-    useEffect(() => {
+    // Use useMemo for completely stable texture - only changes when URL actually changes
+    const stableTexture = useMemo(() => {
+      // If no URL or not an image, return null
       if (!mediaUrl || mediaType !== 'image') {
-        setTexture(null);
-        setLoading(false);
-        return;
+        currentUrlRef.current = null;
+        textureRef.current = null;
+        return null;
       }
       
-      // Don't reload if we already have a texture for this URL
-      if (texture && texture.userData?.sourceUrl === mediaUrl) {
-        return;
+      // If URL hasn't changed, return existing texture
+      if (currentUrlRef.current === mediaUrl && textureRef.current) {
+        return textureRef.current;
       }
       
-      console.log('Loading texture for:', mediaUrl);
-      setLoading(true);
+      // Only create new texture if URL actually changed
+      if (currentUrlRef.current !== mediaUrl) {
+        console.log('Creating stable texture for:', mediaUrl);
+        currentUrlRef.current = mediaUrl;
+        
+        const loader = new THREE.TextureLoader();
+        loader.load(
+          mediaUrl,
+          (loadedTexture) => {
+            loadedTexture.needsUpdate = true;
+            loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
+            loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+            loadedTexture.minFilter = THREE.LinearFilter;
+            loadedTexture.magFilter = THREE.LinearFilter;
+            textureRef.current = loadedTexture;
+            console.log('Stable texture loaded:', mediaUrl);
+          },
+          undefined,
+          (error) => {
+            console.warn('Failed to load stable texture:', mediaUrl, error);
+            textureRef.current = null;
+          }
+        );
+      }
       
-      const loader = new THREE.TextureLoader();
-      
-      loader.load(
-        mediaUrl,
-        (loadedTexture) => {
-          loadedTexture.needsUpdate = true;
-          loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
-          loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
-          loadedTexture.minFilter = THREE.LinearFilter;
-          loadedTexture.magFilter = THREE.LinearFilter;
-          // Store source URL to prevent reloading
-          loadedTexture.userData = { sourceUrl: mediaUrl };
-          setTexture(loadedTexture);
-          setLoading(false);
-          console.log('Texture loaded successfully:', mediaUrl);
-        },
-        undefined,
-        (error) => {
-          console.warn('Failed to load texture:', mediaUrl, error);
-          setTexture(null);
-          setLoading(false);
-        }
-      );
+      return textureRef.current;
     }, [mediaUrl, mediaType]);
     
     return (
       <mesh position={position}>
         <planeGeometry args={dimensions} />
         <meshBasicMaterial 
-          map={texture}
-          color={texture ? "#ffffff" : loading ? "#6b7280" : "#374151"}
+          map={stableTexture}
+          color={stableTexture ? "#ffffff" : "#374151"}
           transparent={true}
-          opacity={texture ? 1 : 0.25}
+          opacity={stableTexture ? 1 : 0.25}
           side={THREE.DoubleSide}
         />
       </mesh>
     );
-  };
+  });
 
   return (
     <>

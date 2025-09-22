@@ -483,10 +483,22 @@ export const useBillboardData = () => {
         (payload) => {
           if (payload.eventType === 'UPDATE') {
             const updatedItem = payload.new as MediaGridItem;
-            setMediaItems(prev => prev.map(item => 
-              item.id === updatedItem.id ? updatedItem : item
-            ));
-            originalData.current.mediaItems.set(updatedItem.id, { ...updatedItem });
+            
+            // Only update if we don't have pending changes AND content actually changed
+            const currentItem = mediaItems.find(item => item.id === updatedItem.id);
+            const contentChanged = !currentItem || 
+              currentItem.media_url !== updatedItem.media_url ||
+              currentItem.media_type !== updatedItem.media_type;
+            
+            if (!pendingChanges.current.mediaItems.has(updatedItem.id) && contentChanged) {
+              setMediaItems(prev => prev.map(item => 
+                item.id === updatedItem.id ? updatedItem : item
+              ));
+              originalData.current.mediaItems.set(updatedItem.id, { ...updatedItem });
+              console.log('📡 Applied media update for item:', updatedItem.id.substring(0, 8));
+            } else {
+              console.log('📡 Skipped media update - no change or pending');
+            }
           }
         }
       )
