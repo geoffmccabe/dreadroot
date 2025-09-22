@@ -125,12 +125,18 @@ export const useBillboardData = () => {
 
   // Batch save only changed data
   const savePendingChanges = async () => {
+    console.log('💾 savePendingChanges called. Pending changes:', {
+      walls: pendingChanges.current.walls.size,
+      screenUrls: pendingChanges.current.screenUrls.size,
+      mediaItems: pendingChanges.current.mediaItems.size
+    });
+    
     try {
       const promises: Promise<any>[] = [];
 
       // Save changed walls
       if (pendingChanges.current.walls.size > 0) {
-        console.log(`Saving ${pendingChanges.current.walls.size} wall position changes...`);
+        console.log(`💾 Saving ${pendingChanges.current.walls.size} wall position changes...`);
         const wallsToUpdate = walls.filter(wall => 
           pendingChanges.current.walls.has(wall.id)
         );
@@ -297,6 +303,8 @@ export const useBillboardData = () => {
   };
 
   const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
+    console.log('🎯 updateWallPosition called:', { wallId, position, rotation });
+    
     // Update local state immediately
     setWalls(prevWalls => 
       prevWalls.map(wall => 
@@ -316,6 +324,7 @@ export const useBillboardData = () => {
 
     // Mark as pending change
     pendingChanges.current.walls.add(wallId);
+    console.log('📝 Added wall to pending changes. Pending walls:', pendingChanges.current.walls.size);
   };
 
   const uploadMedia = async (file: File): Promise<string | null> => {
@@ -404,7 +413,11 @@ export const useBillboardData = () => {
       .subscribe();
 
     // Set up batch saving every 30 seconds
-    const saveInterval = setInterval(savePendingChanges, 30000);
+    console.log('⏰ Setting up auto-save interval (30 seconds)');
+    const saveInterval = setInterval(() => {
+      console.log('⏰ Auto-save triggered by interval');
+      savePendingChanges();
+    }, 30000);
 
     return () => {
       supabase.removeChannel(wallsChannel);
@@ -425,6 +438,7 @@ export const useBillboardData = () => {
     updateMediaItem,
     updateWallPosition,
     uploadMedia,
+    savePendingChanges, // Add manual save function
     refetch: fetchData
   };
 };

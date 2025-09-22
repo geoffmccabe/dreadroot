@@ -14,7 +14,7 @@ interface BillboardControlPanelProps {
 }
 
 export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible, onWallPositionsChange }) => {
-  const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia } = useBillboardData();
+  const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia, savePendingChanges } = useBillboardData();
   const { toast } = useToast();
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -655,7 +655,16 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                         </div>
                         
                         {/* Wall Preview */}
-                        {getWallPreview(selectedWallForMoving)}
+                <div className="flex items-center gap-4">
+                  {getWallPreview(selectedWallForMoving)}
+                  <Button 
+                    onClick={() => savePendingChanges()}
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    💾 Save Now
+                  </Button>
+                </div>
                       </div>
                     </div>
                   ) : null;
