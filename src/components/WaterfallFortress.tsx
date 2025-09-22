@@ -8,6 +8,61 @@ import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 
+// Sky component with beautiful gradient
+function SkyTexture() {
+  const { scene } = useThree();
+  
+  useEffect(() => {
+    // Create a beautiful gradient sky using a shader
+    const vertexShader = `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+    
+    const fragmentShader = `
+      uniform vec3 topColor;
+      uniform vec3 bottomColor;
+      uniform float offset;
+      uniform float exponent;
+      varying vec3 vWorldPosition;
+      
+      void main() {
+        float h = normalize(vWorldPosition + offset).y;
+        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+      }
+    `;
+    
+    // Create sky sphere with gradient shader
+    const skyGeo = new THREE.SphereGeometry(320, 32, 16);
+    const skyMat = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms: {
+        topColor: { value: new THREE.Color(0x91c7f5) },    // Light blue
+        bottomColor: { value: new THREE.Color(0xffffff) }, // White
+        offset: { value: 33 },
+        exponent: { value: 0.6 }
+      },
+      side: THREE.BackSide
+    });
+    
+    const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(skyMesh);
+    
+    return () => {
+      scene.remove(skyMesh);
+      skyGeo.dispose();
+      skyMat.dispose();
+    };
+  }, [scene]);
+  
+  return null;
+}
+
 // First person controls component
 function FirstPersonControls({ onShoot, showCrosshairs }: { onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; showCrosshairs: boolean }) {
   const { camera, gl } = useThree();
@@ -775,11 +830,8 @@ function Scene({ settings, onCoinHit }: { settings: any; onCoinHit: (position: T
       />
       <ambientLight intensity={0.25} />
 
-      {/* Sky dome */}
-      <mesh scale={[320, 320, 320]}>
-        <sphereGeometry args={[1, 32, 16]} />
-        <meshBasicMaterial color="#dff1ff" side={THREE.BackSide} />
-      </mesh>
+      {/* HDRI Sky */}
+      <SkyTexture />
 
       {/* Fog */}
       <fog attach="fog" args={['#dff1ff', 0, 600]} />
