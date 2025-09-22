@@ -786,7 +786,7 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
         
         {!isCollapsed && (
           <div className="space-y-3 animate-fade-in">
-            <div className="grid grid-cols-[120px_1fr] gap-3 items-center">
+            <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
               <Label className="text-xs opacity-85">Flow speed</Label>
               <Slider
                 value={[settings.flowSpeed]}
@@ -796,8 +796,9 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
                 step={0.01}
                 className="flex-1"
               />
+              <span className="text-xs opacity-75">{settings.flowSpeed.toFixed(2)}</span>
             </div>
-            <div className="grid grid-cols-[120px_1fr] gap-3 items-center">
+            <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
               <Label className="text-xs opacity-85">Drops count</Label>
               <Slider
                 value={[settings.dropCount]}
@@ -807,8 +808,9 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
                 step={100}
                 className="flex-1"
               />
+              <span className="text-xs opacity-75">{settings.dropCount}</span>
             </div>
-            <div className="grid grid-cols-[120px_1fr] gap-3 items-center">
+            <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
               <Label className="text-xs opacity-85">Coin rate (ps)</Label>
               <Slider
                 value={[settings.coinRate]}
@@ -818,8 +820,9 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
                 step={1}
                 className="flex-1"
               />
+              <span className="text-xs opacity-75">{settings.coinRate}</span>
             </div>
-            <div className="grid grid-cols-[120px_1fr] gap-3 items-center">
+            <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
               <Label className="text-xs opacity-85">Coin size</Label>
               <Slider
                 value={[settings.coinSize]}
@@ -829,42 +832,41 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
                 step={0.01}
                 className="flex-1"
               />
+              <span className="text-xs opacity-75">{settings.coinSize.toFixed(2)}</span>
             </div>
             
             {/* Color/Weight Controls */}
             <div className="mt-4 space-y-2">
               <Label className="text-xs opacity-85 font-semibold">Drop Colors & Weights</Label>
-              <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+              <div className="grid grid-cols-3 gap-2">
                 {settings.colorPalette.map((colorWeight, index) => (
-                  <div key={index} className="flex items-center gap-2 text-xs">
-                    <div className="flex items-center gap-1 flex-1">
-                      <div 
-                        className="w-4 h-4 rounded border border-gray-300"
-                        style={{ backgroundColor: colorWeight.hex }}
-                      />
-                      <Input
-                        type="color"
-                        value={colorWeight.hex}
-                        onChange={(e) => {
-                          const newPalette = [...settings.colorPalette];
-                          newPalette[index] = { ...newPalette[index], hex: e.target.value };
-                          onSettingsChange('colorPalette', newPalette);
-                        }}
-                        className="w-8 h-6 p-0 border-0 cursor-pointer"
-                      />
-                      <Input
-                        type="number"
-                        value={colorWeight.weight}
-                        onChange={(e) => {
-                          const newPalette = [...settings.colorPalette];
-                          newPalette[index] = { ...newPalette[index], weight: parseInt(e.target.value) || 0 };
-                          onSettingsChange('colorPalette', newPalette);
-                        }}
-                        className="w-14 h-6 text-xs p-1"
-                        min="0"
-                        max="100"
-                      />
-                    </div>
+                  <div key={index} className="flex items-center gap-1 text-xs">
+                    <div 
+                      className="w-4 h-4 rounded border border-gray-300 flex-shrink-0"
+                      style={{ backgroundColor: colorWeight.hex }}
+                    />
+                    <Input
+                      type="color"
+                      value={colorWeight.hex}
+                      onChange={(e) => {
+                        const newPalette = [...settings.colorPalette];
+                        newPalette[index] = { ...newPalette[index], hex: e.target.value };
+                        onSettingsChange('colorPalette', newPalette);
+                      }}
+                      className="w-6 h-6 p-0 border-0 cursor-pointer flex-shrink-0"
+                    />
+                    <Input
+                      type="number"
+                      value={colorWeight.weight}
+                      onChange={(e) => {
+                        const newPalette = [...settings.colorPalette];
+                        newPalette[index] = { ...newPalette[index], weight: parseInt(e.target.value) || 0 };
+                        onSettingsChange('colorPalette', newPalette);
+                      }}
+                      className="w-12 h-6 text-xs p-1 flex-1"
+                      min="0"
+                      max="100"
+                    />
                   </div>
                 ))}
               </div>
@@ -882,18 +884,14 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
 
 // Main Waterfall Fortress component
 export default function WaterfallFortress() {
-  // Default color/weight pairs as requested by user
+  // Default color/weight pairs - 6 colors as requested
   const defaultColorPalette = [
     { hex: '#06c8c0', weight: 10 },
     { hex: '#028eef', weight: 10 },
     { hex: '#194ca8', weight: 20 },
     { hex: '#18488a', weight: 30 },
     { hex: '#103d6a', weight: 30 },
-    { hex: '#06c8c0', weight: 10 }, // Additional entries to make 10 total
-    { hex: '#028eef', weight: 10 },
-    { hex: '#194ca8', weight: 20 },
-    { hex: '#18488a', weight: 30 },
-    { hex: '#103d6a', weight: 30 }
+    { hex: '#0a2847', weight: 20 }
   ];
 
   const [settings, setSettings] = useState({
