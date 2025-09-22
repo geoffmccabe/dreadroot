@@ -8,7 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { BillboardControlPanel } from '@/components/BillboardControlPanel';
-import { ScreenControls, BillboardWalls } from '@/components/BillboardWalls';
+import { BillboardWalls } from '@/components/BillboardWalls';
 
 // Sky component with beautiful gradient
 function SkyTexture() {
@@ -1137,12 +1137,10 @@ export default function WaterfallFortress() {
     />
     
     {panelsVisible && (
-      <div className="fixed bottom-80 left-4 z-20">
+      <div className="fixed bottom-4 left-80 z-20">
         <BillboardControlPanel />
       </div>
     )}
-    
-    <ScreenControls />
     
     {/* Score display */}
     <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2 bg-black/50 text-white p-2 rounded">
