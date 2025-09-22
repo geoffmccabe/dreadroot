@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -24,53 +24,91 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
   };
 
   // Wall 1 - Screen with URL buttons (front wall inner)
-  const Wall1Screen = () => (
-    <group position={[0, 10, -7]} rotation={[0, 0, 0]}>
-      {/* Main screen plane */}
-      <mesh position={[0, 0, 0.01]}>
-        <planeGeometry args={[18, 12]} />
-        <meshBasicMaterial color="#000000" />
-      </mesh>
+  const Wall1Screen = () => {
+    // Create URL text texture
+    const urlTexture = useMemo(() => {
+      if (!currentUrl?.url) return null;
       
-      {/* Screen content - URL display */}
-      {currentUrl?.url && (
-        <mesh position={[0, 0, 0.02]}>
-          <planeGeometry args={[17.8, 11.8]} />
-          <meshBasicMaterial color="#1e293b" />
-          {/* URL text would be rendered here in a real implementation */}
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 512;
+      const context = canvas.getContext('2d')!;
+      
+      // Black background
+      context.fillStyle = '#1e293b';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // White text
+      context.fillStyle = '#ffffff';
+      context.font = 'bold 60px Arial';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(currentUrl.url, canvas.width / 2, canvas.height / 2);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      return texture;
+    }, [currentUrl?.url]);
+
+    return (
+      <group position={[0, 10, -6]} rotation={[0, 0, 0]}>
+        {/* Main screen plane */}
+        <mesh position={[0, 0, 0.01]}>
+          <planeGeometry args={[36, 18]} />
+          <meshBasicMaterial color="#000000" />
         </mesh>
-      )}
-      
-      {/* URL buttons at bottom */}
-      <group position={[-6, -4.5, 0.03]}>
-        {wall1Urls.slice(0, 4).map((urlData, index) => (
-          <mesh
-            key={urlData.slot_number}
-            position={[index * 3, 0, 0]}
-            onClick={() => setActiveScreenUrl(urlData.slot_number)}
-          >
-            <planeGeometry args={[2.8, 1.5]} />
-            <meshBasicMaterial 
-              color={activeScreenUrl === urlData.slot_number ? "#4f46e5" : "#6b7280"} 
-            />
-          </mesh>
-        ))}
+        
+        {/* Screen content - URL display */}
+        <mesh position={[0, 2, 0.02]}>
+          <planeGeometry args={[35, 14]} />
+          <meshBasicMaterial 
+            map={urlTexture}
+            color={currentUrl?.url ? "#ffffff" : "#1e293b"} 
+          />
+        </mesh>
+        
+        {/* URL buttons at bottom */}
+        <group position={[-13.5, -6, 0.03]}>
+          {wall1Urls.slice(0, 4).map((urlData, index) => (
+            <mesh
+              key={urlData.slot_number}
+              position={[index * 9, 0, 0]}
+              onClick={() => setActiveScreenUrl(urlData.slot_number)}
+            >
+              <planeGeometry args={[8.5, 3]} />
+              <meshBasicMaterial 
+                color={activeScreenUrl === urlData.slot_number ? "#4f46e5" : "#6b7280"} 
+              />
+            </mesh>
+          ))}
+        </group>
       </group>
-    </group>
-  );
+    );
+  };
 
   // Media Grid Wall Component
-  const MediaGridWall = ({ wallNumber, position, rotation }: { wallNumber: number; position: [number, number, number]; rotation: [number, number, number] }) => {
+  const MediaGridWall = ({ wallNumber, position, rotation, wallType }: { 
+    wallNumber: number; 
+    position: [number, number, number]; 
+    rotation: [number, number, number];
+    wallType: 'side' | 'back';
+  }) => {
     const mediaItems = getMediaItemsForWall(wallNumber);
+    
+    // Calculate dimensions based on wall type
+    const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
+    const wallHeight = 20; // All walls are 20 units high
+    const slotWidth = wallWidth / 3; // 3 columns
+    const slotHeight = wallHeight / 2; // 2 rows
     
     return (
       <group position={position} rotation={rotation}>
-        {/* Grid: 3 columns x 2 rows - no gaps */}
+        {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
         {Array.from({ length: 6 }, (_, index) => {
           const col = index % 3;
           const row = Math.floor(index / 3);
-          const x = (col - 1) * 6; // No gaps: 18/3 = 6
-          const y = (1 - row) * 6; // No gaps: 12/2 = 6
+          const x = (col - 1) * slotWidth; // Center the grid
+          const y = (1 - row) * slotHeight; // Center the grid vertically
           
           const mediaItem = mediaItems.find(item => item.slot_number === index + 1);
           
@@ -78,6 +116,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
             <MediaSlot 
               key={index} 
               position={[x, y, 0.01]} 
+              dimensions={[slotWidth, slotHeight]}
               mediaUrl={mediaItem?.media_url} 
               mediaType={mediaItem?.media_type}
             />
@@ -88,8 +127,9 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
   };
 
   // Individual media slot component with texture loading
-  const MediaSlot = ({ position, mediaUrl, mediaType }: { 
+  const MediaSlot = ({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
+    dimensions: [number, number];
     mediaUrl?: string | null; 
     mediaType?: string | null; 
   }) => {
@@ -105,11 +145,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
     
     return (
       <mesh position={position}>
-        <planeGeometry args={[6, 6]} />
+        <planeGeometry args={dimensions} />
         <meshBasicMaterial 
           map={texture}
           color={mediaUrl ? "#ffffff" : "#374151"} 
-          transparent={!mediaUrl}
+          transparent={true}
           opacity={mediaUrl ? 1 : 0.25}
         />
       </mesh>
@@ -125,21 +165,24 @@ const BillboardWalls: React.FC<BillboardWallsProps> = () => {
       <MediaGridWall 
         wallNumber={2} 
         position={[18, 10, -23]} 
-        rotation={[0, -Math.PI/2, 0]} 
+        rotation={[0, -Math.PI/2, 0]}
+        wallType="side"
       />
       
       {/* Wall 3 - Media Grid (back wall inner) */}
       <MediaGridWall 
         wallNumber={3} 
-        position={[0, 10, -39]} 
-        rotation={[0, Math.PI, 0]} 
+        position={[0, 10, -37]} 
+        rotation={[0, Math.PI, 0]}
+        wallType="back"
       />
       
       {/* Wall 4 - Media Grid (left wall inner) */}
       <MediaGridWall 
         wallNumber={4} 
         position={[-18, 10, -23]} 
-        rotation={[0, Math.PI/2, 0]} 
+        rotation={[0, Math.PI/2, 0]}
+        wallType="side"
       />
     </>
   );
