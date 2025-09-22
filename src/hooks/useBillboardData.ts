@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface BillboardWall {
@@ -29,10 +29,21 @@ export interface MediaGridItem {
 }
 
 export const useBillboardData = () => {
-  const [walls, setWalls] = useState<BillboardWall[]>([]);
-  const [screenUrls, setScreenUrls] = useState<ScreenUrl[]>([]);
-  const [mediaItems, setMediaItems] = useState<MediaGridItem[]>([]);
+  const [wallsState, setWallsState] = useState<BillboardWall[]>([]);
+  const [screenUrlsState, setScreenUrlsState] = useState<ScreenUrl[]>([]);
+  const [mediaItemsState, setMediaItemsState] = useState<MediaGridItem[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Debounce refs for real-time updates
+  const debounceTimeouts = useRef<{
+    walls: NodeJS.Timeout | null;
+    screenUrls: NodeJS.Timeout | null;
+    mediaItems: NodeJS.Timeout | null;
+  }>({
+    walls: null,
+    screenUrls: null,
+    mediaItems: null
+  });
   
   // Track original data to detect changes
   const originalData = useRef<{
@@ -87,7 +98,7 @@ export const useBillboardData = () => {
           ...wall,
           wall_type: wall.wall_type as 'screen' | 'media-grid'
         }));
-        setWalls(typedWalls);
+        setWallsState(typedWalls);
         // Update original data reference
         originalData.current.walls.clear();
         typedWalls.forEach(wall => {
@@ -97,7 +108,7 @@ export const useBillboardData = () => {
       
       if (urlsData) {
         console.log('🔗 Loaded screen URLs:', urlsData.length, 'records');
-        setScreenUrls(urlsData as ScreenUrl[]);
+        setScreenUrlsState(urlsData as ScreenUrl[]);
         originalData.current.screenUrls.clear();
         urlsData.forEach(url => {
           originalData.current.screenUrls.set(url.id, { ...url });
@@ -110,7 +121,7 @@ export const useBillboardData = () => {
           ...item,
           media_type: item.media_type as 'image' | 'video' | null
         }));
-        setMediaItems(typedMedia);
+        setMediaItemsState(typedMedia);
         originalData.current.mediaItems.clear();
         typedMedia.forEach(item => {
           originalData.current.mediaItems.set(item.id, { ...item });
@@ -138,7 +149,7 @@ export const useBillboardData = () => {
       // Save changed walls
       if (pendingChanges.current.walls.size > 0) {
         console.log(`💾 Saving ${pendingChanges.current.walls.size} wall position changes...`);
-        const wallsToUpdate = walls.filter(wall => 
+        const wallsToUpdate = wallsState.filter(wall => 
           pendingChanges.current.walls.has(wall.id)
         );
 
@@ -202,7 +213,7 @@ export const useBillboardData = () => {
       // Save changed screen URLs
       if (pendingChanges.current.screenUrls.size > 0) {
         console.log(`Saving ${pendingChanges.current.screenUrls.size} screen URL changes...`);
-        const urlsToUpdate = screenUrls.filter(url => 
+        const urlsToUpdate = screenUrlsState.filter(url => 
           pendingChanges.current.screenUrls.has(url.id)
         );
 
@@ -232,7 +243,7 @@ export const useBillboardData = () => {
       // Save changed media items
       if (pendingChanges.current.mediaItems.size > 0) {
         console.log(`Saving ${pendingChanges.current.mediaItems.size} media item changes...`);
-        const itemsToUpdate = mediaItems.filter(item => 
+        const itemsToUpdate = mediaItemsState.filter(item => 
           pendingChanges.current.mediaItems.has(item.id)
         );
 
@@ -279,13 +290,13 @@ export const useBillboardData = () => {
     }
   };
 
-  const updateScreenUrl = async (wallId: string, slotNumber: number, url: string) => {
+  const updateScreenUrl = useCallback(async (wallId: string, slotNumber: number, url: string) => {
     // Find the screen URL record
-    const screenUrl = screenUrls.find(s => s.wall_id === wallId && s.slot_number === slotNumber);
+    const screenUrl = screenUrlsState.find(s => s.wall_id === wallId && s.slot_number === slotNumber);
     if (!screenUrl) return;
 
     // Update local state immediately
-    setScreenUrls(prev => 
+    setScreenUrlsState(prev => 
       prev.map(s => 
         s.id === screenUrl.id ? { ...s, url } : s
       )
@@ -293,19 +304,19 @@ export const useBillboardData = () => {
 
     // Mark as pending change
     pendingChanges.current.screenUrls.add(screenUrl.id);
-  };
+  }, [screenUrlsState]);
 
-  const updateMediaItem = async (wallId: string, slotNumber: number, mediaUrl: string | null, mediaType: 'image' | 'video' | null) => {
+  const updateMediaItem = useCallback(async (wallId: string, slotNumber: number, mediaUrl: string | null, mediaType: 'image' | 'video' | null) => {
     console.log('🖼️ updateMediaItem called with:', { wallId, slotNumber, mediaUrl, mediaType });
-    console.log('🖼️ Current mediaItems:', mediaItems.length, 'items');
+    console.log('🖼️ Current mediaItems:', mediaItemsState.length, 'items');
     
     // Find the media item record
-    let mediaItem = mediaItems.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
+    let mediaItem = mediaItemsState.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
     console.log('🖼️ Found mediaItem:', mediaItem);
     
     if (!mediaItem) {
       console.error('❌ Media item not found for wallId:', wallId, 'slotNumber:', slotNumber);
-      console.log('🖼️ Available media items:', mediaItems.map(m => ({ 
+      console.log('🖼️ Available media items:', mediaItemsState.map(m => ({ 
         id: m.id.substring(0, 8) + '...', 
         wall_id: m.wall_id.substring(0, 8) + '...', 
         slot_number: m.slot_number 
@@ -314,7 +325,7 @@ export const useBillboardData = () => {
     }
 
     // Update local state immediately  
-    setMediaItems(prev => {
+    setMediaItemsState(prev => {
       const updated = prev.map(m => 
         m.id === mediaItem.id ? { ...m, media_url: mediaUrl, media_type: mediaType } : m
       );
@@ -352,14 +363,14 @@ export const useBillboardData = () => {
       console.error('❌ Exception saving media item:', error);
       return false;
     }
-  };
+  }, [mediaItemsState]);
 
-  const updateWallPosition = async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
+  const updateWallPosition = useCallback(async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
     console.log('🎯 updateWallPosition called:', { wallId, position, rotation });
-    console.log('🎯 Walls before update:', walls.map(w => ({ id: w.id, number: w.wall_number, pos: { x: w.position_x, y: w.position_y, z: w.position_z }})));
+    console.log('🎯 Walls before update:', wallsState.map(w => ({ id: w.id, number: w.wall_number, pos: { x: w.position_x, y: w.position_y, z: w.position_z }})));
     
     // Update local state immediately
-    setWalls(prevWalls => {
+    setWallsState(prevWalls => {
       const updated = prevWalls.map(wall => 
         wall.id === wallId 
           ? {
@@ -385,7 +396,7 @@ export const useBillboardData = () => {
       screenUrls: pendingChanges.current.screenUrls.size,
       mediaItems: pendingChanges.current.mediaItems.size
     });
-  };
+  }, [wallsState]);
 
   const uploadMedia = async (file: File): Promise<string | null> => {
     try {
@@ -435,26 +446,29 @@ export const useBillboardData = () => {
               position: { x: updatedWall.position_x, y: updatedWall.position_y, z: updatedWall.position_z }
             });
             
-            // Only update if we don't have pending changes for this wall AND position actually changed
-            const currentWall = walls.find(w => w.id === updatedWall.id);
-            const positionChanged = !currentWall || 
-              currentWall.position_x !== updatedWall.position_x ||
-              currentWall.position_y !== updatedWall.position_y ||
-              currentWall.position_z !== updatedWall.position_z ||
-              currentWall.rotation_x !== updatedWall.rotation_x ||
-              currentWall.rotation_y !== updatedWall.rotation_y ||
-              currentWall.rotation_z !== updatedWall.rotation_z;
-            
-            if (!pendingChanges.current.walls.has(updatedWall.id) && positionChanged) {
-              setWalls(prev => prev.map(wall => 
-                wall.id === updatedWall.id ? updatedWall : wall
-              ));
-              originalData.current.walls.set(updatedWall.id, { ...updatedWall });
-              console.log('📡 Applied real-time update for wall', updatedWall.wall_number);
-            } else {
-              console.log('📡 Skipped real-time update for wall', updatedWall.wall_number, 
-                pendingChanges.current.walls.has(updatedWall.id) ? '(has pending changes)' : '(no position change)');
+            // Debounce wall updates to prevent flashing
+            if (debounceTimeouts.current.walls) {
+              clearTimeout(debounceTimeouts.current.walls);
             }
+            
+            debounceTimeouts.current.walls = setTimeout(() => {
+              const currentWall = wallsState.find(w => w.id === updatedWall.id);
+              const positionChanged = !currentWall || 
+                currentWall.position_x !== updatedWall.position_x ||
+                currentWall.position_y !== updatedWall.position_y ||
+                currentWall.position_z !== updatedWall.position_z ||
+                currentWall.rotation_x !== updatedWall.rotation_x ||
+                currentWall.rotation_y !== updatedWall.rotation_y ||
+                currentWall.rotation_z !== updatedWall.rotation_z;
+              
+              if (!pendingChanges.current.walls.has(updatedWall.id) && positionChanged) {
+                setWallsState(prev => prev.map(wall => 
+                  wall.id === updatedWall.id ? updatedWall : wall
+                ));
+                originalData.current.walls.set(updatedWall.id, { ...updatedWall });
+                console.log('📡 Applied debounced real-time update for wall', updatedWall.wall_number);
+              }
+            }, 100);
           }
         }
       )
@@ -467,10 +481,18 @@ export const useBillboardData = () => {
         (payload) => {
           if (payload.eventType === 'UPDATE') {
             const updatedUrl = payload.new as ScreenUrl;
-            setScreenUrls(prev => prev.map(url => 
-              url.id === updatedUrl.id ? updatedUrl : url
-            ));
-            originalData.current.screenUrls.set(updatedUrl.id, { ...updatedUrl });
+            
+            // Debounce URL updates
+            if (debounceTimeouts.current.screenUrls) {
+              clearTimeout(debounceTimeouts.current.screenUrls);
+            }
+            
+            debounceTimeouts.current.screenUrls = setTimeout(() => {
+              setScreenUrlsState(prev => prev.map(url => 
+                url.id === updatedUrl.id ? updatedUrl : url
+              ));
+              originalData.current.screenUrls.set(updatedUrl.id, { ...updatedUrl });
+            }, 100);
           }
         }
       )
@@ -484,21 +506,25 @@ export const useBillboardData = () => {
           if (payload.eventType === 'UPDATE') {
             const updatedItem = payload.new as MediaGridItem;
             
-            // Only update if we don't have pending changes AND content actually changed
-            const currentItem = mediaItems.find(item => item.id === updatedItem.id);
-            const contentChanged = !currentItem || 
-              currentItem.media_url !== updatedItem.media_url ||
-              currentItem.media_type !== updatedItem.media_type;
-            
-            if (!pendingChanges.current.mediaItems.has(updatedItem.id) && contentChanged) {
-              setMediaItems(prev => prev.map(item => 
-                item.id === updatedItem.id ? updatedItem : item
-              ));
-              originalData.current.mediaItems.set(updatedItem.id, { ...updatedItem });
-              console.log('📡 Applied media update for item:', updatedItem.id.substring(0, 8));
-            } else {
-              console.log('📡 Skipped media update - no change or pending');
+            // Debounce media updates to prevent flashing
+            if (debounceTimeouts.current.mediaItems) {
+              clearTimeout(debounceTimeouts.current.mediaItems);
             }
+            
+            debounceTimeouts.current.mediaItems = setTimeout(() => {
+              const currentItem = mediaItemsState.find(item => item.id === updatedItem.id);
+              const contentChanged = !currentItem || 
+                currentItem.media_url !== updatedItem.media_url ||
+                currentItem.media_type !== updatedItem.media_type;
+              
+              if (!pendingChanges.current.mediaItems.has(updatedItem.id) && contentChanged) {
+                setMediaItemsState(prev => prev.map(item => 
+                  item.id === updatedItem.id ? updatedItem : item
+                ));
+                originalData.current.mediaItems.set(updatedItem.id, { ...updatedItem });
+                console.log('📡 Applied debounced media update for item:', updatedItem.id.substring(0, 8));
+              }
+            }, 100);
           }
         }
       )
@@ -512,6 +538,11 @@ export const useBillboardData = () => {
     }, 30000);
 
     return () => {
+      // Clear any pending debounce timeouts
+      Object.values(debounceTimeouts.current).forEach(timeout => {
+        if (timeout) clearTimeout(timeout);
+      });
+      
       supabase.removeChannel(wallsChannel);
       supabase.removeChannel(urlsChannel);
       supabase.removeChannel(mediaChannel);
@@ -520,6 +551,11 @@ export const useBillboardData = () => {
       savePendingChanges();
     };
   }, []);
+
+  // Stabilize arrays using useMemo to prevent unnecessary re-renders
+  const walls = useMemo(() => wallsState, [wallsState]);
+  const screenUrls = useMemo(() => screenUrlsState, [screenUrlsState]);
+  const mediaItems = useMemo(() => mediaItemsState, [mediaItemsState]);
 
   return {
     walls,

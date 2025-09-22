@@ -10,45 +10,75 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   const { walls, screenUrls, mediaItems } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
 
-  // Get wall positions from local control or fallback to database
-  const getWallPositionAndRotation = (wallNumber: number) => {
-    // Use local positions if available, otherwise fallback to database
-    if (wallPositions && wallPositions[wallNumber]) {
-      const pos = wallPositions[wallNumber];
-      return {
-        position: [pos.x, pos.y, pos.z] as [number, number, number],
-        rotation: [pos.rotX, pos.rotY, pos.rotZ] as [number, number, number]
-      };
-    }
+  // Memoized wall positions to prevent constant re-renders
+  const getWallPositionAndRotation = useMemo(() => {
+    const positionCache = new Map<number, { position: [number, number, number]; rotation: [number, number, number] }>();
     
-    const wall = walls.find(w => w.wall_number === wallNumber);
-    if (!wall) return { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
-    
-    return {
-      position: [
-        wall.position_x ?? 0,
-        wall.position_y ?? 0,
-        wall.position_z ?? 0
-      ] as [number, number, number],
-      rotation: [
-        wall.rotation_x ?? 0,
-        wall.rotation_y ?? 0,
-        wall.rotation_z ?? 0
-      ] as [number, number, number]
+    return (wallNumber: number) => {
+      if (positionCache.has(wallNumber)) {
+        return positionCache.get(wallNumber)!;
+      }
+      
+      let result;
+      // Use local positions if available, otherwise fallback to database
+      if (wallPositions && wallPositions[wallNumber]) {
+        const pos = wallPositions[wallNumber];
+        result = {
+          position: [pos.x, pos.y, pos.z] as [number, number, number],
+          rotation: [pos.rotX, pos.rotY, pos.rotZ] as [number, number, number]
+        };
+      } else {
+        const wall = walls.find(w => w.wall_number === wallNumber);
+        if (!wall) {
+          result = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
+        } else {
+          result = {
+            position: [
+              wall.position_x ?? 0,
+              wall.position_y ?? 0,
+              wall.position_z ?? 0
+            ] as [number, number, number],
+            rotation: [
+              wall.rotation_x ?? 0,
+              wall.rotation_y ?? 0,
+              wall.rotation_z ?? 0
+            ] as [number, number, number]
+          };
+        }
+      }
+      
+      positionCache.set(wallNumber, result);
+      return result;
     };
-  };
+  }, [walls, wallPositions]);
 
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
   const currentUrl = wall1Urls.find(url => url.slot_number === activeScreenUrl);
 
-  const getMediaItemsForWall = (wallNumber: number) => {
-    const wall = walls.find(w => w.wall_number === wallNumber);
-    if (!wall) return [];
-    return mediaItems
-      .filter(item => item.wall_id === wall.id)
-      .sort((a, b) => a.slot_number - b.slot_number);
-  };
+  // Memoized media items to prevent constant re-renders
+  const getMediaItemsForWall = useMemo(() => {
+    const mediaCache = new Map<number, any[]>();
+    
+    return (wallNumber: number) => {
+      if (mediaCache.has(wallNumber)) {
+        return mediaCache.get(wallNumber)!;
+      }
+      
+      const wall = walls.find(w => w.wall_number === wallNumber);
+      if (!wall) {
+        mediaCache.set(wallNumber, []);
+        return [];
+      }
+      
+      const items = mediaItems
+        .filter(item => item.wall_id === wall.id)
+        .sort((a, b) => a.slot_number - b.slot_number);
+      
+      mediaCache.set(wallNumber, items);
+      return items;
+    };
+  }, [walls, mediaItems]);
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
@@ -257,7 +287,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     );
   };
 
-  // Individual media slot component with stable texture loading that actually works
+  // Individual media slot component with completely stable texture loading
   const MediaSlot = React.memo(({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
@@ -329,6 +359,17 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
           side={THREE.DoubleSide}
         />
       </mesh>
+    );
+  }, (prevProps, nextProps) => {
+    // Custom comparison function to prevent unnecessary re-renders
+    return (
+      prevProps.mediaUrl === nextProps.mediaUrl &&
+      prevProps.mediaType === nextProps.mediaType &&
+      prevProps.position[0] === nextProps.position[0] &&
+      prevProps.position[1] === nextProps.position[1] &&
+      prevProps.position[2] === nextProps.position[2] &&
+      prevProps.dimensions[0] === nextProps.dimensions[0] &&
+      prevProps.dimensions[1] === nextProps.dimensions[1]
     );
   });
 
