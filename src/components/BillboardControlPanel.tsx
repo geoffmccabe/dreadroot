@@ -18,6 +18,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedWallForMoving, setSelectedWallForMoving] = useState<number>(1);
+  const [tempPositions, setTempPositions] = useState<Record<number, {x: string, y: string, z: string}>>({});
 
   if (!isVisible) return null;
   
@@ -111,6 +112,35 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
     } catch (error) {
       console.error('Error updating wall position:', error);
     }
+  };
+
+  const handleTempPositionChange = (axis: 'x' | 'y' | 'z', value: string) => {
+    setTempPositions(prev => ({
+      ...prev,
+      [selectedWallForMoving]: {
+        ...prev[selectedWallForMoving],
+        [axis]: value
+      }
+    }));
+  };
+
+  const handlePositionSubmit = (axis: 'x' | 'y' | 'z') => {
+    const tempValue = tempPositions[selectedWallForMoving]?.[axis];
+    if (tempValue !== undefined) {
+      const numValue = parseFloat(tempValue);
+      if (!isNaN(numValue)) {
+        handleDirectPositionChange(axis, numValue);
+      }
+    }
+  };
+
+  const getTempOrActualPosition = (wall: any, axis: 'x' | 'y' | 'z') => {
+    const tempValue = tempPositions[selectedWallForMoving]?.[axis];
+    if (tempValue !== undefined) {
+      return tempValue;
+    }
+    const actualValue = axis === 'x' ? wall.position_x : axis === 'y' ? wall.position_y : wall.position_z;
+    return (actualValue ?? 0).toString();
   };
 
   const getWallPreview = (wallNumber: number) => {
@@ -275,8 +305,10 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                             <Input
                               type="number"
                               step="0.1"
-                              value={wall.position_x?.toFixed(1) ?? '0'}
-                              onChange={(e) => handleDirectPositionChange('x', parseFloat(e.target.value) || 0)}
+                              value={getTempOrActualPosition(wall, 'x')}
+                              onChange={(e) => handleTempPositionChange('x', e.target.value)}
+                              onBlur={() => handlePositionSubmit('x')}
+                              onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('x')}
                               className="h-8 text-xs bg-slate-700 text-white border-slate-600"
                             />
                           </div>
@@ -285,8 +317,10 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                             <Input
                               type="number"
                               step="0.1"
-                              value={wall.position_y?.toFixed(1) ?? '0'}
-                              onChange={(e) => handleDirectPositionChange('y', parseFloat(e.target.value) || 0)}
+                              value={getTempOrActualPosition(wall, 'y')}
+                              onChange={(e) => handleTempPositionChange('y', e.target.value)}
+                              onBlur={() => handlePositionSubmit('y')}
+                              onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('y')}
                               className="h-8 text-xs bg-slate-700 text-white border-slate-600"
                             />
                           </div>
@@ -295,8 +329,10 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                             <Input
                               type="number"
                               step="0.1"
-                              value={wall.position_z?.toFixed(1) ?? '0'}
-                              onChange={(e) => handleDirectPositionChange('z', parseFloat(e.target.value) || 0)}
+                              value={getTempOrActualPosition(wall, 'z')}
+                              onChange={(e) => handleTempPositionChange('z', e.target.value)}
+                              onBlur={() => handlePositionSubmit('z')}
+                              onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('z')}
                               className="h-8 text-xs bg-slate-700 text-white border-slate-600"
                             />
                           </div>
