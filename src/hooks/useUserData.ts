@@ -50,15 +50,21 @@ export const useUserData = () => {
   const loadUserData = async () => {
     try {
       setIsLoading(true);
+      console.log('Loading user data for:', tempUserId);
       
       // Load or create user profile
-      let { data: existingProfile } = await supabase
+      let { data: existingProfile, error: profileSelectError } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', tempUserId)
         .maybeSingle();
 
+      if (profileSelectError) {
+        console.error('Error loading profile:', profileSelectError);
+      }
+
       if (!existingProfile) {
+        console.log('Creating new profile for:', tempUserId);
         // Create new profile for demo user
         const { data: newProfile, error: profileError } = await supabase
           .from('user_profiles')
@@ -69,8 +75,14 @@ export const useUserData = () => {
           .select()
           .single();
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          throw profileError;
+        }
         existingProfile = newProfile;
+        console.log('Created profile:', existingProfile);
+      } else {
+        console.log('Loaded existing profile:', existingProfile);
       }
 
       setProfile(existingProfile);
@@ -83,6 +95,7 @@ export const useUserData = () => {
 
       if (inventoryError) throw inventoryError;
       setInventory(inventoryData || []);
+      console.log('Loaded inventory:', inventoryData);
 
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -180,28 +193,41 @@ export const useUserData = () => {
   };
 
   const addCoins = async (amount: number) => {
-    if (!profile) return false;
+    if (!profile) {
+      console.log('No profile found, cannot add coins');
+      return false;
+    }
 
     try {
+      console.log(`Adding ${amount} coins to profile:`, profile.id);
       const newCoinAmount = profile.coins + amount;
       const { error } = await supabase
         .from('user_profiles')
         .update({ coins: newCoinAmount })
         .eq('id', profile.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating coins:', error);
+        throw error;
+      }
 
       // Update local state
       setProfile(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+      console.log(`Successfully added ${amount} coins. New total: ${newCoinAmount}`);
       
       toast({
         title: "Coins earned!",
-        description: `+${amount} coins`,
+        description: `+${amount} coins! Total: ${newCoinAmount}`,
       });
       
       return true;
     } catch (error) {
       console.error('Error adding coins:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add coins",
+        variant: "destructive"
+      });
       return false;
     }
   };
