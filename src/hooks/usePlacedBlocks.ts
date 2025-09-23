@@ -13,13 +13,28 @@ export interface PlacedBlock {
   updated_at: string;
 }
 
+// Generate a proper UUID for temporary demo users
+const generateTempUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 export const usePlacedBlocks = () => {
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // For demo purposes, we'll use a temporary user ID
-  const tempUserId = 'temp-user-' + Date.now();
+  // Generate a consistent temp UUID for this session (same as useUserData)
+  const [tempUserId] = useState(() => {
+    const stored = localStorage.getItem('temp-user-id');
+    if (stored) return stored;
+    const newId = generateTempUUID();
+    localStorage.setItem('temp-user-id', newId);
+    return newId;
+  });
 
   useEffect(() => {
     loadBlocks();

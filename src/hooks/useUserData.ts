@@ -19,15 +19,29 @@ export interface UserInventoryItem {
   updated_at: string;
 }
 
+// Generate a proper UUID for temporary demo users
+const generateTempUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 export const useUserData = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [inventory, setInventory] = useState<UserInventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  // For demo purposes, we'll use a temporary user ID
-  // In a real app, this would come from authentication
-  const tempUserId = 'temp-user-' + Date.now();
+  // Generate a consistent temp UUID for this session
+  const [tempUserId] = useState(() => {
+    const stored = localStorage.getItem('temp-user-id');
+    if (stored) return stored;
+    const newId = generateTempUUID();
+    localStorage.setItem('temp-user-id', newId);
+    return newId;
+  });
 
   useEffect(() => {
     loadUserData();
@@ -165,12 +179,40 @@ export const useUserData = () => {
     }
   };
 
+  const addCoins = async (amount: number) => {
+    if (!profile) return false;
+
+    try {
+      const newCoinAmount = profile.coins + amount;
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ coins: newCoinAmount })
+        .eq('id', profile.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setProfile(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+      
+      toast({
+        title: "Coins earned!",
+        description: `+${amount} coins`,
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error adding coins:', error);
+      return false;
+    }
+  };
+
   return {
     profile,
     inventory,
     isLoading,
     buyBlock,
     useBlock,
+    addCoins,
     refreshData: loadUserData
   };
 };

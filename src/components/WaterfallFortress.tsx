@@ -1155,16 +1155,20 @@ export default function WaterfallFortress() {
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   
   // User data and block system hooks
-  const { profile, inventory } = useUserData();
+  const { profile, inventory, addCoins } = useUserData();
   const { placeBlock } = usePlacedBlocks();
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleCoinHit = useCallback((position: THREE.Vector3) => {
-    setCoinScore(prev => prev + 1);
-  }, []);
+  const handleCoinHit = useCallback(async (position: THREE.Vector3) => {
+    // Add coins to database instead of just local state
+    const success = await addCoins(1);
+    if (success) {
+      setCoinScore(prev => prev + 1);
+    }
+  }, [addCoins]);
 
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
     if (!selectedBlockType) return;
