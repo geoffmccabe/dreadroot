@@ -1621,7 +1621,15 @@ export default function WaterfallFortress() {
     <Button
       className="fixed top-4 right-4 z-30 waterfall-button"
       size="sm"
-      onClick={() => setPanelsVisible(!panelsVisible)}
+      onClick={() => {
+        console.log('Panel toggle clicked, current panelsVisible:', panelsVisible);
+        try {
+          setPanelsVisible(!panelsVisible);
+          console.log('Panel visibility set to:', !panelsVisible);
+        } catch (error) {
+          console.error('Error toggling panels:', error);
+        }
+      }}
     >
       {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
     </Button>

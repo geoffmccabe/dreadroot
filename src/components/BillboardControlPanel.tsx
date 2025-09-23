@@ -15,6 +15,9 @@ interface BillboardControlPanelProps {
 }
 
 export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible, onWallPositionsChange }) => {
+  // Move the visibility check BEFORE all hooks to avoid Rules of Hooks violation
+  if (!isVisible) return null;
+  
   const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia } = useBillboardData();
   const { toast } = useToast();
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
@@ -28,9 +31,6 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   
   // Ref to track active intervals for cleanup
   const activeIntervals = useRef<Set<NodeJS.Timeout>>(new Set());
-
-  // Move the visibility check after all hooks - CRITICAL for Rules of Hooks
-  if (!isVisible) return null;
   
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
