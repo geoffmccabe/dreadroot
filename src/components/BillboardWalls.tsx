@@ -219,17 +219,18 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     mediaUrl?: string | null; 
     mediaType?: string | null; 
   }) => {
-    const textureRef = useRef<THREE.Texture | null>(null);
+    const [texture, setTexture] = useState<THREE.Texture | null>(null);
     const loadedUrlRef = useRef<string | null>(null);
-    const [, forceUpdate] = useState({});
     
     // Stable texture loading - only when URL actually changes
-    useMemo(() => {
+    useEffect(() => {
       // Clear texture if no URL or not an image
       if (!mediaUrl || mediaType !== 'image') {
-        if (textureRef.current) {
-          textureRef.current.dispose();
-          textureRef.current = null;
+        if (loadedUrlRef.current) {
+          if (texture) {
+            texture.dispose();
+          }
+          setTexture(null);
           loadedUrlRef.current = null;
         }
         return;
@@ -241,8 +242,8 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       }
       
       // Dispose old texture
-      if (textureRef.current) {
-        textureRef.current.dispose();
+      if (texture) {
+        texture.dispose();
       }
       
       loadedUrlRef.current = mediaUrl;
@@ -257,30 +258,26 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
             loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
             loadedTexture.minFilter = THREE.LinearFilter;
             loadedTexture.magFilter = THREE.LinearFilter;
-            textureRef.current = loadedTexture;
-            forceUpdate({});
+            setTexture(loadedTexture);
           }
         },
         undefined,
         (error) => {
           if (loadedUrlRef.current === mediaUrl) {
-            textureRef.current = null;
-            forceUpdate({});
+            setTexture(null);
           }
         }
       );
-    }, [mediaUrl, mediaType]);
-    
-    const hasTexture = !!textureRef.current;
+    }, [mediaUrl, mediaType, texture]);
     
     return (
       <mesh position={position}>
         <planeGeometry args={dimensions} />
         <meshBasicMaterial 
-          map={textureRef.current}
-          color={hasTexture ? "#ffffff" : "#374151"}
+          map={texture}
+          color={texture ? "#ffffff" : "#374151"}
           transparent={true}
-          opacity={hasTexture ? 1 : 0.25}
+          opacity={texture ? 1 : 0.25}
           side={THREE.DoubleSide}
         />
       </mesh>
