@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,8 +11,25 @@ interface InventoryProps {
 }
 
 export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
-  const { profile, inventory, isLoading } = useUserData();
+  const { profile, inventory, isLoading, updateBlockchainAddress } = useUserData();
   const [blockchainAddress, setBlockchainAddress] = useState('');
+
+  // Sync with profile data
+  useEffect(() => {
+    if (profile?.blockchain_address) {
+      setBlockchainAddress(profile.blockchain_address);
+    }
+  }, [profile?.blockchain_address]);
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBlockchainAddress(e.target.value);
+  };
+
+  const handleAddressBlur = async () => {
+    if (blockchainAddress !== (profile?.blockchain_address || '')) {
+      await updateBlockchainAddress(blockchainAddress);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -57,7 +74,8 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
                 type="text"
                 placeholder="0x...."
                 value={blockchainAddress}
-                onChange={(e) => setBlockchainAddress(e.target.value)}
+                onChange={handleAddressChange}
+                onBlur={handleAddressBlur}
                 className="placeholder:text-muted-foreground/50"
               />
             </div>

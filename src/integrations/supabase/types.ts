@@ -191,6 +191,7 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          blockchain_address: string | null
           coins: number
           created_at: string
           id: string
@@ -198,6 +199,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          blockchain_address?: string | null
           coins?: number
           created_at?: string
           id?: string
@@ -205,6 +207,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          blockchain_address?: string | null
           coins?: number
           created_at?: string
           id?: string

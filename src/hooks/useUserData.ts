@@ -6,6 +6,7 @@ export interface UserProfile {
   id: string;
   user_id: string | null;
   coins: number;
+  blockchain_address?: string;
   created_at: string;
   updated_at: string;
 }
@@ -227,6 +228,38 @@ export const useUserData = () => {
     }
   };
 
+  const updateBlockchainAddress = async (address: string) => {
+    if (!profile) {
+      console.log('No profile found, cannot update blockchain address');
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ blockchain_address: address })
+        .eq('id', profile.id);
+
+      if (error) {
+        console.error('Error updating blockchain address:', error);
+        throw error;
+      }
+
+      // Update local state
+      setProfile(prev => prev ? { ...prev, blockchain_address: address } : null);
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating blockchain address:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update blockchain address",
+        variant: "destructive"
+      });
+      return false;
+    }
+  };
+
   return {
     profile,
     inventory,
@@ -234,6 +267,7 @@ export const useUserData = () => {
     buyBlock,
     useBlock,
     addCoins,
+    updateBlockchainAddress,
     refreshData: loadUserData
   };
 };
