@@ -1012,6 +1012,7 @@ function Scene({
       {/* Scene objects */}
       <Fortress />
       <BillboardWalls wallPositions={wallPositions} />
+      <PlacedBlocks />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         dropCount={settings.dropCount} 
