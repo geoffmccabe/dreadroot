@@ -161,13 +161,16 @@ function FirstPersonControls({
     ];
 
     // Add placed blocks as colliders for jumping/collision
-    const blockColliders = existingBlocks.map(block => 
-      new THREE.Box3(
+    const blockColliders = existingBlocks.map(block => {
+      const collider = new THREE.Box3(
         new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5),
         new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5)
-      )
-    );
+      );
+      console.log(`Block collider at (${block.position_x}, ${block.position_y}, ${block.position_z}):`, collider);
+      return collider;
+    });
     
+    console.log(`Total colliders: ${fortressColliders.length} fortress + ${blockColliders.length} blocks = ${fortressColliders.length + blockColliders.length}`);
     return [...fortressColliders, ...blockColliders];
   }, [existingBlocks]);
 
@@ -217,11 +220,13 @@ function FirstPersonControls({
         break;
       case 'KeyB':
         // Toggle block placement mode
-        console.log('B key pressed, current selectedBlockType:', selectedBlockType, 'inventory blocks:', getBlockQuantity('fortress_block'));
-        if (getBlockQuantity('fortress_block') > 0) {
+        const blockCount = getBlockQuantity('fortress_block');
+        console.log('B key pressed - selectedBlockType:', selectedBlockType, 'inventory blocks:', blockCount);
+        console.log('Current mode will be:', selectedBlockType ? 'exit block mode' : 'enter block mode');
+        if (blockCount > 0) {
           onModeChange(selectedBlockType ? null : 'building');
         } else {
-          console.log('No fortress_block in inventory');
+          console.log('No fortress_block in inventory - cannot enter block mode');
         }
         break;
       case 'KeyO':
@@ -1605,7 +1610,11 @@ export default function WaterfallFortress() {
       </div>
       
       {/* Block inventory */}
-      {getBlockQuantity('fortress_block') > 0 && (
+      {(() => {
+        const blockCount = getBlockQuantity('fortress_block');
+        console.log('Block inventory render - blockCount:', blockCount);
+        return blockCount > 0;
+      })() && (
         <div className="flex items-center gap-2">
           <div 
             className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
