@@ -10,11 +10,6 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   const { walls, screenUrls, mediaItems, loading } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
 
-  // Don't render anything until data is loaded to prevent position jumping
-  if (loading || walls.length === 0) {
-    return null;
-  }
-
   const getWallPositionAndRotation = useCallback((wallNumber: number) => {
     // Use local positions if available, otherwise fallback to database
     if (wallPositions && wallPositions[wallNumber]) {
@@ -56,6 +51,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
   const currentUrl = wall1Urls.find(url => url.slot_number === activeScreenUrl);
+
+  // Don't render anything until data is loaded to prevent position jumping
+  if (loading || walls.length === 0) {
+    return null;
+  }
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
