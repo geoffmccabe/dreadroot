@@ -58,12 +58,12 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     const geometry = new THREE.PlaneGeometry(slotWidth, slotHeight);
     const [uMin, vMin, uMax, vMax] = getSlotUVs(slotIndex);
     
-    // Update UV coordinates
+    // Update UV coordinates - fix vertex order for correct mapping
     const uvs = geometry.attributes.uv;
-    uvs.setXY(0, uMin, vMin); // Bottom-left
-    uvs.setXY(1, uMax, vMin); // Bottom-right
-    uvs.setXY(2, uMin, vMax); // Top-left
-    uvs.setXY(3, uMax, vMax); // Top-right
+    uvs.setXY(0, uMin, vMax); // Top-left
+    uvs.setXY(1, uMax, vMax); // Top-right  
+    uvs.setXY(2, uMin, vMin); // Bottom-left
+    uvs.setXY(3, uMax, vMin); // Bottom-right
     uvs.needsUpdate = true;
     
     return geometry;
