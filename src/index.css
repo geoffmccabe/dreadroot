@@ -167,4 +167,16 @@ All colors MUST be HSL.
     height: 6px;
     box-shadow: 0 24px 0 #ff2431;
   }
+
+  /* Flying coin animation */
+  @keyframes flyToCoin {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(calc(-100vw + 10rem), calc(100vh - 8rem)) scale(0.5);
+      opacity: 0;
+    }
+  }
 }

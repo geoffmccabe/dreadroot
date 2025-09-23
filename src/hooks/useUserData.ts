@@ -215,11 +215,6 @@ export const useUserData = () => {
       setProfile(prev => prev ? { ...prev, coins: newCoinAmount } : null);
       console.log(`Successfully added ${amount} coins. New total: ${newCoinAmount}`);
       
-      toast({
-        title: "Coins earned!",
-        description: `+${amount} coins! Total: ${newCoinAmount}`,
-      });
-      
       return true;
     } catch (error) {
       console.error('Error adding coins:', error);

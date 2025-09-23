@@ -1162,12 +1162,46 @@ export default function WaterfallFortress() {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleCoinHit = useCallback(async (position: THREE.Vector3) => {
-    // Add coins to database instead of just local state
-    const success = await addCoins(1);
-    if (success) {
-      setCoinScore(prev => prev + 1);
-    }
+  // Flying coin animation state
+  const [flyingCoins, setFlyingCoins] = useState<Array<{
+    id: string;
+    startX: number;
+    startY: number;
+    startTime: number;
+  }>>([]);
+
+  const handleCoinHit = useCallback(async (position: THREE.Vector3, screenPosition?: { x: number; y: number }) => {
+    // Create flying coin animation
+    const coinId = Math.random().toString(36).substr(2, 9);
+    const startTime = Date.now();
+    
+    // Convert 3D position to screen position if not provided
+    let startX = screenPosition?.x || window.innerWidth / 2;
+    let startY = screenPosition?.y || window.innerHeight / 2;
+    
+    // Add flying coin to state
+    setFlyingCoins(prev => [...prev, {
+      id: coinId,
+      startX,
+      startY,
+      startTime
+    }]);
+
+    // Play coin hit sound
+    const audio = new Audio('/coin_hit_sound.mp3');
+    audio.volume = 0.3;
+    audio.play();
+
+    // Remove flying coin after animation and add to database
+    setTimeout(async () => {
+      const success = await addCoins(1);
+      if (success) {
+        setCoinScore(prev => prev + 1);
+      }
+      
+      // Remove this flying coin from state
+      setFlyingCoins(prev => prev.filter(coin => coin.id !== coinId));
+    }, 600); // Animation duration
   }, [addCoins]);
 
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
@@ -1217,6 +1251,25 @@ export default function WaterfallFortress() {
         onBlockPlace={handleBlockPlace}
       />
     </Canvas>
+
+    {/* Flying coin animations */}
+    {flyingCoins.map(coin => (
+      <div
+        key={coin.id}
+        className="fixed pointer-events-none z-50"
+        style={{
+          left: coin.startX,
+          top: coin.startY,
+          animation: 'flyToCoin 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards'
+        }}
+      >
+        <img 
+          src="/waterfall_coin.png" 
+          alt="coin" 
+          className="w-8 h-8 animate-spin"
+        />
+      </div>
+    ))}
 
     {/* Panel visibility toggle button */}
     <Button
