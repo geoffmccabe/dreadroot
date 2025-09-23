@@ -7,8 +7,13 @@ interface BillboardWallsProps {
 }
 
 const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
-  const { walls, screenUrls, mediaItems } = useBillboardData();
+  const { walls, screenUrls, mediaItems, loading } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
+
+  // Don't render anything until data is loaded to prevent position jumping
+  if (loading || walls.length === 0) {
+    return null;
+  }
 
   const getWallPositionAndRotation = useCallback((wallNumber: number) => {
     // Use local positions if available, otherwise fallback to database
@@ -58,88 +63,38 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     const [posX, posY, posZ] = position;
     const [rotX, rotY, rotZ] = rotation;
 
-    
-
-    // Create iframe texture for live website content
-    const [iframeTexture, setIframeTexture] = useState<THREE.Texture | null>(null);
-    
-    useEffect(() => {
+    // Stable texture creation - only create once per URL
+    const iframeTexture = useMemo(() => {
       const urlString = currentUrl?.url;
-      if (!urlString) {
-        setIframeTexture(null);
-        return;
-      }
+      if (!urlString) return null;
 
       // Check if URL is valid
       try {
         new URL(urlString);
       } catch {
         console.warn('Invalid URL:', urlString);
-        setIframeTexture(null);
-        return;
+        return null;
       }
 
+      // Create a simple placeholder texture with URL info
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 768;
+      const context = canvas.getContext('2d')!;
       
+      context.fillStyle = '#1e293b';
+      context.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Create iframe element
-      const iframe = document.createElement('iframe');
-      iframe.src = urlString;
-      iframe.width = '1024';
-      iframe.height = '768';
-      iframe.style.border = 'none';
-      iframe.style.position = 'absolute';
-      iframe.style.left = '-9999px';
-      iframe.style.top = '-9999px';
+      // Add URL text
+      context.fillStyle = '#ffffff';
+      context.font = 'bold 40px Arial';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText('Loading...', canvas.width / 2, canvas.height / 2 - 50);
+      context.font = '30px Arial';
+      context.fillText(urlString, canvas.width / 2, canvas.height / 2 + 50);
       
-      // Add iframe to document
-      document.body.appendChild(iframe);
-
-      // Create canvas and texture after iframe loads
-      const handleLoad = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = 1024;
-          canvas.height = 768;
-          const context = canvas.getContext('2d')!;
-          
-          // Create a simple loading/placeholder texture
-          context.fillStyle = '#1e293b';
-          context.fillRect(0, 0, canvas.width, canvas.height);
-          
-          // Add URL text
-          context.fillStyle = '#ffffff';
-          context.font = 'bold 40px Arial';
-          context.textAlign = 'center';
-          context.textBaseline = 'middle';
-          context.fillText('Loading...', canvas.width / 2, canvas.height / 2 - 50);
-          context.font = '30px Arial';
-          context.fillText(urlString, canvas.width / 2, canvas.height / 2 + 50);
-          
-          const texture = new THREE.CanvasTexture(canvas);
-          // Don't manually set needsUpdate - let THREE.js handle it
-          setIframeTexture(texture);
-        } catch (error) {
-          console.error('Error creating iframe texture:', error);
-        } finally {
-          // Clean up iframe
-          if (iframe.parentNode) {
-            iframe.parentNode.removeChild(iframe);
-          }
-        }
-      };
-
-      iframe.onload = handleLoad;
-      
-      // Fallback if iframe doesn't load in 3 seconds
-      setTimeout(() => {
-        handleLoad();
-      }, 3000);
-
-      return () => {
-        if (iframe.parentNode) {
-          iframe.parentNode.removeChild(iframe);
-        }
-      };
+      return new THREE.CanvasTexture(canvas);
     }, [currentUrl?.url]);
 
     // Fallback texture for when no URL is set
@@ -158,9 +113,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       context.textBaseline = 'middle';
       context.fillText('No URL Selected', canvas.width / 2, canvas.height / 2);
       
-      const texture = new THREE.CanvasTexture(canvas);
-      // Don't manually set needsUpdate - let THREE.js handle it
-      return texture;
+      return new THREE.CanvasTexture(canvas);
     }, []);
 
     return (
