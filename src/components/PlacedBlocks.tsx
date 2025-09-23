@@ -2,37 +2,63 @@ import React, { useRef, useMemo, useCallback } from 'react';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
+import { getBlockByKey } from '@/data/blockRegistry';
 
-// Shared texture and geometry for performance
-const SharedBlockResources = () => {
-  const cliffTexture = useLoader(THREE.TextureLoader, '/cliff_texture_seamless.webp');
-  cliffTexture.wrapS = THREE.RepeatWrapping;
-  cliffTexture.wrapT = THREE.RepeatWrapping;
-  cliffTexture.repeat.set(1, 1);
-  
-  const geometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
-  const material = useMemo(() => new THREE.MeshLambertMaterial({ 
-    map: cliffTexture, 
-    color: 0xcccccc 
-  }), [cliffTexture]);
-  
-  return { geometry, material };
+// Shared geometry for performance
+const SharedBlockGeometry = () => {
+  return useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
 };
 
-// Memoized individual block component
-const FortressBlock = React.memo(({ 
+// Memoized individual block component with proper textures
+const PlacedBlockComponent = React.memo(({ 
   position, 
+  blockType,
   onCollision,
-  geometry,
-  material 
+  geometry
 }: { 
   position: [number, number, number];
+  blockType: string;
   onCollision?: (box: THREE.Box3, blockId: string) => void;
   geometry: THREE.BoxGeometry;
-  material: THREE.MeshLambertMaterial;
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
+  
+  // Get block definition from registry
+  const blockDef = getBlockByKey(blockType);
+  
+  // Load texture based on block type
+  const texture = useLoader(THREE.TextureLoader, blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp');
+  
+  // Configure texture
+  React.useEffect(() => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+  }, [texture]);
+  
+  // Create material based on block properties
+  const material = useMemo(() => {
+    const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
+    
+    const materialProps: any = {
+      map: texture,
+      color: baseColor
+    };
+    
+    // Handle special properties
+    if (blockDef?.properties?.emissive) {
+      materialProps.emissive = baseColor;
+      materialProps.emissiveIntensity = 0.3;
+    }
+    
+    if (blockDef?.properties?.transparent) {
+      materialProps.transparent = true;
+      materialProps.opacity = 0.7;
+    }
+    
+    return new THREE.MeshLambertMaterial(materialProps);
+  }, [texture, blockDef]);
 
   // Create collision box only once per block
   React.useEffect(() => {
@@ -41,6 +67,13 @@ const FortressBlock = React.memo(({
       onCollision(box, blockId);
     }
   }, [blockId, onCollision]);
+
+  // Clean up material when component unmounts
+  React.useEffect(() => {
+    return () => {
+      material.dispose();
+    };
+  }, [material]);
 
   return (
     <mesh ref={meshRef} position={position} castShadow receiveShadow geometry={geometry} material={material} />
@@ -51,11 +84,14 @@ const FortressBlock = React.memo(({
 export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => void }> = ({ onCollision }) => {
   const { blocks } = usePlacedBlocksWithCache();
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
-  const { geometry, material } = SharedBlockResources();
+  const geometry = SharedBlockGeometry();
 
   // Debug logging and force re-render when blocks change
   React.useEffect(() => {
     console.log('PlacedBlocks updated - total blocks:', blocks.length);
+    if (blocks.length > 0) {
+      console.log('Block types present:', [...new Set(blocks.map(b => b.block_type))]);
+    }
   }, [blocks]);
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
@@ -89,12 +125,12 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
   return (
     <>
       {blocks.map((block) => (
-        <FortressBlock
+        <PlacedBlockComponent
           key={block.id}
           position={[block.position_x, block.position_y, block.position_z]}
+          blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}
-          material={material}
         />
       ))}
     </>

@@ -87,7 +87,8 @@ function FirstPersonControls({
   getBlockQuantity,
   selectedBlockType,
   shopOpen,
-  inventoryOpen
+  inventoryOpen,
+  onCycleBlock
 }: { 
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -107,6 +108,7 @@ function FirstPersonControls({
   selectedBlockType: string | null;
   shopOpen: boolean;
   inventoryOpen: boolean;
+  onCycleBlock: (direction: 'next' | 'prev') => void;
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -1137,7 +1139,8 @@ function Scene({
   getBlockQuantity,
   selectedBlockType,
   shopOpen,
-  inventoryOpen
+  inventoryOpen,
+  onCycleBlock
 }: { 
   settings: { flowSpeed: number; dropCount: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -1152,6 +1155,7 @@ function Scene({
   selectedBlockType: string | null;
   shopOpen: boolean;
   inventoryOpen: boolean;
+  onCycleBlock: (direction: 'next' | 'prev') => void;
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -1309,6 +1313,7 @@ function Scene({
         selectedBlockType={selectedBlockType}
         shopOpen={shopOpen}
         inventoryOpen={inventoryOpen}
+        onCycleBlock={cycleSelectedBlock}
       />
       
       {/* Lighting */}
@@ -1638,6 +1643,33 @@ export default function WaterfallFortress() {
     }
   }, [inventory, setBlockMode, toast]);
 
+  // Cycle through available blocks with mouse wheel
+  const cycleSelectedBlock = useCallback((direction: 'next' | 'prev') => {
+    if (!selectedBlockType) return;
+    
+    const availableBlocks = inventory.filter(item => item.quantity > 0);
+    if (availableBlocks.length <= 1) return;
+    
+    const currentIndex = availableBlocks.findIndex(item => item.item_type === selectedBlockType);
+    if (currentIndex === -1) return;
+    
+    let nextIndex;
+    if (direction === 'next') {
+      nextIndex = (currentIndex + 1) % availableBlocks.length;
+    } else {
+      nextIndex = (currentIndex - 1 + availableBlocks.length) % availableBlocks.length;
+    }
+    
+    const nextBlock = availableBlocks[nextIndex];
+    setSelectedBlockType(nextBlock.item_type);
+    
+    toast({
+      title: "Block selected",
+      description: `Selected ${nextBlock.item_type} (${nextBlock.quantity} available)`,
+      duration: 1000
+    });
+  }, [selectedBlockType, inventory, toast]);
+
   // Shop and inventory handlers
   const handleOpenShop = useCallback(() => {
     setShopOpen(true);
@@ -1681,6 +1713,7 @@ export default function WaterfallFortress() {
         selectedBlockType={selectedBlockType}
         shopOpen={shopOpen}
         inventoryOpen={inventoryOpen}
+        onCycleBlock={cycleSelectedBlock}
       />
       
       {/* Block Preview */}
