@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface BillboardWall {
@@ -33,6 +33,19 @@ export const useBillboardData = () => {
   const [screenUrls, setScreenUrls] = useState<ScreenUrl[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaGridItem[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Refs to access current state without creating dependencies
+  const screenUrlsRef = useRef<ScreenUrl[]>([]);
+  const mediaItemsRef = useRef<MediaGridItem[]>([]);
+  
+  // Update refs when state changes
+  useEffect(() => {
+    screenUrlsRef.current = screenUrls;
+  }, [screenUrls]);
+  
+  useEffect(() => {
+    mediaItemsRef.current = mediaItems;
+  }, [mediaItems]);
   
   const fetchData = useCallback(async () => {
     try {
@@ -69,7 +82,7 @@ export const useBillboardData = () => {
   }, []);
 
   const updateScreenUrl = useCallback(async (wallId: string, slotNumber: number, url: string) => {
-    const screenUrl = screenUrls.find(s => s.wall_id === wallId && s.slot_number === slotNumber);
+    const screenUrl = screenUrlsRef.current.find(s => s.wall_id === wallId && s.slot_number === slotNumber);
     if (!screenUrl) return;
 
     setScreenUrls(prev => prev.map(s => 
@@ -80,10 +93,10 @@ export const useBillboardData = () => {
       .from('screen_urls')
       .update({ url })
       .eq('id', screenUrl.id);
-  }, [screenUrls]);
+  }, []);
 
   const updateMediaItem = useCallback(async (wallId: string, slotNumber: number, mediaUrl: string | null, mediaType: 'image' | 'video' | null) => {
-    const mediaItem = mediaItems.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
+    const mediaItem = mediaItemsRef.current.find(m => m.wall_id === wallId && m.slot_number === slotNumber);
     if (!mediaItem) return false;
 
     setMediaItems(prev => prev.map(m => 
@@ -96,7 +109,7 @@ export const useBillboardData = () => {
       .eq('id', mediaItem.id);
       
     return !error;
-  }, [mediaItems]);
+  }, []);
 
   const updateWallPosition = useCallback(async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
     setWalls(prevWalls => prevWalls.map(wall => 
