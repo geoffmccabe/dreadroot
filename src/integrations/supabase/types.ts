@@ -94,6 +94,39 @@ export type Database = {
           },
         ]
       }
+      placed_blocks: {
+        Row: {
+          block_type: string
+          created_at: string
+          id: string
+          position_x: number
+          position_y: number
+          position_z: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          block_type?: string
+          created_at?: string
+          id?: string
+          position_x: number
+          position_y: number
+          position_z: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          block_type?: string
+          created_at?: string
+          id?: string
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       screen_urls: {
         Row: {
           created_at: string
@@ -128,6 +161,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_inventory: {
+        Row: {
+          created_at: string
+          id: string
+          item_type: string
+          quantity: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_type?: string
+          quantity?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_type?: string
+          quantity?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          coins: number
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          coins?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          coins?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {

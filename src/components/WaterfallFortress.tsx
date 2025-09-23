@@ -9,6 +9,11 @@ import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { BillboardControlPanel } from '@/components/BillboardControlPanel';
 import { BillboardWalls } from '@/components/BillboardWalls';
+import { BlockShop } from '@/components/BlockShop';
+import { PlacedBlocks } from '@/components/PlacedBlocks';
+import { useUserData } from '@/hooks/useUserData';
+import { usePlacedBlocks } from '@/hooks/usePlacedBlocks';
+import { Toaster } from '@/components/ui/toaster';
 
 // Sky component with beautiful gradient
 function SkyTexture() {
@@ -70,7 +75,9 @@ function FirstPersonControls({
   onShoot, 
   showCrosshairs, 
   audioRefs, 
-  playAudio 
+  playAudio,
+  blockPlacementMode,
+  onBlockPlace
 }: { 
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -81,6 +88,8 @@ function FirstPersonControls({
     coinHit: HTMLAudioElement;
   };
   playAudio: (audio: HTMLAudioElement) => Promise<void>;
+  blockPlacementMode: boolean;
+  onBlockPlace?: (position: THREE.Vector3) => void;
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -221,6 +230,15 @@ function FirstPersonControls({
   const handleClick = useCallback(() => {
     if (!isLocked.current) {
       gl.domElement.requestPointerLock();
+    } else if (blockPlacementMode && onBlockPlace) {
+      // Place block at ground level in front of player
+      const forwardDirection = new THREE.Vector3(0, 0, -1);
+      forwardDirection.applyQuaternion(camera.quaternion);
+      const placePosition = camera.position.clone().add(forwardDirection.multiplyScalar(3));
+      placePosition.y = Math.floor(placePosition.y) + 0.5; // Snap to grid and center
+      placePosition.x = Math.floor(placePosition.x) + 0.5;
+      placePosition.z = Math.floor(placePosition.z) + 0.5;
+      onBlockPlace(placePosition);
     } else if (crosshairsEnabled && onShoot) {
       // Fire bullet
       const shootDirection = new THREE.Vector3(0, 0, -1);
@@ -230,7 +248,7 @@ function FirstPersonControls({
       // Play gunshot sound using preloaded audio
       playAudio(audioRefs.gunshot);
     }
-  }, [gl, crosshairsEnabled, onShoot, camera]);
+  }, [gl, crosshairsEnabled, onShoot, camera, blockPlacementMode, onBlockPlace]);
 
   const handlePointerLockChange = useCallback(() => {
     isLocked.current = document.pointerLockElement === gl.domElement;
@@ -769,10 +787,18 @@ function Bullets({ bullets }: {
 
 // Scene component
 // Scene component with audio management
-function Scene({ settings, onCoinHit, wallPositions }: { 
+function Scene({ 
+  settings, 
+  onCoinHit, 
+  wallPositions, 
+  blockPlacementMode, 
+  onBlockPlace 
+}: { 
   settings: any; 
   onCoinHit: (position: THREE.Vector3) => void; 
   wallPositions?: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
+  blockPlacementMode: boolean;
+  onBlockPlace?: (position: THREE.Vector3) => void;
 }) {
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
   const [showCrosshairs, setShowCrosshairs] = useState(false);
@@ -898,6 +924,8 @@ function Scene({ settings, onCoinHit, wallPositions }: {
         showCrosshairs={true}
         audioRefs={audioRefs.current}
         playAudio={playAudio}
+        blockPlacementMode={blockPlacementMode}
+        onBlockPlace={onBlockPlace}
       />
       
       {/* Lighting */}
@@ -1086,9 +1114,15 @@ export default function WaterfallFortress() {
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
   
   // Wall positions state for real-time control
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
+  
+  // User data and block system hooks
+  const { profile, inventory } = useUserData();
+  const { placeBlock } = usePlacedBlocks();
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -1097,6 +1131,25 @@ export default function WaterfallFortress() {
   const handleCoinHit = useCallback((position: THREE.Vector3) => {
     setCoinScore(prev => prev + 1);
   }, []);
+
+  const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
+    if (!selectedBlockType) return;
+    
+    const success = await placeBlock(position.x, position.y, position.z, selectedBlockType);
+    if (success) {
+      // Deduct block from inventory would be handled in the placeBlock function
+      // For now, we just place the block
+    }
+  }, [selectedBlockType, placeBlock]);
+
+  const handleBlockPurchased = useCallback(() => {
+    // Refresh could be handled here if needed
+  }, []);
+
+  const getBlockQuantity = (itemType: string) => {
+    const item = inventory.find(i => i.item_type === itemType);
+    return item?.quantity || 0;
+  };
 
   // Listen for crosshair state changes from FirstPersonControls
   useEffect(() => {
@@ -1118,7 +1171,13 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
-      <Scene settings={settings} onCoinHit={handleCoinHit} wallPositions={wallPositions} />
+      <Scene 
+        settings={settings} 
+        onCoinHit={handleCoinHit} 
+        wallPositions={wallPositions}
+        blockPlacementMode={!!selectedBlockType}
+        onBlockPlace={handleBlockPlace}
+      />
     </Canvas>
 
     {/* Panel visibility toggle button */}
@@ -1144,21 +1203,55 @@ export default function WaterfallFortress() {
       />
     </div>
     
-    {/* Score display */}
-    <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2 bg-black/50 text-white p-2 rounded">
-      <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
-      <span className="font-bold">x{coinScore}</span>
+    {/* Score display and block inventory */}
+    <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2">
+      {/* Coin display - clickable to open shop */}
+      <div 
+        className="flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer hover:bg-black/70 transition-colors"
+        onClick={() => setShopOpen(true)}
+      >
+        <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+        <span className="font-bold">x{profile?.coins || 0}</span>
+      </div>
+      
+      {/* Block inventory */}
+      {getBlockQuantity('fortress_block') > 0 && (
+        <div className="flex items-center gap-2">
+          <div 
+            className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
+              selectedBlockType === 'fortress_block' ? 'bg-blue-500/70' : 'hover:bg-black/70'
+            }`}
+            onClick={() => setSelectedBlockType(selectedBlockType === 'fortress_block' ? null : 'fortress_block')}
+          >
+            <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
+              <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
+            </div>
+            <span className="font-bold">x{getBlockQuantity('fortress_block')}</span>
+          </div>
+        </div>
+      )}
     </div>
     
     {/* Instructions */}
     {panelsVisible && (
       <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
-        Press R for crosshairs • Click to shoot
+        {selectedBlockType ? 'Click to place block' : 'Press R for crosshairs • Click to shoot'}
+        {selectedBlockType && <div className="text-xs opacity-75">Click block icon to deselect</div>}
       </div>
     )}
     
+    {/* Block Shop Modal */}
+    <BlockShop 
+      isOpen={shopOpen}
+      onClose={() => setShopOpen(false)}
+      onBlockPurchased={handleBlockPurchased}
+    />
+    
     {/* Crosshair - conditional class for active state */}
-    <div className={`waterfall-crosshair ${crosshairsEnabled ? 'active' : ''}`} />
+    <div className={`waterfall-crosshair ${crosshairsEnabled || !!selectedBlockType ? 'active' : ''}`} />
+    
+    {/* Toast notifications */}
+    <Toaster />
     </div>
   );
 }
