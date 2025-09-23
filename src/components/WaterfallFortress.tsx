@@ -79,7 +79,14 @@ function FirstPersonControls({
   audioRefs, 
   playAudio,
   blockPlacementMode,
-  onBlockPlace
+  onBlockPlace,
+  onOpenShop,
+  onOpenInventory,
+  onModeChange,
+  getBlockQuantity,
+  selectedBlockType,
+  shopOpen,
+  inventoryOpen
 }: { 
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -92,6 +99,13 @@ function FirstPersonControls({
   playAudio: (audio: HTMLAudioElement) => Promise<void>;
   blockPlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
+  onOpenShop: () => void;
+  onOpenInventory: () => void;
+  onModeChange: (mode: 'shooting' | 'building' | null) => void;
+  getBlockQuantity: (itemType: string) => number;
+  selectedBlockType: string | null;
+  shopOpen: boolean;
+  inventoryOpen: boolean;
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -105,6 +119,9 @@ function FirstPersonControls({
   const onGround = useRef(true);
   const yaw = useRef(0);
   const pitch = useRef(0);
+  
+  // Get existing blocks from parent context
+  const { blocks: existingBlocks } = usePlacedBlocks();
   
   // Firing rate limiting to prevent performance issues
   const lastFireTime = useRef(0);
@@ -172,18 +189,30 @@ function FirstPersonControls({
         break;
       case 'KeyR':
         if (!blockPlacementMode) {
-          const newCrosshairsState = !crosshairsEnabled;
-          setCrosshairsEnabled(newCrosshairsState);
-          
-          // Dispatch custom event to notify parent component
-          const crosshairEvent = new CustomEvent('crosshairChange', { 
-            detail: { enabled: newCrosshairsState } 
-          });
-          window.dispatchEvent(crosshairEvent);
+          const newCrosshairsState = !showCrosshairs;
+          onModeChange(newCrosshairsState ? 'shooting' : null);
           
           // Play appropriate gun sound using preloaded audio
           const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
           playAudio(audio);
+        }
+        break;
+      case 'KeyB':
+        // Toggle block placement mode
+        if (getBlockQuantity('fortress_block') > 0) {
+          onModeChange(selectedBlockType ? null : 'building');
+        }
+        break;
+      case 'KeyO':
+        // Open shop
+        if (!shopOpen) {
+          onOpenShop();
+        }
+        break;
+      case 'KeyI':
+        // Open inventory
+        if (!inventoryOpen) {
+          onOpenInventory();
         }
         break;
       case 'Escape':
@@ -192,7 +221,7 @@ function FirstPersonControls({
         }
         break;
     }
-  }, [crosshairsEnabled]);
+  }, [crosshairsEnabled, onModeChange, onOpenShop, onOpenInventory, getBlockQuantity, selectedBlockType, shopOpen, inventoryOpen]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     switch (event.code) {
@@ -239,29 +268,106 @@ function FirstPersonControls({
     if (!isLocked.current) {
       gl.domElement.requestPointerLock();
     } else if (blockPlacementMode && onBlockPlace) {
-      // Place block at the preview position with restrictions
-      const forwardDirection = new THREE.Vector3(0, 0, -1);
-      forwardDirection.applyQuaternion(camera.quaternion);
-      const placePosition = camera.position.clone().add(forwardDirection.multiplyScalar(3));
+      // Minecraft-style block placement with surface detection
+      const raycaster = new THREE.Raycaster();
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(camera.quaternion);
+      raycaster.set(camera.position, direction);
       
-      // Snap to voxel grid
-      placePosition.x = Math.floor(placePosition.x) + 0.5;
-      placePosition.y = Math.max(0.5, Math.floor(placePosition.y + 0.5) + 0.5);
-      placePosition.z = Math.floor(placePosition.z) + 0.5;
+      // Create intersection targets (ground, existing blocks, fortress walls)
+      const targets: THREE.Object3D[] = [];
       
-      // Check placement restrictions
-      const fortressCenter = new THREE.Vector3(0, 0, -20);
-      const distanceToFortress = placePosition.distanceTo(fortressCenter);
-      const waterfallZ = -6;
-      const waterfallBlockingWidth = 8;
+      // Add ground plane
+      const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+      const groundMesh = new THREE.Mesh(groundGeometry);
+      groundMesh.rotation.x = -Math.PI / 2;
+      groundMesh.position.y = 0;
+      targets.push(groundMesh);
       
-      // Validate placement
-      const tooCloseToFortress = distanceToFortress < 30;
-      const blockingWaterfall = Math.abs(placePosition.x) < waterfallBlockingWidth / 2 && placePosition.z > waterfallZ;
+      // Add fortress walls as collision targets
+      const fortressWalls = [
+        // Front wall
+        { center: [0, 10, -10], size: [50, 20, 2] },
+        // Side walls  
+        { center: [-25, 10, -20], size: [2, 20, 20] },
+        { center: [25, 10, -20], size: [2, 20, 20] },
+        // Back wall
+        { center: [0, 10, -30], size: [50, 20, 2] }
+      ];
       
-      if (!tooCloseToFortress && !blockingWaterfall) {
-        onBlockPlace(placePosition);
+      fortressWalls.forEach(wall => {
+        const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size as [number, number, number]));
+        wallMesh.position.set(...wall.center as [number, number, number]);
+        targets.push(wallMesh);
+      });
+      
+      // Add existing blocks to collision targets
+      if (existingBlocks && existingBlocks.length > 0) {
+        existingBlocks.forEach(block => {
+          const blockMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+          blockMesh.position.set(block.position_x, block.position_y, block.position_z);
+          targets.push(blockMesh);
+        });
       }
+      
+      // Find intersection
+      const intersects = raycaster.intersectObjects(targets);
+      
+      if (intersects.length > 0) {
+        const intersection = intersects[0];
+        const hitPoint = intersection.point;
+        const normal = intersection.face?.normal;
+        
+        if (normal) {
+          // Calculate placement position adjacent to hit surface
+          const placePosition = hitPoint.clone().add(normal.clone().multiplyScalar(0.5));
+          
+          // Snap to voxel grid
+          placePosition.x = Math.floor(placePosition.x) + 0.5;
+          placePosition.y = Math.floor(placePosition.y) + 0.5;
+          placePosition.z = Math.floor(placePosition.z) + 0.5;
+          
+          // Ensure minimum height
+          placePosition.y = Math.max(0.5, placePosition.y);
+          
+          // Check placement restrictions
+          const fortressCenter = new THREE.Vector3(0, 0, -20);
+          const distanceToFortress = placePosition.distanceTo(fortressCenter);
+          const waterfallZ = -6;
+          const waterfallBlockingWidth = 8;
+          
+          // Validate placement
+          const tooCloseToFortress = distanceToFortress < 30;
+          const blockingWaterfall = Math.abs(placePosition.x) < waterfallBlockingWidth / 2 && placePosition.z > waterfallZ;
+          
+          // Check for block overlap
+          let blockOverlap = false;
+          if (existingBlocks && existingBlocks.length > 0) {
+            blockOverlap = existingBlocks.some(block => 
+              Math.abs(block.position_x - placePosition.x) < 0.1 && 
+              Math.abs(block.position_y - placePosition.y) < 0.1 && 
+              Math.abs(block.position_z - placePosition.z) < 0.1
+            );
+          }
+          
+          if (!tooCloseToFortress && !blockingWaterfall && !blockOverlap) {
+            onBlockPlace(placePosition);
+          }
+        }
+      }
+      
+      // Clean up temporary objects
+      targets.forEach(target => {
+        const mesh = target as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) {
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(mat => mat.dispose());
+          } else {
+            mesh.material.dispose();
+          }
+        }
+      });
     } else if (crosshairsEnabled && onShoot) {
       // Implement firing rate limiting to prevent performance issues
       const now = Date.now();
@@ -278,7 +384,7 @@ function FirstPersonControls({
       // Play gunshot sound using preloaded audio
       playAudio(audioRefs.gunshot);
     }
-  }, [gl, crosshairsEnabled, onShoot, camera, blockPlacementMode, onBlockPlace]);
+  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks]);
 
   const handlePointerLockChange = useCallback(() => {
     isLocked.current = document.pointerLockElement === gl.domElement;
@@ -825,16 +931,26 @@ function Scene({
   onBlockPlace,
   onModeChange,
   onOpenShop,
-  onOpenInventory
+  onOpenInventory,
+  crosshairsEnabled,
+  getBlockQuantity,
+  selectedBlockType,
+  shopOpen,
+  inventoryOpen
 }: { 
-  settings: any; 
-  onCoinHit: (position: THREE.Vector3) => void; 
-  wallPositions?: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
+  settings: { flowSpeed: number; dropCount: number; coinRate: number; coinSize: number; colorPalette: any };
+  onCoinHit: (position: THREE.Vector3) => void;
+  wallPositions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
   blockPlacementMode: boolean;
-  onBlockPlace?: (position: THREE.Vector3) => void;
-  onModeChange?: (mode: 'shooting' | 'building' | null) => void;
-  onOpenShop?: () => void;
-  onOpenInventory?: () => void;
+  onBlockPlace: (position: THREE.Vector3) => void;
+  onModeChange: (mode: 'shooting' | 'building' | null) => void;
+  onOpenShop: () => void;
+  onOpenInventory: () => void;
+  crosshairsEnabled: boolean;
+  getBlockQuantity: (itemType: string) => number;
+  selectedBlockType: string | null;
+  shopOpen: boolean;
+  inventoryOpen: boolean;
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -980,11 +1096,18 @@ function Scene({
     <>
       <FirstPersonControls 
         onShoot={handleShoot} 
-        showCrosshairs={true}
+        showCrosshairs={crosshairsEnabled}
         audioRefs={audioRefs.current}
         playAudio={playAudio}
         blockPlacementMode={blockPlacementMode}
         onBlockPlace={onBlockPlace}
+        onOpenShop={onOpenShop}
+        onOpenInventory={onOpenInventory}
+        onModeChange={onModeChange}
+        getBlockQuantity={getBlockQuantity}
+        selectedBlockType={selectedBlockType}
+        shopOpen={shopOpen}
+        inventoryOpen={inventoryOpen}
       />
       
       {/* Lighting */}
@@ -1308,6 +1431,14 @@ export default function WaterfallFortress() {
         wallPositions={wallPositions}
         blockPlacementMode={!!selectedBlockType}
         onBlockPlace={handleBlockPlace}
+        onModeChange={handleModeChange}
+        onOpenShop={handleOpenShop}
+        onOpenInventory={handleOpenInventory}
+        crosshairsEnabled={crosshairsEnabled}
+        getBlockQuantity={getBlockQuantity}
+        selectedBlockType={selectedBlockType}
+        shopOpen={shopOpen}
+        inventoryOpen={inventoryOpen}
       />
       
       {/* Block Preview */}
