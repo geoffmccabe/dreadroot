@@ -46,16 +46,12 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     const col = slotIndex % 3;
     const row = Math.floor(slotIndex / 3);
     
-    console.log(`Slot ${slotIndex + 1} -> col=${col}, row=${row}`);
-    
     const uMin = col / 3;
     const uMax = (col + 1) / 3;
     // Canvas row 0 maps to Three.js V top (1-0.5 to 1)
     // Canvas row 1 maps to Three.js V bottom (1-1 to 0.5) 
     const vMin = 1 - (row + 1) * 0.5;  // Bottom of slot in Three.js coords
     const vMax = 1 - row * 0.5;        // Top of slot in Three.js coords
-    
-    console.log(`UV mapping: u(${uMin}, ${uMax}), v(${vMin}, ${vMax})`);
     
     return [uMin, vMin, uMax, vMax];
   };

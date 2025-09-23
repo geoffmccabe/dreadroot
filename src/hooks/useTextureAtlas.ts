@@ -74,32 +74,28 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
                 
                 console.log(`Drawing image ${index + 1} at canvas position (${x}, ${y}), col=${col}, row=${row}`);
                 
-                // Simple cover behavior: scale image to fill slot, crop excess
-                const imgAspect = img.width / img.height;
+                // Implement proper "cover" behavior like CSS background-size: cover
+                const imageAspect = img.width / img.height;
                 const slotAspect = slotWidth / slotHeight;
                 
-                let scaleX, scaleY, offsetX = 0, offsetY = 0;
+                let sourceX = 0, sourceY = 0, sourceWidth = img.width, sourceHeight = img.height;
                 
-                if (imgAspect > slotAspect) {
-                  // Image is wider - scale to fit height, crop width
-                  scaleY = slotHeight / img.height;
-                  scaleX = scaleY;
-                  const scaledWidth = img.width * scaleX;
-                  offsetX = -(scaledWidth - slotWidth) / 2;
+                if (imageAspect > slotAspect) {
+                  // Image is wider than slot - crop sides, keep full height
+                  sourceWidth = img.height * slotAspect;
+                  sourceX = (img.width - sourceWidth) / 2;
                 } else {
-                  // Image is taller - scale to fit width, crop height  
-                  scaleX = slotWidth / img.width;
-                  scaleY = scaleX;
-                  const scaledHeight = img.height * scaleY;
-                  offsetY = -(scaledHeight - slotHeight) / 2;
+                  // Image is taller than slot - crop top/bottom, keep full width  
+                  sourceHeight = img.width / slotAspect;
+                  sourceY = (img.height - sourceHeight) / 2;
                 }
                 
-                // Save context, apply transforms, draw, restore
-                ctx.save();
-                ctx.translate(x, y);
-                ctx.scale(scaleX, scaleY);
-                ctx.drawImage(img, offsetX / scaleX, offsetY / scaleY);
-                ctx.restore();
+                // Draw the cropped image to fill the entire slot
+                ctx.drawImage(
+                  img,
+                  sourceX, sourceY, sourceWidth, sourceHeight, // Source (what part of image to use)
+                  x, y, slotWidth, slotHeight                   // Destination (where to draw on canvas)
+                );
                 
                 resolve();
               };
