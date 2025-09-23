@@ -50,10 +50,15 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     return result;
   }, [walls, wallPositions]);
 
-  // Clear cache when walls or wallPositions change
+  // Only clear position cache when content actually changes
+  const wallContentHash = useMemo(() => {
+    return walls.map(w => `${w.id}-${w.wall_number}-${w.position_x}-${w.position_y}-${w.position_z}-${w.rotation_x}-${w.rotation_y}-${w.rotation_z}`).join('|') + 
+           JSON.stringify(wallPositions);
+  }, [walls, wallPositions]);
+
   useEffect(() => {
     positionCacheRef.current.clear();
-  }, [walls, wallPositions]);
+  }, [wallContentHash]);
 
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
@@ -81,10 +86,14 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     return items;
   }, [walls, mediaItems]);
 
-  // Clear cache when walls or mediaItems change
+  // Only clear media cache when content actually changes
+  const mediaContentHash = useMemo(() => {
+    return mediaItems.map(m => `${m.id}-${m.wall_id}-${m.slot_number}-${m.media_url}-${m.media_type}`).join('|');
+  }, [mediaItems]);
+
   useEffect(() => {
     mediaCacheRef.current.clear();
-  }, [walls, mediaItems]);
+  }, [mediaContentHash]);
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
@@ -333,13 +342,13 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         (loadedTexture) => {
           // Only set texture if this URL is still current (prevents race conditions)
           if (loadedUrlRef.current === mediaUrl) {
-            loadedTexture.needsUpdate = true;
             loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
             loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
             loadedTexture.minFilter = THREE.LinearFilter;
             loadedTexture.magFilter = THREE.LinearFilter;
             setTexture(loadedTexture);
             setLoading(false);
+            loadedTexture.needsUpdate = true;
             
           }
         },
