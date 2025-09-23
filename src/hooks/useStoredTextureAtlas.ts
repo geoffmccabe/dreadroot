@@ -81,10 +81,10 @@ export const useStoredTextureAtlas = (
         atlasTexture.dispose();
       }
       
-      // Create canvas for atlas - 2048x1024 for good quality/performance balance
+      // Create canvas for atlas - 2400x1600 for 800x800 pixel slots
       const canvas = document.createElement('canvas');
-      canvas.width = 2048;
-      canvas.height = 1024;
+      canvas.width = 2400;
+      canvas.height = 1600;
       const ctx = canvas.getContext('2d');
       
       if (!ctx) {
@@ -94,7 +94,7 @@ export const useStoredTextureAtlas = (
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Each slot is ~683x512 (2048/3 ≈ 683, 1024/2 = 512)
+      // Each slot is 800x800 (2400/3 = 800, 1600/2 = 800)
       const slotWidth = Math.floor(canvas.width / 3);
       const slotHeight = Math.floor(canvas.height / 2);
       
@@ -210,22 +210,34 @@ export const useStoredTextureAtlas = (
     }
   };
   
-  // On mount, load existing atlas (no rebuilding unless needed)
+  // Initialize atlas on mount - load stored or rebuild if needed
   useEffect(() => {
+    let hasLoadedStored = false;
+    
     const initializeAtlas = async () => {
+      console.log(`🔧 Initializing atlas for wall ${wallNumber}`);
+      
+      // First try to load stored atlas
       const storedAtlas = await loadStoredAtlas();
-      if (!storedAtlas && imageUrls.some(url => url)) {
-        // Only rebuild if we have images but no stored atlas
+      if (storedAtlas) {
+        hasLoadedStored = true;
+        console.log(`✅ Using stored atlas for wall ${wallNumber}`);
+        return;
+      }
+      
+      // Only rebuild if no stored atlas and we have images
+      if (imageUrls.some(url => url)) {
+        console.log(`🔨 No stored atlas found, rebuilding for wall ${wallNumber}`);
         await rebuildAtlas();
       }
     };
     
     initializeAtlas();
     
-    // Listen for atlas rebuild events
+    // Listen for manual rebuild events from BCP
     const handleRebuildAtlas = (event: CustomEvent) => {
       if (event.detail.wallNumber === wallNumber) {
-        console.log(`🔔 Received rebuild request for wall ${wallNumber}`);
+        console.log(`🔔 Manual rebuild requested for wall ${wallNumber}`);
         rebuildAtlas();
       }
     };
@@ -239,15 +251,7 @@ export const useStoredTextureAtlas = (
       }
       window.removeEventListener('rebuildAtlas', handleRebuildAtlas as EventListener);
     };
-  }, [wallNumber]); // Only depend on wallNumber, not imageUrlsHash
-  
-  // Rebuild atlas when image URLs change (for manual changes)
-  useEffect(() => {
-    if (imageUrls.some(url => url)) {
-      console.log(`🔄 Image URLs changed for wall ${wallNumber}, rebuilding atlas`);
-      rebuildAtlas();
-    }
-  }, [imageUrlsHash]);
+  }, [wallNumber, imageUrlsHash]); // Depend on both wallNumber and imageUrlsHash
   
   return { atlasTexture, isLoading, error, rebuildAtlas };
 };
