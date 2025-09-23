@@ -38,7 +38,8 @@ export const usePlacedBlocks = () => {
 
   useEffect(() => {
     loadBlocks();
-    setupRealtimeSubscription();
+    const cleanup = setupRealtimeSubscription();
+    return cleanup;
   }, []);
 
   const loadBlocks = async () => {
@@ -73,16 +74,35 @@ export const usePlacedBlocks = () => {
           table: 'placed_blocks'
         },
         (payload) => {
+          console.log('Real-time event received:', payload.eventType, payload);
           if (payload.eventType === 'INSERT') {
-            setBlocks(prev => [...prev, payload.new as PlacedBlock]);
+            setBlocks(prev => {
+              // Check if block already exists (avoid duplicates from optimistic updates)
+              const exists = prev.some(block => block.id === payload.new.id);
+              if (exists) return prev;
+              return [...prev, payload.new as PlacedBlock];
+            });
           } else if (payload.eventType === 'DELETE') {
             setBlocks(prev => prev.filter(block => block.id !== payload.old.id));
           }
         }
       )
-      .subscribe();
+      .on('system', {}, (status) => {
+        console.log('Realtime status:', status);
+      })
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime subscription error, attempting to reconnect...');
+          // Reconnect after a delay
+          setTimeout(() => {
+            setupRealtimeSubscription();
+          }, 1000);
+        }
+      });
 
     return () => {
+      console.log('Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   };
@@ -94,6 +114,20 @@ export const usePlacedBlocks = () => {
         // Check if user has blocks in inventory (this will be handled by the calling component)
         // For now, we just place the block
       }
+
+      // Optimistic update - add block immediately for instant feedback
+      const optimisticBlock: PlacedBlock = {
+        id: `temp-${Date.now()}`, // Temporary ID
+        user_id: tempUserId,
+        position_x: x,
+        position_y: y,
+        position_z: z,
+        block_type: blockType,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      setBlocks(prev => [...prev, optimisticBlock]);
 
       const { data, error } = await supabase
         .from('placed_blocks')
@@ -109,6 +143,11 @@ export const usePlacedBlocks = () => {
 
       if (error) throw error;
       
+      // Replace optimistic block with real data
+      setBlocks(prev => prev.map(block => 
+        block.id === optimisticBlock.id ? data : block
+      ));
+      
       toast({
         title: "Block placed!",
         description: `${blockType} placed successfully`,
@@ -117,6 +156,10 @@ export const usePlacedBlocks = () => {
       return data;
     } catch (error) {
       console.error('Error placing block:', error);
+      
+      // Remove optimistic block on error
+      setBlocks(prev => prev.filter(block => !block.id.startsWith('temp-')));
+      
       toast({
         title: "Failed to place block",
         description: "Could not place block at this location",
