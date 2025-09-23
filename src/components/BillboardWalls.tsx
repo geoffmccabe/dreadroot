@@ -268,7 +268,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
           }
         }
       );
-    }, [mediaUrl, mediaType, texture]);
+    }, [mediaUrl, mediaType]);
     
     return (
       <mesh position={position}>
