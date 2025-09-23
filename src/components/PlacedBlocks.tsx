@@ -53,6 +53,11 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const { geometry, material } = SharedBlockResources();
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('PlacedBlocks rendering with blocks:', blocks);
+  }, [blocks]);
+
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
     collisionBoxes.current.set(blockId, box);
     if (onCollision) {
@@ -79,6 +84,11 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
 
   // Memoize the blocks list to prevent unnecessary re-renders
   const memoizedBlocks = useMemo(() => blocks, [blocks]);
+
+  if (!blocks || blocks.length === 0) {
+    console.log('No blocks to render');
+    return null;
+  }
 
   return (
     <>

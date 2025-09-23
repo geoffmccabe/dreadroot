@@ -334,7 +334,7 @@ function FirstPersonControls({
           const fortressCenter = new THREE.Vector3(0, 0, -20);
           const distanceToFortress = placePosition.distanceTo(fortressCenter);
           const waterfallZ = -6;
-          const waterfallBlockingWidth = 8;
+          const waterfallBlockingWidth = 4;
           
           // Validate placement
           const tooCloseToFortress = distanceToFortress < 30;

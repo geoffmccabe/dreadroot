@@ -24,7 +24,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
   
   // Waterfall blocking area - extends infinitely forward from the waterfall
   const waterfallZ = -6; // Waterfall is around z = -6
-  const waterfallBlockingWidth = 8; // Block area 8 units wide centered on waterfall
+  const waterfallBlockingWidth = 4; // Block area 4 units wide centered on waterfall
 
   const isValidPlacement = (position: THREE.Vector3): boolean => {
     // Check distance from fortress (30 meter restriction)
@@ -67,12 +67,14 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     const material = meshRef.current.material as THREE.MeshLambertMaterial;
     const isValid = isValidPlacement(newPosition);
     material.transparent = true;
-    material.opacity = 0.5;
+    material.opacity = 0.7;
     
     if (isValid) {
-      material.color.setRGB(1, 1, 1); // White tint for valid placement
+      material.color.setRGB(0.5, 1, 0.5); // Green glow for valid placement
+      material.emissive.setRGB(0.1, 0.3, 0.1); // Add green glow
     } else {
       material.color.setRGB(1, 0.2, 0.2); // Red tint for invalid placement
+      material.emissive.setRGB(0.3, 0.1, 0.1); // Add red glow
     }
   });
 
@@ -84,8 +86,9 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
       <meshLambertMaterial 
         map={cliffTexture} 
         transparent 
-        opacity={0.5}
+        opacity={0.7}
         color={0xcccccc}
+        emissive={0x000000}
       />
     </mesh>
   );
