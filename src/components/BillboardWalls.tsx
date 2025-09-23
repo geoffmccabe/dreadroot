@@ -10,28 +10,20 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
   const { walls, screenUrls, mediaItems } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
 
-  // Stable cache using refs to prevent re-creation
-  const positionCacheRef = useRef(new Map<number, { position: [number, number, number]; rotation: [number, number, number] }>());
-  
   const getWallPositionAndRotation = useCallback((wallNumber: number) => {
-    if (positionCacheRef.current.has(wallNumber)) {
-      return positionCacheRef.current.get(wallNumber)!;
-    }
-    
-    let result;
     // Use local positions if available, otherwise fallback to database
     if (wallPositions && wallPositions[wallNumber]) {
       const pos = wallPositions[wallNumber];
-      result = {
+      return {
         position: [pos.x, pos.y, pos.z] as [number, number, number],
         rotation: [pos.rotX, pos.rotY, pos.rotZ] as [number, number, number]
       };
     } else {
       const wall = walls.find(w => w.wall_number === wallNumber);
       if (!wall) {
-        result = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
+        return { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
       } else {
-        result = {
+        return {
           position: [
             wall.position_x ?? 0,
             wall.position_y ?? 0,
@@ -45,55 +37,20 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         };
       }
     }
+  }, [walls, wallPositions]);
+
+  const getMediaItemsForWall = useCallback((wallNumber: number) => {
+    const wall = walls.find(w => w.wall_number === wallNumber);
+    if (!wall) return [];
     
-    positionCacheRef.current.set(wallNumber, result);
-    return result;
-  }, [walls, wallPositions]);
-
-  // Only clear position cache when content actually changes
-  const wallContentHash = useMemo(() => {
-    return walls.map(w => `${w.id}-${w.wall_number}-${w.position_x}-${w.position_y}-${w.position_z}-${w.rotation_x}-${w.rotation_y}-${w.rotation_z}`).join('|') + 
-           JSON.stringify(wallPositions);
-  }, [walls, wallPositions]);
-
-  useEffect(() => {
-    positionCacheRef.current.clear();
-  }, [wallContentHash]);
+    return mediaItems
+      .filter(item => item.wall_id === wall.id)
+      .sort((a, b) => a.slot_number - b.slot_number);
+  }, [walls, mediaItems]);
 
   const wall1 = walls.find(w => w.wall_number === 1);
   const wall1Urls = screenUrls.filter(url => url.wall_id === wall1?.id);
   const currentUrl = wall1Urls.find(url => url.slot_number === activeScreenUrl);
-
-  // Stable cache using refs to prevent re-creation
-  const mediaCacheRef = useRef(new Map<number, any[]>());
-  
-  const getMediaItemsForWall = useCallback((wallNumber: number) => {
-    if (mediaCacheRef.current.has(wallNumber)) {
-      return mediaCacheRef.current.get(wallNumber)!;
-    }
-    
-    const wall = walls.find(w => w.wall_number === wallNumber);
-    if (!wall) {
-      mediaCacheRef.current.set(wallNumber, []);
-      return [];
-    }
-    
-    const items = mediaItems
-      .filter(item => item.wall_id === wall.id)
-      .sort((a, b) => a.slot_number - b.slot_number);
-    
-    mediaCacheRef.current.set(wallNumber, items);
-    return items;
-  }, [walls, mediaItems]);
-
-  // Only clear media cache when content actually changes
-  const mediaContentHash = useMemo(() => {
-    return mediaItems.map(m => `${m.id}-${m.wall_id}-${m.slot_number}-${m.media_url}-${m.media_type}`).join('|');
-  }, [mediaItems]);
-
-  useEffect(() => {
-    mediaCacheRef.current.clear();
-  }, [mediaContentHash]);
 
   // Wall 1 - Screen with URL buttons (front wall inner)
   const Wall1Screen = () => {
@@ -302,24 +259,24 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     );
   };
 
-  // Individual media slot component with completely stable texture loading
+  // Individual media slot component with stable texture management
   const MediaSlot = React.memo(({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
     mediaUrl?: string | null; 
     mediaType?: string | null; 
   }) => {
-    const [texture, setTexture] = useState<THREE.Texture | null>(null);
-    const [loading, setLoading] = useState(false);
+    const textureRef = useRef<THREE.Texture | null>(null);
     const loadedUrlRef = useRef<string | null>(null);
+    const [, forceUpdate] = useState({});
     
-    // Only load texture when URL actually changes
-    useEffect(() => {
-      // If no URL or not an image, clear texture
+    // Stable texture loading - only when URL actually changes
+    useMemo(() => {
+      // Clear texture if no URL or not an image
       if (!mediaUrl || mediaType !== 'image') {
-        if (loadedUrlRef.current) {
-          setTexture(null);
-          setLoading(false);
+        if (textureRef.current) {
+          textureRef.current.dispose();
+          textureRef.current = null;
           loadedUrlRef.current = null;
         }
         return;
@@ -330,58 +287,50 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         return;
       }
       
-      setLoading(true);
+      // Dispose old texture
+      if (textureRef.current) {
+        textureRef.current.dispose();
+      }
+      
       loadedUrlRef.current = mediaUrl;
       
       const loader = new THREE.TextureLoader();
-      
       loader.load(
         mediaUrl,
         (loadedTexture) => {
-          // Only set texture if this URL is still current (prevents race conditions)
+          // Only set texture if this URL is still current
           if (loadedUrlRef.current === mediaUrl) {
             loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
             loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
             loadedTexture.minFilter = THREE.LinearFilter;
             loadedTexture.magFilter = THREE.LinearFilter;
-            // Don't manually set needsUpdate - let THREE.js handle it
-            setTexture(loadedTexture);
-            setLoading(false);
+            textureRef.current = loadedTexture;
+            forceUpdate({});
           }
         },
         undefined,
         (error) => {
-          console.warn('❌ Failed to load texture for MediaSlot:', mediaUrl, error);
           if (loadedUrlRef.current === mediaUrl) {
-            setTexture(null);
-            setLoading(false);
+            textureRef.current = null;
+            forceUpdate({});
           }
         }
       );
     }, [mediaUrl, mediaType]);
     
+    const hasTexture = !!textureRef.current;
+    
     return (
       <mesh position={position}>
         <planeGeometry args={dimensions} />
         <meshBasicMaterial 
-          map={texture}
-          color={texture ? "#ffffff" : loading ? "#6b7280" : "#374151"}
+          map={textureRef.current}
+          color={hasTexture ? "#ffffff" : "#374151"}
           transparent={true}
-          opacity={texture ? 1 : 0.25}
+          opacity={hasTexture ? 1 : 0.25}
           side={THREE.DoubleSide}
         />
       </mesh>
-    );
-  }, (prevProps, nextProps) => {
-    // Custom comparison function to prevent unnecessary re-renders
-    return (
-      prevProps.mediaUrl === nextProps.mediaUrl &&
-      prevProps.mediaType === nextProps.mediaType &&
-      prevProps.position[0] === nextProps.position[0] &&
-      prevProps.position[1] === nextProps.position[1] &&
-      prevProps.position[2] === nextProps.position[2] &&
-      prevProps.dimensions[0] === nextProps.dimensions[0] &&
-      prevProps.dimensions[1] === nextProps.dimensions[1]
     );
   });
 
