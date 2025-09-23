@@ -189,7 +189,7 @@ function FirstPersonControls({
         break;
       case 'KeyR':
         if (!blockPlacementMode) {
-          const newCrosshairsState = !showCrosshairs;
+          const newCrosshairsState = !crosshairsEnabled;
           onModeChange(newCrosshairsState ? 'shooting' : null);
           
           // Play appropriate gun sound using preloaded audio
