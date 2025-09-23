@@ -88,9 +88,10 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
 
   // Debug logging and force re-render when blocks change
   React.useEffect(() => {
-    console.log('PlacedBlocks updated - total blocks:', blocks.length);
+    console.log('PlacedBlocks component updated - total blocks:', blocks.length);
     if (blocks.length > 0) {
       console.log('Block types present:', [...new Set(blocks.map(b => b.block_type))]);
+      console.log('Block positions:', blocks.map(b => `${b.block_type} at (${b.position_x}, ${b.position_y}, ${b.position_z})`));
     }
   }, [blocks]);
 
@@ -126,13 +127,14 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
     <>
       {blocks.map((block) => (
         <PlacedBlockComponent
-          key={block.id}
+          key={`${block.id}-${block.position_x}-${block.position_y}-${block.position_z}`}
           position={[block.position_x, block.position_y, block.position_z]}
           blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}
         />
       ))}
+      <group key={`block-group-${blocks.length}`} />
     </>
   );
 };

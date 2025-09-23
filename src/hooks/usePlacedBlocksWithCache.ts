@@ -184,8 +184,13 @@ export const usePlacedBlocksWithCache = () => {
         updated_at: new Date().toISOString()
       };
 
-      // Add to local state immediately
-      setBlocks(prev => [...prev, optimisticBlock]);
+      // Add to local state immediately with force re-render
+      setBlocks(prev => {
+        console.log('Adding new block to state, previous count:', prev.length);
+        const updated = [...prev, optimisticBlock];
+        console.log('New block count:', updated.length);
+        return updated;
+      });
 
       // Add to IndexedDB (not synced yet)
       const dbBlock: DBBlock = {

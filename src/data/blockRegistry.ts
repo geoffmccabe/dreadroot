@@ -14,7 +14,7 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     },
     properties: {
       size: { width: 1, height: 1, depth: 1 },
-      color: '#8B7355'
+      color: '#C0C0C0'
     }
   },
   grass_block: {
