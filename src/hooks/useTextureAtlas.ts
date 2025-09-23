@@ -16,15 +16,23 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
   
   // Create a stable array of URLs for comparison
   const urlsString = useMemo(() => {
-    return JSON.stringify(imageUrls.map(url => url || ''));
+    const result = JSON.stringify(imageUrls.map(url => url || ''));
+    console.log('🔄 useTextureAtlas - URLs changed:', result);
+    return result;
   }, [imageUrls]);
   
   useEffect(() => {
+    console.log('🔄 useTextureAtlas effect triggered');
+    console.log('Current URLs:', urlsString);
+    console.log('Last URLs:', lastUrlsRef.current);
+    
     // Don't regenerate if URLs haven't actually changed
     if (lastUrlsRef.current === urlsString) {
+      console.log('⏭️ URLs unchanged, skipping atlas regeneration');
       return;
     }
     
+    console.log('🚀 Starting atlas regeneration...');
     lastUrlsRef.current = urlsString;
     
     const createAtlas = async () => {
