@@ -51,10 +51,11 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     const uMin = col / 3;
     const uMax = (col + 1) / 3;
     
-    // With flipY = false, canvas row 0 (top) maps to V=1.0 to V=0.5
-    // Canvas row 1 (bottom) maps to V=0.5 to V=0.0  
-    const vMax = row === 0 ? 1.0 : 0.5;    // Top edge of slot
-    const vMin = row === 0 ? 0.5 : 0.0;    // Bottom edge of slot
+    // Fix: Invert the V coordinate mapping to match actual canvas layout
+    // Canvas row 0 (top) should map to V=0.0 to V=0.5  
+    // Canvas row 1 (bottom) should map to V=0.5 to V=1.0
+    const vMin = row === 0 ? 0.0 : 0.5;    // Bottom edge of slot
+    const vMax = row === 0 ? 0.5 : 1.0;    // Top edge of slot
     
     console.log(`UV mapping: u(${uMin}, ${uMax}), v(${vMin}, ${vMax})`);
     
