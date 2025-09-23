@@ -231,14 +231,14 @@ function FirstPersonControls({
         }
         break;
       case 'KeyB':
-        // Toggle block placement mode
-        const blockCount = getBlockQuantity('fortress_block');
-        console.log('B key pressed - selectedBlockType:', selectedBlockType, 'inventory blocks:', blockCount);
-        console.log('Current mode will be:', selectedBlockType ? 'exit block mode' : 'enter block mode');
-        if (blockCount > 0) {
-          onModeChange(selectedBlockType ? null : 'building');
+        // Toggle block placement mode - check for any buildable block type
+        console.log('B key pressed - selectedBlockType:', selectedBlockType);
+        if (selectedBlockType) {
+          // Exit block mode
+          onModeChange(null);
         } else {
-          console.log('No fortress_block in inventory - cannot enter block mode');
+          // Try to enter block mode with any available block
+          onModeChange('building');
         }
         break;
       case 'KeyO':
@@ -1571,14 +1571,20 @@ export default function WaterfallFortress() {
   const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
     console.log('Mode change requested:', mode);
     if (mode === 'building') {
-      // Only allow block mode if user has blocks
-      if (getBlockQuantity('fortress_block') > 0) {
-        console.log('Setting block mode - fortress_block');
-        setSelectedBlockType('fortress_block');
+      // Find first available block type from inventory
+      const availableBlockType = inventory.find(item => item.quantity > 0)?.item_type;
+      if (availableBlockType) {
+        console.log('Setting block mode -', availableBlockType);
+        setSelectedBlockType(availableBlockType);
         setCrosshairsEnabled(false);
         setBlockMode(true); // Enable periodic syncing
       } else {
-        console.log('Cannot set block mode - no fortress_block');
+        console.log('Cannot set block mode - no blocks available');
+        toast({
+          title: "No blocks available",
+          description: "You need to purchase blocks from the shop first",
+          variant: "destructive"
+        });
       }
     } else if (mode === 'shooting') {
       console.log('Setting shooting mode');
@@ -1591,7 +1597,7 @@ export default function WaterfallFortress() {
       setCrosshairsEnabled(false);
       setBlockMode(false); // Disable periodic syncing
     }
-  }, [inventory, setBlockMode]);
+  }, [inventory, setBlockMode, toast]);
 
   // Shop and inventory handlers
   const handleOpenShop = useCallback(() => {
@@ -1721,22 +1727,22 @@ export default function WaterfallFortress() {
       
       {/* Block inventory */}
       {(() => {
-        const blockCount = getBlockQuantity('fortress_block');
-        console.log('Block inventory render - blockCount:', blockCount);
-        return blockCount > 0;
+        const totalBlocks = inventory.reduce((total, item) => total + item.quantity, 0);
+        console.log('Block inventory render - totalBlocks:', totalBlocks);
+        return totalBlocks > 0;
       })() && (
         <div className="flex items-center gap-2">
           <div 
             className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
-              selectedBlockType === 'fortress_block' ? 'bg-blue-500/70' : 'hover:bg-black/70'
+              selectedBlockType ? 'bg-blue-500/70' : 'hover:bg-black/70'
             }`}
-            onClick={() => handleModeChange(selectedBlockType === 'fortress_block' ? null : 'building')}
+            onClick={() => handleModeChange(selectedBlockType ? null : 'building')}
             title="Toggle block placement mode"
           >
             <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
               <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
             </div>
-            <span className="font-bold">x{getBlockQuantity('fortress_block')}</span>
+            <span className="font-bold">x{inventory.reduce((total, item) => total + item.quantity, 0)}</span>
           </div>
         </div>
       )}
