@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTextureAtlas } from '@/hooks/useTextureAtlas';
+import { useStoredTextureAtlas } from '@/hooks/useStoredTextureAtlas';
 import * as THREE from 'three';
 
 interface MediaItem {
@@ -30,7 +30,7 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     return mediaItem?.media_type === 'image' ? mediaItem.media_url : null;
   });
   
-  const { atlasTexture, isLoading, error } = useTextureAtlas(imageUrls);
+  const { atlasTexture, isLoading, error } = useStoredTextureAtlas(wallNumber, imageUrls);
   
   // Calculate wall dimensions
   const wallWidth = wallType === 'back' ? 40 : 30;

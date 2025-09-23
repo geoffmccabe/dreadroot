@@ -108,8 +108,17 @@ export const useBillboardData = () => {
       .update({ media_url: mediaUrl, media_type: mediaType })
       .eq('id', mediaItem.id);
       
+    // Trigger atlas rebuild when media item is updated
+    if (!error && mediaType === 'image') {
+      const wall = walls.find(w => w.id === wallId);
+      if (wall) {
+        console.log(`🔔 Triggering atlas rebuild for wall ${wall.wall_number}`);
+        window.dispatchEvent(new CustomEvent('rebuildAtlas', { detail: { wallNumber: wall.wall_number } }));
+      }
+    }
+      
     return !error;
-  }, []);
+  }, [walls]);
 
   const updateWallPosition = useCallback(async (wallId: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }) => {
     setWalls(prevWalls => prevWalls.map(wall => 
