@@ -26,7 +26,22 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
   const handleBuyBlock = async (itemId: string, cost: number) => {
     const success = await buyBlock(itemId, cost);
     if (success) {
-      onBlockPurchased();
+      // Play coin sound 3 times rapidly
+      const audio = new Audio('/coin_hit_sound.mp3');
+      audio.volume = 0.3;
+      audio.play();
+      
+      setTimeout(() => {
+        const audio2 = new Audio('/coin_hit_sound.mp3');
+        audio2.volume = 0.3;
+        audio2.play();
+      }, 100);
+      
+      setTimeout(() => {
+        const audio3 = new Audio('/coin_hit_sound.mp3');
+        audio3.volume = 0.3;
+        audio3.play();
+      }, 200);
     }
   };
 
@@ -59,10 +74,6 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
         </DialogHeader>
         
         <div className="space-y-4">
-          <div className="text-sm text-muted-foreground">
-            Buy blocks with your coins to build in the world!
-          </div>
-          
           {BLOCK_ITEMS.map((item) => (
             <Card key={item.id} className="p-4">
               <div className="flex items-center gap-3">
@@ -72,7 +83,6 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
                 
                 <div className="flex-1">
                   <h3 className="font-semibold">{item.name}</h3>
-                  <p className="text-sm text-muted-foreground">{item.description}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <img src="/waterfall_coin.png" alt="coin" className="w-4 h-4" />
                     <span className="text-sm font-medium">{item.cost} coins</span>
@@ -95,10 +105,6 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
               </div>
             </Card>
           ))}
-          
-          <div className="text-xs text-muted-foreground text-center pt-2">
-            Click a block after buying to select it for placement
-          </div>
         </div>
       </DialogContent>
     </Dialog>
