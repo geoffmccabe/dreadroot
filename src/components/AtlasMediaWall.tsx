@@ -32,11 +32,11 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   
   const { atlasTexture, isLoading, error } = useStoredTextureAtlas(wallNumber, imageUrls);
   
-  // Calculate wall dimensions
-  const wallWidth = wallType === 'back' ? 40 : 30;
+  // Calculate wall dimensions - 3x2 aspect ratio for square slots
+  const wallWidth = 30;  // 3x2 aspect ratio: 30:20 = 3:2
   const wallHeight = 20;
-  const slotWidth = wallWidth / 3;
-  const slotHeight = wallHeight / 2;
+  const slotWidth = wallWidth / 3;  // 10 units wide
+  const slotHeight = wallHeight / 2; // 10 units tall (making each slot square)
   
   // UV coordinates for each slot in the 3x2 grid
   // Canvas layout: [0][1][2]  <- row 0 (top)
