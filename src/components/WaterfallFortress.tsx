@@ -1468,7 +1468,7 @@ export default function WaterfallFortress() {
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   
   // User data and block system hooks
-  const { profile, inventory, addCoins, useBlock } = useUserData();
+  const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
   const { placeBlock, setBlockMode } = usePlacedBlocksWithCache();
   const { toast } = useToast();
 
@@ -1559,8 +1559,9 @@ export default function WaterfallFortress() {
   }, [selectedBlockType, inventory, useBlock, placeBlock, toast]);
 
   const handleBlockPurchased = useCallback(() => {
-    // Refresh could be handled here if needed
-  }, []);
+    // Refresh user data to update inventory and coin count
+    refreshData();
+  }, [refreshData]);
 
   const getBlockQuantity = (itemType: string) => {
     const item = inventory.find(i => i.item_type === itemType);
