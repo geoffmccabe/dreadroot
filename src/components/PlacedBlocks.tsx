@@ -1,7 +1,7 @@
 import React, { useRef, useMemo, useCallback } from 'react';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
-import { usePlacedBlocks } from '@/hooks/usePlacedBlocks';
+import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 
 // Shared texture and geometry for performance
 const SharedBlockResources = () => {
@@ -49,7 +49,7 @@ const FortressBlock = React.memo(({
 
 // Component to render all placed blocks with collision detection
 export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => void }> = ({ onCollision }) => {
-  const { blocks } = usePlacedBlocks();
+  const { blocks } = usePlacedBlocksWithCache();
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const { geometry, material } = SharedBlockResources();
 

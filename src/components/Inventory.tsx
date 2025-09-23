@@ -86,6 +86,7 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     handleAddressBlur();
+                    e.currentTarget.blur(); // Force blur to exit focus
                   }
                 }}
                 className="placeholder:text-muted-foreground/50"

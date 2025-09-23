@@ -14,7 +14,7 @@ import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
 import { Inventory } from '@/components/Inventory';
 import { useUserData } from '@/hooks/useUserData';
-import { usePlacedBlocks } from '@/hooks/usePlacedBlocks';
+import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -122,7 +122,7 @@ function FirstPersonControls({
   const pitch = useRef(0);
   
   // Get existing blocks from parent context
-  const { blocks: existingBlocks } = usePlacedBlocks();
+  const { blocks: existingBlocks, setBlockMode } = usePlacedBlocksWithCache();
   
   // Firing rate limiting to prevent performance issues
   const lastFireTime = useRef(0);
@@ -245,12 +245,6 @@ function FirstPersonControls({
         // Open shop
         if (!shopOpen) {
           onOpenShop();
-        }
-        break;
-      case 'KeyI':
-        // Open inventory
-        if (!inventoryOpen) {
-          onOpenInventory();
         }
         break;
       case 'Escape':
@@ -1475,7 +1469,7 @@ export default function WaterfallFortress() {
   
   // User data and block system hooks
   const { profile, inventory, addCoins, useBlock } = useUserData();
-  const { placeBlock } = usePlacedBlocks();
+  const { placeBlock, setBlockMode } = usePlacedBlocksWithCache();
   const { toast } = useToast();
 
   const handleSettingsChange = (key: string, value: any) => {
@@ -1582,6 +1576,7 @@ export default function WaterfallFortress() {
         console.log('Setting block mode - fortress_block');
         setSelectedBlockType('fortress_block');
         setCrosshairsEnabled(false);
+        setBlockMode(true); // Enable periodic syncing
       } else {
         console.log('Cannot set block mode - no fortress_block');
       }
@@ -1589,12 +1584,14 @@ export default function WaterfallFortress() {
       console.log('Setting shooting mode');
       setSelectedBlockType(null);
       setCrosshairsEnabled(true);
+      setBlockMode(false); // Disable periodic syncing
     } else {
       console.log('Setting null mode');
       setSelectedBlockType(null);
       setCrosshairsEnabled(false);
+      setBlockMode(false); // Disable periodic syncing
     }
-  }, [inventory]);
+  }, [inventory, setBlockMode]);
 
   // Shop and inventory handlers
   const handleOpenShop = useCallback(() => {
