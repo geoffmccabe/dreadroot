@@ -1313,7 +1313,7 @@ function Scene({
         selectedBlockType={selectedBlockType}
         shopOpen={shopOpen}
         inventoryOpen={inventoryOpen}
-        onCycleBlock={cycleSelectedBlock}
+        onCycleBlock={onCycleBlock}
       />
       
       {/* Lighting */}
