@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
+import { getBlockByKey } from '@/data/blockRegistry';
 
 interface BlockPreviewProps {
   blockType: string;
@@ -13,11 +14,19 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
   const { camera, raycaster, pointer } = useThree();
   const [previewPosition, setPreviewPosition] = useState<THREE.Vector3>(new THREE.Vector3());
   
-  // Load cliff texture for fortress blocks
-  const cliffTexture = useLoader(THREE.TextureLoader, '/cliff_texture_seamless.webp');
-  cliffTexture.wrapS = THREE.RepeatWrapping;
-  cliffTexture.wrapT = THREE.RepeatWrapping;
-  cliffTexture.repeat.set(1, 1);
+  // Get block definition from registry
+  const blockDef = useMemo(() => getBlockByKey(blockType), [blockType]);
+  
+  // Load texture based on block definition
+  const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  const texture = useLoader(THREE.TextureLoader, textureUrl);
+  
+  // Set up texture properties
+  useMemo(() => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+  }, [texture]);
 
   // Fortress center position for distance calculations
   const fortressCenter = new THREE.Vector3(0, 0, -20);
@@ -63,18 +72,31 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     setPreviewPosition(newPosition);
     meshRef.current.position.copy(newPosition);
     
-    // Change material based on valid placement
+    // Change material based on valid placement and block properties
     const material = meshRef.current.material as THREE.MeshLambertMaterial;
     const isValid = isValidPlacement(newPosition);
+    
+    // Base block properties from registry
+    const baseColor = blockDef?.properties?.color || '#ffffff';
+    const isEmissive = blockDef?.properties?.emissive || false;
+    const isTransparent = blockDef?.properties?.transparent || false;
+    
     material.transparent = true;
-    material.opacity = 0.7;
+    material.opacity = isTransparent ? 0.5 : 0.7;
     
     if (isValid) {
-      material.color.setRGB(1, 1, 1); // Keep original color for valid placement
-      material.emissive.setRGB(0, 0, 0); // No emissive glow
+      material.color.set(baseColor);
+      if (isEmissive) {
+        material.emissive.set(baseColor);
+        material.emissiveIntensity = 0.2;
+      } else {
+        material.emissive.setRGB(0, 0, 0);
+        material.emissiveIntensity = 0;
+      }
     } else {
       material.color.setRGB(1, 0.2, 0.2); // Red tint for invalid placement
       material.emissive.setRGB(0.3, 0.1, 0.1); // Add red glow
+      material.emissiveIntensity = 0.5;
     }
   });
 
@@ -84,11 +106,12 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     <mesh ref={meshRef} position={previewPosition}>
       <boxGeometry args={[1, 1, 1]} />
       <meshLambertMaterial 
-        map={cliffTexture} 
+        map={texture}
         transparent 
-        opacity={0.7}
-        color={0xcccccc}
-        emissive={0x000000}
+        opacity={blockDef?.properties?.transparent ? 0.5 : 0.7}
+        color={blockDef?.properties?.color || '#ffffff'}
+        emissive={blockDef?.properties?.emissive ? (blockDef?.properties?.color || '#FFE135') : '#000000'}
+        emissiveIntensity={blockDef?.properties?.emissive ? 0.2 : 0}
       />
     </mesh>
   );
