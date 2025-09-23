@@ -70,8 +70,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     material.opacity = 0.7;
     
     if (isValid) {
-      material.color.setRGB(0.5, 1, 0.5); // Green glow for valid placement
-      material.emissive.setRGB(0.1, 0.3, 0.1); // Add green glow
+      material.color.setRGB(1, 1, 1); // Keep original color for valid placement
+      material.emissive.setRGB(0, 0, 0); // No emissive glow
     } else {
       material.color.setRGB(1, 0.2, 0.2); // Red tint for invalid placement
       material.emissive.setRGB(0.3, 0.1, 0.1); // Add red glow

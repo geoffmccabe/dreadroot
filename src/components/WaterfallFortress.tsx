@@ -314,6 +314,7 @@ function FirstPersonControls({
       const intersects = raycaster.intersectObjects(targets);
       
       if (intersects.length > 0) {
+        console.log('Found intersection for block placement:', intersects[0]);
         const intersection = intersects[0];
         const hitPoint = intersection.point;
         const normal = intersection.face?.normal;
@@ -350,10 +351,22 @@ function FirstPersonControls({
             );
           }
           
+          console.log('Placement validation:', {
+            tooCloseToFortress,
+            blockingWaterfall, 
+            blockOverlap,
+            position: placePosition
+          });
+          
           if (!tooCloseToFortress && !blockingWaterfall && !blockOverlap) {
+            console.log('Valid placement, calling onBlockPlace');
             onBlockPlace(placePosition);
+          } else {
+            console.log('Invalid placement due to restrictions');
           }
         }
+      } else {
+        console.log('No intersection found for block placement');
       }
       
       // Clean up temporary objects
@@ -448,7 +461,7 @@ function FirstPersonControls({
       onGround.current = false;
     }
 
-    // Wall collision detection
+    // Wall and block collision detection
     for (const collider of colliders) {
       if (collider.containsPoint(camera.position)) {
         camera.position.copy(prevPosition);
@@ -456,6 +469,24 @@ function FirstPersonControls({
         break;
       }
     }
+    
+    // Check if standing on a block or ground for proper jumping
+    const feetPosition = camera.position.clone();
+    feetPosition.y -= 1.6; // Offset to feet level
+    
+    let standingOnSurface = feetPosition.y <= 0; // Ground level
+    
+    // Check if standing on any block
+    for (const collider of colliders) {
+      const expandedCollider = collider.clone();
+      expandedCollider.max.y += 0.1; // Small buffer for surface detection
+      if (expandedCollider.containsPoint(feetPosition)) {
+        standingOnSurface = true;
+        break;
+      }
+    }
+    
+    onGround.current = standingOnSurface;
   });
 
   return null;
@@ -1355,17 +1386,29 @@ export default function WaterfallFortress() {
   }, [addCoins]);
 
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
-    if (!selectedBlockType) return;
+    console.log('handleBlockPlace called with:', position, 'selectedBlockType:', selectedBlockType);
     
-    // Check if user has blocks in inventory
-    const hasBlocks = inventory.some(item => item.item_type === selectedBlockType && item.quantity > 0);
-    if (!hasBlocks) {
+    if (!selectedBlockType) {
+      console.log('No selectedBlockType');
       return;
     }
     
+    // Check if user has blocks in inventory
+    const hasBlocks = inventory.some(item => item.item_type === selectedBlockType && item.quantity > 0);
+    console.log('Has blocks in inventory:', hasBlocks, 'inventory:', inventory);
+    
+    if (!hasBlocks) {
+      console.log('No blocks in inventory');
+      return;
+    }
+    
+    console.log('Attempting to place block at:', position);
     const success = await placeBlock(position.x, position.y, position.z, selectedBlockType, true);
+    console.log('Block placement result:', success);
+    
     if (success) {
       // Consume block from inventory
+      console.log('Consuming block from inventory');
       await useBlock(selectedBlockType);
     }
   }, [selectedBlockType, placeBlock, inventory, useBlock]);
