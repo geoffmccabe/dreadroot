@@ -189,7 +189,7 @@ function FirstPersonControls({
         break;
       case 'KeyR':
         if (!blockPlacementMode) {
-          const newCrosshairsState = !crosshairsEnabled;
+          const newCrosshairsState = !showCrosshairs;
           onModeChange(newCrosshairsState ? 'shooting' : null);
           
           // Play appropriate gun sound using preloaded audio
@@ -381,7 +381,7 @@ function FirstPersonControls({
           }
         }
       });
-    } else if (crosshairsEnabled && onShoot) {
+    } else if (showCrosshairs && onShoot) {
       // Implement firing rate limiting to prevent performance issues
       const now = Date.now();
       if (now - lastFireTime.current < FIRE_RATE_LIMIT) {
