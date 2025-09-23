@@ -41,6 +41,9 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     cost: 8,
     category: 'decoration',
     rarity: 'rare',
+    texture: {
+      diffuse: '/cliff_texture_seamless.webp' // Using cliff texture as base, emissive properties will make it glow
+    },
     properties: {
       size: { width: 1, height: 1, depth: 1 },
       color: '#FFE135',
@@ -55,6 +58,9 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     cost: 15,
     category: 'decoration',
     rarity: 'epic',
+    texture: {
+      diffuse: '/grass_texture_seamless.webp' // Using grass texture as base, will appear crystalline due to transparency and color
+    },
     properties: {
       size: { width: 1, height: 1, depth: 1 },
       color: '#87CEEB',
@@ -70,6 +76,11 @@ export const getAllBlocks = (): BlockType[] => {
 
 export const getBlockByKey = (key: string): BlockType | undefined => {
   return BLOCK_REGISTRY[key];
+};
+
+export const getBlockTexture = (key: string): string => {
+  const block = getBlockByKey(key);
+  return block?.texture?.diffuse || '/cliff_texture_seamless.webp'; // Fallback texture
 };
 
 export const getBlockById = (id: number): BlockType | undefined => {
