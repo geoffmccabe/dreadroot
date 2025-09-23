@@ -274,17 +274,19 @@ function FirstPersonControls({
       direction.applyQuaternion(camera.quaternion);
       raycaster.set(camera.position, direction);
       
+      
       // Create intersection targets (ground, existing blocks, fortress walls)
       const targets: THREE.Object3D[] = [];
       
-      // Add ground plane
+      // Add ground plane with material for raycasting
       const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-      const groundMesh = new THREE.Mesh(groundGeometry);
+      const groundMaterial = new THREE.MeshBasicMaterial({ visible: false }); // Invisible but detectable
+      const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
       groundMesh.rotation.x = -Math.PI / 2;
       groundMesh.position.y = 0;
       targets.push(groundMesh);
       
-      // Add fortress walls as collision targets
+      // Add fortress walls as collision targets with materials
       const fortressWalls = [
         // Front wall
         { center: [0, 10, -10], size: [50, 20, 2] },
@@ -295,23 +297,33 @@ function FirstPersonControls({
         { center: [0, 10, -30], size: [50, 20, 2] }
       ];
       
+      const wallMaterial = new THREE.MeshBasicMaterial({ visible: false }); // Invisible but detectable
       fortressWalls.forEach(wall => {
-        const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size as [number, number, number]));
+        const wallMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(...wall.size as [number, number, number]), 
+          wallMaterial
+        );
         wallMesh.position.set(...wall.center as [number, number, number]);
         targets.push(wallMesh);
       });
       
-      // Add existing blocks to collision targets
+      // Add existing blocks to collision targets with materials
       if (existingBlocks && existingBlocks.length > 0) {
+        const blockMaterial = new THREE.MeshBasicMaterial({ visible: false }); // Invisible but detectable
         existingBlocks.forEach(block => {
-          const blockMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+          const blockMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1), 
+            blockMaterial
+          );
           blockMesh.position.set(block.position_x, block.position_y, block.position_z);
           targets.push(blockMesh);
         });
       }
       
+      console.log('Created', targets.length, 'raycasting targets for block placement');
+      
       // Find intersection
-      const intersects = raycaster.intersectObjects(targets);
+      const intersects = raycaster.intersectObjects(targets, true);
       
       if (intersects.length > 0) {
         console.log('Found intersection for block placement:', intersects[0]);
