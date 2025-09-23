@@ -293,32 +293,37 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     );
   };
 
-  // Individual media slot component with ultra-stable texture loading
+  // Individual media slot component with completely stable texture loading
   const MediaSlot = React.memo(({ position, dimensions, mediaUrl, mediaType }: { 
     position: [number, number, number]; 
     dimensions: [number, number];
     mediaUrl?: string | null; 
     mediaType?: string | null; 
   }) => {
-    const textureRef = useRef<THREE.Texture | null>(null);
+    const [texture, setTexture] = useState<THREE.Texture | null>(null);
+    const [loading, setLoading] = useState(false);
     const loadedUrlRef = useRef<string | null>(null);
-    const [, forceUpdate] = useState({});
     
-    // Ultra-stable texture loading - only when URL actually changes
+    // Only load texture when URL actually changes
     useEffect(() => {
+      // If no URL or not an image, clear texture
       if (!mediaUrl || mediaType !== 'image') {
-        if (textureRef.current) {
-          textureRef.current.dispose();
-          textureRef.current = null;
+        if (loadedUrlRef.current) {
+          console.log('Clearing texture - no URL or not image');
+          setTexture(null);
+          setLoading(false);
           loadedUrlRef.current = null;
-          forceUpdate({});
         }
         return;
       }
       
-      // Skip if same URL
-      if (loadedUrlRef.current === mediaUrl) return;
+      // Don't reload if URL hasn't changed
+      if (loadedUrlRef.current === mediaUrl) {
+        return;
+      }
       
+      
+      setLoading(true);
       loadedUrlRef.current = mediaUrl;
       
       const loader = new THREE.TextureLoader();
@@ -326,35 +331,24 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       loader.load(
         mediaUrl,
         (loadedTexture) => {
-          // Race condition check
+          // Only set texture if this URL is still current (prevents race conditions)
           if (loadedUrlRef.current === mediaUrl) {
-            // Dispose old texture
-            if (textureRef.current) {
-              textureRef.current.dispose();
-            }
-            
-            // Set texture properties BEFORE marking for update
+            loadedTexture.needsUpdate = true;
             loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
             loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
             loadedTexture.minFilter = THREE.LinearFilter;
             loadedTexture.magFilter = THREE.LinearFilter;
+            setTexture(loadedTexture);
+            setLoading(false);
             
-            textureRef.current = loadedTexture;
-            
-            // Only set needsUpdate AFTER texture is fully configured
-            setTimeout(() => {
-              if (textureRef.current === loadedTexture) {
-                loadedTexture.needsUpdate = true;
-                forceUpdate({});
-              }
-            }, 0);
           }
         },
         undefined,
         (error) => {
+          console.warn('❌ Failed to load texture for MediaSlot:', mediaUrl, error);
           if (loadedUrlRef.current === mediaUrl) {
-            textureRef.current = null;
-            forceUpdate({});
+            setTexture(null);
+            setLoading(false);
           }
         }
       );
@@ -364,10 +358,10 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       <mesh position={position}>
         <planeGeometry args={dimensions} />
         <meshBasicMaterial 
-          map={textureRef.current}
-          color={textureRef.current ? "#ffffff" : "#374151"}
+          map={texture}
+          color={texture ? "#ffffff" : loading ? "#6b7280" : "#374151"}
           transparent={true}
-          opacity={textureRef.current ? 1 : 0.25}
+          opacity={texture ? 1 : 0.25}
           side={THREE.DoubleSide}
         />
       </mesh>
