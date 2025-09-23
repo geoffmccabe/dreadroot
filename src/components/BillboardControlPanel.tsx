@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { useToast } from '@/hooks/use-toast';
@@ -396,291 +397,297 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
             </TabsList>
             
             <TabsContent value="wall1" className="space-y-4">
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Screen URLs</h3>
-                {wall1Urls.map((urlData) => (
-                  <div key={urlData.slot_number} className="space-y-2">
-                    <Label htmlFor={`url-${urlData.slot_number}`}>
-                      URL Slot {urlData.slot_number}
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id={`url-${urlData.slot_number}`}
-                        placeholder={urlData.url || "Enter URL..."}
-                        value={newUrls[urlData.slot_number] ?? urlData.url ?? ''}
-                        onChange={(e) => setNewUrls(prev => ({
-                          ...prev,
-                          [urlData.slot_number]: e.target.value
-                        }))}
-                      />
-                       <Button 
-                         onClick={() => handleUrlUpdate(urlData.slot_number)}
-                         size="sm"
-                         disabled={isUpdatingPosition}
-                       >
-                         Update
-                       </Button>
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-4 pr-4">
+                  <h3 className="text-lg font-semibold">Screen URLs</h3>
+                  {wall1Urls.map((urlData) => (
+                    <div key={urlData.slot_number} className="space-y-2">
+                      <Label htmlFor={`url-${urlData.slot_number}`}>
+                        URL Slot {urlData.slot_number}
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id={`url-${urlData.slot_number}`}
+                          placeholder={urlData.url || "Enter URL..."}
+                          value={newUrls[urlData.slot_number] ?? urlData.url ?? ''}
+                          onChange={(e) => setNewUrls(prev => ({
+                            ...prev,
+                            [urlData.slot_number]: e.target.value
+                          }))}
+                        />
+                         <Button 
+                           onClick={() => handleUrlUpdate(urlData.slot_number)}
+                           size="sm"
+                           disabled={isUpdatingPosition}
+                         >
+                           Update
+                         </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </TabsContent>
 
             {[2, 3, 4].map(wallNumber => (
               <TabsContent key={wallNumber} value={`wall${wallNumber}`} className="space-y-4">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Media Grid - Wall {wallNumber}</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {Array.from({ length: 6 }, (_, index) => {
-                      const slotNumber = index + 1;
-                      const mediaItem = getMediaItemsForWall(wallNumber).find(item => item.slot_number === slotNumber);
-                      
-                      return (
-                        <div key={slotNumber} className="space-y-2">
-                          <Label>Slot {slotNumber}</Label>
-                          <div className="border-2 border-dashed border-muted rounded-lg p-4 text-center">
-                            {mediaItem?.media_url ? (
-                              <div className="space-y-2">
-                                {mediaItem.media_type === 'image' ? (
-                                  <img 
-                                    src={mediaItem.media_url} 
-                                    alt={`Slot ${slotNumber}`}
-                                    className="max-w-full h-20 object-cover mx-auto"
-                                  />
-                                ) : (
-                                  <video 
-                                    src={mediaItem.media_url}
-                                    className="max-w-full h-20 object-cover mx-auto"
-                                    controls
-                                  />
-                                )}
-                                <p className="text-xs text-muted-foreground">
-                                  {mediaItem.media_type}
-                                </p>
-                              </div>
-                            ) : (
-                              <p className="text-muted-foreground">No media</p>
-                            )}
-                            
-                            <input
-                              type="file"
-                              accept="image/*,video/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleFileUpload(wallNumber, slotNumber, file);
-                                }
-                              }}
-                              className="mt-2 text-xs"
-                            />
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-4 pr-4">
+                    <h3 className="text-lg font-semibold">Media Grid - Wall {wallNumber}</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {Array.from({ length: 6 }, (_, index) => {
+                        const slotNumber = index + 1;
+                        const mediaItem = getMediaItemsForWall(wallNumber).find(item => item.slot_number === slotNumber);
+                        
+                        return (
+                          <div key={slotNumber} className="space-y-2">
+                            <Label>Slot {slotNumber}</Label>
+                            <div className="border-2 border-dashed border-muted rounded-lg p-4 text-center">
+                              {mediaItem?.media_url ? (
+                                <div className="space-y-2">
+                                  {mediaItem.media_type === 'image' ? (
+                                    <img 
+                                      src={mediaItem.media_url} 
+                                      alt={`Slot ${slotNumber}`}
+                                      className="max-w-full h-20 object-cover mx-auto"
+                                    />
+                                  ) : (
+                                    <video 
+                                      src={mediaItem.media_url}
+                                      className="max-w-full h-20 object-cover mx-auto"
+                                      controls
+                                    />
+                                  )}
+                                  <p className="text-xs text-muted-foreground">
+                                    {mediaItem.media_type}
+                                  </p>
+                                </div>
+                              ) : (
+                                <p className="text-muted-foreground">No media</p>
+                              )}
+                              
+                              <input
+                                type="file"
+                                accept="image/*,video/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleFileUpload(wallNumber, slotNumber, file);
+                                  }
+                                }}
+                                className="mt-2 text-xs"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                </ScrollArea>
               </TabsContent>
             ))}
 
             <TabsContent value="move" className="space-y-4">
-              <div className="space-y-4">
-                 <div className="flex items-center justify-between">
-                   <div className="flex items-center space-x-2">
-                     <label className="text-sm font-medium">Select Wall:</label>
-                     <select 
-                       value={selectedWallForMoving}
-                       onChange={(e) => setSelectedWallForMoving(parseInt(e.target.value))}
-                       className="px-3 py-1 border rounded-md bg-slate-700 text-white border-slate-600"
-                     >
-                       <option value={1}>Screen (Wall 1)</option>
-                       <option value={2}>Wall 2</option>
-                       <option value={3}>Wall 3</option>
-                       <option value={4}>Wall 4</option>
-                     </select>
-                    </div>
-                    
-                  </div>
-
-                 {(() => {
-                  const wall = walls.find(w => w.wall_number === selectedWallForMoving);
-                  return wall ? (
-                    <div className="space-y-3">
-                      {/* Editable Position Fields */}
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium text-white">Current Position (editable):</Label>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-xs text-gray-300">X:</Label>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={getTempOrActualPosition(wall, 'x')}
-                              onChange={(e) => handleTempPositionChange('x', e.target.value)}
-                              onBlur={() => handlePositionSubmit('x')}
-                              onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('x')}
-                              className="h-8 text-xs bg-slate-700 text-white border-slate-600"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-gray-300">Y:</Label>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={getTempOrActualPosition(wall, 'y')}
-                              onChange={(e) => handleTempPositionChange('y', e.target.value)}
-                              onBlur={() => handlePositionSubmit('y')}
-                              onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('y')}
-                              className="h-8 text-xs bg-slate-700 text-white border-slate-600"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-gray-300">Z:</Label>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={getTempOrActualPosition(wall, 'z')}
-                              onChange={(e) => handleTempPositionChange('z', e.target.value)}
-                              onBlur={() => handlePositionSubmit('z')}
-                              onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('z')}
-                              className="h-8 text-xs bg-slate-700 text-white border-slate-600"
-                            />
-                          </div>
-                        </div>
+              <ScrollArea className="h-[400px]">
+                <div className="space-y-4 pr-4">
+                   <div className="flex items-center justify-between">
+                     <div className="flex items-center space-x-2">
+                       <label className="text-sm font-medium">Select Wall:</label>
+                       <select 
+                         value={selectedWallForMoving}
+                         onChange={(e) => setSelectedWallForMoving(parseInt(e.target.value))}
+                         className="px-3 py-1 border rounded-md bg-slate-700 text-white border-slate-600"
+                       >
+                         <option value={1}>Screen (Wall 1)</option>
+                         <option value={2}>Wall 2</option>
+                         <option value={3}>Wall 3</option>
+                         <option value={4}>Wall 4</option>
+                       </select>
                       </div>
                       
-                      <div className="flex items-start space-x-4">
-                        <div className="space-y-3 flex-1">
-                          {/* X Axis Controls - Increased increments for visibility */}
-                          <div className="flex items-center space-x-2">
-                            <span className="w-8 text-sm font-medium text-white">X:</span>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('x', -1)}
-                               disabled={isUpdatingPosition}
-                             >
-                               ←
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('x', -5)}
-                               disabled={isUpdatingPosition}
-                             >
-                               -5
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('x', 5)}
-                               disabled={isUpdatingPosition}
-                             >
-                               +5
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('x', 1)}
-                               disabled={isUpdatingPosition}
-                             >
-                               →
-                             </Button>
-                          </div>
+                    </div>
 
-                           {/* Y Axis Controls - Increased increments for visibility */}
-                           <div className="flex items-center space-x-2">
-                             <span className="w-8 text-sm font-medium text-white">Y:</span>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('y', -1)}
-                               disabled={isUpdatingPosition}
-                             >
-                               ↓
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('y', -5)}
-                               disabled={isUpdatingPosition}
-                             >
-                               -5
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('y', 5)}
-                               disabled={isUpdatingPosition}
-                             >
-                               +5
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('y', 1)}
-                               disabled={isUpdatingPosition}
-                             >
-                               ↑
-                             </Button>
-                           </div>
-
-                           {/* Z Axis Controls - Increased increments for visibility */}
-                           <div className="flex items-center space-x-2">
-                             <span className="w-8 text-sm font-medium text-white">Z:</span>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('z', -1)}
-                               disabled={isUpdatingPosition}
-                             >
-                               ←
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('z', -5)}
-                               disabled={isUpdatingPosition}
-                             >
-                               -5
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('z', 5)}
-                               disabled={isUpdatingPosition}
-                             >
-                               +5
-                             </Button>
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
-                               onClick={() => handleSingleClick('z', 1)}
-                               disabled={isUpdatingPosition}
-                             >
-                               →
-                             </Button>
+                   {(() => {
+                    const wall = walls.find(w => w.wall_number === selectedWallForMoving);
+                    return wall ? (
+                      <div className="space-y-3">
+                        {/* Editable Position Fields */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium text-white">Current Position (editable):</Label>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-300">X:</Label>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                value={getTempOrActualPosition(wall, 'x')}
+                                onChange={(e) => handleTempPositionChange('x', e.target.value)}
+                                onBlur={() => handlePositionSubmit('x')}
+                                onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('x')}
+                                className="h-8 text-xs bg-slate-700 text-white border-slate-600"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-300">Y:</Label>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                value={getTempOrActualPosition(wall, 'y')}
+                                onChange={(e) => handleTempPositionChange('y', e.target.value)}
+                                onBlur={() => handlePositionSubmit('y')}
+                                onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('y')}
+                                className="h-8 text-xs bg-slate-700 text-white border-slate-600"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-gray-300">Z:</Label>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                value={getTempOrActualPosition(wall, 'z')}
+                                onChange={(e) => handleTempPositionChange('z', e.target.value)}
+                                onBlur={() => handlePositionSubmit('z')}
+                                onKeyDown={(e) => e.key === 'Enter' && handlePositionSubmit('z')}
+                                className="h-8 text-xs bg-slate-700 text-white border-slate-600"
+                              />
+                            </div>
                           </div>
                         </div>
                         
-                         {/* Wall Preview */}
-                         {getWallPreview(selectedWallForMoving)}
+                        <div className="flex items-start space-x-4">
+                          <div className="space-y-3 flex-1">
+                            {/* X Axis Controls - Increased increments for visibility */}
+                            <div className="flex items-center space-x-2">
+                              <span className="w-8 text-sm font-medium text-white">X:</span>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('x', -1)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 ←
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('x', -5)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 -5
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('x', 5)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 +5
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('x', 1)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 →
+                               </Button>
+                            </div>
+
+                             {/* Y Axis Controls - Increased increments for visibility */}
+                             <div className="flex items-center space-x-2">
+                               <span className="w-8 text-sm font-medium text-white">Y:</span>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('y', -1)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 ↓
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('y', -5)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 -5
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('y', 5)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 +5
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('y', 1)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 ↑
+                               </Button>
+                             </div>
+
+                             {/* Z Axis Controls - Increased increments for visibility */}
+                             <div className="flex items-center space-x-2">
+                               <span className="w-8 text-sm font-medium text-white">Z:</span>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('z', -1)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 ←
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('z', -5)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 -5
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('z', 5)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 +5
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 className="text-slate-800 bg-white border-slate-400 hover:bg-slate-100"
+                                 onClick={() => handleSingleClick('z', 1)}
+                                 disabled={isUpdatingPosition}
+                               >
+                                 →
+                               </Button>
+                            </div>
+                          </div>
+                          
+                           {/* Wall Preview */}
+                           {getWallPreview(selectedWallForMoving)}
+                        </div>
                       </div>
-                    </div>
-                  ) : null;
-                })()}
-              </div>
+                    ) : null;
+                  })()}
+                </div>
+              </ScrollArea>
             </TabsContent>
           </Tabs>
           </CardContent>

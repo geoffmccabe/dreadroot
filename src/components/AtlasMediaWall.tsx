@@ -41,17 +41,22 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   // UV coordinates for each slot in the 3x2 grid
   // Canvas layout: [0][1][2]  <- row 0 (top)
   //               [3][4][5]  <- row 1 (bottom)
-  // But Three.js UV (0,0) is bottom-left, so we need to map correctly
+  // Three.js UV (0,0) is bottom-left, canvas (0,0) is top-left
   const getSlotUVs = (slotIndex: number): [number, number, number, number] => {
     const col = slotIndex % 3;
     const row = Math.floor(slotIndex / 3);
     
+    console.log(`Slot ${slotIndex + 1}: col=${col}, row=${row}`);
+    
     const uMin = col / 3;
     const uMax = (col + 1) / 3;
-    // Canvas row 0 maps to Three.js V top (1-0.5 to 1)
-    // Canvas row 1 maps to Three.js V bottom (1-1 to 0.5) 
-    const vMin = 1 - (row + 1) * 0.5;  // Bottom of slot in Three.js coords
-    const vMax = 1 - row * 0.5;        // Top of slot in Three.js coords
+    
+    // Canvas row 0 (top) should map to Three.js V top (0.5 to 1.0)
+    // Canvas row 1 (bottom) should map to Three.js V bottom (0.0 to 0.5)
+    const vMin = row === 0 ? 0.5 : 0.0;    // Bottom edge of slot
+    const vMax = row === 0 ? 1.0 : 0.5;    // Top edge of slot
+    
+    console.log(`UV mapping: u(${uMin}, ${uMax}), v(${vMin}, ${vMax})`);
     
     return [uMin, vMin, uMax, vMax];
   };
@@ -61,12 +66,13 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     const geometry = new THREE.PlaneGeometry(slotWidth, slotHeight);
     const [uMin, vMin, uMax, vMax] = getSlotUVs(slotIndex);
     
-    // Update UV coordinates
+    // Update UV coordinates - PlaneGeometry vertices are:
+    // 0: bottom-left, 1: bottom-right, 2: top-left, 3: top-right
     const uvs = geometry.attributes.uv;
-    uvs.setXY(0, uMin, vMin); // Bottom-left
-    uvs.setXY(1, uMax, vMin); // Bottom-right
-    uvs.setXY(2, uMin, vMax); // Top-left
-    uvs.setXY(3, uMax, vMax); // Top-right
+    uvs.setXY(0, uMin, vMin); // Bottom-left vertex
+    uvs.setXY(1, uMax, vMin); // Bottom-right vertex  
+    uvs.setXY(2, uMin, vMax); // Top-left vertex
+    uvs.setXY(3, uMax, vMax); // Top-right vertex
     uvs.needsUpdate = true;
     
     return geometry;
