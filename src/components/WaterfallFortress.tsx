@@ -127,13 +127,13 @@ function FirstPersonControls({
   const lastFireTime = useRef(0);
   const FIRE_RATE_LIMIT = 150; // Minimum 150ms between shots
 
-  // Collision boxes for fortress walls
+  // Collision boxes for fortress walls and placed blocks
   const colliders = useMemo(() => {
     const cliffW = 40, cliffH = 20, frontT = 2;
     const courtyardDepth = 30, frontZ = -8;
     const openingHalfW = 2;
     
-    return [
+    const fortressColliders = [
       // Left pillar
       new THREE.Box3(
         new THREE.Vector3(-cliffW/2, 0, frontZ - frontT/2),
@@ -159,7 +159,17 @@ function FirstPersonControls({
         new THREE.Vector3(cliffW/2, cliffH, frontZ - courtyardDepth - frontT + 1)
       )
     ];
-  }, []);
+
+    // Add placed blocks as colliders for jumping/collision
+    const blockColliders = existingBlocks.map(block => 
+      new THREE.Box3(
+        new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5),
+        new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5)
+      )
+    );
+    
+    return [...fortressColliders, ...blockColliders];
+  }, [existingBlocks]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     switch (event.code) {
@@ -189,12 +199,20 @@ function FirstPersonControls({
         break;
       case 'KeyR':
         if (!blockPlacementMode) {
+          // In gun/default mode - toggle shooting crosshairs
           const newCrosshairsState = !showCrosshairs;
           onModeChange(newCrosshairsState ? 'shooting' : null);
           
           // Play appropriate gun sound using preloaded audio
           const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
           playAudio(audio);
+        } else {
+          // In block mode - switch to gun mode with cocking sound
+          console.log('R pressed in block mode, switching to gun mode');
+          onModeChange('shooting');
+          
+          // Play gun cocking sound
+          playAudio(audioRefs.pistolCocking);
         }
         break;
       case 'KeyB':
@@ -494,13 +512,16 @@ function FirstPersonControls({
     
     let standingOnSurface = feetPosition.y <= 0; // Ground level
     
-    // Check if standing on any block
-    for (const collider of colliders) {
-      const expandedCollider = collider.clone();
-      expandedCollider.max.y += 0.1; // Small buffer for surface detection
-      if (expandedCollider.containsPoint(feetPosition)) {
-        standingOnSurface = true;
-        break;
+    // Check if standing on any block surface
+    if (!standingOnSurface) {
+      for (const collider of colliders) {
+        // Check if feet are touching the top of any collider
+        if (feetPosition.x >= collider.min.x && feetPosition.x <= collider.max.x &&
+            feetPosition.z >= collider.min.z && feetPosition.z <= collider.max.z &&
+            feetPosition.y >= collider.max.y - 0.1 && feetPosition.y <= collider.max.y + 0.1) {
+          standingOnSurface = true;
+          break;
+        }
       }
     }
     

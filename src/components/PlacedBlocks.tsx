@@ -56,9 +56,6 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
   // Debug logging and force re-render when blocks change
   React.useEffect(() => {
     console.log('PlacedBlocks updated - total blocks:', blocks.length);
-    if (blocks.length > 0) {
-      console.log('Block positions:', blocks.map(b => `(${b.position_x}, ${b.position_y}, ${b.position_z})`));
-    }
   }, [blocks]);
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
@@ -86,14 +83,11 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
   }, [blockIds, onCollision]);
 
   if (!blocks || blocks.length === 0) {
-    console.log('No blocks to render');
     return null;
   }
 
-  console.log('Rendering', blocks.length, 'blocks');
-
   return (
-    <group>
+    <>
       {blocks.map((block) => (
         <FortressBlock
           key={block.id}
@@ -103,6 +97,6 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
           material={material}
         />
       ))}
-    </group>
+    </>
   );
 };
