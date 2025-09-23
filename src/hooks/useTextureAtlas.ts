@@ -58,6 +58,8 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
         const imagePromises = imageUrls.map(async (url, index) => {
           if (!url) return; // Skip empty slots
           
+          console.log(`Loading image for slot ${index + 1}:`, url);
+          
           try {
             const img = new Image();
             img.crossOrigin = 'anonymous';
@@ -70,43 +72,35 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
                 const x = col * slotWidth;
                 const y = row * slotHeight;
                 
-                // Draw image to FILL slot completely (cover behavior - crop if needed)
+                console.log(`Drawing image ${index + 1} at canvas position (${x}, ${y}), col=${col}, row=${row}`);
+                
+                // Simple cover behavior: scale image to fill slot, crop excess
                 const imgAspect = img.width / img.height;
                 const slotAspect = slotWidth / slotHeight;
                 
-                let drawWidth, drawHeight, drawX, drawY;
-                let sourceX = 0, sourceY = 0, sourceWidth = img.width, sourceHeight = img.height;
+                let scaleX, scaleY, offsetX = 0, offsetY = 0;
                 
                 if (imgAspect > slotAspect) {
-                  // Image is wider than slot - crop sides
-                  drawWidth = slotWidth;
-                  drawHeight = slotHeight;
-                  drawX = x;
-                  drawY = y;
-                  
-                  // Calculate how much to crop from sides
-                  const targetWidth = img.height * slotAspect;
-                  sourceX = (img.width - targetWidth) / 2;
-                  sourceWidth = targetWidth;
+                  // Image is wider - scale to fit height, crop width
+                  scaleY = slotHeight / img.height;
+                  scaleX = scaleY;
+                  const scaledWidth = img.width * scaleX;
+                  offsetX = -(scaledWidth - slotWidth) / 2;
                 } else {
-                  // Image is taller than slot - crop top/bottom
-                  drawWidth = slotWidth;
-                  drawHeight = slotHeight;
-                  drawX = x;
-                  drawY = y;
-                  
-                  // Calculate how much to crop from top/bottom
-                  const targetHeight = img.width / slotAspect;
-                  sourceY = (img.height - targetHeight) / 2;
-                  sourceHeight = targetHeight;
+                  // Image is taller - scale to fit width, crop height  
+                  scaleX = slotWidth / img.width;
+                  scaleY = scaleX;
+                  const scaledHeight = img.height * scaleY;
+                  offsetY = -(scaledHeight - slotHeight) / 2;
                 }
                 
-                // Draw cropped/scaled image to fill entire slot
-                ctx.drawImage(
-                  img,
-                  sourceX, sourceY, sourceWidth, sourceHeight, // Source rectangle (crop)
-                  drawX, drawY, drawWidth, drawHeight // Destination rectangle (slot)
-                );
+                // Save context, apply transforms, draw, restore
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scaleX, scaleY);
+                ctx.drawImage(img, offsetX / scaleX, offsetY / scaleY);
+                ctx.restore();
+                
                 resolve();
               };
               
