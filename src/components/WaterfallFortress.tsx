@@ -16,6 +16,7 @@ import { Inventory } from '@/components/Inventory';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useToast } from '@/hooks/use-toast';
+import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
 
 // Sky component with beautiful gradient
@@ -88,7 +89,8 @@ function FirstPersonControls({
   selectedBlockType,
   shopOpen,
   inventoryOpen,
-  onCycleBlock
+  onCycleBlock,
+  blocks
 }: { 
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -109,6 +111,7 @@ function FirstPersonControls({
   shopOpen: boolean;
   inventoryOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
+  blocks: PlacedBlock[];
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -123,8 +126,8 @@ function FirstPersonControls({
   const yaw = useRef(0);
   const pitch = useRef(0);
   
-  // Get existing blocks from shared context
-  const { blocks: existingBlocks } = useBlocks();
+  // Use blocks from props instead of context (context doesn't cross Canvas boundary)
+  const existingBlocks = blocks;
   
   // Firing rate limiting to prevent performance issues
   const lastFireTime = useRef(0);
@@ -1150,7 +1153,8 @@ function Scene({
   selectedBlockType,
   shopOpen,
   inventoryOpen,
-  onCycleBlock
+  onCycleBlock,
+  blocks
 }: { 
   settings: { flowSpeed: number; dropCount: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -1166,6 +1170,7 @@ function Scene({
   shopOpen: boolean;
   inventoryOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
+  blocks: PlacedBlock[];
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -1324,6 +1329,7 @@ function Scene({
         shopOpen={shopOpen}
         inventoryOpen={inventoryOpen}
         onCycleBlock={onCycleBlock}
+        blocks={blocks}
       />
       
       {/* Lighting */}
@@ -1351,7 +1357,7 @@ function Scene({
       {/* Scene objects */}
       <Fortress />
       <BillboardWalls wallPositions={wallPositions} />
-      <PlacedBlocks />
+      <PlacedBlocks blocks={blocks} />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         dropCount={settings.dropCount} 
@@ -1522,7 +1528,7 @@ export default function WaterfallFortress() {
   
   // User data and block system hooks
   const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
-  const { placeBlock, setBlockMode } = useBlocks();
+  const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { toast } = useToast();
 
   const handleSettingsChange = (key: string, value: any) => {
@@ -1733,6 +1739,7 @@ export default function WaterfallFortress() {
         shopOpen={shopOpen}
         inventoryOpen={inventoryOpen}
         onCycleBlock={cycleSelectedBlock}
+        blocks={blocks}
       />
       
       {/* Block Preview */}

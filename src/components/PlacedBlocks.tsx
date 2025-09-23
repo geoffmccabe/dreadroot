@@ -1,7 +1,7 @@
 import React, { useRef, useMemo, useCallback } from 'react';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useBlocks } from '@/contexts/BlocksContext';
+import { PlacedBlock } from '@/types/blocks';
 import { getBlockByKey } from '@/data/blockRegistry';
 
 // Shared geometry for performance
@@ -81,8 +81,10 @@ const PlacedBlockComponent = React.memo(({
 });
 
 // Component to render all placed blocks with collision detection
-export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => void }> = ({ onCollision }) => {
-  const { blocks } = useBlocks();
+export const PlacedBlocks: React.FC<{ 
+  blocks: PlacedBlock[]; 
+  onCollision?: (boxes: THREE.Box3[]) => void; 
+}> = ({ blocks, onCollision }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
 
