@@ -1428,6 +1428,8 @@ export default function WaterfallFortress() {
       // Consume block from inventory
       console.log('Consuming block from inventory');
       await useBlock(selectedBlockType);
+    } else {
+      console.log('Block placement failed');
     }
   }, [selectedBlockType, placeBlock, inventory, useBlock]);
 
@@ -1623,8 +1625,11 @@ export default function WaterfallFortress() {
       onClose={() => setInventoryOpen(false)}
     />
     
-    {/* Crosshair - conditional class for active state */}
-    <div className={`waterfall-crosshair ${crosshairsEnabled || !!selectedBlockType ? 'active' : ''}`} />
+    {/* Crosshair - conditional class for different modes */}
+    <div className={`waterfall-crosshair ${
+      selectedBlockType ? 'block-mode' : 
+      crosshairsEnabled ? 'active' : ''
+    }`} />
     
     {/* Toast notifications */}
     <Toaster />

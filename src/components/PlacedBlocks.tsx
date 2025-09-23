@@ -53,9 +53,12 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const { geometry, material } = SharedBlockResources();
 
-  // Debug logging
+  // Debug logging and force re-render when blocks change
   React.useEffect(() => {
-    console.log('PlacedBlocks rendering with blocks:', blocks);
+    console.log('PlacedBlocks updated - total blocks:', blocks.length);
+    if (blocks.length > 0) {
+      console.log('Block positions:', blocks.map(b => `(${b.position_x}, ${b.position_y}, ${b.position_z})`));
+    }
   }, [blocks]);
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
@@ -82,17 +85,16 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
     }
   }, [blockIds, onCollision]);
 
-  // Memoize the blocks list to prevent unnecessary re-renders
-  const memoizedBlocks = useMemo(() => blocks, [blocks]);
-
   if (!blocks || blocks.length === 0) {
     console.log('No blocks to render');
     return null;
   }
 
+  console.log('Rendering', blocks.length, 'blocks');
+
   return (
-    <>
-      {memoizedBlocks.map((block) => (
+    <group>
+      {blocks.map((block) => (
         <FortressBlock
           key={block.id}
           position={[block.position_x, block.position_y, block.position_z]}
@@ -101,6 +103,6 @@ export const PlacedBlocks: React.FC<{ onCollision?: (boxes: THREE.Box3[]) => voi
           material={material}
         />
       ))}
-    </>
+    </group>
   );
 };

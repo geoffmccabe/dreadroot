@@ -137,6 +137,25 @@ All colors MUST be HSL.
     z-index: 50;
   }
 
+  /* Block placement mode - hand cursor */
+  .waterfall-crosshair.block-mode {
+    border: none;
+    width: 24px;
+    height: 24px;
+    opacity: 0.5;
+    background: none;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: hsl(var(--foreground));
+  }
+
+  .waterfall-crosshair.block-mode::before {
+    content: '✋';
+  }
+
+  /* Shooting mode - crosshairs */
   .waterfall-crosshair.active {
     border-color: #ff2431;
   }
