@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useBillboardData } from '@/hooks/useBillboardData';
+import { AtlasMediaWall } from '@/components/AtlasMediaWall';
 import * as THREE from 'three';
 
 interface BillboardWallsProps {
@@ -167,122 +168,6 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
     );
   };
 
-  // Media Grid Wall Component
-  const MediaGridWall = ({ wallNumber, wallType }: { 
-    wallNumber: number; 
-    wallType: 'side' | 'back';
-  }) => {
-    const mediaItems = getMediaItemsForWall(wallNumber);
-    const { position, rotation } = getWallPositionAndRotation(wallNumber);
-    const [posX, posY, posZ] = position;
-    const [rotX, rotY, rotZ] = rotation;
-
-    
-    
-    // Calculate dimensions based on wall type
-    const wallWidth = wallType === 'back' ? 40 : 30; // Back wall: 40 units, Side walls: 30 units
-    const wallHeight = 20; // All walls are 20 units high
-    const slotWidth = wallWidth / 3; // 3 columns
-    const slotHeight = wallHeight / 2; // 2 rows
-    
-    return (
-      <group position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
-        {/* Grid: 3 columns x 2 rows - no gaps, fill entire wall */}
-        {Array.from({ length: 6 }, (_, index) => {
-          const col = index % 3;
-          const row = Math.floor(index / 3);
-          
-          // Position slots to fill entire wall without gaps
-          const x = (col - 1) * slotWidth; // -slotWidth, 0, slotWidth
-          const y = (0.5 - row) * slotHeight; // slotHeight/2, -slotHeight/2
-          
-          const mediaItem = mediaItems.find(item => item.slot_number === index + 1);
-          
-          return (
-            <MediaSlot 
-              key={`${wallNumber}-slot-${index + 1}`} 
-              position={[x, y, 0.01]} 
-              dimensions={[slotWidth, slotHeight]}
-              mediaUrl={mediaItem?.media_url} 
-              mediaType={mediaItem?.media_type}
-            />
-          );
-        })}
-      </group>
-    );
-  };
-
-  // Individual media slot component with stable texture management
-  const MediaSlot = React.memo(({ position, dimensions, mediaUrl, mediaType }: { 
-    position: [number, number, number]; 
-    dimensions: [number, number];
-    mediaUrl?: string | null; 
-    mediaType?: string | null; 
-  }) => {
-    const [texture, setTexture] = useState<THREE.Texture | null>(null);
-    const loadedUrlRef = useRef<string | null>(null);
-    
-    // Stable texture loading - only when URL actually changes
-    useEffect(() => {
-      // Clear texture if no URL or not an image
-      if (!mediaUrl || mediaType !== 'image') {
-        if (loadedUrlRef.current) {
-          if (texture) {
-            texture.dispose();
-          }
-          setTexture(null);
-          loadedUrlRef.current = null;
-        }
-        return;
-      }
-      
-      // Don't reload if URL hasn't changed
-      if (loadedUrlRef.current === mediaUrl) {
-        return;
-      }
-      
-      // Dispose old texture
-      if (texture) {
-        texture.dispose();
-      }
-      
-      loadedUrlRef.current = mediaUrl;
-      
-      const loader = new THREE.TextureLoader();
-      loader.load(
-        mediaUrl,
-        (loadedTexture) => {
-          // Only set texture if this URL is still current
-          if (loadedUrlRef.current === mediaUrl) {
-            loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
-            loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
-            loadedTexture.minFilter = THREE.LinearFilter;
-            loadedTexture.magFilter = THREE.LinearFilter;
-            setTexture(loadedTexture);
-          }
-        },
-        undefined,
-        (error) => {
-          if (loadedUrlRef.current === mediaUrl) {
-            setTexture(null);
-          }
-        }
-      );
-    }, [mediaUrl, mediaType]);
-    
-    return (
-      <mesh position={position}>
-        <planeGeometry args={dimensions} />
-        <meshBasicMaterial 
-          map={texture}
-          color={texture ? "#ffffff" : "#374151"}
-          transparent={true}
-          opacity={texture ? 1 : 0.25}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-    );
-  });
 
   return (
     <>
@@ -290,21 +175,30 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       <Wall1Screen />
       
       {/* Wall 2 - Media Grid (right wall inner) */}
-      <MediaGridWall 
+      <AtlasMediaWall 
         wallNumber={2} 
         wallType="side"
+        position={getWallPositionAndRotation(2).position}
+        rotation={getWallPositionAndRotation(2).rotation}
+        mediaItems={getMediaItemsForWall(2)}
       />
       
       {/* Wall 3 - Media Grid (back wall inner) */}
-      <MediaGridWall 
+      <AtlasMediaWall 
         wallNumber={3} 
         wallType="back"
+        position={getWallPositionAndRotation(3).position}
+        rotation={getWallPositionAndRotation(3).rotation}
+        mediaItems={getMediaItemsForWall(3)}
       />
       
       {/* Wall 4 - Media Grid (left wall inner) */}
-      <MediaGridWall 
+      <AtlasMediaWall 
         wallNumber={4} 
         wallType="side"
+        position={getWallPositionAndRotation(4).position}
+        rotation={getWallPositionAndRotation(4).rotation}
+        mediaItems={getMediaItemsForWall(4)}
       />
     </>
   );
