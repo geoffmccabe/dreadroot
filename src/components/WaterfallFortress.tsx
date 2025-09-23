@@ -320,12 +320,16 @@ function FirstPersonControls({
       // Create intersection targets (ground, existing blocks, fortress walls)
       const targets: THREE.Object3D[] = [];
       
-      // Add ground plane with material for raycasting
-      const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-      const groundMaterial = new THREE.MeshBasicMaterial({ visible: false }); // Invisible but detectable
+      // Add ground plane with material for raycasting - make it more reliable
+      const groundGeometry = new THREE.PlaneGeometry(200, 200);
+      const groundMaterial = new THREE.MeshBasicMaterial({ 
+        visible: false,
+        side: THREE.DoubleSide // Ensure both sides are detectable
+      });
       const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
       groundMesh.rotation.x = -Math.PI / 2;
-      groundMesh.position.y = 0;
+      groundMesh.position.set(0, 0, 0);
+      groundMesh.name = 'ground'; // For debugging
       targets.push(groundMesh);
       
       // Constants for fortress dimensions
@@ -361,27 +365,43 @@ function FirstPersonControls({
       
       // Add existing blocks to collision targets with materials
       if (existingBlocks && existingBlocks.length > 0) {
-        const blockMaterial = new THREE.MeshBasicMaterial({ visible: false }); // Invisible but detectable
-        existingBlocks.forEach(block => {
+        const blockMaterial = new THREE.MeshBasicMaterial({ 
+          visible: false,
+          side: THREE.DoubleSide
+        });
+        existingBlocks.forEach((block, index) => {
           const blockMesh = new THREE.Mesh(
             new THREE.BoxGeometry(1, 1, 1), 
             blockMaterial
           );
           blockMesh.position.set(block.position_x, block.position_y, block.position_z);
+          blockMesh.name = `block-${index}`; // For debugging
           targets.push(blockMesh);
         });
       }
       
-      console.log('Created', targets.length, 'raycasting targets for block placement');
+      console.log(`Created ${targets.length} raycasting targets:`, targets.map(t => t.name || 'unnamed'));
+      console.log('Raycaster origin:', camera.position, 'direction:', direction);
       
       // Find intersection
       const intersects = raycaster.intersectObjects(targets, true);
+      console.log(`Found ${intersects.length} intersections:`, intersects.map(i => ({
+        object: i.object.name || 'unnamed',
+        point: i.point,
+        distance: i.distance
+      })));
       
       if (intersects.length > 0) {
-        console.log('Found intersection for block placement:', intersects[0]);
         const intersection = intersects[0];
         const hitPoint = intersection.point;
         const normal = intersection.face?.normal;
+        
+        console.log('Block placement intersection details:', {
+          point: hitPoint,
+          normal: normal,
+          object: intersection.object.name || 'unnamed',
+          distance: intersection.distance
+        });
         
         if (normal) {
           // Calculate placement position adjacent to hit surface
@@ -394,6 +414,8 @@ function FirstPersonControls({
           
           // Ensure minimum height
           placePosition.y = Math.max(0.5, placePosition.y);
+          
+          console.log('Calculated placement position:', placePosition);
           
           // Check placement restrictions
           const fortressCenter = new THREE.Vector3(0, 0, -20);
@@ -419,18 +441,34 @@ function FirstPersonControls({
             tooCloseToFortress,
             blockingWaterfall, 
             blockOverlap,
-            position: placePosition
+            position: placePosition,
+            distanceToFortress,
+            selectedBlockType
           });
           
           if (!tooCloseToFortress && !blockingWaterfall && !blockOverlap) {
-            console.log('Valid placement, calling onBlockPlace');
+            console.log('Valid placement, calling onBlockPlace with selectedBlockType:', selectedBlockType);
             onBlockPlace(placePosition);
           } else {
             console.log('Invalid placement due to restrictions');
+            // Show user feedback for invalid placement
+            if (tooCloseToFortress) console.log('Too close to fortress');
+            if (blockingWaterfall) console.log('Blocking waterfall'); 
+            if (blockOverlap) console.log('Block overlap detected');
           }
         }
       } else {
-        console.log('No intersection found for block placement');
+        console.log('No intersection found for block placement - raycaster may not be hitting any objects');
+        // Try fallback placement on ground if no intersection
+        if (camera.position.y > 1) {
+          const groundPosition = new THREE.Vector3(
+            Math.floor(camera.position.x) + 0.5,
+            0.5,
+            Math.floor(camera.position.z) + 0.5
+          );
+          console.log('Fallback ground placement at:', groundPosition);
+          onBlockPlace(groundPosition);
+        }
       }
       
       // Clean up temporary objects
@@ -1570,20 +1608,20 @@ export default function WaterfallFortress() {
 
   // Mode change handler
   const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
-    console.log('Mode change requested:', mode);
+    console.log('Mode change requested:', mode, 'Current inventory:', inventory);
     if (mode === 'building') {
       // Find first available block type from inventory
-      const availableBlockType = inventory.find(item => item.quantity > 0)?.item_type;
-      if (availableBlockType) {
-        console.log('Setting block mode -', availableBlockType);
-        setSelectedBlockType(availableBlockType);
+      const availableItem = inventory.find(item => item.quantity > 0);
+      if (availableItem) {
+        console.log('Setting block mode with available block:', availableItem.item_type, 'quantity:', availableItem.quantity);
+        setSelectedBlockType(availableItem.item_type);
         setCrosshairsEnabled(false);
         setBlockMode(true); // Enable periodic syncing
       } else {
-        console.log('Cannot set block mode - no blocks available');
+        console.log('Cannot set block mode - no blocks available in inventory:', inventory);
         toast({
           title: "No blocks available",
-          description: "You need to purchase blocks from the shop first",
+          description: "You need to purchase blocks from the shop first (Press O to open shop)",
           variant: "destructive"
         });
       }
@@ -1727,26 +1765,37 @@ export default function WaterfallFortress() {
       </div>
       
       {/* Block inventory */}
-      {(() => {
-        const totalBlocks = inventory.reduce((total, item) => total + item.quantity, 0);
-        console.log('Block inventory render - totalBlocks:', totalBlocks);
-        return totalBlocks > 0;
-      })() && (
-        <div className="flex items-center gap-2">
-          <div 
-            className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
-              selectedBlockType ? 'bg-blue-500/70' : 'hover:bg-black/70'
-            }`}
-            onClick={() => handleModeChange(selectedBlockType ? null : 'building')}
-            title="Toggle block placement mode"
-          >
-            <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
-              <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
-            </div>
-            <span className="font-bold">x{inventory.reduce((total, item) => total + item.quantity, 0)}</span>
+      <div className="flex items-center gap-2">
+        <div 
+          className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
+            selectedBlockType ? 'bg-blue-500/70' : 'hover:bg-black/70'
+          }`}
+          onClick={() => {
+            const totalBlocks = inventory.reduce((total, item) => total + item.quantity, 0);
+            if (totalBlocks > 0) {
+              handleModeChange(selectedBlockType ? null : 'building');
+            } else {
+              handleOpenShop();
+            }
+          }}
+          title={inventory.reduce((total, item) => total + item.quantity, 0) > 0 ? 
+            (selectedBlockType ? "Exit block mode" : "Enter block mode") : 
+            "Buy blocks from shop"
+          }
+        >
+          <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
+            <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
           </div>
+          <span className="font-bold">x{inventory.reduce((total, item) => total + item.quantity, 0)}</span>
         </div>
-      )}
+        
+        {/* Block mode indicator */}
+        {selectedBlockType && (
+          <div className="bg-blue-500/70 text-white px-2 py-1 rounded text-xs">
+            BLOCK MODE: {selectedBlockType}
+          </div>
+        )}
+      </div>
     </div>
     
     {/* Instructions */}

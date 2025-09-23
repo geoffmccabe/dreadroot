@@ -10,28 +10,44 @@ interface DBBlock extends Omit<PlacedBlock, 'created_at' | 'updated_at'> {
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 1;
+  private dbVersion = 2; // Increment version to trigger migration
   private storeName = 'blocks';
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, this.dbVersion);
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
-      };
-      
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
+      try {
+        const request = indexedDB.open(this.dbName, this.dbVersion);
         
-        if (!db.objectStoreNames.contains(this.storeName)) {
+        request.onerror = () => {
+          console.error('IndexedDB open error:', request.error);
+          reject(request.error);
+        };
+        
+        request.onsuccess = () => {
+          this.db = request.result;
+          console.log('IndexedDB initialized successfully');
+          resolve();
+        };
+        
+        request.onupgradeneeded = (event) => {
+          console.log('IndexedDB upgrade needed, clearing corrupted data');
+          const db = (event.target as IDBOpenDBRequest).result;
+          
+          // Clear existing store if it exists (to fix corruption)
+          if (db.objectStoreNames.contains(this.storeName)) {
+            db.deleteObjectStore(this.storeName);
+          }
+          
+          // Create fresh store
           const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
           store.createIndex('synced', 'synced', { unique: false });
           store.createIndex('position', ['position_x', 'position_y', 'position_z'], { unique: false });
-        }
-      };
+          console.log('IndexedDB store recreated');
+        };
+      } catch (error) {
+        console.error('Error initializing IndexedDB:', error);
+        reject(error);
+      }
     });
   }
 
@@ -78,13 +94,38 @@ class BlockDB {
     if (!this.db) await this.init();
     
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.storeName], 'readonly');
-      const store = transaction.objectStore(this.storeName);
-      const index = store.index('synced');
-      const request = index.getAll(IDBKeyRange.only(false));
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
+      try {
+        const transaction = this.db!.transaction([this.storeName], 'readonly');
+        const store = transaction.objectStore(this.storeName);
+        
+        // Use cursor instead of index to avoid corruption issues
+        const request = store.openCursor();
+        const unsyncedBlocks: DBBlock[] = [];
+        
+        request.onerror = () => {
+          console.error('Error reading unsynced blocks:', request.error);
+          reject(request.error);
+        };
+        
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (cursor) {
+            const block = cursor.value as DBBlock;
+            // Ensure synced field is properly typed
+            if (block.synced === false || (block.synced as any) === 'false' || block.synced == null) {
+              // Normalize synced field to boolean
+              block.synced = false;
+              unsyncedBlocks.push(block);
+            }
+            cursor.continue();
+          } else {
+            resolve(unsyncedBlocks);
+          }
+        };
+      } catch (error) {
+        console.error('Error in getUnsyncedBlocks:', error);
+        resolve([]); // Return empty array on error to prevent sync loop
+      }
     });
   }
 

@@ -253,6 +253,11 @@ export const usePlacedBlocksWithCache = () => {
   const batchSyncBlocks = async () => {
     try {
       const unsyncedBlocks = await getUnsyncedBlocks();
+      if (unsyncedBlocks.length === 0) {
+        console.log('No unsynced blocks to process');
+        return;
+      }
+      
       console.log(`Syncing ${unsyncedBlocks.length} unsynced blocks...`);
 
       for (const block of unsyncedBlocks) {
@@ -260,10 +265,12 @@ export const usePlacedBlocksWithCache = () => {
           await syncBlockToSupabase(block);
         } catch (error) {
           console.error(`Failed to sync block ${block.id}:`, error);
+          // Don't retry immediately to prevent spam
         }
       }
     } catch (error) {
       console.error('Error in batch sync:', error);
+      // Don't propagate the error to prevent sync loop
     }
   };
 
