@@ -17,7 +17,7 @@ export const useStoredTextureAtlas = (
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const atlasFileName = `wall-${wallNumber}-atlas.webp`;
+  const atlasFileName = `wall-${wallNumber}-atlas-v2.webp`;
   
   // Create a stable hash of image URLs to detect changes
   const imageUrlsHash = useMemo(() => {
