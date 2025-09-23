@@ -175,20 +175,38 @@ export const useUserData = () => {
 
   const useBlock = async (itemType: string) => {
     const item = inventory.find(i => i.item_type === itemType);
-    if (!item || item.quantity <= 0) return false;
+    if (!item || item.quantity <= 0) {
+      console.log(`No ${itemType} blocks available in inventory`);
+      return false;
+    }
 
     try {
+      console.log(`Using ${itemType} block. Current quantity: ${item.quantity}`);
+      
+      const newQuantity = item.quantity - 1;
       const { error } = await supabase
         .from('user_inventory')
-        .update({ quantity: item.quantity - 1 })
+        .update({ quantity: newQuantity })
         .eq('id', item.id);
 
       if (error) throw error;
 
-      await loadUserData();
+      // Update local state immediately for instant feedback
+      setInventory(prev => prev.map(i => 
+        i.id === item.id 
+          ? { ...i, quantity: newQuantity }
+          : i
+      ).filter(i => i.quantity > 0)); // Remove items with 0 quantity
+
+      console.log(`Successfully used ${itemType} block. New quantity: ${newQuantity}`);
       return true;
     } catch (error) {
       console.error('Error using block:', error);
+      toast({
+        title: "Error",
+        description: "Failed to use block from inventory",
+        variant: "destructive"
+      });
       return false;
     }
   };
