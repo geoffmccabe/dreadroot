@@ -315,24 +315,34 @@ function FirstPersonControls({
       groundMesh.position.y = 0;
       targets.push(groundMesh);
       
-      // Add fortress walls as collision targets with materials
+      // Constants for fortress dimensions
+      const cliffW = 40, cliffH = 20, frontT = 2;
+      const courtyardDepth = 30, frontZ = -8;
+      const openingHalfW = 2;
+      
+      // Add fortress walls as collision targets with proper dimensions and positions
       const fortressWalls = [
-        // Front wall
-        { center: [0, 10, -10], size: [50, 20, 2] },
-        // Side walls  
-        { center: [-25, 10, -20], size: [2, 20, 20] },
-        { center: [25, 10, -20], size: [2, 20, 20] },
+        // Front left pillar
+        { position: [-(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ], size: [cliffW/2 - openingHalfW, cliffH, frontT] },
+        // Front right pillar  
+        { position: [(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ], size: [cliffW/2 - openingHalfW, cliffH, frontT] },
+        // Left wall
+        { position: [-cliffW/2 + 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2], size: [2, cliffH, courtyardDepth + frontT] },
+        // Right wall  
+        { position: [cliffW/2 - 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2], size: [2, cliffH, courtyardDepth + frontT] },
         // Back wall
-        { center: [0, 10, -30], size: [50, 20, 2] }
+        { position: [0, cliffH/2, frontZ - courtyardDepth - frontT], size: [cliffW, cliffH, 2] },
+        // Courtyard floor
+        { position: [0, 0.01, frontZ - courtyardDepth/2 - frontT/2], size: [cliffW-4, 0.1, courtyardDepth-2] }
       ];
       
       const wallMaterial = new THREE.MeshBasicMaterial({ visible: false }); // Invisible but detectable
       fortressWalls.forEach(wall => {
         const wallMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(...wall.size as [number, number, number]), 
+          new THREE.BoxGeometry(wall.size[0], wall.size[1], wall.size[2]), 
           wallMaterial
         );
-        wallMesh.position.set(...wall.center as [number, number, number]);
+        wallMesh.position.set(wall.position[0], wall.position[1], wall.position[2]);
         targets.push(wallMesh);
       });
       
@@ -502,28 +512,71 @@ function FirstPersonControls({
       onGround.current = false;
     }
 
-    // Wall and block collision detection
+    // Wall and block collision detection - improved
+    const playerRadius = 0.4;
+    const playerHeight = 1.6;
+    const playerBox = new THREE.Box3(
+      new THREE.Vector3(
+        camera.position.x - playerRadius,
+        camera.position.y - playerHeight,
+        camera.position.z - playerRadius
+      ),
+      new THREE.Vector3(
+        camera.position.x + playerRadius,
+        camera.position.y,
+        camera.position.z + playerRadius
+      )
+    );
+    
     for (const collider of colliders) {
-      if (collider.containsPoint(camera.position)) {
-        camera.position.copy(prevPosition);
+      if (playerBox.intersectsBox(collider)) {
+        // More precise collision handling
+        const centerDiffX = camera.position.x - (collider.min.x + collider.max.x) / 2;
+        const centerDiffZ = camera.position.z - (collider.min.z + collider.max.z) / 2;
+        
+        const overlapX = Math.min(
+          Math.abs(playerBox.max.x - collider.min.x),
+          Math.abs(collider.max.x - playerBox.min.x)
+        );
+        const overlapZ = Math.min(
+          Math.abs(playerBox.max.z - collider.min.z), 
+          Math.abs(collider.max.z - playerBox.min.z)
+        );
+        
+        // Push out in the direction of least overlap to prevent seeing inside blocks
+        if (overlapX < overlapZ) {
+          // Push along X axis
+          camera.position.x = centerDiffX > 0 ? 
+            collider.max.x + playerRadius + 0.01 : 
+            collider.min.x - playerRadius - 0.01;
+        } else {
+          // Push along Z axis  
+          camera.position.z = centerDiffZ > 0 ? 
+            collider.max.z + playerRadius + 0.01 : 
+            collider.min.z - playerRadius - 0.01;
+        }
         velocity.current.y = 0;
         break;
       }
     }
     
-    // Check if standing on a block or ground for proper jumping
+    // Check if standing on a block or ground for proper jumping - improved surface detection
     const feetPosition = camera.position.clone();
     feetPosition.y -= 1.6; // Offset to feet level
     
-    let standingOnSurface = feetPosition.y <= 0; // Ground level
+    let standingOnSurface = feetPosition.y <= 0.1; // Ground level with small tolerance
     
-    // Check if standing on any block surface
+    // Check if standing on any block surface with better detection
     if (!standingOnSurface) {
       for (const collider of colliders) {
-        // Check if feet are touching the top of any collider
-        if (feetPosition.x >= collider.min.x && feetPosition.x <= collider.max.x &&
-            feetPosition.z >= collider.min.z && feetPosition.z <= collider.max.z &&
-            feetPosition.y >= collider.max.y - 0.1 && feetPosition.y <= collider.max.y + 0.1) {
+        // Check if feet are close to the top of any collider
+        const tolerance = 0.15;
+        if (feetPosition.x >= collider.min.x - tolerance && feetPosition.x <= collider.max.x + tolerance &&
+            feetPosition.z >= collider.min.z - tolerance && feetPosition.z <= collider.max.z + tolerance &&
+            Math.abs(feetPosition.y - collider.max.y) <= tolerance) {
+          // Snap to surface for stable standing
+          camera.position.y = collider.max.y + 1.6;
+          velocity.current.y = 0;
           standingOnSurface = true;
           break;
         }
@@ -547,7 +600,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
   const prevDropCount = useRef(dropCount);
   
   const fall = {
-    width: 4,
+    width: 6, // Made 2m wider (1m on each side)
     depth: 0.6,
     topY: 19.95, // cliffH - 0.05
     bottomY: 0.2,
