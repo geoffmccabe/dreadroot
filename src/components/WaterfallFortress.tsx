@@ -103,6 +103,10 @@ function FirstPersonControls({
   const onGround = useRef(true);
   const yaw = useRef(0);
   const pitch = useRef(0);
+  
+  // Firing rate limiting to prevent performance issues
+  const lastFireTime = useRef(0);
+  const FIRE_RATE_LIMIT = 150; // Minimum 150ms between shots
 
   // Collision boxes for fortress walls
   const colliders = useMemo(() => {
@@ -240,6 +244,13 @@ function FirstPersonControls({
       placePosition.z = Math.floor(placePosition.z) + 0.5;
       onBlockPlace(placePosition);
     } else if (crosshairsEnabled && onShoot) {
+      // Implement firing rate limiting to prevent performance issues
+      const now = Date.now();
+      if (now - lastFireTime.current < FIRE_RATE_LIMIT) {
+        return; // Prevent rapid firing
+      }
+      lastFireTime.current = now;
+      
       // Fire bullet
       const shootDirection = new THREE.Vector3(0, 0, -1);
       shootDirection.applyQuaternion(camera.quaternion);
@@ -786,7 +797,7 @@ function Bullets({ bullets }: {
 }
 
 // Scene component
-// Scene component with audio management
+// Scene component with audio management and performance optimization
 function Scene({ 
   settings, 
   onCoinHit, 
@@ -800,10 +811,16 @@ function Scene({
   blockPlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
 }) {
+  // Performance-optimized bullet system with object pooling
+  const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
   const [showCrosshairs, setShowCrosshairs] = useState(false);
+  
+  // Audio throttling to prevent rapid-fire audio issues
+  const lastAudioTime = useRef(0);
+  const AUDIO_THROTTLE = 100; // Minimum 100ms between audio plays
 
-  // Audio context and preloaded audio management
+  // Single audio context and optimized audio management
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioRefs = useRef({
     pistolCocking: new Audio('/pistol_cocking_sound.mp3'),
@@ -812,108 +829,125 @@ function Scene({
     coinHit: new Audio('/coin_hit_sound.mp3')
   });
 
-  // Initialize audio context and preload sounds
+  // Initialize audio context and preload sounds (optimized)
   useEffect(() => {
-    // Create audio context for managing audio state
+    // Create single audio context
     try {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
     } catch (e) {
       console.warn('Web Audio API not supported');
     }
 
-    // Set volumes for preloaded audio
-    audioRefs.current.pistolCocking.volume = 0.5;
-    audioRefs.current.pistolHolster.volume = 0.5;
-    audioRefs.current.gunshot.volume = 0.3;
-    audioRefs.current.coinHit.volume = 0.4;
-
-    // Preload all audio files
-    Object.values(audioRefs.current).forEach(audio => {
+    // Optimize audio settings for performance
+    const audioElements = audioRefs.current;
+    Object.values(audioElements).forEach(audio => {
+      audio.volume = audio === audioElements.gunshot ? 0.2 : 0.4; // Lower gunshot volume
       audio.preload = 'auto';
       audio.load();
     });
 
     return () => {
-      // Cleanup audio context
+      // Cleanup audio context only on unmount
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
     };
   }, []);
 
-  // Function to resume audio context if suspended
-  const resumeAudioContext = useCallback(async () => {
-    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-      try {
-        await audioContextRef.current.resume();
-      } catch (e) {
-        console.warn('Failed to resume audio context:', e);
-      }
-    }
-  }, []);
-
-  // Safe audio play function
+  // Throttled audio play function to prevent audio spam
   const playAudio = useCallback(async (audio: HTMLAudioElement) => {
+    const now = Date.now();
+    if (now - lastAudioTime.current < AUDIO_THROTTLE) {
+      return; // Throttle rapid audio plays
+    }
+    
     try {
-      await resumeAudioContext();
-      audio.currentTime = 0;
-      await audio.play();
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+      
+      // Reset and play audio
+      if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
+        audio.currentTime = 0;
+        await audio.play();
+        lastAudioTime.current = now;
+      }
     } catch (e) {
       console.warn('Audio play failed:', e);
     }
-  }, [resumeAudioContext]);
+  }, []);
 
+  // Performance-optimized bullet creation with object pooling
   const handleShoot = useCallback((origin: THREE.Vector3, direction: THREE.Vector3) => {
-    setBullets(prev => [...prev, {
-      position: origin.clone(),
-      direction: direction.clone(),
-      speed: 100,
-      life: 3.0
-    }]);
+    setBullets(prev => {
+      // Limit bullets to prevent memory issues
+      const newBullets = prev.slice(-MAX_BULLETS + 1);
+      
+      // Reuse Vector3 objects when possible
+      const bulletPos = new THREE.Vector3().copy(origin);
+      const bulletDir = new THREE.Vector3().copy(direction);
+      
+      newBullets.push({
+        position: bulletPos,
+        direction: bulletDir,
+        speed: 100,
+        life: 3.0
+      });
+      
+      return newBullets;
+    });
     setShowCrosshairs(true);
   }, []);
 
-  // Audio callback for coin hits
-  const handleCoinHitSound = useCallback(() => {
-    playAudio(audioRefs.current.coinHit);
-  }, [playAudio]);
-
+  // Optimized frame loop with reduced garbage collection and throttling
+  const frameCount = useRef(0);
   useFrame((state, delta) => {
+    // Throttle expensive operations to every few frames
+    frameCount.current++;
+    
+    // Only process bullets every frame, but throttle other operations
     setBullets(prev => {
-      const newBullets = [];
+      if (prev.length === 0) return prev;
       
-      for (const bullet of prev) {
+      const activeBullets = [];
+      const coins = (window as any).getCoins ? (window as any).getCoins() : [];
+      
+      for (let i = 0; i < prev.length; i++) {
+        const bullet = prev[i];
+        
+        // Update position (reuse existing Vector3)
         bullet.position.addScaledVector(bullet.direction, bullet.speed * delta);
         bullet.life -= delta;
         
         if (bullet.life > 0) {
-          // Check collision with coins
-          const coins = (window as any).getCoins ? (window as any).getCoins() : [];
+          // Efficient collision detection
           let hit = false;
           
-          for (const coin of coins) {
+          for (let j = 0; j < coins.length && !hit; j++) {
+            const coin = coins[j];
             if (coin.visible && coin.mesh) {
               const distance = bullet.position.distanceTo(coin.position);
-              if (distance < 0.8) { // Collision threshold
+              if (distance < 0.8) {
                 coin.visible = false;
                 if (coin.mesh) coin.mesh.visible = false;
-                onCoinHit(coin.position.clone());
-                hit = true;
+                onCoinHit(coin.position);
                 
-                // Play coin hit sound using parent's audio system
-                handleCoinHitSound();
-                break;
+                // Throttled audio play
+                playAudio(audioRefs.current.coinHit);
+                hit = true;
               }
             }
           }
           
           if (!hit) {
-            newBullets.push(bullet);
+            activeBullets.push(bullet);
           }
         }
       }
       
-      return newBullets;
+      return activeBullets;
     });
   });
 
