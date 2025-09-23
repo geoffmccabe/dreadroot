@@ -14,7 +14,7 @@ import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
 import { Inventory } from '@/components/Inventory';
 import { useUserData } from '@/hooks/useUserData';
-import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
+import { useBlocks } from '@/contexts/BlocksContext';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -123,8 +123,8 @@ function FirstPersonControls({
   const yaw = useRef(0);
   const pitch = useRef(0);
   
-  // Get existing blocks from parent context
-  const { blocks: existingBlocks, setBlockMode } = usePlacedBlocksWithCache();
+  // Get existing blocks from shared context
+  const { blocks: existingBlocks } = useBlocks();
   
   // Firing rate limiting to prevent performance issues
   const lastFireTime = useRef(0);
@@ -304,6 +304,14 @@ function FirstPersonControls({
     
     camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
   }, [camera]);
+
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (!isLocked.current || !blockPlacementMode) return;
+    
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? 'next' : 'prev';
+    onCycleBlock(direction);
+  }, [blockPlacementMode, onCycleBlock]);
 
   const handleClick = useCallback(() => {
     console.log('Click detected, isLocked:', isLocked.current, 'blockPlacementMode:', blockPlacementMode);
@@ -511,6 +519,7 @@ function FirstPersonControls({
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
     document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('wheel', handleWheel);
     document.addEventListener('pointerlockchange', handlePointerLockChange);
     gl.domElement.addEventListener('click', handleClick);
 
@@ -518,10 +527,11 @@ function FirstPersonControls({
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
       document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('wheel', handleWheel);
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
       gl.domElement.removeEventListener('click', handleClick);
     };
-  }, [handleKeyDown, handleKeyUp, handleMouseMove, handlePointerLockChange, handleClick, gl.domElement]);
+  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, gl.domElement]);
 
   useFrame((state, delta) => {
     // Movement input
@@ -1512,7 +1522,7 @@ export default function WaterfallFortress() {
   
   // User data and block system hooks
   const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
-  const { placeBlock, setBlockMode } = usePlacedBlocksWithCache();
+  const { placeBlock, setBlockMode } = useBlocks();
   const { toast } = useToast();
 
   const handleSettingsChange = (key: string, value: any) => {
@@ -1591,12 +1601,21 @@ export default function WaterfallFortress() {
     }
     
     // Place block in the world
-    const result = await placeBlock(position.x, position.y, position.z, selectedBlockType);
-    if (result) {
-      console.log('Block placed successfully:', result);
+    try {
+      const placedBlock = await placeBlock(position.x, position.y, position.z, selectedBlockType);
+      if (placedBlock) {
+        console.log('Block placed successfully:', placedBlock);
+        toast({
+          title: "Block placed!",
+          description: `${selectedBlockType} placed at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to place block:', error);
       toast({
-        title: "Block placed!",
-        description: `${selectedBlockType} placed at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
+        title: "Block placement failed",
+        description: "There was an error placing the block",
+        variant: "destructive"
       });
     }
   }, [selectedBlockType, inventory, useBlock, placeBlock, toast]);
