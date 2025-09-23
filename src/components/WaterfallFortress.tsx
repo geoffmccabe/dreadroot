@@ -175,6 +175,13 @@ function FirstPersonControls({
   }, [existingBlocks]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Don't process key events when dialogs are open or input fields are focused
+    if (shopOpen || inventoryOpen || 
+        document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA') {
+      return;
+    }
+    
     switch (event.code) {
       case 'KeyW':
       case 'ArrowUp':
@@ -250,6 +257,13 @@ function FirstPersonControls({
   }, [crosshairsEnabled, onModeChange, onOpenShop, onOpenInventory, getBlockQuantity, selectedBlockType, shopOpen, inventoryOpen]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
+    // Don't process key events when dialogs are open or input fields are focused
+    if (shopOpen || inventoryOpen || 
+        document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA') {
+      return;
+    }
+    
     switch (event.code) {
       case 'KeyW':
       case 'ArrowUp':
@@ -530,32 +544,54 @@ function FirstPersonControls({
     
     for (const collider of colliders) {
       if (playerBox.intersectsBox(collider)) {
-        // More precise collision handling
+        // Calculate overlaps on all axes
         const centerDiffX = camera.position.x - (collider.min.x + collider.max.x) / 2;
+        const centerDiffY = camera.position.y - (collider.min.y + collider.max.y) / 2;
         const centerDiffZ = camera.position.z - (collider.min.z + collider.max.z) / 2;
         
         const overlapX = Math.min(
           Math.abs(playerBox.max.x - collider.min.x),
           Math.abs(collider.max.x - playerBox.min.x)
         );
+        const overlapY = Math.min(
+          Math.abs(playerBox.max.y - collider.min.y),
+          Math.abs(collider.max.y - playerBox.min.y)
+        );
         const overlapZ = Math.min(
           Math.abs(playerBox.max.z - collider.min.z), 
           Math.abs(collider.max.z - playerBox.min.z)
         );
         
-        // Push out in the direction of least overlap to prevent seeing inside blocks
-        if (overlapX < overlapZ) {
+        // Resolve collision in direction of smallest overlap
+        if (overlapY <= overlapX && overlapY <= overlapZ) {
+          // Vertical collision
+          if (centerDiffY > 0) {
+            // Landing on top - only if moving downward
+            if (velocity.current.y <= 0) {
+              camera.position.y = collider.max.y + playerHeight;
+              velocity.current.y = 0;
+              onGround.current = true;
+            }
+          } else {
+            // Hitting from below - only if moving upward  
+            if (velocity.current.y > 0) {
+              camera.position.y = collider.min.y;
+              velocity.current.y = 0;
+            }
+          }
+        } else if (overlapX <= overlapZ) {
           // Push along X axis
           camera.position.x = centerDiffX > 0 ? 
             collider.max.x + playerRadius + 0.01 : 
             collider.min.x - playerRadius - 0.01;
+          // Don't reset Y velocity for horizontal collisions
         } else {
           // Push along Z axis  
           camera.position.z = centerDiffZ > 0 ? 
             collider.max.z + playerRadius + 0.01 : 
             collider.min.z - playerRadius - 0.01;
+          // Don't reset Y velocity for horizontal collisions
         }
-        velocity.current.y = 0;
         break;
       }
     }
@@ -564,26 +600,26 @@ function FirstPersonControls({
     const feetPosition = camera.position.clone();
     feetPosition.y -= 1.6; // Offset to feet level
     
-    let standingOnSurface = feetPosition.y <= 0.1; // Ground level with small tolerance
+    let standingOnSurface = feetPosition.y <= 0.05; // Ground level with tighter tolerance
     
-    // Check if standing on any block surface with better detection
-    if (!standingOnSurface) {
+    // Check if standing on any block surface - only when not already colliding vertically
+    if (!standingOnSurface && velocity.current.y <= 0.1) {
       for (const collider of colliders) {
-        // Check if feet are close to the top of any collider
-        const tolerance = 0.15;
-        if (feetPosition.x >= collider.min.x - tolerance && feetPosition.x <= collider.max.x + tolerance &&
-            feetPosition.z >= collider.min.z - tolerance && feetPosition.z <= collider.max.z + tolerance &&
+        // Check if feet are directly on top of a block surface
+        const tolerance = 0.05; // Much tighter tolerance
+        if (feetPosition.x >= collider.min.x - 0.3 && feetPosition.x <= collider.max.x + 0.3 &&
+            feetPosition.z >= collider.min.z - 0.3 && feetPosition.z <= collider.max.z + 0.3 &&
             Math.abs(feetPosition.y - collider.max.y) <= tolerance) {
-          // Snap to surface for stable standing
-          camera.position.y = collider.max.y + 1.6;
-          velocity.current.y = 0;
           standingOnSurface = true;
           break;
         }
       }
     }
     
-    onGround.current = standingOnSurface;
+    // Only update ground state if not in a vertical collision
+    if (!standingOnSurface || velocity.current.y > 0.1) {
+      onGround.current = standingOnSurface;
+    }
   });
 
   return null;
