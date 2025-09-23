@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useUserData } from '@/hooks/useUserData';
 import { Card } from '@/components/ui/card';
 
@@ -10,6 +12,7 @@ interface InventoryProps {
 
 export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
   const { profile, inventory, isLoading } = useUserData();
+  const [blockchainAddress, setBlockchainAddress] = useState('');
 
   if (isLoading) {
     return (
@@ -40,6 +43,23 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
                 <span className="font-medium">Coins</span>
               </div>
               <span className="font-bold text-lg">{profile?.coins || 0}</span>
+            </div>
+          </Card>
+
+          {/* Blockchain Address */}
+          <Card className="p-4">
+            <div className="space-y-2">
+              <Label htmlFor="blockchain-address" className="text-sm font-medium">
+                Waterfall Blockchain Address
+              </Label>
+              <Input
+                id="blockchain-address"
+                type="text"
+                placeholder="0x...."
+                value={blockchainAddress}
+                onChange={(e) => setBlockchainAddress(e.target.value)}
+                className="placeholder:text-muted-foreground/50"
+              />
             </div>
           </Card>
 
