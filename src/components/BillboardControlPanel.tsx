@@ -14,7 +14,7 @@ interface BillboardControlPanelProps {
 }
 
 export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible, onWallPositionsChange }) => {
-  const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia, savePendingChanges } = useBillboardData();
+  const { walls, screenUrls, mediaItems, updateScreenUrl, updateMediaItem, updateWallPosition, uploadMedia } = useBillboardData();
   const { toast } = useToast();
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -497,41 +497,11 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                        <option value={3}>Wall 3</option>
                        <option value={4}>Wall 4</option>
                      </select>
-                   </div>
-                   
-                   <Button 
-                     onClick={async () => {
-                       console.log('💾 Save button clicked');
-                       const result = await savePendingChanges();
-                        if (result.success) {
-                          if (result.count > 0) {
-                            toast({
-                              title: "Positions Saved",
-                              description: `Successfully saved ${result.count} wall position(s).`
-                            });
-                          } else {
-                            toast({
-                              title: "No Changes",
-                              description: "No position changes to save."
-                            });
-                          }
-                        } else {
-                          toast({
-                            title: "Save Failed",
-                            description: `Failed to save wall positions. Error: ${result.error?.message || 'Unknown error'}`,
-                            variant: "destructive"
-                          });
-                        }
-                     }}
-                     size="sm"
-                     variant="outline"
-                     className="border-slate-600 bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white"
-                   >
-                     💾 Save Positions
-                   </Button>
-                 </div>
+                    </div>
+                    
+                  </div>
 
-                {(() => {
+                 {(() => {
                   const wall = walls.find(w => w.wall_number === selectedWallForMoving);
                   return wall ? (
                     <div className="space-y-3">
