@@ -11,6 +11,8 @@ import { BillboardControlPanel } from '@/components/BillboardControlPanel';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { BlockShop } from '@/components/BlockShop';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
+import { BlockPreview } from '@/components/BlockPreview';
+import { Inventory } from '@/components/Inventory';
 import { useUserData } from '@/hooks/useUserData';
 import { usePlacedBlocks } from '@/hooks/usePlacedBlocks';
 import { Toaster } from '@/components/ui/toaster';
@@ -169,18 +171,20 @@ function FirstPersonControls({
         event.preventDefault();
         break;
       case 'KeyR':
-        const newCrosshairsState = !crosshairsEnabled;
-        setCrosshairsEnabled(newCrosshairsState);
-        
-        // Dispatch custom event to notify parent component
-        const crosshairEvent = new CustomEvent('crosshairChange', { 
-          detail: { enabled: newCrosshairsState } 
-        });
-        window.dispatchEvent(crosshairEvent);
-        
-        // Play appropriate gun sound using preloaded audio
-        const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
-        playAudio(audio);
+        if (!blockPlacementMode) {
+          const newCrosshairsState = !crosshairsEnabled;
+          setCrosshairsEnabled(newCrosshairsState);
+          
+          // Dispatch custom event to notify parent component
+          const crosshairEvent = new CustomEvent('crosshairChange', { 
+            detail: { enabled: newCrosshairsState } 
+          });
+          window.dispatchEvent(crosshairEvent);
+          
+          // Play appropriate gun sound using preloaded audio
+          const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
+          playAudio(audio);
+        }
         break;
       case 'Escape':
         if (isLocked.current) {
@@ -235,14 +239,29 @@ function FirstPersonControls({
     if (!isLocked.current) {
       gl.domElement.requestPointerLock();
     } else if (blockPlacementMode && onBlockPlace) {
-      // Place block at ground level in front of player
+      // Place block at the preview position with restrictions
       const forwardDirection = new THREE.Vector3(0, 0, -1);
       forwardDirection.applyQuaternion(camera.quaternion);
       const placePosition = camera.position.clone().add(forwardDirection.multiplyScalar(3));
-      placePosition.y = Math.floor(placePosition.y) + 0.5; // Snap to grid and center
+      
+      // Snap to voxel grid
       placePosition.x = Math.floor(placePosition.x) + 0.5;
+      placePosition.y = Math.max(0.5, Math.floor(placePosition.y + 0.5) + 0.5);
       placePosition.z = Math.floor(placePosition.z) + 0.5;
-      onBlockPlace(placePosition);
+      
+      // Check placement restrictions
+      const fortressCenter = new THREE.Vector3(0, 0, -20);
+      const distanceToFortress = placePosition.distanceTo(fortressCenter);
+      const waterfallZ = -6;
+      const waterfallBlockingWidth = 8;
+      
+      // Validate placement
+      const tooCloseToFortress = distanceToFortress < 30;
+      const blockingWaterfall = Math.abs(placePosition.x) < waterfallBlockingWidth / 2 && placePosition.z > waterfallZ;
+      
+      if (!tooCloseToFortress && !blockingWaterfall) {
+        onBlockPlace(placePosition);
+      }
     } else if (crosshairsEnabled && onShoot) {
       // Implement firing rate limiting to prevent performance issues
       const now = Date.now();
@@ -803,13 +822,19 @@ function Scene({
   onCoinHit, 
   wallPositions, 
   blockPlacementMode, 
-  onBlockPlace 
+  onBlockPlace,
+  onModeChange,
+  onOpenShop,
+  onOpenInventory
 }: { 
   settings: any; 
   onCoinHit: (position: THREE.Vector3) => void; 
   wallPositions?: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
   blockPlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
+  onModeChange?: (mode: 'shooting' | 'building' | null) => void;
+  onOpenShop?: () => void;
+  onOpenInventory?: () => void;
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -1149,6 +1174,7 @@ export default function WaterfallFortress() {
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
   
   // Wall positions state for real-time control
@@ -1223,6 +1249,32 @@ export default function WaterfallFortress() {
     return item?.quantity || 0;
   };
 
+  // Mode change handler
+  const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
+    if (mode === 'building') {
+      // Only allow block mode if user has blocks
+      if (getBlockQuantity('fortress_block') > 0) {
+        setSelectedBlockType('fortress_block');
+        setCrosshairsEnabled(false);
+      }
+    } else if (mode === 'shooting') {
+      setSelectedBlockType(null);
+      setCrosshairsEnabled(true);
+    } else {
+      setSelectedBlockType(null);
+      setCrosshairsEnabled(false);
+    }
+  }, [inventory]);
+
+  // Shop and inventory handlers
+  const handleOpenShop = useCallback(() => {
+    setShopOpen(true);
+  }, []);
+
+  const handleOpenInventory = useCallback(() => {
+    setInventoryOpen(true);
+  }, []);
+
   // Listen for crosshair state changes from FirstPersonControls
   useEffect(() => {
     const handleCrosshairChange = (event: CustomEvent) => {
@@ -1250,6 +1302,14 @@ export default function WaterfallFortress() {
         blockPlacementMode={!!selectedBlockType}
         onBlockPlace={handleBlockPlace}
       />
+      
+      {/* Block Preview */}
+      {selectedBlockType && (
+        <BlockPreview 
+          blockType={selectedBlockType}
+          visible={true}
+        />
+      )}
     </Canvas>
 
     {/* Flying coin animations */}
@@ -1296,13 +1356,24 @@ export default function WaterfallFortress() {
     
     {/* Score display and block inventory */}
     <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2">
-      {/* Coin display - clickable to open shop */}
-      <div 
-        className="flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer hover:bg-black/70 transition-colors"
-        onClick={() => setShopOpen(true)}
-      >
-        <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
-        <span className="font-bold">x{profile?.coins || 0}</span>
+      {/* Coin display with separated click areas */}
+      <div className="flex items-center gap-0 bg-black/50 text-white rounded">
+        {/* Shooting mode button area (around coin icon) */}
+        <div 
+          className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-l"
+          onClick={() => handleModeChange('shooting')}
+          title="Switch to shooting mode"
+        >
+          <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+        </div>
+        {/* Coin count (clickable to open shop) */}
+        <div 
+          className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-r border-l border-white/20"
+          onClick={() => handleOpenShop()}
+          title="Open shop"
+        >
+          <span className="font-bold">x{profile?.coins || 0}</span>
+        </div>
       </div>
       
       {/* Block inventory */}
@@ -1312,7 +1383,8 @@ export default function WaterfallFortress() {
             className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
               selectedBlockType === 'fortress_block' ? 'bg-blue-500/70' : 'hover:bg-black/70'
             }`}
-            onClick={() => setSelectedBlockType(selectedBlockType === 'fortress_block' ? null : 'fortress_block')}
+            onClick={() => handleModeChange(selectedBlockType === 'fortress_block' ? null : 'building')}
+            title="Toggle block placement mode"
           >
             <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
               <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
@@ -1326,8 +1398,10 @@ export default function WaterfallFortress() {
     {/* Instructions */}
     {panelsVisible && (
       <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
-        {selectedBlockType ? 'Click to place block' : 'Press R for crosshairs • Click to shoot'}
-        {selectedBlockType && <div className="text-xs opacity-75">Click block icon to deselect</div>}
+        <div>{selectedBlockType ? 'Click to place block • ESC to cancel' : 'R for crosshairs • Click to shoot'}</div>
+        <div className="text-xs opacity-75 mt-1">
+          B = Block mode • O = Open Shop • I = Inventory
+        </div>
       </div>
     )}
     
@@ -1336,6 +1410,12 @@ export default function WaterfallFortress() {
       isOpen={shopOpen}
       onClose={() => setShopOpen(false)}
       onBlockPurchased={handleBlockPurchased}
+    />
+    
+    {/* Inventory Modal */}
+    <Inventory 
+      isOpen={inventoryOpen}
+      onClose={() => setInventoryOpen(false)}
     />
     
     {/* Crosshair - conditional class for active state */}

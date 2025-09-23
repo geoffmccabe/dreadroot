@@ -87,8 +87,14 @@ export const usePlacedBlocks = () => {
     };
   };
 
-  const placeBlock = async (x: number, y: number, z: number, blockType: string) => {
+  const placeBlock = async (x: number, y: number, z: number, blockType: string, useInventory: boolean = true) => {
     try {
+      // Check inventory if required
+      if (useInventory) {
+        // Check if user has blocks in inventory (this will be handled by the calling component)
+        // For now, we just place the block
+      }
+
       const { data, error } = await supabase
         .from('placed_blocks')
         .insert([{
