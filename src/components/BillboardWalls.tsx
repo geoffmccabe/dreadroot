@@ -159,7 +159,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
           context.fillText(urlString, canvas.width / 2, canvas.height / 2 + 50);
           
           const texture = new THREE.CanvasTexture(canvas);
-          texture.needsUpdate = true;
+          // Don't manually set needsUpdate - let THREE.js handle it
           setIframeTexture(texture);
         } catch (error) {
           console.error('Error creating iframe texture:', error);
@@ -202,7 +202,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       context.fillText('No URL Selected', canvas.width / 2, canvas.height / 2);
       
       const texture = new THREE.CanvasTexture(canvas);
-      texture.needsUpdate = true;
+      // Don't manually set needsUpdate - let THREE.js handle it
       return texture;
     }, []);
 
@@ -318,7 +318,6 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       // If no URL or not an image, clear texture
       if (!mediaUrl || mediaType !== 'image') {
         if (loadedUrlRef.current) {
-          console.log('Clearing texture - no URL or not image');
           setTexture(null);
           setLoading(false);
           loadedUrlRef.current = null;
@@ -330,7 +329,6 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
       if (loadedUrlRef.current === mediaUrl) {
         return;
       }
-      
       
       setLoading(true);
       loadedUrlRef.current = mediaUrl;
@@ -346,10 +344,9 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
             loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
             loadedTexture.minFilter = THREE.LinearFilter;
             loadedTexture.magFilter = THREE.LinearFilter;
+            // Don't manually set needsUpdate - let THREE.js handle it
             setTexture(loadedTexture);
             setLoading(false);
-            loadedTexture.needsUpdate = true;
-            
           }
         },
         undefined,
