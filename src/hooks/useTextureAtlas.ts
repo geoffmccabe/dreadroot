@@ -70,26 +70,43 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
                 const x = col * slotWidth;
                 const y = row * slotHeight;
                 
-                // Draw image to fit slot while maintaining aspect ratio
+                // Draw image to FILL slot completely (cover behavior - crop if needed)
                 const imgAspect = img.width / img.height;
                 const slotAspect = slotWidth / slotHeight;
                 
-                let drawWidth = slotWidth;
-                let drawHeight = slotHeight;
-                let drawX = x;
-                let drawY = y;
+                let drawWidth, drawHeight, drawX, drawY;
+                let sourceX = 0, sourceY = 0, sourceWidth = img.width, sourceHeight = img.height;
                 
                 if (imgAspect > slotAspect) {
-                  // Image is wider - fit to width
-                  drawHeight = slotWidth / imgAspect;
-                  drawY = y + (slotHeight - drawHeight) / 2;
+                  // Image is wider than slot - crop sides
+                  drawWidth = slotWidth;
+                  drawHeight = slotHeight;
+                  drawX = x;
+                  drawY = y;
+                  
+                  // Calculate how much to crop from sides
+                  const targetWidth = img.height * slotAspect;
+                  sourceX = (img.width - targetWidth) / 2;
+                  sourceWidth = targetWidth;
                 } else {
-                  // Image is taller - fit to height
-                  drawWidth = slotHeight * imgAspect;
-                  drawX = x + (slotWidth - drawWidth) / 2;
+                  // Image is taller than slot - crop top/bottom
+                  drawWidth = slotWidth;
+                  drawHeight = slotHeight;
+                  drawX = x;
+                  drawY = y;
+                  
+                  // Calculate how much to crop from top/bottom
+                  const targetHeight = img.width / slotAspect;
+                  sourceY = (img.height - targetHeight) / 2;
+                  sourceHeight = targetHeight;
                 }
                 
-                ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+                // Draw cropped/scaled image to fill entire slot
+                ctx.drawImage(
+                  img,
+                  sourceX, sourceY, sourceWidth, sourceHeight, // Source rectangle (crop)
+                  drawX, drawY, drawWidth, drawHeight // Destination rectangle (slot)
+                );
                 resolve();
               };
               
