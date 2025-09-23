@@ -85,6 +85,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
         map={cliffTexture} 
         transparent 
         opacity={0.5}
+        color={0xcccccc}
       />
     </mesh>
   );

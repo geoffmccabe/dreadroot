@@ -27,7 +27,7 @@ function FortressBlock({ position, onCollision }: {
   return (
     <mesh ref={meshRef} position={position} castShadow receiveShadow>
       <boxGeometry args={[1, 1, 1]} />
-      <meshLambertMaterial map={cliffTexture} />
+      <meshLambertMaterial map={cliffTexture} color={0xcccccc} />
     </mesh>
   );
 }

@@ -1181,7 +1181,7 @@ export default function WaterfallFortress() {
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   
   // User data and block system hooks
-  const { profile, inventory, addCoins } = useUserData();
+  const { profile, inventory, addCoins, useBlock } = useUserData();
   const { placeBlock } = usePlacedBlocks();
 
   const handleSettingsChange = (key: string, value: any) => {
@@ -1233,12 +1233,18 @@ export default function WaterfallFortress() {
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
     if (!selectedBlockType) return;
     
-    const success = await placeBlock(position.x, position.y, position.z, selectedBlockType);
-    if (success) {
-      // Deduct block from inventory would be handled in the placeBlock function
-      // For now, we just place the block
+    // Check if user has blocks in inventory
+    const hasBlocks = inventory.some(item => item.item_type === selectedBlockType && item.quantity > 0);
+    if (!hasBlocks) {
+      return;
     }
-  }, [selectedBlockType, placeBlock]);
+    
+    const success = await placeBlock(position.x, position.y, position.z, selectedBlockType, true);
+    if (success) {
+      // Consume block from inventory
+      await useBlock(selectedBlockType);
+    }
+  }, [selectedBlockType, placeBlock, inventory, useBlock]);
 
   const handleBlockPurchased = useCallback(() => {
     // Refresh could be handled here if needed
