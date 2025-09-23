@@ -2,17 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useIndexedDB } from './useIndexedDB';
-
-export interface PlacedBlock {
-  id: string;
-  user_id: string | null;
-  position_x: number;
-  position_y: number;
-  position_z: number;
-  block_type: string;
-  created_at: string;
-  updated_at: string;
-}
+import { PlacedBlock } from '../types/blocks';
 
 interface DBBlock extends PlacedBlock {
   synced: boolean;

@@ -1,4 +1,4 @@
-import { PlacedBlock } from './usePlacedBlocks';
+import { PlacedBlock } from '../types/blocks';
 
 interface DBBlock extends Omit<PlacedBlock, 'created_at' | 'updated_at'> {
   created_at: string;
