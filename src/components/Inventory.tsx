@@ -76,6 +76,12 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
                 value={blockchainAddress}
                 onChange={handleAddressChange}
                 onBlur={handleAddressBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddressBlur();
+                  }
+                }}
                 className="placeholder:text-muted-foreground/50"
               />
             </div>

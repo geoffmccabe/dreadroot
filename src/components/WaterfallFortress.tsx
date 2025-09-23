@@ -15,6 +15,7 @@ import { BlockPreview } from '@/components/BlockPreview';
 import { Inventory } from '@/components/Inventory';
 import { useUserData } from '@/hooks/useUserData';
 import { usePlacedBlocks } from '@/hooks/usePlacedBlocks';
+import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 
 // Sky component with beautiful gradient
@@ -175,24 +176,28 @@ function FirstPersonControls({
   }, [existingBlocks]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    // Don't process key events when dialogs are open or input fields are focused
-    if (shopOpen || inventoryOpen || 
-        document.activeElement?.tagName === 'INPUT' || 
-        document.activeElement?.tagName === 'TEXTAREA') {
-      return;
-    }
-    
-    switch (event.code) {
-      case 'KeyW':
-      case 'ArrowUp':
-        keys.current.w = true;
-        break;
-      case 'KeyS':
-      case 'ArrowDown':
-        keys.current.s = true;
-        break;
-      case 'KeyA':
-      case 'ArrowLeft':
+  // Don't process key events when dialogs are open or input fields are focused
+  if (shopOpen || inventoryOpen || 
+      document.activeElement?.tagName === 'INPUT' || 
+      document.activeElement?.tagName === 'TEXTAREA') {
+    return;
+  }
+  
+  switch (event.code) {
+    case 'KeyI':
+      event.preventDefault(); // Prevent the 'i' from being typed in input fields
+      onOpenInventory();
+      break;
+    case 'KeyW':
+    case 'ArrowUp':
+      keys.current.w = true;
+      break;
+    case 'KeyS':
+    case 'ArrowDown':
+      keys.current.s = true;
+      break;
+    case 'KeyA':
+    case 'ArrowLeft':
         keys.current.a = true;
         break;
       case 'KeyD':
@@ -1471,6 +1476,7 @@ export default function WaterfallFortress() {
   // User data and block system hooks
   const { profile, inventory, addCoins, useBlock } = useUserData();
   const { placeBlock } = usePlacedBlocks();
+  const { toast } = useToast();
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -1532,21 +1538,31 @@ export default function WaterfallFortress() {
     
     if (!hasBlocks) {
       console.log('No blocks in inventory');
+      toast({
+        title: "No blocks available",
+        description: `You don't have any ${selectedBlockType} blocks in your inventory`,
+        variant: "destructive"
+      });
       return;
     }
     
-    console.log('Attempting to place block at:', position);
-    const success = await placeBlock(position.x, position.y, position.z, selectedBlockType, true);
-    console.log('Block placement result:', success);
-    
-    if (success) {
-      // Consume block from inventory
-      console.log('Consuming block from inventory');
-      await useBlock(selectedBlockType);
-    } else {
-      console.log('Block placement failed');
+    // Use block from inventory
+    const success = await useBlock(selectedBlockType);
+    if (!success) {
+      console.log('Failed to use block from inventory');
+      return;
     }
-  }, [selectedBlockType, placeBlock, inventory, useBlock]);
+    
+    // Place block in the world
+    const result = await placeBlock(position.x, position.y, position.z, selectedBlockType);
+    if (result) {
+      console.log('Block placed successfully:', result);
+      toast({
+        title: "Block placed!",
+        description: `${selectedBlockType} placed at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
+      });
+    }
+  }, [selectedBlockType, inventory, useBlock, placeBlock, toast]);
 
   const handleBlockPurchased = useCallback(() => {
     // Refresh could be handled here if needed
