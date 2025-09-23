@@ -199,8 +199,11 @@ function FirstPersonControls({
         break;
       case 'KeyB':
         // Toggle block placement mode
+        console.log('B key pressed, current selectedBlockType:', selectedBlockType, 'inventory blocks:', getBlockQuantity('fortress_block'));
         if (getBlockQuantity('fortress_block') > 0) {
           onModeChange(selectedBlockType ? null : 'building');
+        } else {
+          console.log('No fortress_block in inventory');
         }
         break;
       case 'KeyO':
@@ -265,9 +268,12 @@ function FirstPersonControls({
   }, [camera]);
 
   const handleClick = useCallback(() => {
+    console.log('Click detected, isLocked:', isLocked.current, 'blockPlacementMode:', blockPlacementMode);
+    
     if (!isLocked.current) {
       gl.domElement.requestPointerLock();
     } else if (blockPlacementMode && onBlockPlace) {
+      console.log('Attempting block placement...');
       // Minecraft-style block placement with surface detection
       const raycaster = new THREE.Raycaster();
       const direction = new THREE.Vector3(0, 0, -1);
@@ -1436,16 +1442,22 @@ export default function WaterfallFortress() {
 
   // Mode change handler
   const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
+    console.log('Mode change requested:', mode);
     if (mode === 'building') {
       // Only allow block mode if user has blocks
       if (getBlockQuantity('fortress_block') > 0) {
+        console.log('Setting block mode - fortress_block');
         setSelectedBlockType('fortress_block');
         setCrosshairsEnabled(false);
+      } else {
+        console.log('Cannot set block mode - no fortress_block');
       }
     } else if (mode === 'shooting') {
+      console.log('Setting shooting mode');
       setSelectedBlockType(null);
       setCrosshairsEnabled(true);
     } else {
+      console.log('Setting null mode');
       setSelectedBlockType(null);
       setCrosshairsEnabled(false);
     }
