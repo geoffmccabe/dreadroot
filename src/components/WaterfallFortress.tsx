@@ -475,16 +475,20 @@ function FirstPersonControls({
         }
       } else {
         console.log('No intersection found for block placement - raycaster may not be hitting any objects');
-        // Try fallback placement on ground if no intersection (ON grid)
-        if (camera.position.y > 1) {
-          const groundPosition = new THREE.Vector3(
-            Math.round(camera.position.x),
-            0,
-            Math.round(camera.position.z)
-          );
-          console.log('Fallback ground placement at:', groundPosition);
-          onBlockPlace(groundPosition);
-        }
+        // Try fallback placement at reasonable distance in front of player (same as BlockPreview)
+        const distance = 3;
+        const direction = new THREE.Vector3(0, 0, -1);
+        direction.applyQuaternion(camera.quaternion);
+        
+        const groundPosition = camera.position.clone().add(direction.multiplyScalar(distance));
+        
+        // Snap to voxel grid
+        groundPosition.x = Math.round(groundPosition.x);
+        groundPosition.y = Math.max(0, Math.round(groundPosition.y)); // Keep above ground
+        groundPosition.z = Math.round(groundPosition.z);
+        
+        console.log('Fallback placement 3 units ahead at:', groundPosition);
+        onBlockPlace(groundPosition);
       }
       
       // Clean up temporary objects
