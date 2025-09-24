@@ -237,12 +237,15 @@ function FirstPersonControls({
         break;
       case 'KeyB':
         // Toggle block placement mode - check for any buildable block type
-        console.log('B key pressed - selectedBlockType:', selectedBlockType);
+        console.log('B key pressed - current mode:', selectedBlockType ? 'building' : 'none');
+        
         if (selectedBlockType) {
           // Exit block mode
+          console.log('Exiting block mode');
           onModeChange(null);
         } else {
-          // Try to enter block mode with any available block
+          // Enter block mode - let the parent component handle inventory checking
+          console.log('Attempting to enter block mode');
           onModeChange('building');
         }
         break;
@@ -1640,7 +1643,8 @@ export default function WaterfallFortress() {
 
   // Mode change handler
   const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
-    console.log('Mode change requested:', mode, 'Current inventory:', inventory);
+    console.log('Mode change requested:', mode, 'Current inventory items with quantity > 0:', inventory.filter(item => item.quantity > 0).map(item => `${item.item_type}:${item.quantity}`));
+    
     if (mode === 'building') {
       // Find first available block type from inventory
       const availableItem = inventory.find(item => item.quantity > 0);
@@ -1649,6 +1653,12 @@ export default function WaterfallFortress() {
         setSelectedBlockType(availableItem.item_type);
         setCrosshairsEnabled(false);
         setBlockMode(true); // Enable periodic syncing
+        
+        toast({
+          title: "Block mode enabled",
+          description: `Press left click to place ${availableItem.item_type}. Press B to exit.`,
+          duration: 3000
+        });
       } else {
         console.log('Cannot set block mode - no blocks available in inventory:', inventory);
         toast({
@@ -1663,10 +1673,18 @@ export default function WaterfallFortress() {
       setCrosshairsEnabled(true);
       setBlockMode(false); // Disable periodic syncing
     } else {
-      console.log('Setting null mode');
+      console.log('Setting null mode (exit block mode)');
       setSelectedBlockType(null);
       setCrosshairsEnabled(false);
       setBlockMode(false); // Disable periodic syncing
+      
+      if (mode === null) {
+        toast({
+          title: "Block mode disabled",
+          description: "Press B to re-enter block placement mode",
+          duration: 2000
+        });
+      }
     }
   }, [inventory, setBlockMode, toast]);
 
