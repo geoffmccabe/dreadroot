@@ -60,13 +60,13 @@ const PlacedBlockComponent = React.memo(({
     return new THREE.MeshLambertMaterial(materialProps);
   }, [texture, blockDef]);
 
-  // Create collision box only once per block
+  // Create collision box only once per block - removed onCollision from deps to prevent loop
   React.useEffect(() => {
     if (meshRef.current && onCollision) {
       const box = new THREE.Box3().setFromObject(meshRef.current);
       onCollision(box, blockId);
     }
-  }, [blockId, onCollision]);
+  }, [blockId]); // Removed onCollision from dependencies to prevent infinite loop
 
   // Clean up material when component unmounts
   React.useEffect(() => {

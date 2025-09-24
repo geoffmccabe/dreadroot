@@ -1594,7 +1594,18 @@ export default function WaterfallFortress() {
   }, [addCoins]);
 
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
-    console.log('handleBlockPlace called with:', position, 'selectedBlockType:', selectedBlockType);
+    console.log('=== BLOCK PLACEMENT START ===');
+    console.log('handleBlockPlace called with position:', {
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      rounded: {
+        x: Math.round(position.x),
+        y: Math.round(position.y),
+        z: Math.round(position.z)
+      }
+    });
+    console.log('selectedBlockType:', selectedBlockType);
     
     if (!selectedBlockType) {
       console.log('No selectedBlockType');
@@ -1622,11 +1633,19 @@ export default function WaterfallFortress() {
       return;
     }
     
-    // Place block in the world
+    // Place block in the world with rounded coordinates for grid alignment
     try {
-      const placedBlock = await placeBlock(position.x, position.y, position.z, selectedBlockType);
+      const roundedPos = {
+        x: Math.round(position.x),
+        y: Math.round(position.y), 
+        z: Math.round(position.z)
+      };
+      console.log('Placing block at rounded position:', roundedPos);
+      
+      const placedBlock = await placeBlock(roundedPos.x, roundedPos.y, roundedPos.z, selectedBlockType);
       if (placedBlock) {
         console.log('Block placed successfully:', placedBlock);
+        console.log('Block should appear at:', `(${placedBlock.position_x}, ${placedBlock.position_y}, ${placedBlock.position_z})`);
         
         // Play placement sound
         try {
@@ -1638,9 +1657,10 @@ export default function WaterfallFortress() {
         
         toast({
           title: "✓ Block placed!",
-          description: `${selectedBlockType} placed at (${Math.round(position.x)}, ${Math.round(position.y)}, ${Math.round(position.z)})`,
+          description: `${selectedBlockType} placed at (${placedBlock.position_x}, ${placedBlock.position_y}, ${placedBlock.position_z})`,
         });
-        
+      } else {
+        console.log('placeBlock returned null/undefined');
       }
     } catch (error) {
       console.error('Failed to place block:', error);
