@@ -91,6 +91,7 @@ export const PlacedBlocks: React.FC<{
   // Debug logging and force re-render when blocks change
   React.useEffect(() => {
     console.log('PlacedBlocks component updated - total blocks:', blocks.length);
+    console.log('PlacedBlocks received blocks array:', blocks);
     if (blocks.length > 0) {
       console.log('Block types present:', [...new Set(blocks.map(b => b.block_type))]);
       console.log('Block positions:', blocks.map(b => `${b.block_type} at (${b.position_x}, ${b.position_y}, ${b.position_z})`));

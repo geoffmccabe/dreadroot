@@ -1535,11 +1535,6 @@ export default function WaterfallFortress() {
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { toast } = useToast();
   
-  // Force re-render state for immediate block updates
-  const [renderKey, setRenderKey] = useState(0);
-  const forceRender = useCallback(() => {
-    setRenderKey(prev => prev + 1);
-  }, []);
   
   // Main component audio refs for placement sounds
   const mainAudioRefs = useRef({
@@ -1646,8 +1641,6 @@ export default function WaterfallFortress() {
           description: `${selectedBlockType} placed at (${Math.round(position.x)}, ${Math.round(position.y)}, ${Math.round(position.z)})`,
         });
         
-        // Force a re-render to ensure block appears immediately
-        forceRender();
       }
     } catch (error) {
       console.error('Failed to place block:', error);
@@ -1797,8 +1790,7 @@ export default function WaterfallFortress() {
         dpr={[1, 2]}
       >
       <Scene
-        key={`scene-${renderKey}`}
-        settings={settings} 
+        settings={settings}
         onCoinHit={handleCoinHit} 
         wallPositions={wallPositions}
         blockPlacementMode={!!selectedBlockType}
