@@ -131,7 +131,7 @@ export const PlacedBlocks: React.FC<{
       {blocks.map((block) => (
         <PlacedBlockComponent
           key={block.id}
-          position={[block.position_x, block.position_y, block.position_z]}
+          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
           blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}

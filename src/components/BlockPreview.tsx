@@ -70,7 +70,14 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     newPosition.z = Math.round(newPosition.z);
     
     setPreviewPosition(newPosition);
-    meshRef.current.position.copy(newPosition);
+    
+    // Apply the 0.5 offset for rendering
+    const renderPosition = new THREE.Vector3(
+      newPosition.x + 0.5, 
+      newPosition.y + 0.5, 
+      newPosition.z + 0.5
+    );
+    meshRef.current.position.copy(renderPosition);
     
     // Change material based on valid placement and block properties
     const material = meshRef.current.material as THREE.MeshLambertMaterial;
@@ -103,7 +110,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
   if (!visible) return null;
 
   return (
-    <mesh ref={meshRef} position={previewPosition}>
+    <mesh ref={meshRef} position={[0, 0, 0]}>
       <boxGeometry args={[1, 1, 1]} />
       <meshLambertMaterial 
         map={texture}
