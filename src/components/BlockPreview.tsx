@@ -64,10 +64,10 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     const distance = 3;
     const newPosition = camera.position.clone().add(direction.multiplyScalar(distance));
     
-    // Snap to voxel grid (1 unit blocks)
-    newPosition.x = Math.floor(newPosition.x) + 0.5;
-    newPosition.y = Math.max(0.5, Math.floor(newPosition.y + 0.5) + 0.5); // Keep above ground
-    newPosition.z = Math.floor(newPosition.z) + 0.5;
+    // Snap to voxel grid (1 unit blocks) - place ON grid, not between
+    newPosition.x = Math.round(newPosition.x);
+    newPosition.y = Math.max(0, Math.round(newPosition.y)); // Keep above ground
+    newPosition.z = Math.round(newPosition.z);
     
     setPreviewPosition(newPosition);
     meshRef.current.position.copy(newPosition);

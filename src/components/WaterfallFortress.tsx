@@ -423,13 +423,13 @@ function FirstPersonControls({
           // Calculate placement position adjacent to hit surface
           const placePosition = hitPoint.clone().add(normal.clone().multiplyScalar(0.5));
           
-          // Snap to voxel grid
-          placePosition.x = Math.floor(placePosition.x) + 0.5;
-          placePosition.y = Math.floor(placePosition.y) + 0.5;
-          placePosition.z = Math.floor(placePosition.z) + 0.5;
+          // Snap to voxel grid (place ON grid positions, not between)
+          placePosition.x = Math.round(placePosition.x);
+          placePosition.y = Math.round(placePosition.y);
+          placePosition.z = Math.round(placePosition.z);
           
-          // Ensure minimum height
-          placePosition.y = Math.max(0.5, placePosition.y);
+          // Ensure minimum height (place ON grid, not between)
+          placePosition.y = Math.max(0, Math.round(placePosition.y));
           
           console.log('Calculated placement position:', placePosition);
           
@@ -475,12 +475,12 @@ function FirstPersonControls({
         }
       } else {
         console.log('No intersection found for block placement - raycaster may not be hitting any objects');
-        // Try fallback placement on ground if no intersection
+        // Try fallback placement on ground if no intersection (ON grid)
         if (camera.position.y > 1) {
           const groundPosition = new THREE.Vector3(
-            Math.floor(camera.position.x) + 0.5,
-            0.5,
-            Math.floor(camera.position.z) + 0.5
+            Math.round(camera.position.x),
+            0,
+            Math.round(camera.position.z)
           );
           console.log('Fallback ground placement at:', groundPosition);
           onBlockPlace(groundPosition);
