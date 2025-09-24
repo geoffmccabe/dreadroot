@@ -1626,9 +1626,11 @@ export default function WaterfallFortress() {
     }
   }, [selectedBlockType, inventory, useBlock, placeBlock, toast]);
 
-  const handleBlockPurchased = useCallback(() => {
+  const handleBlockPurchased = useCallback(async () => {
     // Refresh user data to update inventory and coin count
-    refreshData();
+    console.log('Block purchased, refreshing data...');
+    await refreshData();
+    console.log('Data refreshed after purchase');
   }, [refreshData]);
 
   const getBlockQuantity = (itemType: string) => {
@@ -1670,13 +1672,35 @@ export default function WaterfallFortress() {
 
   // Cycle through available blocks with mouse wheel
   const cycleSelectedBlock = useCallback((direction: 'next' | 'prev') => {
-    if (!selectedBlockType) return;
-    
     const availableBlocks = inventory.filter(item => item.quantity > 0);
+    if (availableBlocks.length === 0) return;
+    
+    // If no block is selected, select the first one
+    if (!selectedBlockType) {
+      const firstBlock = availableBlocks[0];
+      setSelectedBlockType(firstBlock.item_type);
+      toast({
+        title: "Block selected",
+        description: `Selected ${firstBlock.item_type} (${firstBlock.quantity} available)`,
+        duration: 1000
+      });
+      return;
+    }
+    
     if (availableBlocks.length <= 1) return;
     
     const currentIndex = availableBlocks.findIndex(item => item.item_type === selectedBlockType);
-    if (currentIndex === -1) return;
+    if (currentIndex === -1) {
+      // Current block not found, select the first available
+      const firstBlock = availableBlocks[0];
+      setSelectedBlockType(firstBlock.item_type);
+      toast({
+        title: "Block selected", 
+        description: `Selected ${firstBlock.item_type} (${firstBlock.quantity} available)`,
+        duration: 1000
+      });
+      return;
+    }
     
     let nextIndex;
     if (direction === 'next') {

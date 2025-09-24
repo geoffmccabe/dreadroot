@@ -121,25 +121,37 @@ export const useUserData = () => {
     }
 
     try {
+      console.log(`Starting purchase: ${itemType} for ${cost} coins. Current coins: ${profile.coins}`);
+      
       // Deduct coins
+      const newCoinAmount = profile.coins - cost;
       const { error: coinsError } = await supabase
         .from('user_profiles')
-        .update({ coins: profile.coins - cost })
+        .update({ coins: newCoinAmount })
         .eq('id', profile.id);
 
-      if (coinsError) throw coinsError;
+      if (coinsError) {
+        console.error('Error updating coins:', coinsError);
+        throw coinsError;
+      }
+      console.log(`Coins updated: ${profile.coins} -> ${newCoinAmount}`);
 
       // Add to inventory
       const existingItem = inventory.find(item => item.item_type === itemType);
       
       if (existingItem) {
         // Update existing inventory item
+        const newQuantity = existingItem.quantity + 1;
         const { error: updateError } = await supabase
           .from('user_inventory')
-          .update({ quantity: existingItem.quantity + 1 })
+          .update({ quantity: newQuantity })
           .eq('id', existingItem.id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('Error updating inventory:', updateError);
+          throw updateError;
+        }
+        console.log(`Inventory updated: ${itemType} quantity ${existingItem.quantity} -> ${newQuantity}`);
       } else {
         // Create new inventory item
         const { error: insertError } = await supabase
@@ -150,9 +162,16 @@ export const useUserData = () => {
             quantity: 1
           }]);
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('Error inserting inventory item:', insertError);
+          throw insertError;
+        }
+        console.log(`New inventory item created: ${itemType} with quantity 1`);
       }
 
+      // Update local state immediately for better UX
+      setProfile(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+      
       // Refresh data
       await loadUserData();
       

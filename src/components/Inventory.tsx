@@ -97,26 +97,28 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
           {/* Blocks */}
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-muted-foreground">Blocks</h3>
-            {inventory.length === 0 ? (
+            {inventory.filter(item => item.quantity > 0).length === 0 ? (
               <Card className="p-4 text-center text-muted-foreground">
                 No blocks in inventory
               </Card>
             ) : (
-              inventory.map((item) => (
-                <Card key={item.id} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
-                        <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
+              inventory
+                .filter(item => item.quantity > 0)
+                .map((item) => (
+                  <Card key={item.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
+                          <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
+                        </div>
+                        <span className="font-medium capitalize">
+                          {item.item_type.replace('_', ' ')}
+                        </span>
                       </div>
-                      <span className="font-medium capitalize">
-                        {item.item_type.replace('_', ' ')}
-                      </span>
+                      <span className="font-bold">x{item.quantity}</span>
                     </div>
-                    <span className="font-bold">x{item.quantity}</span>
-                  </div>
-                </Card>
-              ))
+                  </Card>
+                ))
             )}
           </div>
         </div>
