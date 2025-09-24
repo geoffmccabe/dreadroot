@@ -189,7 +189,8 @@ export const usePlacedBlocksWithCache = () => {
         console.log('Adding new block to state, previous count:', prev.length);
         const updated = [...prev, optimisticBlock];
         console.log('New block count:', updated.length);
-        return updated;
+        // Force immediate re-render by creating new array reference  
+        return [...updated];
       });
 
       // Add to IndexedDB (not synced yet)

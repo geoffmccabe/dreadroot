@@ -94,6 +94,7 @@ export const PlacedBlocks: React.FC<{
     if (blocks.length > 0) {
       console.log('Block types present:', [...new Set(blocks.map(b => b.block_type))]);
       console.log('Block positions:', blocks.map(b => `${b.block_type} at (${b.position_x}, ${b.position_y}, ${b.position_z})`));
+      console.log('Block IDs:', blocks.map(b => b.id));
     }
   }, [blocks]);
 
@@ -128,14 +129,14 @@ export const PlacedBlocks: React.FC<{
     <>
       {blocks.map((block) => (
         <PlacedBlockComponent
-          key={`${block.id}-${block.position_x}-${block.position_y}-${block.position_z}`}
+          key={block.id}
           position={[block.position_x, block.position_y, block.position_z]}
           blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}
         />
       ))}
-      <group key={`block-group-${blocks.length}`} />
+      <group key={`render-trigger-${blocks.length}-${Date.now()}`} />
     </>
   );
 };

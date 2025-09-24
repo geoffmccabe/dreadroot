@@ -1190,7 +1190,8 @@ function Scene({
     pistolCocking: new Audio('/pistol_cocking_sound.mp3'),
     pistolHolster: new Audio('/holster_pistol_sound.mp3'),
     gunshot: new Audio('/space_gunshot.mp3'),
-    coinHit: new Audio('/coin_hit_sound.mp3')
+    coinHit: new Audio('/coin_hit_sound.mp3'),
+    woodenThud: new Audio('/wooden_thud_sound.mp3')
   });
 
   // Initialize audio context and preload sounds (optimized)
@@ -1533,6 +1534,23 @@ export default function WaterfallFortress() {
   const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { toast } = useToast();
+  
+  // Force re-render state for immediate block updates
+  const [renderKey, setRenderKey] = useState(0);
+  const forceRender = useCallback(() => {
+    setRenderKey(prev => prev + 1);
+  }, []);
+  
+  // Main component audio refs for placement sounds
+  const mainAudioRefs = useRef({
+    woodenThud: new Audio('/wooden_thud_sound.mp3')
+  });
+  
+  // Initialize main audio
+  useEffect(() => {
+    mainAudioRefs.current.woodenThud.preload = 'auto';
+    mainAudioRefs.current.woodenThud.load();
+  }, []);
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -1614,10 +1632,22 @@ export default function WaterfallFortress() {
       const placedBlock = await placeBlock(position.x, position.y, position.z, selectedBlockType);
       if (placedBlock) {
         console.log('Block placed successfully:', placedBlock);
+        
+        // Play placement sound
+        try {
+          mainAudioRefs.current.woodenThud.currentTime = 0;
+          await mainAudioRefs.current.woodenThud.play();
+        } catch (audioError) {
+          console.log('Audio play failed:', audioError);
+        }
+        
         toast({
-          title: "Block placed!",
-          description: `${selectedBlockType} placed at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
+          title: "✓ Block placed!",
+          description: `${selectedBlockType} placed at (${Math.round(position.x)}, ${Math.round(position.y)}, ${Math.round(position.z)})`,
         });
+        
+        // Force a re-render to ensure block appears immediately
+        forceRender();
       }
     } catch (error) {
       console.error('Failed to place block:', error);
@@ -1766,7 +1796,8 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
-      <Scene 
+      <Scene
+        key={`scene-${renderKey}`}
         settings={settings} 
         onCoinHit={handleCoinHit} 
         wallPositions={wallPositions}
