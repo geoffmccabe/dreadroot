@@ -99,10 +99,8 @@ export const PlacedBlocks: React.FC<{
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
     collisionBoxes.current.set(blockId, box);
-    if (onCollision) {
-      onCollision(Array.from(collisionBoxes.current.values()));
-    }
-  }, [onCollision]);
+    // Don't call onCollision here - let the effect handle it
+  }, []);
 
   // Only update collision boxes when blocks are added/removed
   const blockIds = useMemo(() => new Set(blocks.map(b => b.id)), [blocks]);
@@ -116,10 +114,11 @@ export const PlacedBlocks: React.FC<{
       }
     });
     
-    if (onCollision) {
+    // Only call onCollision once after cleanup, and only if we have collision boxes
+    if (onCollision && collisionBoxes.current.size > 0) {
       onCollision(Array.from(collisionBoxes.current.values()));
     }
-  }, [blockIds, onCollision]);
+  }, [blockIds]); // Remove onCollision from dependencies to prevent infinite loop
 
   if (!blocks || blocks.length === 0) {
     return null;
