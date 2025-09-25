@@ -826,9 +826,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       const v = halton(i + 1, 3);  
       const w = halton(i + 1, 5);
       
-      // Create continuous flow by staggering start times
+      // Create continuous flow with proper density
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.topY + (w * 3); // Small stagger above top edge for continuousness
+      positions[i * 3 + 1] = fall.topY + (w * rangeY * 0.8); // Spread drops throughout most of fall zone for density
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
