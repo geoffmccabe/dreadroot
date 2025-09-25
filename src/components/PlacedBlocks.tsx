@@ -53,8 +53,20 @@ const PlacedBlockComponent = React.memo(({
     }
     
     if (blockDef?.properties?.transparent) {
-      materialProps.transparent = true;
-      materialProps.opacity = 0.7;
+      // Use MeshPhysicalMaterial for glass/crystal effect
+      return new THREE.MeshPhysicalMaterial({
+        color: baseColor,
+        transparent: true,
+        opacity: 0.6,
+        transmission: 0.9, // Glass-like transmission
+        thickness: 0.5,
+        roughness: 0.1, // Very smooth surface
+        metalness: 0.0,
+        clearcoat: 1.0, // High clearcoat for glossy look
+        clearcoatRoughness: 0.0,
+        ior: 1.5, // Index of refraction similar to glass
+        // Don't use texture map for crystal - rely on material properties
+      });
     }
     
     return new THREE.MeshLambertMaterial(materialProps);
