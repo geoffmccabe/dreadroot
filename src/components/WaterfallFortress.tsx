@@ -19,6 +19,167 @@ import { useToast } from '@/hooks/use-toast';
 import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
 
+// VoxelFaceHighlight component for red diamond face highlighting
+function VoxelFaceHighlight({ mousePosition, blockPlacementMode, blocks }: { 
+  mousePosition: THREE.Vector2; 
+  blockPlacementMode: boolean;
+  blocks: PlacedBlock[];
+}) {
+  const meshRef = useRef<THREE.LineSegments>(null);
+  const { camera, gl, raycaster } = useThree();
+  const [highlightPosition, setHighlightPosition] = useState<THREE.Vector3 | null>(null);
+  const [highlightNormal, setHighlightNormal] = useState<THREE.Vector3 | null>(null);
+  
+  useFrame(() => {
+    if (!blockPlacementMode || !meshRef.current) {
+      setHighlightPosition(null);
+      setHighlightNormal(null);
+      return;
+    }
+
+    // Convert mouse position to raycaster
+    raycaster.setFromCamera(mousePosition, camera);
+    
+    // Create intersection targets (ground, existing blocks, fortress walls)
+    const targets: THREE.Object3D[] = [];
+    
+    // Add ground plane
+    const groundGeometry = new THREE.PlaneGeometry(200, 200);
+    const groundMaterial = new THREE.MeshBasicMaterial({ 
+      visible: false,
+      side: THREE.DoubleSide 
+    });
+    const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+    groundMesh.rotation.x = -Math.PI / 2;
+    groundMesh.position.set(0, 0, 0);
+    targets.push(groundMesh);
+    
+    // Add fortress walls
+    const cliffW = 40, cliffH = 20, frontT = 2;
+    const courtyardDepth = 30, frontZ = -8;
+    const openingHalfW = 2;
+    
+    const fortressWalls = [
+      { position: [-(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ], size: [cliffW/2 - openingHalfW, cliffH, frontT] },
+      { position: [(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ], size: [cliffW/2 - openingHalfW, cliffH, frontT] },
+      { position: [-cliffW/2 + 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2], size: [2, cliffH, courtyardDepth + frontT] },
+      { position: [cliffW/2 - 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2], size: [2, cliffH, courtyardDepth + frontT] },
+      { position: [0, cliffH/2, frontZ - courtyardDepth - frontT], size: [cliffW, cliffH, 2] },
+      { position: [0, 0.01, frontZ - courtyardDepth/2 - frontT/2], size: [cliffW-4, 0.1, courtyardDepth-2] }
+    ];
+    
+    const wallMaterial = new THREE.MeshBasicMaterial({ visible: false });
+    fortressWalls.forEach(wall => {
+      const wallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(wall.size[0], wall.size[1], wall.size[2]), 
+        wallMaterial
+      );
+      wallMesh.position.set(wall.position[0], wall.position[1], wall.position[2]);
+      targets.push(wallMesh);
+    });
+    
+    // Add existing blocks
+    const blockMaterial = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+    blocks.forEach((block, index) => {
+      const blockMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), blockMaterial);
+      blockMesh.position.set(block.position_x, block.position_y, block.position_z);
+      targets.push(blockMesh);
+    });
+    
+    // Find intersection within 5 block range
+    const intersects = raycaster.intersectObjects(targets, true).filter(i => i.distance <= 5);
+    
+    if (intersects.length > 0) {
+      const intersection = intersects[0];
+      const hitPoint = intersection.point;
+      const normal = intersection.face?.normal;
+      
+      if (normal) {
+        // Transform normal to world space
+        const worldNormal = normal.clone().transformDirection(intersection.object.matrixWorld).normalize();
+        
+        // Calculate the face position - snap to voxel grid
+        const facePosition = hitPoint.clone().add(worldNormal.clone().multiplyScalar(0.001));
+        facePosition.x = Math.round(facePosition.x);
+        facePosition.y = Math.round(facePosition.y);
+        facePosition.z = Math.round(facePosition.z);
+        
+        setHighlightPosition(facePosition);
+        setHighlightNormal(worldNormal);
+      }
+    } else {
+      setHighlightPosition(null);
+      setHighlightNormal(null);
+    }
+  });
+
+  // Create red diamond geometry for face highlighting
+  const diamondGeometry = useMemo(() => {
+    if (!highlightPosition || !highlightNormal) return null;
+    
+    const geometry = new THREE.BufferGeometry();
+    const vertices = new Float32Array([]);
+    
+    // Determine face orientation and create diamond outline
+    if (Math.abs(highlightNormal.y) > 0.9) {
+      // Horizontal face (top/bottom)
+      const y = highlightPosition.y + (highlightNormal.y > 0 ? 0.5 : -0.5) + highlightNormal.y * 0.01;
+      const vertices = new Float32Array([
+        // Diamond outline on horizontal face
+        highlightPosition.x, y, highlightPosition.z - 0.5,
+        highlightPosition.x + 0.5, y, highlightPosition.z,
+        highlightPosition.x + 0.5, y, highlightPosition.z,
+        highlightPosition.x, y, highlightPosition.z + 0.5,
+        highlightPosition.x, y, highlightPosition.z + 0.5,
+        highlightPosition.x - 0.5, y, highlightPosition.z,
+        highlightPosition.x - 0.5, y, highlightPosition.z,
+        highlightPosition.x, y, highlightPosition.z - 0.5
+      ]);
+      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    } else if (Math.abs(highlightNormal.x) > 0.9) {
+      // Vertical face (left/right)
+      const x = highlightPosition.x + (highlightNormal.x > 0 ? 0.5 : -0.5) + highlightNormal.x * 0.01;
+      const vertices = new Float32Array([
+        x, highlightPosition.y - 0.5, highlightPosition.z,
+        x, highlightPosition.y, highlightPosition.z + 0.5,
+        x, highlightPosition.y, highlightPosition.z + 0.5,
+        x, highlightPosition.y + 0.5, highlightPosition.z,
+        x, highlightPosition.y + 0.5, highlightPosition.z,
+        x, highlightPosition.y, highlightPosition.z - 0.5,
+        x, highlightPosition.y, highlightPosition.z - 0.5,
+        x, highlightPosition.y - 0.5, highlightPosition.z
+      ]);
+      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    } else if (Math.abs(highlightNormal.z) > 0.9) {
+      // Vertical face (front/back)
+      const z = highlightPosition.z + (highlightNormal.z > 0 ? 0.5 : -0.5) + highlightNormal.z * 0.01;
+      const vertices = new Float32Array([
+        highlightPosition.x, highlightPosition.y - 0.5, z,
+        highlightPosition.x + 0.5, highlightPosition.y, z,
+        highlightPosition.x + 0.5, highlightPosition.y, z,
+        highlightPosition.x, highlightPosition.y + 0.5, z,
+        highlightPosition.x, highlightPosition.y + 0.5, z,
+        highlightPosition.x - 0.5, highlightPosition.y, z,
+        highlightPosition.x - 0.5, highlightPosition.y, z,
+        highlightPosition.x, highlightPosition.y - 0.5, z
+      ]);
+      geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    }
+    
+    return geometry;
+  }, [highlightPosition, highlightNormal]);
+
+  if (!blockPlacementMode || !diamondGeometry) {
+    return null;
+  }
+
+  return (
+    <lineSegments ref={meshRef} geometry={diamondGeometry}>
+      <lineBasicMaterial color="#ff0000" linewidth={3} />
+    </lineSegments>
+  );
+}
+
 // Sky component with beautiful gradient
 function SkyTexture() {
   const { scene } = useThree();
@@ -90,7 +251,9 @@ function FirstPersonControls({
   shopOpen,
   inventoryOpen,
   onCycleBlock,
-  blocks
+  blocks,
+  mousePosition,
+  onMousePositionChange
 }: { 
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -112,8 +275,10 @@ function FirstPersonControls({
   inventoryOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
+  mousePosition: THREE.Vector2;
+  onMousePositionChange: (position: THREE.Vector2) => void;
 }) {
-  const { camera, gl } = useThree();
+  const { camera, gl, raycaster } = useThree();
   const isLocked = useRef(false);
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
@@ -311,6 +476,18 @@ function FirstPersonControls({
     camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
   }, [camera]);
 
+  const handleMouseMoveGlobal = useCallback((event: MouseEvent) => {
+    if (!isLocked.current) return;
+    
+    // Calculate normalized device coordinates (-1 to +1) for mouse position
+    const rect = gl.domElement.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // Update mouse position for raycasting
+    onMousePositionChange(new THREE.Vector2(x, y));
+  }, [gl.domElement, onMousePositionChange]);
+
   const handleWheel = useCallback((event: WheelEvent) => {
     if (!isLocked.current || !blockPlacementMode) return;
     
@@ -326,12 +503,8 @@ function FirstPersonControls({
       gl.domElement.requestPointerLock();
     } else if (blockPlacementMode && onBlockPlace) {
       console.log('Attempting block placement...');
-      // Minecraft-style block placement with surface detection
-      const raycaster = new THREE.Raycaster();
-      const direction = new THREE.Vector3(0, 0, -1);
-      direction.applyQuaternion(camera.quaternion);
-      raycaster.set(camera.position, direction);
-      
+      // Mouse-based block placement with surface detection
+      raycaster.setFromCamera(mousePosition, camera);
       
       // Create intersection targets (ground, existing blocks, fortress walls)
       const targets: THREE.Object3D[] = [];
@@ -539,6 +712,7 @@ function FirstPersonControls({
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
     document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousemove', handleMouseMoveGlobal);
     document.addEventListener('wheel', handleWheel);
     document.addEventListener('pointerlockchange', handlePointerLockChange);
     gl.domElement.addEventListener('click', handleClick);
@@ -547,11 +721,12 @@ function FirstPersonControls({
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
       document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mousemove', handleMouseMoveGlobal);
       document.removeEventListener('wheel', handleWheel);
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
       gl.domElement.removeEventListener('click', handleClick);
     };
-  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, gl.domElement]);
+  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleMouseMoveGlobal, handleWheel, handlePointerLockChange, handleClick, gl.domElement]);
 
   useFrame((state, delta) => {
     // Movement input
@@ -1189,6 +1364,8 @@ function Scene({
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
 }) {
+  // Mouse position state for raycasting
+  const [mousePosition, setMousePosition] = useState(new THREE.Vector2(0, 0));
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
@@ -1347,6 +1524,15 @@ function Scene({
         shopOpen={shopOpen}
         inventoryOpen={inventoryOpen}
         onCycleBlock={onCycleBlock}
+        blocks={blocks}
+        mousePosition={mousePosition}
+        onMousePositionChange={setMousePosition}
+      />
+      
+      {/* Voxel Face Highlight */}
+      <VoxelFaceHighlight 
+        mousePosition={mousePosition}
+        blockPlacementMode={blockPlacementMode}
         blocks={blocks}
       />
       
@@ -1540,6 +1726,9 @@ export default function WaterfallFortress() {
   const [shopOpen, setShopOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
+  
+  // Mouse position state for hand icon tracking (percentage values for CSS positioning)
+  const [mouseScreenPosition, setMouseScreenPosition] = useState({ x: 50, y: 50 });
   
   // Wall positions state for real-time control
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
@@ -1847,6 +2036,18 @@ export default function WaterfallFortress() {
       window.removeEventListener('crosshairChange', handleCrosshairChange as EventListener);
     };
   }, []);
+  
+  // Mouse tracking for hand icon position
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const x = (event.clientX / window.innerWidth) * 100;
+      const y = (event.clientY / window.innerHeight) * 100;
+      setMouseScreenPosition({ x, y });
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => document.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
@@ -2019,11 +2220,17 @@ export default function WaterfallFortress() {
       onClose={() => setInventoryOpen(false)}
     />
     
-    {/* Crosshair - conditional class for different modes */}
-    <div className={`waterfall-crosshair ${
-      selectedBlockType ? 'block-mode' : 
-      crosshairsEnabled ? 'active' : ''
-    }`} />
+    {/* Crosshair - conditional class for different modes with mouse tracking */}
+    <div 
+      className={`waterfall-crosshair ${
+        selectedBlockType ? 'block-mode' : 
+        crosshairsEnabled ? 'active' : ''
+      }`}
+      style={{
+        left: `${mouseScreenPosition.x}%`,
+        top: `${mouseScreenPosition.y}%`
+      }}
+    />
     
     {/* Toast notifications */}
     <Toaster />
