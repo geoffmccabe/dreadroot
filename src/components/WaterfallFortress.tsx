@@ -890,8 +890,8 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       // Get head position (front of the drop)
       let headY = positions[i * 6 + 1];
       
-      // Apply gravity acceleration instead of constant velocity
-      velocitiesRef.current[i] += 9.8 * mul * delta; // Gravity acceleration
+      // Apply gravity acceleration instead of constant velocity (reduced for more realistic speed)
+      velocitiesRef.current[i] += 4.0 * mul * delta; // Reduced gravity acceleration
       headY -= velocitiesRef.current[i] * delta;
       
       // Update fall time for elongation
@@ -963,6 +963,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         depthTest={true}
         blending={THREE.AdditiveBlending}
         fog={false}
+        linewidth={3}
       />
     </lineSegments>
   );
