@@ -695,23 +695,16 @@ function FirstPersonControls({
 }
 
 // Waterfall component matching original exactly
-function Waterfall({ flowSpeed = 50, dropCount = 6000, colorPalette }: { 
-  flowSpeed: number; // Now represents drops per second
-  dropCount: number; // Maximum number of active drops
+function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: { 
+  flowSpeed: number; 
+  dropCount: number; 
   colorPalette: Array<{ hex: string; weight: number; }>;
 }) {
   const linesRef = useRef<THREE.LineSegments>(null);
-  const dropsRef = useRef<Array<{
-    x: number;
-    y: number;
-    z: number;
-    velocity: number;
-    fallTime: number;
-    active: boolean;
-    color: { r: number; g: number; b: number };
-  }>>([]);
-  const emissionAccumulator = useRef(0);
-
+  const velocitiesRef = useRef<Float32Array>();
+  const fallTimeRef = useRef<Float32Array>(); // Track how long each drop has been falling
+  const prevDropCount = useRef(dropCount);
+  
   const fall = {
     width: 6, // Made 2m wider (1m on each side)
     depth: 0.6,
@@ -720,142 +713,6 @@ function Waterfall({ flowSpeed = 50, dropCount = 6000, colorPalette }: {
     centerX: 0,
     z: -6.8 // Moved closer to fortress wall
   };
-
-  // Water drop colors from props with proper normalization
-  const pickColor = useCallback(() => {
-    const totalWeight = colorPalette.reduce((sum, item) => sum + item.weight, 0);
-    const randomValue = Math.random() * totalWeight;
-    
-    let currentWeight = 0;
-    for (const item of colorPalette) {
-      currentWeight += item.weight;
-      if (randomValue <= currentWeight) {
-        const hex = item.hex.replace('#', '');
-        const r = parseInt(hex.substr(0, 2), 16) / 255;
-        const g = parseInt(hex.substr(2, 2), 16) / 255;
-        const b = parseInt(hex.substr(4, 2), 16) / 255;
-        return { r, g, b };
-      }
-    }
-    
-    // Fallback to first color
-    const hex = colorPalette[0].hex.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16) / 255;
-    const g = parseInt(hex.substr(2, 2), 16) / 255;
-    const b = parseInt(hex.substr(4, 2), 16) / 255;
-    return { r, g, b };
-  }, [colorPalette]);
-
-  // Initialize drops array
-  useEffect(() => {
-    dropsRef.current = [];
-  }, []);
-
-  useFrame((state, delta) => {
-    if (!linesRef.current) return;
-
-    // Emit new drops based on rate (dropsPerSecond)
-    emissionAccumulator.current += (flowSpeed * delta);
-    while (emissionAccumulator.current >= 1 && dropsRef.current.length < dropCount) {
-      const newDrop = {
-        x: fall.centerX + (Math.random() - 0.5) * fall.width,
-        y: fall.topY,
-        z: fall.z + (Math.random() - 0.5) * fall.depth,
-        velocity: 1 + Math.random() * 2,
-        fallTime: 0,
-        active: true,
-        color: pickColor()
-      };
-      dropsRef.current.push(newDrop);
-      emissionAccumulator.current -= 1;
-    }
-
-    // Update existing drops
-    const activeDrops = dropsRef.current.filter(drop => drop.active);
-    
-    for (const drop of activeDrops) {
-      // Apply gravity
-      drop.velocity += 4.0 * delta;
-      drop.y -= drop.velocity * delta;
-      drop.fallTime += delta;
-      
-      // Remove drops that hit bottom
-      if (drop.y <= fall.bottomY) {
-        drop.active = false;
-      }
-    }
-
-    // Remove inactive drops
-    dropsRef.current = dropsRef.current.filter(drop => drop.active);
-
-    // Update geometry
-    const positions = new Float32Array(dropsRef.current.length * 6);
-    const colors = new Float32Array(dropsRef.current.length * 6);
-
-    for (let i = 0; i < dropsRef.current.length; i++) {
-      const drop = dropsRef.current[i];
-      const elongation = Math.min(drop.fallTime * drop.velocity * 0.5, 20);
-      
-      // Head position (front)
-      positions[i * 6] = drop.x;
-      positions[i * 6 + 1] = drop.y;
-      positions[i * 6 + 2] = drop.z;
-      
-      // Tail position (stretched behind)
-      positions[i * 6 + 3] = drop.x;
-      positions[i * 6 + 4] = drop.y + elongation;
-      positions[i * 6 + 5] = drop.z;
-      
-      // Colors for both vertices
-      colors[i * 6] = drop.color.r;
-      colors[i * 6 + 1] = drop.color.g;
-      colors[i * 6 + 2] = drop.color.b;
-      colors[i * 6 + 3] = drop.color.r;
-      colors[i * 6 + 4] = drop.color.g;
-      colors[i * 6 + 5] = drop.color.b;
-    }
-
-    // Update buffer attributes
-    const geometry = linesRef.current.geometry;
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  });
-
-  return (
-    <lineSegments ref={linesRef} frustumCulled={false}>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={0}
-          array={new Float32Array(0)}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          count={0}
-          array={new Float32Array(0)}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <lineBasicMaterial
-        vertexColors
-        transparent
-        opacity={1.0}
-        depthWrite={false}
-        depthTest={true}
-        blending={THREE.AdditiveBlending}
-        fog={false}
-        linewidth={3}
-      />
-    </lineSegments>
-  );
-}
-
-// Fortress structure
-function Fortress() {
-  const cliffW = 40, cliffH = 20, frontT = 2;
-  const courtyardDepth = 30, frontZ = -8;
-  const openingHalfW = 2, openingH = 5;
 
   // Water drop colors from props with proper normalization
   const dropPaletteColors = useMemo(() => {
@@ -1033,8 +890,8 @@ function Fortress() {
       // Get head position (front of the drop)
       let headY = positions[i * 6 + 1];
       
-      // Apply gravity acceleration instead of constant velocity (reduced for more realistic speed)
-      velocitiesRef.current[i] += 4.0 * mul * delta; // Reduced gravity acceleration
+      // Apply gravity acceleration instead of constant velocity
+      velocitiesRef.current[i] += 9.8 * mul * delta; // Gravity acceleration
       headY -= velocitiesRef.current[i] * delta;
       
       // Update fall time for elongation
@@ -1087,14 +944,14 @@ function Fortress() {
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={0}
-          array={new Float32Array(0)}
+          count={dropCount * 2}
+          array={positions}
           itemSize={3}
         />
         <bufferAttribute
           attach="attributes-color"
-          count={0}
-          array={new Float32Array(0)}
+          count={dropCount * 2}
+          array={colors}
           itemSize={3}
         />
       </bufferGeometry>
@@ -1106,7 +963,6 @@ function Fortress() {
         depthTest={true}
         blending={THREE.AdditiveBlending}
         fog={false}
-        linewidth={3}
       />
     </lineSegments>
   );
