@@ -30,7 +30,7 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     },
     properties: {
       size: { width: 1, height: 1, depth: 1 },
-      color: '#4A7C59'
+      color: '#FFFFFF' // White/neutral color to show natural grass texture without tinting
     }
   },
   glowing_block: {
