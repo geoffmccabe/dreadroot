@@ -828,7 +828,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       
       // Create continuous flow by staggering start times
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.topY - (w * rangeY * 0.5); // Start at top edge and slightly below
+      positions[i * 3 + 1] = fall.topY + (w * 3); // Small stagger above top edge for continuousness
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
