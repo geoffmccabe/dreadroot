@@ -826,9 +826,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       const v = halton(i + 1, 3);  
       const w = halton(i + 1, 5);
       
-      // Create continuous flow with proper density
+      // Simple continuous flow - all drops start at top edge
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.topY + (w * rangeY * 0.8); // Spread drops throughout most of fall zone for density
+      positions[i * 3 + 1] = fall.topY - (w * 0.5); // Start right at top edge with tiny variation
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
@@ -864,7 +864,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       if (y <= fall.bottomY) {
         // Reset drop to top edge with new random X/Z position and velocity
         positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
-        y = fall.topY + Math.random() * 3; // Small random offset at top
+        y = fall.topY; // Reset exactly to top edge
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
         velocitiesRef.current[i] = Math.random() * 2 + 1; // Reset to random initial velocity
         
