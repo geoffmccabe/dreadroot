@@ -1944,15 +1944,7 @@ export default function WaterfallFortress() {
           <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
             <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
           </div>
-          <span className="font-bold">x{(() => {
-            const totalQuantity = inventory.reduce((total, item) => total + item.quantity, 0);
-            console.log('Bottom left inventory display:', {
-              inventoryItems: inventory,
-              totalQuantity,
-              itemsWithQuantity: inventory.filter(item => item.quantity > 0)
-            });
-            return totalQuantity;
-          })()}</span>
+          <span className="font-bold">x{inventory.reduce((total, item) => total + item.quantity, 0)}</span>
         </div>
         
         {/* Block mode indicator */}
