@@ -32,14 +32,17 @@ const PlacedBlockComponent = React.memo(({
   
   // Configure texture
   React.useEffect(() => {
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
+    texture.wrapS = THREE.ClampToEdgeWrapping; // Don't repeat for grass block
+    texture.wrapT = THREE.ClampToEdgeWrapping;
     
     // Special handling for grass block - use only top-left 20% of texture
     if (blockType === 'grass_block') {
-      texture.repeat.set(0.2, 0.2); // Use only 20% width and height (4% total area)
-      texture.offset.set(0, 0.8); // Position at top-left corner (UV coords: bottom-left is 0,0)
+      // Use only 20% width and height (4% total area) from top-left
+      texture.repeat.set(5, 5); // Scale up to fill the block with the small section
+      texture.offset.set(0, 0.8); // Start from top area (UV Y=0.8 to Y=1.0)
     } else {
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
       texture.repeat.set(1, 1);
       texture.offset.set(0, 0);
     }
@@ -47,21 +50,25 @@ const PlacedBlockComponent = React.memo(({
   
   // Create material based on block properties
   const material = useMemo(() => {
-    const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
-    
     const materialProps: any = {
       map: texture,
-      color: baseColor
     };
     
-    // Handle special properties
-    if (blockDef?.properties?.emissive) {
-      materialProps.emissive = baseColor;
-      materialProps.emissiveIntensity = 0.3;
+    // Only apply color tinting for non-grass blocks or special properties
+    if (blockType !== 'grass_block') {
+      const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
+      materialProps.color = baseColor;
+      
+      // Handle special properties
+      if (blockDef?.properties?.emissive) {
+        materialProps.emissive = baseColor;
+        materialProps.emissiveIntensity = 0.3;
+      }
     }
     
     if (blockDef?.properties?.transparent) {
       // Use MeshPhysicalMaterial for glass/crystal effect
+      const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
       return new THREE.MeshPhysicalMaterial({
         color: baseColor,
         transparent: true,
@@ -80,7 +87,7 @@ const PlacedBlockComponent = React.memo(({
     }
     
     return new THREE.MeshLambertMaterial(materialProps);
-  }, [texture, blockDef]);
+  }, [texture, blockDef, blockType]);
 
   // Create collision box only once per block - removed onCollision from deps to prevent loop
   React.useEffect(() => {
