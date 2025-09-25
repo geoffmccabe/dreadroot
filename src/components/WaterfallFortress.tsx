@@ -710,7 +710,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     topY: 19.95, // cliffH - 0.05
     bottomY: 0.2,
     centerX: 0,
-    z: -5.95 // frontZ + frontT/2 + 0.05
+    z: -6.8 // Moved closer to fortress wall
   };
 
   // Water drop colors from props with proper normalization
@@ -828,7 +828,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       
       // Create continuous flow by staggering start times
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.topY + (w * rangeY * 2); // Stagger drops above visible area
+      positions[i * 3 + 1] = fall.topY - (w * rangeY * 0.5); // Start at top edge and slightly below
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
