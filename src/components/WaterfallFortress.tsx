@@ -796,8 +796,8 @@ function Waterfall({ flowSpeed = 1.2, dropsPerSecond = 100, colorPalette }: {
     if (currentTime - lastEmissionTime.current >= emissionInterval && activeDrops.current.length < maxDrops) {
       // Emit single drop at top
       const newDrop = {
-        x: (Math.random() - 0.5) * fall.width,
-        z: (Math.random() - 0.5) * fall.depth,
+        x: fall.centerX + (Math.random() - 0.5) * fall.width,
+        z: fall.z + (Math.random() - 0.5) * fall.depth,
         y: fall.topY,
         velocity: 0.8 + Math.random() * 0.4, // Random initial velocity
         fallTime: 0,
