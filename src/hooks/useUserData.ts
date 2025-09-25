@@ -172,7 +172,7 @@ export const useUserData = () => {
       // Update local state immediately for better UX
       setProfile(prev => prev ? { ...prev, coins: newCoinAmount } : null);
       
-      // Refresh data
+      // Refresh data to ensure consistency
       await loadUserData();
       
       toast({
@@ -194,8 +194,16 @@ export const useUserData = () => {
 
   const useBlock = async (itemType: string) => {
     const item = inventory.find(i => i.item_type === itemType);
+    console.log(`useBlock called for ${itemType}. Found item:`, item);
+    console.log('Current inventory:', inventory);
+    
     if (!item || item.quantity <= 0) {
       console.log(`No ${itemType} blocks available in inventory`);
+      toast({
+        title: "No blocks available",
+        description: `You don't have any ${itemType} blocks in your inventory`,
+        variant: "destructive"
+      });
       return false;
     }
 
@@ -215,9 +223,14 @@ export const useUserData = () => {
         i.id === item.id 
           ? { ...i, quantity: newQuantity }
           : i
-      ).filter(i => i.quantity > 0)); // Remove items with 0 quantity
+      )); // Keep items with 0 quantity to maintain UI consistency
 
       console.log(`Successfully used ${itemType} block. New quantity: ${newQuantity}`);
+      console.log('Updated inventory state:', inventory.map(i => `${i.item_type}:${i.quantity}`));
+      
+      // Refresh data to ensure consistency
+      await loadUserData();
+      
       return true;
     } catch (error) {
       console.error('Error using block:', error);
@@ -297,6 +310,11 @@ export const useUserData = () => {
     }
   };
 
+  const refreshData = async () => {
+    console.log('refreshData called');
+    await loadUserData();
+  };
+
   return {
     profile,
     inventory,
@@ -305,6 +323,6 @@ export const useUserData = () => {
     useBlock,
     addCoins,
     updateBlockchainAddress,
-    refreshData: loadUserData
+    refreshData
   };
 };

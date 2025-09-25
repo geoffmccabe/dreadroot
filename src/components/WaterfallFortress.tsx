@@ -1673,6 +1673,37 @@ export default function WaterfallFortress() {
           title: "✓ Block placed!",
           description: `${selectedBlockType} placed at (${placedBlock.position_x}, ${placedBlock.position_y}, ${placedBlock.position_z})`,
         });
+        
+        // Check if we still have blocks of this type after placing
+        // Wait a moment for the inventory to update
+        setTimeout(() => {
+          const currentItem = inventory.find(item => item.item_type === selectedBlockType);
+          const stillHasBlocks = currentItem && currentItem.quantity > 0;
+          
+          if (!stillHasBlocks) {
+            // Find next available block type
+            const availableBlocks = inventory.filter(item => item.quantity > 0 && item.item_type !== selectedBlockType);
+            console.log('No more blocks of type', selectedBlockType, 'available blocks:', availableBlocks);
+            
+            if (availableBlocks.length > 0) {
+              const nextBlock = availableBlocks[0];
+              setSelectedBlockType(nextBlock.item_type);
+              toast({
+                title: "Auto-switched block type",
+                description: `Switched to ${nextBlock.item_type} (${nextBlock.quantity} available)`,
+                duration: 2000
+              });
+            } else {
+              // No blocks available, exit block mode
+              handleModeChange(null);
+              toast({
+                title: "No more blocks",
+                description: "All blocks used! Purchase more from the shop.",
+                duration: 3000
+              });
+            }
+          }
+        }, 500); // Give time for inventory update to propagate
       } else {
         console.log('placeBlock returned null/undefined');
       }
@@ -1700,11 +1731,13 @@ export default function WaterfallFortress() {
 
   // Mode change handler
   const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
-    console.log('Mode change requested:', mode, 'Current inventory items with quantity > 0:', inventory.filter(item => item.quantity > 0).map(item => `${item.item_type}:${item.quantity}`));
+    console.log('Mode change requested:', mode);
+    const availableItems = inventory.filter(item => item.quantity > 0);
+    console.log('Available inventory items:', availableItems.map(item => `${item.item_type}:${item.quantity}`));
     
     if (mode === 'building') {
       // Find first available block type from inventory
-      const availableItem = inventory.find(item => item.quantity > 0);
+      const availableItem = availableItems[0];
       if (availableItem) {
         console.log('Setting block mode with available block:', availableItem.item_type, 'quantity:', availableItem.quantity);
         setSelectedBlockType(availableItem.item_type);
@@ -1924,27 +1957,34 @@ export default function WaterfallFortress() {
       
       {/* Block inventory */}
       <div className="flex items-center gap-2">
+        {/* Block inventory - Only show total of blocks with quantity > 0 */}
         <div 
           className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
             selectedBlockType ? 'bg-blue-500/70' : 'hover:bg-black/70'
           }`}
           onClick={() => {
-            const totalBlocks = inventory.reduce((total, item) => total + item.quantity, 0);
+            const availableBlocks = inventory.filter(item => item.quantity > 0);
+            const totalBlocks = availableBlocks.reduce((total, item) => total + item.quantity, 0);
+            console.log('Block inventory clicked:', { availableBlocks, totalBlocks, selectedBlockType });
+            
             if (totalBlocks > 0) {
               handleModeChange(selectedBlockType ? null : 'building');
             } else {
               handleOpenShop();
             }
           }}
-          title={inventory.reduce((total, item) => total + item.quantity, 0) > 0 ? 
-            (selectedBlockType ? "Exit block mode" : "Enter block mode") : 
-            "Buy blocks from shop"
-          }
+          title={(() => {
+            const availableBlocks = inventory.filter(item => item.quantity > 0);
+            const totalBlocks = availableBlocks.reduce((total, item) => total + item.quantity, 0);
+            return totalBlocks > 0 ? 
+              (selectedBlockType ? "Exit block mode" : "Enter block mode") : 
+              "Buy blocks from shop";
+          })()}
         >
           <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
             <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
           </div>
-          <span className="font-bold">x{inventory.reduce((total, item) => total + item.quantity, 0)}</span>
+          <span className="font-bold">x{inventory.filter(item => item.quantity > 0).reduce((total, item) => total + item.quantity, 0)}</span>
         </div>
         
         {/* Block mode indicator */}
