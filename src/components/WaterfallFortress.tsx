@@ -826,9 +826,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       const v = halton(i + 1, 3);  
       const w = halton(i + 1, 5);
       
-      // Initial positioning - all drops start at top edge
+      // Initial positioning - spread drops across the fall zone with natural distribution
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.topY - (w * 2); // Small staggered start with slight offset
+      positions[i * 3 + 1] = fall.bottomY + w * rangeY; // Natural distribution across full range
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
@@ -836,8 +836,8 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
       
-      // Not used in simple method
-      velocitiesRef.current[i] = 0;
+      // Initialize with random velocities for natural acceleration
+      velocitiesRef.current[i] = Math.random() * 2 + 1; // Random initial velocity
     }
     
     return { positions, colors };
@@ -856,13 +856,17 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     
     for (let i = 0; i < dropCount; i++) {
       let y = positions[i * 3 + 1];
-      y -= (5.5 * mul) * delta; // Exact formula from original
+      
+      // Apply gravity acceleration instead of constant velocity
+      velocitiesRef.current[i] += 9.8 * mul * delta; // Gravity acceleration
+      y -= velocitiesRef.current[i] * delta;
       
       if (y <= fall.bottomY) {
-        // Reset drop to top edge with new random X/Z position
+        // Reset drop to top edge with new random X/Z position and velocity
         positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
-        y = fall.topY; // Always reset to top edge
+        y = fall.topY + Math.random() * 3; // Small random offset at top
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
+        velocitiesRef.current[i] = Math.random() * 2 + 1; // Reset to random initial velocity
         
         // Update color exactly like original (with needsUpdate check)
         const color = pickColor();
