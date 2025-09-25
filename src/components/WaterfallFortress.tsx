@@ -826,9 +826,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       const v = halton(i + 1, 3);  
       const w = halton(i + 1, 5);
       
-      // Simple continuous flow - all drops start at top edge
+      // Distribute drops throughout fall zone for continuous appearance
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.topY - (w * 0.5); // Start right at top edge with tiny variation
+      positions[i * 3 + 1] = fall.bottomY + (w * rangeY); // Full distribution for continuity
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
