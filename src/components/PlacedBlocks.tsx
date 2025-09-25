@@ -34,8 +34,16 @@ const PlacedBlockComponent = React.memo(({
   React.useEffect(() => {
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(1, 1);
-  }, [texture]);
+    
+    // Special handling for grass block - use only top-left 20% of texture
+    if (blockType === 'grass_block') {
+      texture.repeat.set(0.2, 0.2); // Use only 20% width and height (4% total area)
+      texture.offset.set(0, 0.8); // Position at top-left corner (UV coords: bottom-left is 0,0)
+    } else {
+      texture.repeat.set(1, 1);
+      texture.offset.set(0, 0);
+    }
+  }, [texture, blockType]);
   
   // Create material based on block properties
   const material = useMemo(() => {
