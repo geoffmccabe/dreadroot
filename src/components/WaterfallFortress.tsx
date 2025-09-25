@@ -399,9 +399,9 @@ function FirstPersonControls({
       console.log(`Created ${targets.length} raycasting targets:`, targets.map(t => t.name || 'unnamed'));
       console.log('Raycaster origin:', camera.position, 'direction:', direction);
       
-      // Find intersection
-      const intersects = raycaster.intersectObjects(targets, true);
-      console.log(`Found ${intersects.length} intersections:`, intersects.map(i => ({
+      // Find intersection - filter to 5 block maximum range
+      const intersects = raycaster.intersectObjects(targets, true).filter(i => i.distance <= 5);
+      console.log(`Found ${intersects.length} intersections within 5 blocks:`, intersects.map(i => ({
         object: i.object.name || 'unnamed',
         point: i.point,
         distance: i.distance
@@ -485,8 +485,8 @@ function FirstPersonControls({
         }
       } else {
         console.log('No intersection found for block placement - raycaster may not be hitting any objects');
-        // Try fallback placement at reasonable distance in front of player (same as BlockPreview)
-        const distance = 3;
+        // Try fallback placement at Minecraft distance (5 blocks) in front of player
+        const distance = 5;
         const direction = new THREE.Vector3(0, 0, -1);
         direction.applyQuaternion(camera.quaternion);
         
@@ -497,7 +497,7 @@ function FirstPersonControls({
         groundPosition.y = Math.max(0, Math.round(groundPosition.y)); // Keep above ground
         groundPosition.z = Math.round(groundPosition.z);
         
-        console.log('Fallback placement 3 units ahead at:', groundPosition);
+        console.log('Fallback placement 5 units ahead at:', groundPosition);
         onBlockPlace(groundPosition);
       }
       
