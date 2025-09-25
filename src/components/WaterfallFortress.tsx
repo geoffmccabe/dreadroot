@@ -443,14 +443,24 @@ function FirstPersonControls({
           const tooCloseToFortress = distanceToFortress < 30;
           const blockingWaterfall = Math.abs(placePosition.x) < waterfallBlockingWidth / 2 && placePosition.z > waterfallZ;
           
-          // Check for block overlap
+          // Check for block overlap - blocks are 1x1x1 units, so use stricter tolerance
           let blockOverlap = false;
           if (existingBlocks && existingBlocks.length > 0) {
             blockOverlap = existingBlocks.some(block => 
-              Math.abs(block.position_x - placePosition.x) < 0.1 && 
-              Math.abs(block.position_y - placePosition.y) < 0.1 && 
-              Math.abs(block.position_z - placePosition.z) < 0.1
+              Math.abs(block.position_x - placePosition.x) < 0.9 && 
+              Math.abs(block.position_y - placePosition.y) < 0.9 && 
+              Math.abs(block.position_z - placePosition.z) < 0.9
             );
+            console.log('Block overlap check:', {
+              existingBlockCount: existingBlocks.length,
+              placePosition,
+              blockOverlap,
+              nearbyBlocks: existingBlocks.filter(block => 
+                Math.abs(block.position_x - placePosition.x) < 2 && 
+                Math.abs(block.position_y - placePosition.y) < 2 && 
+                Math.abs(block.position_z - placePosition.z) < 2
+              )
+            });
           }
           
           console.log('Placement validation:', {
@@ -1934,7 +1944,15 @@ export default function WaterfallFortress() {
           <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
             <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
           </div>
-          <span className="font-bold">x{inventory.reduce((total, item) => total + item.quantity, 0)}</span>
+          <span className="font-bold">x{(() => {
+            const totalQuantity = inventory.reduce((total, item) => total + item.quantity, 0);
+            console.log('Bottom left inventory display:', {
+              inventoryItems: inventory,
+              totalQuantity,
+              itemsWithQuantity: inventory.filter(item => item.quantity > 0)
+            });
+            return totalQuantity;
+          })()}</span>
         </div>
         
         {/* Block mode indicator */}
