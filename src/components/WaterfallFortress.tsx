@@ -700,8 +700,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
   dropCount: number; 
   colorPalette: Array<{ hex: string; weight: number; }>;
 }) {
-  const pointsRef = useRef<THREE.Points>(null);
+  const linesRef = useRef<THREE.LineSegments>(null);
   const velocitiesRef = useRef<Float32Array>();
+  const fallTimeRef = useRef<Float32Array>(); // Track how long each drop has been falling
   const prevDropCount = useRef(dropCount);
   
   const fall = {
@@ -770,17 +771,18 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     if (prevDropCount.current !== dropCount) {
       prevDropCount.current = dropCount;
       
-      if (pointsRef.current) {
+      if (linesRef.current) {
         // Dispose old geometry
-        pointsRef.current.geometry.dispose();
+        linesRef.current.geometry.dispose();
         
-        // Create new geometry
+        // Create new geometry for line segments
         const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(dropCount * 3);
-        const colors = new Float32Array(dropCount * 3);
+        const positions = new Float32Array(dropCount * 6); // 2 vertices * 3 coords each
+        const colors = new Float32Array(dropCount * 6); // 2 vertices * 3 colors each
         
-        // Create new velocities array (not used in original simple method)
+        // Create new velocities and fall time arrays
         velocitiesRef.current = new Float32Array(dropCount);
+        fallTimeRef.current = new Float32Array(dropCount);
         
         const rangeY = fall.topY - fall.bottomY;
         
@@ -791,32 +793,48 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
           const w = halton(i + 1, 5);
           
           // Initial positioning exactly like original HTML
-          positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-          positions[i * 3 + 1] = fall.bottomY + w * rangeY;  // Simple distribution like HTML
-          positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
+          const headX = fall.centerX + (u - 0.5) * fall.width;
+          const headY = fall.bottomY + w * rangeY;
+          const headZ = fall.z + (v - 0.5) * fall.depth;
+          
+          // Initially, head and tail are at the same position
+          positions[i * 6] = headX;     // head vertex X
+          positions[i * 6 + 1] = headY; // head vertex Y  
+          positions[i * 6 + 2] = headZ; // head vertex Z
+          positions[i * 6 + 3] = headX; // tail vertex X
+          positions[i * 6 + 4] = headY; // tail vertex Y
+          positions[i * 6 + 5] = headZ; // tail vertex Z
           
           const color = pickColor();
-          colors[i * 3] = color.r;
-          colors[i * 3 + 1] = color.g;
-          colors[i * 3 + 2] = color.b;
+          // Head vertex color
+          colors[i * 6] = color.r;
+          colors[i * 6 + 1] = color.g;
+          colors[i * 6 + 2] = color.b;
+          // Tail vertex color
+          colors[i * 6 + 3] = color.r;
+          colors[i * 6 + 4] = color.g;
+          colors[i * 6 + 5] = color.b;
           
-          // Not used in simple method
+          // Initialize velocities and fall time
           velocitiesRef.current[i] = 0;
+          fallTimeRef.current[i] = 0;
         }
         
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        pointsRef.current.geometry = geometry;
+        linesRef.current.geometry = geometry;
       }
     }
   }, [dropCount, halton, pickColor]);
 
   // Initial setup - using original HTML method for better distribution
   const { positions, colors } = useMemo(() => {
-    const positions = new Float32Array(dropCount * 3);
-    const colors = new Float32Array(dropCount * 3);
+    // Each drop needs 2 vertices (head and tail) for line segments
+    const positions = new Float32Array(dropCount * 6); // 2 vertices * 3 coords each
+    const colors = new Float32Array(dropCount * 6); // 2 vertices * 3 colors each
     
     velocitiesRef.current = new Float32Array(dropCount);
+    fallTimeRef.current = new Float32Array(dropCount);
     
     const rangeY = fall.topY - fall.bottomY;
     
@@ -827,27 +845,41 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       const w = halton(i + 1, 5);
       
       // Distribute drops throughout fall zone for continuous appearance
-      positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.bottomY + (w * rangeY); // Full distribution for continuity
-      positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
+      const headX = fall.centerX + (u - 0.5) * fall.width;
+      const headY = fall.bottomY + (w * rangeY);
+      const headZ = fall.z + (v - 0.5) * fall.depth;
+      
+      // Initially, head and tail are at the same position (no elongation)
+      positions[i * 6] = headX;     // head vertex X
+      positions[i * 6 + 1] = headY; // head vertex Y  
+      positions[i * 6 + 2] = headZ; // head vertex Z
+      positions[i * 6 + 3] = headX; // tail vertex X
+      positions[i * 6 + 4] = headY; // tail vertex Y
+      positions[i * 6 + 5] = headZ; // tail vertex Z
       
       const color = pickColor();
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
+      // Head vertex color
+      colors[i * 6] = color.r;
+      colors[i * 6 + 1] = color.g;
+      colors[i * 6 + 2] = color.b;
+      // Tail vertex color (same as head)
+      colors[i * 6 + 3] = color.r;
+      colors[i * 6 + 4] = color.g;
+      colors[i * 6 + 5] = color.b;
       
       // Initialize with consistent velocity for natural flow
       velocitiesRef.current[i] = 3 + Math.random() * 2; // Slight variation in fall speed
+      fallTimeRef.current[i] = 0; // Start with no fall time
     }
     
     return { positions, colors };
   }, [halton, pickColor, dropCount]);
 
   useFrame((state, delta) => {
-    if (!pointsRef.current) return;
+    if (!linesRef.current) return;
     
-    const positionAttribute = pointsRef.current.geometry.attributes.position;
-    const colorAttribute = pointsRef.current.geometry.attributes.color;
+    const positionAttribute = linesRef.current.geometry.attributes.position;
+    const colorAttribute = linesRef.current.geometry.attributes.color;
     const positions = positionAttribute.array as Float32Array;
     const colors = colorAttribute.array as Float32Array;
     
@@ -855,51 +887,75 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     const mul = flowSpeed; // This matches the original "mul" variable
     
     for (let i = 0; i < dropCount; i++) {
-      let y = positions[i * 3 + 1];
+      // Get head position (front of the drop)
+      let headY = positions[i * 6 + 1];
       
       // Apply gravity acceleration instead of constant velocity
       velocitiesRef.current[i] += 9.8 * mul * delta; // Gravity acceleration
-      y -= velocitiesRef.current[i] * delta;
+      headY -= velocitiesRef.current[i] * delta;
       
-      if (y <= fall.bottomY) {
+      // Update fall time for elongation
+      fallTimeRef.current[i] += delta;
+      
+      if (headY <= fall.bottomY) {
         // Reset drop to top edge with new random X/Z position and velocity
-        positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
-        y = fall.topY; // Reset exactly to top edge
-        positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
+        const newX = fall.centerX + (Math.random() - 0.5) * fall.width;
+        const newZ = fall.z + (Math.random() - 0.5) * fall.depth;
+        
+        // Reset head position
+        positions[i * 6] = newX;     // head X
+        positions[i * 6 + 1] = fall.topY; // head Y - reset exactly to top edge
+        positions[i * 6 + 2] = newZ;     // head Z
+        
+        // Reset tail position (same as head initially)
+        positions[i * 6 + 3] = newX;     // tail X
+        positions[i * 6 + 4] = fall.topY; // tail Y
+        positions[i * 6 + 5] = newZ;     // tail Z
+        
         velocitiesRef.current[i] = Math.random() * 2 + 1; // Reset to random initial velocity
+        fallTimeRef.current[i] = 0; // Reset fall time
         
         // Update color exactly like original (with needsUpdate check)
         const color = pickColor();
-        colors[i * 3] = color.r;
-        colors[i * 3 + 1] = color.g;
-        colors[i * 3 + 2] = color.b;
+        colors[i * 6] = color.r;     // head color
+        colors[i * 6 + 1] = color.g;
+        colors[i * 6 + 2] = color.b;
+        colors[i * 6 + 3] = color.r;     // tail color
+        colors[i * 6 + 4] = color.g;
+        colors[i * 6 + 5] = color.b;
         colorAttribute.needsUpdate = true;
+      } else {
+        // Update head position
+        positions[i * 6 + 1] = headY;
+        
+        // Calculate elongation based on fall time and velocity
+        const elongation = Math.min(fallTimeRef.current[i] * velocitiesRef.current[i] * 0.5, 20); // Max 20x elongation
+        
+        // Update tail position (extends upward from head)
+        positions[i * 6 + 4] = headY + elongation;
       }
-      
-      positions[i * 3 + 1] = y;
     }
     
     positionAttribute.needsUpdate = true;
   });
 
   return (
-    <points ref={pointsRef} frustumCulled={false}>
+    <lineSegments ref={linesRef} frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
-          count={dropCount}
+          count={dropCount * 2}
           array={positions}
           itemSize={3}
         />
         <bufferAttribute
           attach="attributes-color"
-          count={dropCount}
+          count={dropCount * 2}
           array={colors}
           itemSize={3}
         />
       </bufferGeometry>
-      <pointsMaterial
-        size={0.2}
+      <lineBasicMaterial
         vertexColors
         transparent
         opacity={1.0}
@@ -908,7 +964,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         blending={THREE.AdditiveBlending}
         fog={false}
       />
-    </points>
+    </lineSegments>
   );
 }
 
