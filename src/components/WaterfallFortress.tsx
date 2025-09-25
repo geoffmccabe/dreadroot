@@ -826,9 +826,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       const v = halton(i + 1, 3);  
       const w = halton(i + 1, 5);
       
-      // Initial positioning - spread drops across the fall zone with natural distribution
+      // Create continuous flow by staggering start times
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.bottomY + w * rangeY; // Natural distribution across full range
+      positions[i * 3 + 1] = fall.topY + (w * rangeY * 2); // Stagger drops above visible area
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
@@ -836,8 +836,8 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
       
-      // Initialize with random velocities for natural acceleration
-      velocitiesRef.current[i] = Math.random() * 2 + 1; // Random initial velocity
+      // Initialize with consistent velocity for natural flow
+      velocitiesRef.current[i] = 3 + Math.random() * 2; // Slight variation in fall speed
     }
     
     return { positions, colors };
