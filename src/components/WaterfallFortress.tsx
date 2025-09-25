@@ -900,7 +900,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         transparent
         opacity={1.0}
         depthWrite={false}
-        depthTest={false}
+        depthTest={true}
         blending={THREE.AdditiveBlending}
         fog={false}
       />
