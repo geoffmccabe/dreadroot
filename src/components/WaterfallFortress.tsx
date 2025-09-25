@@ -826,9 +826,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       const v = halton(i + 1, 3);  
       const w = halton(i + 1, 5);
       
-      // Initial positioning exactly like original HTML
+      // Initial positioning - all drops start at top edge
       positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.bottomY + w * rangeY;  // Simple distribution like HTML
+      positions[i * 3 + 1] = fall.topY - (w * 2); // Small staggered start with slight offset
       positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
       
       const color = pickColor();
@@ -859,9 +859,9 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       y -= (5.5 * mul) * delta; // Exact formula from original
       
       if (y <= fall.bottomY) {
-        // Reset drop EXACTLY like original HTML
+        // Reset drop to top edge with new random X/Z position
         positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
-        y = fall.topY - Math.random() * (fall.topY - fall.bottomY); // Exact original formula
+        y = fall.topY; // Always reset to top edge
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
         
         // Update color exactly like original (with needsUpdate check)
