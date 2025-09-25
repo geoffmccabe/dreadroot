@@ -718,7 +718,7 @@ function Waterfall({ flowSpeed = 1.2, dropsPerSecond = 100, colorPalette }: {
     topY: 12, // Start at top of fortress instead of high above
     bottomY: 0.2,
     centerX: 0,
-    z: -6.8 // Moved closer to fortress wall
+    z: -7.5 // Right in front of fortress wall (frontZ is -8)
   };
 
   // Water drop colors from props with proper normalization
