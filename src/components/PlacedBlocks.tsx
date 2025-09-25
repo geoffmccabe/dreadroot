@@ -57,14 +57,16 @@ const PlacedBlockComponent = React.memo(({
       return new THREE.MeshPhysicalMaterial({
         color: baseColor,
         transparent: true,
-        opacity: 0.6,
-        transmission: 0.9, // Glass-like transmission
-        thickness: 0.5,
-        roughness: 0.1, // Very smooth surface
-        metalness: 0.0,
-        clearcoat: 1.0, // High clearcoat for glossy look
-        clearcoatRoughness: 0.0,
-        ior: 1.5, // Index of refraction similar to glass
+        opacity: 0.7,
+        transmission: 0.95, // Higher transmission for more glass-like effect
+        thickness: 0.8,
+        roughness: 0.05, // Very smooth surface for high reflectivity
+        metalness: 0.1, // Slight metalness for more reflective appearance
+        clearcoat: 1.0, // Maximum clearcoat for glossy look
+        clearcoatRoughness: 0.0, // Perfectly smooth clearcoat
+        ior: 1.52, // Index of refraction similar to crystal/glass
+        reflectivity: 0.9, // High reflectivity
+        envMapIntensity: 1.5, // Enhance environment reflections
         // Don't use texture map for crystal - rely on material properties
       });
     }

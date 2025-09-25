@@ -63,7 +63,7 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     },
     properties: {
       size: { width: 1, height: 1, depth: 1 },
-      color: '#87CEEB',
+      color: '#00CED1', // Dark turquoise - more blue/cyan, less green
       transparent: true
     }
   }
