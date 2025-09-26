@@ -694,14 +694,15 @@ function FirstPersonControls({
   return null;
 }
 
-// Waterfall component matching original exactly
+// Waterfall component with stretching drops
 function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: { 
   flowSpeed: number; 
   dropCount: number; 
   colorPalette: Array<{ hex: string; weight: number; }>;
 }) {
-  const pointsRef = useRef<THREE.Points>(null);
+  const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const velocitiesRef = useRef<Float32Array>();
+  const stretchFactorsRef = useRef<Float32Array>();
   const prevDropCount = useRef(dropCount);
   
   const fall = {
@@ -765,51 +766,21 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     return result;
   }, []);
 
-  // Recreate drops when count changes - using original HTML method
+  // Recreate drops when count changes - initialize for instanced mesh
   useEffect(() => {
     if (prevDropCount.current !== dropCount) {
       prevDropCount.current = dropCount;
       
-      if (pointsRef.current) {
-        // Dispose old geometry
-        pointsRef.current.geometry.dispose();
-        
-        // Create new geometry
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(dropCount * 3);
-        const colors = new Float32Array(dropCount * 3);
-        
-        // Create new velocities array (not used in original simple method)
+      if (instancedMeshRef.current) {
+        // Create new arrays
         velocitiesRef.current = new Float32Array(dropCount);
+        stretchFactorsRef.current = new Float32Array(dropCount);
         
-        const rangeY = fall.topY - fall.bottomY;
-        
-        // EXACT method from working HTML version
-        for (let i = 0; i < dropCount; i++) {
-          const u = halton(i + 1, 2);
-          const v = halton(i + 1, 3);  
-          const w = halton(i + 1, 5);
-          
-          // Initial positioning exactly like original HTML
-          positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-          positions[i * 3 + 1] = fall.bottomY + w * rangeY;  // Simple distribution like HTML
-          positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
-          
-          const color = pickColor();
-          colors[i * 3] = color.r;
-          colors[i * 3 + 1] = color.g;
-          colors[i * 3 + 2] = color.b;
-          
-          // Not used in simple method
-          velocitiesRef.current[i] = 0;
-        }
-        
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        pointsRef.current.geometry = geometry;
+        // Update the instance count 
+        instancedMeshRef.current.count = dropCount;
       }
     }
-  }, [dropCount, halton, pickColor]);
+  }, [dropCount]);
 
   // Initial setup - using original HTML method for better distribution
   const { positions, colors } = useMemo(() => {
@@ -817,6 +788,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     const colors = new Float32Array(dropCount * 3);
     
     velocitiesRef.current = new Float32Array(dropCount);
+    stretchFactorsRef.current = new Float32Array(dropCount);
     
     const rangeY = fall.topY - fall.bottomY;
     
@@ -838,18 +810,22 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
       
       // Initialize with consistent velocity for natural flow
       velocitiesRef.current[i] = 3 + Math.random() * 2; // Slight variation in fall speed
+      
+      // Random stretch factor between 2x and 10x for each drop
+      stretchFactorsRef.current[i] = 2 + Math.random() * 8;
     }
     
     return { positions, colors };
   }, [halton, pickColor, dropCount]);
 
   useFrame((state, delta) => {
-    if (!pointsRef.current) return;
+    if (!instancedMeshRef.current || !velocitiesRef.current || !stretchFactorsRef.current) return;
     
-    const positionAttribute = pointsRef.current.geometry.attributes.position;
-    const colorAttribute = pointsRef.current.geometry.attributes.color;
-    const positions = positionAttribute.array as Float32Array;
-    const colors = colorAttribute.array as Float32Array;
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const rotation = new THREE.Euler();
+    const scale = new THREE.Vector3();
+    const color = new THREE.Color();
     
     // EXACT physics from original HTML
     const mul = flowSpeed; // This matches the original "mul" variable
@@ -868,47 +844,57 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
         velocitiesRef.current[i] = Math.random() * 2 + 1; // Reset to random initial velocity
         
-        // Update color exactly like original (with needsUpdate check)
-        const color = pickColor();
-        colors[i * 3] = color.r;
-        colors[i * 3 + 1] = color.g;
-        colors[i * 3 + 2] = color.b;
-        colorAttribute.needsUpdate = true;
+        // New random stretch factor for each reset
+        stretchFactorsRef.current[i] = 2 + Math.random() * 8;
+        
+        // Update color exactly like original
+        const newColor = pickColor();
+        colors[i * 3] = newColor.r;
+        colors[i * 3 + 1] = newColor.g;
+        colors[i * 3 + 2] = newColor.b;
       }
       
       positions[i * 3 + 1] = y;
+      
+      // Calculate stretch based on fall progress (only the top stretches as it falls)
+      const fallProgress = 1 - (y - fall.bottomY) / (fall.topY - fall.bottomY);
+      const stretchMultiplier = 1 + (stretchFactorsRef.current[i] - 1) * fallProgress;
+      
+      // Set position, rotation, and scale for this instance
+      position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      rotation.set(0, 0, 0);
+      // Start as square, stretch only in Y direction as it falls
+      scale.set(0.1, 0.1 * stretchMultiplier, 0.1); 
+      
+      matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
+      instancedMeshRef.current.setMatrixAt(i, matrix);
+      
+      // Set color for this instance
+      color.setRGB(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]);
+      instancedMeshRef.current.setColorAt(i, color);
     }
     
-    positionAttribute.needsUpdate = true;
+    instancedMeshRef.current.instanceMatrix.needsUpdate = true;
+    if (instancedMeshRef.current.instanceColor) {
+      instancedMeshRef.current.instanceColor.needsUpdate = true;
+    }
   });
 
   return (
-    <points ref={pointsRef} frustumCulled={false}>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={dropCount}
-          array={positions}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          count={dropCount}
-          array={colors}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <pointsMaterial
-        size={0.2}
-        vertexColors
+    <instancedMesh 
+      ref={instancedMeshRef} 
+      args={[undefined, undefined, dropCount]}
+      frustumCulled={false}
+    >
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial 
         transparent
-        opacity={1.0}
+        opacity={0.8}
         depthWrite={false}
         depthTest={true}
         blending={THREE.AdditiveBlending}
-        fog={false}
       />
-    </points>
+    </instancedMesh>
   );
 }
 
