@@ -1420,13 +1420,13 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
               <span className="text-xs opacity-75">{settings.flowSpeed.toFixed(2)}</span>
             </div>
             <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
-              <Label className="text-xs opacity-85">Drops count</Label>
+              <Label className="text-xs opacity-85">Drops Rate (#/s)</Label>
               <Slider
                 value={[settings.dropCount]}
                 onValueChange={([value]) => onSettingsChange('dropCount', value)}
-                min={500}
-                max={15000}
-                step={100}
+                min={5}
+                max={100}
+                step={5}
                 className="flex-1"
               />
               <span className="text-xs opacity-75">{settings.dropCount}</span>
@@ -1517,7 +1517,7 @@ export default function WaterfallFortress() {
 
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
-    dropCount: 6000,
+    dropCount: 50,
     coinRate: 6,
     coinSize: 0.8,
     colorPalette: defaultColorPalette
