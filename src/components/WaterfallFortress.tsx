@@ -694,26 +694,15 @@ function FirstPersonControls({
   return null;
 }
 
-// Waterfall component with time-based drop generation
+// Waterfall component matching original exactly
 function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: { 
   flowSpeed: number; 
-  dropCount: number; // Now represents drops per second instead of total count
+  dropCount: number; 
   colorPalette: Array<{ hex: string; weight: number; }>;
 }) {
-  const linesRef = useRef<THREE.LineSegments>(null);
-  const dropsRef = useRef<Array<{
-    headX: number;
-    headY: number;
-    headZ: number;
-    tailX: number;
-    tailY: number;
-    tailZ: number;
-    velocity: number;
-    fallTime: number;
-    color: THREE.Color;
-  }>>([]);
-  const lastSpawnTime = useRef(0);
-  const maxDrops = useRef(15000); // Maximum drops to prevent memory issues
+  const pointsRef = useRef<THREE.Points>(null);
+  const velocitiesRef = useRef<Float32Array>();
+  const prevDropCount = useRef(dropCount);
   
   const fall = {
     width: 6, // Made 2m wider (1m on each side)
@@ -776,114 +765,141 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     return result;
   }, []);
 
-  // Create new drop with time-based positioning
-  const createDrop = useCallback((index: number) => {
-    const u = halton(index + 1, 2);
-    const v = halton(index + 1, 3);  
-    
-    const headX = fall.centerX + (u - 0.5) * fall.width;
-    const headY = fall.topY;
-    const headZ = fall.z + (v - 0.5) * fall.depth;
-    
-    return {
-      headX,
-      headY, 
-      headZ,
-      tailX: headX,
-      tailY: headY,
-      tailZ: headZ,
-      velocity: Math.random() * 2 + 1,
-      fallTime: 0,
-      color: pickColor()
-    };
-  }, [halton, pickColor, fall]);
-
-  // Initialize geometry once
+  // Recreate drops when count changes - using original HTML method
   useEffect(() => {
-    if (linesRef.current) {
-      const geometry = new THREE.BufferGeometry();
-      // Start with empty arrays - will be updated dynamically
-      const positions = new Float32Array(maxDrops.current * 6);
-      const colors = new Float32Array(maxDrops.current * 6);
+    if (prevDropCount.current !== dropCount) {
+      prevDropCount.current = dropCount;
       
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      geometry.setDrawRange(0, 0); // Start with 0 drops visible
-      linesRef.current.geometry = geometry;
+      if (pointsRef.current) {
+        // Dispose old geometry
+        pointsRef.current.geometry.dispose();
+        
+        // Create new geometry
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(dropCount * 3);
+        const colors = new Float32Array(dropCount * 3);
+        
+        // Create new velocities array (not used in original simple method)
+        velocitiesRef.current = new Float32Array(dropCount);
+        
+        const rangeY = fall.topY - fall.bottomY;
+        
+        // EXACT method from working HTML version
+        for (let i = 0; i < dropCount; i++) {
+          const u = halton(i + 1, 2);
+          const v = halton(i + 1, 3);  
+          const w = halton(i + 1, 5);
+          
+          // Initial positioning exactly like original HTML
+          positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
+          positions[i * 3 + 1] = fall.bottomY + w * rangeY;  // Simple distribution like HTML
+          positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
+          
+          const color = pickColor();
+          colors[i * 3] = color.r;
+          colors[i * 3 + 1] = color.g;
+          colors[i * 3 + 2] = color.b;
+          
+          // Not used in simple method
+          velocitiesRef.current[i] = 0;
+        }
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        pointsRef.current.geometry = geometry;
+      }
     }
-  }, []);
+  }, [dropCount, halton, pickColor]);
+
+  // Initial setup - using original HTML method for better distribution
+  const { positions, colors } = useMemo(() => {
+    const positions = new Float32Array(dropCount * 3);
+    const colors = new Float32Array(dropCount * 3);
+    
+    velocitiesRef.current = new Float32Array(dropCount);
+    
+    const rangeY = fall.topY - fall.bottomY;
+    
+    // EXACT method from working HTML version
+    for (let i = 0; i < dropCount; i++) {
+      const u = halton(i + 1, 2);
+      const v = halton(i + 1, 3);  
+      const w = halton(i + 1, 5);
+      
+      // Distribute drops throughout fall zone for continuous appearance
+      positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
+      positions[i * 3 + 1] = fall.bottomY + (w * rangeY); // Full distribution for continuity
+      positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
+      
+      const color = pickColor();
+      colors[i * 3] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+      
+      // Initialize with consistent velocity for natural flow
+      velocitiesRef.current[i] = 3 + Math.random() * 2; // Slight variation in fall speed
+    }
+    
+    return { positions, colors };
+  }, [halton, pickColor, dropCount]);
 
   useFrame((state, delta) => {
-    if (!linesRef.current) return;
+    if (!pointsRef.current) return;
     
-    const currentTime = state.clock.elapsedTime * 1000; // Convert to milliseconds
-    const geometry = linesRef.current.geometry;
-    const positionAttribute = geometry.attributes.position;
-    const colorAttribute = geometry.attributes.color;
+    const positionAttribute = pointsRef.current.geometry.attributes.position;
+    const colorAttribute = pointsRef.current.geometry.attributes.color;
     const positions = positionAttribute.array as Float32Array;
     const colors = colorAttribute.array as Float32Array;
     
-    // Spawn new drops based on time (dropCount now represents drops per second)
-    const spawnInterval = 1000 / dropCount; // milliseconds between spawns
-    const drops = dropsRef.current;
+    // EXACT physics from original HTML
+    const mul = flowSpeed; // This matches the original "mul" variable
     
-    if (currentTime - lastSpawnTime.current >= spawnInterval && drops.length < maxDrops.current) {
-      const newDrop = createDrop(drops.length);
-      drops.push(newDrop);
-      lastSpawnTime.current = currentTime;
-    }
-    
-    // Update existing drops
-    const mul = flowSpeed;
-    
-    for (let i = drops.length - 1; i >= 0; i--) {
-      const drop = drops[i];
+    for (let i = 0; i < dropCount; i++) {
+      let y = positions[i * 3 + 1];
       
-      // Apply gravity acceleration
-      drop.velocity += 9.8 * mul * delta;
-      drop.headY -= drop.velocity * delta;
-      drop.fallTime += delta;
+      // Apply gravity acceleration instead of constant velocity
+      velocitiesRef.current[i] += 9.8 * mul * delta; // Gravity acceleration
+      y -= velocitiesRef.current[i] * delta;
       
-      if (drop.headY <= fall.bottomY) {
-        // Remove drop that has reached bottom
-        drops.splice(i, 1);
-      } else {
-        // Update positions in buffer
-        const index = i * 6;
+      if (y <= fall.bottomY) {
+        // Reset drop to top edge with new random X/Z position and velocity
+        positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
+        y = fall.topY; // Reset exactly to top edge
+        positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
+        velocitiesRef.current[i] = Math.random() * 2 + 1; // Reset to random initial velocity
         
-        // Calculate elongation based on fall time and velocity
-        const elongation = Math.min(drop.fallTime * drop.velocity * 0.5, 20);
-        
-        // Head position
-        positions[index] = drop.headX;
-        positions[index + 1] = drop.headY;
-        positions[index + 2] = drop.headZ;
-        
-        // Tail position (extends upward from head)
-        positions[index + 3] = drop.headX;
-        positions[index + 4] = drop.headY + elongation;
-        positions[index + 5] = drop.headZ;
-        
-        // Colors
-        colors[index] = drop.color.r;
-        colors[index + 1] = drop.color.g;
-        colors[index + 2] = drop.color.b;
-        colors[index + 3] = drop.color.r;
-        colors[index + 4] = drop.color.g;
-        colors[index + 5] = drop.color.b;
+        // Update color exactly like original (with needsUpdate check)
+        const color = pickColor();
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+        colorAttribute.needsUpdate = true;
       }
+      
+      positions[i * 3 + 1] = y;
     }
     
-    // Update geometry draw range to only render active drops
-    geometry.setDrawRange(0, drops.length * 2);
     positionAttribute.needsUpdate = true;
-    colorAttribute.needsUpdate = true;
   });
 
   return (
-    <lineSegments ref={linesRef} frustumCulled={false}>
-      <bufferGeometry />
-      <lineBasicMaterial
+    <points ref={pointsRef} frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={dropCount}
+          array={positions}
+          itemSize={3}
+        />
+        <bufferAttribute
+          attach="attributes-color"
+          count={dropCount}
+          array={colors}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        size={0.2}
         vertexColors
         transparent
         opacity={1.0}
@@ -892,7 +908,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
         blending={THREE.AdditiveBlending}
         fog={false}
       />
-    </lineSegments>
+    </points>
   );
 }
 
@@ -1420,13 +1436,13 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
               <span className="text-xs opacity-75">{settings.flowSpeed.toFixed(2)}</span>
             </div>
             <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
-              <Label className="text-xs opacity-85">Drops Rate (#/s)</Label>
+              <Label className="text-xs opacity-85">Drops count</Label>
               <Slider
                 value={[settings.dropCount]}
                 onValueChange={([value]) => onSettingsChange('dropCount', value)}
-                min={100}
-                max={2000}
-                step={50}
+                min={500}
+                max={15000}
+                step={100}
                 className="flex-1"
               />
               <span className="text-xs opacity-75">{settings.dropCount}</span>
@@ -1517,7 +1533,7 @@ export default function WaterfallFortress() {
 
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
-    dropCount: 800,
+    dropCount: 6000,
     coinRate: 6,
     coinSize: 0.8,
     colorPalette: defaultColorPalette
