@@ -1424,9 +1424,9 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
               <Slider
                 value={[settings.dropCount]}
                 onValueChange={([value]) => onSettingsChange('dropCount', value)}
-                min={5}
-                max={100}
-                step={5}
+                min={100}
+                max={2000}
+                step={50}
                 className="flex-1"
               />
               <span className="text-xs opacity-75">{settings.dropCount}</span>
@@ -1517,7 +1517,7 @@ export default function WaterfallFortress() {
 
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
-    dropCount: 50,
+    dropCount: 800,
     coinRate: 6,
     coinSize: 0.8,
     colorPalette: defaultColorPalette
