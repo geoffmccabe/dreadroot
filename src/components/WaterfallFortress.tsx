@@ -695,15 +695,21 @@ function FirstPersonControls({
 }
 
 // Waterfall component with stretching drops
-function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: { 
+function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: { 
   flowSpeed: number; 
-  dropCount: number; 
+  msBetweeenDrops: number; 
   colorPalette: Array<{ hex: string; weight: number; }>;
 }) {
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
-  const velocitiesRef = useRef<Float32Array>();
-  const stretchFactorsRef = useRef<Float32Array>();
-  const prevDropCount = useRef(dropCount);
+  const activeDropsRef = useRef<Array<{
+    position: THREE.Vector3;
+    velocity: number;
+    stretchFactor: number;
+    color: THREE.Color;
+    active: boolean;
+  }>>([]);
+  const nextDropTimeRef = useRef(0);
+  const maxDrops = 500; // Maximum number of concurrent drops
   
   const fall = {
     width: 6, // Made 2m wider (1m on each side)
@@ -754,72 +760,43 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     return color;
   }, [dropCDF, dropPaletteColors]);
 
-  // Halton sequence for better distribution (from original)
-  const halton = useCallback((i: number, base: number) => {
-    let f = 1;
-    let result = 0;
-    while (i > 0) {
-      f /= base;
-      result += f * (i % base);
-      i = Math.floor(i / base);
-    }
-    return result;
-  }, []);
-
-  // Recreate drops when count changes - initialize for instanced mesh
+  // Initialize drops array
   useEffect(() => {
-    if (prevDropCount.current !== dropCount) {
-      prevDropCount.current = dropCount;
-      
-      if (instancedMeshRef.current) {
-        // Create new arrays
-        velocitiesRef.current = new Float32Array(dropCount);
-        stretchFactorsRef.current = new Float32Array(dropCount);
-        
-        // Update the instance count 
-        instancedMeshRef.current.count = dropCount;
-      }
-    }
-  }, [dropCount]);
+    activeDropsRef.current = Array.from({ length: maxDrops }, () => ({
+      position: new THREE.Vector3(0, fall.topY, fall.z),
+      velocity: 0,
+      stretchFactor: 2 + Math.random() * 8,
+      color: pickColor(),
+      active: false
+    }));
+  }, [pickColor]);
 
-  // Initial setup - using original HTML method for better distribution
-  const { positions, colors } = useMemo(() => {
-    const positions = new Float32Array(dropCount * 3);
-    const colors = new Float32Array(dropCount * 3);
-    
-    velocitiesRef.current = new Float32Array(dropCount);
-    stretchFactorsRef.current = new Float32Array(dropCount);
-    
-    const rangeY = fall.topY - fall.bottomY;
-    
-    // EXACT method from working HTML version
-    for (let i = 0; i < dropCount; i++) {
-      const u = halton(i + 1, 2);
-      const v = halton(i + 1, 3);  
-      const w = halton(i + 1, 5);
-      
-      // Distribute drops throughout fall zone for continuous appearance
-      positions[i * 3] = fall.centerX + (u - 0.5) * fall.width;
-      positions[i * 3 + 1] = fall.bottomY + (w * rangeY); // Full distribution for continuity
-      positions[i * 3 + 2] = fall.z + (v - 0.5) * fall.depth;
-      
-      const color = pickColor();
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
-      
-      // Initialize with consistent velocity for natural flow
-      velocitiesRef.current[i] = 3 + Math.random() * 2; // Slight variation in fall speed
-      
-      // Random stretch factor between 2x and 10x for each drop
-      stretchFactorsRef.current[i] = 2 + Math.random() * 8;
+  // Spawn a new drop at the top
+  const spawnDrop = useCallback(() => {
+    const inactiveDrop = activeDropsRef.current.find(drop => !drop.active);
+    if (inactiveDrop) {
+      inactiveDrop.active = true;
+      inactiveDrop.position.set(
+        fall.centerX + (Math.random() - 0.5) * fall.width, // Random X across width
+        fall.topY, // Always start at top
+        fall.z + (Math.random() - 0.5) * fall.depth // Random Z within depth
+      );
+      inactiveDrop.velocity = Math.random() * 2 + 1; // Initial velocity
+      inactiveDrop.stretchFactor = 2 + Math.random() * 8; // Random stretch 2x to 10x
+      inactiveDrop.color = pickColor(); // New random color
     }
-    
-    return { positions, colors };
-  }, [halton, pickColor, dropCount]);
+  }, [pickColor]);
 
   useFrame((state, delta) => {
-    if (!instancedMeshRef.current || !velocitiesRef.current || !stretchFactorsRef.current) return;
+    if (!instancedMeshRef.current) return;
+    
+    const currentTime = state.clock.elapsedTime * 1000; // Convert to milliseconds
+    
+    // Spawn new drops based on timing
+    if (currentTime >= nextDropTimeRef.current) {
+      spawnDrop();
+      nextDropTimeRef.current = currentTime + msBetweeenDrops;
+    }
     
     const matrix = new THREE.Matrix4();
     const position = new THREE.Vector3();
@@ -827,53 +804,44 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
     const scale = new THREE.Vector3();
     const color = new THREE.Color();
     
-    // EXACT physics from original HTML
-    const mul = flowSpeed; // This matches the original "mul" variable
+    const mul = flowSpeed;
+    let activeCount = 0;
     
-    for (let i = 0; i < dropCount; i++) {
-      let y = positions[i * 3 + 1];
+    // Update all active drops
+    activeDropsRef.current.forEach((drop, i) => {
+      if (!drop.active) return;
       
-      // Apply gravity acceleration instead of constant velocity
-      velocitiesRef.current[i] += 9.8 * mul * delta; // Gravity acceleration
-      y -= velocitiesRef.current[i] * delta;
+      // Apply gravity acceleration
+      drop.velocity += 9.8 * mul * delta;
+      drop.position.y -= drop.velocity * delta;
       
-      if (y <= fall.bottomY) {
-        // Reset drop to top edge with new random X/Z position and velocity
-        positions[i * 3] = fall.centerX + (Math.random() - 0.5) * fall.width;
-        y = fall.topY; // Reset exactly to top edge
-        positions[i * 3 + 2] = fall.z + (Math.random() - 0.5) * fall.depth;
-        velocitiesRef.current[i] = Math.random() * 2 + 1; // Reset to random initial velocity
-        
-        // New random stretch factor for each reset
-        stretchFactorsRef.current[i] = 2 + Math.random() * 8;
-        
-        // Update color exactly like original
-        const newColor = pickColor();
-        colors[i * 3] = newColor.r;
-        colors[i * 3 + 1] = newColor.g;
-        colors[i * 3 + 2] = newColor.b;
+      // Check if drop reached bottom
+      if (drop.position.y <= fall.bottomY) {
+        drop.active = false;
+        return;
       }
       
-      positions[i * 3 + 1] = y;
-      
       // Calculate stretch based on fall progress (only the top stretches as it falls)
-      const fallProgress = 1 - (y - fall.bottomY) / (fall.topY - fall.bottomY);
-      const stretchMultiplier = 1 + (stretchFactorsRef.current[i] - 1) * fallProgress;
+      const fallProgress = 1 - (drop.position.y - fall.bottomY) / (fall.topY - fall.bottomY);
+      const stretchMultiplier = 1 + (drop.stretchFactor - 1) * fallProgress;
       
       // Set position, rotation, and scale for this instance
-      position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      position.copy(drop.position);
       rotation.set(0, 0, 0);
       // Start as square, stretch only in Y direction as it falls
-      scale.set(0.1, 0.1 * stretchMultiplier, 0.1); 
+      scale.set(0.1, 0.1 * stretchMultiplier, 0.1);
       
       matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
-      instancedMeshRef.current.setMatrixAt(i, matrix);
+      instancedMeshRef.current.setMatrixAt(activeCount, matrix);
       
       // Set color for this instance
-      color.setRGB(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]);
-      instancedMeshRef.current.setColorAt(i, color);
-    }
+      instancedMeshRef.current.setColorAt(activeCount, drop.color);
+      
+      activeCount++;
+    });
     
+    // Update instance count to only render active drops
+    instancedMeshRef.current.count = activeCount;
     instancedMeshRef.current.instanceMatrix.needsUpdate = true;
     if (instancedMeshRef.current.instanceColor) {
       instancedMeshRef.current.instanceColor.needsUpdate = true;
@@ -883,7 +851,7 @@ function Waterfall({ flowSpeed = 1.2, dropCount = 6000, colorPalette }: {
   return (
     <instancedMesh 
       ref={instancedMeshRef} 
-      args={[undefined, undefined, dropCount]}
+      args={[undefined, undefined, maxDrops]}
       frustumCulled={false}
     >
       <boxGeometry args={[1, 1, 1]} />
@@ -1163,7 +1131,7 @@ function Scene({
   onCycleBlock,
   blocks
 }: { 
-  settings: { flowSpeed: number; dropCount: number; coinRate: number; coinSize: number; colorPalette: any };
+  settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
   wallPositions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
   blockPlacementMode: boolean;
@@ -1368,7 +1336,7 @@ function Scene({
       <PlacedBlocks blocks={blocks} />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
-        dropCount={settings.dropCount} 
+        msBetweeenDrops={settings.msBetweeenDrops} 
         colorPalette={settings.colorPalette} 
       />
       <Coins 
@@ -1422,16 +1390,16 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
               <span className="text-xs opacity-75">{settings.flowSpeed.toFixed(2)}</span>
             </div>
             <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
-              <Label className="text-xs opacity-85">Drops count</Label>
+              <Label className="text-xs opacity-85">MS between drops</Label>
               <Slider
-                value={[settings.dropCount]}
-                onValueChange={([value]) => onSettingsChange('dropCount', value)}
-                min={500}
-                max={15000}
-                step={100}
+                value={[settings.msBetweeenDrops]}
+                onValueChange={([value]) => onSettingsChange('msBetweeenDrops', value)}
+                min={5}
+                max={100}
+                step={1}
                 className="flex-1"
               />
-              <span className="text-xs opacity-75">{settings.dropCount}</span>
+              <span className="text-xs opacity-75">{settings.msBetweeenDrops}ms</span>
             </div>
             <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
               <Label className="text-xs opacity-85">Coin rate (ps)</Label>
@@ -1519,7 +1487,7 @@ export default function WaterfallFortress() {
 
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
-    dropCount: 6000,
+    msBetweeenDrops: 10, // 10ms = 100 drops per second
     coinRate: 6,
     coinSize: 0.8,
     colorPalette: defaultColorPalette
