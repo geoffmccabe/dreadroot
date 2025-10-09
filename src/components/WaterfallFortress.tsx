@@ -999,8 +999,8 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const timeAccumulatorRef = useRef(0);
-  const maxCoins = 5000; // Large pool
+  const timeSinceLastCoinRef = useRef(0);
+  const maxCoins = 5000;
   
   // Load coin texture
   const coinTexture = useMemo(() => {
@@ -1029,9 +1029,9 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     if (inactiveCoin) {
       inactiveCoin.visible = true;
       inactiveCoin.position.set(
-        (Math.random() - 0.5) * 4,
-        20,
-        -6 + (Math.random() - 0.5) * 0.6
+        (Math.random() - 0.5) * 4, // Random X
+        20, // Start at top
+        -6 + (Math.random() - 0.5) * 0.6 // Random Z
       );
       inactiveCoin.velocity = 0;
       inactiveCoin.rotation = Math.random() * Math.PI * 2;
@@ -1042,15 +1042,13 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     
-    // Calculate ms between coins from rate per second
-    const msBetweeenCoins = 1000 / coinRate; // coinRate is per second
+    // Spawn coins at constant rate - coinRate is coins per second
+    const secondsPerCoin = 1 / coinRate;
+    timeSinceLastCoinRef.current += delta;
     
-    // Accumulate time and spawn continuously
-    timeAccumulatorRef.current += delta * 1000;
-    
-    while (timeAccumulatorRef.current >= msBetweeenCoins) {
-      timeAccumulatorRef.current -= msBetweeenCoins;
+    if (timeSinceLastCoinRef.current >= secondsPerCoin) {
       spawnCoin();
+      timeSinceLastCoinRef.current = 0;
     }
 
     // Update coin physics
