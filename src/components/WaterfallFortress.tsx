@@ -999,13 +999,8 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const timeSinceLastCoinRef = useRef(0);
+  const lastSpawnTimeRef = useRef(0);
   const maxCoins = 5000;
-  
-  // Reset timer when coin rate changes to prevent batching
-  useEffect(() => {
-    timeSinceLastCoinRef.current = 0;
-  }, [coinRate]);
   
   // Load coin texture
   const coinTexture = useMemo(() => {
@@ -1047,13 +1042,12 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     
-    // Simple coin spawning: one coin per interval
     const interval = 1 / coinRate;
-    timeSinceLastCoinRef.current += delta;
+    const currentTime = state.clock.elapsedTime;
     
-    if (timeSinceLastCoinRef.current >= interval) {
+    if (currentTime - lastSpawnTimeRef.current >= interval) {
       spawnCoin();
-      timeSinceLastCoinRef.current -= interval;
+      lastSpawnTimeRef.current = currentTime;
     }
 
     // Update coin physics
