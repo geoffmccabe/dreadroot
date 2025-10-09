@@ -996,10 +996,9 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   coinRate: number; 
   coinSize: number; 
   flowSpeed: number; 
-  onGetCoins?: () => { position: THREE.Vector3; visible: boolean }[];
+  onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const spriteRefs = useRef<(THREE.Sprite | null)[]>([]);
   const coinTimerRef = useRef(0);
   const maxCoins = 5000;
   
@@ -1018,7 +1017,8 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
         rotation: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() * 2 - 1) * Math.PI * 2,
         scaleJitter: 1 + (Math.random() * 0.4 - 0.2),
-        visible: false
+        visible: false,
+        mesh: null as THREE.Sprite | null
       });
     }
     return coinsArray;
@@ -1028,7 +1028,6 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     const coinIndex = coins.findIndex(c => !c.visible);
     if (coinIndex !== -1) {
       const coin = coins[coinIndex];
-      const sprite = spriteRefs.current[coinIndex];
       
       coin.visible = true;
       coin.position.set(
@@ -1040,9 +1039,9 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
       coin.rotation = Math.random() * Math.PI * 2;
       coin.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 2;
       
-      if (sprite) {
-        sprite.visible = true;
-        sprite.position.copy(coin.position);
+      if (coin.mesh) {
+        coin.mesh.visible = true;
+        coin.mesh.position.copy(coin.position);
       }
     }
   }, [coins]);
@@ -1060,20 +1059,19 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
 
     // Update coin physics
     const gravity = 9.8 * flowSpeed;
-    coins.forEach((coin, index) => {
-      const sprite = spriteRefs.current[index];
-      if (!sprite || !coin.visible) return;
+    coins.forEach((coin) => {
+      if (!coin.mesh || !coin.visible) return;
       
       coin.velocity += gravity * delta;
       coin.position.y -= coin.velocity * delta;
       coin.rotation += coin.rotSpeed * delta;
       
-      sprite.position.copy(coin.position);
-      sprite.material.rotation = coin.rotation;
+      coin.mesh.position.copy(coin.position);
+      coin.mesh.material.rotation = coin.rotation;
       
       if (coin.position.y <= 0.2) {
         coin.visible = false;
-        sprite.visible = false;
+        coin.mesh.visible = false;
       }
     });
   });
@@ -1090,7 +1088,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
       {coins.map((coin, index) => (
         <sprite 
           key={index} 
-          ref={(ref) => { spriteRefs.current[index] = ref; }}
+          ref={(ref) => { coin.mesh = ref; }}
           visible={false}
           scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
         >
