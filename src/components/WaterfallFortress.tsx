@@ -999,7 +999,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const timeSinceLastCoinRef = useRef(0);
+  const lastCoinSpawnTimeRef = useRef(0);
   const maxCoins = 5000;
   
   // Load coin texture
@@ -1044,11 +1044,10 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     
     // Spawn coins at constant rate - coinRate is coins per second
     const secondsPerCoin = 1 / coinRate;
-    timeSinceLastCoinRef.current += delta;
     
-    if (timeSinceLastCoinRef.current >= secondsPerCoin) {
+    if (state.clock.elapsedTime - lastCoinSpawnTimeRef.current >= secondsPerCoin) {
       spawnCoin();
-      timeSinceLastCoinRef.current = 0;
+      lastCoinSpawnTimeRef.current = state.clock.elapsedTime;
     }
 
     // Update coin physics
