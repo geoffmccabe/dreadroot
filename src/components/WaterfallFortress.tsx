@@ -999,7 +999,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const lastCoinSpawnTimeRef = useRef<number | null>(null);
+  const timeSinceLastCoinRef = useRef(0);
   const maxCoins = 5000;
   
   // Load coin texture
@@ -1042,27 +1042,13 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     
-    // Initialize spawn time on first frame
-    if (lastCoinSpawnTimeRef.current === null) {
-      lastCoinSpawnTimeRef.current = state.clock.elapsedTime;
-      return;
-    }
+    // Simple coin spawning: one coin per interval
+    const interval = 1 / coinRate;
+    timeSinceLastCoinRef.current += delta;
     
-    // Spawn coins at constant rate - coinRate is coins per second
-    const secondsPerCoin = 1 / coinRate;
-    
-    // Calculate how many coins should spawn based on elapsed time
-    const timeSinceLastCoin = state.clock.elapsedTime - lastCoinSpawnTimeRef.current;
-    const coinsToSpawn = Math.floor(timeSinceLastCoin / secondsPerCoin);
-    
-    if (coinsToSpawn > 0) {
-      // Cap at reasonable amount to prevent huge batches
-      const cappedCoins = Math.min(coinsToSpawn, 5);
-      for (let i = 0; i < cappedCoins; i++) {
-        spawnCoin();
-      }
-      // Advance by exact time consumed, preserving fractional seconds
-      lastCoinSpawnTimeRef.current += cappedCoins * secondsPerCoin;
+    if (timeSinceLastCoinRef.current >= interval) {
+      spawnCoin();
+      timeSinceLastCoinRef.current = 0;
     }
 
     // Update coin physics
