@@ -792,10 +792,10 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     
     const currentTime = state.clock.elapsedTime * 1000; // Convert to milliseconds
     
-    // Spawn new drops based on timing
-    if (currentTime >= nextDropTimeRef.current) {
+    // Spawn multiple drops per frame if needed (handles high spawn rates correctly)
+    while (currentTime >= nextDropTimeRef.current) {
       spawnDrop();
-      nextDropTimeRef.current = currentTime + msBetweeenDrops;
+      nextDropTimeRef.current += msBetweeenDrops;
     }
     
     const matrix = new THREE.Matrix4();
@@ -1394,8 +1394,8 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
               <Slider
                 value={[settings.msBetweeenDrops]}
                 onValueChange={([value]) => onSettingsChange('msBetweeenDrops', value)}
-                min={5}
-                max={100}
+                min={1}
+                max={50}
                 step={1}
                 className="flex-1"
               />
