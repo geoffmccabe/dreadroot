@@ -996,9 +996,10 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   coinRate: number; 
   coinSize: number; 
   flowSpeed: number; 
-  onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
+  onGetCoins?: () => { position: THREE.Vector3; visible: boolean }[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const spriteRefs = useRef<(THREE.Sprite | null)[]>([]);
   const coinTimerRef = useRef(0);
   const maxCoins = 5000;
   
@@ -1017,25 +1018,32 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
         rotation: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() * 2 - 1) * Math.PI * 2,
         scaleJitter: 1 + (Math.random() * 0.4 - 0.2),
-        visible: false,
-        mesh: null as THREE.Sprite | null
+        visible: false
       });
     }
     return coinsArray;
   }, []);
 
   const spawnCoin = useCallback(() => {
-    const inactiveCoin = coins.find(c => !c.visible);
-    if (inactiveCoin) {
-      inactiveCoin.visible = true;
-      inactiveCoin.position.set(
-        (Math.random() - 0.5) * 4, // Random X
-        20, // Start at top
-        -6 + (Math.random() - 0.5) * 0.6 // Random Z
+    const coinIndex = coins.findIndex(c => !c.visible);
+    if (coinIndex !== -1) {
+      const coin = coins[coinIndex];
+      const sprite = spriteRefs.current[coinIndex];
+      
+      coin.visible = true;
+      coin.position.set(
+        (Math.random() - 0.5) * 4,
+        20,
+        -6 + (Math.random() - 0.5) * 0.6
       );
-      inactiveCoin.velocity = 0;
-      inactiveCoin.rotation = Math.random() * Math.PI * 2;
-      inactiveCoin.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 2;
+      coin.velocity = 0;
+      coin.rotation = Math.random() * Math.PI * 2;
+      coin.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 2;
+      
+      if (sprite) {
+        sprite.visible = true;
+        sprite.position.copy(coin.position);
+      }
     }
   }, [coins]);
 
@@ -1046,28 +1054,26 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     coinTimerRef.current += delta;
     
     if (coinTimerRef.current >= interval) {
-      console.log('Spawning coin - interval:', interval, 'timer:', coinTimerRef.current);
       spawnCoin();
       coinTimerRef.current = 0;
     }
 
     // Update coin physics
     const gravity = 9.8 * flowSpeed;
-    coins.forEach((coin) => {
-      if (!coin.visible || !coin.mesh) return;
+    coins.forEach((coin, index) => {
+      const sprite = spriteRefs.current[index];
+      if (!sprite || !coin.visible) return;
       
       coin.velocity += gravity * delta;
       coin.position.y -= coin.velocity * delta;
       coin.rotation += coin.rotSpeed * delta;
       
-      coin.mesh.position.copy(coin.position);
-      coin.mesh.material.rotation = coin.rotation;
+      sprite.position.copy(coin.position);
+      sprite.material.rotation = coin.rotation;
       
       if (coin.position.y <= 0.2) {
         coin.visible = false;
-        if (coin.mesh) {
-          coin.mesh.visible = false;
-        }
+        sprite.visible = false;
       }
     });
   });
@@ -1081,21 +1087,16 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
 
   return (
     <group ref={groupRef}>
-      {coins.map((coin, index) => 
-        coin.visible && (
-          <sprite 
-            key={index} 
-            ref={(ref) => { 
-              coin.mesh = ref; 
-              if (ref) ref.visible = true;
-            }}
-            position={[coin.position.x, coin.position.y, coin.position.z]} 
-            scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
-          >
-            <spriteMaterial map={coinTexture} transparent />
-          </sprite>
-        )
-      )}
+      {coins.map((coin, index) => (
+        <sprite 
+          key={index} 
+          ref={(ref) => { spriteRefs.current[index] = ref; }}
+          visible={false}
+          scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
+        >
+          <spriteMaterial map={coinTexture} transparent />
+        </sprite>
+      ))}
     </group>
   );
 }
