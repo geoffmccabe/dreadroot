@@ -1394,12 +1394,12 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
               <Slider
                 value={[settings.msBetweeenDrops]}
                 onValueChange={([value]) => onSettingsChange('msBetweeenDrops', value)}
-                min={1}
-                max={50}
-                step={1}
+                min={0.1}
+                max={5}
+                step={0.1}
                 className="flex-1"
               />
-              <span className="text-xs opacity-75">{settings.msBetweeenDrops}ms</span>
+              <span className="text-xs opacity-75">{settings.msBetweeenDrops.toFixed(1)}ms</span>
             </div>
             <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
               <Label className="text-xs opacity-85">Coin rate (ps)</Label>
@@ -1487,7 +1487,7 @@ export default function WaterfallFortress() {
 
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
-    msBetweeenDrops: 10, // 10ms = 100 drops per second
+    msBetweeenDrops: 1, // 1ms = 1000 drops per second
     coinRate: 6,
     coinSize: 0.8,
     colorPalette: defaultColorPalette
