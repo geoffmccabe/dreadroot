@@ -793,21 +793,16 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     // Accumulate time in milliseconds
     timeAccumulatorRef.current += delta * 1000;
     
-    // Spawn drops based on accumulated time
-    let spawnedThisFrame = 0;
+    // Try to spawn drops - time keeps flowing whether we spawn or not
     while (timeAccumulatorRef.current >= msBetweeenDrops) {
-      const inactiveDrop = activeDropsRef.current.find(drop => !drop.active);
-      if (!inactiveDrop) {
-        // Pool is full - reset accumulator to prevent batch spawning later
-        timeAccumulatorRef.current = 0;
-        break;
-      }
-      spawnDrop();
       timeAccumulatorRef.current -= msBetweeenDrops;
-      spawnedThisFrame++;
       
-      // Safety limit to prevent infinite loop
-      if (spawnedThisFrame > 100) break;
+      // Try to spawn if pool has space
+      const inactiveDrop = activeDropsRef.current.find(drop => !drop.active);
+      if (inactiveDrop) {
+        spawnDrop();
+      }
+      // If no space, we still subtracted the time, so no buildup/batching
     }
     
     const matrix = new THREE.Matrix4();
