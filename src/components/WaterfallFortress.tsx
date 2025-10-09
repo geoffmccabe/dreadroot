@@ -1045,9 +1045,17 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     // Spawn coins at constant rate - coinRate is coins per second
     const secondsPerCoin = 1 / coinRate;
     
-    if (state.clock.elapsedTime - lastCoinSpawnTimeRef.current >= secondsPerCoin) {
-      spawnCoin();
-      lastCoinSpawnTimeRef.current = state.clock.elapsedTime;
+    // Calculate how many coins should spawn based on elapsed time
+    const timeSinceLastCoin = state.clock.elapsedTime - lastCoinSpawnTimeRef.current;
+    const coinsToSpawn = Math.floor(timeSinceLastCoin / secondsPerCoin);
+    
+    if (coinsToSpawn > 0) {
+      // Spawn all due coins to prevent batching
+      for (let i = 0; i < coinsToSpawn; i++) {
+        spawnCoin();
+      }
+      // Advance by exact time consumed, preserving fractional seconds
+      lastCoinSpawnTimeRef.current += coinsToSpawn * secondsPerCoin;
     }
 
     // Update coin physics
