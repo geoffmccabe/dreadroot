@@ -1077,7 +1077,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
         // Random direction in 3D space
         const angle = (Math.PI * 2 * spawned) / particleCount;
         const elevation = (Math.random() - 0.5) * Math.PI * 0.5;
-        const speed = 2 + Math.random() * 3;
+        const speed = (2 + Math.random() * 3) * 3; // 3x farther
         
         particle.active = true;
         particle.position.copy(position);
