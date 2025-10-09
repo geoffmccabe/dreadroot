@@ -1001,6 +1001,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   const groupRef = useRef<THREE.Group>(null);
   const coinTimerRef = useRef(0);
   const maxCoins = 5000;
+  const maxExplosionParticles = 1000;
   
   // Load coin texture
   const coinTexture = useMemo(() => {
@@ -1022,6 +1023,25 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
       });
     }
     return coinsArray;
+  }, []);
+
+  // Explosion particles
+  const explosionParticles = useMemo(() => {
+    const particles = [];
+    for (let i = 0; i < maxExplosionParticles; i++) {
+      particles.push({
+        position: new THREE.Vector3(0, 0, 0),
+        velocity: new THREE.Vector3(0, 0, 0),
+        velocityY: 0, // Falling velocity
+        rotation: 0,
+        rotSpeed: 0,
+        opacity: 0,
+        scale: 0,
+        active: false,
+        mesh: null as THREE.Sprite | null
+      });
+    }
+    return particles;
   }, []);
 
   const spawnCoin = useCallback(() => {
@@ -1046,6 +1066,44 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     }
   }, [coins]);
 
+  // Create explosion effect
+  const createExplosion = useCallback((position: THREE.Vector3, fallingVelocity: number) => {
+    const particleCount = 16;
+    let spawned = 0;
+    
+    for (let i = 0; i < explosionParticles.length && spawned < particleCount; i++) {
+      const particle = explosionParticles[i];
+      if (!particle.active) {
+        // Random direction in 3D space
+        const angle = (Math.PI * 2 * spawned) / particleCount;
+        const elevation = (Math.random() - 0.5) * Math.PI * 0.5;
+        const speed = 2 + Math.random() * 3;
+        
+        particle.active = true;
+        particle.position.copy(position);
+        particle.velocity.set(
+          Math.cos(angle) * Math.cos(elevation) * speed,
+          Math.sin(elevation) * speed,
+          Math.sin(angle) * Math.cos(elevation) * speed
+        );
+        particle.velocityY = fallingVelocity; // Inherit falling velocity
+        particle.rotation = Math.random() * Math.PI * 2;
+        particle.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 4;
+        particle.opacity = 1;
+        particle.scale = coinSize * 0.4; // Smaller than original coin
+        
+        if (particle.mesh) {
+          particle.mesh.visible = true;
+          particle.mesh.position.copy(particle.position);
+          particle.mesh.scale.set(particle.scale, particle.scale, 1);
+          particle.mesh.material.opacity = particle.opacity;
+        }
+        
+        spawned++;
+      }
+    }
+  }, [explosionParticles, coinSize]);
+
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     
@@ -1057,8 +1115,9 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
       coinTimerRef.current = 0;
     }
 
-    // Update coin physics
     const gravity = 9.8 * flowSpeed;
+    
+    // Update coin physics
     coins.forEach((coin) => {
       if (!coin.mesh || !coin.visible) return;
       
@@ -1074,14 +1133,44 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
         coin.mesh.visible = false;
       }
     });
+
+    // Update explosion particles
+    explosionParticles.forEach((particle) => {
+      if (!particle.active || !particle.mesh) return;
+      
+      // Apply outward velocity
+      particle.position.add(particle.velocity.clone().multiplyScalar(delta));
+      
+      // Apply gravity (continue falling)
+      particle.velocityY += gravity * delta;
+      particle.position.y -= particle.velocityY * delta;
+      
+      // Rotate
+      particle.rotation += particle.rotSpeed * delta;
+      
+      // Fade out
+      particle.opacity -= delta * 1.5; // Fade over ~0.66 seconds
+      
+      // Update mesh
+      particle.mesh.position.copy(particle.position);
+      particle.mesh.material.rotation = particle.rotation;
+      particle.mesh.material.opacity = Math.max(0, particle.opacity);
+      
+      // Deactivate when fully faded or hit ground
+      if (particle.opacity <= 0 || particle.position.y <= 0) {
+        particle.active = false;
+        particle.mesh.visible = false;
+      }
+    });
   });
 
-  // Expose coins for bullet collision detection
+  // Expose coins and explosion function for bullet collision detection
   useEffect(() => {
     if (onGetCoins) {
       (window as any).getCoins = () => coins;
+      (window as any).createCoinExplosion = createExplosion;
     }
-  }, [coins, onGetCoins]);
+  }, [coins, onGetCoins, createExplosion]);
 
   return (
     <group ref={groupRef}>
@@ -1091,6 +1180,16 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
           ref={(ref) => { coin.mesh = ref; }}
           visible={false}
           scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
+        >
+          <spriteMaterial map={coinTexture} transparent />
+        </sprite>
+      ))}
+      {explosionParticles.map((particle, index) => (
+        <sprite 
+          key={`particle-${index}`} 
+          ref={(ref) => { particle.mesh = ref; }}
+          visible={false}
+          scale={[0.5, 0.5, 1]}
         >
           <spriteMaterial map={coinTexture} transparent />
         </sprite>
@@ -1275,6 +1374,11 @@ function Scene({
             if (coin.visible && coin.mesh) {
               const distance = bullet.position.distanceTo(coin.position);
               if (distance < 0.8) {
+                // Create explosion effect
+                if ((window as any).createCoinExplosion) {
+                  (window as any).createCoinExplosion(coin.position.clone(), coin.velocity);
+                }
+                
                 coin.visible = false;
                 if (coin.mesh) coin.mesh.visible = false;
                 onCoinHit(coin.position);
