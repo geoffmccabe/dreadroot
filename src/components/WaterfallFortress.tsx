@@ -1046,6 +1046,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     coinTimerRef.current += delta;
     
     if (coinTimerRef.current >= interval) {
+      console.log('Spawning coin - interval:', interval, 'timer:', coinTimerRef.current);
       spawnCoin();
       coinTimerRef.current = 0;
     }
