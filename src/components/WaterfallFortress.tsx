@@ -765,7 +765,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     activeDropsRef.current = Array.from({ length: maxDrops }, () => ({
       position: new THREE.Vector3(0, fall.topY, fall.z),
       velocity: 0,
-      stretchFactor: 2 + Math.random() * 8,
+      stretchFactor: 5, // All drops stretch to 5x
       color: pickColor(),
       active: false
     }));
@@ -782,7 +782,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
         fall.z + (Math.random() - 0.5) * fall.depth // Random Z within depth
       );
       inactiveDrop.velocity = Math.random() * 2 + 1; // Initial velocity
-      inactiveDrop.stretchFactor = 2 + Math.random() * 8; // Random stretch 2x to 10x
+      inactiveDrop.stretchFactor = 5; // Always stretch to 5x
       inactiveDrop.color = pickColor(); // New random color
     }
   }, [pickColor]);
@@ -822,15 +822,20 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
         return;
       }
       
-      // Calculate stretch based on fall progress (only the top stretches as it falls)
+      // Calculate stretch based on fall progress
       const fallProgress = 1 - (drop.position.y - fall.bottomY) / (fall.topY - fall.bottomY);
       const stretchMultiplier = 1 + (drop.stretchFactor - 1) * fallProgress;
       
-      // Set position, rotation, and scale for this instance
-      position.copy(drop.position);
+      // Scale: start as square (0.1x0.1x0.1), stretch only in Y to 5x (0.1x0.5x0.1)
+      const baseSize = 0.1;
+      const scaleY = baseSize * stretchMultiplier;
+      scale.set(baseSize, scaleY, baseSize);
+      
+      // Adjust position so bottom edge falls at constant rate (not center)
+      // As drop stretches, center moves up by half the stretch amount
+      const yOffset = (scaleY - baseSize) / 2;
+      position.set(drop.position.x, drop.position.y + yOffset, drop.position.z);
       rotation.set(0, 0, 0);
-      // Start as square, stretch only in Y direction as it falls
-      scale.set(0.1, 0.1 * stretchMultiplier, 0.1);
       
       matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
       instancedMeshRef.current.setMatrixAt(activeCount, matrix);
