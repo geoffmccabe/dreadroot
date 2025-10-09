@@ -991,7 +991,7 @@ function Fortress() {
   );
 }
 
-// Coins component using sprites like the original
+// Coins component using sprites
 function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: { 
   coinRate: number; 
   coinSize: number; 
@@ -999,8 +999,8 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const coinAccumulator = useRef(0);
-  const maxCoins = 800; // Match original
+  const timeAccumulatorRef = useRef(0);
+  const maxCoins = 5000; // Large pool
   
   // Load coin texture
   const coinTexture = useMemo(() => {
@@ -1012,7 +1012,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     const coinsArray = [];
     for (let i = 0; i < maxCoins; i++) {
       coinsArray.push({
-        position: new THREE.Vector3(0, 20, -6 + (Math.random() - 0.5) * 0.6), // Start at fortress height
+        position: new THREE.Vector3(0, 20, -6),
         velocity: 0,
         rotation: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() * 2 - 1) * Math.PI * 2,
@@ -1022,30 +1022,38 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
       });
     }
     return coinsArray;
-  }, [maxCoins]);
+  }, []);
+
+  const spawnCoin = useCallback(() => {
+    const inactiveCoin = coins.find(c => !c.visible);
+    if (inactiveCoin) {
+      inactiveCoin.visible = true;
+      inactiveCoin.position.set(
+        (Math.random() - 0.5) * 4,
+        20,
+        -6 + (Math.random() - 0.5) * 0.6
+      );
+      inactiveCoin.velocity = 0;
+      inactiveCoin.rotation = Math.random() * Math.PI * 2;
+      inactiveCoin.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 2;
+    }
+  }, [coins]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     
-    // Spawn coins exactly like original
-    coinAccumulator.current += coinRate * delta;
-    while (coinAccumulator.current >= 1) {
-      const availableCoin = coins.find(c => !c.visible);
-      if (availableCoin) {
-        availableCoin.visible = true;
-        availableCoin.position.set(
-          (Math.random() - 0.5) * 4, // fall.width
-          20, // Start at fortress height
-          -6 + (Math.random() - 0.5) * 0.6 // fall.z + fall.depth
-        );
-        availableCoin.velocity = 0;
-        availableCoin.rotation = Math.random() * Math.PI * 2;
-        availableCoin.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 2;
-      }
-      coinAccumulator.current -= 1;
+    // Calculate ms between coins from rate per second
+    const msBetweeenCoins = 1000 / coinRate; // coinRate is per second
+    
+    // Accumulate time and spawn continuously
+    timeAccumulatorRef.current += delta * 1000;
+    
+    while (timeAccumulatorRef.current >= msBetweeenCoins) {
+      timeAccumulatorRef.current -= msBetweeenCoins;
+      spawnCoin();
     }
 
-    // Update coin physics exactly like original
+    // Update coin physics
     const gravity = 9.8 * flowSpeed;
     coins.forEach((coin) => {
       if (!coin.visible || !coin.mesh) return;
@@ -1054,13 +1062,11 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
       coin.position.y -= coin.velocity * delta;
       coin.rotation += coin.rotSpeed * delta;
       
-      // Update mesh position and rotation
       coin.mesh.position.copy(coin.position);
       coin.mesh.material.rotation = coin.rotation;
       
       if (coin.position.y <= 0.2) {
         coin.visible = false;
-        // Remove from rendering by clearing mesh reference
         if (coin.mesh) {
           coin.mesh.visible = false;
         }
