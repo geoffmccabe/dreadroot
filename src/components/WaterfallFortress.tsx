@@ -709,7 +709,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     active: boolean;
   }>>([]);
   const timeAccumulatorRef = useRef(0); // Accumulate time in milliseconds
-  const maxDrops = 500; // Maximum number of concurrent drops
+  const maxDrops = 3000; // Increased for high spawn rates (handles up to ~1500 drops/sec continuously)
   
   const fall = {
     width: 6, // Made 2m wider (1m on each side)
