@@ -1053,7 +1053,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     
     if (timeSinceLastCoinRef.current >= interval) {
       spawnCoin();
-      timeSinceLastCoinRef.current = 0;
+      timeSinceLastCoinRef.current -= interval;
     }
 
     // Update coin physics
