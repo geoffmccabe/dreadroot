@@ -708,7 +708,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     color: THREE.Color;
     active: boolean;
   }>>([]);
-  const nextDropTimeRef = useRef(0);
+  const nextDropTimeRef = useRef(-1); // Start at -1 to initialize on first frame
   const maxDrops = 500; // Maximum number of concurrent drops
   
   const fall = {
@@ -792,10 +792,18 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     
     const currentTime = state.clock.elapsedTime * 1000; // Convert to milliseconds
     
-    // Spawn multiple drops per frame if needed (handles high spawn rates correctly)
-    while (currentTime >= nextDropTimeRef.current) {
+    // Initialize nextDropTime on first frame
+    if (nextDropTimeRef.current === -1) {
+      nextDropTimeRef.current = currentTime;
+    }
+    
+    // Spawn drops continuously - limit to reasonable batch size per frame
+    let spawned = 0;
+    const maxSpawnsPerFrame = 10; // Prevent frame lag from spawning too many at once
+    while (currentTime >= nextDropTimeRef.current && spawned < maxSpawnsPerFrame) {
       spawnDrop();
       nextDropTimeRef.current += msBetweeenDrops;
+      spawned++;
     }
     
     const matrix = new THREE.Matrix4();
