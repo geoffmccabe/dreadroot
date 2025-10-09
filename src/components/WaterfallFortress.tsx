@@ -708,8 +708,8 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     color: THREE.Color;
     active: boolean;
   }>>([]);
-  const timeAccumulatorRef = useRef(0); // Accumulate time in milliseconds
-  const maxDrops = 5000; // Increased for high spawn rates
+  const timeAccumulatorRef = useRef(0);
+  const maxDrops = 20000; // Massive pool to never run out
   
   const fall = {
     width: 6, // Made 2m wider (1m on each side)
@@ -790,19 +790,12 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
   useFrame((state, delta) => {
     if (!instancedMeshRef.current) return;
     
-    // Accumulate time in milliseconds
+    // Accumulate time and spawn continuously
     timeAccumulatorRef.current += delta * 1000;
     
-    // Try to spawn drops - time keeps flowing whether we spawn or not
     while (timeAccumulatorRef.current >= msBetweeenDrops) {
       timeAccumulatorRef.current -= msBetweeenDrops;
-      
-      // Try to spawn if pool has space
-      const inactiveDrop = activeDropsRef.current.find(drop => !drop.active);
-      if (inactiveDrop) {
-        spawnDrop();
-      }
-      // If no space, we still subtracted the time, so no buildup/batching
+      spawnDrop();
     }
     
     const matrix = new THREE.Matrix4();
