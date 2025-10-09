@@ -709,7 +709,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     active: boolean;
   }>>([]);
   const timeAccumulatorRef = useRef(0); // Accumulate time in milliseconds
-  const maxDrops = 3000; // Increased for high spawn rates (handles up to ~1500 drops/sec continuously)
+  const maxDrops = 5000; // Increased for high spawn rates
   
   const fall = {
     width: 6, // Made 2m wider (1m on each side)
@@ -765,7 +765,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     activeDropsRef.current = Array.from({ length: maxDrops }, () => ({
       position: new THREE.Vector3(0, fall.topY, fall.z),
       velocity: 0,
-      stretchFactor: 5, // All drops stretch to 5x
+      stretchFactor: 10, // All drops stretch to 10x
       color: pickColor(),
       active: false
     }));
@@ -782,7 +782,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
         fall.z + (Math.random() - 0.5) * fall.depth // Random Z within depth
       );
       inactiveDrop.velocity = Math.random() * 2 + 1; // Initial velocity
-      inactiveDrop.stretchFactor = 5; // Always stretch to 5x
+      inactiveDrop.stretchFactor = 10; // Always stretch to 10x
       inactiveDrop.color = pickColor(); // New random color
     }
   }, [pickColor]);
@@ -837,7 +837,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
       const fallProgress = 1 - (drop.position.y - fall.bottomY) / (fall.topY - fall.bottomY);
       const stretchMultiplier = 1 + (drop.stretchFactor - 1) * fallProgress;
       
-      // Scale: start as square (0.1x0.1x0.1), stretch only in Y to 5x (0.1x0.5x0.1)
+      // Scale: start as square (0.1x0.1x0.1), stretch only in Y to 10x (0.1x1.0x0.1)
       const baseSize = 0.1;
       const scaleY = baseSize * stretchMultiplier;
       scale.set(baseSize, scaleY, baseSize);
