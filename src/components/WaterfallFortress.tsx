@@ -1002,6 +1002,11 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
   const timeSinceLastCoinRef = useRef(0);
   const maxCoins = 5000;
   
+  // Reset timer when coin rate changes to prevent batching
+  useEffect(() => {
+    timeSinceLastCoinRef.current = 0;
+  }, [coinRate]);
+  
   // Load coin texture
   const coinTexture = useMemo(() => {
     const loader = new THREE.TextureLoader();
