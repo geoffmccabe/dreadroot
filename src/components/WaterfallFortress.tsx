@@ -794,9 +794,20 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     timeAccumulatorRef.current += delta * 1000;
     
     // Spawn drops based on accumulated time
+    let spawnedThisFrame = 0;
     while (timeAccumulatorRef.current >= msBetweeenDrops) {
+      const inactiveDrop = activeDropsRef.current.find(drop => !drop.active);
+      if (!inactiveDrop) {
+        // Pool is full - reset accumulator to prevent batch spawning later
+        timeAccumulatorRef.current = 0;
+        break;
+      }
       spawnDrop();
       timeAccumulatorRef.current -= msBetweeenDrops;
+      spawnedThisFrame++;
+      
+      // Safety limit to prevent infinite loop
+      if (spawnedThisFrame > 100) break;
     }
     
     const matrix = new THREE.Matrix4();
