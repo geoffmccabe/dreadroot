@@ -36,12 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session) {
         setSession(session);
         setUser(session.user);
+        setIsLoading(false);
       } else {
         // Auto sign-in anonymously if no session exists
+        console.log('No session found, signing in anonymously...');
         await signInAnonymously();
       }
-      
-      setIsLoading(false);
     };
 
     initAuth();
@@ -56,7 +56,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Signed in anonymously:', data.user?.id);
     } catch (error) {
       console.error('Error signing in anonymously:', error);
-      toast.error('Failed to authenticate');
+      toast.error('Failed to authenticate. Please refresh the page.');
+      setIsLoading(false);
     }
   };
 
