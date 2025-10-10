@@ -1322,7 +1322,7 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
 
   return (
     <div className="fixed top-4 left-4 z-20 space-y-4 max-w-md">
-      <Card className="waterfall-card">
+      <Card className="waterfall-card w-full">
         <div 
           className="flex items-center justify-between mb-3 cursor-pointer"
           onClick={() => setIsCollapsed(!isCollapsed)}
