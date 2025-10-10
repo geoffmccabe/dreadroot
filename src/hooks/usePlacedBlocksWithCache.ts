@@ -169,6 +169,18 @@ export const usePlacedBlocksWithCache = () => {
   // Optimized block placement with instant local feedback
   const placeBlock = async (x: number, y: number, z: number, blockType: string) => {
     try {
+      // Check for duplicate position FIRST before doing anything
+      const isDuplicate = blocks.some(block => 
+        block.position_x === x && 
+        block.position_y === y && 
+        block.position_z === z
+      );
+      
+      if (isDuplicate) {
+        console.log('Block already exists at position', {x, y, z}, '- skipping placement');
+        return null;
+      }
+      
       // Generate temporary ID for instant feedback
       const tempId = `temp-${Date.now()}-${Math.random()}`;
       
@@ -186,18 +198,6 @@ export const usePlacedBlocksWithCache = () => {
 
       // Add to local state immediately
       setBlocks(prev => {
-        // Check for duplicate position before adding
-        const isDuplicate = prev.some(block => 
-          block.position_x === x && 
-          block.position_y === y && 
-          block.position_z === z
-        );
-        
-        if (isDuplicate) {
-          console.log('Block already exists at this position, skipping');
-          return prev;
-        }
-        
         console.log('Adding new block to state, previous count:', prev.length);
         const updated = [...prev, optimisticBlock];
         console.log('New block count:', updated.length);
