@@ -1311,6 +1311,13 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
 }) {
   const [isCollapsed, setIsCollapsed] = useState(true);
 
+  // Reset collapsed state when panel becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      setIsCollapsed(false);
+    }
+  }, [isVisible]);
+
   if (!isVisible) return null;
 
   return (
@@ -1838,7 +1845,7 @@ export default function WaterfallFortress() {
     />
     
     {/* Billboard Control Panel - positioned below the Waterfall panel */}
-    <div className="fixed top-4 left-4 z-20 space-y-4 max-w-md" style={{ marginTop: '320px' }}>
+    <div className="fixed top-4 left-4 z-20 max-w-md" style={{ marginTop: '320px' }}>
       <BillboardControlPanel 
         isVisible={panelsVisible} 
         onWallPositionsChange={setWallPositions}

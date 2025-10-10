@@ -22,6 +22,13 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   const { toast } = useToast();
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
   const [isCollapsed, setIsCollapsed] = useState(true);
+  
+  // Reset collapsed state when panel becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      setIsCollapsed(false);
+    }
+  }, [isVisible]);
   const [selectedWallForMoving, setSelectedWallForMoving] = useState<number>(1);
   const [tempPositions, setTempPositions] = useState<Record<number, {x: string, y: string, z: string}>>({});
   const [isUpdatingPosition, setIsUpdatingPosition] = useState(false);
