@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getBlockByKey } from '@/data/blockRegistry';
+import { calculateBlockPlacement } from '@/lib/blockPlacement';
 
 interface BlockPreviewProps {
   blockType: string;
@@ -11,7 +12,7 @@ interface BlockPreviewProps {
 
 export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }) => {
   const meshRef = useRef<THREE.Mesh>(null);
-  const { camera, raycaster, pointer } = useThree();
+  const { camera } = useThree();
   const [previewPosition, setPreviewPosition] = useState<THREE.Vector3>(new THREE.Vector3());
   
   // Get block definition from registry
@@ -28,60 +29,27 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     texture.repeat.set(1, 1);
   }, [texture]);
 
-  // Fortress center position for distance calculations
-  const fortressCenter = new THREE.Vector3(0, 0, -20);
-  
-  // Waterfall blocking area - extends infinitely forward from the waterfall
-  const waterfallZ = -6; // Waterfall is around z = -6
-  const waterfallBlockingWidth = 4; // Block area 4 units wide centered on waterfall
-
-  const isValidPlacement = (position: THREE.Vector3): boolean => {
-    // Check distance from fortress (30 meter restriction)
-    const distanceToFortress = position.distanceTo(fortressCenter);
-    if (distanceToFortress < 30) {
-      return false;
-    }
-
-    // Check if in front of waterfall (blocking player movement)
-    if (Math.abs(position.x) < waterfallBlockingWidth / 2 && position.z > waterfallZ) {
-      return false;
-    }
-
-    return true;
-  };
-
   useFrame((state) => {
     if (!visible || !meshRef.current) return;
 
-    // Cast ray from camera forward to find placement position
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(camera.quaternion);
+    // Use centralized block placement system to get accurate placement position
+    // This ensures preview matches actual placement
+    const placementResult = calculateBlockPlacement({
+      camera,
+      existingBlocks: [], // Preview doesn't need to check overlap - visual only
+      maxDistance: 5,
+    });
     
-    // Set ray from camera position in forward direction
-    raycaster.set(camera.position, direction);
-    
-    // Calculate position 3 units in front of camera at ground level
-    const distance = 3;
-    const newPosition = camera.position.clone().add(direction.multiplyScalar(distance));
-    
-    // Snap to voxel grid (1 unit blocks) - place ON grid, not between
-    newPosition.x = Math.round(newPosition.x);
-    newPosition.y = Math.max(0, Math.round(newPosition.y)); // Keep above ground
-    newPosition.z = Math.round(newPosition.z);
+    // Use placement result for positioning and validity
+    const newPosition = placementResult.position || new THREE.Vector3();
+    const renderPosition = placementResult.renderPosition || new THREE.Vector3();
+    const isValid = placementResult.isValid;
     
     setPreviewPosition(newPosition);
-    
-    // Apply the 0.5 offset for rendering
-    const renderPosition = new THREE.Vector3(
-      newPosition.x + 0.5, 
-      newPosition.y + 0.5, 
-      newPosition.z + 0.5
-    );
     meshRef.current.position.copy(renderPosition);
     
     // Change material based on valid placement and block properties
     const material = meshRef.current.material as THREE.MeshLambertMaterial;
-    const isValid = isValidPlacement(newPosition);
     
     // Base block properties from registry
     const baseColor = blockDef?.properties?.color || '#ffffff';

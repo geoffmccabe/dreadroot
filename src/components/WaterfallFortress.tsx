@@ -18,6 +18,7 @@ import { useBlocks } from '@/contexts/BlocksContext';
 import { useToast } from '@/hooks/use-toast';
 import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
+import { calculateBlockPlacement } from '@/lib/blockPlacement';
 
 // Sky component with beautiful gradient
 function SkyTexture() {
@@ -333,189 +334,26 @@ function FirstPersonControls({
       raycaster.set(camera.position, direction);
       
       
-      // TODO (Phase 2): Refactor to use BlockPlacementSystem instead of creating temporary meshes
-      // Current approach creates/destroys geometry on every click, causing performance issues
-      // Should reference existing scene objects instead of recreating them
-      // Create intersection targets (ground, existing blocks, fortress walls)
-      const targets: THREE.Object3D[] = [];
-      
-      // Add ground plane with material for raycasting - make it more reliable
-      const groundGeometry = new THREE.PlaneGeometry(200, 200);
-      const groundMaterial = new THREE.MeshBasicMaterial({ 
-        visible: false,
-        side: THREE.DoubleSide // Ensure both sides are detectable
-      });
-      const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
-      groundMesh.rotation.x = -Math.PI / 2;
-      groundMesh.position.set(0, 0, 0);
-      groundMesh.name = 'ground'; // For debugging
-      targets.push(groundMesh);
-      
-      // Constants for fortress dimensions
-      const cliffW = 40, cliffH = 20, frontT = 2;
-      const courtyardDepth = 30, frontZ = -8;
-      const openingHalfW = 2;
-      
-      // Add fortress walls as collision targets with proper dimensions and positions
-      const fortressWalls = [
-        // Front left pillar
-        { position: [-(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ], size: [cliffW/2 - openingHalfW, cliffH, frontT] },
-        // Front right pillar  
-        { position: [(cliffW/2 + openingHalfW)/2, cliffH/2, frontZ], size: [cliffW/2 - openingHalfW, cliffH, frontT] },
-        // Left wall
-        { position: [-cliffW/2 + 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2], size: [2, cliffH, courtyardDepth + frontT] },
-        // Right wall  
-        { position: [cliffW/2 - 1, cliffH/2, frontZ - courtyardDepth/2 - frontT/2], size: [2, cliffH, courtyardDepth + frontT] },
-        // Back wall
-        { position: [0, cliffH/2, frontZ - courtyardDepth - frontT], size: [cliffW, cliffH, 2] },
-        // Courtyard floor
-        { position: [0, 0.01, frontZ - courtyardDepth/2 - frontT/2], size: [cliffW-4, 0.1, courtyardDepth-2] }
-      ];
-      
-      const wallMaterial = new THREE.MeshBasicMaterial({ visible: false }); // Invisible but detectable
-      fortressWalls.forEach(wall => {
-        const wallMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(wall.size[0], wall.size[1], wall.size[2]), 
-          wallMaterial
-        );
-        wallMesh.position.set(wall.position[0], wall.position[1], wall.position[2]);
-        targets.push(wallMesh);
+      // Use centralized block placement system (Phase 2)
+      const placementResult = calculateBlockPlacement({
+        camera,
+        existingBlocks: existingBlocks || [],
+        maxDistance: 5,
       });
       
-      // Add existing blocks to collision targets with materials
-      if (existingBlocks && existingBlocks.length > 0) {
-        const blockMaterial = new THREE.MeshBasicMaterial({ 
-          visible: false,
-          side: THREE.DoubleSide
-        });
-        existingBlocks.forEach((block, index) => {
-          const blockMesh = new THREE.Mesh(
-            new THREE.BoxGeometry(1, 1, 1), 
-            blockMaterial
-          );
-          blockMesh.position.set(block.position_x, block.position_y, block.position_z);
-          blockMesh.name = `block-${index}`; // For debugging
-          targets.push(blockMesh);
-        });
-      }
+      console.log('Block placement result:', placementResult);
       
-      console.log(`Created ${targets.length} raycasting targets:`, targets.map(t => t.name || 'unnamed'));
-      console.log('Raycaster origin:', camera.position, 'direction:', direction);
-      
-      // Find intersection - filter to 5 block maximum range
-      const intersects = raycaster.intersectObjects(targets, true).filter(i => i.distance <= 5);
-      console.log(`Found ${intersects.length} intersections within 5 blocks:`, intersects.map(i => ({
-        object: i.object.name || 'unnamed',
-        point: i.point,
-        distance: i.distance
-      })));
-      
-      if (intersects.length > 0) {
-        const intersection = intersects[0];
-        const hitPoint = intersection.point;
-        const normal = intersection.face?.normal;
-        
-        console.log('Block placement intersection details:', {
-          point: hitPoint,
-          normal: normal,
-          object: intersection.object.name || 'unnamed',
-          distance: intersection.distance
-        });
-        
-        if (normal) {
-          // Calculate placement position adjacent to hit surface
-          const placePosition = hitPoint.clone().add(normal.clone().multiplyScalar(0.5));
-          
-          // Snap to voxel grid (place ON grid positions, not between)
-          placePosition.x = Math.round(placePosition.x);
-          placePosition.y = Math.round(placePosition.y);
-          placePosition.z = Math.round(placePosition.z);
-          
-          // Ensure minimum height (place ON grid, not between)
-          placePosition.y = Math.max(0, Math.round(placePosition.y));
-          
-          console.log('Calculated placement position:', placePosition);
-          
-          // Check placement restrictions
-          const fortressCenter = new THREE.Vector3(0, 0, -20);
-          const distanceToFortress = placePosition.distanceTo(fortressCenter);
-          const waterfallZ = -6;
-          const waterfallBlockingWidth = 4;
-          
-          // Validate placement
-          const tooCloseToFortress = distanceToFortress < 30;
-          const blockingWaterfall = Math.abs(placePosition.x) < waterfallBlockingWidth / 2 && placePosition.z > waterfallZ;
-          
-          // Check for block overlap - blocks are 1x1x1 units, so use stricter tolerance
-          let blockOverlap = false;
-          if (existingBlocks && existingBlocks.length > 0) {
-            blockOverlap = existingBlocks.some(block => 
-              Math.abs(block.position_x - placePosition.x) < 0.9 && 
-              Math.abs(block.position_y - placePosition.y) < 0.9 && 
-              Math.abs(block.position_z - placePosition.z) < 0.9
-            );
-            console.log('Block overlap check:', {
-              existingBlockCount: existingBlocks.length,
-              placePosition,
-              blockOverlap,
-              nearbyBlocks: existingBlocks.filter(block => 
-                Math.abs(block.position_x - placePosition.x) < 2 && 
-                Math.abs(block.position_y - placePosition.y) < 2 && 
-                Math.abs(block.position_z - placePosition.z) < 2
-              )
-            });
-          }
-          
-          console.log('Placement validation:', {
-            tooCloseToFortress,
-            blockingWaterfall, 
-            blockOverlap,
-            position: placePosition,
-            distanceToFortress,
-            selectedBlockType
-          });
-          
-          if (!tooCloseToFortress && !blockingWaterfall && !blockOverlap) {
-            console.log('Valid placement, calling onBlockPlace with selectedBlockType:', selectedBlockType);
-            onBlockPlace(placePosition);
-          } else {
-            console.log('Invalid placement due to restrictions');
-            // Show user feedback for invalid placement
-            if (tooCloseToFortress) console.log('Too close to fortress');
-            if (blockingWaterfall) console.log('Blocking waterfall'); 
-            if (blockOverlap) console.log('Block overlap detected');
-          }
-        }
+      if (placementResult.isValid && placementResult.position) {
+        console.log('Valid placement, calling onBlockPlace with selectedBlockType:', selectedBlockType);
+        onBlockPlace(placementResult.position);
       } else {
-        console.log('No intersection found for block placement - raycaster may not be hitting any objects');
-        // Try fallback placement at Minecraft distance (5 blocks) in front of player
-        const distance = 5;
-        const direction = new THREE.Vector3(0, 0, -1);
-        direction.applyQuaternion(camera.quaternion);
-        
-        const groundPosition = camera.position.clone().add(direction.multiplyScalar(distance));
-        
-        // Snap to voxel grid
-        groundPosition.x = Math.round(groundPosition.x);
-        groundPosition.y = Math.max(0, Math.round(groundPosition.y)); // Keep above ground
-        groundPosition.z = Math.round(groundPosition.z);
-        
-        console.log('Fallback placement 5 units ahead at:', groundPosition);
-        onBlockPlace(groundPosition);
+        console.log('Invalid placement:', placementResult.reason);
+        // Show user feedback for invalid placement
+        if (placementResult.reason === 'fortress') console.log('Too close to fortress');
+        if (placementResult.reason === 'waterfall') console.log('Blocking waterfall');
+        if (placementResult.reason === 'overlap') console.log('Block overlap detected');
+        if (placementResult.reason === 'no-surface') console.log('No surface found within range');
       }
-      
-      // Clean up temporary objects
-      targets.forEach(target => {
-        const mesh = target as THREE.Mesh;
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (mesh.material) {
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(mat => mat.dispose());
-          } else {
-            mesh.material.dispose();
-          }
-        }
-      });
     } else if (showCrosshairs && onShoot) {
       // Implement firing rate limiting to prevent performance issues
       const now = Date.now();
