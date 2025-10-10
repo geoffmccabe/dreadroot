@@ -1309,7 +1309,7 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
   onSettingsChange: (key: string, value: any) => void;
   isVisible: boolean;
 }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   if (!isVisible) return null;
 
@@ -1445,7 +1445,7 @@ export default function WaterfallFortress() {
     coinSize: 0.8,
     colorPalette: defaultColorPalette
   });
-  const [panelsVisible, setPanelsVisible] = useState(true);
+  const [panelsVisible, setPanelsVisible] = useState(false);
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
