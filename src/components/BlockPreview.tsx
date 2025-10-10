@@ -8,9 +8,10 @@ import { calculateBlockPlacement } from '@/lib/blockPlacement';
 interface BlockPreviewProps {
   blockType: string;
   visible: boolean;
+  existingBlocks?: Array<{ position_x: number; position_y: number; position_z: number }>;
 }
 
-export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }) => {
+export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, existingBlocks = [] }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
   const [previewPosition, setPreviewPosition] = useState<THREE.Vector3>(new THREE.Vector3());
@@ -33,10 +34,10 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible }
     if (!visible || !meshRef.current) return;
 
     // Use centralized block placement system to get accurate placement position
-    // This ensures preview matches actual placement
+    // This ensures preview matches actual placement (including overlap detection)
     const placementResult = calculateBlockPlacement({
       camera,
-      existingBlocks: [], // Preview doesn't need to check overlap - visual only
+      existingBlocks: existingBlocks as any,
       maxDistance: 5,
     });
     

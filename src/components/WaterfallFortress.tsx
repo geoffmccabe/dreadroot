@@ -1790,6 +1790,7 @@ export default function WaterfallFortress() {
         <BlockPreview 
           blockType={selectedBlockType}
           visible={true}
+          existingBlocks={blocks || []}
         />
       )}
     </Canvas>

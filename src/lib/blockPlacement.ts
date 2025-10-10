@@ -191,8 +191,36 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
     const intersects = raycaster.intersectObjects(targets, true)
       .filter(i => i.distance <= maxDistance);
     
+    // If no intersection found, use fallback placement
     if (intersects.length === 0) {
-      return { isValid: false, position: null, reason: 'no-surface' };
+      // Fallback: place block at maxDistance in front of player at ground level
+      const fallbackPosition = camera.position.clone().add(direction.clone().multiplyScalar(maxDistance));
+      
+      // Snap to voxel grid
+      fallbackPosition.x = Math.round(fallbackPosition.x);
+      fallbackPosition.y = Math.max(0, Math.round(fallbackPosition.y));
+      fallbackPosition.z = Math.round(fallbackPosition.z);
+      
+      // Validate fallback placement
+      const validation = validatePlacement(fallbackPosition, existingBlocks, {
+        fortressCenter,
+        fortressMinDistance,
+        waterfallZ,
+        waterfallBlockingWidth,
+      });
+      
+      const renderPosition = new THREE.Vector3(
+        fallbackPosition.x + 0.5,
+        fallbackPosition.y + 0.5,
+        fallbackPosition.z + 0.5
+      );
+      
+      return {
+        isValid: validation.isValid,
+        position: fallbackPosition,
+        reason: validation.reason,
+        renderPosition,
+      };
     }
     
     const intersection = intersects[0];
