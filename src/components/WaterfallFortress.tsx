@@ -333,6 +333,9 @@ function FirstPersonControls({
       raycaster.set(camera.position, direction);
       
       
+      // TODO (Phase 2): Refactor to use BlockPlacementSystem instead of creating temporary meshes
+      // Current approach creates/destroys geometry on every click, causing performance issues
+      // Should reference existing scene objects instead of recreating them
       // Create intersection targets (ground, existing blocks, fortress walls)
       const targets: THREE.Object3D[] = [];
       
