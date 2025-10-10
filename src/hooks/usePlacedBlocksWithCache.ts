@@ -9,14 +9,7 @@ interface DBBlock extends PlacedBlock {
   local_id?: string;
 }
 
-// Generate a proper UUID for temporary demo users
-const generateTempUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
+// Removed temp UUID hack - now using real Supabase authentication
 
 export const usePlacedBlocksWithCache = () => {
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
@@ -32,14 +25,7 @@ export const usePlacedBlocksWithCache = () => {
     init: initDB
   } = useIndexedDB();
 
-  // Generate a consistent temp UUID for this session
-  const [tempUserId] = useState(() => {
-    const stored = localStorage.getItem('temp-user-id');
-    if (stored) return stored;
-    const newId = generateTempUUID();
-    localStorage.setItem('temp-user-id', newId);
-    return newId;
-  });
+  // Removed temp UUID - using real authentication now
 
   // Track if user is in block mode for periodic syncing
   const isBlockModeRef = useRef(false);
@@ -169,6 +155,19 @@ export const usePlacedBlocksWithCache = () => {
   // Optimized block placement with instant local feedback
   const placeBlock = async (x: number, y: number, z: number, blockType: string) => {
     try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('User not authenticated');
+        toast({
+          title: "Authentication required",
+          description: "Please wait for authentication...",
+          variant: "destructive"
+        });
+        return null;
+      }
+
       // Check for duplicate position FIRST before doing anything
       const isDuplicate = blocks.some(block => 
         block.position_x === x && 
@@ -187,7 +186,7 @@ export const usePlacedBlocksWithCache = () => {
       // Create optimistic block
       const optimisticBlock: PlacedBlock = {
         id: tempId,
-        user_id: tempUserId,
+        user_id: user.id, // Use real user ID
         position_x: x,
         position_y: y,
         position_z: z,
@@ -235,19 +234,40 @@ export const usePlacedBlocksWithCache = () => {
   // Sync a single block to Supabase
   const syncBlockToSupabase = async (dbBlock: DBBlock) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('Cannot sync: user not authenticated');
+        return;
+      }
+
+      const blockData = {
+        user_id: user.id,
+        position_x: dbBlock.position_x,
+        position_y: dbBlock.position_y,
+        position_z: dbBlock.position_z,
+        block_type: dbBlock.block_type,
+      };
+
+      // Use upsert to handle conflicts gracefully
       const { data, error } = await supabase
         .from('placed_blocks')
-        .insert([{
-          user_id: dbBlock.user_id,
-          position_x: dbBlock.position_x,
-          position_y: dbBlock.position_y,
-          position_z: dbBlock.position_z,
-          block_type: dbBlock.block_type
-        }])
+        .upsert(blockData, {
+          onConflict: 'position_x,position_y,position_z',
+          ignoreDuplicates: false
+        })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Handle unique constraint violation gracefully
+        if (error.code === '23505') {
+          console.log('Block position already occupied, removing local temp block');
+          await removeFromDB(dbBlock.id);
+          return;
+        }
+        throw error;
+      }
 
       // Update IndexedDB with real server data
       await updateBlock(dbBlock.id, {
@@ -294,31 +314,80 @@ export const usePlacedBlocksWithCache = () => {
     }
   };
 
-  // Remove block
+  // Remove block with ownership check
   const removeBlock = async (blockId: string) => {
     try {
-      // Remove from Supabase
+      console.log('Attempting to remove block:', blockId);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast({
+          title: "Authentication required",
+          description: "You must be authenticated to remove blocks",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      // Check ownership before attempting delete
+      const blockToRemove = blocks.find(b => b.id === blockId);
+      
+      if (!blockToRemove) {
+        console.error('Block not found in local state');
+        return false;
+      }
+
+      // Check if user owns the block or is admin
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+      
+      const isAdmin = roles?.some(r => r.role === 'admin');
+      const isOwner = blockToRemove.user_id === user.id;
+
+      if (!isOwner && !isAdmin) {
+        toast({
+          title: "Permission denied",
+          description: "You can only remove blocks you placed",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      // Optimistically remove from UI
+      setBlocks(prev => prev.filter(block => block.id !== blockId));
+      
+      // Remove from Supabase (RLS will enforce ownership)
       const { error } = await supabase
         .from('placed_blocks')
         .delete()
         .eq('id', blockId);
-
-      if (error) throw error;
-
+      
+      if (error) {
+        console.error('Failed to remove block from Supabase:', error);
+        toast({
+          title: "Failed to remove block",
+          description: "Could not remove this block",
+          variant: "destructive"
+        });
+        // Revert optimistic update
+        await syncWithSupabase();
+        return false;
+      }
+      
       // Remove from IndexedDB
       await removeFromDB(blockId);
-
-      // Update local state
-      setBlocks(prev => prev.filter(block => block.id !== blockId));
-
+      
+      console.log('Block removed successfully');
       toast({
         title: "Block removed",
         description: "Block removed successfully",
       });
-
       return true;
     } catch (error) {
-      console.error('Error removing block:', error);
+      console.error('Error in removeBlock:', error);
       toast({
         title: "Failed to remove block",
         description: "Could not remove this block",
