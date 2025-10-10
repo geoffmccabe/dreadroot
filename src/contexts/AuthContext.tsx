@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   user: User | null;
@@ -55,14 +56,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Signed in anonymously:', data.user?.id);
     } catch (error) {
       console.error('Error signing in anonymously:', error);
+      toast.error('Failed to authenticate');
     }
   };
 
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
+      toast.success('Signed out successfully');
     } catch (error) {
       console.error('Error signing out:', error);
+      toast.error('Failed to sign out');
     }
   };
 
