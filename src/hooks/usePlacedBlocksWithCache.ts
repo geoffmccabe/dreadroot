@@ -186,6 +186,18 @@ export const usePlacedBlocksWithCache = () => {
 
       // Add to local state immediately
       setBlocks(prev => {
+        // Check for duplicate position before adding
+        const isDuplicate = prev.some(block => 
+          block.position_x === x && 
+          block.position_y === y && 
+          block.position_z === z
+        );
+        
+        if (isDuplicate) {
+          console.log('Block already exists at this position, skipping');
+          return prev;
+        }
+        
         console.log('Adding new block to state, previous count:', prev.length);
         const updated = [...prev, optimisticBlock];
         console.log('New block count:', updated.length);
@@ -200,9 +212,12 @@ export const usePlacedBlocksWithCache = () => {
       };
       await addBlock(dbBlock);
 
-      // If not in block mode, sync immediately
+      // If not in block mode, sync in background (non-blocking for instant placement)
       if (!isBlockModeRef.current) {
-        await syncBlockToSupabase(dbBlock);
+        syncBlockToSupabase(dbBlock).catch(error => {
+          console.error('Background sync failed:', error);
+          // Block remains in IndexedDB as unsynced and will retry with next batch sync
+        });
       }
 
       return optimisticBlock;
