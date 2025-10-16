@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface UserProfile {
   id: string;
-  user_id: string | null;
+  user_id: string;
   coins: number;
   blockchain_address?: string;
   created_at: string;
@@ -13,88 +14,77 @@ export interface UserProfile {
 
 export interface UserInventoryItem {
   id: string;
-  user_id: string | null;
+  user_id: string;
   item_type: string;
   quantity: number;
   created_at: string;
   updated_at: string;
 }
 
-// Generate a proper UUID for temporary demo users
-const generateTempUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c == 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
-
 export const useUserData = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [inventory, setInventory] = useState<UserInventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-
-  // Generate a consistent temp UUID for this session
-  const [tempUserId] = useState(() => {
-    const stored = localStorage.getItem('temp-user-id');
-    if (stored) return stored;
-    const newId = generateTempUUID();
-    localStorage.setItem('temp-user-id', newId);
-    return newId;
-  });
+  const { user, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
-    loadUserData();
-  }, []);
+    // Wait for auth to load before querying user data
+    if (!authLoading) {
+      loadUserData();
+    }
+  }, [user?.id, authLoading]);
 
   const loadUserData = async () => {
+    // If no authenticated user, clear state
+    if (!user?.id) {
+      setProfile(null);
+      setInventory([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
-      console.log('Loading user data for:', tempUserId);
+      console.log('Loading user data for authenticated user:', user.id);
       
-      // Load or create user profile
-      let { data: existingProfile, error: profileSelectError } = await supabase
+      // Load user profile (should exist due to trigger)
+      const { data: existingProfile, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('user_id', tempUserId)
+        .eq('user_id', user.id)
         .maybeSingle();
 
-      if (profileSelectError) {
-        console.error('Error loading profile:', profileSelectError);
+      if (profileError) {
+        console.error('Error loading profile:', profileError);
+        throw profileError;
       }
 
       if (!existingProfile) {
-        console.log('Creating new profile for:', tempUserId);
-        // Create new profile for demo user
-        const { data: newProfile, error: profileError } = await supabase
-          .from('user_profiles')
-          .insert([{
-            user_id: tempUserId,
-            coins: 100
-          }])
-          .select()
-          .single();
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-          throw profileError;
-        }
-        existingProfile = newProfile;
-        console.log('Created profile:', existingProfile);
-      } else {
-        console.log('Loaded existing profile:', existingProfile);
+        console.error('Profile not found for user:', user.id);
+        toast({
+          title: "Profile Error",
+          description: "User profile not found. Please contact support.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
       }
 
       setProfile(existingProfile);
+      console.log('Loaded profile:', existingProfile);
 
       // Load inventory
       const { data: inventoryData, error: inventoryError } = await supabase
         .from('user_inventory')
         .select('*')
-        .eq('user_id', tempUserId);
+        .eq('user_id', user.id);
 
-      if (inventoryError) throw inventoryError;
+      if (inventoryError) {
+        console.error('Error loading inventory:', inventoryError);
+        throw inventoryError;
+      }
+
       setInventory(inventoryData || []);
       console.log('Loaded inventory:', inventoryData);
 
@@ -111,6 +101,15 @@ export const useUserData = () => {
   };
 
   const buyBlock = async (itemType: string, cost: number) => {
+    if (!user?.id) {
+      toast({
+        title: "Authentication required",
+        description: "Please wait for authentication to complete",
+        variant: "destructive"
+      });
+      return false;
+    }
+
     if (!profile || profile.coins < cost) {
       toast({
         title: "Insufficient coins",
@@ -128,7 +127,7 @@ export const useUserData = () => {
       const { error: coinsError } = await supabase
         .from('user_profiles')
         .update({ coins: newCoinAmount })
-        .eq('id', profile.id);
+        .eq('user_id', user.id);
 
       if (coinsError) {
         console.error('Error updating coins:', coinsError);
@@ -157,7 +156,7 @@ export const useUserData = () => {
         const { error: insertError } = await supabase
           .from('user_inventory')
           .insert([{
-            user_id: tempUserId,
+            user_id: user.id,
             item_type: itemType,
             quantity: 1
           }]);
@@ -244,8 +243,8 @@ export const useUserData = () => {
   };
 
   const addCoins = async (amount: number) => {
-    if (!profile) {
-      console.log('No profile found, cannot add coins');
+    if (!user?.id || !profile) {
+      console.log('No authenticated user or profile found, cannot add coins');
       return false;
     }
 
@@ -255,7 +254,7 @@ export const useUserData = () => {
       const { error } = await supabase
         .from('user_profiles')
         .update({ coins: newCoinAmount })
-        .eq('id', profile.id);
+        .eq('user_id', user.id);
 
       if (error) {
         console.error('Error updating coins:', error);
@@ -279,8 +278,8 @@ export const useUserData = () => {
   };
 
   const updateBlockchainAddress = async (address: string) => {
-    if (!profile) {
-      console.log('No profile found, cannot update blockchain address');
+    if (!user?.id || !profile) {
+      console.log('No authenticated user or profile found, cannot update blockchain address');
       return false;
     }
 
@@ -288,7 +287,7 @@ export const useUserData = () => {
       const { error } = await supabase
         .from('user_profiles')
         .update({ blockchain_address: address })
-        .eq('id', profile.id);
+        .eq('user_id', user.id);
 
       if (error) {
         console.error('Error updating blockchain address:', error);

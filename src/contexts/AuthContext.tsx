@@ -19,6 +19,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Clean up old temp-user-id from localStorage (migration cleanup)
+    const oldTempId = localStorage.getItem('temp-user-id');
+    if (oldTempId) {
+      console.log('Removing old temp-user-id from localStorage');
+      localStorage.removeItem('temp-user-id');
+    }
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {

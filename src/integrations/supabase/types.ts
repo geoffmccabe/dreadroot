@@ -169,7 +169,7 @@ export type Database = {
           item_type: string
           quantity: number
           updated_at: string
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           created_at?: string
@@ -177,7 +177,7 @@ export type Database = {
           item_type?: string
           quantity?: number
           updated_at?: string
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           created_at?: string
@@ -185,7 +185,7 @@ export type Database = {
           item_type?: string
           quantity?: number
           updated_at?: string
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -196,7 +196,7 @@ export type Database = {
           created_at: string
           id: string
           updated_at: string
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           blockchain_address?: string | null
@@ -204,7 +204,7 @@ export type Database = {
           created_at?: string
           id?: string
           updated_at?: string
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           blockchain_address?: string | null
@@ -212,7 +212,7 @@ export type Database = {
           created_at?: string
           id?: string
           updated_at?: string
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }
