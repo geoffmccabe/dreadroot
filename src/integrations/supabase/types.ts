@@ -103,7 +103,7 @@ export type Database = {
           position_y: number
           position_z: number
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           block_type?: string
@@ -113,7 +113,7 @@ export type Database = {
           position_y: number
           position_z: number
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           block_type?: string
@@ -123,7 +123,7 @@ export type Database = {
           position_y?: number
           position_z?: number
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
