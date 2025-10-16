@@ -55,6 +55,45 @@ All colors MUST be HSL.
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Typography tokens */
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+    --font-size-3xl: 1.875rem;
+
+    /* Spacing tokens */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+
+    /* Shadow tokens */
+    --shadow-sm: 0 1px 2px 0 hsl(208 85% 25% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(208 85% 25% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(208 85% 25% / 0.1);
+    --shadow-xl: 0 20px 25px -5px hsl(208 85% 25% / 0.15);
+
+    /* Overlay/Panel tokens for semi-transparent backgrounds */
+    --overlay-light: 0 0% 100% / 0.5;
+    --overlay-dark: 0 0% 0% / 0.5;
+    --overlay-darker: 0 0% 0% / 0.7;
+    --panel-bg: var(--card);
+    --panel-border: var(--card-border);
+    --panel-blur: blur(12px);
+
+    /* Brand-specific accent colors (for blocks, icons, special elements) */
+    --brand-accent-1: 208 85% 50%; /* Blue */
+    --brand-accent-2: 181 84% 45%; /* Teal */
+    --brand-accent-3: 271 81% 56%; /* Purple */
+    --brand-accent-4: 45 93% 47%; /* Gold/Amber */
+    --brand-accent-5: 142 76% 36%; /* Green */
+    --brand-danger: 0 84% 60%; /* Red */
   }
 
   .dark {
@@ -95,6 +134,149 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Dark mode shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.5);
+    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.6);
+
+    /* Dark overlay adjustments */
+    --overlay-light: 0 0% 100% / 0.1;
+    --overlay-dark: 0 0% 0% / 0.7;
+    --overlay-darker: 0 0% 0% / 0.85;
+
+    /* Dark mode brand accents (brighter for visibility) */
+    --brand-accent-1: 208 85% 60%; /* Brighter blue */
+    --brand-accent-2: 181 84% 55%; /* Brighter teal */
+    --brand-accent-3: 271 81% 66%; /* Brighter purple */
+    --brand-accent-4: 45 93% 57%; /* Brighter gold */
+    --brand-accent-5: 142 76% 46%; /* Brighter green */
+  }
+
+  /* Theme Variants - Easy Skinning System */
+  /* Default is Waterfall theme (already defined above) */
+  
+  [data-theme="bitcoin"] {
+    /* Bitcoin Orange & Dark Gray Theme */
+    --background: 30 100% 97%;
+    --foreground: 0 0% 10%;
+    
+    --primary: 27 96% 51%; /* Bitcoin orange #f7931a */
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 10%;
+    
+    --accent: 0 0% 29%; /* Bitcoin gray */
+    --accent-foreground: 0 0% 100%;
+    
+    --brand-accent-1: 27 96% 51%; /* Orange */
+    --brand-accent-2: 0 0% 29%; /* Gray */
+    --brand-accent-3: 27 96% 41%; /* Darker orange */
+    --brand-accent-4: 45 100% 51%; /* Gold */
+    --brand-accent-5: 142 50% 40%; /* Green */
+  }
+
+  [data-theme="bitcoin"].dark {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 95%;
+    
+    --primary: 27 96% 61%; /* Brighter orange for dark */
+    --primary-foreground: 0 0% 10%;
+    
+    --accent: 0 0% 80%;
+    --accent-foreground: 0 0% 10%;
+    
+    --brand-accent-1: 27 96% 61%;
+    --brand-accent-2: 0 0% 50%;
+    --brand-accent-3: 27 96% 51%;
+    --brand-accent-4: 45 100% 61%;
+  }
+
+  [data-theme="emerald"] {
+    /* Emerald Green & Forest Theme */
+    --background: 152 68% 96%;
+    --foreground: 152 100% 8%;
+    
+    --primary: 160 84% 39%; /* Emerald green */
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 152 50% 90%;
+    --secondary-foreground: 152 100% 8%;
+    
+    --accent: 173 80% 40%; /* Teal */
+    --accent-foreground: 0 0% 100%;
+    
+    --brand-accent-1: 160 84% 39%; /* Emerald */
+    --brand-accent-2: 173 80% 40%; /* Teal */
+    --brand-accent-3: 142 71% 45%; /* Green */
+    --brand-accent-4: 45 93% 47%; /* Gold */
+    --brand-accent-5: 220 90% 56%; /* Blue */
+  }
+
+  [data-theme="emerald"].dark {
+    --background: 152 50% 8%;
+    --foreground: 152 68% 96%;
+    
+    --primary: 160 84% 49%;
+    --brand-accent-1: 160 84% 49%;
+    --brand-accent-2: 173 80% 50%;
+  }
+}
+
+/* Utility Component Classes */
+@layer components {
+  /* Panel styles */
+  .panel-base {
+    background: hsl(var(--panel-bg));
+    border: 1px solid hsl(var(--panel-border));
+    @apply rounded-lg shadow-md backdrop-blur-md;
+  }
+
+  .panel-overlay {
+    background: hsl(var(--overlay-dark));
+    @apply backdrop-blur-sm;
+  }
+
+  .panel-overlay-darker {
+    background: hsl(var(--overlay-darker));
+    @apply backdrop-blur-md;
+  }
+
+  /* Brand colored elements */
+  .btn-brand-1 {
+    background: hsl(var(--brand-accent-1));
+    @apply text-white hover:opacity-90 transition-opacity;
+  }
+
+  .btn-brand-2 {
+    background: hsl(var(--brand-accent-2));
+    @apply text-white hover:opacity-90 transition-opacity;
+  }
+
+  .text-brand-1 {
+    color: hsl(var(--brand-accent-1));
+  }
+
+  .text-brand-2 {
+    color: hsl(var(--brand-accent-2));
+  }
+
+  .text-brand-3 {
+    color: hsl(var(--brand-accent-3));
+  }
+
+  .bg-brand-1 {
+    background: hsl(var(--brand-accent-1));
+  }
+
+  .bg-brand-2 {
+    background: hsl(var(--brand-accent-2));
+  }
+
+  .border-brand-1 {
+    border-color: hsl(var(--brand-accent-1));
   }
 }
 
