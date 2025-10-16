@@ -1859,16 +1859,16 @@ export default function WaterfallFortress() {
         {/* Shooting mode button area (around coin icon) */}
         <div 
           className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-l"
-          onClick={() => handleModeChange('shooting')}
-          title="Switch to shooting mode"
+          onClick={() => setInventoryOpen(true)}
+          title="Open inventory"
         >
           <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
         </div>
         {/* Coin count (clickable to open shop) */}
         <div 
           className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-r border-l border-white/20"
-          onClick={() => handleOpenShop()}
-          title="Open shop"
+          onClick={() => setInventoryOpen(true)}
+          title="Open inventory"
         >
           <span className="font-bold">x{profile?.coins || 0}</span>
         </div>
