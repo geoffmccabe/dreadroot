@@ -55,9 +55,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initAuth = async () => {
       try {
+        // Check what's in localStorage
+        const storageKeys = Object.keys(localStorage).filter(k => k.includes('supabase'));
+        console.log('📦 localStorage keys:', storageKeys);
+        storageKeys.forEach(key => {
+          console.log(`  ${key}:`, localStorage.getItem(key)?.substring(0, 100));
+        });
+
         // CRITICAL: Check for existing session FIRST, before listener fires
         console.log('🔍 Checking for existing session...');
-        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        const { data: { session: existingSession }, error } = await supabase.auth.getSession();
+        
+        console.log('📊 getSession result:', { 
+          hasSession: !!existingSession, 
+          userId: existingSession?.user?.id,
+          error: error?.message 
+        });
         
         if (!mounted) return;
 
