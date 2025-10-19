@@ -316,10 +316,42 @@ export const useUserData = () => {
     await loadUserData();
   };
 
+  const checkIsAdmin = async () => {
+    if (!user?.id) return false;
+    
+    try {
+      const { data, error } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: 'admin'
+      });
+
+      if (error) {
+        console.error('Error checking admin role:', error);
+        return false;
+      }
+
+      return data || false;
+    } catch (error) {
+      console.error('Error checking admin role:', error);
+      return false;
+    }
+  };
+
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      checkIsAdmin().then(setIsAdmin);
+    } else {
+      setIsAdmin(false);
+    }
+  }, [user?.id]);
+
   return {
     profile,
     inventory,
     isLoading,
+    isAdmin,
     buyBlock,
     useBlock,
     addCoins,

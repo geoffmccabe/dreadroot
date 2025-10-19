@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { BillboardControlPanel } from '@/components/BillboardControlPanel';
+import { AdminPanel } from '@/components/AdminPanel';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
@@ -1834,13 +1834,13 @@ export default function WaterfallFortress() {
       isVisible={panelsVisible}
     />
     
-    {/* Billboard Control Panel - positioned below the Waterfall panel */}
-    <div className="fixed top-4 left-4 z-20 w-[28rem]" style={{ marginTop: '320px' }}>
-      <BillboardControlPanel 
-        isVisible={panelsVisible} 
-        onWallPositionsChange={setWallPositions}
-      />
-    </div>
+    {/* Admin Panel - accessible via A key */}
+    <AdminPanel
+      isOpen={panelsVisible}
+      onClose={() => setPanelsVisible(false)}
+      defaultTab="coins"
+      onWallPositionsChange={setWallPositions}
+    />
     
     {/* Score display and block inventory */}
     <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2">
