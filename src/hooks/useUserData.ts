@@ -320,17 +320,28 @@ export const useUserData = () => {
     if (!user?.id) return false;
     
     try {
-      const { data, error } = await supabase.rpc('has_role', {
+      // Check for both admin and superadmin roles
+      const { data: adminCheck, error: adminError } = await supabase.rpc('has_role', {
         _user_id: user.id,
         _role: 'admin'
       });
 
-      if (error) {
-        console.error('Error checking admin role:', error);
-        return false;
+      if (adminError) {
+        console.error('Error checking admin role:', adminError);
       }
 
-      return data || false;
+      const { data: superadminCheck, error: superadminError } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: 'superadmin'
+      });
+
+      if (superadminError) {
+        console.error('Error checking superadmin role:', superadminError);
+      }
+
+      const isAdminUser = adminCheck || superadminCheck || false;
+      console.log('Admin check result:', { adminCheck, superadminCheck, isAdminUser });
+      return isAdminUser;
     } catch (error) {
       console.error('Error checking admin role:', error);
       return false;
