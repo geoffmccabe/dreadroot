@@ -386,15 +386,27 @@ All colors MUST be HSL.
     position: fixed !important;
     top: 1rem !important;
     left: 1rem !important;
+    right: auto !important;
+    bottom: auto !important;
     transform: none !important;
+    translate: none !important;
     margin: 0 !important;
+    inset: auto !important;
   }
 
-  .user-panel-dialog[data-state="open"] {
+  .user-panel-dialog[data-state="open"],
+  .user-panel-dialog[data-state="closed"],
+  .user-panel-dialog[data-state="opening"],
+  .user-panel-dialog[data-state="closing"] {
     animation: none !important;
+    transform: none !important;
+    translate: none !important;
   }
 
-  .user-panel-dialog[data-state="closed"] {
-    animation: none !important;
+  /* Override any parent positioning */
+  [data-radix-portal] .user-panel-dialog {
+    position: fixed !important;
+    top: 1rem !important;
+    left: 1rem !important;
   }
 }
