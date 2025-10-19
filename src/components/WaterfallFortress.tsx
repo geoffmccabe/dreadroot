@@ -1116,10 +1116,11 @@ function Scene({
 
   // Initialize audio context and preload sounds (optimized)
   useEffect(() => {
-    // Create single audio context
+    // Create single audio context only if it doesn't exist
     try {
-      if (!audioContextRef.current) {
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        console.log('AudioContext created');
       }
     } catch (e) {
       console.warn('Web Audio API not supported');
@@ -1134,9 +1135,19 @@ function Scene({
     });
 
     return () => {
-      // Cleanup audio context only on unmount
-      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close();
+      // Cleanup audio context only if it exists and isn't already closed
+      if (audioContextRef.current) {
+        const ctx = audioContextRef.current;
+        if (ctx.state !== 'closed') {
+          console.log('Closing AudioContext');
+          ctx.close().catch(err => {
+            // Ignore errors if already closing
+            if (err.name !== 'InvalidStateError') {
+              console.error('Error closing AudioContext:', err);
+            }
+          });
+        }
+        audioContextRef.current = null; // Clear ref to prevent double close
       }
     };
   }, []);

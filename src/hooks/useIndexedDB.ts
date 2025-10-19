@@ -33,13 +33,29 @@ class BlockDB {
         
         request.onsuccess = () => {
           this.db = request.result;
-          console.log('IndexedDB initialized successfully');
+          console.log('IndexedDB initialized successfully, version:', this.db.version);
           resolve();
         };
         
+        request.onblocked = () => {
+          console.warn('IndexedDB upgrade blocked - close all other tabs');
+        };
+        
         request.onupgradeneeded = (event) => {
-          console.log('IndexedDB upgrade needed, version:', (event.target as IDBOpenDBRequest).result.version);
           const db = (event.target as IDBOpenDBRequest).result;
+          const oldVersion = event.oldVersion;
+          const newVersion = event.newVersion || this.dbVersion;
+          
+          console.log(`IndexedDB upgrade: v${oldVersion} -> v${newVersion}`);
+          
+          // Handle version conflicts by clearing and recreating
+          if (oldVersion > newVersion) {
+            console.warn('Version conflict detected - database downgrade not supported');
+            // Delete all stores and recreate
+            Array.from(db.objectStoreNames).forEach(name => {
+              db.deleteObjectStore(name);
+            });
+          }
           
           // Clear existing blocks store if it exists (to fix corruption)
           if (db.objectStoreNames.contains(this.storeName)) {
@@ -61,7 +77,15 @@ class BlockDB {
         };
       } catch (error) {
         console.error('Error initializing IndexedDB:', error);
-        reject(error);
+        // If all else fails, try deleting the database and starting fresh
+        if (error instanceof DOMException && error.name === 'VersionError') {
+          console.warn('Attempting to delete and recreate database...');
+          indexedDB.deleteDatabase(this.dbName);
+          // Retry once after deletion
+          setTimeout(() => this.init().then(resolve).catch(reject), 100);
+        } else {
+          reject(error);
+        }
       }
     });
   }
