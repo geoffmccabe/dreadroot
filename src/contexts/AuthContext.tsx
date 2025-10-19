@@ -67,8 +67,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session) {
           console.log('✅ Found existing session:', session.user?.id);
-          setSession(session);
-          setUser(session.user);
+          
+          // Verify the user actually exists by checking if we can fetch their data
+          const { error: userCheckError } = await supabase.auth.getUser();
+          if (userCheckError) {
+            console.error('❌ Session is stale, clearing and creating new user');
+            await supabase.auth.signOut();
+            await signInAnonymouslyInternal();
+          } else {
+            setSession(session);
+            setUser(session.user);
+          }
         } else {
           // Only auto sign-in if there's truly no session
           console.log('🔑 No existing session, creating anonymous user...');

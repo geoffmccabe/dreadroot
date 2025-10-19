@@ -75,8 +75,7 @@ export const useUserData = () => {
       }
 
       if (!existingProfile) {
-        // Profile not found - this can happen right after user creation
-        // Retry a few times with exponential backoff
+        // Profile not found - this can happen right after user creation OR if session is stale
         if (retryCount < 3) {
           const delay = Math.pow(2, retryCount) * 500; // 500ms, 1s, 2s
           console.log(`Profile not found, retrying in ${delay}ms (attempt ${retryCount + 1}/3)`);
@@ -84,13 +83,10 @@ export const useUserData = () => {
           return;
         }
         
-        console.error('Profile not found after retries for user:', user.id);
-        toast({
-          title: "Profile Error",
-          description: "User profile not found. Please contact support.",
-          variant: "destructive"
-        });
-        setIsLoading(false);
+        // After retries, session might be stale - clear it and reload
+        console.error('Profile not found after retries for user:', user.id, '- clearing stale session');
+        await supabase.auth.signOut();
+        window.location.reload();
         return;
       }
 
