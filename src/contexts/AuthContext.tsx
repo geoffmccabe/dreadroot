@@ -92,13 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // THEN check for existing session or auto sign-in
     const initAuth = async () => {
       try {
-        // Initialize IndexedDB first
-        await blockDB.init();
-        
-        // Check for tracked user ID in IndexedDB
-        const trackedUserId = await blockDB.getUserId();
-        console.log('🔍 Tracked user ID:', trackedUserId);
-        
+        // Check Supabase session FIRST (source of truth)
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -108,24 +102,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return;
         
         if (session) {
+          // We have an active session - use it
           console.log('✅ Found existing session:', session.user?.id);
-          
-          // If we have a session, always trust it and sync IndexedDB
-          if (trackedUserId && session.user?.id !== trackedUserId) {
-            console.warn('⚠️ Session user mismatch - trusting session and updating stored ID');
-            await blockDB.setUserId(session.user.id);
-          }
-          
           setSession(session);
           setUser(session.user);
-        } else if (trackedUserId) {
-          // We have a tracked user but no session - session expired
-          console.warn('⚠️ Session expired. Clearing stored ID and creating new anonymous user.');
-          await blockDB.clearUserId();
-          await signInAnonymouslyInternal();
+          
+          // Sync IndexedDB in background
+          blockDB.init().then(() => {
+            blockDB.setUserId(session.user.id).catch(console.error);
+          });
         } else {
-          // No session and no tracked user - first time user
-          console.log('🔑 No existing session or tracked user, creating anonymous user...');
+          // No session - check if we should create one
+          await blockDB.init();
+          const trackedUserId = await blockDB.getUserId();
+          
+          if (trackedUserId) {
+            // Had a tracked user but session expired - clear and start fresh
+            console.warn('⚠️ Session lost. Creating new anonymous user.');
+            await blockDB.clearUserId();
+          } else {
+            console.log('🔑 First time user, creating anonymous session...');
+          }
+          
           await signInAnonymouslyInternal();
         }
       } catch (error) {
