@@ -78,7 +78,7 @@ export const useUserData = () => {
         console.error('Profile not found for user:', user.id);
         toast({
           title: "Profile Error",
-          description: "User profile not found. Please contact support.",
+          description: "Please sign in to continue.",
           variant: "destructive"
         });
         setIsLoading(false);

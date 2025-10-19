@@ -15,6 +15,7 @@ import { BlockPreview } from '@/components/BlockPreview';
 import { Inventory } from '@/components/Inventory';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
@@ -1476,6 +1477,7 @@ export default function WaterfallFortress() {
   // User data and block system hooks
   const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
   const { blocks, placeBlock, setBlockMode } = useBlocks();
+  const { user, signOut } = useAuth();
   const { toast } = useToast();
   
   
@@ -1848,6 +1850,21 @@ export default function WaterfallFortress() {
     >
       {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
     </Button>
+    
+    {/* Sign out button */}
+    <div className="fixed top-4 right-16 z-30 flex items-center gap-2">
+      <div className="bg-black/50 text-white px-3 py-1 rounded text-sm">
+        {user?.email || 'User'}
+      </div>
+      <Button
+        className="waterfall-button"
+        size="sm"
+        onClick={signOut}
+        title="Sign out"
+      >
+        Sign Out
+      </Button>
+    </div>
     
     <ControlPanel 
       settings={settings} 
