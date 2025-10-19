@@ -11,7 +11,7 @@ import NotFound from "./pages/NotFound";
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, session } = useAuth();
   
   if (isLoading) {
     return (
@@ -21,7 +21,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
   
-  if (!user) {
+  // Reject anonymous users (from old auth system) or users without email
+  if (!user || !session?.user?.email) {
     return <Navigate to="/auth" replace />;
   }
   

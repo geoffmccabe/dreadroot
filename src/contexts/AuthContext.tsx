@@ -119,22 +119,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Signing out user:', user?.id);
       
-      // Clear IndexedDB session first
-      await clearUserSession();
+      // Try to clear IndexedDB but don't fail if it errors
+      try {
+        await clearUserSession();
+      } catch (idbError) {
+        console.warn('IndexedDB clear failed (non-critical):', idbError);
+      }
       
-      // Then sign out from Supabase (this will trigger auth state change)
+      // Sign out from Supabase
       const { error } = await supabase.auth.signOut();
       
       if (error) {
         console.error('Supabase signOut error:', error);
-        throw error;
+        // Even if there's an error, try to clear local storage manually
+        localStorage.clear();
+        sessionStorage.clear();
       }
       
-      console.log('Successfully signed out');
-      toast.success('Signed out successfully');
+      // Force page reload to clear all state
+      window.location.href = '/auth';
+      
     } catch (error) {
-      console.error('Error signing out:', error);
-      toast.error('Failed to sign out');
+      console.error('Critical error signing out:', error);
+      // Force clear everything and reload
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/auth';
     }
   };
 
