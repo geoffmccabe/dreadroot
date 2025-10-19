@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { blockDB } from '@/hooks/useIndexedDB';
 
 interface AuthContextType {
   user: User | null;
@@ -35,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Store user ID in IndexedDB for persistent tracking
       if (data.user?.id) {
-        localStorage.setItem('anonymous-user-id', data.user.id);
+        await blockDB.setUserId(data.user.id);
       }
       
       return data;
@@ -52,13 +53,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isInitializing = true;
     let mounted = true;
-    
-    // Clean up old temp-user-id from localStorage (migration cleanup)
-    const oldTempId = localStorage.getItem('temp-user-id');
-    if (oldTempId) {
-      console.log('🧹 Removing old temp-user-id from localStorage');
-      localStorage.removeItem('temp-user-id');
-    }
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -70,13 +64,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Sync localStorage with actual session
+        // Sync IndexedDB with actual session (non-blocking)
         if (session?.user?.id) {
-          const stored = localStorage.getItem('anonymous-user-id');
-          if (stored !== session.user.id) {
-            console.log('🔄 Syncing stored user ID to match session:', session.user.id);
-            localStorage.setItem('anonymous-user-id', session.user.id);
-          }
+          setTimeout(async () => {
+            const stored = await blockDB.getUserId();
+            if (stored !== session.user.id) {
+              console.log('🔄 Syncing stored user ID to match session:', session.user.id);
+              await blockDB.setUserId(session.user.id);
+            }
+          }, 0);
+        }
+        
+        // Clear user ID on sign out
+        if (event === 'SIGNED_OUT') {
+          setTimeout(async () => {
+            await blockDB.clearUserId();
+          }, 0);
         }
         
         // Only set loading to false if we're not in the initial setup
@@ -89,8 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // THEN check for existing session or auto sign-in
     const initAuth = async () => {
       try {
-        // Check for tracked user ID in localStorage
-        const trackedUserId = localStorage.getItem('anonymous-user-id');
+        // Initialize IndexedDB first
+        await blockDB.init();
+        
+        // Check for tracked user ID in IndexedDB
+        const trackedUserId = await blockDB.getUserId();
         console.log('🔍 Tracked user ID:', trackedUserId);
         
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -104,20 +110,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session) {
           console.log('✅ Found existing session:', session.user?.id);
           
-          // If we have a session, always trust it and sync localStorage
+          // If we have a session, always trust it and sync IndexedDB
           if (trackedUserId && session.user?.id !== trackedUserId) {
             console.warn('⚠️ Session user mismatch - trusting session and updating stored ID');
-            localStorage.setItem('anonymous-user-id', session.user.id);
+            await blockDB.setUserId(session.user.id);
           }
           
           setSession(session);
           setUser(session.user);
         } else if (trackedUserId) {
-          // We have a tracked user but no session
-          // This means the session expired - we need to create a new anonymous user
-          // Unfortunately, Supabase doesn't allow re-authentication of anonymous users
-          console.warn('⚠️ Session expired for tracked user. Creating new anonymous user.');
-          console.log('📝 Note: Previous user data may need migration if this user upgrades later.');
+          // We have a tracked user but no session - session expired
+          console.warn('⚠️ Session expired. Clearing stored ID and creating new anonymous user.');
+          await blockDB.clearUserId();
           await signInAnonymouslyInternal();
         } else {
           // No session and no tracked user - first time user
@@ -147,6 +151,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.signInAnonymously();
       if (error) throw error;
       console.log('Signed in anonymously:', data.user?.id);
+      if (data.user?.id) {
+        await blockDB.setUserId(data.user.id);
+      }
     } catch (error) {
       console.error('Error signing in anonymously:', error);
       toast.error('Failed to authenticate. Please refresh the page.');
@@ -156,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      await blockDB.clearUserId();
       await supabase.auth.signOut();
       toast.success('Signed out successfully');
     } catch (error) {
