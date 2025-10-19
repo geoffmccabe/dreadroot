@@ -35,10 +35,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isInitializing = true;
     
-    // CRITICAL: Clear ALL Supabase auth data on mount to prevent stale sessions
-    console.log('🧹 Clearing all auth storage to prevent stale sessions');
-    localStorage.removeItem('sb-ditecxjpkgbqkeckebzb-auth-token');
-    
     // Clean up old temp-user-id from localStorage (migration cleanup)
     const oldTempId = localStorage.getItem('temp-user-id');
     if (oldTempId) {
@@ -63,9 +59,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // THEN check for existing session or auto sign-in
     const initAuth = async () => {
       try {
-        // After clearing storage, there should be no session
-        console.log('🔑 Creating fresh anonymous user...');
-        await signInAnonymouslyInternal();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ Error getting session:', error);
+        }
+        
+        if (session) {
+          console.log('✅ Found existing session:', session.user?.id);
+          setSession(session);
+          setUser(session.user);
+        } else {
+          // Only auto sign-in if there's truly no session
+          console.log('🔑 No existing session, creating anonymous user...');
+          await signInAnonymouslyInternal();
+        }
       } catch (error) {
         console.error('❌ Error in initAuth:', error);
       } finally {
