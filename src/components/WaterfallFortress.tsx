@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Settings } from 'lucide-react';
 import { AdminPanel } from '@/components/AdminPanel';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
@@ -1453,12 +1453,14 @@ export default function WaterfallFortress() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [walletTab, setWalletTab] = useState<'inventory' | 'store' | 'wallet'>('inventory');
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [adminPanelTab, setAdminPanelTab] = useState<'coins' | 'billboards' | 'blocks'>('coins');
   
   // Wall positions state for real-time control
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   
   // User data and block system hooks
-  const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
+  const { profile, inventory, addCoins, useBlock, refreshData, isAdmin } = useUserData();
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { toast } = useToast();
   
@@ -1746,6 +1748,12 @@ export default function WaterfallFortress() {
     setWalletOpen(true);
   }, []);
 
+  // Admin panel handler
+  const openAdminPanel = useCallback((tab: 'coins' | 'billboards' | 'blocks') => {
+    setAdminPanelTab(tab);
+    setAdminPanelOpen(true);
+  }, []);
+
   // Listen for crosshair state changes from FirstPersonControls
   useEffect(() => {
     const handleCrosshairChange = (event: CustomEvent) => {
@@ -1827,18 +1835,30 @@ export default function WaterfallFortress() {
     >
       {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
     </Button>
+
+    {/* Admin Panel button - only visible to admins */}
+    {isAdmin && (
+      <Button
+        className="fixed top-4 right-16 z-30"
+        size="sm"
+        onClick={() => openAdminPanel('coins')}
+        title="Open Admin Panel"
+      >
+        <Settings className="h-4 w-4" />
+      </Button>
+    )}
     
-    <ControlPanel 
+    <ControlPanel
       settings={settings} 
       onSettingsChange={handleSettingsChange}
       isVisible={panelsVisible}
     />
     
-    {/* Admin Panel - accessible via A key */}
+    {/* Admin Panel - accessible via Settings button */}
     <AdminPanel
-      isOpen={panelsVisible}
-      onClose={() => setPanelsVisible(false)}
-      defaultTab="coins"
+      isOpen={adminPanelOpen}
+      onClose={() => setAdminPanelOpen(false)}
+      defaultTab={adminPanelTab}
       onWallPositionsChange={setWallPositions}
     />
     
