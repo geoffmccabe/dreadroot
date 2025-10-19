@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -17,9 +17,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isSigningInRef = useRef(false); // Guard against multiple sign-in attempts
 
   const signInAnonymouslyInternal = async () => {
+    // Prevent multiple simultaneous sign-in attempts
+    if (isSigningInRef.current) {
+      console.log('⏸️ Sign-in already in progress, skipping');
+      return;
+    }
+
     try {
+      isSigningInRef.current = true;
+      console.log('🔑 Starting anonymous sign-in...');
       const { data, error } = await supabase.auth.signInAnonymously();
       if (error) throw error;
       console.log('✅ Signed in anonymously:', data.user?.id);
@@ -29,6 +38,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast.error('Failed to authenticate. Please refresh the page.');
       setIsLoading(false);
       throw error;
+    } finally {
+      isSigningInRef.current = false;
     }
   };
 
