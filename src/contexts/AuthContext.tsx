@@ -52,11 +52,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    let hasInitialized = false;
 
-    // Set up auth state listener FIRST
+    const initAuth = async () => {
+      try {
+        // CRITICAL: Check for existing session FIRST, before listener fires
+        console.log('🔍 Checking for existing session...');
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+
+        if (existingSession) {
+          console.log('✅ Found existing session, restoring:', existingSession.user?.id);
+          setSession(existingSession);
+          setUser(existingSession.user);
+          
+          // Sync IndexedDB in background
+          blockDB.init().then(() => {
+            blockDB.setUserId(existingSession.user.id).catch(console.error);
+          });
+        } else {
+          console.log('❌ No existing session found, creating new anonymous user');
+          await signInAnonymouslyInternal();
+        }
+      } catch (error) {
+        console.error('❌ Error in initAuth:', error);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    // Set up listener for future auth changes (after initial check)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         console.log('🔄 Auth state changed:', event, 'user:', session?.user?.id);
         
         if (!mounted) return;
@@ -64,35 +93,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Handle first initialization - create anonymous user if no session
-        if (!hasInitialized) {
-          hasInitialized = true;
-          
-          if (!session && !isSigningInRef.current) {
-            console.log('🔑 No session on init, creating anonymous user...');
-            await signInAnonymouslyInternal();
-          } else if (session) {
-            console.log('✅ Session restored from storage:', session.user?.id);
-            // Sync IndexedDB in background
-            blockDB.init().then(() => {
-              blockDB.setUserId(session.user.id).catch(console.error);
-            });
-          }
-          
-          setIsLoading(false);
-        }
-        
         // Handle sign out
         if (event === 'SIGNED_OUT') {
           blockDB.init().then(() => {
             blockDB.clearUserId().catch(console.error);
           });
         }
+        
+        // Sync IndexedDB on sign in
+        if (event === 'SIGNED_IN' && session?.user?.id) {
+          blockDB.init().then(() => {
+            blockDB.setUserId(session.user.id).catch(console.error);
+          });
+        }
       }
     );
 
-    // Initialize IndexedDB
-    blockDB.init().catch(console.error);
+    // Initialize auth
+    initAuth();
 
     return () => {
       mounted = false;
