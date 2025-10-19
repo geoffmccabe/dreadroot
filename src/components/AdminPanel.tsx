@@ -222,14 +222,15 @@ function BlocksList({ userRoles }: BlocksListProps) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewBlockDialog, setShowNewBlockDialog] = useState(false);
+  const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [newBlockData, setNewBlockData] = useState({
     name: '',
     description: '',
     cost: 10,
-    key: ''
+    key: '',
+    texture: null as File | null
   });
   const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const isSuperAdmin = userRoles.includes('superadmin');
@@ -341,6 +342,27 @@ function BlocksList({ userRoles }: BlocksListProps) {
     }
 
     try {
+      let textureUrl = null;
+
+      // Upload texture if provided
+      if (newBlockData.texture) {
+        const fileExt = newBlockData.texture.name.split('.').pop();
+        const fileName = `${newBlockData.key}-${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('block-textures')
+          .upload(fileName, newBlockData.texture);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('block-textures')
+          .getPublicUrl(fileName);
+
+        textureUrl = urlData.publicUrl;
+      }
+
+      // Don't specify ID, let database auto-increment
       const { error } = await supabase
         .from('blocks')
         .insert([{
@@ -350,6 +372,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
           cost: newBlockData.cost,
           category: 'building',
           rarity: 'common',
+          texture_url: textureUrl,
           properties: {
             size: [1, 1, 1],
             color: '#808080',
@@ -366,13 +389,48 @@ function BlocksList({ userRoles }: BlocksListProps) {
       });
 
       setShowNewBlockDialog(false);
-      setNewBlockData({ name: '', description: '', cost: 10, key: '' });
+      setNewBlockData({ name: '', description: '', cost: 10, key: '', texture: null });
       loadBlocks();
     } catch (error: any) {
       console.error('Failed to create block:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to create block",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleUpdateBlock = async () => {
+    if (!isSuperAdmin || !editingBlock) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('blocks')
+        .update({
+          name: editingBlock.name,
+          description: editingBlock.description,
+          cost: editingBlock.cost,
+          properties: editingBlock.properties
+        })
+        .eq('id', editingBlock.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Block updated successfully"
+      });
+
+      setEditingBlock(null);
+      loadBlocks();
+    } catch (error: any) {
+      console.error('Failed to update block:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update block",
         variant: "destructive"
       });
     }
@@ -461,6 +519,17 @@ function BlocksList({ userRoles }: BlocksListProps) {
                     </div>
                   )}
                 </div>
+
+                {/* Edit Button */}
+                {isSuperAdmin && (
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => setEditingBlock(block)}
+                  >
+                    Edit
+                  </Button>
+                )}
               </div>
             </Card>
           ))}
@@ -512,12 +581,89 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   min="1"
                 />
               </div>
+              <div>
+                <Label htmlFor="block-texture">Texture Image</Label>
+                <Input
+                  id="block-texture"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setNewBlockData({ ...newBlockData, texture: e.target.files?.[0] || null })}
+                />
+                {newBlockData.texture && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Selected: {newBlockData.texture.name}
+                  </div>
+                )}
+              </div>
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" onClick={() => setShowNewBlockDialog(false)}>
                   Cancel
                 </Button>
                 <Button onClick={handleCreateBlock}>
                   Create Block
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Block Dialog */}
+      {editingBlock && (
+        <Dialog open={!!editingBlock} onOpenChange={(open) => !open && setEditingBlock(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Block</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div>
+                <Label htmlFor="edit-block-name">Block Name</Label>
+                <Input
+                  id="edit-block-name"
+                  value={editingBlock.name}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-block-description">Description</Label>
+                <Input
+                  id="edit-block-description"
+                  value={editingBlock.description || ''}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, description: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-block-cost">Cost (coins)</Label>
+                <Input
+                  id="edit-block-cost"
+                  type="number"
+                  value={editingBlock.cost}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, cost: parseInt(e.target.value) || 10 })}
+                  min="1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-block-color">Block Color</Label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    id="edit-block-color"
+                    type="color"
+                    value={editingBlock.properties.color}
+                    onChange={(e) => setEditingBlock({ 
+                      ...editingBlock, 
+                      properties: { ...editingBlock.properties, color: e.target.value }
+                    })}
+                    className="w-20 h-10"
+                  />
+                  <span className="text-xs text-muted-foreground">{editingBlock.properties.color}</span>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setEditingBlock(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateBlock}>
+                  Save Changes
                 </Button>
               </div>
             </div>
