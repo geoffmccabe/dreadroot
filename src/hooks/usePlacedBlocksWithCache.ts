@@ -11,7 +11,7 @@ interface DBBlock extends PlacedBlock {
 
 // Removed temp UUID hack - now using real Supabase authentication
 
-export const usePlacedBlocksWithCache = () => {
+export const usePlacedBlocksWithCache = (userId: string | null) => {
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -31,28 +31,34 @@ export const usePlacedBlocksWithCache = () => {
   const isBlockModeRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Load blocks when userId becomes available
   useEffect(() => {
-    initializeCache();
+    if (userId) {
+      console.log('✅ User authenticated, loading blocks for:', userId);
+      initializeCache();
+    } else {
+      console.log('⏳ Waiting for user authentication...');
+      setIsLoading(true);
+      setBlocks([]);
+    }
+    
     const cleanup = setupRealtimeSubscription();
     return cleanup;
-  }, []);
+  }, [userId]); // Re-run when userId changes
 
   // Initialize IndexedDB and load blocks
   const initializeCache = async () => {
+    if (!userId) {
+      console.warn('⚠️ Cannot initialize cache without userId');
+      setIsLoading(false);
+      return;
+    }
+    
     try {
       setIsLoading(true);
       await initDB();
       
-      // Wait for authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        console.warn('⚠️ No authenticated user - waiting for auth...');
-        setIsLoading(false);
-        return;
-      }
-      
-      console.log('✅ Loading blocks for user:', user.id);
+      console.log('💾 Loading blocks from IndexedDB...');
       
       // Load blocks from IndexedDB first (instant)
       const cachedBlocks = await getAllBlocks();

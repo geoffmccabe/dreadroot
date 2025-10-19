@@ -1,6 +1,7 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 import { PlacedBlock } from '@/types/blocks';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface BlocksContextType {
   blocks: PlacedBlock[];
@@ -14,7 +15,8 @@ interface BlocksContextType {
 const BlocksContext = createContext<BlocksContextType | undefined>(undefined);
 
 export function BlocksProvider({ children }: { children: ReactNode }) {
-  const blocksHook = usePlacedBlocksWithCache();
+  const { user } = useAuth();
+  const blocksHook = usePlacedBlocksWithCache(user?.id || null);
   
   return (
     <BlocksContext.Provider value={blocksHook}>

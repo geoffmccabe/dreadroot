@@ -1,3 +1,4 @@
+import React from 'react';
 import { PlacedBlock } from '../types/blocks';
 
 interface DBBlock extends Omit<PlacedBlock, 'created_at' | 'updated_at'> {
@@ -260,7 +261,9 @@ class BlockDB {
 export const blockDB = new BlockDB();
 
 export const useIndexedDB = () => {
-  return {
+  // Memoize the return object to prevent unnecessary re-renders
+  // These methods are stable since blockDB is a singleton
+  return React.useMemo(() => ({
     getAllBlocks: () => blockDB.getAllBlocks(),
     addBlock: (block: DBBlock) => blockDB.addBlock(block),
     removeBlock: (blockId: string) => blockDB.removeBlock(blockId),
@@ -272,5 +275,5 @@ export const useIndexedDB = () => {
     saveUserSession: (userId: string) => blockDB.saveUserSession(userId),
     getUserSession: () => blockDB.getUserSession(),
     clearUserSession: () => blockDB.clearUserSession()
-  };
+  }), []); // Empty deps since blockDB is stable
 };

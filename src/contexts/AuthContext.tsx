@@ -20,6 +20,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const { saveUserSession, getUserSession, clearUserSession } = useIndexedDB();
 
+  // Separate effect for IndexedDB sync - reacts to session changes
+  useEffect(() => {
+    if (session?.user?.id) {
+      // Save to IndexedDB when we have a session
+      saveUserSession(session.user.id).catch(err => {
+        console.error('Failed to save user session to IndexedDB:', err);
+      });
+    } else if (session === null && user === null && !isLoading) {
+      // Clear IndexedDB when explicitly signed out
+      clearUserSession().catch(err => {
+        console.error('Failed to clear user session from IndexedDB:', err);
+      });
+    }
+  }, [session, user, isLoading, saveUserSession, clearUserSession]);
+
   useEffect(() => {
     // Clean up old temp-user-id from localStorage (migration cleanup)
     const oldTempId = localStorage.getItem('temp-user-id');
@@ -28,24 +43,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('temp-user-id');
     }
 
-    // Set up auth state listener FIRST
+    // Set up auth state listener FIRST (synchronous only - no async calls)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔔 Auth state changed:', event, session?.user?.id);
-        setSession(session);
-        setUser(session?.user ?? null);
+      (event, newSession) => {
+        console.log('🔔 Auth state changed:', event, newSession?.user?.id);
+        // Only update state - IndexedDB handled in separate effect
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         setIsLoading(false);
-        
-        // Save user_id to IndexedDB whenever we have a session
-        if (session?.user?.id) {
-          setTimeout(() => {
-            saveUserSession(session.user.id);
-          }, 0);
-        } else {
-          setTimeout(() => {
-            clearUserSession();
-          }, 0);
-        }
       }
     );
 
@@ -54,23 +59,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('🔐 Starting auth initialization...');
       
       // Step 1: Check Supabase localStorage session
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('📦 Supabase session:', session?.user?.id || 'null');
+      const { data: { session: supabaseSession } } = await supabase.auth.getSession();
+      console.log('📦 Supabase session:', supabaseSession?.user?.id || 'null');
       
       // Step 2: Check IndexedDB for last known user
       const storedSession = await getUserSession();
       console.log('💾 IndexedDB stored user:', storedSession?.user_id || 'null');
       
       // Step 3: Decision logic
-      if (session) {
-        // Supabase has a session
-        console.log('✅ Using Supabase session:', session.user.id);
-        setSession(session);
-        setUser(session.user);
-        
-        // Update IndexedDB with this user_id
-        await saveUserSession(session.user.id);
-        setIsLoading(false);
+      if (supabaseSession) {
+        // Supabase has a session - let onAuthStateChange handle state update
+        console.log('✅ Using Supabase session:', supabaseSession.user.id);
+        // Don't set state here - onAuthStateChange will handle it
         
       } else if (storedSession?.user_id) {
         // No Supabase session, but IndexedDB has a user
@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     initAuth();
 
     return () => subscription.unsubscribe();
-  }, [saveUserSession, getUserSession, clearUserSession]);
+  }, []); // Empty deps - only run once on mount
 
   const signInAnonymously = async () => {
     try {
