@@ -51,12 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    let isInitializing = true;
     let mounted = true;
+    let hasInitialized = false;
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         console.log('🔄 Auth state changed:', event, 'user:', session?.user?.id);
         
         if (!mounted) return;
@@ -64,79 +64,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Sync IndexedDB with actual session (non-blocking)
-        if (session?.user?.id) {
-          setTimeout(async () => {
-            const stored = await blockDB.getUserId();
-            if (stored !== session.user.id) {
-              console.log('🔄 Syncing stored user ID to match session:', session.user.id);
-              await blockDB.setUserId(session.user.id);
-            }
-          }, 0);
-        }
-        
-        // Clear user ID on sign out
-        if (event === 'SIGNED_OUT') {
-          setTimeout(async () => {
-            await blockDB.clearUserId();
-          }, 0);
-        }
-        
-        // Only set loading to false if we're not in the initial setup
-        if (!isInitializing) {
+        // Handle first initialization - create anonymous user if no session
+        if (!hasInitialized) {
+          hasInitialized = true;
+          
+          if (!session && !isSigningInRef.current) {
+            console.log('🔑 No session on init, creating anonymous user...');
+            await signInAnonymouslyInternal();
+          } else if (session) {
+            console.log('✅ Session restored from storage:', session.user?.id);
+            // Sync IndexedDB in background
+            blockDB.init().then(() => {
+              blockDB.setUserId(session.user.id).catch(console.error);
+            });
+          }
+          
           setIsLoading(false);
+        }
+        
+        // Handle sign out
+        if (event === 'SIGNED_OUT') {
+          blockDB.init().then(() => {
+            blockDB.clearUserId().catch(console.error);
+          });
         }
       }
     );
 
-    // THEN check for existing session or auto sign-in
-    const initAuth = async () => {
-      try {
-        // Check Supabase session FIRST (source of truth)
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('❌ Error getting session:', error);
-        }
-        
-        if (!mounted) return;
-        
-        if (session) {
-          // We have an active session - use it
-          console.log('✅ Found existing session:', session.user?.id);
-          setSession(session);
-          setUser(session.user);
-          
-          // Sync IndexedDB in background
-          blockDB.init().then(() => {
-            blockDB.setUserId(session.user.id).catch(console.error);
-          });
-        } else {
-          // No session - check if we should create one
-          await blockDB.init();
-          const trackedUserId = await blockDB.getUserId();
-          
-          if (trackedUserId) {
-            // Had a tracked user but session expired - clear and start fresh
-            console.warn('⚠️ Session lost. Creating new anonymous user.');
-            await blockDB.clearUserId();
-          } else {
-            console.log('🔑 First time user, creating anonymous session...');
-          }
-          
-          await signInAnonymouslyInternal();
-        }
-      } catch (error) {
-        console.error('❌ Error in initAuth:', error);
-      } finally {
-        if (mounted) {
-          isInitializing = false;
-          setIsLoading(false);
-        }
-      }
-    };
-
-    initAuth();
+    // Initialize IndexedDB
+    blockDB.init().catch(console.error);
 
     return () => {
       mounted = false;
