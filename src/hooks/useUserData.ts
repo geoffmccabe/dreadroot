@@ -35,7 +35,7 @@ export const useUserData = () => {
     }
   }, [user?.id, authLoading]);
 
-  const loadUserData = async () => {
+  const loadUserData = async (retryCount = 0) => {
     // If no authenticated user, clear state
     if (!user?.id) {
       setProfile(null);
@@ -75,7 +75,16 @@ export const useUserData = () => {
       }
 
       if (!existingProfile) {
-        console.error('Profile not found for user:', user.id);
+        // Profile not found - this can happen right after user creation
+        // Retry a few times with exponential backoff
+        if (retryCount < 3) {
+          const delay = Math.pow(2, retryCount) * 500; // 500ms, 1s, 2s
+          console.log(`Profile not found, retrying in ${delay}ms (attempt ${retryCount + 1}/3)`);
+          setTimeout(() => loadUserData(retryCount + 1), delay);
+          return;
+        }
+        
+        console.error('Profile not found after retries for user:', user.id);
         toast({
           title: "Profile Error",
           description: "User profile not found. Please contact support.",
