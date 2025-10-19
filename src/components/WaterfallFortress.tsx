@@ -1464,6 +1464,12 @@ export default function WaterfallFortress() {
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { toast } = useToast();
   
+  // Debug admin status
+  useEffect(() => {
+    console.log('🔍 Admin status:', isAdmin);
+    console.log('👤 User profile:', profile);
+  }, [isAdmin, profile]);
+  
   
   // Main component audio refs for placement sounds
   const mainAudioRefs = useRef({
@@ -1841,7 +1847,10 @@ export default function WaterfallFortress() {
       <Button
         className="fixed top-4 right-16 z-30"
         size="sm"
-        onClick={() => openAdminPanel('coins')}
+        onClick={() => {
+          console.log('🔧 Admin Panel button clicked');
+          openAdminPanel('coins');
+        }}
         title="Open Admin Panel"
       >
         <Settings className="h-4 w-4" />
