@@ -43,6 +43,17 @@ export const usePlacedBlocksWithCache = () => {
       setIsLoading(true);
       await initDB();
       
+      // Wait for authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.warn('⚠️ No authenticated user - waiting for auth...');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('✅ Loading blocks for user:', user.id);
+      
       // Load blocks from IndexedDB first (instant)
       const cachedBlocks = await getAllBlocks();
       setBlocks(cachedBlocks.map(block => ({

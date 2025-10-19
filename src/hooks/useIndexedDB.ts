@@ -7,11 +7,18 @@ interface DBBlock extends Omit<PlacedBlock, 'created_at' | 'updated_at'> {
   local_id?: string; // For offline blocks
 }
 
+interface UserSession {
+  id: string; // Always '1' (single record store)
+  user_id: string; // Last authenticated Supabase user ID
+  last_active: string; // ISO timestamp
+}
+
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 2; // Increment version to trigger migration
+  private dbVersion = 3; // Increment version to add user_session store
   private storeName = 'blocks';
+  private sessionStoreName = 'user_session';
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -30,19 +37,26 @@ class BlockDB {
         };
         
         request.onupgradeneeded = (event) => {
-          console.log('IndexedDB upgrade needed, clearing corrupted data');
+          console.log('IndexedDB upgrade needed, version:', (event.target as IDBOpenDBRequest).result.version);
           const db = (event.target as IDBOpenDBRequest).result;
           
-          // Clear existing store if it exists (to fix corruption)
+          // Clear existing blocks store if it exists (to fix corruption)
           if (db.objectStoreNames.contains(this.storeName)) {
             db.deleteObjectStore(this.storeName);
           }
           
-          // Create fresh store
+          // Create fresh blocks store
           const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
           store.createIndex('synced', 'synced', { unique: false });
           store.createIndex('position', ['position_x', 'position_y', 'position_z'], { unique: false });
-          console.log('IndexedDB store recreated');
+          
+          // Create user_session store if it doesn't exist
+          if (!db.objectStoreNames.contains(this.sessionStoreName)) {
+            db.createObjectStore(this.sessionStoreName, { keyPath: 'id' });
+            console.log('IndexedDB user_session store created');
+          }
+          
+          console.log('IndexedDB stores ready');
         };
       } catch (error) {
         console.error('Error initializing IndexedDB:', error);
@@ -190,6 +204,57 @@ class BlockDB {
       getRequest.onerror = () => reject(getRequest.error);
     });
   }
+
+  // User session management
+  async saveUserSession(userId: string): Promise<void> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.sessionStoreName], 'readwrite');
+      const store = transaction.objectStore(this.sessionStoreName);
+      const session: UserSession = {
+        id: '1',
+        user_id: userId,
+        last_active: new Date().toISOString()
+      };
+      const request = store.put(session);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        console.log('💾 Saved user to IndexedDB:', userId);
+        resolve();
+      };
+    });
+  }
+
+  async getUserSession(): Promise<UserSession | null> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.sessionStoreName], 'readonly');
+      const store = transaction.objectStore(this.sessionStoreName);
+      const request = store.get('1');
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  }
+
+  async clearUserSession(): Promise<void> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.sessionStoreName], 'readwrite');
+      const store = transaction.objectStore(this.sessionStoreName);
+      const request = store.clear();
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        console.log('💾 Cleared user session from IndexedDB');
+        resolve();
+      };
+    });
+  }
 }
 
 export const blockDB = new BlockDB();
@@ -203,6 +268,9 @@ export const useIndexedDB = () => {
     markAsSynced: (blockId: string) => blockDB.markAsSynced(blockId),
     clearAllBlocks: () => blockDB.clearAllBlocks(),
     updateBlock: (blockId: string, updates: Partial<DBBlock>) => blockDB.updateBlock(blockId, updates),
-    init: () => blockDB.init()
+    init: () => blockDB.init(),
+    saveUserSession: (userId: string) => blockDB.saveUserSession(userId),
+    getUserSession: () => blockDB.getUserSession(),
+    clearUserSession: () => blockDB.clearUserSession()
   };
 };
