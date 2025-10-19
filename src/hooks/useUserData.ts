@@ -352,8 +352,13 @@ export const useUserData = () => {
 
   useEffect(() => {
     if (user?.id) {
-      checkIsAdmin().then(setIsAdmin);
+      console.log('🔍 Checking admin status for user:', user.id);
+      checkIsAdmin().then((result) => {
+        console.log('✅ Admin check complete:', result);
+        setIsAdmin(result);
+      });
     } else {
+      console.log('❌ No user ID, setting isAdmin to false');
       setIsAdmin(false);
     }
   }, [user?.id]);
