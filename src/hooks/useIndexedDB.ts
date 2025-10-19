@@ -10,7 +10,7 @@ interface DBBlock extends Omit<PlacedBlock, 'created_at' | 'updated_at'> {
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 3; // Increment version to add auth store
+  private dbVersion = 4; // Support full Supabase auth storage in auth store
   private storeName = 'blocks';
   private authStoreName = 'auth';
 
@@ -232,6 +232,46 @@ class BlockDB {
       const transaction = this.db!.transaction([this.authStoreName], 'readwrite');
       const store = transaction.objectStore(this.authStoreName);
       const request = store.delete('anonymous-user-id');
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  // Generic key-value storage methods for Supabase auth
+  async getAuthItem(key: string): Promise<string | null> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.authStoreName], 'readonly');
+      const store = transaction.objectStore(this.authStoreName);
+      const request = store.get(key);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result?.value || null);
+    });
+  }
+
+  async setAuthItem(key: string, value: string): Promise<void> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.authStoreName], 'readwrite');
+      const store = transaction.objectStore(this.authStoreName);
+      const request = store.put({ key, value });
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  async removeAuthItem(key: string): Promise<void> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.authStoreName], 'readwrite');
+      const store = transaction.objectStore(this.authStoreName);
+      const request = store.delete(key);
       
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve();
