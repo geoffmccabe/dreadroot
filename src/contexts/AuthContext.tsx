@@ -51,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let isInitializing = true;
+    let mounted = true;
     
     // Clean up old temp-user-id from localStorage (migration cleanup)
     const oldTempId = localStorage.getItem('temp-user-id');
@@ -63,8 +64,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('🔄 Auth state changed:', event, 'user:', session?.user?.id);
+        
+        if (!mounted) return;
+        
         setSession(session);
         setUser(session?.user ?? null);
+        
+        // Sync localStorage with actual session
+        if (session?.user?.id) {
+          const stored = localStorage.getItem('anonymous-user-id');
+          if (stored !== session.user.id) {
+            console.log('🔄 Syncing stored user ID to match session:', session.user.id);
+            localStorage.setItem('anonymous-user-id', session.user.id);
+          }
+        }
         
         // Only set loading to false if we're not in the initial setup
         if (!isInitializing) {
@@ -86,39 +99,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error('❌ Error getting session:', error);
         }
         
+        if (!mounted) return;
+        
         if (session) {
           console.log('✅ Found existing session:', session.user?.id);
           
-          // Verify session matches tracked user
+          // If we have a session, always trust it and sync localStorage
           if (trackedUserId && session.user?.id !== trackedUserId) {
-            console.warn('⚠️ Session user mismatch, clearing and using tracked user');
-            await supabase.auth.signOut();
-            // Don't create new user - the tracked one should be used
-          } else {
-            setSession(session);
-            setUser(session.user);
+            console.warn('⚠️ Session user mismatch - trusting session and updating stored ID');
+            localStorage.setItem('anonymous-user-id', session.user.id);
           }
+          
+          setSession(session);
+          setUser(session.user);
         } else if (trackedUserId) {
-          // We have a tracked user but no session - session expired
-          console.log('⚠️ Session expired for tracked user, signing out fully');
-          localStorage.removeItem('anonymous-user-id');
+          // We have a tracked user but no session
+          // This means the session expired - we need to create a new anonymous user
+          // Unfortunately, Supabase doesn't allow re-authentication of anonymous users
+          console.warn('⚠️ Session expired for tracked user. Creating new anonymous user.');
+          console.log('📝 Note: Previous user data may need migration if this user upgrades later.');
           await signInAnonymouslyInternal();
         } else {
-          // No session and no tracked user - create new one
+          // No session and no tracked user - first time user
           console.log('🔑 No existing session or tracked user, creating anonymous user...');
           await signInAnonymouslyInternal();
         }
       } catch (error) {
         console.error('❌ Error in initAuth:', error);
       } finally {
-        isInitializing = false;
-        setIsLoading(false);
+        if (mounted) {
+          isInitializing = false;
+          setIsLoading(false);
+        }
       }
     };
 
     initAuth();
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
