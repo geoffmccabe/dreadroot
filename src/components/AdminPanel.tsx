@@ -77,20 +77,36 @@ export function AdminPanel({ isOpen, onClose, defaultTab = 'coins', onWallPositi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl h-[90vh] flex flex-col gap-4 p-6">
+        <DialogHeader className="pb-2 border-b">
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue={defaultTab} className="w-full flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="coins">Coins</TabsTrigger>
-            <TabsTrigger value="billboards">Billboards</TabsTrigger>
-            <TabsTrigger value="blocks">Blocks</TabsTrigger>
+        <Tabs defaultValue={defaultTab} className="flex-1 flex flex-col gap-4">
+          <TabsList className="grid w-full grid-cols-3 h-12 bg-secondary/50 p-1 rounded-lg border-2 border-primary/20">
+            <TabsTrigger 
+              value="coins" 
+              className="text-sm font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            >
+              Coins
+            </TabsTrigger>
+            <TabsTrigger 
+              value="billboards"
+              className="text-sm font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            >
+              Billboards
+            </TabsTrigger>
+            <TabsTrigger 
+              value="blocks"
+              className="text-sm font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            >
+              Blocks
+            </TabsTrigger>
           </TabsList>
 
+
           {/* Coins Tab */}
-          <TabsContent value="coins" className="flex-1 overflow-y-auto">
+          <TabsContent value="coins" className="flex-1 overflow-auto data-[state=active]:flex data-[state=active]:flex-col">
             <Card>
               <CardHeader>
                 <CardTitle>Waterfall & Coins Management</CardTitle>
@@ -125,12 +141,12 @@ export function AdminPanel({ isOpen, onClose, defaultTab = 'coins', onWallPositi
           </TabsContent>
 
           {/* Billboards Tab */}
-          <TabsContent value="billboards" className="flex-1 overflow-y-auto">
+          <TabsContent value="billboards" className="flex-1 overflow-auto data-[state=active]:flex data-[state=active]:flex-col">
             <BillboardsTabContent onWallPositionsChange={onWallPositionsChange} />
           </TabsContent>
 
           {/* Blocks Tab */}
-          <TabsContent value="blocks" className="flex-1 overflow-y-auto">
+          <TabsContent value="blocks" className="flex-1 overflow-auto data-[state=active]:flex data-[state=active]:flex-col">
             <BlocksTabContent />
           </TabsContent>
         </Tabs>
