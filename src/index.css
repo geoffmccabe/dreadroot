@@ -380,4 +380,21 @@ All colors MUST be HSL.
       opacity: 0;
     }
   }
+
+  /* User Panel - Fixed positioning override */
+  .user-panel-dialog {
+    position: fixed !important;
+    top: 1rem !important;
+    left: 1rem !important;
+    transform: none !important;
+    margin: 0 !important;
+  }
+
+  .user-panel-dialog[data-state="open"] {
+    animation: none !important;
+  }
+
+  .user-panel-dialog[data-state="closed"] {
+    animation: none !important;
+  }
 }
