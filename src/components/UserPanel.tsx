@@ -121,7 +121,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={closePanel}>
-      <DialogContent className="fixed top-4 left-4 w-[28rem] max-w-[28rem] bg-background/95 backdrop-blur translate-x-0 translate-y-0 data-[state=open]:slide-in-from-left">
+      <DialogContent className="fixed top-4 left-4 w-[28rem] max-w-[28rem] bg-background/95 backdrop-blur !translate-x-0 !translate-y-0 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out sm:!translate-x-0 sm:!translate-y-0">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
