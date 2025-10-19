@@ -51,19 +51,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    console.log('🚀 AuthContext mounting...');
     let mounted = true;
-    let sessionCheckComplete = false;
+    
+    // Check localStorage immediately
+    const lsKeys = Object.keys(localStorage);
+    console.log('📦 localStorage has', lsKeys.length, 'keys');
+    const authKeys = lsKeys.filter(k => k.includes('supabase') || k.includes('auth'));
+    console.log('🔑 Auth-related keys:', authKeys);
+    
+    // Don't create ANY auth state listeners - just get session and create user if needed
+    const initOnce = async () => {
+      try {
+        // Prevent multiple calls
+        if (isSigningInRef.current) {
+          console.log('⏸️ Already initializing, skipping');
+          return;
+        }
+        
+        isSigningInRef.current = true;
+        console.log('🔍 Calling getSession()...');
+        
+        const { data: { session: existingSession }, error } = await supabase.auth.getSession();
+        
+        console.log('📊 getSession() returned:', {
+          hasSession: !!existingSession,
+          userId: existingSession?.user?.id,
+          error: error?.message,
+          isAnonymous: existingSession?.user?.is_anonymous
+        });
+        
+        if (!mounted) {
+          console.log('⚠️ Component unmounted, aborting');
+          return;
+        }
 
-    // Set up listener FIRST - but with guard
+        if (existingSession) {
+          console.log('✅ Session exists, using it');
+          setSession(existingSession);
+          setUser(existingSession.user);
+          await blockDB.init();
+          await blockDB.setUserId(existingSession.user.id);
+        } else {
+          console.log('❌ No session, creating anonymous user');
+          const { data, error: signInError } = await supabase.auth.signInAnonymously();
+          
+          if (signInError) {
+            console.error('❌ Sign in failed:', signInError);
+            throw signInError;
+          }
+          
+          console.log('✅ Created anonymous user:', data?.user?.id);
+          setSession(data.session);
+          setUser(data.user);
+          
+          if (data.user?.id) {
+            await blockDB.init();
+            await blockDB.setUserId(data.user.id);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Init error:', error);
+        toast.error('Failed to authenticate. Please refresh the page.');
+      } finally {
+        isSigningInRef.current = false;
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initOnce();
+
+    // Set up listener for future changes ONLY
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔄 Auth event:', event, 'session:', !!session, 'checkComplete:', sessionCheckComplete);
+      (event, session) => {
+        console.log('🔄 Auth state changed:', event);
         
         if (!mounted) return;
-
-        // Only handle INITIAL_SESSION once we've explicitly checked
-        if (event === 'INITIAL_SESSION' && !sessionCheckComplete) {
-          console.log('⏸️ Deferring INITIAL_SESSION until explicit check completes');
+        
+        // Ignore INITIAL_SESSION - we handle that manually above
+        if (event === 'INITIAL_SESSION') {
+          console.log('⏭️ Ignoring INITIAL_SESSION event');
           return;
         }
         
@@ -71,55 +140,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         
         if (event === 'SIGNED_OUT') {
-          blockDB.init().then(() => blockDB.clearUserId().catch(console.error));
+          blockDB.init().then(() => blockDB.clearUserId());
         }
         
         if (event === 'SIGNED_IN' && session?.user?.id) {
-          blockDB.init().then(() => blockDB.setUserId(session.user.id).catch(console.error));
+          blockDB.init().then(() => blockDB.setUserId(session.user.id));
         }
       }
     );
 
-    // NOW check for existing session
-    const checkSession = async () => {
-      try {
-        console.log('🔍 Explicitly checking for existing session...');
-        const { data: { session: existingSession }, error } = await supabase.auth.getSession();
-        
-        console.log('📊 Result:', { 
-          hasSession: !!existingSession, 
-          userId: existingSession?.user?.id,
-          error: error?.message,
-          expiresAt: existingSession?.expires_at
-        });
-        
-        if (!mounted) return;
-        
-        sessionCheckComplete = true;
-
-        if (existingSession) {
-          console.log('✅ Restoring existing session');
-          setSession(existingSession);
-          setUser(existingSession.user);
-          blockDB.init().then(() => {
-            blockDB.setUserId(existingSession.user.id).catch(console.error);
-          });
-        } else if (!isSigningInRef.current) {
-          console.log('❌ No session found, creating new anonymous user');
-          await signInAnonymouslyInternal();
-        }
-      } catch (error) {
-        console.error('❌ Error checking session:', error);
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    checkSession();
-
     return () => {
+      console.log('🛑 AuthContext unmounting');
       mounted = false;
       subscription.unsubscribe();
     };
