@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BlocksProvider } from "@/contexts/BlocksContext";
-import { AuthDebugger } from "@/components/AuthDebugger";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -13,7 +12,6 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthDebugger />
     <AuthProvider>
       <TooltipProvider>
         <BlocksProvider>

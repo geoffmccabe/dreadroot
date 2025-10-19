@@ -6,12 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, ChevronRight, Eye, EyeOff, Settings } from 'lucide-react';
-import { AdminPanel } from '@/components/AdminPanel';
+import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { BillboardControlPanel } from '@/components/BillboardControlPanel';
 import { BillboardWalls } from '@/components/BillboardWalls';
+import { BlockShop } from '@/components/BlockShop';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
-import { WalletPanel } from '@/components/WalletPanel';
+import { Inventory } from '@/components/Inventory';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useToast } from '@/hooks/use-toast';
@@ -82,11 +83,13 @@ function FirstPersonControls({
   playAudio,
   blockPlacementMode,
   onBlockPlace,
-  openWallet,
+  onOpenShop,
+  onOpenInventory,
   onModeChange,
   getBlockQuantity,
   selectedBlockType,
-  walletOpen,
+  shopOpen,
+  inventoryOpen,
   onCycleBlock,
   blocks
 }: { 
@@ -101,11 +104,13 @@ function FirstPersonControls({
   playAudio: (audio: HTMLAudioElement) => Promise<void>;
   blockPlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
-  openWallet: (tab: 'inventory' | 'store' | 'wallet') => void;
+  onOpenShop: () => void;
+  onOpenInventory: () => void;
   onModeChange: (mode: 'shooting' | 'building' | null) => void;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
-  walletOpen: boolean;
+  shopOpen: boolean;
+  inventoryOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
 }) {
@@ -178,7 +183,7 @@ function FirstPersonControls({
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
   // Don't process key events when dialogs are open or input fields are focused
-  if (walletOpen || 
+  if (shopOpen || inventoryOpen || 
       document.activeElement?.tagName === 'INPUT' || 
       document.activeElement?.tagName === 'TEXTAREA') {
     return;
@@ -187,7 +192,7 @@ function FirstPersonControls({
   switch (event.code) {
     case 'KeyI':
       event.preventDefault(); // Prevent the 'i' from being typed in input fields
-      openWallet('inventory');
+      onOpenInventory();
       break;
     case 'KeyW':
     case 'ArrowUp':
@@ -247,14 +252,8 @@ function FirstPersonControls({
         break;
       case 'KeyO':
         // Open shop
-        if (!walletOpen) {
-          openWallet('store');
-        }
-        break;
-      case 'KeyW':
-        // Open wallet tab
-        if (!walletOpen) {
-          openWallet('wallet');
+        if (!shopOpen) {
+          onOpenShop();
         }
         break;
       case 'Escape':
@@ -263,11 +262,11 @@ function FirstPersonControls({
         }
         break;
     }
-  }, [crosshairsEnabled, onModeChange, openWallet, getBlockQuantity, selectedBlockType, walletOpen]);
+  }, [crosshairsEnabled, onModeChange, onOpenShop, onOpenInventory, getBlockQuantity, selectedBlockType, shopOpen, inventoryOpen]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     // Don't process key events when dialogs are open or input fields are focused
-    if (walletOpen || 
+    if (shopOpen || inventoryOpen || 
         document.activeElement?.tagName === 'INPUT' || 
         document.activeElement?.tagName === 'TEXTAREA') {
       return;
@@ -1070,11 +1069,13 @@ function Scene({
   blockPlacementMode, 
   onBlockPlace,
   onModeChange,
-  openWallet,
+  onOpenShop,
+  onOpenInventory,
   crosshairsEnabled,
   getBlockQuantity,
   selectedBlockType,
-  walletOpen,
+  shopOpen,
+  inventoryOpen,
   onCycleBlock,
   blocks
 }: { 
@@ -1084,11 +1085,13 @@ function Scene({
   blockPlacementMode: boolean;
   onBlockPlace: (position: THREE.Vector3) => void;
   onModeChange: (mode: 'shooting' | 'building' | null) => void;
-  openWallet: (tab: 'inventory' | 'store' | 'wallet') => void;
+  onOpenShop: () => void;
+  onOpenInventory: () => void;
   crosshairsEnabled: boolean;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
-  walletOpen: boolean;
+  shopOpen: boolean;
+  inventoryOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
 }) {
@@ -1247,11 +1250,13 @@ function Scene({
         playAudio={playAudio}
         blockPlacementMode={blockPlacementMode}
         onBlockPlace={onBlockPlace}
-        openWallet={openWallet}
+        onOpenShop={onOpenShop}
+        onOpenInventory={onOpenInventory}
         onModeChange={onModeChange}
         getBlockQuantity={getBlockQuantity}
         selectedBlockType={selectedBlockType}
-        walletOpen={walletOpen}
+        shopOpen={shopOpen}
+        inventoryOpen={inventoryOpen}
         onCycleBlock={onCycleBlock}
         blocks={blocks}
       />
@@ -1450,25 +1455,17 @@ export default function WaterfallFortress() {
   const [panelsVisible, setPanelsVisible] = useState(false);
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
-  const [walletOpen, setWalletOpen] = useState(false);
-  const [walletTab, setWalletTab] = useState<'inventory' | 'store' | 'wallet'>('inventory');
+  const [shopOpen, setShopOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
-  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
-  const [adminPanelTab, setAdminPanelTab] = useState<'coins' | 'billboards' | 'blocks'>('coins');
   
   // Wall positions state for real-time control
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   
   // User data and block system hooks
-  const { profile, inventory, addCoins, useBlock, refreshData, isAdmin } = useUserData();
+  const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { toast } = useToast();
-  
-  // Debug admin status
-  useEffect(() => {
-    console.log('🔍 Admin status:', isAdmin);
-    console.log('👤 User profile:', profile);
-  }, [isAdmin, profile]);
   
   
   // Main component audio refs for placement sounds
@@ -1748,16 +1745,13 @@ export default function WaterfallFortress() {
     });
   }, [selectedBlockType, inventory, toast]);
 
-  // Wallet panel handler
-  const openWallet = useCallback((tab: 'inventory' | 'store' | 'wallet') => {
-    setWalletTab(tab);
-    setWalletOpen(true);
+  // Shop and inventory handlers
+  const handleOpenShop = useCallback(() => {
+    setShopOpen(true);
   }, []);
 
-  // Admin panel handler
-  const openAdminPanel = useCallback((tab: 'coins' | 'billboards' | 'blocks') => {
-    setAdminPanelTab(tab);
-    setAdminPanelOpen(true);
+  const handleOpenInventory = useCallback(() => {
+    setInventoryOpen(true);
   }, []);
 
   // Listen for crosshair state changes from FirstPersonControls
@@ -1787,11 +1781,13 @@ export default function WaterfallFortress() {
         blockPlacementMode={!!selectedBlockType}
         onBlockPlace={handleBlockPlace}
         onModeChange={handleModeChange}
-        openWallet={openWallet}
+        onOpenShop={handleOpenShop}
+        onOpenInventory={handleOpenInventory}
         crosshairsEnabled={crosshairsEnabled}
         getBlockQuantity={getBlockQuantity}
         selectedBlockType={selectedBlockType}
-        walletOpen={walletOpen}
+        shopOpen={shopOpen}
+        inventoryOpen={inventoryOpen}
         onCycleBlock={cycleSelectedBlock}
         blocks={blocks}
       />
@@ -1841,35 +1837,20 @@ export default function WaterfallFortress() {
     >
       {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
     </Button>
-
-    {/* Admin Panel button - only visible to admins */}
-    {isAdmin && (
-      <Button
-        className="fixed top-4 right-16 z-30"
-        size="sm"
-        onClick={() => {
-          console.log('🔧 Admin Panel button clicked');
-          openAdminPanel('coins');
-        }}
-        title="Open Admin Panel"
-      >
-        <Settings className="h-4 w-4" />
-      </Button>
-    )}
     
-    <ControlPanel
+    <ControlPanel 
       settings={settings} 
       onSettingsChange={handleSettingsChange}
       isVisible={panelsVisible}
     />
     
-    {/* Admin Panel - accessible via Settings button */}
-    <AdminPanel
-      isOpen={adminPanelOpen}
-      onClose={() => setAdminPanelOpen(false)}
-      defaultTab={adminPanelTab}
-      onWallPositionsChange={setWallPositions}
-    />
+    {/* Billboard Control Panel - positioned below the Waterfall panel */}
+    <div className="fixed top-4 left-4 z-20 w-[28rem]" style={{ marginTop: '320px' }}>
+      <BillboardControlPanel 
+        isVisible={panelsVisible} 
+        onWallPositionsChange={setWallPositions}
+      />
+    </div>
     
     {/* Score display and block inventory */}
     <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2">
@@ -1878,7 +1859,7 @@ export default function WaterfallFortress() {
         {/* Shooting mode button area (around coin icon) */}
         <div 
           className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-l"
-          onClick={() => openWallet('inventory')}
+          onClick={() => setInventoryOpen(true)}
           title="Open inventory"
         >
           <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
@@ -1886,7 +1867,7 @@ export default function WaterfallFortress() {
         {/* Coin count (clickable to open shop) */}
         <div 
           className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-r border-l border-white/20"
-          onClick={() => openWallet('inventory')}
+          onClick={() => setInventoryOpen(true)}
           title="Open inventory"
         >
           <span className="font-bold">x{profile?.coins || 0}</span>
@@ -1908,7 +1889,7 @@ export default function WaterfallFortress() {
             if (totalBlocks > 0) {
               handleModeChange(selectedBlockType ? null : 'building');
             } else {
-              openWallet('store');
+              handleOpenShop();
             }
           }}
           title={(() => {
@@ -1939,17 +1920,22 @@ export default function WaterfallFortress() {
       <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
         <div>{selectedBlockType ? 'Click to place block • ESC to cancel' : 'R for crosshairs • Click to shoot'}</div>
         <div className="text-xs opacity-75 mt-1">
-          B = Block mode • O = Open Shop • I = Inventory • W = Wallet
+          B = Block mode • O = Open Shop • I = Inventory
         </div>
       </div>
     )}
     
-    {/* Unified Wallet Panel */}
-    <WalletPanel
-      isOpen={walletOpen}
-      onClose={() => setWalletOpen(false)}
-      defaultTab={walletTab}
+    {/* Block Shop Modal */}
+    <BlockShop 
+      isOpen={shopOpen}
+      onClose={() => setShopOpen(false)}
       onBlockPurchased={handleBlockPurchased}
+    />
+    
+    {/* Inventory Modal */}
+    <Inventory 
+      isOpen={inventoryOpen}
+      onClose={() => setInventoryOpen(false)}
     />
     
     {/* Crosshair - conditional class for different modes */}

@@ -10,9 +10,8 @@ interface DBBlock extends Omit<PlacedBlock, 'created_at' | 'updated_at'> {
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 4; // Support full Supabase auth storage in auth store
+  private dbVersion = 2; // Increment version to trigger migration
   private storeName = 'blocks';
-  private authStoreName = 'auth';
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -34,22 +33,16 @@ class BlockDB {
           console.log('IndexedDB upgrade needed, clearing corrupted data');
           const db = (event.target as IDBOpenDBRequest).result;
           
-          // Clear existing blocks store if it exists (to fix corruption)
+          // Clear existing store if it exists (to fix corruption)
           if (db.objectStoreNames.contains(this.storeName)) {
             db.deleteObjectStore(this.storeName);
           }
           
-          // Create fresh blocks store
+          // Create fresh store
           const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
           store.createIndex('synced', 'synced', { unique: false });
           store.createIndex('position', ['position_x', 'position_y', 'position_z'], { unique: false });
-          console.log('IndexedDB blocks store recreated');
-          
-          // Create auth store for user ID persistence
-          if (!db.objectStoreNames.contains(this.authStoreName)) {
-            db.createObjectStore(this.authStoreName, { keyPath: 'key' });
-            console.log('IndexedDB auth store created');
-          }
+          console.log('IndexedDB store recreated');
         };
       } catch (error) {
         console.error('Error initializing IndexedDB:', error);
@@ -197,86 +190,6 @@ class BlockDB {
       getRequest.onerror = () => reject(getRequest.error);
     });
   }
-
-  // Auth methods for user ID persistence
-  async getUserId(): Promise<string | null> {
-    if (!this.db) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.authStoreName], 'readonly');
-      const store = transaction.objectStore(this.authStoreName);
-      const request = store.get('anonymous-user-id');
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result?.value || null);
-    });
-  }
-
-  async setUserId(userId: string): Promise<void> {
-    if (!this.db) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.authStoreName], 'readwrite');
-      const store = transaction.objectStore(this.authStoreName);
-      const request = store.put({ key: 'anonymous-user-id', value: userId });
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
-    });
-  }
-
-  async clearUserId(): Promise<void> {
-    if (!this.db) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.authStoreName], 'readwrite');
-      const store = transaction.objectStore(this.authStoreName);
-      const request = store.delete('anonymous-user-id');
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
-    });
-  }
-
-  // Generic key-value storage methods for Supabase auth
-  async getAuthItem(key: string): Promise<string | null> {
-    if (!this.db) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.authStoreName], 'readonly');
-      const store = transaction.objectStore(this.authStoreName);
-      const request = store.get(key);
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result?.value || null);
-    });
-  }
-
-  async setAuthItem(key: string, value: string): Promise<void> {
-    if (!this.db) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.authStoreName], 'readwrite');
-      const store = transaction.objectStore(this.authStoreName);
-      const request = store.put({ key, value });
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
-    });
-  }
-
-  async removeAuthItem(key: string): Promise<void> {
-    if (!this.db) await this.init();
-    
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([this.authStoreName], 'readwrite');
-      const store = transaction.objectStore(this.authStoreName);
-      const request = store.delete(key);
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
-    });
-  }
 }
 
 export const blockDB = new BlockDB();
@@ -290,9 +203,6 @@ export const useIndexedDB = () => {
     markAsSynced: (blockId: string) => blockDB.markAsSynced(blockId),
     clearAllBlocks: () => blockDB.clearAllBlocks(),
     updateBlock: (blockId: string, updates: Partial<DBBlock>) => blockDB.updateBlock(blockId, updates),
-    init: () => blockDB.init(),
-    getUserId: () => blockDB.getUserId(),
-    setUserId: (userId: string) => blockDB.setUserId(userId),
-    clearUserId: () => blockDB.clearUserId()
+    init: () => blockDB.init()
   };
 };

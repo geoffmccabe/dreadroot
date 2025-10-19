@@ -35,7 +35,7 @@ export const useUserData = () => {
     }
   }, [user?.id, authLoading]);
 
-  const loadUserData = async (retryCount = 0) => {
+  const loadUserData = async () => {
     // If no authenticated user, clear state
     if (!user?.id) {
       setProfile(null);
@@ -75,18 +75,13 @@ export const useUserData = () => {
       }
 
       if (!existingProfile) {
-        // Profile not found - this can happen right after user creation OR if session is stale
-        if (retryCount < 3) {
-          const delay = Math.pow(2, retryCount) * 500; // 500ms, 1s, 2s
-          console.log(`Profile not found, retrying in ${delay}ms (attempt ${retryCount + 1}/3)`);
-          setTimeout(() => loadUserData(retryCount + 1), delay);
-          return;
-        }
-        
-        // After retries, session might be stale - clear it and reload
-        console.error('Profile not found after retries for user:', user.id, '- clearing stale session');
-        await supabase.auth.signOut();
-        window.location.reload();
+        console.error('Profile not found for user:', user.id);
+        toast({
+          title: "Profile Error",
+          description: "User profile not found. Please contact support.",
+          variant: "destructive"
+        });
+        setIsLoading(false);
         return;
       }
 
@@ -321,58 +316,10 @@ export const useUserData = () => {
     await loadUserData();
   };
 
-  const checkIsAdmin = async () => {
-    if (!user?.id) return false;
-    
-    try {
-      // Check for both admin and superadmin roles
-      const { data: adminCheck, error: adminError } = await supabase.rpc('has_role', {
-        _user_id: user.id,
-        _role: 'admin'
-      });
-
-      if (adminError) {
-        console.error('Error checking admin role:', adminError);
-      }
-
-      const { data: superadminCheck, error: superadminError } = await supabase.rpc('has_role', {
-        _user_id: user.id,
-        _role: 'superadmin'
-      });
-
-      if (superadminError) {
-        console.error('Error checking superadmin role:', superadminError);
-      }
-
-      const isAdminUser = adminCheck || superadminCheck || false;
-      console.log('Admin check result:', { adminCheck, superadminCheck, isAdminUser });
-      return isAdminUser;
-    } catch (error) {
-      console.error('Error checking admin role:', error);
-      return false;
-    }
-  };
-
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    if (user?.id) {
-      console.log('🔍 Checking admin status for user:', user.id);
-      checkIsAdmin().then((result) => {
-        console.log('✅ Admin check complete:', result);
-        setIsAdmin(result);
-      });
-    } else {
-      console.log('❌ No user ID, setting isAdmin to false');
-      setIsAdmin(false);
-    }
-  }, [user?.id]);
-
   return {
     profile,
     inventory,
     isLoading,
-    isAdmin,
     buyBlock,
     useBlock,
     addCoins,
