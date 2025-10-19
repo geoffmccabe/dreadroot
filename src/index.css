@@ -381,8 +381,8 @@ All colors MUST be HSL.
     }
   }
 
-  /* User Panel - Fixed positioning override */
-  .user-panel-dialog {
+  /* User Panel - Fixed positioning override (only when open) */
+  .user-panel-dialog[data-state="open"] {
     position: fixed !important;
     top: 1rem !important;
     left: 1rem !important;
@@ -391,30 +391,15 @@ All colors MUST be HSL.
     transform: none !important;
     translate: none !important;
     margin: 0 !important;
-    inset: auto !important;
-    z-index: 9999 !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    display: flex !important;
+    animation: fadeIn 0.2s ease-out !important;
   }
 
-  .user-panel-dialog[data-state="open"],
-  .user-panel-dialog[data-state="closed"],
-  .user-panel-dialog[data-state="opening"],
-  .user-panel-dialog[data-state="closing"] {
-    animation: none !important;
-    transform: none !important;
-    translate: none !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    display: flex !important;
-  }
-
-  /* Override any parent positioning */
-  [data-radix-portal] .user-panel-dialog {
-    position: fixed !important;
-    top: 1rem !important;
-    left: 1rem !important;
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
