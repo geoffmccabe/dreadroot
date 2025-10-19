@@ -52,43 +52,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let sessionCheckComplete = false;
 
-    const initAuth = async () => {
-      try {
-        // Check what's in localStorage
-        const storageKeys = Object.keys(localStorage).filter(k => k.includes('supabase'));
-        console.log('📦 localStorage keys:', storageKeys);
-        storageKeys.forEach(key => {
-          console.log(`  ${key}:`, localStorage.getItem(key)?.substring(0, 100));
-        });
-
-        // CRITICAL: Check for existing session FIRST, before listener fires
-        console.log('🔍 Checking for existing session...');
-        const { data: { session: existingSession }, error } = await supabase.auth.getSession();
-        
-        console.log('📊 getSession result:', { 
-          hasSession: !!existingSession, 
-          userId: existingSession?.user?.id,
-          error: error?.message 
-        });
+    // Set up listener FIRST - but with guard
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔄 Auth event:', event, 'session:', !!session, 'checkComplete:', sessionCheckComplete);
         
         if (!mounted) return;
 
+        // Only handle INITIAL_SESSION once we've explicitly checked
+        if (event === 'INITIAL_SESSION' && !sessionCheckComplete) {
+          console.log('⏸️ Deferring INITIAL_SESSION until explicit check completes');
+          return;
+        }
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (event === 'SIGNED_OUT') {
+          blockDB.init().then(() => blockDB.clearUserId().catch(console.error));
+        }
+        
+        if (event === 'SIGNED_IN' && session?.user?.id) {
+          blockDB.init().then(() => blockDB.setUserId(session.user.id).catch(console.error));
+        }
+      }
+    );
+
+    // NOW check for existing session
+    const checkSession = async () => {
+      try {
+        console.log('🔍 Explicitly checking for existing session...');
+        const { data: { session: existingSession }, error } = await supabase.auth.getSession();
+        
+        console.log('📊 Result:', { 
+          hasSession: !!existingSession, 
+          userId: existingSession?.user?.id,
+          error: error?.message,
+          expiresAt: existingSession?.expires_at
+        });
+        
+        if (!mounted) return;
+        
+        sessionCheckComplete = true;
+
         if (existingSession) {
-          console.log('✅ Found existing session, restoring:', existingSession.user?.id);
+          console.log('✅ Restoring existing session');
           setSession(existingSession);
           setUser(existingSession.user);
-          
-          // Sync IndexedDB in background
           blockDB.init().then(() => {
             blockDB.setUserId(existingSession.user.id).catch(console.error);
           });
-        } else {
-          console.log('❌ No existing session found, creating new anonymous user');
+        } else if (!isSigningInRef.current) {
+          console.log('❌ No session found, creating new anonymous user');
           await signInAnonymouslyInternal();
         }
       } catch (error) {
-        console.error('❌ Error in initAuth:', error);
+        console.error('❌ Error checking session:', error);
       } finally {
         if (mounted) {
           setIsLoading(false);
@@ -96,34 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Set up listener for future auth changes (after initial check)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log('🔄 Auth state changed:', event, 'user:', session?.user?.id);
-        
-        if (!mounted) return;
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Handle sign out
-        if (event === 'SIGNED_OUT') {
-          blockDB.init().then(() => {
-            blockDB.clearUserId().catch(console.error);
-          });
-        }
-        
-        // Sync IndexedDB on sign in
-        if (event === 'SIGNED_IN' && session?.user?.id) {
-          blockDB.init().then(() => {
-            blockDB.setUserId(session.user.id).catch(console.error);
-          });
-        }
-      }
-    );
-
-    // Initialize auth
-    initAuth();
+    checkSession();
 
     return () => {
       mounted = false;
