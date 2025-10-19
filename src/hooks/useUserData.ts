@@ -48,16 +48,30 @@ export const useUserData = () => {
       setIsLoading(true);
       console.log('Loading user data for authenticated user:', user.id);
       
-      // Load user profile (should exist due to trigger)
-      const { data: existingProfile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Load both profile and inventory in parallel for faster loading
+      const [
+        { data: existingProfile, error: profileError },
+        { data: inventoryData, error: inventoryError }
+      ] = await Promise.all([
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('user_inventory')
+          .select('*')
+          .eq('user_id', user.id)
+      ]);
 
       if (profileError) {
         console.error('Error loading profile:', profileError);
         throw profileError;
+      }
+
+      if (inventoryError) {
+        console.error('Error loading inventory:', inventoryError);
+        throw inventoryError;
       }
 
       if (!existingProfile) {
@@ -72,20 +86,8 @@ export const useUserData = () => {
       }
 
       setProfile(existingProfile);
-      console.log('Loaded profile:', existingProfile);
-
-      // Load inventory
-      const { data: inventoryData, error: inventoryError } = await supabase
-        .from('user_inventory')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (inventoryError) {
-        console.error('Error loading inventory:', inventoryError);
-        throw inventoryError;
-      }
-
       setInventory(inventoryData || []);
+      console.log('Loaded profile:', existingProfile);
       console.log('Loaded inventory:', inventoryData);
 
     } catch (error) {
