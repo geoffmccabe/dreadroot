@@ -7,15 +7,16 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
-import { BillboardControlPanel } from '@/components/BillboardControlPanel';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
 import { UserPanel } from '@/components/UserPanel';
+import { AdminPanel } from '@/components/AdminPanel';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
+import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { useToast } from '@/hooks/use-toast';
 import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
@@ -1461,11 +1462,26 @@ export default function WaterfallFortress() {
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   
   // User data and block system hooks
-  const { profile, inventory, addCoins, useBlock, refreshData } = useUserData();
+  const { profile, inventory, addCoins, useBlock, refreshData, getUserRoles } = useUserData();
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
+  const { openPanel: openAdminPanel } = useAdminPanel();
+  
+  // Track user roles for admin button visibility
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  
+  useEffect(() => {
+    const loadRoles = async () => {
+      const roles = await getUserRoles();
+      setUserRoles(roles);
+    };
+    
+    if (user) {
+      loadRoles();
+    }
+  }, [user, getUserRoles]);
   
   
   // Main component audio refs for placement sounds
@@ -1834,37 +1850,25 @@ export default function WaterfallFortress() {
         Sign Out
       </Button>
       
-      {/* Panel visibility toggle */}
-      <Button
-        className="waterfall-button"
-        size="sm"
-        onClick={() => {
-          console.log('Panel toggle clicked, current panelsVisible:', panelsVisible);
-          try {
-            setPanelsVisible(!panelsVisible);
-            console.log('Panel visibility set to:', !panelsVisible);
-          } catch (error) {
-            console.error('Error toggling panels:', error);
-          }
-        }}
-      >
-        {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </Button>
+      {/* Admin Panel toggle - Only visible for admin/superadmin */}
+      {(userRoles.includes('admin') || userRoles.includes('superadmin')) && (
+        <Button
+          className="waterfall-button"
+          size="sm"
+          onClick={() => openAdminPanel('coins')}
+          title="Admin Panel"
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+      )}
     </div>
     
-    <ControlPanel 
-      settings={settings} 
-      onSettingsChange={handleSettingsChange}
-      isVisible={panelsVisible}
+    {/* Admin Panel (replaces inline control panels) */}
+    <AdminPanel 
+      waterfallSettings={settings}
+      onWaterfallSettingsChange={handleSettingsChange}
+      onWallPositionsChange={setWallPositions}
     />
-    
-    {/* Billboard Control Panel - positioned below the Waterfall panel */}
-    <div className="fixed top-4 left-4 z-20 w-[28rem]" style={{ marginTop: '320px' }}>
-      <BillboardControlPanel 
-        isVisible={panelsVisible} 
-        onWallPositionsChange={setWallPositions}
-      />
-    </div>
     
     {/* Score display and block inventory */}
     <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2">
@@ -1930,14 +1934,12 @@ export default function WaterfallFortress() {
     </div>
     
     {/* Instructions */}
-    {panelsVisible && (
-      <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
-        <div>{selectedBlockType ? 'Click to place block • ESC to cancel' : 'R for crosshairs • Click to shoot'}</div>
-        <div className="text-xs opacity-75 mt-1">
-          B = Block mode • O = Open Shop • I = Inventory
-        </div>
+    <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
+      <div>{selectedBlockType ? 'Click to place block • ESC to cancel' : 'R for crosshairs • Click to shoot'}</div>
+      <div className="text-xs opacity-75 mt-1">
+        B = Block mode • O = Open Shop • I = Inventory
       </div>
-    )}
+    </div>
     
     {/* User Panel (replaces BlockShop and Inventory) */}
     <UserPanel onBlockPurchased={handleBlockPurchased} />

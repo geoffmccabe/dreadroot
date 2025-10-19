@@ -394,6 +394,19 @@ All colors MUST be HSL.
     animation: fadeIn 0.2s ease-out !important;
   }
 
+  /* Admin Panel - Fixed positioning override (only when open) */
+  .admin-panel-dialog[data-state="open"] {
+    position: fixed !important;
+    top: 1rem !important;
+    right: 1rem !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    translate: none !important;
+    margin: 0 !important;
+    animation: fadeIn 0.2s ease-out !important;
+  }
+
   @keyframes fadeIn {
     from {
       opacity: 0;

@@ -316,6 +316,24 @@ export const useUserData = () => {
     await loadUserData();
   };
 
+  const getUserRoles = async (): Promise<string[]> => {
+    if (!user) return [];
+    
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      return data?.map(r => r.role) || [];
+    } catch (error) {
+      console.error('Failed to get user roles:', error);
+      return [];
+    }
+  };
+
   return {
     profile,
     inventory,
@@ -324,6 +342,7 @@ export const useUserData = () => {
     useBlock,
     addCoins,
     updateBlockchainAddress,
-    refreshData
+    refreshData,
+    getUserRoles
   };
 };
