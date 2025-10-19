@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { BlocksProvider } from "@/contexts/BlocksContext";
+import { UserPanelProvider } from "@/contexts/UserPanelContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ClearSession from "./pages/ClearSession";
@@ -57,31 +58,33 @@ const App = () => (
     <AuthProvider>
       <TooltipProvider>
         <BlocksProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/clear-session" element={<ClearSession />} />
-              <Route 
-                path="/" 
-                element={
-                  <ProtectedRoute>
-                    <Index />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/auth" 
-                element={
-                  <AuthRoute>
-                    <Auth />
-                  </AuthRoute>
-                } 
-              />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+          <UserPanelProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/clear-session" element={<ClearSession />} />
+                <Route 
+                  path="/" 
+                  element={
+                    <ProtectedRoute>
+                      <Index />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/auth" 
+                  element={
+                    <AuthRoute>
+                      <Auth />
+                    </AuthRoute>
+                  } 
+                />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </UserPanelProvider>
         </BlocksProvider>
       </TooltipProvider>
     </AuthProvider>

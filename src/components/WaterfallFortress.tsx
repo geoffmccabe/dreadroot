@@ -9,13 +9,13 @@ import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { BillboardControlPanel } from '@/components/BillboardControlPanel';
 import { BillboardWalls } from '@/components/BillboardWalls';
-import { BlockShop } from '@/components/BlockShop';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
-import { Inventory } from '@/components/Inventory';
+import { UserPanel } from '@/components/UserPanel';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserPanel } from '@/contexts/UserPanelContext';
 import { useToast } from '@/hooks/use-toast';
 import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
@@ -84,16 +84,14 @@ function FirstPersonControls({
   playAudio,
   blockPlacementMode,
   onBlockPlace,
-  onOpenShop,
-  onOpenInventory,
+  onOpenPanel,
   onModeChange,
   getBlockQuantity,
   selectedBlockType,
-  shopOpen,
-  inventoryOpen,
+  panelOpen,
   onCycleBlock,
   blocks
-}: { 
+}: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
   audioRefs: {
@@ -105,13 +103,11 @@ function FirstPersonControls({
   playAudio: (audio: HTMLAudioElement) => Promise<void>;
   blockPlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
-  onOpenShop: () => void;
-  onOpenInventory: () => void;
+  onOpenPanel: (tab: 'user' | 'wallet' | 'inventory' | 'store') => void;
   onModeChange: (mode: 'shooting' | 'building' | null) => void;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
-  shopOpen: boolean;
-  inventoryOpen: boolean;
+  panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
 }) {
@@ -184,7 +180,7 @@ function FirstPersonControls({
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
   // Don't process key events when dialogs are open or input fields are focused
-  if (shopOpen || inventoryOpen || 
+  if (panelOpen || 
       document.activeElement?.tagName === 'INPUT' || 
       document.activeElement?.tagName === 'TEXTAREA') {
     return;
@@ -192,8 +188,8 @@ function FirstPersonControls({
   
   switch (event.code) {
     case 'KeyI':
-      event.preventDefault(); // Prevent the 'i' from being typed in input fields
-      onOpenInventory();
+      event.preventDefault();
+      onOpenPanel('inventory');
       break;
     case 'KeyW':
     case 'ArrowUp':
@@ -252,10 +248,8 @@ function FirstPersonControls({
         }
         break;
       case 'KeyO':
-        // Open shop
-        if (!shopOpen) {
-          onOpenShop();
-        }
+        event.preventDefault();
+        onOpenPanel('store');
         break;
       case 'Escape':
         if (isLocked.current) {
@@ -263,11 +257,11 @@ function FirstPersonControls({
         }
         break;
     }
-  }, [crosshairsEnabled, onModeChange, onOpenShop, onOpenInventory, getBlockQuantity, selectedBlockType, shopOpen, inventoryOpen]);
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, getBlockQuantity, selectedBlockType, panelOpen]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     // Don't process key events when dialogs are open or input fields are focused
-    if (shopOpen || inventoryOpen || 
+    if (panelOpen || 
         document.activeElement?.tagName === 'INPUT' || 
         document.activeElement?.tagName === 'TEXTAREA') {
       return;
@@ -1070,13 +1064,11 @@ function Scene({
   blockPlacementMode, 
   onBlockPlace,
   onModeChange,
-  onOpenShop,
-  onOpenInventory,
+  onOpenPanel,
   crosshairsEnabled,
   getBlockQuantity,
   selectedBlockType,
-  shopOpen,
-  inventoryOpen,
+  panelOpen,
   onCycleBlock,
   blocks
 }: { 
@@ -1086,13 +1078,11 @@ function Scene({
   blockPlacementMode: boolean;
   onBlockPlace: (position: THREE.Vector3) => void;
   onModeChange: (mode: 'shooting' | 'building' | null) => void;
-  onOpenShop: () => void;
-  onOpenInventory: () => void;
+  onOpenPanel: (tab: 'user' | 'wallet' | 'inventory' | 'store') => void;
   crosshairsEnabled: boolean;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
-  shopOpen: boolean;
-  inventoryOpen: boolean;
+  panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
 }) {
@@ -1262,13 +1252,11 @@ function Scene({
         playAudio={playAudio}
         blockPlacementMode={blockPlacementMode}
         onBlockPlace={onBlockPlace}
-        onOpenShop={onOpenShop}
-        onOpenInventory={onOpenInventory}
+        onOpenPanel={onOpenPanel}
         onModeChange={onModeChange}
         getBlockQuantity={getBlockQuantity}
         selectedBlockType={selectedBlockType}
-        shopOpen={shopOpen}
-        inventoryOpen={inventoryOpen}
+        panelOpen={panelOpen}
         onCycleBlock={onCycleBlock}
         blocks={blocks}
       />
@@ -1467,8 +1455,6 @@ export default function WaterfallFortress() {
   const [panelsVisible, setPanelsVisible] = useState(false);
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
-  const [shopOpen, setShopOpen] = useState(false);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
   
   // Wall positions state for real-time control
@@ -1479,6 +1465,7 @@ export default function WaterfallFortress() {
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const { isOpen: panelOpen, openPanel } = useUserPanel();
   
   
   // Main component audio refs for placement sounds
@@ -1758,14 +1745,10 @@ export default function WaterfallFortress() {
     });
   }, [selectedBlockType, inventory, toast]);
 
-  // Shop and inventory handlers
-  const handleOpenShop = useCallback(() => {
-    setShopOpen(true);
-  }, []);
-
-  const handleOpenInventory = useCallback(() => {
-    setInventoryOpen(true);
-  }, []);
+  // Panel handler
+  const handleOpenPanel = useCallback((tab: 'user' | 'wallet' | 'inventory' | 'store') => {
+    openPanel(tab);
+  }, [openPanel]);
 
   // Listen for crosshair state changes from FirstPersonControls
   useEffect(() => {
@@ -1794,13 +1777,11 @@ export default function WaterfallFortress() {
         blockPlacementMode={!!selectedBlockType}
         onBlockPlace={handleBlockPlace}
         onModeChange={handleModeChange}
-        onOpenShop={handleOpenShop}
-        onOpenInventory={handleOpenInventory}
+        onOpenPanel={handleOpenPanel}
         crosshairsEnabled={crosshairsEnabled}
         getBlockQuantity={getBlockQuantity}
         selectedBlockType={selectedBlockType}
-        shopOpen={shopOpen}
-        inventoryOpen={inventoryOpen}
+        panelOpen={panelOpen}
         onCycleBlock={cycleSelectedBlock}
         blocks={blocks}
       />
@@ -1892,15 +1873,15 @@ export default function WaterfallFortress() {
         {/* Shooting mode button area (around coin icon) */}
         <div 
           className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-l"
-          onClick={() => setInventoryOpen(true)}
+          onClick={() => openPanel('inventory')}
           title="Open inventory"
         >
           <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
         </div>
-        {/* Coin count (clickable to open shop) */}
+        {/* Coin count (clickable to open inventory) */}
         <div 
           className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-r border-l border-white/20"
-          onClick={() => setInventoryOpen(true)}
+          onClick={() => openPanel('inventory')}
           title="Open inventory"
         >
           <span className="font-bold">x{profile?.coins || 0}</span>
@@ -1922,7 +1903,7 @@ export default function WaterfallFortress() {
             if (totalBlocks > 0) {
               handleModeChange(selectedBlockType ? null : 'building');
             } else {
-              handleOpenShop();
+              openPanel('store');
             }
           }}
           title={(() => {
@@ -1958,18 +1939,8 @@ export default function WaterfallFortress() {
       </div>
     )}
     
-    {/* Block Shop Modal */}
-    <BlockShop 
-      isOpen={shopOpen}
-      onClose={() => setShopOpen(false)}
-      onBlockPurchased={handleBlockPurchased}
-    />
-    
-    {/* Inventory Modal */}
-    <Inventory 
-      isOpen={inventoryOpen}
-      onClose={() => setInventoryOpen(false)}
-    />
+    {/* User Panel (replaces BlockShop and Inventory) */}
+    <UserPanel onBlockPurchased={handleBlockPurchased} />
     
     {/* Crosshair - conditional class for different modes */}
     <div className={`waterfall-crosshair ${
