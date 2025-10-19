@@ -56,6 +56,48 @@ export type Database = {
         }
         Relationships: []
       }
+      blocks: {
+        Row: {
+          category: string
+          cost: number
+          created_at: string
+          description: string | null
+          id: number
+          key: string
+          name: string
+          properties: Json | null
+          rarity: string
+          texture_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          cost?: number
+          created_at?: string
+          description?: string | null
+          id?: number
+          key: string
+          name: string
+          properties?: Json | null
+          rarity?: string
+          texture_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          cost?: number
+          created_at?: string
+          description?: string | null
+          id?: number
+          key?: string
+          name?: string
+          properties?: Json | null
+          rarity?: string
+          texture_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       media_grid_items: {
         Row: {
           created_at: string

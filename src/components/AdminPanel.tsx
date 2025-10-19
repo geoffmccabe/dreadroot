@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import React, { useState, useEffect, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ChevronDown, ChevronRight, Upload, Plus } from 'lucide-react';
 import { BillboardControlPanel } from '@/components/BillboardControlPanel';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { supabase } from '@/integrations/supabase/client';
-import { getAllBlocks } from '@/data/blockRegistry';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
+import { useUserData } from '@/hooks/useUserData';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -195,45 +197,334 @@ function UsersList({}: UsersListProps) {
   );
 }
 
-interface BlocksListProps {}
+interface Block {
+  id: number;
+  key: string;
+  name: string;
+  description: string;
+  cost: number;
+  category: string;
+  rarity: string;
+  texture_url: string | null;
+  properties: {
+    size: [number, number, number];
+    color: string;
+    emissive: boolean;
+    transparent: boolean;
+  };
+}
 
-function BlocksList({}: BlocksListProps) {
-  const blocks = getAllBlocks().sort((a, b) => a.name.localeCompare(b.name));
+interface BlocksListProps {
+  userRoles: string[];
+}
+
+function BlocksList({ userRoles }: BlocksListProps) {
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNewBlockDialog, setShowNewBlockDialog] = useState(false);
+  const [newBlockData, setNewBlockData] = useState({
+    name: '',
+    description: '',
+    cost: 10,
+    key: ''
+  });
+  const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const isSuperAdmin = userRoles.includes('superadmin');
+
+  useEffect(() => {
+    loadBlocks();
+  }, []);
+
+  const loadBlocks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('blocks')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+
+      // Cast properties from Json to the correct type
+      const typedBlocks = (data || []).map(block => ({
+        ...block,
+        properties: block.properties as Block['properties']
+      }));
+
+      setBlocks(typedBlocks);
+    } catch (error) {
+      console.error('Failed to load blocks:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load blocks",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTextureUpload = async (blockId: number, file: File) => {
+    if (!isSuperAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "Only superadmins can change block textures",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploadingBlockId(blockId);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${blockId}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('block-textures')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('block-textures')
+        .getPublicUrl(filePath);
+
+      // Update block record
+      const { error: updateError } = await supabase
+        .from('blocks')
+        .update({ texture_url: urlData.publicUrl })
+        .eq('id', blockId);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Success",
+        description: "Texture uploaded successfully"
+      });
+
+      loadBlocks();
+    } catch (error: any) {
+      console.error('Failed to upload texture:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload texture",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingBlockId(null);
+    }
+  };
+
+  const handleCreateBlock = async () => {
+    if (!isSuperAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "Only superadmins can create blocks",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!newBlockData.name || !newBlockData.key) {
+      toast({
+        title: "Validation Error",
+        description: "Name and key are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('blocks')
+        .insert([{
+          key: newBlockData.key,
+          name: newBlockData.name,
+          description: newBlockData.description,
+          cost: newBlockData.cost,
+          category: 'building',
+          rarity: 'common',
+          properties: {
+            size: [1, 1, 1],
+            color: '#808080',
+            emissive: false,
+            transparent: false
+          }
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Block created successfully"
+      });
+
+      setShowNewBlockDialog(false);
+      setNewBlockData({ name: '', description: '', cost: 10, key: '' });
+      loadBlocks();
+    } catch (error: any) {
+      console.error('Failed to create block:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create block",
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (loading) {
+    return <div className="text-sm opacity-75">Loading blocks...</div>;
+  }
 
   return (
-    <ScrollArea className="h-[500px] w-full">
-      <div className="space-y-2">
-        {blocks.map((block) => (
-          <Card key={block.id} className="p-3">
-            <div className="flex items-start gap-3">
-              <div 
-                className="w-12 h-12 rounded border-2 flex-shrink-0"
-                style={{
-                  backgroundColor: block.properties.color,
-                  borderColor: block.properties.emissive ? '#ffd700' : '#888'
-                }}
-              />
-              <div className="flex-1 text-xs space-y-1">
-                <div className="font-bold">{block.name}</div>
-                <div className="opacity-75">{block.description}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="px-2 py-0.5 rounded bg-secondary text-secondary-foreground text-[10px]">
-                    {block.category}
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-accent text-accent-foreground text-[10px]">
-                    {block.rarity}
-                  </span>
-                  <span className="opacity-50 text-[10px]">{block.cost} coins</span>
+    <>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-sm font-semibold">Blocks Registry</h3>
+        {isSuperAdmin && (
+          <Button 
+            size="sm" 
+            onClick={() => setShowNewBlockDialog(true)}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            New Block
+          </Button>
+        )}
+      </div>
+
+      <ScrollArea className="h-[500px] w-full">
+        <div className="space-y-2">
+          {blocks.map((block) => (
+            <Card key={block.id} className="p-3">
+              <div className="flex items-start gap-3">
+                {/* Texture Preview */}
+                <div className="relative w-16 h-16 rounded border-2 flex-shrink-0 overflow-hidden bg-muted">
+                  {block.texture_url ? (
+                    <img 
+                      src={block.texture_url} 
+                      alt={block.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div 
+                      className="w-full h-full"
+                      style={{ backgroundColor: block.properties.color }}
+                    />
+                  )}
+                  {isSuperAdmin && (
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleTextureUpload(block.id, file);
+                        }}
+                        disabled={uploadingBlockId === block.id}
+                      />
+                      <Upload className="h-6 w-6 text-white" />
+                    </label>
+                  )}
+                  {uploadingBlockId === block.id && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+                      <div className="text-white text-xs">Uploading...</div>
+                    </div>
+                  )}
                 </div>
-                <div className="text-[10px] opacity-50 font-mono mt-1">
-                  Texture: {block.texture.diffuse}
+
+                {/* Block Info */}
+                <div className="flex-1 text-xs space-y-1">
+                  <div className="font-bold">{block.name}</div>
+                  <div className="opacity-75">{block.description || 'No description'}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="px-2 py-0.5 rounded bg-secondary text-secondary-foreground text-[10px]">
+                      {block.category}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-accent text-accent-foreground text-[10px]">
+                      {block.rarity}
+                    </span>
+                    <span className="opacity-50 text-[10px]">{block.cost} coins</span>
+                  </div>
+                  <div className="text-[10px] opacity-50 font-mono mt-1">
+                    Key: {block.key}
+                  </div>
+                  {block.texture_url && (
+                    <div className="text-[10px] opacity-50 font-mono mt-1 truncate">
+                      Texture: {block.texture_url}
+                    </div>
+                  )}
                 </div>
               </div>
+            </Card>
+          ))}
+        </div>
+      </ScrollArea>
+
+      {/* New Block Dialog */}
+      {showNewBlockDialog && (
+        <Dialog open={showNewBlockDialog} onOpenChange={setShowNewBlockDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Block</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div>
+                <Label htmlFor="block-name">Block Name</Label>
+                <Input
+                  id="block-name"
+                  value={newBlockData.name}
+                  onChange={(e) => setNewBlockData({ ...newBlockData, name: e.target.value })}
+                  placeholder="e.g., Diamond Block"
+                />
+              </div>
+              <div>
+                <Label htmlFor="block-key">Block Key (unique identifier)</Label>
+                <Input
+                  id="block-key"
+                  value={newBlockData.key}
+                  onChange={(e) => setNewBlockData({ ...newBlockData, key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                  placeholder="e.g., diamond_block"
+                />
+              </div>
+              <div>
+                <Label htmlFor="block-description">Description</Label>
+                <Input
+                  id="block-description"
+                  value={newBlockData.description}
+                  onChange={(e) => setNewBlockData({ ...newBlockData, description: e.target.value })}
+                  placeholder="Brief description of the block"
+                />
+              </div>
+              <div>
+                <Label htmlFor="block-cost">Cost (coins)</Label>
+                <Input
+                  id="block-cost"
+                  type="number"
+                  value={newBlockData.cost}
+                  onChange={(e) => setNewBlockData({ ...newBlockData, cost: parseInt(e.target.value) || 10 })}
+                  min="1"
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setShowNewBlockDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateBlock}>
+                  Create Block
+                </Button>
+              </div>
             </div>
-          </Card>
-        ))}
-      </div>
-    </ScrollArea>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 
@@ -249,6 +540,19 @@ export function AdminPanel({
   onWallPositionsChange 
 }: AdminPanelProps) {
   const { isOpen, activeTab, closePanel, setActiveTab } = useAdminPanel();
+  const { getUserRoles } = useUserData();
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadRoles = async () => {
+      const roles = await getUserRoles();
+      setUserRoles(roles);
+    };
+    
+    if (isOpen) {
+      loadRoles();
+    }
+  }, [isOpen, getUserRoles]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closePanel()}>
@@ -282,7 +586,7 @@ export function AdminPanel({
           </TabsContent>
 
           <TabsContent value="blocks" className="mt-4">
-            <BlocksList />
+            <BlocksList userRoles={userRoles} />
           </TabsContent>
         </Tabs>
       </DialogContent>
