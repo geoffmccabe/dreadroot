@@ -1834,35 +1834,40 @@ export default function WaterfallFortress() {
       </div>
     ))}
 
-    {/* Panel visibility toggle button */}
-    <Button
-      className="fixed top-4 right-4 z-30 waterfall-button"
-      size="sm"
-      onClick={() => {
-        console.log('Panel toggle clicked, current panelsVisible:', panelsVisible);
-        try {
-          setPanelsVisible(!panelsVisible);
-          console.log('Panel visibility set to:', !panelsVisible);
-        } catch (error) {
-          console.error('Error toggling panels:', error);
-        }
-      }}
-    >
-      {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-    </Button>
-    
-    {/* Sign out button */}
-    <div className="fixed top-4 right-16 z-30 flex items-center gap-2">
-      <div className="bg-black/50 text-white px-3 py-1 rounded text-sm">
-        {user?.email || 'User'}
-      </div>
+    {/* Top right controls */}
+    <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
+      {/* User email display */}
+      {user?.email && (
+        <div className="bg-black/70 text-white px-3 py-2 rounded text-sm font-medium border border-white/20">
+          {user.email}
+        </div>
+      )}
+      
+      {/* Sign out button */}
       <Button
-        className="waterfall-button"
+        className="waterfall-button bg-red-500/80 hover:bg-red-600/80 text-white border-red-400/50"
         size="sm"
         onClick={signOut}
         title="Sign out"
       >
         Sign Out
+      </Button>
+      
+      {/* Panel visibility toggle */}
+      <Button
+        className="waterfall-button"
+        size="sm"
+        onClick={() => {
+          console.log('Panel toggle clicked, current panelsVisible:', panelsVisible);
+          try {
+            setPanelsVisible(!panelsVisible);
+            console.log('Panel visibility set to:', !panelsVisible);
+          } catch (error) {
+            console.error('Error toggling panels:', error);
+          }
+        }}
+      >
+        {panelsVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </Button>
     </div>
     

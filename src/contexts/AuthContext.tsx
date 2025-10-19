@@ -117,12 +117,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      console.log('Signing out user:', user?.id);
+      
       // Clear IndexedDB session first
       await clearUserSession();
       
-      // Then sign out from Supabase
-      await supabase.auth.signOut();
+      // Then sign out from Supabase (this will trigger auth state change)
+      const { error } = await supabase.auth.signOut();
       
+      if (error) {
+        console.error('Supabase signOut error:', error);
+        throw error;
+      }
+      
+      console.log('Successfully signed out');
       toast.success('Signed out successfully');
     } catch (error) {
       console.error('Error signing out:', error);
