@@ -32,6 +32,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.signInAnonymously();
       if (error) throw error;
       console.log('✅ Signed in anonymously:', data.user?.id);
+      
+      // Store user ID in IndexedDB for persistent tracking
+      if (data.user?.id) {
+        localStorage.setItem('anonymous-user-id', data.user.id);
+      }
+      
       return data;
     } catch (error) {
       console.error('❌ Error signing in anonymously:', error);
@@ -70,6 +76,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // THEN check for existing session or auto sign-in
     const initAuth = async () => {
       try {
+        // Check for tracked user ID in localStorage
+        const trackedUserId = localStorage.getItem('anonymous-user-id');
+        console.log('🔍 Tracked user ID:', trackedUserId);
+        
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -78,11 +88,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session) {
           console.log('✅ Found existing session:', session.user?.id);
-          setSession(session);
-          setUser(session.user);
+          
+          // Verify session matches tracked user
+          if (trackedUserId && session.user?.id !== trackedUserId) {
+            console.warn('⚠️ Session user mismatch, clearing and using tracked user');
+            await supabase.auth.signOut();
+            // Don't create new user - the tracked one should be used
+          } else {
+            setSession(session);
+            setUser(session.user);
+          }
+        } else if (trackedUserId) {
+          // We have a tracked user but no session - session expired
+          console.log('⚠️ Session expired for tracked user, signing out fully');
+          localStorage.removeItem('anonymous-user-id');
+          await signInAnonymouslyInternal();
         } else {
-          // Only auto sign-in if there's truly no session
-          console.log('🔑 No existing session, creating anonymous user...');
+          // No session and no tracked user - create new one
+          console.log('🔑 No existing session or tracked user, creating anonymous user...');
           await signInAnonymouslyInternal();
         }
       } catch (error) {
