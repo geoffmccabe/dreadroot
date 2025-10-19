@@ -392,6 +392,11 @@ All colors MUST be HSL.
     translate: none !important;
     margin: 0 !important;
     inset: auto !important;
+    z-index: 9999 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: flex !important;
   }
 
   .user-panel-dialog[data-state="open"],
@@ -401,6 +406,9 @@ All colors MUST be HSL.
     animation: none !important;
     transform: none !important;
     translate: none !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: flex !important;
   }
 
   /* Override any parent positioning */
