@@ -77,12 +77,12 @@ export function AdminPanel({ isOpen, onClose, defaultTab = 'coins', onWallPositi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue={defaultTab} className="w-full">
+        <Tabs defaultValue={defaultTab} className="w-full flex-1 flex flex-col overflow-hidden">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
@@ -90,7 +90,7 @@ export function AdminPanel({ isOpen, onClose, defaultTab = 'coins', onWallPositi
           </TabsList>
 
           {/* Coins Tab */}
-          <TabsContent value="coins">
+          <TabsContent value="coins" className="flex-1 overflow-y-auto">
             <Card>
               <CardHeader>
                 <CardTitle>Waterfall & Coins Management</CardTitle>
@@ -125,12 +125,12 @@ export function AdminPanel({ isOpen, onClose, defaultTab = 'coins', onWallPositi
           </TabsContent>
 
           {/* Billboards Tab */}
-          <TabsContent value="billboards">
+          <TabsContent value="billboards" className="flex-1 overflow-y-auto">
             <BillboardsTabContent onWallPositionsChange={onWallPositionsChange} />
           </TabsContent>
 
           {/* Blocks Tab */}
-          <TabsContent value="blocks">
+          <TabsContent value="blocks" className="flex-1 overflow-y-auto">
             <BlocksTabContent />
           </TabsContent>
         </Tabs>
