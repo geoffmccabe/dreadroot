@@ -18,42 +18,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const signInAnonymouslyInternal = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+      console.log('✅ Signed in anonymously:', data.user?.id);
+      return data;
+    } catch (error) {
+      console.error('❌ Error signing in anonymously:', error);
+      toast.error('Failed to authenticate. Please refresh the page.');
+      setIsLoading(false);
+      throw error;
+    }
+  };
+
   useEffect(() => {
+    let isInitializing = true;
+    
     // Clean up old temp-user-id from localStorage (migration cleanup)
     const oldTempId = localStorage.getItem('temp-user-id');
     if (oldTempId) {
-      console.log('Removing old temp-user-id from localStorage');
+      console.log('🧹 Removing old temp-user-id from localStorage');
       localStorage.removeItem('temp-user-id');
     }
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
+        console.log('🔄 Auth state changed:', event, 'user:', session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
-        setIsLoading(false);
+        
+        // Only set loading to false if we're not in the initial setup
+        if (!isInitializing) {
+          setIsLoading(false);
+        }
       }
     );
 
     // THEN check for existing session or auto sign-in
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        setSession(session);
-        setUser(session.user);
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ Error getting session:', error);
+        }
+        
+        if (session) {
+          console.log('✅ Found existing session:', session.user?.id);
+          setSession(session);
+          setUser(session.user);
+        } else {
+          // Only auto sign-in if there's truly no session
+          console.log('🔑 No existing session, creating anonymous user...');
+          await signInAnonymouslyInternal();
+        }
+      } catch (error) {
+        console.error('❌ Error in initAuth:', error);
+      } finally {
+        isInitializing = false;
         setIsLoading(false);
-      } else {
-        // Auto sign-in anonymously if no session exists
-        console.log('No session found, signing in anonymously...');
-        await signInAnonymously();
       }
     };
 
     initAuth();
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signInAnonymously = async () => {
