@@ -116,36 +116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    try {
-      console.log('Signing out user:', user?.id);
-      
-      // Try to clear IndexedDB but don't fail if it errors
-      try {
-        await clearUserSession();
-      } catch (idbError) {
-        console.warn('IndexedDB clear failed (non-critical):', idbError);
-      }
-      
-      // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        console.error('Supabase signOut error:', error);
-        // Even if there's an error, try to clear local storage manually
-        localStorage.clear();
-        sessionStorage.clear();
-      }
-      
-      // Force page reload to clear all state
-      window.location.href = '/auth';
-      
-    } catch (error) {
-      console.error('Critical error signing out:', error);
-      // Force clear everything and reload
-      localStorage.clear();
-      sessionStorage.clear();
-      window.location.href = '/auth';
-    }
+    // Force navigate to clear session page which will handle cleanup
+    window.location.href = '/clear-session';
   };
 
   return (

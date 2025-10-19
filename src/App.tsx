@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { BlocksProvider } from "@/contexts/BlocksContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import ClearSession from "./pages/ClearSession";
 import NotFound from "./pages/NotFound";
 
 // Protected route wrapper
@@ -31,7 +32,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Auth route wrapper (redirect if already authenticated)
 function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, session } = useAuth();
   
   if (isLoading) {
     return (
@@ -41,7 +42,8 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
     );
   }
   
-  if (user) {
+  // Only redirect if user has a valid email (not anonymous)
+  if (user && session?.user?.email) {
     return <Navigate to="/" replace />;
   }
   
@@ -59,6 +61,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
+              <Route path="/clear-session" element={<ClearSession />} />
               <Route 
                 path="/" 
                 element={
