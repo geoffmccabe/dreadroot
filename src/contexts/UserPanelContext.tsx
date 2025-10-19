@@ -19,6 +19,10 @@ export const UserPanelProvider: React.FC<{ children: ReactNode }> = ({ children 
   const openPanel = (tab: PanelTab = 'user') => {
     setActiveTab(tab);
     setIsOpen(true);
+    // Exit pointer lock when opening panel so user can interact with it
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
   };
 
   const closePanel = () => {
