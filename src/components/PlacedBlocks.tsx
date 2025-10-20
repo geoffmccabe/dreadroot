@@ -67,16 +67,24 @@ const PlacedBlockComponent = React.memo(({
       map: texture,
     };
     
-    // Only apply color tinting for non-grass blocks and non-animated textures
-    // Animated GIFs should display at full brightness without color tinting
-    if (blockType !== 'grass_block' && !isAnimated) {
+    // Apply different color tinting based on block type
+    if (blockType !== 'grass_block') {
       const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
-      materialProps.color = baseColor;
       
-      // Handle special properties
-      if (blockDef?.properties?.emissive) {
-        materialProps.emissive = baseColor;
-        materialProps.emissiveIntensity = 0.3;
+      // For animated GIFs, use a lighter tint (blend between base color and white)
+      // This gives a middle ground between full color tint and no tint
+      if (isAnimated) {
+        const lightTint = new THREE.Color(0xffffff).lerp(baseColor, 0.3); // 30% of base color, 70% white
+        materialProps.color = lightTint;
+      } else {
+        // Static textures get full color tint
+        materialProps.color = baseColor;
+        
+        // Handle special properties
+        if (blockDef?.properties?.emissive) {
+          materialProps.emissive = baseColor;
+          materialProps.emissiveIntensity = 0.3;
+        }
       }
     }
     
