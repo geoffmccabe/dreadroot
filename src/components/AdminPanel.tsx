@@ -342,6 +342,18 @@ function BlocksList({ userRoles }: BlocksListProps) {
     }
 
     try {
+      // CRITICAL: Check auth session FIRST before anything else
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession) {
+        toast({
+          title: "Authentication Error",
+          description: "You must be logged in. Please refresh and sign in again.",
+          variant: "destructive"
+        });
+        return;
+      }
+      console.log('✅ Active session found for user:', currentSession.user.id);
+
       let textureUrl = null;
 
       // Upload texture if provided
@@ -361,17 +373,6 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
         textureUrl = urlData.publicUrl;
       }
-
-      // Check current auth status
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      console.log('Current auth user:', currentUser?.id);
-      
-      // Check user roles
-      const { data: rolesData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', currentUser?.id);
-      console.log('User roles:', rolesData);
 
       // Don't specify ID, let database auto-increment
       const { error, data } = await supabase
