@@ -46,7 +46,7 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     const col = slotIndex % 3;
     const row = Math.floor(slotIndex / 3);
     
-    console.log(`Slot ${slotIndex + 1}: col=${col}, row=${row}`);
+    // console.log(`Slot ${slotIndex + 1}: col=${col}, row=${row}`);
     
     const uMin = col / 3;
     const uMax = (col + 1) / 3;
@@ -57,7 +57,7 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     const vMin = row === 0 ? 0.0 : 0.5;    // Bottom edge of slot
     const vMax = row === 0 ? 0.5 : 1.0;    // Top edge of slot
     
-    console.log(`UV mapping: u(${uMin}, ${uMax}), v(${vMin}, ${vMax})`);
+    // console.log(`UV mapping: u(${uMin}, ${uMax}), v(${vMin}, ${vMax})`);
     
     return [uMin, vMin, uMax, vMax];
   };
