@@ -113,7 +113,9 @@ const PlacedBlockComponent = React.memo(({
   // Clean up material when component unmounts
   React.useEffect(() => {
     return () => {
-      material.dispose();
+      if (material) {
+        material.dispose();
+      }
     };
   }, [material]);
 
