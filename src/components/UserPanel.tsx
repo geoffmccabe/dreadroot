@@ -9,8 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { useUserData } from '@/hooks/useUserData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
-import { getAllBlocks } from '@/data/blockRegistry';
 import { BlockType } from '@/types/blocks';
+import { supabase } from '@/integrations/supabase/client';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -26,25 +26,30 @@ const BlockIcon: React.FC<{ block: BlockType }> = ({ block }) => {
   const baseColor = block.properties?.color || '#8B7355';
   const isEmissive = block.properties?.emissive;
   const isTransparent = block.properties?.transparent;
+  const hasTexture = block.texture?.diffuse;
   
   return (
     <div className={`w-12 h-12 rounded border flex items-center justify-center ${
       isEmissive ? 'shadow-lg' : ''
     }`} 
     style={{ 
-      background: isEmissive 
-        ? `radial-gradient(circle, ${baseColor}, ${baseColor}80)` 
-        : `linear-gradient(135deg, ${baseColor}, ${baseColor}CC)`,
+      background: hasTexture 
+        ? `url(${block.texture?.diffuse}) center/cover`
+        : isEmissive 
+          ? `radial-gradient(circle, ${baseColor}, ${baseColor}80)` 
+          : `linear-gradient(135deg, ${baseColor}, ${baseColor}CC)`,
       borderColor: isTransparent ? `${baseColor}60` : `${baseColor}DD`,
       opacity: isTransparent ? 0.8 : 1
     }}>
-      <div className={`w-8 h-8 rounded-sm border ${
-        isEmissive ? 'animate-pulse' : ''
-      }`}
-      style={{
-        background: `linear-gradient(135deg, ${baseColor}EE, ${baseColor}AA)`,
-        borderColor: `${baseColor}FF`
-      }}></div>
+      {!hasTexture && (
+        <div className={`w-8 h-8 rounded-sm border ${
+          isEmissive ? 'animate-pulse' : ''
+        }`}
+        style={{
+          background: `linear-gradient(135deg, ${baseColor}EE, ${baseColor}AA)`,
+          borderColor: `${baseColor}FF`
+        }}></div>
+      )}
     </div>
   );
 };
@@ -58,7 +63,45 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { user } = useAuth();
   const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress } = useUserData();
   const [blockchainAddress, setBlockchainAddress] = useState('');
-  const availableBlocks = getAllBlocks();
+  const [availableBlocks, setAvailableBlocks] = useState<BlockType[]>([]);
+  const [loadingBlocks, setLoadingBlocks] = useState(true);
+
+  // Load blocks from database
+  useEffect(() => {
+    const loadBlocks = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('blocks')
+          .select('*')
+          .order('cost', { ascending: true })
+          .order('name', { ascending: true });
+
+        if (error) throw error;
+
+        const typedBlocks: BlockType[] = (data || []).map(block => ({
+          id: block.id,
+          key: block.key,
+          name: block.name,
+          description: block.description || '',
+          cost: block.cost,
+          category: block.category as BlockType['category'],
+          rarity: block.rarity as BlockType['rarity'],
+          texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
+          properties: block.properties as BlockType['properties']
+        }));
+
+        setAvailableBlocks(typedBlocks);
+      } catch (error) {
+        console.error('Failed to load blocks:', error);
+      } finally {
+        setLoadingBlocks(false);
+      }
+    };
+
+    if (isOpen && activeTab === 'store') {
+      loadBlocks();
+    }
+  }, [isOpen, activeTab]);
 
   // Sync blockchain address with profile
   useEffect(() => {
@@ -218,8 +261,17 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
 
           {/* Store Tab */}
           <TabsContent value="store" className="space-y-4">
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {availableBlocks.map((block) => (
+            {loadingBlocks ? (
+              <Card className="p-4 text-center text-muted-foreground">
+                Loading blocks...
+              </Card>
+            ) : availableBlocks.length === 0 ? (
+              <Card className="p-4 text-center text-muted-foreground">
+                No blocks available in store
+              </Card>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {availableBlocks.map((block) => (
                 <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-center gap-3">
                     <BlockIcon block={block} />
@@ -264,7 +316,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   </div>
                 </Card>
               ))}
-            </div>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>
