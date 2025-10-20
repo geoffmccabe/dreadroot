@@ -63,6 +63,12 @@ export const useAnimatedTexture = (url: string) => {
 
       framesRef.current = frames as GIFFrame[];
       
+      // Debug: Log frame info
+      console.log('GIF Frames loaded:', frames.length);
+      console.log('First frame disposal type:', frames[0].disposalType);
+      console.log('Frame disposal types:', frames.map((f: any) => f.disposalType));
+      console.log('Sample frame dims:', frames[0].dims);
+      
       // Create canvas for rendering frames
       const canvas = document.createElement('canvas');
       canvas.width = frames[0].dims.width;
