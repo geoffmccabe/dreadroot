@@ -103,9 +103,15 @@ export const useAnimatedTexture = (url: string) => {
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
 
+    // Default position to 0,0 if not specified
+    const left = frame.dims.left || 0;
+    const top = frame.dims.top || 0;
+
     // Handle disposal of previous frame
     if (frameIndex > 0) {
       const prevFrame = framesRef.current[frameIndex - 1];
+      const prevLeft = prevFrame.dims.left || 0;
+      const prevTop = prevFrame.dims.top || 0;
       
       // Disposal Type:
       // 0 or 1: No disposal (leave as is)
@@ -115,8 +121,8 @@ export const useAnimatedTexture = (url: string) => {
       if (prevFrame.disposalType === 2) {
         // Clear the previous frame's area
         ctx.clearRect(
-          prevFrame.dims.left,
-          prevFrame.dims.top,
+          prevLeft,
+          prevTop,
           prevFrame.dims.width,
           prevFrame.dims.height
         );
@@ -143,7 +149,7 @@ export const useAnimatedTexture = (url: string) => {
     imageData.data.set(frame.patch);
     
     // Draw the new frame at its position
-    ctx.putImageData(imageData, frame.dims.left, frame.dims.top);
+    ctx.putImageData(imageData, left, top);
   };
 
   // Animation update function to be called in useFrame
