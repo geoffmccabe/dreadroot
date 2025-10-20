@@ -27,25 +27,30 @@ const BlockIcon: React.FC<{ block: BlockType }> = ({ block }) => {
   const baseColor = block.properties?.color || '#8B7355';
   const isEmissive = block.properties?.emissive;
   const isTransparent = block.properties?.transparent;
+  const hasTexture = block.texture?.diffuse;
   
   return (
-    <div className={`w-12 h-12 rounded border flex items-center justify-center ${
+    <div className={`w-18 h-18 rounded border flex items-center justify-center ${
       isEmissive ? 'shadow-lg' : ''
     }`} 
     style={{ 
-      background: isEmissive 
-        ? `radial-gradient(circle, ${baseColor}, ${baseColor}80)` 
-        : `linear-gradient(135deg, ${baseColor}, ${baseColor}CC)`,
+      background: hasTexture 
+        ? `url(${block.texture?.diffuse}) center/cover`
+        : isEmissive 
+          ? `radial-gradient(circle, ${baseColor}, ${baseColor}80)` 
+          : `linear-gradient(135deg, ${baseColor}, ${baseColor}CC)`,
       borderColor: isTransparent ? `${baseColor}60` : `${baseColor}DD`,
       opacity: isTransparent ? 0.8 : 1
     }}>
-      <div className={`w-8 h-8 rounded-sm border ${
-        isEmissive ? 'animate-pulse' : ''
-      }`}
-      style={{
-        background: `linear-gradient(135deg, ${baseColor}EE, ${baseColor}AA)`,
-        borderColor: `${baseColor}FF`
-      }}></div>
+      {!hasTexture && (
+        <div className={`w-12 h-12 rounded-sm border ${
+          isEmissive ? 'animate-pulse' : ''
+        }`}
+        style={{
+          background: `linear-gradient(135deg, ${baseColor}EE, ${baseColor}AA)`,
+          borderColor: `${baseColor}FF`
+        }}></div>
+      )}
     </div>
   );
 };

@@ -67,8 +67,9 @@ const PlacedBlockComponent = React.memo(({
       map: texture,
     };
     
-    // Only apply color tinting for non-grass blocks or special properties
-    if (blockType !== 'grass_block') {
+    // Only apply color tinting for non-grass blocks and non-animated textures
+    // Animated GIFs should display at full brightness without color tinting
+    if (blockType !== 'grass_block' && !isAnimated) {
       const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
       materialProps.color = baseColor;
       
@@ -100,7 +101,7 @@ const PlacedBlockComponent = React.memo(({
     }
     
     return new THREE.MeshLambertMaterial(materialProps);
-  }, [texture, blockDef, blockType]);
+  }, [texture, blockDef, blockType, isAnimated]);
 
   // Create collision box only once per block - removed onCollision from deps to prevent loop
   React.useEffect(() => {
