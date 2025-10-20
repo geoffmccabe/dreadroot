@@ -244,7 +244,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
       const { data, error } = await supabase
         .from('blocks')
         .select('*')
-        .order('cost', { ascending: false })
+        .order('cost', { ascending: true })
         .order('name', { ascending: true });
 
       if (error) throw error;
