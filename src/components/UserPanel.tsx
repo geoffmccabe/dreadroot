@@ -204,15 +204,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                     .map((item) => {
                       const block = availableBlocks.find(b => b.key === item.item_type);
                       return (
-                        <Card key={item.id} className="p-4">
+                        <Card key={item.id} className="p-3">
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               {block ? (
-                                <div className="scale-50 origin-left">
-                                  <BlockIcon block={block} />
-                                </div>
+                                <BlockIcon block={block} />
                               ) : (
-                                <div className="w-9 h-9 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
+                                <div className="w-9 h-9 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center flex-shrink-0">
                                   <div className="w-6 h-6 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
                                 </div>
                               )}
