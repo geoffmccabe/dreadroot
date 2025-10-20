@@ -3,14 +3,16 @@ import * as THREE from 'three';
 import { parseGIF, decompressFrames } from 'gifuct-js';
 
 interface GIFFrame {
-  dims: { width: number; height: number };
+  dims: { width: number; height: number; top: number; left: number };
   patch: Uint8ClampedArray;
   delay: number;
+  disposalType: number;
 }
 
 export const useAnimatedTexture = (url: string) => {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const backupCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const framesRef = useRef<GIFFrame[]>([]);
   const currentFrameRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
@@ -67,6 +69,18 @@ export const useAnimatedTexture = (url: string) => {
       canvas.height = frames[0].dims.height;
       canvasRef.current = canvas;
 
+      // Create backup canvas for disposal type 3
+      const backupCanvas = document.createElement('canvas');
+      backupCanvas.width = frames[0].dims.width;
+      backupCanvas.height = frames[0].dims.height;
+      backupCanvasRef.current = backupCanvas;
+
+      // Initialize with transparent background
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+
       // Create texture from canvas
       const canvasTexture = new THREE.CanvasTexture(canvas);
       canvasTexture.minFilter = THREE.LinearFilter;
@@ -89,11 +103,47 @@ export const useAnimatedTexture = (url: string) => {
     const ctx = canvasRef.current.getContext('2d');
     if (!ctx) return;
 
+    // Handle disposal of previous frame
+    if (frameIndex > 0) {
+      const prevFrame = framesRef.current[frameIndex - 1];
+      
+      // Disposal Type:
+      // 0 or 1: No disposal (leave as is)
+      // 2: Restore to background color (clear the frame area)
+      // 3: Restore to previous (restore the area to what it was before the last frame)
+      
+      if (prevFrame.disposalType === 2) {
+        // Clear the previous frame's area
+        ctx.clearRect(
+          prevFrame.dims.left,
+          prevFrame.dims.top,
+          prevFrame.dims.width,
+          prevFrame.dims.height
+        );
+      } else if (prevFrame.disposalType === 3 && backupCanvasRef.current) {
+        // Restore from backup
+        const backupCtx = backupCanvasRef.current.getContext('2d');
+        if (backupCtx) {
+          ctx.drawImage(backupCanvasRef.current, 0, 0);
+        }
+      }
+    }
+
+    // Backup current state if next frame might need it (disposal type 3)
+    if (frame.disposalType === 3 && backupCanvasRef.current) {
+      const backupCtx = backupCanvasRef.current.getContext('2d');
+      if (backupCtx) {
+        backupCtx.clearRect(0, 0, backupCanvasRef.current.width, backupCanvasRef.current.height);
+        backupCtx.drawImage(canvasRef.current, 0, 0);
+      }
+    }
+
     // Create ImageData from frame patch
     const imageData = ctx.createImageData(frame.dims.width, frame.dims.height);
     imageData.data.set(frame.patch);
     
-    ctx.putImageData(imageData, 0, 0);
+    // Draw the new frame at its position
+    ctx.putImageData(imageData, frame.dims.left, frame.dims.top);
   };
 
   // Animation update function to be called in useFrame
