@@ -362,8 +362,19 @@ function BlocksList({ userRoles }: BlocksListProps) {
         textureUrl = urlData.publicUrl;
       }
 
+      // Check current auth status
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      console.log('Current auth user:', currentUser?.id);
+      
+      // Check user roles
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', currentUser?.id);
+      console.log('User roles:', rolesData);
+
       // Don't specify ID, let database auto-increment
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('blocks')
         .insert([{
           key: newBlockData.key,
@@ -379,9 +390,14 @@ function BlocksList({ userRoles }: BlocksListProps) {
             emissive: false,
             transparent: false
           }
-        }]);
+        }])
+        .select();
 
-      if (error) throw error;
+      console.log('Insert result:', { error, data });
+      if (error) {
+        console.error('Insert error details:', error);
+        throw error;
+      }
 
       toast({
         title: "Success",
