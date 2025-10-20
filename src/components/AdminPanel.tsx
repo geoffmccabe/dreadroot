@@ -479,7 +479,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
             <Card key={block.id} className="p-3">
               <div className="flex items-start gap-3">
                 {/* Texture Preview */}
-                <div className="relative w-16 h-16 rounded border-2 flex-shrink-0 overflow-hidden bg-muted">
+                <div className="relative w-24 h-24 rounded border-2 flex-shrink-0 overflow-hidden bg-muted">
                   {block.texture_url ? (
                     <img 
                       src={block.texture_url} 

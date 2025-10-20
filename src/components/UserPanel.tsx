@@ -29,7 +29,7 @@ const BlockIcon: React.FC<{ block: BlockType }> = ({ block }) => {
   const hasTexture = block.texture?.diffuse;
   
   return (
-    <div className={`w-18 h-18 rounded border flex items-center justify-center ${
+    <div className={`w-[72px] h-[72px] rounded border flex items-center justify-center ${
       isEmissive ? 'shadow-lg' : ''
     }`}
     style={{ 
