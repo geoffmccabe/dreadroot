@@ -201,6 +201,16 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {inventory
                     .filter(item => item.quantity > 0)
+                    .sort((a, b) => {
+                      const blockA = availableBlocks.find(block => block.key === a.item_type);
+                      const blockB = availableBlocks.find(block => block.key === b.item_type);
+                      const costA = blockA?.cost || 0;
+                      const costB = blockB?.cost || 0;
+                      
+                      // Sort by cost descending, then name ascending
+                      if (costB !== costA) return costB - costA;
+                      return (a.item_type || '').localeCompare(b.item_type || '');
+                    })
                     .map((item) => {
                       const block = availableBlocks.find(b => b.key === item.item_type);
                       return (

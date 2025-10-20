@@ -35,11 +35,11 @@ export const useBlocksData = () => {
       // Start new fetch
       fetchPromise = (async () => {
         try {
-          const { data, error } = await supabase
-            .from('blocks')
-            .select('*')
-            .order('cost', { ascending: true })
-            .order('name', { ascending: true });
+      const { data, error } = await supabase
+        .from('blocks')
+        .select('*')
+        .order('cost', { ascending: false })
+        .order('name', { ascending: true });
 
           if (error) throw error;
 
@@ -90,7 +90,7 @@ export const useBlocksData = () => {
       const { data, error } = await supabase
         .from('blocks')
         .select('*')
-        .order('cost', { ascending: true })
+        .order('cost', { ascending: false })
         .order('name', { ascending: true });
 
       if (error) throw error;
