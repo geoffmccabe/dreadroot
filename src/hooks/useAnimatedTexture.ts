@@ -19,8 +19,10 @@ export const useAnimatedTexture = (url: string) => {
   const isGifRef = useRef(false);
 
   useEffect(() => {
+    console.log('🎨 Loading texture:', url);
     const isGif = url.toLowerCase().endsWith('.gif');
     isGifRef.current = isGif;
+    console.log('🎬 Is GIF?', isGif);
 
     if (isGif) {
       loadAnimatedGif(url);
@@ -39,17 +41,22 @@ export const useAnimatedTexture = (url: string) => {
   }, [url]);
 
   const loadStaticTexture = (url: string) => {
+    console.log('📷 Loading static texture from:', url);
     const loader = new THREE.TextureLoader();
     loader.load(url, (loadedTexture) => {
+      console.log('✅ Static texture loaded');
       setTexture(loadedTexture);
     });
   };
 
   const loadAnimatedGif = async (url: string) => {
     try {
+      console.log('🎬 Starting GIF load from:', url);
       // Fetch the GIF
       const response = await fetch(url);
+      console.log('📥 GIF fetch response:', response.status);
       const buffer = await response.arrayBuffer();
+      console.log('📦 GIF buffer size:', buffer.byteLength);
       
       // Parse GIF
       const gif = parseGIF(buffer);
