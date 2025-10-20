@@ -2,7 +2,7 @@ import React, { useRef, useState, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
-import { getBlockByKey } from '@/data/blockRegistry';
+import { useBlocksData } from '@/hooks/useBlocksData';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
 
 interface BlockPreviewProps {
@@ -15,9 +15,10 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   const meshRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
   const [previewPosition, setPreviewPosition] = useState<THREE.Vector3>(new THREE.Vector3());
+  const { getBlockByKey } = useBlocksData();
   
-  // Get block definition from registry
-  const blockDef = useMemo(() => getBlockByKey(blockType), [blockType]);
+  // Get block definition from database
+  const blockDef = useMemo(() => getBlockByKey(blockType), [blockType, getBlockByKey]);
   
   // Load texture based on block definition
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';

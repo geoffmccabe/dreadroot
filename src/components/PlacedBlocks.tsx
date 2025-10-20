@@ -2,7 +2,7 @@ import React, { useRef, useMemo, useCallback } from 'react';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
-import { getBlockByKey } from '@/data/blockRegistry';
+import { useBlocksData } from '@/hooks/useBlocksData';
 
 // Shared geometry for performance
 const SharedBlockGeometry = () => {
@@ -23,8 +23,9 @@ const PlacedBlockComponent = React.memo(({
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
+  const { getBlockByKey } = useBlocksData();
   
-  // Get block definition from registry
+  // Get block definition from database
   const blockDef = getBlockByKey(blockType);
   
   // Load texture based on block type

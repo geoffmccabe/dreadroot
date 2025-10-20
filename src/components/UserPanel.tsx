@@ -10,7 +10,7 @@ import { useUserData } from '@/hooks/useUserData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { BlockType } from '@/types/blocks';
-import { supabase } from '@/integrations/supabase/client';
+import { useBlocksData } from '@/hooks/useBlocksData';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -62,46 +62,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
   const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress } = useUserData();
+  const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const [blockchainAddress, setBlockchainAddress] = useState('');
-  const [availableBlocks, setAvailableBlocks] = useState<BlockType[]>([]);
-  const [loadingBlocks, setLoadingBlocks] = useState(true);
-
-  // Load blocks from database
-  useEffect(() => {
-    const loadBlocks = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('blocks')
-          .select('*')
-          .order('cost', { ascending: true })
-          .order('name', { ascending: true });
-
-        if (error) throw error;
-
-        const typedBlocks: BlockType[] = (data || []).map(block => ({
-          id: block.id,
-          key: block.key,
-          name: block.name,
-          description: block.description || '',
-          cost: block.cost,
-          category: block.category as BlockType['category'],
-          rarity: block.rarity as BlockType['rarity'],
-          texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
-          properties: block.properties as BlockType['properties']
-        }));
-
-        setAvailableBlocks(typedBlocks);
-      } catch (error) {
-        console.error('Failed to load blocks:', error);
-      } finally {
-        setLoadingBlocks(false);
-      }
-    };
-
-    if (isOpen && activeTab === 'store') {
-      loadBlocks();
-    }
-  }, [isOpen, activeTab]);
 
   // Sync blockchain address with profile
   useEffect(() => {
