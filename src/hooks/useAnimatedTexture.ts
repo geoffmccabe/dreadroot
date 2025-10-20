@@ -120,14 +120,14 @@ export const useAnimatedTexture = (url: string) => {
     const left = frame.dims.left || 0;
     const top = frame.dims.top || 0;
 
-    // Handle disposal of previous frame
+    // Handle disposal of previous frame FIRST (before drawing new frame)
     if (frameIndex > 0) {
       const prevFrame = framesRef.current[frameIndex - 1];
       const prevLeft = prevFrame.dims.left || 0;
       const prevTop = prevFrame.dims.top || 0;
       
       // Disposal Type:
-      // 0 or 1: No disposal (leave as is)
+      // 0 or 1: No disposal (leave as is, stack frames)
       // 2: Restore to background color (clear the frame area)
       // 3: Restore to previous (restore the area to what it was before the last frame)
       
@@ -146,9 +146,13 @@ export const useAnimatedTexture = (url: string) => {
           ctx.drawImage(backupCanvasRef.current, 0, 0);
         }
       }
+      // Disposal type 0 or 1: Do nothing, keep previous frame
+    } else {
+      // First frame - clear canvas
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
 
-    // Backup current state if next frame might need it (disposal type 3)
+    // Backup current state if this frame will need restoration later
     if (frame.disposalType === 3 && backupCanvasRef.current) {
       const backupCtx = backupCanvasRef.current.getContext('2d');
       if (backupCtx) {
@@ -157,12 +161,21 @@ export const useAnimatedTexture = (url: string) => {
       }
     }
 
-    // Create ImageData from frame patch
-    const imageData = ctx.createImageData(frame.dims.width, frame.dims.height);
-    imageData.data.set(frame.patch);
+    // Create temporary canvas for this frame
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = frame.dims.width;
+    tempCanvas.height = frame.dims.height;
+    const tempCtx = tempCanvas.getContext('2d');
     
-    // Draw the new frame at its position
-    ctx.putImageData(imageData, left, top);
+    if (tempCtx) {
+      // Put frame data on temp canvas
+      const imageData = tempCtx.createImageData(frame.dims.width, frame.dims.height);
+      imageData.data.set(frame.patch);
+      tempCtx.putImageData(imageData, 0, 0);
+      
+      // Draw temp canvas onto main canvas (respects alpha/transparency)
+      ctx.drawImage(tempCanvas, left, top);
+    }
   };
 
   // Animation update function to be called in useFrame
