@@ -252,6 +252,18 @@ function FirstPersonControls({
         event.preventDefault();
         onOpenPanel('store');
         break;
+      case 'BracketLeft': // [ key - cycle to previous block
+        if (blockPlacementMode) {
+          event.preventDefault();
+          onCycleBlock('prev');
+        }
+        break;
+      case 'BracketRight': // ] key - cycle to next block
+        if (blockPlacementMode) {
+          event.preventDefault();
+          onCycleBlock('next');
+        }
+        break;
       case 'Escape':
         if (isLocked.current) {
           document.exitPointerLock();
