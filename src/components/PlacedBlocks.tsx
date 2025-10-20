@@ -1,8 +1,9 @@
 import React, { useRef, useMemo, useCallback } from 'react';
-import { useLoader } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
+import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 
 // Shared geometry for performance
 const SharedBlockGeometry = () => {
@@ -28,19 +29,28 @@ const PlacedBlockComponent = React.memo(({
   // Get block definition from database
   const blockDef = getBlockByKey(blockType);
   
-  // Load texture based on block type
-  const texture = useLoader(THREE.TextureLoader, blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp');
+  // Load texture with animated GIF support
+  const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  const { texture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  
+  // Update animated texture on each frame
+  useFrame((state, delta) => {
+    if (isAnimated && updateTexture) {
+      updateTexture(delta);
+    }
+  });
   
   // Configure texture
   React.useEffect(() => {
-    texture.wrapS = THREE.ClampToEdgeWrapping; // Don't repeat for grass block
+    if (!texture) return;
+    
+    texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
     
     // Special handling for grass block - use only top-left 20% of texture
     if (blockType === 'grass_block') {
-      // Use only 20% width and height (4% total area) from top-left
-      texture.repeat.set(5, 5); // Scale up to fill the block with the small section
-      texture.offset.set(0, 0.8); // Start from top area (UV Y=0.8 to Y=1.0)
+      texture.repeat.set(5, 5);
+      texture.offset.set(0, 0.8);
     } else {
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
@@ -51,6 +61,8 @@ const PlacedBlockComponent = React.memo(({
   
   // Create material based on block properties
   const material = useMemo(() => {
+    if (!texture) return null;
+    
     const materialProps: any = {
       map: texture,
     };
@@ -104,6 +116,8 @@ const PlacedBlockComponent = React.memo(({
       material.dispose();
     };
   }, [material]);
+
+  if (!material) return null;
 
   return (
     <mesh ref={meshRef} position={position} castShadow receiveShadow geometry={geometry} material={material} />

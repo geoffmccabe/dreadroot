@@ -1,9 +1,9 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
+import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 
 interface BlockPreviewProps {
   blockType: string;
@@ -20,18 +20,24 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   // Get block definition from database
   const blockDef = useMemo(() => getBlockByKey(blockType), [blockType, getBlockByKey]);
   
-  // Load texture based on block definition
+  // Load texture with animated GIF support
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  const texture = useLoader(THREE.TextureLoader, textureUrl);
+  const { texture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Set up texture properties
   useMemo(() => {
+    if (!texture) return;
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1, 1);
   }, [texture]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
+    // Update animated texture
+    if (isAnimated && updateTexture) {
+      updateTexture(delta);
+    }
+    
     if (!visible || !meshRef.current) return;
 
     // Use centralized block placement system to get accurate placement position
@@ -77,7 +83,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     }
   });
 
-  if (!visible) return null;
+  if (!visible || !texture) return null;
 
   return (
     <mesh ref={meshRef} position={[0, 0, 0]}>
