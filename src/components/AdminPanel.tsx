@@ -233,7 +233,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
   const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
   const { toast } = useToast();
 
-  const isSuperAdmin = userRoles.includes('admin');
+  const isSuperAdmin = userRoles.includes('superadmin');
 
   useEffect(() => {
     loadBlocks();
