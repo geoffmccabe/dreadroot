@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
+import { supabase } from '@/integrations/supabase/client';
 
 // Custom hook for weather cycle - shared by sky and lighting
 function useWeatherCycle(weatherSettings: {
@@ -1365,7 +1366,7 @@ function Scene({
   useEffect(() => {
     const handleBlockRainEvent = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { blockTypes } = customEvent.detail;
+      const { blockTypes, batchHandler } = customEvent.detail;
       
       console.log('Block rain event received in Scene component');
       
@@ -1380,13 +1381,13 @@ function Scene({
       const targetPosition = new THREE.Vector3();
       raycaster.ray.intersectPlane(groundPlane, targetPosition);
       
-      console.log('Target position:', targetPosition);
+      console.log('Target position for block rain:', targetPosition);
       
-      // Calculate positions for 100 blocks in a 10x10 grid around target
+      // Calculate positions for 100 blocks randomly spread around target
       const spreadRadius = 5; // 5 blocks in each direction
       const blockPositions: Array<{ x: number; y: number; z: number; type: string }> = [];
       
-      // Create a grid of positions
+      // Create positions for 100 blocks
       for (let i = 0; i < 100; i++) {
         const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
         
@@ -1398,7 +1399,7 @@ function Scene({
         const gridX = Math.round(randomX);
         const gridZ = Math.round(randomZ);
         
-        // Find the highest existing block at this X,Z position
+        // Find the highest existing block at this X,Z position for stacking
         let groundY = 0;
         blocks.forEach(block => {
           if (Math.round(block.position_x) === gridX && Math.round(block.position_z) === gridZ) {
@@ -1414,42 +1415,12 @@ function Scene({
         });
       }
       
-      // Batch place blocks using direct Supabase insert
-      console.log('Placing', blockPositions.length, 'blocks in batch...');
+      console.log('Calculated', blockPositions.length, 'block positions');
       
-      // Call the parent's onBlockPlace for each position rapidly (without inventory checks)
-      let placedCount = 0;
-      const batchSize = 20; // Place 20 at a time
-      
-      for (let i = 0; i < blockPositions.length; i += batchSize) {
-        const batch = blockPositions.slice(i, i + batchSize);
-        
-        // Place all blocks in this batch simultaneously
-        await Promise.all(batch.map(async (pos) => {
-          try {
-            // Check if position is already occupied
-            const exists = blocks.some(b => 
-              Math.round(b.position_x) === pos.x && 
-              Math.round(b.position_y) === pos.y && 
-              Math.round(b.position_z) === pos.z
-            );
-            
-            if (!exists) {
-              await onBlockPlace(new THREE.Vector3(pos.x, pos.y, pos.z));
-              placedCount++;
-            }
-          } catch (err) {
-            console.error('Failed to place block:', err);
-          }
-        }));
-        
-        // Small delay between batches to prevent overwhelming the system
-        if (i + batchSize < blockPositions.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+      // Use batch handler for instant placement
+      if (batchHandler) {
+        await batchHandler(blockPositions);
       }
-      
-      console.log(`Block Rain complete: ${placedCount} blocks placed`);
     };
     
     window.addEventListener('triggerBlockRain', handleBlockRainEvent);
@@ -1457,7 +1428,7 @@ function Scene({
     return () => {
       window.removeEventListener('triggerBlockRain', handleBlockRainEvent);
     };
-  }, [camera, blocks, onBlockPlace]);
+  }, [camera, blocks]);
   
   // Initialize audio context and preload sounds (optimized)
   useEffect(() => {
@@ -1902,7 +1873,59 @@ export default function WaterfallFortress() {
   }, [addCoins]);
 
   // Block Rain feature - spawns 100 random blocks for testing
-  // Optimized version that uses camera raycast and batch operations
+  // Direct batch placement bypassing normal flow for performance
+  const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('User not authenticated for block rain');
+        return;
+      }
+
+      // Prepare batch insert data
+      const blocksToInsert = positions.map(pos => ({
+        user_id: user.id,
+        position_x: pos.x,
+        position_y: pos.y,
+        position_z: pos.z,
+        block_type: pos.type
+      }));
+
+      console.log('Batch inserting', blocksToInsert.length, 'blocks...');
+      
+      // Single batch insert to Supabase
+      const { data, error } = await supabase
+        .from('placed_blocks')
+        .insert(blocksToInsert)
+        .select();
+
+      if (error) {
+        console.error('Batch insert error:', error);
+        toast({
+          title: "Block Rain Failed",
+          description: "Some blocks couldn't be placed",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      console.log(`✓ Block Rain complete: ${data?.length || 0} blocks placed`);
+      
+      toast({
+        title: "Block Rain Complete!",
+        description: `${data?.length || 0} blocks spawned successfully`,
+        duration: 2000
+      });
+      
+      // Refresh blocks to show new ones
+      await refreshData();
+    } catch (error) {
+      console.error('Block rain error:', error);
+    }
+  }, [toast, refreshData]);
+
+  // Block Rain trigger - spawns 100 random blocks for testing
   const handleBlockRain = useCallback(() => {
     console.log('=== BLOCK RAIN TRIGGERED ===');
     
@@ -1910,18 +1933,17 @@ export default function WaterfallFortress() {
     const blockTypes = ['fortress_block', 'grass_block', 'glowing_block', 'crystal_block'];
     
     // Trigger block rain in the Scene component via a custom event
-    // This allows us to access the camera and do proper raycasting
     const event = new CustomEvent('triggerBlockRain', {
-      detail: { blockTypes }
+      detail: { blockTypes, batchHandler: handleBlockRainBatch }
     });
     window.dispatchEvent(event);
     
     toast({
       title: "Block Rain!",
-      description: "Spawning 100 random blocks at your target...",
-      duration: 2000
+      description: "Spawning 100 random blocks...",
+      duration: 1000
     });
-  }, [toast]);
+  }, [toast, handleBlockRainBatch]);
 
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
     console.log('=== BLOCK PLACEMENT START ===');
