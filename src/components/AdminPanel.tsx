@@ -477,13 +477,13 @@ function BlocksList({ userRoles }: BlocksListProps) {
         )}
       </div>
 
-      <ScrollArea className="h-[500px] w-full">
+      <ScrollArea className="h-[500px] w-full pr-4">
         <div className="space-y-2">
           {blocks.map((block) => (
             <Card key={block.id} className="p-3">
               <div className="flex items-start gap-3">
                 {/* Texture Preview */}
-                <div className="relative w-24 h-24 rounded border-2 flex-shrink-0 overflow-hidden bg-muted">
+                <div className="relative w-20 h-20 rounded border-2 flex-shrink-0 overflow-hidden bg-muted">
                   {block.texture_url ? (
                     <img 
                       src={block.texture_url} 
@@ -508,7 +508,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                         }}
                         disabled={uploadingBlockId === block.id}
                       />
-                      <Upload className="h-6 w-6 text-white" />
+                      <Upload className="h-5 w-5 text-white" />
                     </label>
                   )}
                   {uploadingBlockId === block.id && (
@@ -519,10 +519,10 @@ function BlocksList({ userRoles }: BlocksListProps) {
                 </div>
 
                 {/* Block Info */}
-                <div className="flex-1 text-xs space-y-1">
-                  <div className="font-bold">{block.name}</div>
-                  <div className="opacity-75">{block.description || 'No description'}</div>
-                  <div className="flex items-center gap-2 mt-1">
+                <div className="flex-1 min-w-0 text-xs space-y-1">
+                  <div className="font-bold truncate">{block.name}</div>
+                  <div className="opacity-75 line-clamp-2">{block.description || 'No description'}</div>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="px-2 py-0.5 rounded bg-secondary text-secondary-foreground text-[10px]">
                       {block.category}
                     </span>
@@ -531,12 +531,12 @@ function BlocksList({ userRoles }: BlocksListProps) {
                     </span>
                     <span className="opacity-50 text-[10px]">{block.cost} coins</span>
                   </div>
-                  <div className="text-[10px] opacity-50 font-mono mt-1">
+                  <div className="text-[10px] opacity-50 font-mono mt-1 truncate">
                     Key: {block.key}
                   </div>
                   {block.texture_url && (
                     <div className="text-[10px] opacity-50 font-mono mt-1 truncate">
-                      Texture: {block.texture_url}
+                      Texture: {block.texture_url.split('/').pop()}
                     </div>
                   )}
                 </div>
@@ -547,6 +547,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                     size="sm" 
                     variant="outline"
                     onClick={() => setEditingBlock(block)}
+                    className="flex-shrink-0 h-8"
                   >
                     Edit
                   </Button>
@@ -849,9 +850,12 @@ export function AdminPanel({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closePanel()}>
-      <DialogContent className="admin-panel-dialog max-w-2xl max-h-[90vh] overflow-hidden">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className="grid w-full grid-cols-4">
+      <DialogContent className="admin-panel-dialog w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Admin Panel</DialogTitle>
+        </DialogHeader>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
+          <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
