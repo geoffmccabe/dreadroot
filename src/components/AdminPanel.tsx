@@ -656,11 +656,11 @@ function BlocksList({ userRoles }: BlocksListProps) {
                     />
                   )}
                 </div>
-                <Label htmlFor="edit-block-texture">Upload New Texture</Label>
-                <Input
-                  id="edit-block-texture"
+                <input
+                  id="edit-block-texture-input"
                   type="file"
                   accept="image/*"
+                  className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
@@ -679,6 +679,18 @@ function BlocksList({ userRoles }: BlocksListProps) {
                     }
                   }}
                 />
+                <Button 
+                  variant="outline" 
+                  className="w-full mb-2"
+                  onClick={() => document.getElementById('edit-block-texture-input')?.click()}
+                >
+                  Upload New Texture
+                </Button>
+                {editingBlock.texture_url && (
+                  <p className="text-xs text-muted-foreground">
+                    Current: {editingBlock.texture_url.split('/').pop()}
+                  </p>
+                )}
               </div>
 
               {/* Name */}
@@ -734,12 +746,25 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   id="edit-block-category"
                   value={editingBlock.category}
                   onChange={(e) => setEditingBlock({ ...editingBlock, category: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mb-2"
                 >
                   <option value="building">Building</option>
                   <option value="decorative">Decorative</option>
                   <option value="special">Special</option>
                 </select>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    const newCategory = prompt("Enter new category name:");
+                    if (newCategory && newCategory.trim()) {
+                      setEditingBlock({ ...editingBlock, category: newCategory.trim().toLowerCase() });
+                    }
+                  }}
+                >
+                  Add New Category
+                </Button>
               </div>
 
               {/* Rarity */}
@@ -749,13 +774,26 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   id="edit-block-rarity"
                   value={editingBlock.rarity}
                   onChange={(e) => setEditingBlock({ ...editingBlock, rarity: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mb-2"
                 >
                   <option value="common">Common</option>
                   <option value="rare">Rare</option>
                   <option value="epic">Epic</option>
                   <option value="legendary">Legendary</option>
                 </select>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    const newRarity = prompt("Enter new rarity name:");
+                    if (newRarity && newRarity.trim()) {
+                      setEditingBlock({ ...editingBlock, rarity: newRarity.trim().toLowerCase() });
+                    }
+                  }}
+                >
+                  Add New Rarity
+                </Button>
               </div>
 
               {/* Properties */}
