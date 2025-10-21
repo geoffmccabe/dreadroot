@@ -647,11 +647,12 @@ function BlocksList({ userRoles }: BlocksListProps) {
                       src={editingBlock.texture_url} 
                       alt={editingBlock.name}
                       className="w-full h-full object-cover"
+                      key={editingBlock.texture_url}
                     />
                   ) : (
                     <div 
                       className="w-full h-full"
-                      style={{ backgroundColor: editingBlock.properties.color }}
+                      style={{ backgroundColor: editingBlock.properties?.color || '#808080' }}
                     />
                   )}
                 </div>
@@ -666,6 +667,15 @@ function BlocksList({ userRoles }: BlocksListProps) {
                       await handleTextureUpload(editingBlock.id, file);
                       // Reload blocks to get the new texture URL
                       await loadBlocks();
+                      // Update the editingBlock state with the new texture URL
+                      const { data: updatedBlock } = await supabase
+                        .from('blocks')
+                        .select('*')
+                        .eq('id', editingBlock.id)
+                        .single();
+                      if (updatedBlock) {
+                        setEditingBlock(updatedBlock as unknown as Block);
+                      }
                     }
                   }}
                 />
