@@ -120,13 +120,11 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
     // Update background color: black (0x000000) to bright blue (0x87CEEB)
     if (skyBackgroundRef.current) {
       const material = skyBackgroundRef.current.material as THREE.MeshBasicMaterial;
-      const color = new THREE.Color();
-      color.lerpColors(
+      material.color.lerpColors(
         new THREE.Color(0x000000), // Pure black at dark
         new THREE.Color(0x87CEEB), // Bright sky blue at light
         normalizedLighting
       );
-      material.color = color;
     }
     
     // Update texture opacity: 1 at dark, 0 at bright
