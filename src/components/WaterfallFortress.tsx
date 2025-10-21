@@ -1069,6 +1069,72 @@ function Bullets({ bullets }: {
 }
 
 // Scene component
+// Dynamic lighting component that cycles between min and max values
+function DynamicLighting({ weatherSettings }: { 
+  weatherSettings: {
+    maxLighting: number;
+    minLighting: number;
+    cycleDuration: number;
+  } 
+}) {
+  const hemisphereRef = useRef<THREE.HemisphereLight>(null);
+  const directionalRef = useRef<THREE.DirectionalLight>(null);
+  const ambientRef = useRef<THREE.AmbientLight>(null);
+  
+  useFrame(() => {
+    const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000; // Convert minutes to milliseconds
+    const currentTime = Date.now();
+    const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs; // 0 to 1
+    
+    // Create a smooth sine wave cycle (goes from 0 to 1 to 0)
+    const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
+    
+    // Calculate current lighting percentage based on min and max
+    const lightingPercentage = weatherSettings.minLighting + 
+      (weatherSettings.maxLighting - weatherSettings.minLighting) * sineWave;
+    
+    // Convert percentage to intensity values
+    const baseIntensity = lightingPercentage / 100;
+    
+    // Update lights
+    if (hemisphereRef.current) {
+      hemisphereRef.current.intensity = 1.1 * baseIntensity;
+    }
+    if (directionalRef.current) {
+      directionalRef.current.intensity = 1.0 * baseIntensity;
+    }
+    if (ambientRef.current) {
+      ambientRef.current.intensity = 0.25 * baseIntensity;
+    }
+  });
+  
+  return (
+    <>
+      <hemisphereLight 
+        ref={hemisphereRef}
+        args={['#ffffff', '#edfff6', 1.1]} 
+      />
+      <directionalLight
+        ref={directionalRef}
+        position={[35, 45, 15]}
+        intensity={1.0}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-far={100}
+        shadow-camera-left={-50}
+        shadow-camera-right={50}
+        shadow-camera-top={50}
+        shadow-camera-bottom={-50}
+      />
+      <ambientLight 
+        ref={ambientRef}
+        intensity={0.25} 
+      />
+    </>
+  );
+}
+
 // Scene component with audio management and performance optimization
 function Scene({ 
   settings, 
@@ -1083,7 +1149,8 @@ function Scene({
   selectedBlockType,
   panelOpen,
   onCycleBlock,
-  blocks
+  blocks,
+  weatherSettings
 }: { 
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -1098,6 +1165,11 @@ function Scene({
   panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
+  weatherSettings: {
+    maxLighting: number;
+    minLighting: number;
+    cycleDuration: number;
+  };
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -1274,21 +1346,8 @@ function Scene({
         blocks={blocks}
       />
       
-      {/* Lighting */}
-      <hemisphereLight args={['#ffffff', '#edfff6', 1.1]} />
-      <directionalLight
-        position={[35, 45, 15]}
-        intensity={1.0}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-far={100}
-        shadow-camera-left={-50}
-        shadow-camera-right={50}
-        shadow-camera-top={50}
-        shadow-camera-bottom={-50}
-      />
-      <ambientLight intensity={0.25} />
+      {/* Dynamic Lighting with weather cycle */}
+      <DynamicLighting weatherSettings={weatherSettings} />
 
       {/* HDRI Sky */}
       <SkyTexture />
@@ -1465,6 +1524,17 @@ export default function WaterfallFortress() {
     coinSize: 0.8,
     colorPalette: defaultColorPalette
   });
+  
+  // Weather settings state
+  const [weatherSettings, setWeatherSettings] = useState(() => {
+    const stored = localStorage.getItem('weatherSettings');
+    return stored ? JSON.parse(stored) : {
+      maxLighting: 70,
+      minLighting: 20,
+      cycleDuration: 5 // minutes
+    };
+  });
+  
   const [panelsVisible, setPanelsVisible] = useState(false);
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
@@ -1509,6 +1579,14 @@ export default function WaterfallFortress() {
 
   const handleSettingsChange = (key: string, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+  };
+  
+  const handleWeatherSettingsChange = (key: string, value: number) => {
+    setWeatherSettings(prev => {
+      const newSettings = { ...prev, [key]: value };
+      localStorage.setItem('weatherSettings', JSON.stringify(newSettings));
+      return newSettings;
+    });
   };
 
   // Flying coin animation state
@@ -1812,6 +1890,7 @@ export default function WaterfallFortress() {
         panelOpen={panelOpen}
         onCycleBlock={cycleSelectedBlock}
         blocks={blocks}
+        weatherSettings={weatherSettings}
       />
       
       {/* Block Preview */}
@@ -1880,6 +1959,8 @@ export default function WaterfallFortress() {
       waterfallSettings={settings}
       onWaterfallSettingsChange={handleSettingsChange}
       onWallPositionsChange={setWallPositions}
+      weatherSettings={weatherSettings}
+      onWeatherSettingsChange={handleWeatherSettingsChange}
     />
     
     {/* Score display and block inventory */}

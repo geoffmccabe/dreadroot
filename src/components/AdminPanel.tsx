@@ -900,16 +900,96 @@ function BlocksList({ userRoles }: BlocksListProps) {
   );
 }
 
+interface WeatherControlsProps {
+  settings: {
+    maxLighting: number;
+    minLighting: number;
+    cycleDuration: number;
+  };
+  onSettingsChange: (key: string, value: number) => void;
+}
+
+function WeatherControls({ settings, onSettingsChange }: WeatherControlsProps) {
+  return (
+    <Card className="w-full p-6">
+      <h3 className="font-bold text-sm mb-4">LIGHTING CYCLE</h3>
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm">Max Lighting</Label>
+            <span className="text-sm font-mono opacity-75">{settings.maxLighting}%</span>
+          </div>
+          <Slider
+            value={[settings.maxLighting]}
+            onValueChange={([value]) => onSettingsChange('maxLighting', value)}
+            min={0}
+            max={100}
+            step={1}
+            className="w-full"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm">Min Lighting</Label>
+            <span className="text-sm font-mono opacity-75">{settings.minLighting}%</span>
+          </div>
+          <Slider
+            value={[settings.minLighting]}
+            onValueChange={([value]) => onSettingsChange('minLighting', value)}
+            min={0}
+            max={100}
+            step={1}
+            className="w-full"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm">Cycle Duration</Label>
+            <span className="text-sm font-mono opacity-75">{settings.cycleDuration} min</span>
+          </div>
+          <Slider
+            value={[settings.cycleDuration]}
+            onValueChange={([value]) => onSettingsChange('cycleDuration', value)}
+            min={1}
+            max={60}
+            step={1}
+            className="w-full"
+          />
+        </div>
+
+        <div className="text-xs text-muted-foreground mt-4 p-3 bg-muted/50 rounded">
+          <p className="mb-1">
+            <strong>Current behavior:</strong> Lighting will cycle between {settings.minLighting}% and {settings.maxLighting}% over {settings.cycleDuration} minutes.
+          </p>
+          <p>
+            The scene will smoothly transition from minimum to maximum lighting and back.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 interface AdminPanelProps {
   waterfallSettings?: any;
   onWaterfallSettingsChange?: (key: string, value: any) => void;
   onWallPositionsChange?: (positions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>) => void;
+  weatherSettings?: {
+    maxLighting: number;
+    minLighting: number;
+    cycleDuration: number;
+  };
+  onWeatherSettingsChange?: (key: string, value: number) => void;
 }
 
 export function AdminPanel({ 
   waterfallSettings, 
   onWaterfallSettingsChange,
-  onWallPositionsChange 
+  onWallPositionsChange,
+  weatherSettings,
+  onWeatherSettingsChange
 }: AdminPanelProps) {
   const { isOpen, activeTab, closePanel, setActiveTab } = useAdminPanel();
   const { getUserRoles } = useUserData();
@@ -933,9 +1013,10 @@ export function AdminPanel({
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+          <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
+            <TabsTrigger value="weather">Weather</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
           </TabsList>
@@ -954,6 +1035,15 @@ export function AdminPanel({
               isVisible={true}
               onWallPositionsChange={onWallPositionsChange}
             />
+          </TabsContent>
+
+          <TabsContent value="weather" className="mt-4">
+            {weatherSettings && onWeatherSettingsChange && (
+              <WeatherControls 
+                settings={weatherSettings}
+                onSettingsChange={onWeatherSettingsChange}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="users" className="mt-4">
