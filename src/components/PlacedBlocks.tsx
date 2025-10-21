@@ -70,13 +70,18 @@ const PlacedBlockComponent = React.memo(({
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
-  const { getBlockByKey } = useBlocksData();
+  const { getBlockByKey, isLoading } = useBlocksData();
   
   // Get block definition from database
   const blockDef = getBlockByKey(blockType);
   
+  // Don't render until block definitions are loaded
+  if (isLoading || !blockDef) {
+    return null;
+  }
+  
   // Load texture with animated GIF support - using shared texture cache
-  const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  const textureUrl = blockDef.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture (first block to load creates it, others reuse)
@@ -147,7 +152,7 @@ const PlacedBlockComponent = React.memo(({
   
   // Create material based on block properties with caching
   const material = useMemo(() => {
-    if (!texture || !blockDef) return null;
+    if (!texture) return null;
     
     // Generate cache key (now using cached texture reference)
     const cacheKey = getMaterialCacheKey(
@@ -236,9 +241,9 @@ const PlacedBlockComponent = React.memo(({
 
   if (!material) return null;
 
-  // Get glow factor for point light (with null check)
-  const glowFactor = blockDef?.properties?.glowFactor || 0;
-  const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
+  // Get glow factor for point light
+  const glowFactor = blockDef.properties?.glowFactor || 0;
+  const shouldGlow = blockDef.properties?.emissive && glowFactor > 0;
 
   return (
     <>
@@ -246,7 +251,7 @@ const PlacedBlockComponent = React.memo(({
       {shouldGlow && (
         <pointLight
           position={position}
-          color={blockDef?.properties?.color || '#FFE135'}
+          color={blockDef.properties?.color || '#FFE135'}
           intensity={glowFactor * 2}
           distance={glowFactor * 3}
           decay={2}
@@ -266,7 +271,6 @@ export const PlacedBlocks: React.FC<{
   
   // Clear caches on mount to ensure fresh textures
   React.useEffect(() => {
-    console.log('🔄 PlacedBlocks mounted - clearing texture/material caches');
     clearMaterialCache();
   }, []);
   

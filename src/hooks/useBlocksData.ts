@@ -34,7 +34,6 @@ export const useBlocksData = () => {
 
       // If already loaded, use cache
       if (cachedBlocks && cachedBlocksMap) {
-        console.log(`✅ Using cached blocks data (${cachedBlocks.length} blocks)`);
         setBlocks(cachedBlocks);
         setBlocksMap(cachedBlocksMap);
         setIsLoading(false);
@@ -42,7 +41,6 @@ export const useBlocksData = () => {
       }
 
       // Start new fetch
-      console.log('🔄 Fetching blocks from database...');
       fetchPromise = (async () => {
         try {
           const { data, error } = await supabase
@@ -75,11 +73,6 @@ export const useBlocksData = () => {
           cachedBlocksMap = blockMap;
           setBlocks(typedBlocks);
           setBlocksMap(blockMap);
-          
-          console.log(`✅ Loaded ${typedBlocks.length} blocks from database`);
-          typedBlocks.forEach(block => {
-            console.log(`  - ${block.key}: ${block.texture?.diffuse || 'no texture'}`);
-          });
         } catch (error) {
           console.error('Failed to load blocks:', error);
         } finally {
