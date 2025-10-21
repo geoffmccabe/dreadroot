@@ -63,19 +63,23 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
   const skyBackgroundRef = useRef<THREE.Mesh | null>(null);
   
   useEffect(() => {
-    // Background color sphere (black to bright blue) - slightly smaller radius
-    const backgroundGeo = new THREE.SphereGeometry(495, 60, 40);
+    // Background color sphere - starts pure black
+    const backgroundGeo = new THREE.SphereGeometry(498, 60, 40);
     const backgroundMat = new THREE.MeshBasicMaterial({
       side: THREE.BackSide,
-      color: 0x000000 // Pure black
+      color: new THREE.Color(0x000000), // Pure black
+      fog: false
     });
     const backgroundMesh = new THREE.Mesh(backgroundGeo, backgroundMat);
     skyBackgroundRef.current = backgroundMesh;
     scene.add(backgroundMesh);
     
-    // Load texture for the star layer - larger radius so it renders on top
+    console.log('Background sky sphere added, color:', backgroundMat.color.getHexString());
+    
+    // Load texture for the star layer
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load('/space_night_sky.webp', (texture) => {
+      console.log('Sky texture loaded');
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.repeat.set(0.995, 0.995);
@@ -86,15 +90,16 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
         map: texture,
         side: THREE.BackSide,
         transparent: true,
-        opacity: 1,
-        depthWrite: false // Prevent z-fighting
+        opacity: 1.0,
+        fog: false,
+        depthWrite: false
       });
       
       const textureMesh = new THREE.Mesh(skyGeo, textureMat);
       skyTextureRef.current = textureMesh;
       scene.add(textureMesh);
       
-      console.log('Sky texture loaded successfully');
+      console.log('Sky texture mesh added with opacity:', textureMat.opacity);
     }, undefined, (error) => {
       console.error('Error loading sky texture:', error);
     });
@@ -103,12 +108,15 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
       if (skyTextureRef.current) {
         scene.remove(skyTextureRef.current);
         skyTextureRef.current.geometry.dispose();
-        (skyTextureRef.current.material as THREE.Material).dispose();
+        if (skyTextureRef.current.material instanceof THREE.Material) {
+          const mat = skyTextureRef.current.material as THREE.MeshBasicMaterial;
+          if (mat.map) mat.map.dispose();
+          mat.dispose();
+        }
       }
       if (skyBackgroundRef.current) {
         scene.remove(skyBackgroundRef.current);
         backgroundGeo.dispose();
-        skyBackgroundRef.current.geometry.dispose();
         (skyBackgroundRef.current.material as THREE.Material).dispose();
       }
     };
@@ -116,24 +124,24 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
 
   // Update based on lighting percentage
   useFrame(() => {
-    // Calculate normalized lighting (0 = darkest, 1 = brightest) based on actual range
+    // Calculate normalized lighting (0 = darkest, 1 = brightest)
     const lightingRange = maxLighting - minLighting;
-    const normalizedLighting = lightingRange > 0 ? (lightingPercentage - minLighting) / lightingRange : 0;
+    const normalizedLighting = Math.max(0, Math.min(1, 
+      lightingRange > 0 ? (lightingPercentage - minLighting) / lightingRange : 0
+    ));
     
-    // Update background color: black (0x000000) to bright blue (0x87CEEB)
+    // Update background color: black (0x000000) to bright blue (0x4A90E2)
     if (skyBackgroundRef.current) {
       const material = skyBackgroundRef.current.material as THREE.MeshBasicMaterial;
-      material.color.lerpColors(
-        new THREE.Color(0x000000), // Pure black at dark
-        new THREE.Color(0x87CEEB), // Bright sky blue at light
-        normalizedLighting
-      );
+      const darkColor = new THREE.Color(0x000000); // Pure black
+      const lightColor = new THREE.Color(0x4A90E2); // Bright sky blue (not too bright)
+      material.color.copy(darkColor).lerp(lightColor, normalizedLighting);
     }
     
-    // Update texture opacity: 1 at dark, 0 at bright
-    if (skyTextureRef.current) {
+    // Update texture opacity: 1 at dark (100% visible), 0 at bright (invisible)
+    if (skyTextureRef.current && skyTextureRef.current.material) {
       const material = skyTextureRef.current.material as THREE.MeshBasicMaterial;
-      material.opacity = 1 - normalizedLighting;
+      material.opacity = 1.0 - normalizedLighting;
     }
   });
 
