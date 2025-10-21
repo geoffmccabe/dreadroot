@@ -88,17 +88,18 @@ const PlacedBlockComponent = React.memo(({
   // Get block definition from database (with fallback to prevent blank scene)
   const blockDef = getBlockByKey(blockType);
   
-  // If still loading, return null but don't block the entire scene
-  if (isLoading) {
-    return null;
-  }
-  
   // If no block definition found, use a stable default fallback
   const effectiveBlockDef: any = blockDef || DEFAULT_BLOCK_DEF;
   
   // Load texture with animated GIF support - using shared texture cache
+  // IMPORTANT: This hook MUST be called before any conditional returns
   const textureUrl = effectiveBlockDef.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  
+  // If still loading, return null but don't block the entire scene
+  if (isLoading) {
+    return null;
+  }
   
   // Get or cache the texture (first block to load creates it, others reuse)
   // Track if we already incremented refCount for this component instance
