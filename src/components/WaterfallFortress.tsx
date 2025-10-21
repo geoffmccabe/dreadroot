@@ -63,18 +63,17 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
   const skyBackgroundRef = useRef<THREE.Mesh | null>(null);
   
   useEffect(() => {
-    const skyGeo = new THREE.SphereGeometry(500, 60, 40);
-    
-    // Background color sphere (black to bright blue)
+    // Background color sphere (black to bright blue) - slightly smaller radius
+    const backgroundGeo = new THREE.SphereGeometry(495, 60, 40);
     const backgroundMat = new THREE.MeshBasicMaterial({
       side: THREE.BackSide,
-      color: 0x000000 // Start with black
+      color: 0x000000 // Pure black
     });
-    const backgroundMesh = new THREE.Mesh(skyGeo.clone(), backgroundMat);
+    const backgroundMesh = new THREE.Mesh(backgroundGeo, backgroundMat);
     skyBackgroundRef.current = backgroundMesh;
     scene.add(backgroundMesh);
     
-    // Load texture for the star layer
+    // Load texture for the star layer - larger radius so it renders on top
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load('/space_night_sky.webp', (texture) => {
       texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -82,16 +81,20 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
       texture.repeat.set(0.995, 0.995);
       texture.offset.set(0.0025, 0.0025);
       
+      const skyGeo = new THREE.SphereGeometry(500, 60, 40);
       const textureMat = new THREE.MeshBasicMaterial({
         map: texture,
         side: THREE.BackSide,
         transparent: true,
-        opacity: 1
+        opacity: 1,
+        depthWrite: false // Prevent z-fighting
       });
       
-      const textureMesh = new THREE.Mesh(skyGeo.clone(), textureMat);
+      const textureMesh = new THREE.Mesh(skyGeo, textureMat);
       skyTextureRef.current = textureMesh;
       scene.add(textureMesh);
+      
+      console.log('Sky texture loaded successfully');
     }, undefined, (error) => {
       console.error('Error loading sky texture:', error);
     });
@@ -104,10 +107,10 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
       }
       if (skyBackgroundRef.current) {
         scene.remove(skyBackgroundRef.current);
+        backgroundGeo.dispose();
         skyBackgroundRef.current.geometry.dispose();
         (skyBackgroundRef.current.material as THREE.Material).dispose();
       }
-      skyGeo.dispose();
     };
   }, [scene]);
 
