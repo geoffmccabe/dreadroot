@@ -75,6 +75,15 @@ const PlacedBlockComponent = React.memo(({
   // Get block definition from database
   const blockDef = getBlockByKey(blockType);
   
+  // Debug: Log if block definition is missing
+  if (!blockDef) {
+    console.warn(`⚠️ Block definition not found for type: ${blockType}`);
+  } else if (!blockDef.texture?.diffuse) {
+    console.warn(`⚠️ No texture URL for block: ${blockType}`, blockDef);
+  } else {
+    console.log(`✅ Block ${blockType} texture: ${blockDef.texture.diffuse}`);
+  }
+  
   // Load texture with animated GIF support - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
