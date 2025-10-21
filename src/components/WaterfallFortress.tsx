@@ -53,110 +53,48 @@ function useWeatherCycle(weatherSettings: {
 }
 
 // Sky component with space texture
-function SkyTexture({ lightingPercentage, maxLighting, minLighting }: { 
-  lightingPercentage: number;
-  maxLighting: number;
-  minLighting: number;
-}) {
+function SkyTexture() {
   const { scene } = useThree();
-  const skyTextureRef = useRef<THREE.Mesh | null>(null);
-  const skyBackgroundRef = useRef<THREE.Mesh | null>(null);
   
   useEffect(() => {
-    // Background color sphere - starts pure black
-    const backgroundGeo = new THREE.SphereGeometry(498, 60, 40);
-    const backgroundMat = new THREE.MeshBasicMaterial({
-      side: THREE.BackSide,
-      color: new THREE.Color(0x000000), // Pure black
-      fog: false
-    });
-    const backgroundMesh = new THREE.Mesh(backgroundGeo, backgroundMat);
-    skyBackgroundRef.current = backgroundMesh;
-    scene.add(backgroundMesh);
-    
-    console.log('🌌 Background sky sphere added');
-    
-    // Load texture for the star layer
     const textureLoader = new THREE.TextureLoader();
+    const skyGeo = new THREE.SphereGeometry(320, 64, 32);
+    
     textureLoader.load('/space_night_sky.webp', (texture) => {
-      console.log('✨ Sky texture loaded successfully');
+      // Crop edges to avoid white seam
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.repeat.set(0.995, 0.995);
-      texture.offset.set(0.0025, 0.0025);
+      texture.repeat.set(0.995, 0.995); // Avoid 2-3 pixels on edges
+      texture.offset.set(0.0025, 0.0025); // Center the cropped texture
       
-      const skyGeo = new THREE.SphereGeometry(500, 60, 40);
-      const textureMat = new THREE.MeshBasicMaterial({
+      const skyMat = new THREE.MeshBasicMaterial({
         map: texture,
         side: THREE.BackSide,
-        transparent: true,
-        opacity: 1.0,
-        fog: false,
-        depthWrite: false
+        color: 0x404040 // Darken the texture significantly (25% brightness)
       });
       
-      const textureMesh = new THREE.Mesh(skyGeo, textureMat);
-      skyTextureRef.current = textureMesh;
-      scene.add(textureMesh);
+      const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+      scene.add(skyMesh);
       
-      console.log('✨ Sky texture mesh added to scene');
-    }, undefined, (error) => {
-      console.error('❌ Error loading sky texture:', error);
+      return () => {
+        scene.remove(skyMesh);
+        skyGeo.dispose();
+        skyMat.dispose();
+        texture.dispose();
+      };
     });
     
     return () => {
-      if (skyTextureRef.current) {
-        scene.remove(skyTextureRef.current);
-        skyTextureRef.current.geometry.dispose();
-        if (skyTextureRef.current.material instanceof THREE.Material) {
-          const mat = skyTextureRef.current.material as THREE.MeshBasicMaterial;
-          if (mat.map) mat.map.dispose();
-          mat.dispose();
-        }
-      }
-      if (skyBackgroundRef.current) {
-        scene.remove(skyBackgroundRef.current);
-        backgroundGeo.dispose();
-        (skyBackgroundRef.current.material as THREE.Material).dispose();
-      }
+      skyGeo.dispose();
     };
   }, [scene]);
-
-  // Update based on lighting percentage
-  useFrame(() => {
-    // Calculate normalized lighting (0 = darkest, 1 = brightest)
-    const lightingRange = maxLighting - minLighting;
-    const normalizedLighting = Math.max(0, Math.min(1, 
-      lightingRange > 0 ? (lightingPercentage - minLighting) / lightingRange : 0
-    ));
-    
-    // Update background color: black (0x000000) to bright blue (0x4A90E2)
-    if (skyBackgroundRef.current) {
-      const material = skyBackgroundRef.current.material as THREE.MeshBasicMaterial;
-      const darkColor = new THREE.Color(0x000000); // Pure black
-      const lightColor = new THREE.Color(0x4A90E2); // Bright sky blue
-      material.color.copy(darkColor).lerp(lightColor, normalizedLighting);
-    }
-    
-    // Update texture opacity: 1 at dark (stars fully visible), 0 at bright (stars invisible)
-    if (skyTextureRef.current && skyTextureRef.current.material) {
-      const material = skyTextureRef.current.material as THREE.MeshBasicMaterial;
-      const targetOpacity = 1.0 - normalizedLighting;
-      material.opacity = targetOpacity;
-      
-      // Debug log when opacity changes significantly
-      if (Math.abs(targetOpacity - material.opacity) > 0.1) {
-        console.log(`🌙 Sky opacity: ${targetOpacity.toFixed(2)}, lighting: ${lightingPercentage.toFixed(0)}%, normalized: ${normalizedLighting.toFixed(2)}`);
-      }
-    }
-  });
-
+  
   return null;
 }
 
 // Star field removed - using space texture instead
 
-// Dynamic sky controller - now just displays space texture with dynamic opacity
+// Dynamic sky controller - now just displays space texture
 function DynamicSky({ weatherSettings }: {
   weatherSettings: {
     maxLighting: number;
@@ -164,12 +102,7 @@ function DynamicSky({ weatherSettings }: {
     cycleDuration: number;
   }
 }) {
-  const { lightingPercentage } = useWeatherCycle(weatherSettings);
-  return <SkyTexture 
-    lightingPercentage={lightingPercentage} 
-    maxLighting={weatherSettings.maxLighting}
-    minLighting={weatherSettings.minLighting}
-  />;
+  return <SkyTexture />;
 }
 
 // First person controls component
