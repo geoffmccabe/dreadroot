@@ -264,6 +264,12 @@ export const PlacedBlocks: React.FC<{
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
   
+  // Clear caches on mount to ensure fresh textures
+  React.useEffect(() => {
+    console.log('🔄 PlacedBlocks mounted - clearing texture/material caches');
+    clearMaterialCache();
+  }, []);
+  
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
     activeAnimatedTextures.forEach((updateFn) => {
