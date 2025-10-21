@@ -80,13 +80,22 @@ const PlacedBlockComponent = React.memo(({
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture (first block to load creates it, others reuse)
+  // Track if we already incremented refCount for this component instance
+  const hasIncrementedRef = useRef(false);
+  
   const cachedTextureData = useMemo(() => {
     if (!loadedTexture) return null;
     
     // Check if we already have this texture cached
     if (textureCache.has(textureUrl)) {
       const cached = textureCache.get(textureUrl)!;
-      cached.refCount++; // Increment reference count
+      
+      // Only increment refCount once per component instance
+      if (!hasIncrementedRef.current) {
+        cached.refCount++;
+        hasIncrementedRef.current = true;
+      }
+      
       return cached;
     }
     
@@ -104,6 +113,7 @@ const PlacedBlockComponent = React.memo(({
       refCount: 1 
     };
     textureCache.set(textureUrl, cached);
+    hasIncrementedRef.current = true;
     
     // If animated, register the update function (only once per texture URL)
     if (isAnimated && updateTexture) {
@@ -137,14 +147,14 @@ const PlacedBlockComponent = React.memo(({
   
   // Create material based on block properties with caching
   const material = useMemo(() => {
-    if (!texture) return null;
+    if (!texture || !blockDef) return null;
     
     // Generate cache key (now using cached texture reference)
     const cacheKey = getMaterialCacheKey(
       blockType,
       textureUrl,
       cachedIsAnimated,
-      blockDef?.properties
+      blockDef.properties
     );
     
     // Check if material already exists in cache
@@ -170,9 +180,9 @@ const PlacedBlockComponent = React.memo(({
         materialProps.color = baseColor;
         
         // Handle special properties
-        if (blockDef?.properties?.emissive) {
+        if (blockDef.properties?.emissive) {
           materialProps.emissive = baseColor;
-          const glowFactor = blockDef?.properties?.glowFactor || 3.0;
+          const glowFactor = blockDef.properties.glowFactor || 3.0;
           materialProps.emissiveIntensity = glowFactor * 1.0;
         }
       }
@@ -180,7 +190,7 @@ const PlacedBlockComponent = React.memo(({
     
     let newMaterial: THREE.Material;
     
-    if (blockDef?.properties?.transparent) {
+    if (blockDef.properties?.transparent) {
       // Use MeshPhysicalMaterial for glass/crystal effect with texture overlay
       const baseColor = getBaseColor(blockDef);
       newMaterial = new THREE.MeshPhysicalMaterial({
@@ -226,7 +236,7 @@ const PlacedBlockComponent = React.memo(({
 
   if (!material) return null;
 
-  // Get glow factor for point light
+  // Get glow factor for point light (with null check)
   const glowFactor = blockDef?.properties?.glowFactor || 0;
   const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
 
@@ -261,17 +271,6 @@ export const PlacedBlocks: React.FC<{
     });
   });
 
-  // Debug logging and force re-render when blocks change
-  React.useEffect(() => {
-    console.log('PlacedBlocks component updated - total blocks:', blocks.length);
-    console.log('PlacedBlocks received blocks array:', blocks);
-    if (blocks.length > 0) {
-      console.log('Block types present:', [...new Set(blocks.map(b => b.block_type))]);
-      console.log('Block positions:', blocks.map(b => `${b.block_type} at (${b.position_x}, ${b.position_y}, ${b.position_z})`));
-      console.log('Block IDs:', blocks.map(b => b.id));
-    }
-  }, [blocks]);
-
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
     collisionBoxes.current.set(blockId, box);
   }, []);
@@ -300,7 +299,7 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
-  if (!blocks || blocks.length === 0) {
+  if (blocks.length === 0) {
     return null;
   }
 
