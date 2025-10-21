@@ -5,6 +5,30 @@ import { PlacedBlock } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 
+// Global material cache - shared across all PlacedBlockComponent instances
+const materialCache = new Map<string, THREE.Material>();
+
+// Generate unique cache key based on material properties
+const getMaterialCacheKey = (
+  blockType: string,
+  textureUrl: string,
+  isAnimated: boolean,
+  properties?: {
+    color?: string;
+    emissive?: boolean;
+    transparent?: boolean;
+    glowFactor?: number;
+  }
+): string => {
+  return `${blockType}-${textureUrl}-${isAnimated}-${properties?.color || 'default'}-${properties?.emissive || false}-${properties?.transparent || false}-${properties?.glowFactor || 0}`;
+};
+
+// Function to clear material cache when needed
+export const clearMaterialCache = () => {
+  materialCache.forEach(material => material.dispose());
+  materialCache.clear();
+};
+
 // Shared geometry for performance
 const SharedBlockGeometry = () => {
   return useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
@@ -51,9 +75,22 @@ const PlacedBlockComponent = React.memo(({
     texture.offset.set(0, 0);
   }, [texture, blockType]);
   
-  // Create material based on block properties
+  // Create material based on block properties with caching
   const material = useMemo(() => {
     if (!texture) return null;
+    
+    // Generate cache key
+    const cacheKey = getMaterialCacheKey(
+      blockType,
+      textureUrl,
+      isAnimated,
+      blockDef?.properties
+    );
+    
+    // Check if material already exists in cache
+    if (materialCache.has(cacheKey)) {
+      return materialCache.get(cacheKey)!;
+    }
     
     const materialProps: any = {
       map: texture,
@@ -81,10 +118,12 @@ const PlacedBlockComponent = React.memo(({
       }
     }
     
+    let newMaterial: THREE.Material;
+    
     if (blockDef?.properties?.transparent) {
       // Use MeshPhysicalMaterial for glass/crystal effect with texture overlay
       const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
-      return new THREE.MeshPhysicalMaterial({
+      newMaterial = new THREE.MeshPhysicalMaterial({
         map: texture, // Apply the texture to the glass surface
         color: baseColor,
         transparent: true,
@@ -101,10 +140,15 @@ const PlacedBlockComponent = React.memo(({
         // This creates a "textured glass" effect where the texture appears 
         // printed on/in the glass material while maintaining transparency
       });
+    } else {
+      newMaterial = new THREE.MeshLambertMaterial(materialProps);
     }
     
-    return new THREE.MeshLambertMaterial(materialProps);
-  }, [texture, blockDef, blockType, isAnimated]);
+    // Store in cache before returning
+    materialCache.set(cacheKey, newMaterial);
+    
+    return newMaterial;
+  }, [texture, blockDef, blockType, isAnimated, textureUrl]);
 
   // Create collision box only once per block - removed onCollision from deps to prevent loop
   React.useEffect(() => {
@@ -113,15 +157,6 @@ const PlacedBlockComponent = React.memo(({
       onCollision(box, blockId);
     }
   }, [blockId]); // Removed onCollision from dependencies to prevent infinite loop
-
-  // Clean up material when component unmounts
-  React.useEffect(() => {
-    return () => {
-      if (material) {
-        material.dispose();
-      }
-    };
-  }, [material]);
 
   if (!material) return null;
 
