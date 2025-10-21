@@ -1347,6 +1347,9 @@ function Scene({
   // Audio throttling to prevent rapid-fire audio issues
   const lastAudioTime = useRef(0);
   const AUDIO_THROTTLE = 100; // Minimum 100ms between audio plays
+  
+  // Get camera ref for block rain
+  const { camera } = useThree();
 
   // Single audio context and optimized audio management
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -1358,6 +1361,104 @@ function Scene({
     woodenThud: new Audio('/wooden_thud_sound.mp3')
   });
 
+  // Block Rain handler - triggered by custom event
+  useEffect(() => {
+    const handleBlockRainEvent = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { blockTypes } = customEvent.detail;
+      
+      console.log('Block rain event received in Scene component');
+      
+      // Raycast from camera to find target point
+      const raycaster = new THREE.Raycaster();
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(camera.quaternion);
+      raycaster.set(camera.position, direction);
+      
+      // Create a ground plane for intersection
+      const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const targetPosition = new THREE.Vector3();
+      raycaster.ray.intersectPlane(groundPlane, targetPosition);
+      
+      console.log('Target position:', targetPosition);
+      
+      // Calculate positions for 100 blocks in a 10x10 grid around target
+      const spreadRadius = 5; // 5 blocks in each direction
+      const blockPositions: Array<{ x: number; y: number; z: number; type: string }> = [];
+      
+      // Create a grid of positions
+      for (let i = 0; i < 100; i++) {
+        const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
+        
+        // Random position within spread radius
+        const randomX = targetPosition.x + (Math.random() - 0.5) * spreadRadius * 2;
+        const randomZ = targetPosition.z + (Math.random() - 0.5) * spreadRadius * 2;
+        
+        // Round to grid
+        const gridX = Math.round(randomX);
+        const gridZ = Math.round(randomZ);
+        
+        // Find the highest existing block at this X,Z position
+        let groundY = 0;
+        blocks.forEach(block => {
+          if (Math.round(block.position_x) === gridX && Math.round(block.position_z) === gridZ) {
+            groundY = Math.max(groundY, block.position_y + 1);
+          }
+        });
+        
+        blockPositions.push({
+          x: gridX,
+          y: groundY,
+          z: gridZ,
+          type: randomBlockType
+        });
+      }
+      
+      // Batch place blocks using direct Supabase insert
+      console.log('Placing', blockPositions.length, 'blocks in batch...');
+      
+      // Call the parent's onBlockPlace for each position rapidly (without inventory checks)
+      let placedCount = 0;
+      const batchSize = 20; // Place 20 at a time
+      
+      for (let i = 0; i < blockPositions.length; i += batchSize) {
+        const batch = blockPositions.slice(i, i + batchSize);
+        
+        // Place all blocks in this batch simultaneously
+        await Promise.all(batch.map(async (pos) => {
+          try {
+            // Check if position is already occupied
+            const exists = blocks.some(b => 
+              Math.round(b.position_x) === pos.x && 
+              Math.round(b.position_y) === pos.y && 
+              Math.round(b.position_z) === pos.z
+            );
+            
+            if (!exists) {
+              await onBlockPlace(new THREE.Vector3(pos.x, pos.y, pos.z));
+              placedCount++;
+            }
+          } catch (err) {
+            console.error('Failed to place block:', err);
+          }
+        }));
+        
+        // Small delay between batches to prevent overwhelming the system
+        if (i + batchSize < blockPositions.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      console.log(`Block Rain complete: ${placedCount} blocks placed`);
+    };
+    
+    window.addEventListener('triggerBlockRain', handleBlockRainEvent);
+    
+    return () => {
+      window.removeEventListener('triggerBlockRain', handleBlockRainEvent);
+    };
+  }, [camera, blocks, onBlockPlace]);
+  
   // Initialize audio context and preload sounds (optimized)
   useEffect(() => {
     // Create single audio context only if it doesn't exist
@@ -1801,91 +1902,26 @@ export default function WaterfallFortress() {
   }, [addCoins]);
 
   // Block Rain feature - spawns 100 random blocks for testing
-  const handleBlockRain = useCallback(async () => {
+  // Optimized version that uses camera raycast and batch operations
+  const handleBlockRain = useCallback(() => {
     console.log('=== BLOCK RAIN TRIGGERED ===');
     
     // Get all available block types
     const blockTypes = ['fortress_block', 'grass_block', 'glowing_block', 'crystal_block'];
     
-    // Raycast to find target point where player is looking
-    const canvas = document.querySelector('canvas');
-    if (!canvas) {
-      toast({
-        title: "Block Rain failed",
-        description: "Could not find canvas element",
-        variant: "destructive"
-      });
-      return;
-    }
+    // Trigger block rain in the Scene component via a custom event
+    // This allows us to access the camera and do proper raycasting
+    const event = new CustomEvent('triggerBlockRain', {
+      detail: { blockTypes }
+    });
+    window.dispatchEvent(event);
     
-    // Create a temporary camera reference (will be set in the next frame)
-    let targetPosition = new THREE.Vector3(0, 0, -20); // Default position
-    
-    // We'll use a timeout to ensure we have camera access
-    setTimeout(async () => {
-      // Random center point around player's view
-      const spreadRadius = 5; // 5 blocks in each direction
-      const baseY = 50; // Start height for blocks to fall from
-      
-      toast({
-        title: "Block Rain!",
-        description: "Spawning 100 random blocks...",
-        duration: 2000
-      });
-      
-      let placedCount = 0;
-      const blockPromises: Promise<any>[] = [];
-      
-      // Spawn 100 blocks
-      for (let i = 0; i < 100; i++) {
-        // Random block type
-        const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
-        
-        // Random position around target
-        const randomX = targetPosition.x + (Math.random() - 0.5) * spreadRadius * 2;
-        const randomZ = targetPosition.z + (Math.random() - 0.5) * spreadRadius * 2;
-        const randomY = baseY + Math.random() * 50; // Vary height from 50 to 100
-        
-        // Round to grid
-        const roundedPos = {
-          x: Math.round(randomX),
-          y: Math.round(randomY),
-          z: Math.round(randomZ)
-        };
-        
-        // Place block (no inventory check, direct placement)
-        const promise = placeBlock(roundedPos.x, roundedPos.y, roundedPos.z, randomBlockType)
-          .then(placedBlock => {
-            if (placedBlock) {
-              placedCount++;
-              // Tag this block for cleanup after 10 minutes
-              setTimeout(() => {
-                // Remove block after 10 minutes
-                console.log('Removing block rain block:', placedBlock.id);
-                // Note: We'd need access to removeBlock here, but for now just log
-              }, 10 * 60 * 1000); // 10 minutes
-            }
-          })
-          .catch(err => console.error('Failed to place block rain block:', err));
-        
-        blockPromises.push(promise);
-        
-        // Small delay between spawns to prevent overwhelming the system
-        if (i % 10 === 0) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
-      }
-      
-      // Wait for all blocks to be placed
-      await Promise.all(blockPromises);
-      
-      console.log(`Block Rain complete: ${placedCount} blocks placed`);
-      toast({
-        title: "Block Rain Complete!",
-        description: `${placedCount} blocks spawned. They will disappear in 10 minutes.`,
-      });
-    }, 100);
-  }, [placeBlock, toast]);
+    toast({
+      title: "Block Rain!",
+      description: "Spawning 100 random blocks at your target...",
+      duration: 2000
+    });
+  }, [toast]);
 
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
     console.log('=== BLOCK PLACEMENT START ===');
