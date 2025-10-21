@@ -52,166 +52,49 @@ function useWeatherCycle(weatherSettings: {
   return cycleState;
 }
 
-// Sky component with dynamic gradient
-function SkyTexture({ topColor, bottomColor }: { topColor: THREE.Color; bottomColor: THREE.Color }) {
+// Sky component with space texture
+function SkyTexture() {
   const { scene } = useThree();
-  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   
   useEffect(() => {
-    const vertexShader = `
-      varying vec3 vWorldPosition;
-      void main() {
-        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = worldPosition.xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `;
+    const textureLoader = new THREE.TextureLoader();
+    const skyGeo = new THREE.SphereGeometry(320, 64, 32);
     
-    const fragmentShader = `
-      uniform vec3 topColor;
-      uniform vec3 bottomColor;
-      uniform float offset;
-      uniform float exponent;
-      varying vec3 vWorldPosition;
+    textureLoader.load('/space_night_sky.webp', (texture) => {
+      // Crop edges to avoid white seam
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.repeat.set(0.995, 0.995); // Avoid 2-3 pixels on edges
+      texture.offset.set(0.0025, 0.0025); // Center the cropped texture
       
-      void main() {
-        float h = normalize(vWorldPosition + offset).y;
-        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
-      }
-    `;
-    
-    const skyGeo = new THREE.SphereGeometry(320, 32, 16);
-    const skyMat = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      uniforms: {
-        topColor: { value: topColor.clone() },
-        bottomColor: { value: bottomColor.clone() },
-        offset: { value: 33 },
-        exponent: { value: 0.6 }
-      },
-      side: THREE.BackSide
+      const skyMat = new THREE.MeshBasicMaterial({
+        map: texture,
+        side: THREE.BackSide,
+        color: 0x404040 // Darken the texture significantly (25% brightness)
+      });
+      
+      const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+      scene.add(skyMesh);
+      
+      return () => {
+        scene.remove(skyMesh);
+        skyGeo.dispose();
+        skyMat.dispose();
+        texture.dispose();
+      };
     });
     
-    materialRef.current = skyMat;
-    const skyMesh = new THREE.Mesh(skyGeo, skyMat);
-    scene.add(skyMesh);
-    
     return () => {
-      scene.remove(skyMesh);
       skyGeo.dispose();
-      skyMat.dispose();
     };
   }, [scene]);
-  
-  // Update colors when they change
-  useEffect(() => {
-    if (materialRef.current) {
-      materialRef.current.uniforms.topColor.value.copy(topColor);
-      materialRef.current.uniforms.bottomColor.value.copy(bottomColor);
-    }
-  }, [topColor, bottomColor]);
   
   return null;
 }
 
-// Star field component with twinkling effect
-function StarField({ opacity }: { opacity: number }) {
-  const { scene } = useThree();
-  const pointsRef = useRef<THREE.Points | null>(null);
-  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
-  
-  useEffect(() => {
-    const starCount = 2500;
-    const positions = new Float32Array(starCount * 3);
-    const sizes = new Float32Array(starCount);
-    const phases = new Float32Array(starCount);
-    
-    for (let i = 0; i < starCount; i++) {
-      // Random position in a sphere
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const radius = 250 + Math.random() * 50;
-      
-      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-      positions[i * 3 + 2] = radius * Math.cos(phi);
-      
-      sizes[i] = 0.5 + Math.random() * 1.5;
-      phases[i] = Math.random() * Math.PI * 2;
-    }
-    
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
-    
-    const vertexShader = `
-      attribute float size;
-      attribute float phase;
-      varying float vPhase;
-      
-      void main() {
-        vPhase = phase;
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * (300.0 / -mvPosition.z);
-        gl_Position = projectionMatrix * mvPosition;
-      }
-    `;
-    
-    const fragmentShader = `
-      uniform float time;
-      uniform float opacity;
-      varying float vPhase;
-      
-      void main() {
-        float dist = length(gl_PointCoord - vec2(0.5, 0.5));
-        if (dist > 0.5) discard;
-        
-        // Twinkling effect
-        float twinkle = sin(time * 2.0 + vPhase) * 0.3 + 0.7;
-        float alpha = (1.0 - dist * 2.0) * twinkle * opacity;
-        
-        gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);
-      }
-    `;
-    
-    const material = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      uniforms: {
-        time: { value: 0 },
-        opacity: { value: opacity }
-      },
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    
-    materialRef.current = material;
-    const points = new THREE.Points(geometry, material);
-    pointsRef.current = points;
-    scene.add(points);
-    
-    return () => {
-      scene.remove(points);
-      geometry.dispose();
-      material.dispose();
-    };
-  }, [scene]);
-  
-  // Update opacity and time
-  useFrame((state) => {
-    if (materialRef.current) {
-      materialRef.current.uniforms.opacity.value = opacity;
-      materialRef.current.uniforms.time.value = state.clock.elapsedTime;
-    }
-  });
-  
-  return null;
-}
+// Star field removed - using space texture instead
 
-// Dynamic sky controller that synchronizes colors with lighting
+// Dynamic sky controller - now just displays space texture
 function DynamicSky({ weatherSettings }: {
   weatherSettings: {
     maxLighting: number;
@@ -219,35 +102,7 @@ function DynamicSky({ weatherSettings }: {
     cycleDuration: number;
   }
 }) {
-  const { lightingPercentage } = useWeatherCycle(weatherSettings);
-  
-  // Calculate night factor (1 at night, 0 at day)
-  const nightFactor = 1 - (lightingPercentage / 100);
-  
-  // Define color stops
-  const dayTopColor = useMemo(() => new THREE.Color(0x91c7f5), []); // Light blue
-  const dayBottomColor = useMemo(() => new THREE.Color(0xffffff), []); // White
-  const nightTopColor = useMemo(() => new THREE.Color(0x0a0e27), []); // Deep blue/black
-  const nightBottomColor = useMemo(() => new THREE.Color(0x1a1f3a), []); // Dark blue
-  
-  // Interpolate colors
-  const topColor = useMemo(() => {
-    return dayTopColor.clone().lerp(nightTopColor, nightFactor);
-  }, [nightFactor, dayTopColor, nightTopColor]);
-  
-  const bottomColor = useMemo(() => {
-    return dayBottomColor.clone().lerp(nightBottomColor, nightFactor);
-  }, [nightFactor, dayBottomColor, nightBottomColor]);
-  
-  // Star opacity fades in with darkness
-  const starOpacity = Math.pow(nightFactor, 1.5); // Exponential fade for dramatic effect
-  
-  return (
-    <>
-      <SkyTexture topColor={topColor} bottomColor={bottomColor} />
-      <StarField opacity={starOpacity} />
-    </>
-  );
+  return <SkyTexture />;
 }
 
 // First person controls component

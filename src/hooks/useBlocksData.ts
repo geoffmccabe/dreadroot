@@ -6,21 +6,21 @@ let cachedBlocks: BlockType[] | null = null;
 let cachedBlocksMap: Map<string, BlockType> | null = null;
 let fetchPromise: Promise<void> | null = null;
 
-// Function to clear all caches (useful for debugging)
-export const clearBlocksCache = () => {
-  console.log('🔄 Clearing blocks cache');
-  cachedBlocks = null;
-  cachedBlocksMap = null;
-  fetchPromise = null;
-};
-
 export const useBlocksData = () => {
-  const [blocks, setBlocks] = useState<BlockType[]>([]);
-  const [blocksMap, setBlocksMap] = useState<Map<string, BlockType>>(new Map());
-  const [isLoading, setIsLoading] = useState(true);
+  const [blocks, setBlocks] = useState<BlockType[]>(cachedBlocks || []);
+  const [blocksMap, setBlocksMap] = useState<Map<string, BlockType>>(cachedBlocksMap || new Map());
+  const [isLoading, setIsLoading] = useState(!cachedBlocks);
 
   useEffect(() => {
     const loadBlocks = async () => {
+      // If already loaded, use cache
+      if (cachedBlocks && cachedBlocksMap) {
+        setBlocks(cachedBlocks);
+        setBlocksMap(cachedBlocksMap);
+        setIsLoading(false);
+        return;
+      }
+
       // If already fetching, wait for that promise
       if (fetchPromise) {
         await fetchPromise;
@@ -32,22 +32,14 @@ export const useBlocksData = () => {
         return;
       }
 
-      // If already loaded, use cache
-      if (cachedBlocks && cachedBlocksMap) {
-        setBlocks(cachedBlocks);
-        setBlocksMap(cachedBlocksMap);
-        setIsLoading(false);
-        return;
-      }
-
       // Start new fetch
       fetchPromise = (async () => {
         try {
-          const { data, error } = await supabase
-            .from('blocks')
-            .select('*')
-            .order('cost', { ascending: true })
-            .order('name', { ascending: true });
+      const { data, error } = await supabase
+        .from('blocks')
+        .select('*')
+        .order('cost', { ascending: true })
+        .order('name', { ascending: true });
 
           if (error) throw error;
 
