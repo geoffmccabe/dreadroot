@@ -44,19 +44,11 @@ const PlacedBlockComponent = React.memo(({
   React.useEffect(() => {
     if (!texture) return;
     
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    
-    // Special handling for grass block - use only top-left 20% of texture
-    if (blockType === 'grass_block') {
-      texture.repeat.set(5, 5);
-      texture.offset.set(0, 0.8);
-    } else {
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(1, 1);
-      texture.offset.set(0, 0);
-    }
+    // Use RepeatWrapping for all blocks to properly tile textures
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+    texture.offset.set(0, 0);
   }, [texture, blockType]);
   
   // Create material based on block properties
