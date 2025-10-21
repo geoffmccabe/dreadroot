@@ -53,54 +53,86 @@ function useWeatherCycle(weatherSettings: {
 }
 
 // Sky component with space texture
-function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
+function SkyTexture({ lightingPercentage, maxLighting, minLighting }: { 
+  lightingPercentage: number;
+  maxLighting: number;
+  minLighting: number;
+}) {
   const { scene } = useThree();
-  const skyMeshRef = useRef<THREE.Mesh | null>(null);
+  const skyTextureRef = useRef<THREE.Mesh | null>(null);
+  const skyBackgroundRef = useRef<THREE.Mesh | null>(null);
   
   useEffect(() => {
-    const textureLoader = new THREE.TextureLoader();
-    const skyGeo = new THREE.SphereGeometry(320, 64, 32);
+    const skyGeo = new THREE.SphereGeometry(500, 60, 40);
     
+    // Background color sphere (black to bright blue)
+    const backgroundMat = new THREE.MeshBasicMaterial({
+      side: THREE.BackSide,
+      color: 0x000000 // Start with black
+    });
+    const backgroundMesh = new THREE.Mesh(skyGeo.clone(), backgroundMat);
+    skyBackgroundRef.current = backgroundMesh;
+    scene.add(backgroundMesh);
+    
+    // Load texture for the star layer
+    const textureLoader = new THREE.TextureLoader();
     textureLoader.load('/space_night_sky.webp', (texture) => {
-      // Crop edges to avoid white seam
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.repeat.set(0.995, 0.995); // Avoid 2-3 pixels on edges
-      texture.offset.set(0.0025, 0.0025); // Center the cropped texture
+      texture.repeat.set(0.995, 0.995);
+      texture.offset.set(0.0025, 0.0025);
       
-      const skyMat = new THREE.MeshBasicMaterial({
+      const textureMat = new THREE.MeshBasicMaterial({
         map: texture,
         side: THREE.BackSide,
-        color: 0x0a0a0a, // Much darker base (4% brightness)
         transparent: true,
         opacity: 1
       });
       
-      const skyMesh = new THREE.Mesh(skyGeo, skyMat);
-      skyMeshRef.current = skyMesh;
-      scene.add(skyMesh);
-      
-      return () => {
-        scene.remove(skyMesh);
-        skyGeo.dispose();
-        skyMat.dispose();
-        texture.dispose();
-      };
+      const textureMesh = new THREE.Mesh(skyGeo.clone(), textureMat);
+      skyTextureRef.current = textureMesh;
+      scene.add(textureMesh);
+    }, undefined, (error) => {
+      console.error('Error loading sky texture:', error);
     });
     
     return () => {
+      if (skyTextureRef.current) {
+        scene.remove(skyTextureRef.current);
+        skyTextureRef.current.geometry.dispose();
+        (skyTextureRef.current.material as THREE.Material).dispose();
+      }
+      if (skyBackgroundRef.current) {
+        scene.remove(skyBackgroundRef.current);
+        skyBackgroundRef.current.geometry.dispose();
+        (skyBackgroundRef.current.material as THREE.Material).dispose();
+      }
       skyGeo.dispose();
     };
   }, [scene]);
 
-  // Update opacity based on lighting percentage
+  // Update based on lighting percentage
   useFrame(() => {
-    if (skyMeshRef.current && skyMeshRef.current.material) {
-      const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
-      // Lighting goes from 0 to 100
-      // At 100 (brightest), opacity should be 0
-      // At 0 (darkest), opacity should be 1
-      material.opacity = 1 - (lightingPercentage / 100);
+    // Calculate normalized lighting (0 = darkest, 1 = brightest) based on actual range
+    const lightingRange = maxLighting - minLighting;
+    const normalizedLighting = lightingRange > 0 ? (lightingPercentage - minLighting) / lightingRange : 0;
+    
+    // Update background color: black (0x000000) to bright blue (0x87CEEB)
+    if (skyBackgroundRef.current) {
+      const material = skyBackgroundRef.current.material as THREE.MeshBasicMaterial;
+      const color = new THREE.Color();
+      color.lerpColors(
+        new THREE.Color(0x000000), // Pure black at dark
+        new THREE.Color(0x87CEEB), // Bright sky blue at light
+        normalizedLighting
+      );
+      material.color = color;
+    }
+    
+    // Update texture opacity: 1 at dark, 0 at bright
+    if (skyTextureRef.current) {
+      const material = skyTextureRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = 1 - normalizedLighting;
     }
   });
 
@@ -118,7 +150,11 @@ function DynamicSky({ weatherSettings }: {
   }
 }) {
   const { lightingPercentage } = useWeatherCycle(weatherSettings);
-  return <SkyTexture lightingPercentage={lightingPercentage} />;
+  return <SkyTexture 
+    lightingPercentage={lightingPercentage} 
+    maxLighting={weatherSettings.maxLighting}
+    minLighting={weatherSettings.minLighting}
+  />;
 }
 
 // First person controls component
