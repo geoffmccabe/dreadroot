@@ -117,6 +117,7 @@ const PlacedBlockComponent = React.memo(({
     
     // If animated, register the update function (only once per texture URL)
     if (isAnimated && updateTexture) {
+      console.log('🎬 Registering animated texture:', textureUrl);
       activeAnimatedTextures.set(textureUrl, updateTexture);
     }
     
@@ -260,9 +261,12 @@ export const PlacedBlocks: React.FC<{
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
-    activeAnimatedTextures.forEach((updateFn) => {
-      updateFn(delta);
-    });
+    if (activeAnimatedTextures.size > 0) {
+      console.log('🎬 Updating', activeAnimatedTextures.size, 'animated textures');
+      activeAnimatedTextures.forEach((updateFn) => {
+        updateFn(delta);
+      });
+    }
   });
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {

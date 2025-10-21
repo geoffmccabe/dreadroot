@@ -121,7 +121,7 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       skyMat?.dispose();
       texture?.dispose();
     };
-  }, [scene, lightingPercentage]);
+  }, [scene]); // Only depend on scene, not lightingPercentage - useFrame handles color updates
   
   // Update sky color each frame for smooth transitions
   useFrame(() => {
