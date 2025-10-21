@@ -72,16 +72,29 @@ const PlacedBlockComponent = React.memo(({
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
   const { getBlockByKey, isLoading } = useBlocksData();
   
-  // Get block definition from database
+  // Get block definition from database (with fallback to prevent blank scene)
   const blockDef = getBlockByKey(blockType);
   
-  // Don't render until block definitions are loaded
-  if (isLoading || !blockDef) {
+  // If still loading or no definition, return null but don't block the entire scene
+  if (isLoading) {
     return null;
   }
   
+  // If no block definition found, use a default fallback to prevent breaks
+  const effectiveBlockDef: any = blockDef || {
+    key: blockType,
+    name: blockType,
+    texture: { diffuse: '/cliff_texture_seamless.webp' },
+    properties: {
+      color: '#808080',
+      emissive: false,
+      transparent: false,
+      glowFactor: 0
+    }
+  };
+  
   // Load texture with animated GIF support - using shared texture cache
-  const textureUrl = blockDef.texture?.diffuse || '/cliff_texture_seamless.webp';
+  const textureUrl = effectiveBlockDef.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture (first block to load creates it, others reuse)
@@ -173,7 +186,7 @@ const PlacedBlockComponent = React.memo(({
     
     // Apply different color tinting based on block type
     if (blockType !== 'grass_block') {
-      const baseColor = getBaseColor(blockDef);
+      const baseColor = getBaseColor(effectiveBlockDef);
       
       // For animated GIFs, use a lighter tint (blend between base color and white)
       // This gives a middle ground between full color tint and no tint
@@ -185,9 +198,9 @@ const PlacedBlockComponent = React.memo(({
         materialProps.color = baseColor;
         
         // Handle special properties
-        if (blockDef.properties?.emissive) {
+        if (effectiveBlockDef.properties?.emissive) {
           materialProps.emissive = baseColor;
-          const glowFactor = blockDef.properties.glowFactor || 3.0;
+          const glowFactor = effectiveBlockDef.properties.glowFactor || 3.0;
           materialProps.emissiveIntensity = glowFactor * 1.0;
         }
       }
@@ -195,9 +208,9 @@ const PlacedBlockComponent = React.memo(({
     
     let newMaterial: THREE.Material;
     
-    if (blockDef.properties?.transparent) {
+    if (effectiveBlockDef.properties?.transparent) {
       // Use MeshPhysicalMaterial for glass/crystal effect with texture overlay
-      const baseColor = getBaseColor(blockDef);
+      const baseColor = getBaseColor(effectiveBlockDef);
       newMaterial = new THREE.MeshPhysicalMaterial({
         map: texture, // Apply the texture to the glass surface
         color: baseColor,
@@ -223,7 +236,7 @@ const PlacedBlockComponent = React.memo(({
     materialCache.set(cacheKey, newMaterial);
     
     return newMaterial;
-  }, [texture, blockDef, blockType, cachedIsAnimated, textureUrl]);
+  }, [texture, effectiveBlockDef, blockType, cachedIsAnimated, textureUrl]);
 
   // Use ref to avoid stale closure issues with onCollision callback
   const onCollisionRef = useRef(onCollision);
@@ -242,8 +255,8 @@ const PlacedBlockComponent = React.memo(({
   if (!material) return null;
 
   // Get glow factor for point light
-  const glowFactor = blockDef.properties?.glowFactor || 0;
-  const shouldGlow = blockDef.properties?.emissive && glowFactor > 0;
+  const glowFactor = effectiveBlockDef.properties?.glowFactor || 0;
+  const shouldGlow = effectiveBlockDef.properties?.emissive && glowFactor > 0;
 
   return (
     <>
@@ -251,7 +264,7 @@ const PlacedBlockComponent = React.memo(({
       {shouldGlow && (
         <pointLight
           position={position}
-          color={blockDef.properties?.color || '#FFE135'}
+          color={effectiveBlockDef.properties?.color || '#FFE135'}
           intensity={glowFactor * 2}
           distance={glowFactor * 3}
           decay={2}
@@ -268,11 +281,6 @@ export const PlacedBlocks: React.FC<{
 }> = ({ blocks, onCollision }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
-  
-  // Clear caches on mount to ensure fresh textures
-  React.useEffect(() => {
-    clearMaterialCache();
-  }, []);
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
