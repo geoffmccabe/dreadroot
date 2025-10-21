@@ -53,8 +53,9 @@ function useWeatherCycle(weatherSettings: {
 }
 
 // Sky component with space texture
-function SkyTexture() {
+function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
   const { scene } = useThree();
+  const skyMeshRef = useRef<THREE.Mesh | null>(null);
   
   useEffect(() => {
     const textureLoader = new THREE.TextureLoader();
@@ -70,10 +71,13 @@ function SkyTexture() {
       const skyMat = new THREE.MeshBasicMaterial({
         map: texture,
         side: THREE.BackSide,
-        color: 0x404040 // Darken the texture significantly (25% brightness)
+        color: 0x0a0a0a, // Much darker base (4% brightness)
+        transparent: true,
+        opacity: 1
       });
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+      skyMeshRef.current = skyMesh;
       scene.add(skyMesh);
       
       return () => {
@@ -88,13 +92,24 @@ function SkyTexture() {
       skyGeo.dispose();
     };
   }, [scene]);
-  
+
+  // Update opacity based on lighting percentage
+  useFrame(() => {
+    if (skyMeshRef.current && skyMeshRef.current.material) {
+      const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
+      // Lighting goes from 0 to 100
+      // At 100 (brightest), opacity should be 0
+      // At 0 (darkest), opacity should be 1
+      material.opacity = 1 - (lightingPercentage / 100);
+    }
+  });
+
   return null;
 }
 
 // Star field removed - using space texture instead
 
-// Dynamic sky controller - now just displays space texture
+// Dynamic sky controller - now just displays space texture with dynamic opacity
 function DynamicSky({ weatherSettings }: {
   weatherSettings: {
     maxLighting: number;
@@ -102,7 +117,8 @@ function DynamicSky({ weatherSettings }: {
     cycleDuration: number;
   }
 }) {
-  return <SkyTexture />;
+  const { lightingPercentage } = useWeatherCycle(weatherSettings);
+  return <SkyTexture lightingPercentage={lightingPercentage} />;
 }
 
 // First person controls component
