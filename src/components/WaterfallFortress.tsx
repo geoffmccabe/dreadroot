@@ -74,12 +74,12 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
     skyBackgroundRef.current = backgroundMesh;
     scene.add(backgroundMesh);
     
-    console.log('Background sky sphere added, color:', backgroundMat.color.getHexString());
+    console.log('🌌 Background sky sphere added');
     
     // Load texture for the star layer
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load('/space_night_sky.webp', (texture) => {
-      console.log('Sky texture loaded');
+      console.log('✨ Sky texture loaded successfully');
       texture.wrapS = THREE.ClampToEdgeWrapping;
       texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.repeat.set(0.995, 0.995);
@@ -99,9 +99,9 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
       skyTextureRef.current = textureMesh;
       scene.add(textureMesh);
       
-      console.log('Sky texture mesh added with opacity:', textureMat.opacity);
+      console.log('✨ Sky texture mesh added to scene');
     }, undefined, (error) => {
-      console.error('Error loading sky texture:', error);
+      console.error('❌ Error loading sky texture:', error);
     });
     
     return () => {
@@ -134,14 +134,20 @@ function SkyTexture({ lightingPercentage, maxLighting, minLighting }: {
     if (skyBackgroundRef.current) {
       const material = skyBackgroundRef.current.material as THREE.MeshBasicMaterial;
       const darkColor = new THREE.Color(0x000000); // Pure black
-      const lightColor = new THREE.Color(0x4A90E2); // Bright sky blue (not too bright)
+      const lightColor = new THREE.Color(0x4A90E2); // Bright sky blue
       material.color.copy(darkColor).lerp(lightColor, normalizedLighting);
     }
     
-    // Update texture opacity: 1 at dark (100% visible), 0 at bright (invisible)
+    // Update texture opacity: 1 at dark (stars fully visible), 0 at bright (stars invisible)
     if (skyTextureRef.current && skyTextureRef.current.material) {
       const material = skyTextureRef.current.material as THREE.MeshBasicMaterial;
-      material.opacity = 1.0 - normalizedLighting;
+      const targetOpacity = 1.0 - normalizedLighting;
+      material.opacity = targetOpacity;
+      
+      // Debug log when opacity changes significantly
+      if (Math.abs(targetOpacity - material.opacity) > 0.1) {
+        console.log(`🌙 Sky opacity: ${targetOpacity.toFixed(2)}, lighting: ${lightingPercentage.toFixed(0)}%, normalized: ${normalizedLighting.toFixed(2)}`);
+      }
     }
   });
 
