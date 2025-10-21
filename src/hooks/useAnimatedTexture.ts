@@ -22,7 +22,7 @@ export const useAnimatedTexture = (url: string) => {
     console.log('🎨 Loading texture:', url);
     const isGif = url.toLowerCase().endsWith('.gif');
     isGifRef.current = isGif;
-    console.log('🎬 Is GIF?', isGif, 'URL:', url);
+    console.log('🎬 Is GIF?', isGif);
 
     if (isGif) {
       loadAnimatedGif(url);
@@ -101,9 +101,6 @@ export const useAnimatedTexture = (url: string) => {
       
       // Render first frame
       renderFrame(0);
-      
-      // Mark texture as needing update after first frame is rendered
-      canvasTexture.needsUpdate = true;
       
       setTexture(canvasTexture);
     } catch (error) {

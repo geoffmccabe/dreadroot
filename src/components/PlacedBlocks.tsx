@@ -77,9 +77,7 @@ const PlacedBlockComponent = React.memo(({
   
   // Load texture with animated GIF support - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  console.log(`🎨 Block ${blockType} loading texture:`, textureUrl);
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
-  console.log(`🎬 Block ${blockType} isAnimated:`, isAnimated);
   
   // Get or cache the texture (first block to load creates it, others reuse)
   // Track if we already incremented refCount for this component instance
