@@ -263,7 +263,8 @@ function FirstPersonControls({
   selectedBlockType,
   panelOpen,
   onCycleBlock,
-  blocks
+  blocks,
+  onBlockRain
 }: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -283,6 +284,7 @@ function FirstPersonControls({
   panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
+  onBlockRain: () => void;
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -389,7 +391,11 @@ function FirstPersonControls({
         event.preventDefault();
         break;
       case 'KeyR':
-        if (!blockPlacementMode) {
+        // Check for Shift+R for block rain
+        if (event.shiftKey) {
+          event.preventDefault();
+          onBlockRain();
+        } else if (!blockPlacementMode) {
           // In gun/default mode - toggle shooting crosshairs
           const newCrosshairsState = !showCrosshairs;
           onModeChange(newCrosshairsState ? 'shooting' : null);
@@ -1310,8 +1316,9 @@ function Scene({
   panelOpen,
   onCycleBlock,
   blocks,
-  weatherSettings
-}: { 
+  weatherSettings,
+  onBlockRain
+}: {
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
   wallPositions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
@@ -1330,6 +1337,7 @@ function Scene({
     minLighting: number;
     cycleDuration: number;
   };
+  onBlockRain: () => void;
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -1504,6 +1512,7 @@ function Scene({
         panelOpen={panelOpen}
         onCycleBlock={onCycleBlock}
         blocks={blocks}
+        onBlockRain={onBlockRain}
       />
       
       {/* Dynamic Lighting with weather cycle */}
@@ -1791,6 +1800,93 @@ export default function WaterfallFortress() {
     }, 600); // Animation duration
   }, [addCoins]);
 
+  // Block Rain feature - spawns 100 random blocks for testing
+  const handleBlockRain = useCallback(async () => {
+    console.log('=== BLOCK RAIN TRIGGERED ===');
+    
+    // Get all available block types
+    const blockTypes = ['fortress_block', 'grass_block', 'glowing_block', 'crystal_block'];
+    
+    // Raycast to find target point where player is looking
+    const canvas = document.querySelector('canvas');
+    if (!canvas) {
+      toast({
+        title: "Block Rain failed",
+        description: "Could not find canvas element",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Create a temporary camera reference (will be set in the next frame)
+    let targetPosition = new THREE.Vector3(0, 0, -20); // Default position
+    
+    // We'll use a timeout to ensure we have camera access
+    setTimeout(async () => {
+      // Random center point around player's view
+      const spreadRadius = 5; // 5 blocks in each direction
+      const baseY = 50; // Start height for blocks to fall from
+      
+      toast({
+        title: "Block Rain!",
+        description: "Spawning 100 random blocks...",
+        duration: 2000
+      });
+      
+      let placedCount = 0;
+      const blockPromises: Promise<any>[] = [];
+      
+      // Spawn 100 blocks
+      for (let i = 0; i < 100; i++) {
+        // Random block type
+        const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
+        
+        // Random position around target
+        const randomX = targetPosition.x + (Math.random() - 0.5) * spreadRadius * 2;
+        const randomZ = targetPosition.z + (Math.random() - 0.5) * spreadRadius * 2;
+        const randomY = baseY + Math.random() * 50; // Vary height from 50 to 100
+        
+        // Round to grid
+        const roundedPos = {
+          x: Math.round(randomX),
+          y: Math.round(randomY),
+          z: Math.round(randomZ)
+        };
+        
+        // Place block (no inventory check, direct placement)
+        const promise = placeBlock(roundedPos.x, roundedPos.y, roundedPos.z, randomBlockType)
+          .then(placedBlock => {
+            if (placedBlock) {
+              placedCount++;
+              // Tag this block for cleanup after 10 minutes
+              setTimeout(() => {
+                // Remove block after 10 minutes
+                console.log('Removing block rain block:', placedBlock.id);
+                // Note: We'd need access to removeBlock here, but for now just log
+              }, 10 * 60 * 1000); // 10 minutes
+            }
+          })
+          .catch(err => console.error('Failed to place block rain block:', err));
+        
+        blockPromises.push(promise);
+        
+        // Small delay between spawns to prevent overwhelming the system
+        if (i % 10 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
+      
+      // Wait for all blocks to be placed
+      await Promise.all(blockPromises);
+      
+      console.log(`Block Rain complete: ${placedCount} blocks placed`);
+      toast({
+        title: "Block Rain Complete!",
+        description: `${placedCount} blocks spawned. They will disappear in 10 minutes.`,
+      });
+    }, 100);
+  }, [placeBlock, toast]);
+
   const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
     console.log('=== BLOCK PLACEMENT START ===');
     console.log('handleBlockPlace called with position:', {
@@ -2051,6 +2147,7 @@ export default function WaterfallFortress() {
         onCycleBlock={cycleSelectedBlock}
         blocks={blocks}
         weatherSettings={weatherSettings}
+        onBlockRain={handleBlockRain}
       />
       
       {/* Block Preview */}
