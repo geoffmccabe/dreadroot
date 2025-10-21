@@ -428,9 +428,12 @@ function BlocksList({ userRoles }: BlocksListProps) {
       const { error } = await supabase
         .from('blocks')
         .update({
+          key: editingBlock.key,
           name: editingBlock.name,
           description: editingBlock.description,
           cost: editingBlock.cost,
+          category: editingBlock.category,
+          rarity: editingBlock.rarity,
           properties: editingBlock.properties
         })
         .eq('id', editingBlock.id);
@@ -629,11 +632,45 @@ function BlocksList({ userRoles }: BlocksListProps) {
       {/* Edit Block Dialog */}
       {editingBlock && (
         <Dialog open={!!editingBlock} onOpenChange={(open) => !open && setEditingBlock(null)}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Block</DialogTitle>
+              <DialogTitle>Edit Block: {editingBlock.name}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
+              {/* Texture Upload */}
+              <div>
+                <Label>Current Texture</Label>
+                <div className="relative w-24 h-24 rounded border-2 overflow-hidden bg-muted mb-2">
+                  {editingBlock.texture_url ? (
+                    <img 
+                      src={editingBlock.texture_url} 
+                      alt={editingBlock.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div 
+                      className="w-full h-full"
+                      style={{ backgroundColor: editingBlock.properties.color }}
+                    />
+                  )}
+                </div>
+                <Label htmlFor="edit-block-texture">Upload New Texture</Label>
+                <Input
+                  id="edit-block-texture"
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      await handleTextureUpload(editingBlock.id, file);
+                      // Reload blocks to get the new texture URL
+                      await loadBlocks();
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Name */}
               <div>
                 <Label htmlFor="edit-block-name">Block Name</Label>
                 <Input
@@ -642,6 +679,22 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   onChange={(e) => setEditingBlock({ ...editingBlock, name: e.target.value })}
                 />
               </div>
+
+              {/* Key */}
+              <div>
+                <Label htmlFor="edit-block-key">Block Key (unique identifier)</Label>
+                <Input
+                  id="edit-block-key"
+                  value={editingBlock.key}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  ⚠️ Changing the key may break existing references
+                </p>
+              </div>
+
+              {/* Description */}
               <div>
                 <Label htmlFor="edit-block-description">Description</Label>
                 <Input
@@ -650,6 +703,8 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   onChange={(e) => setEditingBlock({ ...editingBlock, description: e.target.value })}
                 />
               </div>
+
+              {/* Cost */}
               <div>
                 <Label htmlFor="edit-block-cost">Cost (coins)</Label>
                 <Input
@@ -660,23 +715,97 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   min="1"
                 />
               </div>
+
+              {/* Category */}
               <div>
-                <Label htmlFor="edit-block-color">Block Color</Label>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    id="edit-block-color"
-                    type="color"
-                    value={editingBlock.properties.color}
-                    onChange={(e) => setEditingBlock({ 
-                      ...editingBlock, 
-                      properties: { ...editingBlock.properties, color: e.target.value }
+                <Label htmlFor="edit-block-category">Category</Label>
+                <select
+                  id="edit-block-category"
+                  value={editingBlock.category}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, category: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="building">Building</option>
+                  <option value="decorative">Decorative</option>
+                  <option value="special">Special</option>
+                </select>
+              </div>
+
+              {/* Rarity */}
+              <div>
+                <Label htmlFor="edit-block-rarity">Rarity</Label>
+                <select
+                  id="edit-block-rarity"
+                  value={editingBlock.rarity}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, rarity: e.target.value })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="common">Common</option>
+                  <option value="rare">Rare</option>
+                  <option value="epic">Epic</option>
+                  <option value="legendary">Legendary</option>
+                </select>
+              </div>
+
+              {/* Properties */}
+              <div className="space-y-3 border-t pt-3">
+                <Label className="text-sm font-semibold">Properties</Label>
+                
+                {/* Color */}
+                <div>
+                  <Label htmlFor="edit-block-color">Block Color</Label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      id="edit-block-color"
+                      type="color"
+                      value={editingBlock.properties.color}
+                      onChange={(e) => setEditingBlock({ 
+                        ...editingBlock, 
+                        properties: { ...editingBlock.properties, color: e.target.value }
+                      })}
+                      className="w-20 h-10"
+                    />
+                    <span className="text-xs text-muted-foreground">{editingBlock.properties.color}</span>
+                  </div>
+                </div>
+
+                {/* Emissive */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-block-emissive"
+                    checked={editingBlock.properties.emissive}
+                    onChange={(e) => setEditingBlock({
+                      ...editingBlock,
+                      properties: { ...editingBlock.properties, emissive: e.target.checked }
                     })}
-                    className="w-20 h-10"
+                    className="w-4 h-4"
                   />
-                  <span className="text-xs text-muted-foreground">{editingBlock.properties.color}</span>
+                  <Label htmlFor="edit-block-emissive" className="cursor-pointer">
+                    Emissive (glowing)
+                  </Label>
+                </div>
+
+                {/* Transparent */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-block-transparent"
+                    checked={editingBlock.properties.transparent}
+                    onChange={(e) => setEditingBlock({
+                      ...editingBlock,
+                      properties: { ...editingBlock.properties, transparent: e.target.checked }
+                    })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="edit-block-transparent" className="cursor-pointer">
+                    Transparent (glass-like)
+                  </Label>
                 </div>
               </div>
-              <div className="flex gap-2 justify-end">
+
+              {/* Actions */}
+              <div className="flex gap-2 justify-end border-t pt-4">
                 <Button variant="outline" onClick={() => setEditingBlock(null)}>
                   Cancel
                 </Button>
