@@ -89,22 +89,24 @@ const PlacedBlockComponent = React.memo(({
     }
     
     if (blockDef?.properties?.transparent) {
-      // Use MeshPhysicalMaterial for glass/crystal effect
+      // Use MeshPhysicalMaterial for glass/crystal effect with texture overlay
       const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
       return new THREE.MeshPhysicalMaterial({
+        map: texture, // Apply the texture to the glass surface
         color: baseColor,
         transparent: true,
-        opacity: 0.7,
-        transmission: 0.95, // Higher transmission for more glass-like effect
-        thickness: 0.8,
-        roughness: 0.05, // Very smooth surface for high reflectivity
-        metalness: 0.1, // Slight metalness for more reflective appearance
-        clearcoat: 1.0, // Maximum clearcoat for glossy look
-        clearcoatRoughness: 0.0, // Perfectly smooth clearcoat
-        ior: 1.52, // Index of refraction similar to crystal/glass
-        reflectivity: 0.9, // High reflectivity
-        envMapIntensity: 1.5, // Enhance environment reflections
-        // Don't use texture map for crystal - rely on material properties
+        opacity: 0.6, // Slightly more opaque to show texture better
+        transmission: 0.5, // Reduced transmission so texture is visible
+        thickness: 0.5,
+        roughness: 0.1, // Slightly rougher to show texture details
+        metalness: 0.2, // Some metalness for shine
+        clearcoat: 1.0, // Maximum clearcoat for glossy glass effect
+        clearcoatRoughness: 0.1, // Smooth clearcoat
+        ior: 1.5, // Index of refraction for glass
+        reflectivity: 0.7, // Good reflectivity
+        envMapIntensity: 1.2, // Environment reflections
+        // This creates a "textured glass" effect where the texture appears 
+        // printed on/in the glass material while maintaining transparency
       });
     }
     

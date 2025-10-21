@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useUserData } from '@/hooks/useUserData';
+import { useBlocksData } from '@/hooks/useBlocksData';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -447,6 +448,11 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
       setEditingBlock(null);
       loadBlocks();
+      
+      // Refresh global blocks data so all components get updated
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('blocksUpdated'));
+      }
     } catch (error: any) {
       console.error('Failed to update block:', error);
       toast({

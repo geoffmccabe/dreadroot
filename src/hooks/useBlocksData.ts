@@ -74,6 +74,17 @@ export const useBlocksData = () => {
     };
 
     loadBlocks();
+    
+    // Listen for block updates from admin panel
+    const handleBlocksUpdated = () => {
+      refreshBlocks();
+    };
+    
+    window.addEventListener('blocksUpdated', handleBlocksUpdated);
+    
+    return () => {
+      window.removeEventListener('blocksUpdated', handleBlocksUpdated);
+    };
   }, []);
 
   const getBlockByKey = (key: string): BlockType | undefined => {
