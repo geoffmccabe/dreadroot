@@ -96,6 +96,13 @@ const PlacedBlockComponent = React.memo(({
         hasIncrementedRef.current = true;
       }
       
+      // CRITICAL: Ensure animated textures are registered even when using cache
+      // This handles cases where cache exists but animation wasn't registered
+      if (cached.isAnimated && cached.updateFn && !activeAnimatedTextures.has(textureUrl)) {
+        console.log('🎬 Registering cached animated texture:', textureUrl);
+        activeAnimatedTextures.set(textureUrl, cached.updateFn);
+      }
+      
       return cached;
     }
     
@@ -117,6 +124,7 @@ const PlacedBlockComponent = React.memo(({
     
     // If animated, register the update function (only once per texture URL)
     if (isAnimated && updateTexture) {
+      console.log('🎬 Registering new animated texture:', textureUrl);
       activeAnimatedTextures.set(textureUrl, updateTexture);
     }
     
@@ -266,9 +274,11 @@ export const PlacedBlocks: React.FC<{
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
-    activeAnimatedTextures.forEach((updateFn) => {
-      updateFn(delta);
-    });
+    if (activeAnimatedTextures.size > 0) {
+      activeAnimatedTextures.forEach((updateFn) => {
+        updateFn(delta);
+      });
+    }
   });
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
@@ -299,7 +309,11 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
+  console.log('🧊 PlacedBlocks render - block count:', blocks.length);
+  console.log('🎬 Active animated textures:', activeAnimatedTextures.size);
+  
   if (blocks.length === 0) {
+    console.log('⚠️ No blocks to render');
     return null;
   }
 
