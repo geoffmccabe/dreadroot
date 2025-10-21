@@ -102,6 +102,9 @@ export const useAnimatedTexture = (url: string) => {
       // Render first frame
       renderFrame(0);
       
+      // Mark texture as needing update after first frame is rendered
+      canvasTexture.needsUpdate = true;
+      
       setTexture(canvasTexture);
     } catch (error) {
       console.error('Failed to load animated GIF:', error);
