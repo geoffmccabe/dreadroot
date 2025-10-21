@@ -5,6 +5,9 @@ import { PlacedBlock } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 
+// Global texture cache - shared across all PlacedBlockComponent instances
+const textureCache = new Map<string, { texture: THREE.Texture; isAnimated: boolean; updateFn?: (delta: number) => void }>();
+
 // Global material cache - shared across all PlacedBlockComponent instances
 const materialCache = new Map<string, THREE.Material>();
 
@@ -23,10 +26,12 @@ const getMaterialCacheKey = (
   return `${blockType}-${textureUrl}-${isAnimated}-${properties?.color || 'default'}-${properties?.emissive || false}-${properties?.transparent || false}-${properties?.glowFactor || 0}`;
 };
 
-// Function to clear material cache when needed
+// Function to clear caches when needed
 export const clearMaterialCache = () => {
   materialCache.forEach(material => material.dispose());
   materialCache.clear();
+  textureCache.forEach(({ texture }) => texture.dispose());
+  textureCache.clear();
 };
 
 // Shared geometry for performance
@@ -53,37 +58,51 @@ const PlacedBlockComponent = React.memo(({
   // Get block definition from database
   const blockDef = getBlockByKey(blockType);
   
-  // Load texture with animated GIF support
+  // Load texture with animated GIF support - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  const { texture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
-  // Update animated texture on each frame
+  // Get or cache the texture (first block to load creates it, others reuse)
+  const cachedTextureData = useMemo(() => {
+    if (!loadedTexture) return null;
+    
+    // Check if we already have this texture cached
+    if (textureCache.has(textureUrl)) {
+      return textureCache.get(textureUrl)!;
+    }
+    
+    // Configure texture for first time
+    loadedTexture.wrapS = THREE.RepeatWrapping;
+    loadedTexture.wrapT = THREE.RepeatWrapping;
+    loadedTexture.repeat.set(1, 1);
+    loadedTexture.offset.set(0, 0);
+    
+    // Cache it for future blocks
+    const cached = { texture: loadedTexture, isAnimated, updateFn: updateTexture };
+    textureCache.set(textureUrl, cached);
+    return cached;
+  }, [loadedTexture, textureUrl, isAnimated, updateTexture]);
+  
+  const texture = cachedTextureData?.texture || null;
+  const cachedUpdateTexture = cachedTextureData?.updateFn;
+  const cachedIsAnimated = cachedTextureData?.isAnimated || false;
+  
+  // Update animated texture on each frame (all blocks sharing the texture will animate in sync)
   useFrame((state, delta) => {
-    if (isAnimated && updateTexture) {
-      updateTexture(delta);
+    if (cachedIsAnimated && cachedUpdateTexture) {
+      cachedUpdateTexture(delta);
     }
   });
-  
-  // Configure texture
-  React.useEffect(() => {
-    if (!texture) return;
-    
-    // Use RepeatWrapping for all blocks to properly tile textures
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(1, 1);
-    texture.offset.set(0, 0);
-  }, [texture, blockType]);
   
   // Create material based on block properties with caching
   const material = useMemo(() => {
     if (!texture) return null;
     
-    // Generate cache key
+    // Generate cache key (now using cached texture reference)
     const cacheKey = getMaterialCacheKey(
       blockType,
       textureUrl,
-      isAnimated,
+      cachedIsAnimated,
       blockDef?.properties
     );
     
@@ -102,7 +121,7 @@ const PlacedBlockComponent = React.memo(({
       
       // For animated GIFs, use a lighter tint (blend between base color and white)
       // This gives a middle ground between full color tint and no tint
-      if (isAnimated) {
+      if (cachedIsAnimated) {
         const lightTint = new THREE.Color(0xffffff).lerp(baseColor, 0.3); // 30% of base color, 70% white
         materialProps.color = lightTint;
       } else {
@@ -148,7 +167,7 @@ const PlacedBlockComponent = React.memo(({
     materialCache.set(cacheKey, newMaterial);
     
     return newMaterial;
-  }, [texture, blockDef, blockType, isAnimated, textureUrl]);
+  }, [texture, blockDef, blockType, cachedIsAnimated, textureUrl]);
 
   // Create collision box only once per block - removed onCollision from deps to prevent loop
   React.useEffect(() => {
