@@ -87,37 +87,39 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
   useEffect(() => {
     const textureLoader = new THREE.TextureLoader();
     const skyGeo = new THREE.SphereGeometry(320, 64, 32);
+    let skyMesh: THREE.Mesh | null = null;
+    let texture: THREE.Texture | null = null;
+    let skyMat: THREE.MeshBasicMaterial | null = null;
     
-    textureLoader.load('/space_night_sky.webp', (texture) => {
+    textureLoader.load('/space_night_sky.webp', (loadedTexture) => {
       // Crop edges to avoid white seam
-      texture.wrapS = THREE.ClampToEdgeWrapping;
-      texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.repeat.set(0.995, 0.995); // Avoid 2-3 pixels on edges
-      texture.offset.set(0.0025, 0.0025); // Center the cropped texture
+      loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
+      loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+      loadedTexture.repeat.set(0.995, 0.995); // Avoid 2-3 pixels on edges
+      loadedTexture.offset.set(0.0025, 0.0025); // Center the cropped texture
+      texture = loadedTexture;
       
-      const skyMat = new THREE.MeshBasicMaterial({
+      skyMat = new THREE.MeshBasicMaterial({
         map: texture,
         side: THREE.BackSide,
         color: getSkyColor(lightingPercentage) // Dynamic color based on time of day
       });
       
-      const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+      skyMesh = new THREE.Mesh(skyGeo, skyMat);
       skyMeshRef.current = skyMesh;
       scene.add(skyMesh);
-      
-      return () => {
-        scene.remove(skyMesh);
-        skyGeo.dispose();
-        skyMat.dispose();
-        texture.dispose();
-      };
     });
     
     return () => {
+      if (skyMesh) {
+        scene.remove(skyMesh);
+      }
       if (skyMeshRef.current) {
         scene.remove(skyMeshRef.current);
       }
       skyGeo.dispose();
+      skyMat?.dispose();
+      texture?.dispose();
     };
   }, [scene, lightingPercentage]);
   

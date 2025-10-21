@@ -149,18 +149,14 @@ const PlacedBlockComponent = React.memo(({
   const material = useMemo(() => {
     if (!texture || !blockDef) return null;
     
-    // Generate cache key (now using cached texture reference)
+    // Don't use cached materials - textures load async and materials need to update
+    // Generate cache key for potential future optimization
     const cacheKey = getMaterialCacheKey(
       blockType,
       textureUrl,
       cachedIsAnimated,
       blockDef.properties
     );
-    
-    // Check if material already exists in cache
-    if (materialCache.has(cacheKey)) {
-      return materialCache.get(cacheKey)!;
-    }
     
     const materialProps: any = {
       map: texture,
@@ -214,9 +210,7 @@ const PlacedBlockComponent = React.memo(({
       newMaterial = new THREE.MeshLambertMaterial(materialProps);
     }
     
-    // Store in cache before returning
-    materialCache.set(cacheKey, newMaterial);
-    
+    // Don't cache materials since textures load async
     return newMaterial;
   }, [texture, blockDef, blockType, cachedIsAnimated, textureUrl]);
 
