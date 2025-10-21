@@ -6,10 +6,19 @@ import { useBlocksData } from '@/hooks/useBlocksData';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 
 // Global texture cache - shared across all PlacedBlockComponent instances
-const textureCache = new Map<string, { texture: THREE.Texture; isAnimated: boolean; updateFn?: (delta: number) => void }>();
+// Tracks: texture, animation state, update function, and usage count for cleanup
+const textureCache = new Map<string, { 
+  texture: THREE.Texture; 
+  isAnimated: boolean; 
+  updateFn?: (delta: number) => void;
+  refCount: number; // Track how many blocks are using this texture
+}>();
 
 // Global material cache - shared across all PlacedBlockComponent instances
 const materialCache = new Map<string, THREE.Material>();
+
+// Track which textures need frame updates (only one entry per unique texture URL)
+const activeAnimatedTextures = new Map<string, (delta: number) => void>();
 
 // Generate unique cache key based on material properties
 const getMaterialCacheKey = (
@@ -32,6 +41,14 @@ export const clearMaterialCache = () => {
   materialCache.clear();
   textureCache.forEach(({ texture }) => texture.dispose());
   textureCache.clear();
+  activeAnimatedTextures.clear();
+};
+
+// Helper to get base color from block definition
+const getBaseColor = (blockDef: any): THREE.Color => {
+  return blockDef?.properties?.color 
+    ? new THREE.Color(blockDef.properties.color) 
+    : new THREE.Color(0xcccccc);
 };
 
 // Shared geometry for performance
@@ -68,7 +85,9 @@ const PlacedBlockComponent = React.memo(({
     
     // Check if we already have this texture cached
     if (textureCache.has(textureUrl)) {
-      return textureCache.get(textureUrl)!;
+      const cached = textureCache.get(textureUrl)!;
+      cached.refCount++; // Increment reference count
+      return cached;
     }
     
     // Configure texture for first time
@@ -77,22 +96,44 @@ const PlacedBlockComponent = React.memo(({
     loadedTexture.repeat.set(1, 1);
     loadedTexture.offset.set(0, 0);
     
-    // Cache it for future blocks
-    const cached = { texture: loadedTexture, isAnimated, updateFn: updateTexture };
+    // Cache it for future blocks with initial ref count of 1
+    const cached = { 
+      texture: loadedTexture, 
+      isAnimated, 
+      updateFn: updateTexture,
+      refCount: 1 
+    };
     textureCache.set(textureUrl, cached);
+    
+    // If animated, register the update function (only once per texture URL)
+    if (isAnimated && updateTexture) {
+      activeAnimatedTextures.set(textureUrl, updateTexture);
+    }
+    
     return cached;
   }, [loadedTexture, textureUrl, isAnimated, updateTexture]);
   
   const texture = cachedTextureData?.texture || null;
-  const cachedUpdateTexture = cachedTextureData?.updateFn;
   const cachedIsAnimated = cachedTextureData?.isAnimated || false;
   
-  // Update animated texture on each frame (all blocks sharing the texture will animate in sync)
-  useFrame((state, delta) => {
-    if (cachedIsAnimated && cachedUpdateTexture) {
-      cachedUpdateTexture(delta);
-    }
-  });
+  // Cleanup: Decrement ref count when component unmounts
+  React.useEffect(() => {
+    return () => {
+      if (!textureUrl) return;
+      
+      const cached = textureCache.get(textureUrl);
+      if (cached) {
+        cached.refCount--;
+        
+        // If no more blocks are using this texture, remove it from cache
+        if (cached.refCount <= 0) {
+          cached.texture.dispose();
+          textureCache.delete(textureUrl);
+          activeAnimatedTextures.delete(textureUrl);
+        }
+      }
+    };
+  }, [textureUrl]);
   
   // Create material based on block properties with caching
   const material = useMemo(() => {
@@ -117,7 +158,7 @@ const PlacedBlockComponent = React.memo(({
     
     // Apply different color tinting based on block type
     if (blockType !== 'grass_block') {
-      const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
+      const baseColor = getBaseColor(blockDef);
       
       // For animated GIFs, use a lighter tint (blend between base color and white)
       // This gives a middle ground between full color tint and no tint
@@ -141,7 +182,7 @@ const PlacedBlockComponent = React.memo(({
     
     if (blockDef?.properties?.transparent) {
       // Use MeshPhysicalMaterial for glass/crystal effect with texture overlay
-      const baseColor = blockDef?.properties?.color ? new THREE.Color(blockDef.properties.color) : new THREE.Color(0xcccccc);
+      const baseColor = getBaseColor(blockDef);
       newMaterial = new THREE.MeshPhysicalMaterial({
         map: texture, // Apply the texture to the glass surface
         color: baseColor,
@@ -169,13 +210,19 @@ const PlacedBlockComponent = React.memo(({
     return newMaterial;
   }, [texture, blockDef, blockType, cachedIsAnimated, textureUrl]);
 
-  // Create collision box only once per block - removed onCollision from deps to prevent loop
+  // Use ref to avoid stale closure issues with onCollision callback
+  const onCollisionRef = useRef(onCollision);
   React.useEffect(() => {
-    if (meshRef.current && onCollision) {
+    onCollisionRef.current = onCollision;
+  }, [onCollision]);
+  
+  // Create collision box only once per block
+  React.useEffect(() => {
+    if (meshRef.current && onCollisionRef.current) {
       const box = new THREE.Box3().setFromObject(meshRef.current);
-      onCollision(box, blockId);
+      onCollisionRef.current(box, blockId);
     }
-  }, [blockId]); // Removed onCollision from dependencies to prevent infinite loop
+  }, [blockId]);
 
   if (!material) return null;
 
@@ -206,6 +253,13 @@ export const PlacedBlocks: React.FC<{
 }> = ({ blocks, onCollision }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
+  
+  // Single useFrame to update ALL animated textures (called once per frame, not once per block)
+  useFrame((state, delta) => {
+    activeAnimatedTextures.forEach((updateFn) => {
+      updateFn(delta);
+    });
+  });
 
   // Debug logging and force re-render when blocks change
   React.useEffect(() => {
@@ -220,9 +274,14 @@ export const PlacedBlocks: React.FC<{
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
     collisionBoxes.current.set(blockId, box);
-    // Don't call onCollision here - let the effect handle it
   }, []);
 
+  // Use ref to avoid stale closure with onCollision
+  const onCollisionRef = useRef(onCollision);
+  React.useEffect(() => {
+    onCollisionRef.current = onCollision;
+  }, [onCollision]);
+  
   // Only update collision boxes when blocks are added/removed
   const blockIds = useMemo(() => new Set(blocks.map(b => b.id)), [blocks]);
   
@@ -235,11 +294,11 @@ export const PlacedBlocks: React.FC<{
       }
     });
     
-    // Only call onCollision once after cleanup, and only if we have collision boxes
-    if (onCollision && collisionBoxes.current.size > 0) {
-      onCollision(Array.from(collisionBoxes.current.values()));
+    // Call onCollision with updated collision boxes
+    if (onCollisionRef.current && collisionBoxes.current.size > 0) {
+      onCollisionRef.current(Array.from(collisionBoxes.current.values()));
     }
-  }, [blockIds]); // Remove onCollision from dependencies to prevent infinite loop
+  }, [blockIds]);
 
   if (!blocks || blocks.length === 0) {
     return null;
@@ -256,7 +315,6 @@ export const PlacedBlocks: React.FC<{
           geometry={geometry}
         />
       ))}
-      <group key={`render-trigger-${blocks.length}-${Date.now()}`} />
     </>
   );
 };
