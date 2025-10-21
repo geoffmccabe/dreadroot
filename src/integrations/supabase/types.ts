@@ -294,6 +294,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      remove_sky_blocks: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "superadmin"

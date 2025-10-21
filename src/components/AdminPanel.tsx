@@ -992,19 +992,7 @@ export function AdminPanel({
   onWeatherSettingsChange
 }: AdminPanelProps) {
   const { isOpen, activeTab, closePanel, setActiveTab } = useAdminPanel();
-  const { getUserRoles } = useUserData();
-  const [userRoles, setUserRoles] = useState<string[]>([]);
-
-  useEffect(() => {
-    const loadRoles = async () => {
-      const roles = await getUserRoles();
-      setUserRoles(roles);
-    };
-    
-    if (isOpen) {
-      loadRoles();
-    }
-  }, [isOpen, getUserRoles]);
+  const { userRoles } = useUserData();
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closePanel()}>

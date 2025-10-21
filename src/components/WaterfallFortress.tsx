@@ -1785,26 +1785,12 @@ export default function WaterfallFortress() {
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   
   // User data and block system hooks
-  const { profile, inventory, addCoins, useBlock, refreshData, getUserRoles } = useUserData();
+  const { profile, inventory, userRoles, addCoins, useBlock, refreshData } = useUserData();
   const { blocks, placeBlock, setBlockMode } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
-  
-  // Track user roles for admin button visibility
-  const [userRoles, setUserRoles] = useState<string[]>([]);
-  
-  useEffect(() => {
-    const loadRoles = async () => {
-      const roles = await getUserRoles();
-      setUserRoles(roles);
-    };
-    
-    if (user) {
-      loadRoles();
-    }
-  }, [user, getUserRoles]);
   
   
   // Main component audio refs for placement sounds

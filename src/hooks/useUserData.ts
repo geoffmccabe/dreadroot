@@ -24,6 +24,7 @@ export interface UserInventoryItem {
 export const useUserData = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [inventory, setInventory] = useState<UserInventoryItem[]>([]);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
@@ -40,6 +41,7 @@ export const useUserData = () => {
     if (!user?.id) {
       setProfile(null);
       setInventory([]);
+      setUserRoles([]);
       setIsLoading(false);
       return;
     }
@@ -48,10 +50,11 @@ export const useUserData = () => {
       setIsLoading(true);
       console.log('Loading user data for authenticated user:', user.id);
       
-      // Load both profile and inventory in parallel for faster loading
+      // Load profile, inventory, and roles in parallel for faster loading
       const [
         { data: existingProfile, error: profileError },
-        { data: inventoryData, error: inventoryError }
+        { data: inventoryData, error: inventoryError },
+        { data: rolesData, error: rolesError }
       ] = await Promise.all([
         supabase
           .from('user_profiles')
@@ -61,6 +64,10 @@ export const useUserData = () => {
         supabase
           .from('user_inventory')
           .select('*')
+          .eq('user_id', user.id),
+        supabase
+          .from('user_roles')
+          .select('role')
           .eq('user_id', user.id)
       ]);
 
@@ -72,6 +79,11 @@ export const useUserData = () => {
       if (inventoryError) {
         console.error('Error loading inventory:', inventoryError);
         throw inventoryError;
+      }
+
+      if (rolesError) {
+        console.error('Error loading roles:', rolesError);
+        // Don't throw for roles error, just log it
       }
 
       if (!existingProfile) {
@@ -87,8 +99,10 @@ export const useUserData = () => {
 
       setProfile(existingProfile);
       setInventory(inventoryData || []);
+      setUserRoles(rolesData?.map(r => r.role) || []);
       console.log('Loaded profile:', existingProfile);
       console.log('Loaded inventory:', inventoryData);
+      console.log('Loaded roles:', rolesData);
 
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -316,33 +330,15 @@ export const useUserData = () => {
     await loadUserData();
   };
 
-  const getUserRoles = async (): Promise<string[]> => {
-    if (!user) return [];
-    
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
-      return data?.map(r => r.role) || [];
-    } catch (error) {
-      console.error('Failed to get user roles:', error);
-      return [];
-    }
-  };
-
   return {
     profile,
     inventory,
+    userRoles,
     isLoading,
     buyBlock,
     useBlock,
     addCoins,
     updateBlockchainAddress,
-    refreshData,
-    getUserRoles
+    refreshData
   };
 };
