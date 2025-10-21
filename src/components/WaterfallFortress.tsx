@@ -22,12 +22,41 @@ import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
 
-// Sky component with beautiful gradient
-function SkyTexture() {
+// Custom hook for weather cycle - shared by sky and lighting
+function useWeatherCycle(weatherSettings: {
+  maxLighting: number;
+  minLighting: number;
+  cycleDuration: number;
+}) {
+  const [cycleState, setCycleState] = useState({
+    lightingPercentage: weatherSettings.maxLighting,
+    cyclePosition: 0,
+    isNight: false
+  });
+
+  useFrame(() => {
+    const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
+    const currentTime = Date.now();
+    const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
+    
+    const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
+    const lightingPercentage = weatherSettings.minLighting + 
+      (weatherSettings.maxLighting - weatherSettings.minLighting) * sineWave;
+    
+    const isNight = lightingPercentage < 40;
+    
+    setCycleState({ lightingPercentage, cyclePosition, isNight });
+  });
+
+  return cycleState;
+}
+
+// Sky component with dynamic gradient
+function SkyTexture({ topColor, bottomColor }: { topColor: THREE.Color; bottomColor: THREE.Color }) {
   const { scene } = useThree();
+  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   
   useEffect(() => {
-    // Create a beautiful gradient sky using a shader
     const vertexShader = `
       varying vec3 vWorldPosition;
       void main() {
@@ -50,20 +79,20 @@ function SkyTexture() {
       }
     `;
     
-    // Create sky sphere with gradient shader
     const skyGeo = new THREE.SphereGeometry(320, 32, 16);
     const skyMat = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
       uniforms: {
-        topColor: { value: new THREE.Color(0x91c7f5) },    // Light blue
-        bottomColor: { value: new THREE.Color(0xffffff) }, // White
+        topColor: { value: topColor.clone() },
+        bottomColor: { value: bottomColor.clone() },
         offset: { value: 33 },
         exponent: { value: 0.6 }
       },
       side: THREE.BackSide
     });
     
+    materialRef.current = skyMat;
     const skyMesh = new THREE.Mesh(skyGeo, skyMat);
     scene.add(skyMesh);
     
@@ -74,7 +103,150 @@ function SkyTexture() {
     };
   }, [scene]);
   
+  // Update colors when they change
+  useEffect(() => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.topColor.value.copy(topColor);
+      materialRef.current.uniforms.bottomColor.value.copy(bottomColor);
+    }
+  }, [topColor, bottomColor]);
+  
   return null;
+}
+
+// Star field component with twinkling effect
+function StarField({ opacity }: { opacity: number }) {
+  const { scene } = useThree();
+  const pointsRef = useRef<THREE.Points | null>(null);
+  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  
+  useEffect(() => {
+    const starCount = 2500;
+    const positions = new Float32Array(starCount * 3);
+    const sizes = new Float32Array(starCount);
+    const phases = new Float32Array(starCount);
+    
+    for (let i = 0; i < starCount; i++) {
+      // Random position in a sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const radius = 250 + Math.random() * 50;
+      
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = radius * Math.cos(phi);
+      
+      sizes[i] = 0.5 + Math.random() * 1.5;
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    geometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+    
+    const vertexShader = `
+      attribute float size;
+      attribute float phase;
+      varying float vPhase;
+      
+      void main() {
+        vPhase = phase;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * (300.0 / -mvPosition.z);
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+    
+    const fragmentShader = `
+      uniform float time;
+      uniform float opacity;
+      varying float vPhase;
+      
+      void main() {
+        float dist = length(gl_PointCoord - vec2(0.5, 0.5));
+        if (dist > 0.5) discard;
+        
+        // Twinkling effect
+        float twinkle = sin(time * 2.0 + vPhase) * 0.3 + 0.7;
+        float alpha = (1.0 - dist * 2.0) * twinkle * opacity;
+        
+        gl_FragColor = vec4(1.0, 1.0, 1.0, alpha);
+      }
+    `;
+    
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms: {
+        time: { value: 0 },
+        opacity: { value: opacity }
+      },
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    
+    materialRef.current = material;
+    const points = new THREE.Points(geometry, material);
+    pointsRef.current = points;
+    scene.add(points);
+    
+    return () => {
+      scene.remove(points);
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [scene]);
+  
+  // Update opacity and time
+  useFrame((state) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.opacity.value = opacity;
+      materialRef.current.uniforms.time.value = state.clock.elapsedTime;
+    }
+  });
+  
+  return null;
+}
+
+// Dynamic sky controller that synchronizes colors with lighting
+function DynamicSky({ weatherSettings }: {
+  weatherSettings: {
+    maxLighting: number;
+    minLighting: number;
+    cycleDuration: number;
+  }
+}) {
+  const { lightingPercentage } = useWeatherCycle(weatherSettings);
+  
+  // Calculate night factor (1 at night, 0 at day)
+  const nightFactor = 1 - (lightingPercentage / 100);
+  
+  // Define color stops
+  const dayTopColor = useMemo(() => new THREE.Color(0x91c7f5), []); // Light blue
+  const dayBottomColor = useMemo(() => new THREE.Color(0xffffff), []); // White
+  const nightTopColor = useMemo(() => new THREE.Color(0x0a0e27), []); // Deep blue/black
+  const nightBottomColor = useMemo(() => new THREE.Color(0x1a1f3a), []); // Dark blue
+  
+  // Interpolate colors
+  const topColor = useMemo(() => {
+    return dayTopColor.clone().lerp(nightTopColor, nightFactor);
+  }, [nightFactor, dayTopColor, nightTopColor]);
+  
+  const bottomColor = useMemo(() => {
+    return dayBottomColor.clone().lerp(nightBottomColor, nightFactor);
+  }, [nightFactor, dayBottomColor, nightBottomColor]);
+  
+  // Star opacity fades in with darkness
+  const starOpacity = Math.pow(nightFactor, 1.5); // Exponential fade for dramatic effect
+  
+  return (
+    <>
+      <SkyTexture topColor={topColor} bottomColor={bottomColor} />
+      <StarField opacity={starOpacity} />
+    </>
+  );
 }
 
 // First person controls component
@@ -1068,8 +1240,7 @@ function Bullets({ bullets }: {
   );
 }
 
-// Scene component
-// Dynamic lighting component that cycles between min and max values
+// Dynamic lighting component that uses shared weather cycle
 function DynamicLighting({ weatherSettings }: { 
   weatherSettings: {
     maxLighting: number;
@@ -1081,22 +1252,11 @@ function DynamicLighting({ weatherSettings }: {
   const directionalRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   
+  const { lightingPercentage } = useWeatherCycle(weatherSettings);
+  
   useFrame(() => {
-    const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000; // Convert minutes to milliseconds
-    const currentTime = Date.now();
-    const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs; // 0 to 1
-    
-    // Create a smooth sine wave cycle (goes from 0 to 1 to 0)
-    const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
-    
-    // Calculate current lighting percentage based on min and max
-    const lightingPercentage = weatherSettings.minLighting + 
-      (weatherSettings.maxLighting - weatherSettings.minLighting) * sineWave;
-    
-    // Convert percentage to intensity values
     const baseIntensity = lightingPercentage / 100;
     
-    // Update lights
     if (hemisphereRef.current) {
       hemisphereRef.current.intensity = 1.1 * baseIntensity;
     }
@@ -1349,8 +1509,8 @@ function Scene({
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting weatherSettings={weatherSettings} />
 
-      {/* HDRI Sky */}
-      <SkyTexture />
+      {/* Dynamic Sky with day/night cycle and stars */}
+      <DynamicSky weatherSettings={weatherSettings} />
 
       {/* Fog */}
       <fog attach="fog" args={['#dff1ff', 0, 600]} />
