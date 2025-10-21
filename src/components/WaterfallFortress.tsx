@@ -72,11 +72,11 @@ function getSkyColor(lightingPercentage: number): number {
   } else if (lightingPercentage >= 40) {
     // Dusk/Dawn transition: 40-80%
     const factor = (lightingPercentage - 40) / 40;
-    return interpolateColor(0xff8844, 0xffffff, factor); // Orange to white
+    return interpolateColor(0xffaa66, 0xffffff, factor);
   } else {
-    // Night transition: 25-40% - use darker blue that still shows stars
+    // Night transition: 25-40%
     const factor = (lightingPercentage - 25) / 15;
-    return interpolateColor(0x2a2a4a, 0xff8844, factor); // Dark blue to orange
+    return interpolateColor(0x1a1a3a, 0xffaa66, factor);
   }
 }
 
@@ -98,34 +98,34 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       const skyMat = new THREE.MeshBasicMaterial({
         map: texture,
         side: THREE.BackSide,
-        color: 0xffffff // Start with white, will be updated by useFrame
+        color: getSkyColor(lightingPercentage) // Dynamic color based on time of day
       });
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
       skyMeshRef.current = skyMesh;
       scene.add(skyMesh);
+      
+      return () => {
+        scene.remove(skyMesh);
+        skyGeo.dispose();
+        skyMat.dispose();
+        texture.dispose();
+      };
     });
     
     return () => {
       if (skyMeshRef.current) {
         scene.remove(skyMeshRef.current);
-        skyMeshRef.current.geometry.dispose();
-        (skyMeshRef.current.material as THREE.Material).dispose();
       }
+      skyGeo.dispose();
     };
-  }, [scene]);
+  }, [scene, lightingPercentage]);
   
-  // Update sky color smoothly based on lighting
+  // Update sky color each frame for smooth transitions
   useFrame(() => {
-    if (skyMeshRef.current?.material) {
+    if (skyMeshRef.current && skyMeshRef.current.material) {
       const targetColor = getSkyColor(lightingPercentage);
-      const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
-      
-      // Smooth color transition
-      const currentColor = material.color.getHex();
-      if (currentColor !== targetColor) {
-        material.color.setHex(targetColor);
-      }
+      (skyMeshRef.current.material as THREE.MeshBasicMaterial).color.setHex(targetColor);
     }
   });
   
