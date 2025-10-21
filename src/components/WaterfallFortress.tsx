@@ -61,16 +61,9 @@ function SkyTexture() {
     const skyGeo = new THREE.SphereGeometry(320, 64, 32);
     
     textureLoader.load('/space_night_sky.webp', (texture) => {
-      // Crop edges to avoid white seam
-      texture.wrapS = THREE.ClampToEdgeWrapping;
-      texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.repeat.set(0.995, 0.995); // Avoid 2-3 pixels on edges
-      texture.offset.set(0.0025, 0.0025); // Center the cropped texture
-      
       const skyMat = new THREE.MeshBasicMaterial({
         map: texture,
-        side: THREE.BackSide,
-        color: 0x404040 // Darken the texture significantly (25% brightness)
+        side: THREE.BackSide
       });
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
