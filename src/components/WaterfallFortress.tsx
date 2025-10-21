@@ -53,8 +53,36 @@ function useWeatherCycle(weatherSettings: {
 }
 
 // Sky component with space texture
-function SkyTexture() {
+// Helper function to interpolate between colors
+function interpolateColor(color1: number, color2: number, factor: number): number {
+  const c1 = { r: (color1 >> 16) & 0xff, g: (color1 >> 8) & 0xff, b: color1 & 0xff };
+  const c2 = { r: (color2 >> 16) & 0xff, g: (color2 >> 8) & 0xff, b: color2 & 0xff };
+  
+  const r = Math.round(c1.r + (c2.r - c1.r) * factor);
+  const g = Math.round(c1.g + (c2.g - c1.g) * factor);
+  const b = Math.round(c1.b + (c2.b - c1.b) * factor);
+  
+  return (r << 16) | (g << 8) | b;
+}
+
+// Calculate sky color based on lighting percentage
+function getSkyColor(lightingPercentage: number): number {
+  if (lightingPercentage >= 80) {
+    return 0xffffff; // Full day - pure white (100% brightness)
+  } else if (lightingPercentage >= 40) {
+    // Dusk/Dawn transition: 40-80%
+    const factor = (lightingPercentage - 40) / 40;
+    return interpolateColor(0xffaa66, 0xffffff, factor);
+  } else {
+    // Night transition: 25-40%
+    const factor = (lightingPercentage - 25) / 15;
+    return interpolateColor(0x1a1a3a, 0xffaa66, factor);
+  }
+}
+
+function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
   const { scene } = useThree();
+  const skyMeshRef = useRef<THREE.Mesh | null>(null);
   
   useEffect(() => {
     const textureLoader = new THREE.TextureLoader();
@@ -70,10 +98,11 @@ function SkyTexture() {
       const skyMat = new THREE.MeshBasicMaterial({
         map: texture,
         side: THREE.BackSide,
-        color: 0x404040 // Darken the texture significantly (25% brightness)
+        color: getSkyColor(lightingPercentage) // Dynamic color based on time of day
       });
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+      skyMeshRef.current = skyMesh;
       scene.add(skyMesh);
       
       return () => {
@@ -85,16 +114,27 @@ function SkyTexture() {
     });
     
     return () => {
+      if (skyMeshRef.current) {
+        scene.remove(skyMeshRef.current);
+      }
       skyGeo.dispose();
     };
-  }, [scene]);
+  }, [scene, lightingPercentage]);
+  
+  // Update sky color each frame for smooth transitions
+  useFrame(() => {
+    if (skyMeshRef.current && skyMeshRef.current.material) {
+      const targetColor = getSkyColor(lightingPercentage);
+      (skyMeshRef.current.material as THREE.MeshBasicMaterial).color.setHex(targetColor);
+    }
+  });
   
   return null;
 }
 
 // Star field removed - using space texture instead
 
-// Dynamic sky controller - now just displays space texture
+// Dynamic sky controller - responds to weather cycle
 function DynamicSky({ weatherSettings }: {
   weatherSettings: {
     maxLighting: number;
@@ -102,7 +142,8 @@ function DynamicSky({ weatherSettings }: {
     cycleDuration: number;
   }
 }) {
-  return <SkyTexture />;
+  const { lightingPercentage } = useWeatherCycle(weatherSettings);
+  return <SkyTexture lightingPercentage={lightingPercentage} />;
 }
 
 // First person controls component
