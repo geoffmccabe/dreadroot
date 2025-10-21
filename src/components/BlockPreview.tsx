@@ -1,9 +1,9 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useBlocksData } from '@/hooks/useBlocksData';
+import { useBlocksCache } from '@/hooks/useBlocksCache';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
-import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
+import { useCachedTexture } from '@/hooks/useCachedTexture';
 
 interface BlockPreviewProps {
   blockType: string;
@@ -15,14 +15,14 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   const meshRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
   const [previewPosition, setPreviewPosition] = useState<THREE.Vector3>(new THREE.Vector3());
-  const { getBlockByKey } = useBlocksData();
+  const { getBlockByKey } = useBlocksCache();
   
-  // Get block definition from database
+  // Get block definition from cache
   const blockDef = useMemo(() => getBlockByKey(blockType), [blockType, getBlockByKey]);
   
-  // Load texture with animated GIF support
+  // Load texture with caching
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  const { texture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  const { texture, updateTexture, isAnimated } = useCachedTexture(textureUrl);
   
   // Set up texture properties
   useMemo(() => {

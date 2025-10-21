@@ -2,8 +2,8 @@ import React, { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
-import { useBlocksData } from '@/hooks/useBlocksData';
-import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
+import { useBlocksCache } from '@/hooks/useBlocksCache';
+import { useCachedTexture } from '@/hooks/useCachedTexture';
 
 // Global texture cache - shared across all PlacedBlockComponent instances
 // Tracks: texture, animation state, update function, and usage count for cleanup
@@ -70,14 +70,14 @@ const PlacedBlockComponent = React.memo(({
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
-  const { getBlockByKey } = useBlocksData();
+  const { getBlockByKey } = useBlocksCache();
   
-  // Get block definition from database
+  // Get block definition from cache
   const blockDef = getBlockByKey(blockType);
   
-  // Load texture with animated GIF support - using shared texture cache
+  // Load texture with caching - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  const { texture: loadedTexture, updateTexture, isAnimated } = useCachedTexture(textureUrl);
   
   // Get or cache the texture (first block to load creates it, others reuse)
   // Track if we already incremented refCount for this component instance
@@ -117,7 +117,6 @@ const PlacedBlockComponent = React.memo(({
     
     // If animated, register the update function (only once per texture URL)
     if (isAnimated && updateTexture) {
-      console.log('🎬 Registering animated texture:', textureUrl);
       activeAnimatedTextures.set(textureUrl, updateTexture);
     }
     
@@ -261,12 +260,9 @@ export const PlacedBlocks: React.FC<{
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
-    if (activeAnimatedTextures.size > 0) {
-      console.log('🎬 Updating', activeAnimatedTextures.size, 'animated textures');
-      activeAnimatedTextures.forEach((updateFn) => {
-        updateFn(delta);
-      });
-    }
+    activeAnimatedTextures.forEach((updateFn) => {
+      updateFn(delta);
+    });
   });
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
