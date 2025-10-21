@@ -22,7 +22,7 @@ export const useAnimatedTexture = (url: string) => {
     console.log('🎨 Loading texture:', url);
     const isGif = url.toLowerCase().endsWith('.gif');
     isGifRef.current = isGif;
-    console.log('🎬 Is GIF?', isGif);
+    console.log('🎬 Is GIF?', isGif, 'URL:', url);
 
     if (isGif) {
       loadAnimatedGif(url);

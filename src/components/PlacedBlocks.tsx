@@ -77,7 +77,9 @@ const PlacedBlockComponent = React.memo(({
   
   // Load texture with animated GIF support - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  console.log(`🎨 Block ${blockType} loading texture:`, textureUrl);
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  console.log(`🎬 Block ${blockType} isAnimated:`, isAnimated);
   
   // Get or cache the texture (first block to load creates it, others reuse)
   // Track if we already incremented refCount for this component instance
@@ -94,13 +96,6 @@ const PlacedBlockComponent = React.memo(({
       if (!hasIncrementedRef.current) {
         cached.refCount++;
         hasIncrementedRef.current = true;
-      }
-      
-      // CRITICAL: Ensure animated textures are registered even when using cache
-      // This handles cases where cache exists but animation wasn't registered
-      if (cached.isAnimated && cached.updateFn && !activeAnimatedTextures.has(textureUrl)) {
-        console.log('🎬 Registering cached animated texture:', textureUrl);
-        activeAnimatedTextures.set(textureUrl, cached.updateFn);
       }
       
       return cached;
@@ -124,7 +119,6 @@ const PlacedBlockComponent = React.memo(({
     
     // If animated, register the update function (only once per texture URL)
     if (isAnimated && updateTexture) {
-      console.log('🎬 Registering new animated texture:', textureUrl);
       activeAnimatedTextures.set(textureUrl, updateTexture);
     }
     
@@ -274,11 +268,9 @@ export const PlacedBlocks: React.FC<{
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
-    if (activeAnimatedTextures.size > 0) {
-      activeAnimatedTextures.forEach((updateFn) => {
-        updateFn(delta);
-      });
-    }
+    activeAnimatedTextures.forEach((updateFn) => {
+      updateFn(delta);
+    });
   });
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
@@ -309,11 +301,7 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
-  console.log('🧊 PlacedBlocks render - block count:', blocks.length);
-  console.log('🎬 Active animated textures:', activeAnimatedTextures.size);
-  
   if (blocks.length === 0) {
-    console.log('⚠️ No blocks to render');
     return null;
   }
 
