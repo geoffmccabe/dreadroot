@@ -52,7 +52,10 @@ export const useBlocksData = () => {
             category: block.category as BlockType['category'],
             rarity: block.rarity as BlockType['rarity'],
             texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
-            properties: block.properties as BlockType['properties']
+            properties: {
+              ...(block.properties as BlockType['properties']),
+              glowFactor: block.glow_factor || undefined
+            }
           }));
 
           const blockMap = new Map<string, BlockType>();
@@ -115,7 +118,10 @@ export const useBlocksData = () => {
         category: block.category as BlockType['category'],
         rarity: block.rarity as BlockType['rarity'],
         texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
-        properties: block.properties as BlockType['properties']
+        properties: {
+          ...(block.properties as BlockType['properties']),
+          glowFactor: block.glow_factor || undefined
+        }
       }));
 
       const blockMap = new Map<string, BlockType>();

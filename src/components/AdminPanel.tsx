@@ -207,6 +207,7 @@ interface Block {
   category: string;
   rarity: string;
   texture_url: string | null;
+  glow_factor?: number | null;
   properties: {
     size: [number, number, number];
     color: string;
@@ -435,7 +436,8 @@ function BlocksList({ userRoles }: BlocksListProps) {
           cost: editingBlock.cost,
           category: editingBlock.category,
           rarity: editingBlock.rarity,
-          properties: editingBlock.properties
+          properties: editingBlock.properties,
+          glow_factor: editingBlock.glow_factor
         })
         .eq('id', editingBlock.id);
 
@@ -840,6 +842,28 @@ function BlocksList({ userRoles }: BlocksListProps) {
                     Emissive (glowing)
                   </Label>
                 </div>
+
+                {/* Glow Factor - only show when emissive is checked */}
+                {editingBlock.properties.emissive && (
+                  <div>
+                    <Label htmlFor="edit-block-glow-factor">Glow Factor (0-10)</Label>
+                    <Input
+                      id="edit-block-glow-factor"
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      value={editingBlock.glow_factor || 3.0}
+                      onChange={(e) => setEditingBlock({
+                        ...editingBlock,
+                        glow_factor: parseFloat(e.target.value) || 3.0
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Controls emissive intensity and light brightness (0 = no glow, 10 = maximum)
+                    </p>
+                  </div>
+                )}
 
                 {/* Transparent */}
                 <div className="flex items-center gap-2">

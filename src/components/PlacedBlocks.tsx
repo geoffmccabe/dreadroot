@@ -75,7 +75,8 @@ const PlacedBlockComponent = React.memo(({
         // Handle special properties
         if (blockDef?.properties?.emissive) {
           materialProps.emissive = baseColor;
-          materialProps.emissiveIntensity = 0.3;
+          const glowFactor = blockDef?.properties?.glowFactor || 3.0;
+          materialProps.emissiveIntensity = glowFactor * 1.0;
         }
       }
     }
@@ -124,8 +125,23 @@ const PlacedBlockComponent = React.memo(({
 
   if (!material) return null;
 
+  // Get glow factor for point light
+  const glowFactor = blockDef?.properties?.glowFactor || 0;
+  const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
+
   return (
-    <mesh ref={meshRef} position={position} castShadow receiveShadow geometry={geometry} material={material} />
+    <>
+      <mesh ref={meshRef} position={position} castShadow receiveShadow geometry={geometry} material={material} />
+      {shouldGlow && (
+        <pointLight
+          position={position}
+          color={blockDef?.properties?.color || '#FFE135'}
+          intensity={glowFactor * 2}
+          distance={glowFactor * 3}
+          decay={2}
+        />
+      )}
+    </>
   );
 });
 

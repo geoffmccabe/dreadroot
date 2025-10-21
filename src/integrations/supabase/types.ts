@@ -62,6 +62,7 @@ export type Database = {
           cost: number
           created_at: string
           description: string | null
+          glow_factor: number | null
           id: number
           key: string
           name: string
@@ -75,6 +76,7 @@ export type Database = {
           cost?: number
           created_at?: string
           description?: string | null
+          glow_factor?: number | null
           id?: number
           key: string
           name: string
@@ -88,6 +90,7 @@ export type Database = {
           cost?: number
           created_at?: string
           description?: string | null
+          glow_factor?: number | null
           id?: number
           key?: string
           name?: string

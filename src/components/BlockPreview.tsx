@@ -71,7 +71,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
       material.color.set(baseColor);
       if (isEmissive) {
         material.emissive.set(baseColor);
-        material.emissiveIntensity = 0.2;
+        const glowFactor = blockDef?.properties?.glowFactor || 3.0;
+        material.emissiveIntensity = glowFactor * 0.5;
       } else {
         material.emissive.setRGB(0, 0, 0);
         material.emissiveIntensity = 0;
@@ -94,7 +95,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
         opacity={blockDef?.properties?.transparent ? 0.5 : 0.7}
         color={blockDef?.properties?.color || '#ffffff'}
         emissive={blockDef?.properties?.emissive ? (blockDef?.properties?.color || '#FFE135') : '#000000'}
-        emissiveIntensity={blockDef?.properties?.emissive ? 0.2 : 0}
+        emissiveIntensity={blockDef?.properties?.emissive ? (blockDef?.properties?.glowFactor || 3.0) * 0.5 : 0}
       />
     </mesh>
   );

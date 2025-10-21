@@ -27,6 +27,7 @@ export interface BlockType {
     color?: string;
     emissive?: boolean;
     transparent?: boolean;
+    glowFactor?: number;
   };
 }
 
