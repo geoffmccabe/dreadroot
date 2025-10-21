@@ -51,6 +51,19 @@ const getBaseColor = (blockDef: any): THREE.Color => {
     : new THREE.Color(0xcccccc);
 };
 
+// Default fallback block definition (stable reference)
+const DEFAULT_BLOCK_DEF = {
+  key: 'unknown',
+  name: 'Unknown Block',
+  texture: { diffuse: '/cliff_texture_seamless.webp' },
+  properties: {
+    color: '#808080',
+    emissive: false,
+    transparent: false,
+    glowFactor: 0
+  }
+};
+
 // Shared geometry for performance
 const SharedBlockGeometry = () => {
   return useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
@@ -75,23 +88,13 @@ const PlacedBlockComponent = React.memo(({
   // Get block definition from database (with fallback to prevent blank scene)
   const blockDef = getBlockByKey(blockType);
   
-  // If still loading or no definition, return null but don't block the entire scene
+  // If still loading, return null but don't block the entire scene
   if (isLoading) {
     return null;
   }
   
-  // If no block definition found, use a default fallback to prevent breaks
-  const effectiveBlockDef: any = blockDef || {
-    key: blockType,
-    name: blockType,
-    texture: { diffuse: '/cliff_texture_seamless.webp' },
-    properties: {
-      color: '#808080',
-      emissive: false,
-      transparent: false,
-      glowFactor: 0
-    }
-  };
+  // If no block definition found, use a stable default fallback
+  const effectiveBlockDef: any = blockDef || DEFAULT_BLOCK_DEF;
   
   // Load texture with animated GIF support - using shared texture cache
   const textureUrl = effectiveBlockDef.texture?.diffuse || '/cliff_texture_seamless.webp';
@@ -167,12 +170,12 @@ const PlacedBlockComponent = React.memo(({
   const material = useMemo(() => {
     if (!texture) return null;
     
-    // Generate cache key (now using cached texture reference)
+    // Generate cache key using effectiveBlockDef properties
     const cacheKey = getMaterialCacheKey(
       blockType,
       textureUrl,
       cachedIsAnimated,
-      blockDef.properties
+      effectiveBlockDef.properties
     );
     
     // Check if material already exists in cache
