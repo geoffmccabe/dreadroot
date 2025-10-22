@@ -259,6 +259,9 @@ export const PlacedBlocks: React.FC<{
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
   
+  // Ensure block definitions are loaded before rendering any blocks
+  const { isLoading: blockDefsLoading } = useBlocksData();
+  
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
     if (activeAnimatedTextures.size > 0) {
@@ -297,7 +300,8 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
-  if (blocks.length === 0) {
+  // Don't render blocks until block definitions are loaded
+  if (blockDefsLoading || blocks.length === 0) {
     return null;
   }
 
