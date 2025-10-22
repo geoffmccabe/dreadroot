@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { parseGIF, decompressFrames } from 'gifuct-js';
+import { blockDB } from './useIndexedDB';
 
 interface GIFFrame {
   dims: { width: number; height: number; top: number; left: number };
@@ -24,11 +25,7 @@ export const useAnimatedTexture = (url: string) => {
     isGifRef.current = isGif;
     console.log('🎬 Is GIF?', isGif);
 
-    if (isGif) {
-      loadAnimatedGif(url);
-    } else {
-      loadStaticTexture(url);
-    }
+    loadTextureWithCache(url, isGif);
 
     return () => {
       if (texture) {
@@ -40,22 +37,97 @@ export const useAnimatedTexture = (url: string) => {
     };
   }, [url]);
 
-  const loadStaticTexture = (url: string) => {
-    console.log('📷 Loading static texture from:', url);
+  const loadTextureWithCache = async (url: string, isGif: boolean) => {
+    try {
+      // 1. Check IndexedDB cache first
+      const cachedBlob = await blockDB.getTextureBlob(url);
+      
+      if (cachedBlob) {
+        console.log('✅ Found texture in cache, loading instantly');
+        // Load from cache immediately
+        if (isGif) {
+          await loadAnimatedGifFromBlob(cachedBlob);
+        } else {
+          loadStaticTextureFromBlob(cachedBlob);
+        }
+        
+        // 2. Quietly re-download in background to check for updates
+        setTimeout(() => {
+          refreshTextureInBackground(url, isGif, cachedBlob.size);
+        }, 1000);
+      } else {
+        console.log('❌ Not in cache, loading from network');
+        // Load from network
+        await loadFromNetwork(url, isGif);
+      }
+    } catch (error) {
+      console.error('Error loading texture with cache:', error);
+      // Fallback to direct network load
+      loadFromNetwork(url, isGif);
+    }
+  };
+
+  const refreshTextureInBackground = async (url: string, isGif: boolean, cachedSize: number) => {
+    try {
+      console.log('🔄 Background refresh check for:', url);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      
+      // Simple check: if size is different, it's been updated
+      if (blob.size !== cachedSize) {
+        console.log('🆕 Texture updated, hot-swapping');
+        
+        // Load the new texture
+        if (isGif) {
+          await loadAnimatedGifFromBlob(blob);
+        } else {
+          loadStaticTextureFromBlob(blob);
+        }
+        
+        // Update cache
+        await blockDB.saveTextureBlob(url, blob);
+      } else {
+        console.log('✅ Texture is current');
+      }
+    } catch (error) {
+      console.error('Background refresh failed:', error);
+    }
+  };
+
+  const loadFromNetwork = async (url: string, isGif: boolean) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      
+      if (isGif) {
+        await loadAnimatedGifFromBlob(blob);
+      } else {
+        loadStaticTextureFromBlob(blob);
+      }
+      
+      // Save to cache
+      await blockDB.saveTextureBlob(url, blob);
+      console.log('💾 Saved texture to cache');
+    } catch (error) {
+      console.error('Failed to load from network:', error);
+    }
+  };
+
+  const loadStaticTextureFromBlob = (blob: Blob) => {
+    console.log('📷 Loading static texture from blob');
+    const blobUrl = URL.createObjectURL(blob);
     const loader = new THREE.TextureLoader();
-    loader.load(url, (loadedTexture) => {
+    loader.load(blobUrl, (loadedTexture) => {
       console.log('✅ Static texture loaded');
       setTexture(loadedTexture);
+      URL.revokeObjectURL(blobUrl);
     });
   };
 
-  const loadAnimatedGif = async (url: string) => {
+  const loadAnimatedGifFromBlob = async (blob: Blob) => {
     try {
-      console.log('🎬 Starting GIF load from:', url);
-      // Fetch the GIF
-      const response = await fetch(url);
-      console.log('📥 GIF fetch response:', response.status);
-      const buffer = await response.arrayBuffer();
+      console.log('🎬 Starting GIF load from blob');
+      const buffer = await blob.arrayBuffer();
       console.log('📦 GIF buffer size:', buffer.byteLength);
       
       // Parse GIF
@@ -63,8 +135,7 @@ export const useAnimatedTexture = (url: string) => {
       const frames = decompressFrames(gif, true);
       
       if (frames.length === 0) {
-        console.warn('No frames found in GIF, falling back to static texture');
-        loadStaticTexture(url);
+        console.warn('No frames found in GIF');
         return;
       }
 
@@ -105,7 +176,6 @@ export const useAnimatedTexture = (url: string) => {
       setTexture(canvasTexture);
     } catch (error) {
       console.error('Failed to load animated GIF:', error);
-      loadStaticTexture(url);
     }
   };
 

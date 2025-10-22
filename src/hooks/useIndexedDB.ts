@@ -14,12 +14,19 @@ interface UserSession {
   last_active: string; // ISO timestamp
 }
 
+interface TextureBlob {
+  url: string; // Primary key
+  blob: Blob; // The actual texture data
+  cached_at: string; // ISO timestamp
+}
+
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 3; // Increment version to add user_session store
+  private dbVersion = 4; // Increment version to add texture_blobs store
   private storeName = 'blocks';
   private sessionStoreName = 'user_session';
+  private textureStoreName = 'texture_blobs';
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -71,6 +78,12 @@ class BlockDB {
           if (!db.objectStoreNames.contains(this.sessionStoreName)) {
             db.createObjectStore(this.sessionStoreName, { keyPath: 'id' });
             console.log('IndexedDB user_session store created');
+          }
+          
+          // Create texture_blobs store if it doesn't exist
+          if (!db.objectStoreNames.contains(this.textureStoreName)) {
+            db.createObjectStore(this.textureStoreName, { keyPath: 'url' });
+            console.log('IndexedDB texture_blobs store created');
           }
           
           console.log('IndexedDB stores ready');
@@ -280,6 +293,41 @@ class BlockDB {
       };
     });
   }
+
+  // Texture blob management
+  async getTextureBlob(url: string): Promise<Blob | null> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.textureStoreName], 'readonly');
+      const store = transaction.objectStore(this.textureStoreName);
+      const request = store.get(url);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const result = request.result as TextureBlob | undefined;
+        resolve(result?.blob || null);
+      };
+    });
+  }
+
+  async saveTextureBlob(url: string, blob: Blob): Promise<void> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.textureStoreName], 'readwrite');
+      const store = transaction.objectStore(this.textureStoreName);
+      const textureBlob: TextureBlob = {
+        url,
+        blob,
+        cached_at: new Date().toISOString()
+      };
+      const request = store.put(textureBlob);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
 }
 
 export const blockDB = new BlockDB();
@@ -298,6 +346,8 @@ export const useIndexedDB = () => {
     init: () => blockDB.init(),
     saveUserSession: (userId: string) => blockDB.saveUserSession(userId),
     getUserSession: () => blockDB.getUserSession(),
-    clearUserSession: () => blockDB.clearUserSession()
+    clearUserSession: () => blockDB.clearUserSession(),
+    getTextureBlob: (url: string) => blockDB.getTextureBlob(url),
+    saveTextureBlob: (url: string, blob: Blob) => blockDB.saveTextureBlob(url, blob)
   }), []); // Empty deps since blockDB is stable
 };
