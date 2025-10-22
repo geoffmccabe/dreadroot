@@ -56,8 +56,8 @@ const SharedBlockGeometry = () => {
   return useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
 };
 
-// Memoized individual block component with proper textures
-const PlacedBlockComponent = React.memo(({ 
+// Individual block component with proper textures
+const PlacedBlockComponent = ({ 
   position, 
   blockType,
   onCollision,
@@ -249,7 +249,7 @@ const PlacedBlockComponent = React.memo(({
       )}
     </>
   );
-});
+};
 
 // Component to render all placed blocks with collision detection
 export const PlacedBlocks: React.FC<{ 
