@@ -10,6 +10,9 @@ interface GIFFrame {
   disposalType: number;
 }
 
+// Track ongoing background refreshes to prevent duplicates
+const refreshTimers = new Map<string, number>();
+
 export const useAnimatedTexture = (url: string) => {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -18,21 +21,36 @@ export const useAnimatedTexture = (url: string) => {
   const currentFrameRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
   const isGifRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const backgroundRefreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    console.log('🎨 Loading texture:', url);
+    isMountedRef.current = true;
     const isGif = url.toLowerCase().endsWith('.gif');
     isGifRef.current = isGif;
-    console.log('🎬 Is GIF?', isGif);
 
     loadTextureWithCache(url, isGif);
 
     return () => {
+      isMountedRef.current = false;
+      
+      // Clear background refresh timer
+      if (backgroundRefreshTimerRef.current) {
+        clearTimeout(backgroundRefreshTimerRef.current);
+        backgroundRefreshTimerRef.current = null;
+      }
+      
+      // Dispose texture
       if (texture) {
         texture.dispose();
       }
+      
+      // Clean up canvases
       if (canvasRef.current) {
         canvasRef.current = null;
+      }
+      if (backupCanvasRef.current) {
+        backupCanvasRef.current = null;
       }
     };
   }, [url]);
@@ -43,7 +61,6 @@ export const useAnimatedTexture = (url: string) => {
       const cachedBlob = await blockDB.getTextureBlob(url);
       
       if (cachedBlob) {
-        console.log('✅ Found texture in cache, loading instantly');
         // Load from cache immediately
         if (isGif) {
           await loadAnimatedGifFromBlob(cachedBlob);
@@ -51,31 +68,46 @@ export const useAnimatedTexture = (url: string) => {
           loadStaticTextureFromBlob(cachedBlob);
         }
         
-        // 2. Quietly re-download in background to check for updates
-        setTimeout(() => {
-          refreshTextureInBackground(url, isGif, cachedBlob.size);
-        }, 1000);
+        // 2. Schedule background refresh only if not already scheduled
+        // This prevents duplicate refreshes when multiple blocks use same texture
+        if (!refreshTimers.has(url)) {
+          backgroundRefreshTimerRef.current = window.setTimeout(() => {
+            if (isMountedRef.current) {
+              refreshTextureInBackground(url, isGif, cachedBlob.size);
+            }
+            refreshTimers.delete(url);
+          }, 1000);
+          refreshTimers.set(url, backgroundRefreshTimerRef.current);
+        }
       } else {
-        console.log('❌ Not in cache, loading from network');
         // Load from network
         await loadFromNetwork(url, isGif);
       }
     } catch (error) {
       console.error('Error loading texture with cache:', error);
-      // Fallback to direct network load
-      loadFromNetwork(url, isGif);
+      if (isMountedRef.current) {
+        loadFromNetwork(url, isGif);
+      }
     }
   };
 
   const refreshTextureInBackground = async (url: string, isGif: boolean, cachedSize: number) => {
+    if (!isMountedRef.current) return;
+    
     try {
-      console.log('🔄 Background refresh check for:', url);
       const response = await fetch(url);
       const blob = await response.blob();
+      
+      if (!isMountedRef.current) return;
       
       // Simple check: if size is different, it's been updated
       if (blob.size !== cachedSize) {
         console.log('🆕 Texture updated, hot-swapping');
+        
+        // Dispose old texture before creating new one
+        if (texture) {
+          texture.dispose();
+        }
         
         // Load the new texture
         if (isGif) {
@@ -86,8 +118,6 @@ export const useAnimatedTexture = (url: string) => {
         
         // Update cache
         await blockDB.saveTextureBlob(url, blob);
-      } else {
-        console.log('✅ Texture is current');
       }
     } catch (error) {
       console.error('Background refresh failed:', error);
@@ -114,21 +144,31 @@ export const useAnimatedTexture = (url: string) => {
   };
 
   const loadStaticTextureFromBlob = (blob: Blob) => {
-    console.log('📷 Loading static texture from blob');
     const blobUrl = URL.createObjectURL(blob);
     const loader = new THREE.TextureLoader();
-    loader.load(blobUrl, (loadedTexture) => {
-      console.log('✅ Static texture loaded');
-      setTexture(loadedTexture);
-      URL.revokeObjectURL(blobUrl);
-    });
+    loader.load(
+      blobUrl, 
+      (loadedTexture) => {
+        if (isMountedRef.current) {
+          setTexture(loadedTexture);
+        } else {
+          loadedTexture.dispose();
+        }
+        URL.revokeObjectURL(blobUrl);
+      },
+      undefined,
+      (error) => {
+        console.error('Failed to load texture:', error);
+        URL.revokeObjectURL(blobUrl);
+      }
+    );
   };
 
   const loadAnimatedGifFromBlob = async (blob: Blob) => {
     try {
-      console.log('🎬 Starting GIF load from blob');
       const buffer = await blob.arrayBuffer();
-      console.log('📦 GIF buffer size:', buffer.byteLength);
+      
+      if (!isMountedRef.current) return;
       
       // Parse GIF
       const gif = parseGIF(buffer);
@@ -140,12 +180,6 @@ export const useAnimatedTexture = (url: string) => {
       }
 
       framesRef.current = frames as GIFFrame[];
-      
-      // Debug: Log frame info
-      console.log('GIF Frames loaded:', frames.length);
-      console.log('First frame disposal type:', frames[0].disposalType);
-      console.log('Frame disposal types:', frames.map((f: any) => f.disposalType));
-      console.log('Sample frame dims:', frames[0].dims);
       
       // Create canvas for rendering frames
       const canvas = document.createElement('canvas');
@@ -173,7 +207,11 @@ export const useAnimatedTexture = (url: string) => {
       // Render first frame
       renderFrame(0);
       
-      setTexture(canvasTexture);
+      if (isMountedRef.current) {
+        setTexture(canvasTexture);
+      } else {
+        canvasTexture.dispose();
+      }
     } catch (error) {
       console.error('Failed to load animated GIF:', error);
     }

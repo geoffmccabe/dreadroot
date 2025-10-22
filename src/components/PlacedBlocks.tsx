@@ -265,7 +265,6 @@ export const PlacedBlocks: React.FC<{
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
     if (activeAnimatedTextures.size > 0) {
-      console.log('🎬 Updating', activeAnimatedTextures.size, 'animated textures');
       activeAnimatedTextures.forEach((updateFn) => {
         updateFn(delta);
       });
