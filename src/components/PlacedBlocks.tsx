@@ -229,11 +229,12 @@ const PlacedBlockComponent = ({
     }
   }, [blockId]);
 
-  if (!material) return null;
-
   // Get glow factor for point light (with null check)
   const glowFactor = blockDef?.properties?.glowFactor || 0;
   const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
+
+  // Don't render if material isn't ready yet (but keep all hooks called)
+  if (!material) return null;
 
   return (
     <>
