@@ -1,7 +1,7 @@
 import React, { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { PlacedBlock } from '@/types/blocks';
+import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useBlocksCache } from '@/hooks/useBlocksCache';
 import { useCachedTexture } from '@/hooks/useCachedTexture';
 
@@ -62,20 +62,21 @@ const PlacedBlockComponent = React.memo(({
   blockType,
   onCollision,
   geometry,
-  cacheVersion // Added to force re-render when block definitions update
+  blocksMap,
+  cacheVersion
 }: { 
   position: [number, number, number];
   blockType: string;
   onCollision?: (box: THREE.Box3, blockId: string) => void;
   geometry: THREE.BoxGeometry;
+  blocksMap: Map<string, BlockType>; // Passed from parent - single source of truth
   cacheVersion: number; // Triggers re-render when blocks load/update
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
-  const { getBlockByKey } = useBlocksCache();
   
-  // Get block definition from cache
-  const blockDef = getBlockByKey(blockType);
+  // Get block definition from parent's blocksMap
+  const blockDef = blocksMap.get(blockType);
   
   // Load texture with caching - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
@@ -259,7 +260,7 @@ export const PlacedBlocks: React.FC<{
 }> = ({ blocks, onCollision }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
-  const { cacheVersion } = useBlocksCache(); // Get cache version to detect block definition updates
+  const { blocksMap, cacheVersion } = useBlocksCache(); // Single source of truth for block definitions
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
@@ -309,7 +310,8 @@ export const PlacedBlocks: React.FC<{
           blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}
-          cacheVersion={cacheVersion} // Pass cache version to trigger re-renders
+          blocksMap={blocksMap}
+          cacheVersion={cacheVersion}
         />
       ))}
     </>
