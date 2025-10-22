@@ -10,7 +10,7 @@ import { useUserData } from '@/hooks/useUserData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { BlockType } from '@/types/blocks';
-import { useBlocksCache } from '@/hooks/useBlocksCache';
+import { useBlocksData } from '@/hooks/useBlocksData';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -62,7 +62,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
   const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress } = useUserData();
-  const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksCache();
+  const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const [blockchainAddress, setBlockchainAddress] = useState('');
 
   // Sync blockchain address with profile

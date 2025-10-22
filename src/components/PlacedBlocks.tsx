@@ -1,9 +1,9 @@
 import React, { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { PlacedBlock, BlockType } from '@/types/blocks';
-import { useBlocksCache } from '@/hooks/useBlocksCache';
-import { useCachedTexture } from '@/hooks/useCachedTexture';
+import { PlacedBlock } from '@/types/blocks';
+import { useBlocksData } from '@/hooks/useBlocksData';
+import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 
 // Global texture cache - shared across all PlacedBlockComponent instances
 // Tracks: texture, animation state, update function, and usage count for cleanup
@@ -61,26 +61,23 @@ const PlacedBlockComponent = React.memo(({
   position, 
   blockType,
   onCollision,
-  geometry,
-  blocksMap,
-  cacheVersion
+  geometry
 }: { 
   position: [number, number, number];
   blockType: string;
   onCollision?: (box: THREE.Box3, blockId: string) => void;
   geometry: THREE.BoxGeometry;
-  blocksMap: Map<string, BlockType>; // Passed from parent - single source of truth
-  cacheVersion: number; // Triggers re-render when blocks load/update
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
+  const { getBlockByKey } = useBlocksData();
   
-  // Get block definition from parent's blocksMap
-  const blockDef = blocksMap.get(blockType);
+  // Get block definition from database
+  const blockDef = getBlockByKey(blockType);
   
-  // Load texture with caching - using shared texture cache
+  // Load texture with animated GIF support - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  const { texture: loadedTexture, updateTexture, isAnimated } = useCachedTexture(textureUrl);
+  const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture (first block to load creates it, others reuse)
   // Track if we already incremented refCount for this component instance
@@ -120,6 +117,7 @@ const PlacedBlockComponent = React.memo(({
     
     // If animated, register the update function (only once per texture URL)
     if (isAnimated && updateTexture) {
+      console.log('🎬 Registering animated texture:', textureUrl);
       activeAnimatedTextures.set(textureUrl, updateTexture);
     }
     
@@ -260,13 +258,15 @@ export const PlacedBlocks: React.FC<{
 }> = ({ blocks, onCollision }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
-  const { blocksMap, cacheVersion } = useBlocksCache(); // Single source of truth for block definitions
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
-    activeAnimatedTextures.forEach((updateFn) => {
-      updateFn(delta);
-    });
+    if (activeAnimatedTextures.size > 0) {
+      console.log('🎬 Updating', activeAnimatedTextures.size, 'animated textures');
+      activeAnimatedTextures.forEach((updateFn) => {
+        updateFn(delta);
+      });
+    }
   });
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
@@ -310,8 +310,6 @@ export const PlacedBlocks: React.FC<{
           blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}
-          blocksMap={blocksMap}
-          cacheVersion={cacheVersion}
         />
       ))}
     </>

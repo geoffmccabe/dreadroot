@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useUserData } from '@/hooks/useUserData';
-import { useBlocksCache } from '@/hooks/useBlocksCache';
+import { useBlocksData } from '@/hooks/useBlocksData';
 
 interface WaterfallControlsProps {
   settings: any;

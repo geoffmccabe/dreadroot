@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useUserData } from '@/hooks/useUserData';
 import { Card } from '@/components/ui/card';
-import { useBlocksCache } from '@/hooks/useBlocksCache';
+import { useBlocksData } from '@/hooks/useBlocksData';
 
 interface InventoryProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ interface InventoryProps {
 
 export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
   const { profile, inventory, isLoading, updateBlockchainAddress } = useUserData();
-  const { getBlockByKey } = useBlocksCache();
+  const { getBlockByKey } = useBlocksData();
   const [blockchainAddress, setBlockchainAddress] = useState('');
 
   // Sync with profile data
