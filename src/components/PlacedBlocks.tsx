@@ -61,12 +61,14 @@ const PlacedBlockComponent = React.memo(({
   position, 
   blockType,
   onCollision,
-  geometry
+  geometry,
+  cacheVersion // Added to force re-render when block definitions update
 }: { 
   position: [number, number, number];
   blockType: string;
   onCollision?: (box: THREE.Box3, blockId: string) => void;
   geometry: THREE.BoxGeometry;
+  cacheVersion: number; // Triggers re-render when blocks load/update
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
@@ -257,6 +259,7 @@ export const PlacedBlocks: React.FC<{
 }> = ({ blocks, onCollision }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
+  const { cacheVersion } = useBlocksCache(); // Get cache version to detect block definition updates
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
@@ -306,6 +309,7 @@ export const PlacedBlocks: React.FC<{
           blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}
+          cacheVersion={cacheVersion} // Pass cache version to trigger re-renders
         />
       ))}
     </>

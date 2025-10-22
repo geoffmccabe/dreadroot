@@ -82,11 +82,15 @@ export const useCachedTexture = (url: string) => {
     loadTexture();
 
     return () => {
+      loadingRef.current = false; // Reset loading flag on cleanup
       if (texture) {
         texture.dispose();
       }
       if (canvasRef.current) {
         canvasRef.current = null;
+      }
+      if (backupCanvasRef.current) {
+        backupCanvasRef.current = null;
       }
     };
   }, [url]);
