@@ -123,21 +123,26 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
   useFrame(() => {
     if (skyMeshRef.current && skyMeshRef.current.material) {
       const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
-      const targetColor = getSkyColor(lightingPercentage);
-      material.color.setHex(targetColor);
       
       // Show stars only at night (below 50% lighting)
       // Fade stars in/out smoothly between 40-60% for transition
       if (lightingPercentage < 40) {
+        // Full night - show stars at full brightness
         material.map = textureRef.current;
+        material.color.setHex(0xffffff); // White so stars show at full brightness
         material.opacity = 1;
         material.transparent = false;
       } else if (lightingPercentage < 60) {
+        // Transition - fade stars out
         material.map = textureRef.current;
+        material.color.setHex(0xffffff); // Keep white to avoid color tinting
         material.transparent = true;
         material.opacity = (60 - lightingPercentage) / 20; // Fade out as lighting increases
       } else {
-        material.map = null; // No stars during day
+        // Day - no stars, just colored sky
+        material.map = null;
+        const targetColor = getSkyColor(lightingPercentage);
+        material.color.setHex(targetColor);
         material.transparent = false;
         material.opacity = 1;
       }
