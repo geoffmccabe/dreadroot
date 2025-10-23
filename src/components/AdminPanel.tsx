@@ -902,46 +902,37 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
 interface WeatherControlsProps {
   settings: {
-    maxLighting: number;
-    minLighting: number;
+    lightingRange: [number, number];
     cycleDuration: number;
   };
-  onSettingsChange: (key: string, value: number) => void;
+  onSettingsChange: (key: string, value: number | [number, number]) => void;
 }
 
 function WeatherControls({ settings, onSettingsChange }: WeatherControlsProps) {
   return (
     <Card className="w-full p-6">
-      <h3 className="font-bold text-sm mb-4">LIGHTING CYCLE</h3>
+      <h3 className="font-bold text-sm mb-4">DAY/NIGHT CYCLE</h3>
       <div className="space-y-6">
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-sm">Max Lighting</Label>
-            <span className="text-sm font-mono opacity-75">{settings.maxLighting}%</span>
+            <Label className="text-sm">Day/Night Range</Label>
+            <span className="text-sm font-mono opacity-75">
+              {settings.lightingRange[0]}% (Day) - {settings.lightingRange[1]}% (Night)
+            </span>
           </div>
           <Slider
-            value={[settings.maxLighting]}
-            onValueChange={([value]) => onSettingsChange('maxLighting', value)}
+            value={settings.lightingRange}
+            onValueChange={(value) => onSettingsChange('lightingRange', value as [number, number])}
             min={0}
             max={100}
             step={1}
+            minStepsBetweenThumbs={10}
             className="w-full"
           />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Min Lighting</Label>
-            <span className="text-sm font-mono opacity-75">{settings.minLighting}%</span>
+          <div className="flex justify-between text-xs text-muted-foreground mt-2">
+            <span>0% = Pure Day (Bright Blue, No Stars)</span>
+            <span>100% = Pure Night (Black, Full Stars)</span>
           </div>
-          <Slider
-            value={[settings.minLighting]}
-            onValueChange={([value]) => onSettingsChange('minLighting', value)}
-            min={0}
-            max={100}
-            step={1}
-            className="w-full"
-          />
         </div>
 
         <div className="space-y-2">
@@ -961,10 +952,10 @@ function WeatherControls({ settings, onSettingsChange }: WeatherControlsProps) {
 
         <div className="text-xs text-muted-foreground mt-4 p-3 bg-muted/50 rounded">
           <p className="mb-1">
-            <strong>Current behavior:</strong> Lighting will cycle between {settings.minLighting}% and {settings.maxLighting}% over {settings.cycleDuration} minutes.
+            <strong>Current behavior:</strong> Day/night will cycle between {settings.lightingRange[0]}% and {settings.lightingRange[1]}% over {settings.cycleDuration} minutes.
           </p>
           <p>
-            The scene will smoothly transition from minimum to maximum lighting and back.
+            Sky transitions from bright blue with no stars (low %) to pure black with bright stars (high %).
           </p>
         </div>
       </div>
@@ -977,11 +968,10 @@ interface AdminPanelProps {
   onWaterfallSettingsChange?: (key: string, value: any) => void;
   onWallPositionsChange?: (positions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>) => void;
   weatherSettings?: {
-    maxLighting: number;
-    minLighting: number;
+    lightingRange: [number, number];
     cycleDuration: number;
   };
-  onWeatherSettingsChange?: (key: string, value: number) => void;
+  onWeatherSettingsChange?: (key: string, value: number | [number, number]) => void;
 }
 
 export function AdminPanel({ 

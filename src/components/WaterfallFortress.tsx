@@ -25,12 +25,11 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Custom hook for weather cycle - shared by sky and lighting
 function useWeatherCycle(weatherSettings: {
-  maxLighting: number;
-  minLighting: number;
+  lightingRange: [number, number];
   cycleDuration: number;
 }) {
   const [cycleState, setCycleState] = useState({
-    lightingPercentage: weatherSettings.maxLighting,
+    lightingPercentage: weatherSettings.lightingRange[0],
     cyclePosition: 0,
     isNight: false
   });
@@ -41,10 +40,10 @@ function useWeatherCycle(weatherSettings: {
     const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
     
     const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
-    const lightingPercentage = weatherSettings.minLighting + 
-      (weatherSettings.maxLighting - weatherSettings.minLighting) * sineWave;
+    const [minLighting, maxLighting] = weatherSettings.lightingRange;
+    const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
     
-    const isNight = lightingPercentage < 40;
+    const isNight = lightingPercentage > 50;
     
     setCycleState({ lightingPercentage, cyclePosition, isNight });
   });
@@ -65,19 +64,12 @@ function interpolateColor(color1: number, color2: number, factor: number): numbe
   return (r << 16) | (g << 8) | b;
 }
 
-// Calculate sky color based on lighting percentage
+// Calculate sky color based on lighting percentage (0% = bright blue day, 100% = black night)
 function getSkyColor(lightingPercentage: number): number {
-  if (lightingPercentage >= 80) {
-    return 0x87ceeb; // Full day - bright sky blue
-  } else if (lightingPercentage >= 40) {
-    // Dusk/Dawn transition: 40-80%
-    const factor = (lightingPercentage - 40) / 40;
-    return interpolateColor(0xffaa66, 0x87ceeb, factor);
-  } else {
-    // Night transition: 25-40%
-    const factor = (lightingPercentage - 25) / 15;
-    return interpolateColor(0x0a0a1a, 0xffaa66, factor);
-  }
+  // Linear interpolation from bright blue (0x87ceeb) at 0% to black (0x000000) at 100%
+  const dayColor = 0x87ceeb;
+  const nightColor = 0x000000;
+  return interpolateColor(dayColor, nightColor, lightingPercentage / 100);
 }
 
 function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
@@ -124,28 +116,26 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
     if (skyMeshRef.current && skyMeshRef.current.material) {
       const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
       
-      // Show stars only at night (below 50% lighting)
-      // Fade stars in/out smoothly between 40-60% for transition
-      if (lightingPercentage < 40) {
-        // Full night - show stars at full brightness
+      // Calculate star opacity: 0% lighting = 0% stars, 100% lighting = 100% stars
+      const starOpacity = lightingPercentage / 100;
+      
+      if (starOpacity > 0.05) {
+        // Show stars when opacity is above threshold
         material.map = textureRef.current;
-        material.color.setHex(0xffffff); // White so stars show at full brightness
-        material.opacity = 1;
-        material.transparent = false;
-      } else if (lightingPercentage < 60) {
-        // Transition - fade stars out
-        material.map = textureRef.current;
-        material.color.setHex(0xffffff); // Keep white to avoid color tinting
+        material.color.setHex(0xffffff); // White base so stars show at full brightness
         material.transparent = true;
-        material.opacity = (60 - lightingPercentage) / 20; // Fade out as lighting increases
+        material.opacity = starOpacity;
       } else {
-        // Day - no stars, just colored sky
+        // Hide stars completely at very low percentages (pure day)
         material.map = null;
-        const targetColor = getSkyColor(lightingPercentage);
-        material.color.setHex(targetColor);
         material.transparent = false;
         material.opacity = 1;
       }
+      
+      // Always set the sky color (blue at 0%, black at 100%)
+      const targetColor = getSkyColor(lightingPercentage);
+      material.color.setHex(targetColor);
+      
       material.needsUpdate = true;
     }
   });
@@ -158,8 +148,7 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
 // Dynamic sky controller - responds to weather cycle
 function DynamicSky({ weatherSettings }: {
   weatherSettings: {
-    maxLighting: number;
-    minLighting: number;
+    lightingRange: [number, number];
     cycleDuration: number;
   }
 }) {
@@ -1167,8 +1156,7 @@ function Bullets({ bullets }: {
 // Dynamic lighting component that uses shared weather cycle
 function DynamicLighting({ weatherSettings }: { 
   weatherSettings: {
-    maxLighting: number;
-    minLighting: number;
+    lightingRange: [number, number];
     cycleDuration: number;
   } 
 }) {
@@ -1251,8 +1239,7 @@ function Scene({
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
   weatherSettings: {
-    maxLighting: number;
-    minLighting: number;
+    lightingRange: [number, number];
     cycleDuration: number;
   };
   onBlockRain: () => void;
@@ -1686,9 +1673,19 @@ export default function WaterfallFortress() {
   // Weather settings state
   const [weatherSettings, setWeatherSettings] = useState(() => {
     const stored = localStorage.getItem('weatherSettings');
-    return stored ? JSON.parse(stored) : {
-      maxLighting: 70,
-      minLighting: 20,
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Migrate old format to new format
+      if ('maxLighting' in parsed && 'minLighting' in parsed) {
+        return {
+          lightingRange: [parsed.minLighting, parsed.maxLighting] as [number, number],
+          cycleDuration: parsed.cycleDuration || 5
+        };
+      }
+      return parsed;
+    }
+    return {
+      lightingRange: [20, 70] as [number, number],
       cycleDuration: 5 // minutes
     };
   });
@@ -1725,7 +1722,7 @@ export default function WaterfallFortress() {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
   
-  const handleWeatherSettingsChange = (key: string, value: number) => {
+  const handleWeatherSettingsChange = (key: string, value: number | [number, number]) => {
     setWeatherSettings(prev => {
       const newSettings = { ...prev, [key]: value };
       localStorage.setItem('weatherSettings', JSON.stringify(newSettings));
