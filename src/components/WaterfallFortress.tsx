@@ -118,6 +118,7 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       
       // Calculate star opacity: 0% lighting = 0% stars, 100% lighting = 100% stars
       const starOpacity = lightingPercentage / 100;
+      const targetColor = getSkyColor(lightingPercentage);
       
       if (starOpacity > 0.05) {
         // Show stars when opacity is above threshold
@@ -128,13 +129,10 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       } else {
         // Hide stars completely at very low percentages (pure day)
         material.map = null;
+        material.color.setHex(targetColor); // Show bright blue sky during the day
         material.transparent = false;
         material.opacity = 1;
       }
-      
-      // Always set the sky color (blue at 0%, black at 100%)
-      const targetColor = getSkyColor(lightingPercentage);
-      material.color.setHex(targetColor);
       
       material.needsUpdate = true;
     }
