@@ -68,66 +68,80 @@ function interpolateColor(color1: number, color2: number, factor: number): numbe
 // Calculate sky color based on lighting percentage
 function getSkyColor(lightingPercentage: number): number {
   if (lightingPercentage >= 80) {
-    return 0xffffff; // Full day - pure white (100% brightness)
+    return 0x87ceeb; // Full day - bright sky blue
   } else if (lightingPercentage >= 40) {
     // Dusk/Dawn transition: 40-80%
     const factor = (lightingPercentage - 40) / 40;
-    return interpolateColor(0xffaa66, 0xffffff, factor);
+    return interpolateColor(0xffaa66, 0x87ceeb, factor);
   } else {
     // Night transition: 25-40%
     const factor = (lightingPercentage - 25) / 15;
-    return interpolateColor(0x1a1a3a, 0xffaa66, factor);
+    return interpolateColor(0x0a0a1a, 0xffaa66, factor);
   }
 }
 
 function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
   const { scene } = useThree();
   const skyMeshRef = useRef<THREE.Mesh | null>(null);
+  const textureRef = useRef<THREE.Texture | null>(null);
   
   useEffect(() => {
     const textureLoader = new THREE.TextureLoader();
     const skyGeo = new THREE.SphereGeometry(320, 64, 32);
-    let skyMesh: THREE.Mesh | null = null;
-    let texture: THREE.Texture | null = null;
-    let skyMat: THREE.MeshBasicMaterial | null = null;
     
     textureLoader.load('/space_night_sky.webp', (loadedTexture) => {
       // Crop edges to avoid white seam
       loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
       loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
-      loadedTexture.repeat.set(0.995, 0.995); // Avoid 2-3 pixels on edges
-      loadedTexture.offset.set(0.0025, 0.0025); // Center the cropped texture
-      texture = loadedTexture;
+      loadedTexture.repeat.set(0.995, 0.995);
+      loadedTexture.offset.set(0.0025, 0.0025);
+      textureRef.current = loadedTexture;
       
-      skyMat = new THREE.MeshBasicMaterial({
-        map: texture,
+      // Create material - stars only visible at night
+      const skyMat = new THREE.MeshBasicMaterial({
+        map: lightingPercentage < 50 ? loadedTexture : null,
         side: THREE.BackSide,
-        color: getSkyColor(lightingPercentage) // Dynamic color based on time of day
+        color: getSkyColor(lightingPercentage)
       });
       
-      skyMesh = new THREE.Mesh(skyGeo, skyMat);
+      const skyMesh = new THREE.Mesh(skyGeo, skyMat);
       skyMeshRef.current = skyMesh;
       scene.add(skyMesh);
     });
     
     return () => {
-      if (skyMesh) {
-        scene.remove(skyMesh);
-      }
       if (skyMeshRef.current) {
         scene.remove(skyMeshRef.current);
+        skyMeshRef.current.geometry.dispose();
+        (skyMeshRef.current.material as THREE.MeshBasicMaterial).dispose();
       }
-      skyGeo.dispose();
-      skyMat?.dispose();
-      texture?.dispose();
+      textureRef.current?.dispose();
     };
-  }, [scene]); // Only depend on scene, not lightingPercentage - useFrame handles color updates
+  }, [scene]);
   
-  // Update sky color each frame for smooth transitions
+  // Update sky appearance each frame for smooth day/night transitions
   useFrame(() => {
     if (skyMeshRef.current && skyMeshRef.current.material) {
+      const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
       const targetColor = getSkyColor(lightingPercentage);
-      (skyMeshRef.current.material as THREE.MeshBasicMaterial).color.setHex(targetColor);
+      material.color.setHex(targetColor);
+      
+      // Show stars only at night (below 50% lighting)
+      // Fade stars in/out smoothly between 40-60% for transition
+      if (lightingPercentage < 40) {
+        material.map = textureRef.current;
+        material.opacity = 1;
+        material.transparent = false;
+      } else if (lightingPercentage < 60) {
+        material.map = textureRef.current;
+        material.transparent = true;
+        material.opacity = (60 - lightingPercentage) / 20; // Fade out as lighting increases
+      } else {
+        material.map = null; // No stars during day
+        material.transparent = false;
+        material.opacity = 1;
+      }
+      material.needsUpdate = true;
     }
   });
   
