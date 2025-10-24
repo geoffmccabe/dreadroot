@@ -7,11 +7,16 @@ let cachedBlocksMap: Map<string, BlockType> | null = null;
 let fetchPromise: Promise<void> | null = null;
 
 export const useBlocksData = () => {
-  const [blocks, setBlocks] = useState<BlockType[]>(cachedBlocks || []);
-  const [blocksMap, setBlocksMap] = useState<Map<string, BlockType>>(cachedBlocksMap || new Map());
-  const [isLoading, setIsLoading] = useState(!cachedBlocks);
+  const [blocks, setBlocks] = useState<BlockType[]>([]);
+  const [blocksMap, setBlocksMap] = useState<Map<string, BlockType>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Force clear cache on mount
+    cachedBlocks = null;
+    cachedBlocksMap = null;
+    fetchPromise = null;
+    
     const loadBlocks = async () => {
       // If already loaded, use cache
       if (cachedBlocks && cachedBlocksMap) {
@@ -43,6 +48,8 @@ export const useBlocksData = () => {
         .order('cost', { ascending: true });
 
           if (error) throw error;
+
+          console.log('Fetched blocks from DB:', data?.slice(0, 5).map(b => ({ name: b.name, class: b.class, tier: b.tier })));
 
           const typedBlocks: BlockType[] = (data || []).map(block => ({
             id: block.id,
