@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { BlockType } from '@/types/blocks';
@@ -64,13 +65,17 @@ const BlockIcon: React.FC<{ block: BlockType }> = ({ block }) => {
 export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPurchased }) => {
   const { profile, inventory, buyBlock, isLoading: userLoading } = useUserData();
   const { blocks, isLoading: blocksLoading } = useBlocksData();
+  const [activeClass, setActiveClass] = React.useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
 
-  // Sort all blocks by tier
-  const sortedBlocks = React.useMemo(() => {
-    const sorted = [...blocks].sort((a, b) => a.tier - b.tier);
-    console.log('SORTED BLOCKS:', sorted.map(b => ({ name: b.name, tier: b.tier, class: b.class })));
-    return sorted;
-  }, [blocks]);
+  // Filter and sort blocks by class
+  const filteredBlocks = React.useMemo(() => {
+    const filtered = blocks.filter(block => block.class === activeClass);
+    // Sort mystery blocks by tier, others remain in original order
+    if (activeClass === 'mystery') {
+      return filtered.sort((a, b) => a.tier - b.tier);
+    }
+    return filtered;
+  }, [blocks, activeClass]);
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
     const success = await buyBlock(itemKey, cost);
@@ -124,8 +129,17 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4 max-h-96 overflow-y-auto">
-          {sortedBlocks.map((block) => (
+        <Tabs value={activeClass} onValueChange={(value) => setActiveClass(value as typeof activeClass)} className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="basic">Basic</TabsTrigger>
+            <TabsTrigger value="magic">Magic</TabsTrigger>
+            <TabsTrigger value="mystery">Mystery</TabsTrigger>
+            <TabsTrigger value="iconic">Iconic</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value={activeClass} className="mt-4">
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {filteredBlocks.map((block) => (
             <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3">
                 <BlockIcon block={block} />
@@ -176,7 +190,9 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
               </div>
             </Card>
           ))}
-        </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
