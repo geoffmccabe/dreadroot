@@ -23,7 +23,7 @@ interface TextureBlob {
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 5; // Increment to force texture_blobs store creation
+  private dbVersion = 6; // Ensure all stores use delete+recreate pattern
   private storeName = 'blocks';
   private sessionStoreName = 'user_session';
   private textureStoreName = 'texture_blobs';
@@ -74,17 +74,17 @@ class BlockDB {
           store.createIndex('synced', 'synced', { unique: false });
           store.createIndex('position', ['position_x', 'position_y', 'position_z'], { unique: false });
           
-          // Create user_session store if it doesn't exist
-          if (!db.objectStoreNames.contains(this.sessionStoreName)) {
-            db.createObjectStore(this.sessionStoreName, { keyPath: 'id' });
-            console.log('IndexedDB user_session store created');
+          // Clear and recreate user_session store
+          if (db.objectStoreNames.contains(this.sessionStoreName)) {
+            db.deleteObjectStore(this.sessionStoreName);
           }
+          db.createObjectStore(this.sessionStoreName, { keyPath: 'id' });
           
-          // Create texture_blobs store if it doesn't exist
-          if (!db.objectStoreNames.contains(this.textureStoreName)) {
-            db.createObjectStore(this.textureStoreName, { keyPath: 'url' });
-            console.log('IndexedDB texture_blobs store created');
+          // Clear and recreate texture_blobs store
+          if (db.objectStoreNames.contains(this.textureStoreName)) {
+            db.deleteObjectStore(this.textureStoreName);
           }
+          db.createObjectStore(this.textureStoreName, { keyPath: 'url' });
           
           console.log('IndexedDB stores ready');
         };
