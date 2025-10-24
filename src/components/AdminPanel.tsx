@@ -205,7 +205,7 @@ interface Block {
   description: string;
   cost: number;
   category: string;
-  rarity: string;
+  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'divine' | 'mystic' | 'rainbow' | 'apocalyptic' | 'infinite';
   class: 'basic' | 'magic' | 'mystery' | 'iconic';
   tier: number;
   texture_url: string | null;
@@ -258,10 +258,11 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
       if (error) throw error;
 
-      // Cast properties and class from database types to TypeScript types
+      // Cast properties, class, and rarity from database types to TypeScript types
       const typedBlocks = (data || []).map(block => ({
         ...block,
         class: block.class as Block['class'],
+        rarity: block.rarity as Block['rarity'],
         properties: block.properties as Block['properties']
       }));
 
@@ -849,27 +850,20 @@ function BlocksList({ userRoles }: BlocksListProps) {
                 <select
                   id="edit-block-rarity"
                   value={editingBlock.rarity}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, rarity: e.target.value })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mb-2"
+                  onChange={(e) => setEditingBlock({ ...editingBlock, rarity: e.target.value as Block['rarity'] })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring z-50"
                 >
                   <option value="common">Common</option>
+                  <option value="uncommon">Uncommon</option>
                   <option value="rare">Rare</option>
                   <option value="epic">Epic</option>
                   <option value="legendary">Legendary</option>
+                  <option value="divine">Divine</option>
+                  <option value="mystic">Mystic</option>
+                  <option value="rainbow">Rainbow</option>
+                  <option value="apocalyptic">Apocalyptic</option>
+                  <option value="infinite">Infinite</option>
                 </select>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="w-full"
-                  onClick={() => {
-                    const newRarity = prompt("Enter new rarity name:");
-                    if (newRarity && newRarity.trim()) {
-                      setEditingBlock({ ...editingBlock, rarity: newRarity.trim().toLowerCase() });
-                    }
-                  }}
-                >
-                  Add New Rarity
-                </Button>
               </div>
 
               {/* Properties */}
