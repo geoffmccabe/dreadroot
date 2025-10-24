@@ -138,11 +138,17 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
                     {block.description}
                   </p>
                   
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <img src="/waterfall_coin.png" alt="coin" className="w-4 h-4" />
                     <span className="text-sm font-medium">{block.cost} coins</span>
-                    <Badge variant="outline" className="text-xs ml-auto">
+                    <Badge variant="outline" className="text-xs">
                       {block.category}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      Tier {block.tier}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {block.class.toUpperCase()}
                     </Badge>
                   </div>
                 </div>

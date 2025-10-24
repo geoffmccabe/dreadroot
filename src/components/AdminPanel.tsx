@@ -198,7 +198,9 @@ function UsersList({}: UsersListProps) {
   );
 }
 
-interface Block {
+// AdminPanel uses database field names directly (texture_url, glow_factor)
+// This differs from BlockType which uses nested structure (texture.diffuse, properties.glowFactor)
+interface AdminBlock {
   id: number;
   key: string;
   name: string;
@@ -223,18 +225,18 @@ interface BlocksListProps {
 }
 
 function BlocksList({ userRoles }: BlocksListProps) {
-  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [blocks, setBlocks] = useState<AdminBlock[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeClass, setActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [showNewBlockDialog, setShowNewBlockDialog] = useState(false);
-  const [editingBlock, setEditingBlock] = useState<Block | null>(null);
+  const [editingBlock, setEditingBlock] = useState<AdminBlock | null>(null);
   const [newBlockData, setNewBlockData] = useState({
     name: '',
     description: '',
     cost: 10,
     key: '',
     tier: 0,
-    rarity: 'common' as Block['rarity'],
+    rarity: 'common' as AdminBlock['rarity'],
     texture: null as File | null
   });
   const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
@@ -259,12 +261,13 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
       if (error) throw error;
 
-      // Cast properties, class, and rarity from database types to TypeScript types
+      // Cast properties, class, rarity, and tier from database types
       const typedBlocks = (data || []).map(block => ({
         ...block,
-        class: block.class as Block['class'],
-        rarity: block.rarity as Block['rarity'],
-        properties: block.properties as Block['properties']
+        class: block.class as AdminBlock['class'],
+        rarity: block.rarity as AdminBlock['rarity'],
+        tier: block.tier || 0,
+        properties: block.properties as AdminBlock['properties']
       }));
 
       setBlocks(typedBlocks);
@@ -661,7 +664,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                 <select
                   id="block-rarity"
                   value={newBlockData.rarity || 'common'}
-                  onChange={(e) => setNewBlockData({ ...newBlockData, rarity: e.target.value as Block['rarity'] })}
+                  onChange={(e) => setNewBlockData({ ...newBlockData, rarity: e.target.value as AdminBlock['rarity'] })}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring z-50"
                 >
                   <option value="common">Common</option>
@@ -717,7 +720,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                 <select
                   id="edit-block-class"
                   value={editingBlock.class}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, class: e.target.value as Block['class'] })}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, class: e.target.value as AdminBlock['class'] })}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="basic">BASIC</option>
@@ -762,7 +765,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                         .eq('id', editingBlock.id)
                         .single();
                       if (updatedBlock) {
-                        setEditingBlock(updatedBlock as unknown as Block);
+                        setEditingBlock(updatedBlock as unknown as AdminBlock);
                       }
                     }
                   }}
@@ -876,7 +879,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                 <select
                   id="edit-block-rarity"
                   value={editingBlock.rarity}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, rarity: e.target.value as Block['rarity'] })}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, rarity: e.target.value as AdminBlock['rarity'] })}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring z-50"
                 >
                   <option value="common">Common</option>
