@@ -244,8 +244,15 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
   const isSuperAdmin = userRoles.includes('superadmin');
   
-  // Filter blocks by active class
-  const filteredBlocks = blocks.filter(block => block.class === activeClass);
+  // Filter blocks by active class and sort mystery blocks by tier
+  const filteredBlocks = blocks
+    .filter(block => block.class === activeClass)
+    .sort((a, b) => {
+      if (activeClass === 'mystery') {
+        return a.tier - b.tier;
+      }
+      return 0;
+    });
 
   useEffect(() => {
     loadBlocks();
