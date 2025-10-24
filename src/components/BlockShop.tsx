@@ -65,7 +65,10 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
   const { profile, inventory, buyBlock, isLoading: userLoading } = useUserData();
   const { blocks, isLoading: blocksLoading } = useBlocksData();
 
-  // Blocks are already sorted by class and tier from the database query
+  // Sort all blocks by tier
+  const sortedBlocks = React.useMemo(() => {
+    return [...blocks].sort((a, b) => a.tier - b.tier);
+  }, [blocks]);
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
     const success = await buyBlock(itemKey, cost);
@@ -120,7 +123,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
         </DialogHeader>
         
         <div className="space-y-4 max-h-96 overflow-y-auto">
-          {blocks.map((block) => (
+          {sortedBlocks.map((block) => (
             <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3">
                 <BlockIcon block={block} />
