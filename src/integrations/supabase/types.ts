@@ -70,6 +70,7 @@ export type Database = {
           properties: Json | null
           rarity: string
           texture_url: string | null
+          tier: number
           updated_at: string
         }
         Insert: {
@@ -85,6 +86,7 @@ export type Database = {
           properties?: Json | null
           rarity?: string
           texture_url?: string | null
+          tier?: number
           updated_at?: string
         }
         Update: {
@@ -100,6 +102,7 @@ export type Database = {
           properties?: Json | null
           rarity?: string
           texture_url?: string | null
+          tier?: number
           updated_at?: string
         }
         Relationships: []

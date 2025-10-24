@@ -207,6 +207,7 @@ interface Block {
   category: string;
   rarity: string;
   class: 'basic' | 'magic' | 'mystery' | 'iconic';
+  tier: number;
   texture_url: string | null;
   glow_factor?: number | null;
   properties: {
@@ -232,6 +233,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
     description: '',
     cost: 10,
     key: '',
+    tier: 0,
     texture: null as File | null
   });
   const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
@@ -394,6 +396,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
           category: 'building',
           rarity: 'common',
           class: activeClass, // Automatically assign to the active class tab
+          tier: newBlockData.tier,
           texture_url: textureUrl,
           properties: {
             size: [1, 1, 1],
@@ -416,7 +419,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
       });
 
       setShowNewBlockDialog(false);
-      setNewBlockData({ name: '', description: '', cost: 10, key: '', texture: null });
+      setNewBlockData({ name: '', description: '', cost: 10, key: '', tier: 0, texture: null });
       loadBlocks();
     } catch (error: any) {
       console.error('Failed to create block:', error);
@@ -444,6 +447,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
           category: editingBlock.category,
           rarity: editingBlock.rarity,
           class: editingBlock.class,
+          tier: editingBlock.tier,
           properties: editingBlock.properties,
           glow_factor: editingBlock.glow_factor
         })
@@ -555,6 +559,9 @@ function BlocksList({ userRoles }: BlocksListProps) {
                     <span className="px-2 py-0.5 rounded bg-accent text-accent-foreground text-[10px]">
                       {block.rarity}
                     </span>
+                    <span className="px-2 py-0.5 rounded bg-primary text-primary-foreground text-[10px]">
+                      Tier {block.tier}
+                    </span>
                     <span className="opacity-50 text-[10px]">{block.cost} coins</span>
                   </div>
                   <div className="text-[10px] opacity-50 font-mono mt-1 truncate">
@@ -628,6 +635,19 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   onChange={(e) => setNewBlockData({ ...newBlockData, cost: parseInt(e.target.value) || 10 })}
                   min="1"
                 />
+              </div>
+              <div>
+                <Label htmlFor="block-tier">Tier (0-30)</Label>
+                <select
+                  id="block-tier"
+                  value={newBlockData.tier}
+                  onChange={(e) => setNewBlockData({ ...newBlockData, tier: parseInt(e.target.value) || 0 })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {Array.from({ length: 31 }, (_, i) => (
+                    <option key={i} value={i}>Tier {i}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <Label htmlFor="block-texture">Texture Image</Label>
@@ -778,6 +798,21 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   onChange={(e) => setEditingBlock({ ...editingBlock, cost: parseInt(e.target.value) || 10 })}
                   min="1"
                 />
+              </div>
+
+              {/* Tier */}
+              <div>
+                <Label htmlFor="edit-block-tier">Tier (0-30)</Label>
+                <select
+                  id="edit-block-tier"
+                  value={editingBlock.tier}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, tier: parseInt(e.target.value) || 0 })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring z-50"
+                >
+                  {Array.from({ length: 31 }, (_, i) => (
+                    <option key={i} value={i}>Tier {i}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Category */}
