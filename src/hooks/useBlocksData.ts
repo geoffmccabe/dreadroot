@@ -51,6 +51,8 @@ export const useBlocksData = () => {
             cost: block.cost,
             category: block.category as BlockType['category'],
             rarity: block.rarity as BlockType['rarity'],
+            class: block.class as BlockType['class'],
+            tier: block.tier || 0,
             texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
             properties: {
               ...(block.properties as BlockType['properties']),
@@ -117,6 +119,8 @@ export const useBlocksData = () => {
         cost: block.cost,
         category: block.category as BlockType['category'],
         rarity: block.rarity as BlockType['rarity'],
+        class: block.class as BlockType['class'],
+        tier: block.tier || 0,
         texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
         properties: {
           ...(block.properties as BlockType['properties']),

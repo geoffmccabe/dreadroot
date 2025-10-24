@@ -9,6 +9,8 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     cost: 3,
     category: 'building',
     rarity: 'common',
+    class: 'basic',
+    tier: 0,
     texture: {
       diffuse: '/cliff_texture_seamless.webp'
     },
@@ -25,6 +27,8 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     cost: 2,
     category: 'building',
     rarity: 'common',
+    class: 'basic',
+    tier: 0,
     texture: {
       diffuse: '/grass_texture_seamless.webp'
     },
@@ -41,6 +45,8 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     cost: 8,
     category: 'decoration',
     rarity: 'rare',
+    class: 'mystery',
+    tier: 1,
     texture: {
       diffuse: '/cliff_texture_seamless.webp' // Using cliff texture as base, emissive properties will make it glow
     },
@@ -58,6 +64,8 @@ export const BLOCK_REGISTRY: Record<string, BlockType> = {
     cost: 15,
     category: 'decoration',
     rarity: 'epic',
+    class: 'basic',
+    tier: 0,
     texture: {
       diffuse: '/grass_texture_seamless.webp' // Using grass texture as base, will appear crystalline due to transparency and color
     },

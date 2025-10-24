@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useUserData } from '@/hooks/useUserData';
-import { getAllBlocks } from '@/data/blockRegistry';
+import { useBlocksData } from '@/hooks/useBlocksData';
 import { BlockType } from '@/types/blocks';
 
 interface BlockShopProps {
@@ -16,9 +16,15 @@ interface BlockShopProps {
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
     case 'common': return 'bg-gray-100 text-gray-800';
+    case 'uncommon': return 'bg-green-100 text-green-800';
     case 'rare': return 'bg-blue-100 text-blue-800';
     case 'epic': return 'bg-purple-100 text-purple-800';
     case 'legendary': return 'bg-amber-100 text-amber-800';
+    case 'divine': return 'bg-yellow-100 text-yellow-800';
+    case 'mystic': return 'bg-indigo-100 text-indigo-800';
+    case 'rainbow': return 'bg-gradient-to-r from-red-100 via-purple-100 to-blue-100 text-gray-800';
+    case 'apocalyptic': return 'bg-red-100 text-red-800';
+    case 'infinite': return 'bg-cyan-100 text-cyan-800';
     default: return 'bg-gray-100 text-gray-800';
   }
 };
@@ -56,8 +62,8 @@ const BlockIcon: React.FC<{ block: BlockType }> = ({ block }) => {
 };
 
 export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPurchased }) => {
-  const { profile, inventory, buyBlock, isLoading } = useUserData();
-  const availableBlocks = getAllBlocks();
+  const { profile, inventory, buyBlock, isLoading: userLoading } = useUserData();
+  const { blocks, isLoading: blocksLoading } = useBlocksData();
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
     const success = await buyBlock(itemKey, cost);
@@ -88,7 +94,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     return item?.quantity || 0;
   };
 
-  if (isLoading) {
+  if (userLoading || blocksLoading) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-md">
@@ -112,7 +118,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
         </DialogHeader>
         
         <div className="space-y-4 max-h-96 overflow-y-auto">
-          {availableBlocks.map((block) => (
+          {blocks.map((block) => (
             <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3">
                 <BlockIcon block={block} />

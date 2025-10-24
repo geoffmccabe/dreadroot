@@ -234,6 +234,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
     cost: 10,
     key: '',
     tier: 0,
+    rarity: 'common' as Block['rarity'],
     texture: null as File | null
   });
   const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
@@ -395,7 +396,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
           description: newBlockData.description,
           cost: newBlockData.cost,
           category: 'building',
-          rarity: 'common',
+          rarity: newBlockData.rarity,
           class: activeClass, // Automatically assign to the active class tab
           tier: newBlockData.tier,
           texture_url: textureUrl,
@@ -420,7 +421,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
       });
 
       setShowNewBlockDialog(false);
-      setNewBlockData({ name: '', description: '', cost: 10, key: '', tier: 0, texture: null });
+      setNewBlockData({ name: '', description: '', cost: 10, key: '', tier: 0, rarity: 'common', texture: null });
       loadBlocks();
     } catch (error: any) {
       console.error('Failed to create block:', error);
@@ -597,9 +598,14 @@ function BlocksList({ userRoles }: BlocksListProps) {
         <Dialog open={showNewBlockDialog} onOpenChange={setShowNewBlockDialog}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Create New Block</DialogTitle>
+              <DialogTitle>Create New Block - {activeClass.toUpperCase()}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  This block will be created in the <span className="font-semibold text-foreground">{activeClass.toUpperCase()}</span> class
+                </p>
+              </div>
               <div>
                 <Label htmlFor="block-name">Block Name</Label>
                 <Input
@@ -643,11 +649,31 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   id="block-tier"
                   value={newBlockData.tier}
                   onChange={(e) => setNewBlockData({ ...newBlockData, tier: parseInt(e.target.value) || 0 })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring z-50"
                 >
                   {Array.from({ length: 31 }, (_, i) => (
                     <option key={i} value={i}>Tier {i}</option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="block-rarity">Rarity</Label>
+                <select
+                  id="block-rarity"
+                  value={newBlockData.rarity || 'common'}
+                  onChange={(e) => setNewBlockData({ ...newBlockData, rarity: e.target.value as Block['rarity'] })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring z-50"
+                >
+                  <option value="common">Common</option>
+                  <option value="uncommon">Uncommon</option>
+                  <option value="rare">Rare</option>
+                  <option value="epic">Epic</option>
+                  <option value="legendary">Legendary</option>
+                  <option value="divine">Divine</option>
+                  <option value="mystic">Mystic</option>
+                  <option value="rainbow">Rainbow</option>
+                  <option value="apocalyptic">Apocalyptic</option>
+                  <option value="infinite">Infinite</option>
                 </select>
               </div>
               <div>
