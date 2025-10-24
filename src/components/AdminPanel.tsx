@@ -206,6 +206,7 @@ interface Block {
   cost: number;
   category: string;
   rarity: string;
+  class: 'basic' | 'magic' | 'mystery' | 'iconic';
   texture_url: string | null;
   glow_factor?: number | null;
   properties: {
@@ -223,6 +224,7 @@ interface BlocksListProps {
 function BlocksList({ userRoles }: BlocksListProps) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeClass, setActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [showNewBlockDialog, setShowNewBlockDialog] = useState(false);
   const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [newBlockData, setNewBlockData] = useState({
@@ -236,6 +238,9 @@ function BlocksList({ userRoles }: BlocksListProps) {
   const { toast } = useToast();
 
   const isSuperAdmin = userRoles.includes('superadmin');
+  
+  // Filter blocks by active class
+  const filteredBlocks = blocks.filter(block => block.class === activeClass);
 
   useEffect(() => {
     loadBlocks();
@@ -251,9 +256,10 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
       if (error) throw error;
 
-      // Cast properties from Json to the correct type
+      // Cast properties and class from database types to TypeScript types
       const typedBlocks = (data || []).map(block => ({
         ...block,
+        class: block.class as Block['class'],
         properties: block.properties as Block['properties']
       }));
 
@@ -387,6 +393,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
           cost: newBlockData.cost,
           category: 'building',
           rarity: 'common',
+          class: activeClass, // Automatically assign to the active class tab
           texture_url: textureUrl,
           properties: {
             size: [1, 1, 1],
@@ -436,6 +443,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
           cost: editingBlock.cost,
           category: editingBlock.category,
           rarity: editingBlock.rarity,
+          class: editingBlock.class,
           properties: editingBlock.properties,
           glow_factor: editingBlock.glow_factor
         })
@@ -485,9 +493,19 @@ function BlocksList({ userRoles }: BlocksListProps) {
         )}
       </div>
 
+      {/* Class Tabs */}
+      <Tabs value={activeClass} onValueChange={(value) => setActiveClass(value as typeof activeClass)} className="mb-4">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="basic">BASIC</TabsTrigger>
+          <TabsTrigger value="magic">MAGIC</TabsTrigger>
+          <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
+          <TabsTrigger value="iconic">ICONIC</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       <ScrollArea className="h-[500px] w-full pr-4">
         <div className="space-y-2">
-          {blocks.map((block) => (
+          {filteredBlocks.map((block) => (
             <Card key={block.id} className="p-3">
               <div className="flex items-start gap-3">
                 {/* Texture Preview */}
@@ -646,6 +664,21 @@ function BlocksList({ userRoles }: BlocksListProps) {
               <DialogTitle>Edit Block: {editingBlock.name}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
+              {/* Class */}
+              <div>
+                <Label htmlFor="edit-block-class">Block Class</Label>
+                <select
+                  id="edit-block-class"
+                  value={editingBlock.class}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, class: e.target.value as Block['class'] })}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="basic">BASIC</option>
+                  <option value="magic">MAGIC</option>
+                  <option value="mystery">MYSTERY</option>
+                  <option value="iconic">ICONIC</option>
+                </select>
+              </div>
               {/* Texture Upload */}
               <div>
                 <Label>Current Texture</Label>

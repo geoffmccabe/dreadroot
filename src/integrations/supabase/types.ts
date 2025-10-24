@@ -59,6 +59,7 @@ export type Database = {
       blocks: {
         Row: {
           category: string
+          class: string
           cost: number
           created_at: string
           description: string | null
@@ -73,6 +74,7 @@ export type Database = {
         }
         Insert: {
           category?: string
+          class?: string
           cost?: number
           created_at?: string
           description?: string | null
@@ -87,6 +89,7 @@ export type Database = {
         }
         Update: {
           category?: string
+          class?: string
           cost?: number
           created_at?: string
           description?: string | null
@@ -294,10 +297,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      remove_sky_blocks: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
+      remove_sky_blocks: { Args: never; Returns: number }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "superadmin"
