@@ -65,15 +65,15 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
   const { profile, inventory, buyBlock, isLoading: userLoading } = useUserData();
   const { blocks, isLoading: blocksLoading } = useBlocksData();
 
-  // Sort blocks: Mystery blocks alphanumerically, others by default order
+  // Sort blocks: Mystery blocks by tier number, others by default order
   const sortedBlocks = React.useMemo(() => {
     return [...blocks].sort((a, b) => {
       const isMysteryA = a.class === 'mystery';
       const isMysteryB = b.class === 'mystery';
       
-      // If both are mystery blocks, sort alphanumerically by name
+      // If both are mystery blocks, sort by tier number
       if (isMysteryA && isMysteryB) {
-        return a.name.localeCompare(b.name, undefined, { numeric: true });
+        return a.tier - b.tier;
       }
       
       // Keep original order for non-mystery blocks
