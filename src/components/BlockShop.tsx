@@ -67,18 +67,9 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
 
   // Sort blocks: Mystery blocks by tier number, others by default order
   const sortedBlocks = React.useMemo(() => {
-    return [...blocks].sort((a, b) => {
-      const isMysteryA = a.class === 'mystery';
-      const isMysteryB = b.class === 'mystery';
-      
-      // If both are mystery blocks, sort by tier number
-      if (isMysteryA && isMysteryB) {
-        return a.tier - b.tier;
-      }
-      
-      // Keep original order for non-mystery blocks
-      return 0;
-    });
+    const mysteryBlocks = blocks.filter(b => b.class === 'mystery').sort((a, b) => a.tier - b.tier);
+    const otherBlocks = blocks.filter(b => b.class !== 'mystery');
+    return [...otherBlocks, ...mysteryBlocks];
   }, [blocks]);
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
