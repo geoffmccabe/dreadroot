@@ -67,7 +67,9 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
 
   // Sort all blocks by tier
   const sortedBlocks = React.useMemo(() => {
-    return [...blocks].sort((a, b) => a.tier - b.tier);
+    const sorted = [...blocks].sort((a, b) => a.tier - b.tier);
+    console.log('SORTED BLOCKS:', sorted.map(b => ({ name: b.name, tier: b.tier, class: b.class })));
+    return sorted;
   }, [blocks]);
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
