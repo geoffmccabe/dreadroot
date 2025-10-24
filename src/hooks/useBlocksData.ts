@@ -38,8 +38,9 @@ export const useBlocksData = () => {
       const { data, error } = await supabase
         .from('blocks')
         .select('*')
-        .order('cost', { ascending: true })
-        .order('name', { ascending: true });
+        .order('class', { ascending: true })
+        .order('tier', { ascending: true })
+        .order('cost', { ascending: true });
 
           if (error) throw error;
 
@@ -106,8 +107,9 @@ export const useBlocksData = () => {
       const { data, error } = await supabase
         .from('blocks')
         .select('*')
-        .order('cost', { ascending: true })
-        .order('name', { ascending: true });
+        .order('class', { ascending: true })
+        .order('tier', { ascending: true })
+        .order('cost', { ascending: true });
 
       if (error) throw error;
 
