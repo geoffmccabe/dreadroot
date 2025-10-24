@@ -23,7 +23,7 @@ interface TextureBlob {
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 4; // Increment version to add texture_blobs store
+  private dbVersion = 5; // Increment to force texture_blobs store creation
   private storeName = 'blocks';
   private sessionStoreName = 'user_session';
   private textureStoreName = 'texture_blobs';
