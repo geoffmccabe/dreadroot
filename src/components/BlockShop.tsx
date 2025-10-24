@@ -65,6 +65,22 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
   const { profile, inventory, buyBlock, isLoading: userLoading } = useUserData();
   const { blocks, isLoading: blocksLoading } = useBlocksData();
 
+  // Sort blocks: Mystery blocks alphanumerically, others by default order
+  const sortedBlocks = React.useMemo(() => {
+    return [...blocks].sort((a, b) => {
+      const isMysteryA = a.class === 'mystery';
+      const isMysteryB = b.class === 'mystery';
+      
+      // If both are mystery blocks, sort alphanumerically by name
+      if (isMysteryA && isMysteryB) {
+        return a.name.localeCompare(b.name, undefined, { numeric: true });
+      }
+      
+      // Keep original order for non-mystery blocks
+      return 0;
+    });
+  }, [blocks]);
+
   const handleBuyBlock = async (itemKey: string, cost: number) => {
     const success = await buyBlock(itemKey, cost);
     if (success) {
@@ -118,7 +134,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
         </DialogHeader>
         
         <div className="space-y-4 max-h-96 overflow-y-auto">
-          {blocks.map((block) => (
+          {sortedBlocks.map((block) => (
             <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-3">
                 <BlockIcon block={block} />
