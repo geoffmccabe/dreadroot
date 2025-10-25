@@ -234,7 +234,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         args={[geometry, material, blocks.length]}
         castShadow
         receiveShadow
-        frustumCulled={true}
+        frustumCulled={false}
       />
       {shouldGlow && blocks.map((block) => (
         <pointLight
