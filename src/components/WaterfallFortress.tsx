@@ -89,13 +89,14 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       loadedTexture.offset.set(0.0025, 0.0025);
       textureRef.current = loadedTexture;
       
-      // Create material - stars only visible at night
+      // Create material with proper initial state
       const skyMat = new THREE.MeshBasicMaterial({
-        map: lightingPercentage <= 50 ? loadedTexture : null,
         side: THREE.BackSide,
         color: lightingPercentage > 50 ? 0x87ceeb : 0x000000,
+        map: lightingPercentage <= 50 ? loadedTexture : null,
         transparent: lightingPercentage <= 50,
-        opacity: lightingPercentage <= 50 ? 1 : 1
+        opacity: 1,
+        fog: false // Sky shouldn't be affected by fog
       });
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
@@ -1497,8 +1498,8 @@ function Scene({
       {/* Dynamic Sky with day/night cycle and stars */}
       <DynamicSky weatherSettings={weatherSettings} />
 
-      {/* Fog */}
-      <fog attach="fog" args={['#dff1ff', 0, 600]} />
+      {/* Fog - starts far away to not wash out colors */}
+      <fog attach="fog" args={['#dff1ff', 400, 600]} />
 
       {/* Scene objects */}
       <Fortress />
