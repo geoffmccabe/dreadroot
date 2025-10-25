@@ -116,8 +116,8 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
     if (skyMeshRef.current && skyMeshRef.current.material) {
       const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
       
-      // Calculate star opacity: 0% lighting = 100% stars (night), 100% lighting = 0% stars (day)
-      const starOpacity = 1 - (lightingPercentage / 100);
+      // Calculate star opacity: 0% lighting = 0% stars (day), 100% lighting = 100% stars (night)
+      const starOpacity = lightingPercentage / 100;
       const targetColor = getSkyColor(lightingPercentage);
       
       // Always set the base sky color (blue during day, black during night)
@@ -1166,7 +1166,8 @@ function DynamicLighting({ weatherSettings }: {
   const { lightingPercentage } = useWeatherCycle(weatherSettings);
   
   useFrame(() => {
-    const baseIntensity = lightingPercentage / 100;
+    // Ensure minimum 5% ambient light so nothing turns pure black
+    const baseIntensity = Math.max(0.05, lightingPercentage / 100);
     
     if (hemisphereRef.current) {
       hemisphereRef.current.intensity = 1.1 * baseIntensity;
