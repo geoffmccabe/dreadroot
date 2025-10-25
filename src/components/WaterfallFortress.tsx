@@ -64,12 +64,12 @@ function interpolateColor(color1: number, color2: number, factor: number): numbe
   return (r << 16) | (g << 8) | b;
 }
 
-// Calculate sky color based on lighting percentage (0% = bright blue day, 100% = black night)
+// Calculate sky color based on lighting percentage (100% = bright blue day, 0% = black night)
 function getSkyColor(lightingPercentage: number): number {
-  // Linear interpolation from bright blue (0x87ceeb) at 0% to black (0x000000) at 100%
+  // Linear interpolation from black (0x000000) at 0% to bright blue (0x87ceeb) at 100%
   const dayColor = 0x87ceeb;
   const nightColor = 0x000000;
-  return interpolateColor(dayColor, nightColor, lightingPercentage / 100);
+  return interpolateColor(nightColor, dayColor, lightingPercentage / 100);
 }
 
 function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
@@ -91,7 +91,7 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       
       // Create material - stars only visible at night
       const skyMat = new THREE.MeshBasicMaterial({
-        map: lightingPercentage < 50 ? loadedTexture : null,
+        map: lightingPercentage <= 50 ? loadedTexture : null,
         side: THREE.BackSide,
         color: getSkyColor(lightingPercentage)
       });
@@ -116,8 +116,8 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
     if (skyMeshRef.current && skyMeshRef.current.material) {
       const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
       
-      // Calculate star opacity: 0% lighting = 0% stars (day), 100% lighting = 100% stars (night)
-      const starOpacity = lightingPercentage / 100;
+      // Calculate star opacity: 0% lighting = 100% stars (night), 100% lighting = 0% stars (day)
+      const starOpacity = 1 - (lightingPercentage / 100);
       const targetColor = getSkyColor(lightingPercentage);
       
       // Always set the base sky color (blue during day, black during night)
