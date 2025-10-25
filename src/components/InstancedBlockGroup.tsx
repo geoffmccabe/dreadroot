@@ -172,20 +172,32 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, []);
   
-  // Set up instance matrices
+  // Set up instance matrices and compute bounding box
   useEffect(() => {
     if (!meshRef.current) return;
     
     const matrix = new THREE.Matrix4();
+    const boundingBox = new THREE.Box3();
+    
     blocks.forEach((block, i) => {
-      matrix.setPosition(
-        block.position_x + 0.5,
-        block.position_y + 0.5,
-        block.position_z + 0.5
-      );
+      const x = block.position_x + 0.5;
+      const y = block.position_y + 0.5;
+      const z = block.position_z + 0.5;
+      
+      matrix.setPosition(x, y, z);
       meshRef.current!.setMatrixAt(i, matrix);
+      
+      // Expand bounding box to include this block (1x1x1 cube)
+      boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
+      boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
+    
     meshRef.current.instanceMatrix.needsUpdate = true;
+    
+    // Set the bounding box and sphere for proper frustum culling
+    meshRef.current.geometry.boundingBox = boundingBox;
+    meshRef.current.geometry.boundingSphere = new THREE.Sphere();
+    boundingBox.getBoundingSphere(meshRef.current.geometry.boundingSphere);
   }, [blocks]);
   
   // Create collision boxes for all instances
