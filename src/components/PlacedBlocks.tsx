@@ -1,7 +1,7 @@
 import React, { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { PlacedBlock } from '@/types/blocks';
+import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 
@@ -61,19 +61,20 @@ const PlacedBlockComponent = ({
   position, 
   blockType,
   onCollision,
-  geometry
+  geometry,
+  blocksMap
 }: { 
   position: [number, number, number];
   blockType: string;
   onCollision?: (box: THREE.Box3, blockId: string) => void;
   geometry: THREE.BoxGeometry;
+  blocksMap: Map<string, BlockType>;
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
-  const { getBlockByKey } = useBlocksData();
   
-  // Get block definition from database
-  const blockDef = getBlockByKey(blockType);
+  // Get block definition from map passed as prop
+  const blockDef = blocksMap.get(blockType);
   
   // Load texture with animated GIF support - using shared texture cache
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
@@ -261,7 +262,7 @@ export const PlacedBlocks: React.FC<{
   const geometry = SharedBlockGeometry();
   
   // Ensure block definitions are loaded before rendering any blocks
-  const { isLoading: blockDefsLoading } = useBlocksData();
+  const { isLoading: blockDefsLoading, blocksMap } = useBlocksData();
   
   // Single useFrame to update ALL animated textures (called once per frame, not once per block)
   useFrame((state, delta) => {
@@ -314,6 +315,7 @@ export const PlacedBlocks: React.FC<{
           blockType={block.block_type}
           onCollision={handleBlockCollision}
           geometry={geometry}
+          blocksMap={blocksMap}
         />
       ))}
     </>
