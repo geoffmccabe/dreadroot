@@ -89,21 +89,18 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       loadedTexture.offset.set(0.0025, 0.0025);
       textureRef.current = loadedTexture;
       
-      // Create material with proper initial state
+      // Create material - additive blending for stars
       const skyMat = new THREE.MeshBasicMaterial({
         side: THREE.BackSide,
-        color: 0xffffff, // White so texture shows through
-        map: loadedTexture,
-        transparent: true,
-        opacity: 1,
-        fog: false // Sky shouldn't be affected by fog
+        color: 0x000000, // Start with black
+        fog: false
       });
-      
-      console.log('✓ Sky texture loaded successfully', loadedTexture.image.width, 'x', loadedTexture.image.height);
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
       skyMeshRef.current = skyMesh;
       scene.add(skyMesh);
+      
+      console.log('✓ Sky texture loaded:', loadedTexture.image.width, 'x', loadedTexture.image.height);
     });
     
     return () => {
@@ -116,39 +113,33 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
     };
   }, [scene]);
   
-  // Update sky appearance each frame for smooth day/night transitions
+  // Smooth continuous color transition every frame
   useFrame(() => {
     if (skyMeshRef.current && skyMeshRef.current.material) {
       const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
       
-      // Smooth transition: 0% = night (stars), 100% = day (bright blue)
-      const dayFactor = lightingPercentage / 100;
+      // Smooth interpolation: 0% = pure black, 100% = bright sky blue
+      const t = lightingPercentage / 100;
       
-      // Show stars at night (below 40% lighting)
-      if (lightingPercentage < 40 && textureRef.current) {
-        // At night: use white base color so stars show, with sky color overlay via opacity
-        material.color.setHex(0xffffff);
-        material.map = textureRef.current;
-        material.transparent = true;
-        // Fade stars: full at 0%, invisible at 40%
-        material.opacity = 1 - (lightingPercentage / 40);
-      } else {
-        // During day: interpolate from dark blue to bright sky blue
-        const nightColor = { r: 25, g: 25, b: 112 }; // Dark blue instead of black
-        const dayColor = { r: 135, g: 206, b: 235 }; // Bright sky blue
-        
-        // Normalize to 0-1 range for smooth transition from night to day
-        const transitionFactor = (lightingPercentage - 40) / 60; // 40% to 100%
-        const clampedFactor = Math.max(0, Math.min(1, transitionFactor));
-        
-        const r = Math.round(nightColor.r + (dayColor.r - nightColor.r) * clampedFactor);
-        const g = Math.round(nightColor.g + (dayColor.g - nightColor.g) * clampedFactor);
-        const b = Math.round(nightColor.b + (dayColor.b - nightColor.b) * clampedFactor);
-        
-        material.color.setHex((r << 16) | (g << 8) | b);
+      // RGB of bright sky blue: 135, 206, 235
+      const r = Math.round(135 * t);
+      const g = Math.round(206 * t);
+      const b = Math.round(235 * t);
+      
+      material.color.setRGB(r / 255, g / 255, b / 255);
+      
+      // Stars: visible at night (0-20%), fade out completely
+      if (lightingPercentage <= 20 && textureRef.current) {
+        if (!material.map) {
+          material.map = textureRef.current;
+          material.transparent = true;
+        }
+        // Fade from 1.0 at 0% to 0.0 at 20%
+        material.opacity = 1.0 - (lightingPercentage / 20);
+      } else if (material.map) {
         material.map = null;
         material.transparent = false;
-        material.opacity = 1;
+        material.opacity = 1.0;
       }
       
       material.needsUpdate = true;
@@ -1702,7 +1693,7 @@ export default function WaterfallFortress() {
     }
     return {
       lightingRange: [0, 100] as [number, number],
-      cycleDuration: 0.5 // minutes - faster for testing
+      cycleDuration: 2 // minutes - smooth visible cycle
     };
   });
   
