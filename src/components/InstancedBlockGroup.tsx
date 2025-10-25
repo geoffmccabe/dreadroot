@@ -76,16 +76,19 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     textureCache.set(textureUrl, cached);
     hasIncrementedRef.current = true;
     
-    if (isAnimated && updateTexture) {
-      console.log('🎬 Registering animated texture:', textureUrl);
-      activeAnimatedTextures.set(textureUrl, updateTexture);
-    }
-    
     return cached;
   }, [loadedTexture, textureUrl, isAnimated, updateTexture]);
   
   const texture = cachedTextureData?.texture || null;
   const cachedIsAnimated = cachedTextureData?.isAnimated || false;
+  
+  // Register animated texture update function
+  useEffect(() => {
+    if (cachedTextureData?.isAnimated && cachedTextureData.updateFn && textureUrl) {
+      console.log('🎬 Registering animated texture:', textureUrl);
+      activeAnimatedTextures.set(textureUrl, cachedTextureData.updateFn);
+    }
+  }, [cachedTextureData, textureUrl]);
   
   // Cleanup: Decrement ref count when component unmounts
   useEffect(() => {
