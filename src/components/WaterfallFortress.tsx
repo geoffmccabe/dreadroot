@@ -92,11 +92,17 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       // Create material with proper initial state
       const skyMat = new THREE.MeshBasicMaterial({
         side: THREE.BackSide,
-        color: lightingPercentage > 50 ? 0x87ceeb : 0x000000,
-        map: lightingPercentage <= 50 ? loadedTexture : null,
-        transparent: lightingPercentage <= 50,
+        color: 0x87ceeb,
+        map: lightingPercentage < 30 ? loadedTexture : null,
+        transparent: lightingPercentage < 30,
         opacity: 1,
         fog: false // Sky shouldn't be affected by fog
+      });
+      
+      console.log('Sky texture loaded:', {
+        textureWidth: loadedTexture.image.width,
+        textureHeight: loadedTexture.image.height,
+        initialLighting: lightingPercentage
       });
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
@@ -119,21 +125,31 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
     if (skyMeshRef.current && skyMeshRef.current.material) {
       const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
       
-      // Calculate star opacity: 0% lighting = 100% stars (night), 100% lighting = 0% stars (day)
-      const starOpacity = 1 - (lightingPercentage / 100);
+      // Smooth transition: 0% = night (black + stars), 100% = day (bright blue, no stars)
+      const dayFactor = lightingPercentage / 100; // 0 = night, 1 = day
       
-      if (lightingPercentage > 50) {
-        // DAY: Pure bright blue sky, no stars
-        material.color.setHex(0x87ceeb); // Bright sky blue
+      // Interpolate sky color from black to bright sky blue
+      const nightColor = { r: 0, g: 0, b: 0 };
+      const dayColor = { r: 135, g: 206, b: 235 }; // RGB of 0x87ceeb
+      
+      const r = Math.round(nightColor.r + (dayColor.r - nightColor.r) * dayFactor);
+      const g = Math.round(nightColor.g + (dayColor.g - nightColor.g) * dayFactor);
+      const b = Math.round(nightColor.b + (dayColor.b - nightColor.b) * dayFactor);
+      const skyColor = (r << 16) | (g << 8) | b;
+      
+      material.color.setHex(skyColor);
+      
+      // Show stars when lighting is low (below 30%), fade them out smoothly
+      const starVisibilityThreshold = 30;
+      if (lightingPercentage < starVisibilityThreshold && textureRef.current) {
+        material.map = textureRef.current;
+        material.transparent = true;
+        // Full opacity at 0%, fade to 0 at threshold
+        material.opacity = 1 - (lightingPercentage / starVisibilityThreshold);
+      } else {
         material.map = null;
         material.transparent = false;
         material.opacity = 1;
-      } else {
-        // NIGHT: Black sky with stars
-        material.color.setHex(0x000000); // Pure black
-        material.map = textureRef.current;
-        material.transparent = true;
-        material.opacity = Math.max(0.3, starOpacity); // Keep stars visible
       }
       
       material.needsUpdate = true;
