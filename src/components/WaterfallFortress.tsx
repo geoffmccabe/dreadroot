@@ -74,6 +74,7 @@ function getSkyColor(lightingPercentage: number): number {
 
 function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
   const { scene } = useThree();
+  const starMeshRef = useRef<THREE.Mesh | null>(null);
   const skyMeshRef = useRef<THREE.Mesh | null>(null);
   const textureRef = useRef<THREE.Texture | null>(null);
   
@@ -81,68 +82,78 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
     const textureLoader = new THREE.TextureLoader();
     const skyGeo = new THREE.SphereGeometry(320, 64, 32);
     
+    // Layer 1: Solid color sky sphere
+    const skyColorMat = new THREE.MeshBasicMaterial({
+      side: THREE.BackSide,
+      color: 0x000000,
+      fog: false,
+      transparent: true,
+      opacity: 0
+    });
+    const skyColorMesh = new THREE.Mesh(skyGeo.clone(), skyColorMat);
+    skyMeshRef.current = skyColorMesh;
+    scene.add(skyColorMesh);
+    
+    // Layer 2: Star texture sphere (slightly smaller to avoid z-fighting)
     textureLoader.load('/space_night_sky.webp', (loadedTexture) => {
-      // Crop edges to avoid white seam
       loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
       loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
-      loadedTexture.repeat.set(0.995, 0.995);
-      loadedTexture.offset.set(0.0025, 0.0025);
       textureRef.current = loadedTexture;
       
-      // Create material - additive blending for stars
-      const skyMat = new THREE.MeshBasicMaterial({
+      const starGeo = new THREE.SphereGeometry(319, 64, 32);
+      const starMat = new THREE.MeshBasicMaterial({
         side: THREE.BackSide,
-        color: 0x000000, // Start with black
-        fog: false
+        map: loadedTexture,
+        transparent: true,
+        opacity: 1,
+        fog: false,
+        blending: THREE.AdditiveBlending // Stars add light on top
       });
       
-      const skyMesh = new THREE.Mesh(skyGeo, skyMat);
-      skyMeshRef.current = skyMesh;
-      scene.add(skyMesh);
+      const starMesh = new THREE.Mesh(starGeo, starMat);
+      starMeshRef.current = starMesh;
+      scene.add(starMesh);
       
-      console.log('✓ Sky texture loaded:', loadedTexture.image.width, 'x', loadedTexture.image.height);
+      console.log('✓ Stars loaded:', loadedTexture.image.width, 'x', loadedTexture.image.height);
     });
     
     return () => {
       if (skyMeshRef.current) {
         scene.remove(skyMeshRef.current);
         skyMeshRef.current.geometry.dispose();
-        (skyMeshRef.current.material as THREE.MeshBasicMaterial).dispose();
+        (skyMeshRef.current.material as THREE.Material).dispose();
+      }
+      if (starMeshRef.current) {
+        scene.remove(starMeshRef.current);
+        starMeshRef.current.geometry.dispose();
+        (starMeshRef.current.material as THREE.Material).dispose();
       }
       textureRef.current?.dispose();
     };
   }, [scene]);
   
-  // Smooth continuous color transition every frame
+  // Smooth transitions every frame
   useFrame(() => {
-    if (skyMeshRef.current && skyMeshRef.current.material) {
-      const material = skyMeshRef.current.material as THREE.MeshBasicMaterial;
+    // Update sky color layer
+    if (skyMeshRef.current) {
+      const mat = skyMeshRef.current.material as THREE.MeshBasicMaterial;
       
-      // Smooth interpolation: 0% = pure black, 100% = bright sky blue
+      // Smooth interpolation from black to bright sky blue
       const t = lightingPercentage / 100;
+      mat.color.setRGB(135/255 * t, 206/255 * t, 235/255 * t);
+      mat.opacity = t; // Fade in sky color as day progresses
+    }
+    
+    // Update star layer
+    if (starMeshRef.current) {
+      const mat = starMeshRef.current.material as THREE.MeshBasicMaterial;
       
-      // RGB of bright sky blue: 135, 206, 235
-      const r = Math.round(135 * t);
-      const g = Math.round(206 * t);
-      const b = Math.round(235 * t);
-      
-      material.color.setRGB(r / 255, g / 255, b / 255);
-      
-      // Stars: visible at night (0-20%), fade out completely
-      if (lightingPercentage <= 20 && textureRef.current) {
-        if (!material.map) {
-          material.map = textureRef.current;
-          material.transparent = true;
-        }
-        // Fade from 1.0 at 0% to 0.0 at 20%
-        material.opacity = 1.0 - (lightingPercentage / 20);
-      } else if (material.map) {
-        material.map = null;
-        material.transparent = false;
-        material.opacity = 1.0;
+      // Stars visible at night (0-30%), fade out smoothly
+      if (lightingPercentage <= 30) {
+        mat.opacity = 1.0 - (lightingPercentage / 30);
+      } else {
+        mat.opacity = 0;
       }
-      
-      material.needsUpdate = true;
     }
   });
   
