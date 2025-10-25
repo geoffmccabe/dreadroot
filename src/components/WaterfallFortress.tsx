@@ -98,6 +98,16 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
     textureLoader.load('/space_night_sky.webp', (loadedTexture) => {
       loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
       loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
+      
+      // Remove 3 pixels from each edge to eliminate white seam artifacts
+      const img = loadedTexture.image;
+      const cropPixels = 3;
+      const cropX = (cropPixels / img.width) * 2; // *2 because we crop both sides
+      const cropY = (cropPixels / img.height) * 2;
+      
+      loadedTexture.repeat.set(1 - cropX, 1 - cropY);
+      loadedTexture.offset.set(cropX / 2, cropY / 2);
+      
       textureRef.current = loadedTexture;
       
       const starGeo = new THREE.SphereGeometry(319, 64, 32);
