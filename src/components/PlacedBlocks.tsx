@@ -71,6 +71,7 @@ const PlacedBlockComponent = ({
   blocksMap: Map<string, BlockType>;
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.Material | null>(null);
   const blockId = useMemo(() => `${position[0]}-${position[1]}-${position[2]}`, [position]);
   
   // Get block definition from map passed as prop
@@ -147,18 +148,15 @@ const PlacedBlockComponent = ({
     };
   }, [textureUrl]);
   
-  // Create material based on block properties with caching
+  // Create material based on block properties with proper disposal
   const material = useMemo(() => {
+    // Dispose old material if it exists
+    if (materialRef.current) {
+      materialRef.current.dispose();
+      materialRef.current = null;
+    }
+
     if (!texture || !blockDef) return null;
-    
-    // Don't use cached materials - textures load async and materials need to update
-    // Generate cache key for potential future optimization
-    const cacheKey = getMaterialCacheKey(
-      blockType,
-      textureUrl,
-      cachedIsAnimated,
-      blockDef.properties
-    );
     
     const materialProps: any = {
       map: texture,
@@ -212,9 +210,20 @@ const PlacedBlockComponent = ({
       newMaterial = new THREE.MeshLambertMaterial(materialProps);
     }
     
-    // Don't cache materials since textures load async
+    // Store reference for cleanup
+    materialRef.current = newMaterial;
     return newMaterial;
   }, [texture, blockDef, blockType, cachedIsAnimated, textureUrl]);
+
+  // Cleanup: dispose material on unmount
+  React.useEffect(() => {
+    return () => {
+      if (materialRef.current) {
+        materialRef.current.dispose();
+        materialRef.current = null;
+      }
+    };
+  }, []);
 
   // Use ref to avoid stale closure issues with onCollision callback
   const onCollisionRef = useRef(onCollision);
