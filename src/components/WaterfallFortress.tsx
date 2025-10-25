@@ -43,7 +43,7 @@ function useWeatherCycle(weatherSettings: {
     const [minLighting, maxLighting] = weatherSettings.lightingRange;
     const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
     
-    const isNight = lightingPercentage > 50;
+    const isNight = lightingPercentage < 50;
     
     setCycleState({ lightingPercentage, cyclePosition, isNight });
   });
@@ -120,18 +120,6 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       
       // Calculate star opacity: 0% lighting = 100% stars (night), 100% lighting = 0% stars (day)
       const starOpacity = 1 - (lightingPercentage / 100);
-      
-      // Debug logging every 60 frames (roughly once per second at 60fps)
-      if (Math.random() < 0.016) {
-        console.log('Sky Debug:', {
-          lightingPercentage,
-          starOpacity,
-          hasTexture: !!textureRef.current,
-          materialColor: material.color.getHex(),
-          materialMap: !!material.map,
-          materialOpacity: material.opacity
-        });
-      }
       
       if (lightingPercentage > 50) {
         // DAY: Pure bright blue sky, no stars
@@ -1181,17 +1169,6 @@ function DynamicLighting({ weatherSettings }: {
     // Ensure minimum 5% ambient light so nothing turns pure black
     const baseIntensity = Math.max(0.05, lightingPercentage / 100);
     
-    // Debug lighting every 60 frames
-    if (Math.random() < 0.016) {
-      console.log('Lighting Debug:', {
-        lightingPercentage,
-        baseIntensity,
-        hemisphereIntensity: hemisphereRef.current?.intensity,
-        directionalIntensity: directionalRef.current?.intensity,
-        ambientIntensity: ambientRef.current?.intensity
-      });
-    }
-    
     if (hemisphereRef.current) {
       hemisphereRef.current.intensity = 1.1 * baseIntensity;
     }
@@ -1708,7 +1685,7 @@ export default function WaterfallFortress() {
       return parsed;
     }
     return {
-      lightingRange: [20, 70] as [number, number],
+      lightingRange: [0, 100] as [number, number],
       cycleDuration: 5 // minutes
     };
   });
