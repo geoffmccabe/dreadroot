@@ -1,0 +1,239 @@
+import React, { useRef, useMemo, useEffect } from 'react';
+import * as THREE from 'three';
+import { PlacedBlock, BlockType } from '@/types/blocks';
+import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
+
+// Global texture cache - shared across all instanced groups
+const textureCache = new Map<string, { 
+  texture: THREE.Texture; 
+  isAnimated: boolean; 
+  updateFn?: (delta: number) => void;
+  refCount: number;
+}>();
+
+// Track which textures need frame updates
+export const activeAnimatedTextures = new Map<string, (delta: number) => void>();
+
+// Function to clear texture cache
+export const clearTextureCache = () => {
+  textureCache.forEach(({ texture }) => texture.dispose());
+  textureCache.clear();
+  activeAnimatedTextures.clear();
+};
+
+// Helper to get base color from block definition
+const getBaseColor = (blockDef: BlockType): THREE.Color => {
+  return blockDef?.properties?.color 
+    ? new THREE.Color(blockDef.properties.color) 
+    : new THREE.Color(0xcccccc);
+};
+
+interface InstancedBlockGroupProps {
+  blocks: PlacedBlock[];
+  blockDef: BlockType;
+  geometry: THREE.BoxGeometry;
+  onCollision?: (box: THREE.Box3, blockId: string) => void;
+}
+
+export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
+  blocks,
+  blockDef,
+  geometry,
+  onCollision
+}) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const materialRef = useRef<THREE.Material | null>(null);
+  const hasIncrementedRef = useRef(false);
+  
+  // Load texture with animated GIF support
+  const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  
+  // Get or cache the texture
+  const cachedTextureData = useMemo(() => {
+    if (!loadedTexture) return null;
+    
+    if (textureCache.has(textureUrl)) {
+      const cached = textureCache.get(textureUrl)!;
+      if (!hasIncrementedRef.current) {
+        cached.refCount++;
+        hasIncrementedRef.current = true;
+      }
+      return cached;
+    }
+    
+    loadedTexture.wrapS = THREE.RepeatWrapping;
+    loadedTexture.wrapT = THREE.RepeatWrapping;
+    loadedTexture.repeat.set(1, 1);
+    loadedTexture.offset.set(0, 0);
+    
+    const cached = { 
+      texture: loadedTexture, 
+      isAnimated, 
+      updateFn: updateTexture,
+      refCount: 1 
+    };
+    textureCache.set(textureUrl, cached);
+    hasIncrementedRef.current = true;
+    
+    if (isAnimated && updateTexture) {
+      console.log('🎬 Registering animated texture:', textureUrl);
+      activeAnimatedTextures.set(textureUrl, updateTexture);
+    }
+    
+    return cached;
+  }, [loadedTexture, textureUrl, isAnimated, updateTexture]);
+  
+  const texture = cachedTextureData?.texture || null;
+  const cachedIsAnimated = cachedTextureData?.isAnimated || false;
+  
+  // Cleanup: Decrement ref count when component unmounts
+  useEffect(() => {
+    return () => {
+      if (!textureUrl) return;
+      
+      const cached = textureCache.get(textureUrl);
+      if (cached) {
+        cached.refCount--;
+        
+        if (cached.refCount <= 0) {
+          cached.texture.dispose();
+          textureCache.delete(textureUrl);
+          activeAnimatedTextures.delete(textureUrl);
+        }
+      }
+    };
+  }, [textureUrl]);
+  
+  // Create material based on block properties
+  const material = useMemo(() => {
+    if (materialRef.current) {
+      materialRef.current.dispose();
+      materialRef.current = null;
+    }
+
+    if (!texture || !blockDef) return null;
+    
+    const materialProps: any = {
+      map: texture,
+    };
+    
+    if (blockDef.key !== 'grass_block') {
+      const baseColor = getBaseColor(blockDef);
+      
+      if (cachedIsAnimated) {
+        const lightTint = new THREE.Color(0xffffff).lerp(baseColor, 0.3);
+        materialProps.color = lightTint;
+      } else {
+        materialProps.color = baseColor;
+        
+        if (blockDef.properties?.emissive) {
+          materialProps.emissive = baseColor;
+          const glowFactor = blockDef.properties.glowFactor || 3.0;
+          materialProps.emissiveIntensity = glowFactor * 1.0;
+        }
+      }
+    }
+    
+    let newMaterial: THREE.Material;
+    
+    if (blockDef.properties?.transparent) {
+      const baseColor = getBaseColor(blockDef);
+      newMaterial = new THREE.MeshPhysicalMaterial({
+        map: texture,
+        color: baseColor,
+        transparent: true,
+        opacity: 0.6,
+        transmission: 0.5,
+        thickness: 0.5,
+        roughness: 0.1,
+        metalness: 0.2,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.1,
+        ior: 1.5,
+        reflectivity: 0.7,
+        envMapIntensity: 1.2,
+      });
+    } else {
+      newMaterial = new THREE.MeshLambertMaterial(materialProps);
+    }
+    
+    materialRef.current = newMaterial;
+    return newMaterial;
+  }, [texture, blockDef, cachedIsAnimated]);
+
+  // Cleanup material on unmount
+  useEffect(() => {
+    return () => {
+      if (materialRef.current) {
+        materialRef.current.dispose();
+        materialRef.current = null;
+      }
+    };
+  }, []);
+  
+  // Set up instance matrices
+  useEffect(() => {
+    if (!meshRef.current) return;
+    
+    const matrix = new THREE.Matrix4();
+    blocks.forEach((block, i) => {
+      matrix.setPosition(
+        block.position_x + 0.5,
+        block.position_y + 0.5,
+        block.position_z + 0.5
+      );
+      meshRef.current!.setMatrixAt(i, matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [blocks]);
+  
+  // Create collision boxes for all instances
+  useEffect(() => {
+    if (!onCollision) return;
+    
+    blocks.forEach(block => {
+      const box = new THREE.Box3(
+        new THREE.Vector3(
+          block.position_x,
+          block.position_y,
+          block.position_z
+        ),
+        new THREE.Vector3(
+          block.position_x + 1,
+          block.position_y + 1,
+          block.position_z + 1
+        )
+      );
+      onCollision(box, block.id);
+    });
+  }, [blocks, onCollision]);
+  
+  // Get glow properties
+  const glowFactor = blockDef?.properties?.glowFactor || 0;
+  const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
+  
+  if (!material) return null;
+
+  return (
+    <>
+      <instancedMesh
+        ref={meshRef}
+        args={[geometry, material, blocks.length]}
+        castShadow
+        receiveShadow
+        frustumCulled={true}
+      />
+      {shouldGlow && blocks.map((block) => (
+        <pointLight
+          key={block.id}
+          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
+          color={blockDef?.properties?.color || '#FFE135'}
+          intensity={glowFactor * 2}
+          distance={glowFactor * 3}
+          decay={2}
+        />
+      ))}
+    </>
+  );
+};
