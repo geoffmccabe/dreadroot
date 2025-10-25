@@ -12,11 +12,6 @@ export const useBlocksData = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Force clear cache on mount
-    cachedBlocks = null;
-    cachedBlocksMap = null;
-    fetchPromise = null;
-    
     const loadBlocks = async () => {
       // If already loaded, use cache
       if (cachedBlocks && cachedBlocksMap) {
