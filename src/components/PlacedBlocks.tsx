@@ -14,31 +14,11 @@ const textureCache = new Map<string, {
   refCount: number; // Track how many blocks are using this texture
 }>();
 
-// Global material cache - shared across all PlacedBlockComponent instances
-const materialCache = new Map<string, THREE.Material>();
-
 // Track which textures need frame updates (only one entry per unique texture URL)
 const activeAnimatedTextures = new Map<string, (delta: number) => void>();
 
-// Generate unique cache key based on material properties
-const getMaterialCacheKey = (
-  blockType: string,
-  textureUrl: string,
-  isAnimated: boolean,
-  properties?: {
-    color?: string;
-    emissive?: boolean;
-    transparent?: boolean;
-    glowFactor?: number;
-  }
-): string => {
-  return `${blockType}-${textureUrl}-${isAnimated}-${properties?.color || 'default'}-${properties?.emissive || false}-${properties?.transparent || false}-${properties?.glowFactor || 0}`;
-};
-
-// Function to clear caches when needed
-export const clearMaterialCache = () => {
-  materialCache.forEach(material => material.dispose());
-  materialCache.clear();
+// Function to clear texture cache when needed (e.g., on scene reset)
+export const clearTextureCache = () => {
   textureCache.forEach(({ texture }) => texture.dispose());
   textureCache.clear();
   activeAnimatedTextures.clear();
