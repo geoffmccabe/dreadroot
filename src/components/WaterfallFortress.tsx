@@ -881,7 +881,7 @@ function Fortress() {
     const loader = new THREE.TextureLoader();
     const texture = loader.load('/grass_texture_seamless.webp');
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(20, 20);
+    texture.repeat.set(40, 40);
     return texture;
   }, []);
 
@@ -939,11 +939,11 @@ function Fortress() {
         <meshStandardMaterial 
           map={(() => {
             const texture = grassTexture.clone();
-            // Calculate repeat based on the same scale as main ground (260x260 with 20x20 repeat = 13 units per repeat)
+            // Calculate repeat based on the same scale as main ground (260x260 with 40x40 repeat = 6.5 units per repeat)
             // For courtyard: (cliffW-4) = 36, (courtyardDepth-2) = 28
-            texture.repeat.set((cliffW-4)/13, (courtyardDepth-2)/13);
+            texture.repeat.set((cliffW-4)/6.5, (courtyardDepth-2)/6.5);
             return texture;
-          })()} 
+          })()}
           metalness={0} 
           roughness={1} 
         />
