@@ -93,7 +93,9 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       const skyMat = new THREE.MeshBasicMaterial({
         map: lightingPercentage <= 50 ? loadedTexture : null,
         side: THREE.BackSide,
-        color: getSkyColor(lightingPercentage)
+        color: lightingPercentage > 50 ? 0x87ceeb : 0x000000,
+        transparent: lightingPercentage <= 50,
+        opacity: lightingPercentage <= 50 ? 1 : 1
       });
       
       const skyMesh = new THREE.Mesh(skyGeo, skyMat);
@@ -118,21 +120,19 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       
       // Calculate star opacity: 0% lighting = 100% stars (night), 100% lighting = 0% stars (day)
       const starOpacity = 1 - (lightingPercentage / 100);
-      const targetColor = getSkyColor(lightingPercentage);
       
-      // Always set the base sky color (blue during day, black during night)
-      material.color.setHex(targetColor);
-      
-      if (starOpacity > 0.05) {
-        // Show stars at night when opacity is above threshold
-        material.map = textureRef.current;
-        material.transparent = true;
-        material.opacity = starOpacity;
-      } else {
-        // Hide stars completely during bright day
+      if (lightingPercentage > 50) {
+        // DAY: Pure bright blue sky, no stars
+        material.color.setHex(0x87ceeb); // Bright sky blue
         material.map = null;
         material.transparent = false;
         material.opacity = 1;
+      } else {
+        // NIGHT: Black sky with stars
+        material.color.setHex(0x000000); // Pure black
+        material.map = textureRef.current;
+        material.transparent = true;
+        material.opacity = Math.max(0.3, starOpacity); // Keep stars visible
       }
       
       material.needsUpdate = true;
