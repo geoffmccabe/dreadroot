@@ -1800,17 +1800,18 @@ export default function WaterfallFortress() {
     }, 600); // Animation duration
   }, [addCoins]);
 
-  // Block Rain feature - spawns 100 random blocks at ground level
+  // Block Rain feature - spawns 100 random blocks at ground level with stacking
   const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
     if (!placeBlock) return;
     
-    console.log('Starting block rain - calculating ground positions and stacking');
+    console.log('Starting block rain - spawning at ground level with stacking');
     
     // Set expiration to 10 minutes from now
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     let placedCount = 0;
+    let lastThudTime = 0;
     
-    // Place blocks with staggered delays, checking for stacking
+    // Place blocks with staggered delays
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
       const delay = Math.random() * 500; // Random delay 0-500ms
@@ -1830,18 +1831,26 @@ export default function WaterfallFortress() {
           targetY = maxY + 1; // Stack on top
         }
         
-        // Place block at ground/stack level - will be rendered falling from sky
+        // Place block at correct height
         await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
         placedCount++;
         
+        // Play thud sound (throttled to every 50ms)
+        const now = Date.now();
+        if (mainAudioRefs.current.woodenThud && now - lastThudTime > 50) {
+          mainAudioRefs.current.woodenThud.currentTime = 0;
+          mainAudioRefs.current.woodenThud.volume = 0.3;
+          mainAudioRefs.current.woodenThud.play().catch(() => {});
+          lastThudTime = now;
+        }
       } catch (error) {
         console.error('Failed to place block:', error);
       }
     }
     
     toast({
-      title: "Block Rain Started!",
-      description: `${placedCount} blocks falling from sky (expire in 10 min)`,
+      title: "Block Rain Complete!",
+      description: `${placedCount} blocks placed (expire in 10 min)`,
       duration: 2000
     });
   }, [toast, placeBlock, blocks]);
