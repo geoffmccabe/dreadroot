@@ -187,9 +187,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
       const x = block.position_x + 0.5;
-      // Use fallState.currentY only for blocks that are currently falling or have landed
-      // Otherwise use the database position (for normally placed blocks)
-      const y = (fallState && fallState.currentY !== 100 ? fallState.currentY : block.position_y) + 0.5;
+      // Only use fallState for blocks with expires_at (actively falling)
+      const y = (block.expires_at && fallState ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
@@ -240,7 +239,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach(block => {
       const fallState = fallingBlocksState.get(block.id);
-      const y = (fallState && fallState.currentY !== 100) ? fallState.currentY : block.position_y;
+      // Only use fallState for blocks with expires_at (actively falling)
+      const y = (block.expires_at && fallState) ? fallState.currentY : block.position_y;
       
       const box = new THREE.Box3(
         new THREE.Vector3(
