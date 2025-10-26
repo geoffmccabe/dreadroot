@@ -186,9 +186,9 @@ const InstancedBlockGroupComponent: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
-      const x = block.position_x + 0.5;
-      const y = (fallState && !fallState.landed ? fallState.currentY : block.position_y) + 0.5;
-      const z = block.position_z + 0.5;
+      const x = block.position_x;
+      const y = fallState && !fallState.landed ? fallState.currentY : block.position_y;
+      const z = block.position_z;
       
       matrix.setPosition(x, y, z);
       meshRef.current!.setMatrixAt(i, matrix);
@@ -217,9 +217,9 @@ const InstancedBlockGroupComponent: React.FC<InstancedBlockGroupProps> = ({
       const fallState = fallingBlocksState.get(block.id);
       if (fallState && !fallState.landed) {
         // Update matrix for this falling block
-        const x = block.position_x + 0.5;
-        const y = fallState.currentY + 0.5;
-        const z = block.position_z + 0.5;
+        const x = block.position_x;
+        const y = fallState.currentY;
+        const z = block.position_z;
         
         matrix.setPosition(x, y, z);
         meshRef.current!.setMatrixAt(i, matrix);

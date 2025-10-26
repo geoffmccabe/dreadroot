@@ -55,14 +55,9 @@ export const PlacedBlocks: React.FC<{
           landed: false
         });
       }
-      
-      // Update height map for all blocks (for O(1) stacking lookups)
-      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-      const currentMax = heightMap.get(key) || 0;
-      heightMap.set(key, Math.max(currentMax, block.position_y));
     });
     
-    // Clean up removed blocks from falling state and height map
+    // Clean up removed blocks from falling state
     const blockIds = new Set(blocks.map(b => b.id));
     Array.from(fallingBlocksState.keys()).forEach(id => {
       if (!blockIds.has(id)) {
@@ -74,8 +69,8 @@ export const PlacedBlocks: React.FC<{
     heightMap.clear();
     blocks.forEach(block => {
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-      const currentMax = heightMap.get(key) || 0;
-      heightMap.set(key, Math.max(currentMax, block.position_y));
+      const currentMax = heightMap.get(key) || -1;
+      heightMap.set(key, Math.max(currentMax, Math.round(block.position_y)));
     });
   }, [blocks]);
   
