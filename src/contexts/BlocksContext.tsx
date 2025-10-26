@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 interface BlocksContextType {
   blocks: PlacedBlock[];
   isLoading: boolean;
-  placeBlock: (x: number, y: number, z: number, blockType: string) => Promise<PlacedBlock>;
+  placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => Promise<PlacedBlock>;
   removeBlock: (blockId: string) => Promise<boolean>;
   refreshBlocks: () => Promise<void>;
   setBlockMode: (enabled: boolean) => void;

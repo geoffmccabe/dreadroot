@@ -7,6 +7,7 @@ export interface PlacedBlock {
   block_type: string;
   created_at: string;
   updated_at: string;
+  expires_at?: string;
 }
 
 export interface BlockType {

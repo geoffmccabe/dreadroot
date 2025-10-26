@@ -1800,65 +1800,77 @@ export default function WaterfallFortress() {
     }, 600); // Animation duration
   }, [addCoins]);
 
-  // Block Rain feature - spawns 100 random blocks for testing
-  // Direct batch placement bypassing normal flow for performance
+  // Block Rain feature - spawns 100 random blocks with staggered delays
   const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Starting block rain placement with delays...');
       
-      if (!user) {
-        console.error('User not authenticated for block rain');
-        return;
+      // Set expiration to 10 minutes from now
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      
+      let placedCount = 0;
+      
+      // Place each block with a random delay
+      for (let i = 0; i < positions.length; i++) {
+        const pos = positions[i];
+        const delay = Math.random() * 500; // Random delay 0-500ms
+        
+        setTimeout(async () => {
+          try {
+            // Check if position is occupied
+            const isOccupied = blocks.some(block => 
+              Math.round(block.position_x) === pos.x && 
+              Math.round(block.position_z) === pos.z &&
+              Math.round(block.position_y) === pos.y
+            );
+            
+            if (isOccupied) {
+              // Stack on top
+              pos.y += 1;
+            }
+            
+            // Place block with expiration
+            const result = await placeBlock(pos.x, pos.y, pos.z, pos.type, expiresAt);
+            
+            if (result) {
+              placedCount++;
+              // Play wooden thud sound (throttled)
+              if (mainAudioRefs.current.woodenThud.paused) {
+                mainAudioRefs.current.woodenThud.currentTime = 0;
+                mainAudioRefs.current.woodenThud.play().catch(() => {});
+              }
+            }
+          } catch (error) {
+            console.error('Error placing block:', error);
+          }
+        }, delay);
       }
-
-      // Prepare batch insert data
-      const blocksToInsert = positions.map(pos => ({
-        user_id: user.id,
-        position_x: pos.x,
-        position_y: pos.y,
-        position_z: pos.z,
-        block_type: pos.type
-      }));
-
-      console.log('Batch inserting', blocksToInsert.length, 'blocks...');
       
-      // Single batch insert to Supabase
-      const { data, error } = await supabase
-        .from('placed_blocks')
-        .insert(blocksToInsert)
-        .select();
-
-      if (error) {
-        console.error('Batch insert error:', error);
+      // Show completion toast after all delays
+      setTimeout(() => {
         toast({
-          title: "Block Rain Failed",
-          description: "Some blocks couldn't be placed",
-          variant: "destructive"
+          title: "Block Rain Complete!",
+          description: `Blocks spawning over ~50 seconds`,
+          duration: 2000
         });
-        return;
-      }
-
-      console.log(`✓ Block Rain complete: ${data?.length || 0} blocks placed`);
+      }, 1000);
       
-      toast({
-        title: "Block Rain Complete!",
-        description: `${data?.length || 0} blocks spawned successfully`,
-        duration: 2000
-      });
-      
-      // Refresh blocks to show new ones
-      await refreshData();
     } catch (error) {
       console.error('Block rain error:', error);
+      toast({
+        title: "Block Rain Failed",
+        description: "Some blocks couldn't be placed",
+        variant: "destructive"
+      });
     }
-  }, [toast, refreshData]);
+  }, [toast, placeBlock, blocks]);
 
   // Block Rain trigger - spawns 100 random blocks for testing
   const handleBlockRain = useCallback(() => {
     console.log('=== BLOCK RAIN TRIGGERED ===');
     
-    // Get all available block types
-    const blockTypes = ['fortress_block', 'grass_block', 'glowing_block', 'crystal_block'];
+    // Use only basic block types
+    const blockTypes = ['fortress_block', 'grass_block', 'crystal_block'];
     
     // Trigger block rain in the Scene component via a custom event
     const event = new CustomEvent('triggerBlockRain', {

@@ -7,6 +7,7 @@ import { PlacedBlock } from '../types/blocks';
 interface DBBlock extends PlacedBlock {
   synced: boolean;
   local_id?: string;
+  expires_at?: string;
 }
 
 // Removed temp UUID hack - now using real Supabase authentication
@@ -170,7 +171,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   };
 
   // Optimized block placement with instant local feedback
-  const placeBlock = async (x: number, y: number, z: number, blockType: string) => {
+  const placeBlock = async (x: number, y: number, z: number, blockType: string, expiresAt?: string) => {
     try {
       // Get authenticated user
       const { data: { user } } = await supabase.auth.getUser();
@@ -201,7 +202,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       const tempId = `temp-${Date.now()}-${Math.random()}`;
       
       // Create optimistic block
-      const optimisticBlock: PlacedBlock = {
+      const optimisticBlock: any = {
         id: tempId,
         user_id: user.id, // Use real user ID
         position_x: x,
@@ -211,6 +212,11 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
+      
+      // Add expiration if provided
+      if (expiresAt) {
+        optimisticBlock.expires_at = expiresAt;
+      }
 
       // Add to local state immediately
       setBlocks(prev => {
@@ -258,13 +264,18 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         return;
       }
 
-      const blockData = {
+      const blockData: any = {
         user_id: user.id,
         position_x: dbBlock.position_x,
         position_y: dbBlock.position_y,
         position_z: dbBlock.position_z,
         block_type: dbBlock.block_type,
       };
+      
+      // Add expiration if provided
+      if (dbBlock.expires_at) {
+        blockData.expires_at = dbBlock.expires_at;
+      }
 
       // Use upsert to handle conflicts gracefully
       const { data, error } = await supabase
@@ -437,9 +448,22 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     }
   }, []);
 
-  // Cleanup on unmount
+  // Periodic cleanup of expired blocks
   useEffect(() => {
+    const cleanupInterval = setInterval(async () => {
+      try {
+        const { data } = await supabase.rpc('delete_expired_blocks');
+        if (data && data > 0) {
+          console.log(`Cleaned up ${data} expired blocks`);
+          await syncWithSupabase();
+        }
+      } catch (error) {
+        console.error('Error cleaning up expired blocks:', error);
+      }
+    }, 60000); // Every 60 seconds
+
     return () => {
+      clearInterval(cleanupInterval);
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current);
       }

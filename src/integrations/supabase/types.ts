@@ -149,6 +149,7 @@ export type Database = {
         Row: {
           block_type: string
           created_at: string
+          expires_at: string | null
           id: string
           position_x: number
           position_y: number
@@ -159,6 +160,7 @@ export type Database = {
         Insert: {
           block_type?: string
           created_at?: string
+          expires_at?: string | null
           id?: string
           position_x: number
           position_y: number
@@ -169,6 +171,7 @@ export type Database = {
         Update: {
           block_type?: string
           created_at?: string
+          expires_at?: string | null
           id?: string
           position_x?: number
           position_y?: number
@@ -293,6 +296,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_expired_blocks: { Args: never; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
