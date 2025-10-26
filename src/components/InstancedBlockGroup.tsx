@@ -47,6 +47,9 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
   
+  // Reuse matrix to avoid garbage collection
+  const matrixRef = useRef(new THREE.Matrix4());
+  
   // Load texture with animated GIF support
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
@@ -181,7 +184,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   useEffect(() => {
     if (!meshRef.current) return;
     
-    const matrix = new THREE.Matrix4();
+    const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
     
     blocks.forEach((block, i) => {
@@ -213,7 +216,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     if (!meshRef.current) return;
     
     let needsUpdate = false;
-    const matrix = new THREE.Matrix4();
+    const matrix = matrixRef.current;
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
