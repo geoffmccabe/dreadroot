@@ -146,10 +146,27 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
             const dbBlock: DBBlock = { ...newBlock, synced: true };
             await addBlock(dbBlock);
             
-            // Update local state
+            // Update local state - replace temp block or add new block
             setBlocks(prev => {
+              // Check if this is replacing a temp block at the same position
+              const tempBlockIndex = prev.findIndex(block => 
+                block.id.startsWith('temp-') &&
+                block.position_x === newBlock.position_x &&
+                block.position_y === newBlock.position_y &&
+                block.position_z === newBlock.position_z
+              );
+              
+              if (tempBlockIndex >= 0) {
+                // Replace temp block with real block
+                const updated = [...prev];
+                updated[tempBlockIndex] = newBlock;
+                return updated;
+              }
+              
+              // Check if block already exists (prevent duplicates)
               const exists = prev.some(block => block.id === newBlock.id);
               if (exists) return prev;
+              
               return [...prev, newBlock];
             });
           } else if (payload.eventType === 'DELETE') {

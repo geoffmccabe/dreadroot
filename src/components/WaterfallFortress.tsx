@@ -1827,6 +1827,9 @@ export default function WaterfallFortress() {
     let placedCount = 0;
     let lastThudTime = 0;
     
+    // Track height per position to prevent race conditions
+    const localHeightMap = new Map<string, number>();
+    
     // Place blocks with staggered delays
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
@@ -1835,6 +1838,8 @@ export default function WaterfallFortress() {
       await new Promise(resolve => setTimeout(resolve, delay));
       
       try {
+        const key = `${pos.x},${pos.z}`;
+        
         // Find highest block at this x,z position for stacking
         let targetY = pos.y; // Start at ground level
         const blocksAtPosition = blocks.filter(b => 
@@ -1846,6 +1851,13 @@ export default function WaterfallFortress() {
           const maxY = Math.max(...blocksAtPosition.map(b => b.position_y));
           targetY = maxY + 1; // Stack on top
         }
+        
+        // Also check local height map for blocks placed in this batch
+        const localHeight = localHeightMap.get(key) || 0;
+        targetY = Math.max(targetY, localHeight);
+        
+        // Update local height map for next block at this position
+        localHeightMap.set(key, targetY + 1);
         
         // Place block at correct height
         await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);

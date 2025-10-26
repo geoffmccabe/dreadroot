@@ -157,10 +157,19 @@ export const PlacedBlocks: React.FC<{
   }, [blockIds]);
 
   // Group blocks by block_type for instanced rendering (stable grouping)
+  // Use block IDs to ensure uniqueness and prevent duplicate renders
   const groupedBlocks = useMemo(() => {
     const groups = new Map<string, PlacedBlock[]>();
+    const seenIds = new Set<string>();
     
     blocks.forEach(block => {
+      // Skip duplicate IDs (happens during temp->real block transitions)
+      if (seenIds.has(block.id)) {
+        console.warn('Duplicate block ID detected:', block.id);
+        return;
+      }
+      seenIds.add(block.id);
+      
       const existing = groups.get(block.block_type) || [];
       existing.push(block);
       groups.set(block.block_type, existing);

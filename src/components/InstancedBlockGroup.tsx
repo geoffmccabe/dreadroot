@@ -233,7 +233,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
   });
   
-  // Create collision boxes for all instances
+  // Create collision boxes for all instances (only when blocks change, not on every frame)
   useEffect(() => {
     if (!onCollision) return;
     
@@ -262,6 +262,17 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const glowFactor = blockDef?.properties?.glowFactor || 0;
   const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
   
+  // Memoize glowing blocks to prevent re-renders
+  const glowingBlocks = useMemo(() => {
+    if (!shouldGlow) return [];
+    const seenIds = new Set<string>();
+    return blocks.filter(block => {
+      if (seenIds.has(block.id)) return false;
+      seenIds.add(block.id);
+      return true;
+    });
+  }, [blocks, shouldGlow]);
+  
   if (!material) return null;
 
   return (
@@ -273,7 +284,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         receiveShadow
         frustumCulled={false}
       />
-      {shouldGlow && blocks.map((block) => (
+      {glowingBlocks.map((block) => (
         <pointLight
           key={block.id}
           position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
