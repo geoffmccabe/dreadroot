@@ -211,7 +211,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       );
       
       if (isDuplicate) {
-        console.log('Block already exists at position', {x, y, z}, '- skipping placement');
+        console.warn('Block already exists at position', {x, y, z}, '- skipping placement');
         return null;
       }
       
@@ -242,6 +242,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         console.log('New block count:', updated.length);
         return updated;
       });
+      
+      console.log('Block placed successfully, returning ID:', tempId);
 
       // Add to IndexedDB (not synced yet)
       const dbBlock: DBBlock = {

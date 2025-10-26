@@ -54,18 +54,9 @@ export const PlacedBlocks: React.FC<{
       }
     });
     
-    // Initialize falling state for new blocks with expires_at
-    blocks.forEach(block => {
-      if (block.expires_at && !fallingBlocksState.has(block.id)) {
-        // New falling block - start visual fall at Y=100, but land at database position
-        fallingBlocksState.set(block.id, {
-          currentY: 100,
-          velocity: 0,
-          landed: false,
-          targetY: block.position_y  // Use database position which has stacking logic
-        });
-      }
-    });
+    // Do NOT automatically make blocks with expires_at fall from the sky
+    // Falling state is tracked in-memory only and does not persist across refreshes
+    // expires_at is ONLY for database cleanup via delete_expired_blocks()
     
     // Rebuild height map from scratch for accurate stacking
     heightMap.clear();
@@ -73,10 +64,9 @@ export const PlacedBlocks: React.FC<{
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
       const currentMax = heightMap.get(key) || 0;
       
-      // For falling blocks, use their target position to reserve space
-      // For landed blocks, use their actual position
-      const fallState = fallingBlocksState.get(block.id);
-      const blockY = (fallState && !fallState.landed) ? fallState.targetY : block.position_y;
+      // Always use actual database position for heightMap
+      // Falling state is visual only, doesn't affect stacking logic
+      const blockY = block.position_y;
       
       // Store the Y position where the NEXT block should land (top of this block)
       const blockTop = Math.round(blockY) + 1;

@@ -188,8 +188,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       const fallState = fallingBlocksState.get(block.id);
       // Add 0.5 offset because Three.js positions by center, database stores corner
       const x = block.position_x + 0.5;
-      // Only use fallState for blocks with expires_at (actively falling)
-      const y = (block.expires_at && fallState ? fallState.currentY : block.position_y) + 0.5;
+      // Use fallState if actively falling (in-memory only), otherwise use database position
+      const y = (fallState && !fallState.landed ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
@@ -240,8 +240,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach(block => {
       const fallState = fallingBlocksState.get(block.id);
-      // Only use fallState for blocks with expires_at (actively falling)
-      const y = (block.expires_at && fallState) ? fallState.currentY : block.position_y;
+      // Use fallState if actively falling (in-memory only), otherwise use database position
+      const y = (fallState && !fallState.landed) ? fallState.currentY : block.position_y;
       
       const box = new THREE.Box3(
         new THREE.Vector3(

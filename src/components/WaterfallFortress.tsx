@@ -1813,7 +1813,7 @@ export default function WaterfallFortress() {
     let lastThudTime = 0;
     
     // Initialize local height map from global heightMap to prevent race conditions
-    const { heightMap } = await import('./PlacedBlocks');
+    const { heightMap, fallingBlocksState } = await import('./PlacedBlocks');
     const localHeightMap = new Map<string, number>(heightMap);
     
     // Place blocks sequentially (no random delays to prevent race conditions)
@@ -1831,12 +1831,23 @@ export default function WaterfallFortress() {
         // Get the landing Y from localHeightMap (already includes stacking logic)
         const targetY = localHeightMap.get(key) || 0;
         
-        // Update local height map immediately for next block at this position
-        localHeightMap.set(key, targetY + 1);
-        
         // Place block at correct height
-        await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
-        placedCount++;
+        const placedBlock = await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
+        
+        // Only update heightMap if block was actually placed
+        if (placedBlock) {
+          localHeightMap.set(key, targetY + 1);
+          
+          // Add to falling blocks state for visual animation (in-memory only)
+          fallingBlocksState.set(placedBlock.id, {
+            currentY: 100,
+            velocity: 0,
+            landed: false,
+            targetY: targetY
+          });
+          
+          placedCount++;
+        }
         
         // Play thud sound (throttled to every 50ms)
         const now = Date.now();
