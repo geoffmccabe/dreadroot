@@ -761,13 +761,6 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     }
   }, [pickColor]);
 
-  // Reuse objects to avoid garbage collection every frame
-  const matrixRef = useRef(new THREE.Matrix4());
-  const positionRef = useRef(new THREE.Vector3());
-  const rotationRef = useRef(new THREE.Euler());
-  const scaleRef = useRef(new THREE.Vector3());
-  const quaternionRef = useRef(new THREE.Quaternion());
-
   useFrame((state, delta) => {
     if (!instancedMeshRef.current) return;
     
@@ -778,6 +771,12 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
       timeAccumulatorRef.current -= msBetweeenDrops;
       spawnDrop();
     }
+    
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const rotation = new THREE.Euler();
+    const scale = new THREE.Vector3();
+    const color = new THREE.Color();
     
     const mul = flowSpeed;
     let activeCount = 0;
@@ -803,17 +802,16 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
       // Scale: start as square (0.1x0.1x0.1), stretch only in Y to 10x (0.1x1.0x0.1)
       const baseSize = 0.1;
       const scaleY = baseSize * stretchMultiplier;
-      scaleRef.current.set(baseSize, scaleY, baseSize);
+      scale.set(baseSize, scaleY, baseSize);
       
       // Adjust position so bottom edge falls at constant rate (not center)
       // As drop stretches, center moves up by half the stretch amount
       const yOffset = (scaleY - baseSize) / 2;
-      positionRef.current.set(drop.position.x, drop.position.y + yOffset, drop.position.z);
-      rotationRef.current.set(0, 0, 0);
+      position.set(drop.position.x, drop.position.y + yOffset, drop.position.z);
+      rotation.set(0, 0, 0);
       
-      quaternionRef.current.setFromEuler(rotationRef.current);
-      matrixRef.current.compose(positionRef.current, quaternionRef.current, scaleRef.current);
-      instancedMeshRef.current.setMatrixAt(activeCount, matrixRef.current);
+      matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
+      instancedMeshRef.current.setMatrixAt(activeCount, matrix);
       
       // Set color for this instance
       instancedMeshRef.current.setColorAt(activeCount, drop.color);
@@ -1114,10 +1112,8 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: {
     explosionParticles.forEach((particle) => {
       if (!particle.active || !particle.mesh) return;
       
-      // Apply outward velocity (mutate in place, no clone)
-      particle.position.x += particle.velocity.x * delta;
-      particle.position.y += particle.velocity.y * delta;
-      particle.position.z += particle.velocity.z * delta;
+      // Apply outward velocity
+      particle.position.add(particle.velocity.clone().multiplyScalar(delta));
       
       // Apply gravity (continue falling)
       particle.velocityY += gravity * delta;
@@ -1469,12 +1465,11 @@ function Scene({
     // Throttle expensive operations to every few frames
     frameCount.current++;
     
-    // Only process bullets if they exist
+    // Only process bullets every frame, but throttle other operations
     setBullets(prev => {
       if (prev.length === 0) return prev;
       
       const activeBullets = [];
-      // Only get coins if we have bullets to check
       const coins = (window as any).getCoins ? (window as any).getCoins() : [];
       
       for (let i = 0; i < prev.length; i++) {
