@@ -12,6 +12,7 @@ import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
+import { FPSCounter, FPSDisplay } from '@/components/FPSCounter';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -1557,6 +1558,9 @@ function Scene({
         onGetCoins={() => []}
       />
       <Bullets bullets={bullets} />
+      
+      {/* FPS Counter */}
+      <FPSCounter />
     </>
   );
 }
@@ -2192,6 +2196,9 @@ export default function WaterfallFortress() {
         />
       </div>
     ))}
+
+    {/* FPS Display */}
+    <FPSDisplay />
 
     {/* Top right controls */}
     <div className="fixed top-4 right-4 z-30 flex items-center gap-2">

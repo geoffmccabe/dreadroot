@@ -199,13 +199,14 @@ export const useAnimatedTexture = (url: string) => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
 
-      // Create texture from canvas
+      // Render first frame BEFORE creating texture
+      renderFrame(0);
+
+      // Create texture from canvas AFTER first frame is rendered
       const canvasTexture = new THREE.CanvasTexture(canvas);
       canvasTexture.minFilter = THREE.LinearFilter;
       canvasTexture.magFilter = THREE.LinearFilter;
-      
-      // Render first frame
-      renderFrame(0);
+      canvasTexture.needsUpdate = true; // Mark for initial upload
       
       if (isMountedRef.current) {
         setTexture(canvasTexture);
