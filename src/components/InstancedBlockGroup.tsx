@@ -266,15 +266,19 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const glowFactor = blockDef?.properties?.glowFactor || 0;
   const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
   
-  // Memoize glowing blocks to prevent re-renders
+  // Limit point lights to nearest 10 blocks for performance
+  // With 100+ blocks, too many point lights destroy FPS
   const glowingBlocks = useMemo(() => {
     if (!shouldGlow) return [];
     const seenIds = new Set<string>();
-    return blocks.filter(block => {
+    const uniqueBlocks = blocks.filter(block => {
       if (seenIds.has(block.id)) return false;
       seenIds.add(block.id);
       return true;
     });
+    
+    // Limit to 10 nearest glowing blocks for performance
+    return uniqueBlocks.slice(0, 10);
   }, [blocks, shouldGlow]);
   
   if (!material) return null;
@@ -286,7 +290,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         args={[geometry, material, blocks.length]}
         castShadow
         receiveShadow
-        frustumCulled={false}
+        frustumCulled={true}
       />
       {glowingBlocks.map((block) => (
         <pointLight
