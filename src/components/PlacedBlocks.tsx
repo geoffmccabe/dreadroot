@@ -96,7 +96,7 @@ export const PlacedBlocks: React.FC<{
       
       // Check if landed
       if (fallState.currentY <= block.position_y) {
-        fallState.currentY = block.position_y;
+        fallState.currentY = Math.round(block.position_y);
         fallState.velocity = 0;
         fallState.landed = true;
         
