@@ -1800,70 +1800,48 @@ export default function WaterfallFortress() {
     }, 600); // Animation duration
   }, [addCoins]);
 
-  // Block Rain feature - spawns 100 random blocks with staggered delays
+  // Block Rain feature - spawns 100 random blocks high in the sky to fall and stack naturally
   const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
-    try {
-      console.log('Starting block rain placement with delays...');
+    if (!placeBlock) return;
+    
+    console.log('Starting block rain - spawning at Y=100');
+    
+    // Set expiration to 10 minutes from now
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    let placedCount = 0;
+    let lastThudTime = 0;
+    
+    // Place blocks with staggered delays
+    for (let i = 0; i < positions.length; i++) {
+      const pos = positions[i];
+      const delay = Math.random() * 500; // Random delay 0-500ms
       
-      // Set expiration to 10 minutes from now
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await new Promise(resolve => setTimeout(resolve, delay));
       
-      let placedCount = 0;
-      
-      // Place each block with a random delay
-      for (let i = 0; i < positions.length; i++) {
-        const pos = positions[i];
-        const delay = Math.random() * 500; // Random delay 0-500ms
+      try {
+        // Spawn at Y=100 (high in sky) - physics will make them fall and stack naturally
+        await placeBlock(pos.x, 100, pos.z, pos.type, expiresAt);
+        placedCount++;
         
-        setTimeout(async () => {
-          try {
-            // Check if position is occupied
-            const isOccupied = blocks.some(block => 
-              Math.round(block.position_x) === pos.x && 
-              Math.round(block.position_z) === pos.z &&
-              Math.round(block.position_y) === pos.y
-            );
-            
-            if (isOccupied) {
-              // Stack on top
-              pos.y += 1;
-            }
-            
-            // Place block with expiration
-            const result = await placeBlock(pos.x, pos.y, pos.z, pos.type, expiresAt);
-            
-            if (result) {
-              placedCount++;
-              // Play wooden thud sound (throttled)
-              if (mainAudioRefs.current.woodenThud.paused) {
-                mainAudioRefs.current.woodenThud.currentTime = 0;
-                mainAudioRefs.current.woodenThud.play().catch(() => {});
-              }
-            }
-          } catch (error) {
-            console.error('Error placing block:', error);
-          }
-        }, delay);
+        // Play thud sound (throttled to every 50ms)
+        const now = Date.now();
+        if (mainAudioRefs.current.woodenThud && now - lastThudTime > 50) {
+          mainAudioRefs.current.woodenThud.currentTime = 0;
+          mainAudioRefs.current.woodenThud.volume = 0.3;
+          mainAudioRefs.current.woodenThud.play().catch(() => {});
+          lastThudTime = now;
+        }
+      } catch (error) {
+        console.error('Failed to place block:', error);
       }
-      
-      // Show completion toast after all delays
-      setTimeout(() => {
-        toast({
-          title: "Block Rain Complete!",
-          description: `Blocks spawning over ~50 seconds`,
-          duration: 2000
-        });
-      }, 1000);
-      
-    } catch (error) {
-      console.error('Block rain error:', error);
-      toast({
-        title: "Block Rain Failed",
-        description: "Some blocks couldn't be placed",
-        variant: "destructive"
-      });
     }
-  }, [toast, placeBlock, blocks]);
+    
+    toast({
+      title: "Block Rain Started!",
+      description: `${placedCount} blocks falling from sky (expire in 10 min)`,
+      duration: 2000
+    });
+  }, [toast, placeBlock]);
 
   // Block Rain trigger - spawns 100 random blocks for testing
   const handleBlockRain = useCallback(() => {
