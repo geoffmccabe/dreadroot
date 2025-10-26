@@ -83,75 +83,7 @@ export const PlacedBlocks: React.FC<{
   useFrame((state, delta) => {
     const gravity = 9.8;
     
-    // PHASE 1: Check for unsupported blocks and mark them for falling
-    // Build a spatial map of current block positions for O(1) lookup
-    const blockPositionMap = new Map<string, PlacedBlock>();
-    blocks.forEach(block => {
-      const fallState = fallingBlocksState.get(block.id);
-      const currentY = (fallState && !fallState.landed) ? Math.floor(fallState.currentY) : block.position_y;
-      const key = `${Math.round(block.position_x)},${currentY},${Math.round(block.position_z)}`;
-      blockPositionMap.set(key, block);
-    });
-    
-    // Check each block at Y >= 2 for support
-    blocks.forEach(block => {
-      // Skip if already falling or at ground level
-      const fallState = fallingBlocksState.get(block.id);
-      if (fallState && !fallState.landed) return;
-      if (block.position_y < 2) return;
-      
-      const x = Math.round(block.position_x);
-      const y = block.position_y;
-      const z = Math.round(block.position_z);
-      
-      // Check if there's a block directly below
-      const belowKey = `${x},${y - 1},${z}`;
-      const hasBlockBelow = blockPositionMap.has(belowKey);
-      
-      if (!hasBlockBelow) {
-        // Check if supported by adjacent blocks (side support)
-        const adjacentKeys = [
-          `${x + 1},${y},${z}`, // right
-          `${x - 1},${y},${z}`, // left
-          `${x},${y},${z + 1}`, // front
-          `${x},${y},${z - 1}`  // back
-        ];
-        
-        // Check if any adjacent block has support below it
-        const hasSideSupport = adjacentKeys.some(adjKey => {
-          if (!blockPositionMap.has(adjKey)) return false;
-          
-          // Check if the adjacent block itself has support below
-          const [adjX, adjY, adjZ] = adjKey.split(',').map(Number);
-          const adjBelowKey = `${adjX},${adjY - 1},${adjZ}`;
-          return blockPositionMap.has(adjBelowKey) || adjY < 2;
-        });
-        
-        // If no support below or from sides, make it fall
-        if (!hasSideSupport) {
-          // Calculate where it should fall to
-          let targetY = 0;
-          for (let checkY = y - 1; checkY >= 0; checkY--) {
-            const checkKey = `${x},${checkY},${z}`;
-            if (blockPositionMap.has(checkKey)) {
-              targetY = checkY + 1;
-              break;
-            }
-          }
-          
-          // Mark for falling if not already at target
-          if (!fallState && y > targetY) {
-            fallingBlocksState.set(block.id, {
-              currentY: y,
-              velocity: 0,
-              landed: false
-            });
-          }
-        }
-      }
-    });
-    
-    // PHASE 2: Apply gravity to falling blocks
+    // Apply gravity to falling blocks
     fallingBlocksState.forEach((fallState, blockId) => {
       if (fallState.landed) return;
       
@@ -162,30 +94,16 @@ export const PlacedBlocks: React.FC<{
       fallState.velocity += gravity * delta;
       fallState.currentY -= fallState.velocity * delta;
       
-      // Check for landing - find the highest block below this position
-      const x = Math.round(block.position_x);
-      const z = Math.round(block.position_z);
-      let landingY = 0;
-      
-      for (let checkY = Math.floor(fallState.currentY); checkY >= 0; checkY--) {
-        const checkKey = `${x},${checkY},${z}`;
-        if (blockPositionMap.has(checkKey) && checkY < Math.floor(fallState.currentY)) {
-          landingY = checkY + 1;
-          break;
-        }
-      }
-      
-      // Check if landed on target position
-      if (fallState.currentY <= landingY || fallState.currentY <= block.position_y) {
-        const finalY = Math.max(landingY, block.position_y);
-        fallState.currentY = finalY;
+      // Check if landed
+      if (fallState.currentY <= block.position_y) {
+        fallState.currentY = block.position_y;
         fallState.velocity = 0;
         fallState.landed = true;
         
         // Update height map when block lands
-        const key = `${x},${z}`;
+        const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
         const currentMax = heightMap.get(key) || 0;
-        heightMap.set(key, Math.max(currentMax, finalY));
+        heightMap.set(key, Math.max(currentMax, block.position_y));
         
         // Play thud sound (throttled)
         const now = Date.now();
@@ -197,7 +115,7 @@ export const PlacedBlocks: React.FC<{
       }
     });
     
-    // PHASE 3: Update animated textures
+    // Update animated textures
     if (activeAnimatedTextures.size > 0) {
       activeAnimatedTextures.forEach((updateFn) => {
         updateFn(delta);
