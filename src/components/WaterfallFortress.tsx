@@ -1816,12 +1816,14 @@ export default function WaterfallFortress() {
     const { heightMap } = await import('./PlacedBlocks');
     const localHeightMap = new Map<string, number>(heightMap);
     
-    // Place blocks with staggered delays
+    // Place blocks sequentially (no random delays to prevent race conditions)
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
-      const delay = Math.random() * 500; // Random delay 0-500ms
       
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Small fixed delay for visual effect only
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
       
       try {
         const key = `${pos.x},${pos.z}`;
