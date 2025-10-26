@@ -253,31 +253,15 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     });
   }, [blocks, onCollision]);
   
-  // Get glow properties
-  const glowFactor = blockDef?.properties?.glowFactor || 0;
-  const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
-  
   if (!material) return null;
-
+  
   return (
-    <>
-      <instancedMesh
-        ref={meshRef}
-        args={[geometry, material, blocks.length]}
-        castShadow
-        receiveShadow
-        frustumCulled={false}
-      />
-      {shouldGlow && blocks.map((block) => (
-        <pointLight
-          key={block.id}
-          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
-          color={blockDef?.properties?.color || '#FFE135'}
-          intensity={glowFactor * 2}
-          distance={glowFactor * 3}
-          decay={2}
-        />
-      ))}
-    </>
+    <instancedMesh
+      ref={meshRef}
+      args={[geometry, material, blocks.length]}
+      castShadow
+      receiveShadow
+      frustumCulled={false}
+    />
   );
 };

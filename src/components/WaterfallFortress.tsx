@@ -274,16 +274,13 @@ function FirstPersonControls({
     ];
 
     // Add placed blocks as colliders for jumping/collision
-    const blockColliders = existingBlocks.map(block => {
-      const collider = new THREE.Box3(
+    const blockColliders = existingBlocks.map(block => 
+      new THREE.Box3(
         new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5),
         new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5)
-      );
-      console.log(`Block collider at (${block.position_x}, ${block.position_y}, ${block.position_z}):`, collider);
-      return collider;
-    });
+      )
+    );
     
-    console.log(`Total colliders: ${fortressColliders.length} fortress + ${blockColliders.length} blocks = ${fortressColliders.length + blockColliders.length}`);
     return [...fortressColliders, ...blockColliders];
   }, [existingBlocks]);
 
