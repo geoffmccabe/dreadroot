@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
+import { getVisibleChunkKeys } from '@/lib/chunkManager';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
 import { FPSCounter, FPSDisplay } from '@/components/FPSCounter';
@@ -50,6 +51,39 @@ function useWeatherCycle(weatherSettings: {
   });
 
   return cycleState;
+}
+
+// Camera-tracked block renderer with chunk culling
+function CameraTrackedBlocks({ blocks }: { blocks: PlacedBlock[] }) {
+  const { camera } = useThree();
+  const { blocksByChunk, visualDistance } = useBlocks();
+  const [cameraPosition, setCameraPosition] = useState({ x: 0, z: 0 });
+  
+  // Update camera position every frame
+  useFrame(() => {
+    setCameraPosition({
+      x: camera.position.x,
+      z: camera.position.z
+    });
+  });
+  
+  // Filter blocks based on visible chunks
+  const visibleBlocks = useMemo(() => {
+    const visibleChunkKeys = getVisibleChunkKeys(cameraPosition.x, cameraPosition.z, visualDistance);
+    const filtered: PlacedBlock[] = [];
+    
+    for (const chunkKey of visibleChunkKeys) {
+      const chunksBlocks = blocksByChunk.get(chunkKey);
+      if (chunksBlocks) {
+        filtered.push(...chunksBlocks);
+      }
+    }
+    
+    console.log(`📦 Rendering ${filtered.length}/${blocks.length} blocks from ${visibleChunkKeys.length} chunks (distance: ${visualDistance})`);
+    return filtered;
+  }, [cameraPosition.x, cameraPosition.z, visualDistance, blocksByChunk, blocks.length]);
+  
+  return <PlacedBlocks blocks={visibleBlocks} />;
 }
 
 // Sky component with space texture
@@ -1555,7 +1589,7 @@ function Scene({
       {/* Scene objects */}
       <Fortress />
       <BillboardWalls wallPositions={wallPositions} />
-      <PlacedBlocks blocks={blocks} />
+      <CameraTrackedBlocks blocks={blocks} />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         msBetweeenDrops={settings.msBetweeenDrops} 
