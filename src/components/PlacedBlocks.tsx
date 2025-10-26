@@ -150,7 +150,9 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
-  // Group blocks by block_type for instanced rendering (stable grouping)
+  // Group blocks by block_type for instanced rendering (stable dependency array)
+  const blockIdsString = useMemo(() => blocks.map(b => b.id).join(','), [blocks.length]);
+  
   const groupedBlocks = useMemo(() => {
     const groups = new Map<string, PlacedBlock[]>();
     
@@ -160,7 +162,7 @@ export const PlacedBlocks: React.FC<{
       groups.set(block.block_type, existing);
     });
     return groups;
-  }, [blocks]);
+  }, [blockIdsString]);
 
   // Don't render blocks until block definitions are loaded
   if (blockDefsLoading || blocks.length === 0) {
