@@ -274,13 +274,16 @@ function FirstPersonControls({
     ];
 
     // Add placed blocks as colliders for jumping/collision
-    const blockColliders = existingBlocks.map(block => 
-      new THREE.Box3(
+    const blockColliders = existingBlocks.map(block => {
+      const collider = new THREE.Box3(
         new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5),
         new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5)
-      )
-    );
+      );
+      console.log(`Block collider at (${block.position_x}, ${block.position_y}, ${block.position_z}):`, collider);
+      return collider;
+    });
     
+    console.log(`Total colliders: ${fortressColliders.length} fortress + ${blockColliders.length} blocks = ${fortressColliders.length + blockColliders.length}`);
     return [...fortressColliders, ...blockColliders];
   }, [existingBlocks]);
 
@@ -1316,16 +1319,6 @@ function Scene({
       const spreadRadius = 5; // 5 blocks in each direction
       const blockPositions: Array<{ x: number; y: number; z: number; type: string }> = [];
       
-      // Calculate positions for 100 blocks
-      const localHeightMap = new Map<string, number>();
-      
-      // Initialize local height map with existing blocks
-      blocks.forEach(block => {
-        const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-        const currentMax = localHeightMap.get(key) || -1;
-        localHeightMap.set(key, Math.max(currentMax, block.position_y));
-      });
-      
       // Create positions for 100 blocks
       for (let i = 0; i < 100; i++) {
         const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
@@ -1337,10 +1330,30 @@ function Scene({
         // Round to grid
         const gridX = Math.round(randomX);
         const gridZ = Math.round(randomZ);
-        const key = `${gridX},${gridZ}`;
         
-        // Get current height at this position from local map
-        const groundY = (localHeightMap.get(key) || -1) + 1;
+        // Find the highest existing block at this X,Z position for stacking
+        // Use height map for O(1) lookup instead of iterating all blocks
+        const key = `${gridX},${gridZ}`;
+        let groundY = 0;
+        
+        // Check height map first (includes landed blocks)
+        const { heightMap, fallingBlocksState } = await import('./PlacedBlocks');
+        const mapHeight = heightMap.get(key) || 0;
+        groundY = mapHeight;
+        
+        // Also check falling blocks that haven't landed yet at this position
+        blocks.forEach(block => {
+          if (Math.round(block.position_x) === gridX && Math.round(block.position_z) === gridZ) {
+            const fallState = fallingBlocksState.get(block.id);
+            if (fallState && !fallState.landed) {
+              // Use current falling position, not database position
+              groundY = Math.max(groundY, fallState.currentY);
+            }
+          }
+        });
+        
+        // Add 1 to stack on top
+        if (groundY > 0) groundY += 1;
         
         blockPositions.push({
           x: gridX,
@@ -1348,9 +1361,6 @@ function Scene({
           z: gridZ,
           type: randomBlockType
         });
-        
-        // Update local height map for next block at this position
-        localHeightMap.set(key, groundY + 1);
       }
       
       console.log('Calculated', blockPositions.length, 'block positions');
@@ -1810,33 +1820,49 @@ export default function WaterfallFortress() {
   const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
     if (!placeBlock) return;
     
-    console.log('Starting block rain batch placement');
+    console.log('Starting block rain - spawning at ground level with stacking');
     
     // Set expiration to 10 minutes from now
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    let placedCount = 0;
+    let lastThudTime = 0;
     
-    // Build local height map from existing blocks
-    const localHeightMap = new Map<string, number>();
-    blocks.forEach(block => {
-      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-      const currentMax = localHeightMap.get(key) || -1;
-      localHeightMap.set(key, Math.max(currentMax, block.position_y));
-    });
-    
-    // Place all blocks at once using the local height map
-    const placePromises = positions.map(pos => {
-      const key = `${pos.x},${pos.z}`;
-      const groundY = (localHeightMap.get(key) || -1) + 1;
+    // Place blocks with staggered delays
+    for (let i = 0; i < positions.length; i++) {
+      const pos = positions[i];
+      const delay = Math.random() * 500; // Random delay 0-500ms
       
-      // Update local height map for stacking within this batch
-      localHeightMap.set(key, groundY);
+      await new Promise(resolve => setTimeout(resolve, delay));
       
-      return placeBlock(pos.x, groundY, pos.z, pos.type, expiresAt);
-    });
-    
-    // Wait for all blocks to be placed
-    const results = await Promise.allSettled(placePromises);
-    const placedCount = results.filter(r => r.status === 'fulfilled').length;
+      try {
+        // Find highest block at this x,z position for stacking
+        let targetY = pos.y; // Start at ground level
+        const blocksAtPosition = blocks.filter(b => 
+          Math.round(b.position_x) === pos.x && 
+          Math.round(b.position_z) === pos.z
+        );
+        
+        if (blocksAtPosition.length > 0) {
+          const maxY = Math.max(...blocksAtPosition.map(b => b.position_y));
+          targetY = maxY + 1; // Stack on top
+        }
+        
+        // Place block at correct height
+        await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
+        placedCount++;
+        
+        // Play thud sound (throttled to every 50ms)
+        const now = Date.now();
+        if (mainAudioRefs.current.woodenThud && now - lastThudTime > 50) {
+          mainAudioRefs.current.woodenThud.currentTime = 0;
+          mainAudioRefs.current.woodenThud.volume = 0.3;
+          mainAudioRefs.current.woodenThud.play().catch(() => {});
+          lastThudTime = now;
+        }
+      } catch (error) {
+        console.error('Failed to place block:', error);
+      }
+    }
     
     toast({
       title: "Block Rain Complete!",

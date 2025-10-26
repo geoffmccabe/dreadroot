@@ -37,7 +37,7 @@ interface InstancedBlockGroupProps {
   onCollision?: (box: THREE.Box3, blockId: string) => void;
 }
 
-const InstancedBlockGroupComponent: React.FC<InstancedBlockGroupProps> = ({
+export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   blocks,
   blockDef,
   geometry,
@@ -186,9 +186,9 @@ const InstancedBlockGroupComponent: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
-      const x = block.position_x;
-      const y = fallState && !fallState.landed ? fallState.currentY : block.position_y;
-      const z = block.position_z;
+      const x = block.position_x + 0.5;
+      const y = (fallState && !fallState.landed ? fallState.currentY : block.position_y) + 0.5;
+      const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
       meshRef.current!.setMatrixAt(i, matrix);
@@ -217,9 +217,9 @@ const InstancedBlockGroupComponent: React.FC<InstancedBlockGroupProps> = ({
       const fallState = fallingBlocksState.get(block.id);
       if (fallState && !fallState.landed) {
         // Update matrix for this falling block
-        const x = block.position_x;
-        const y = fallState.currentY;
-        const z = block.position_z;
+        const x = block.position_x + 0.5;
+        const y = fallState.currentY + 0.5;
+        const z = block.position_z + 0.5;
         
         matrix.setPosition(x, y, z);
         meshRef.current!.setMatrixAt(i, matrix);
@@ -253,30 +253,31 @@ const InstancedBlockGroupComponent: React.FC<InstancedBlockGroupProps> = ({
     });
   }, [blocks, onCollision]);
   
-  if (!material) return null;
+  // Get glow properties
+  const glowFactor = blockDef?.properties?.glowFactor || 0;
+  const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
   
+  if (!material) return null;
+
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[geometry, material, blocks.length]}
-      castShadow
-      receiveShadow
-      frustumCulled={false}
-    />
+    <>
+      <instancedMesh
+        ref={meshRef}
+        args={[geometry, material, blocks.length]}
+        castShadow
+        receiveShadow
+        frustumCulled={false}
+      />
+      {shouldGlow && blocks.map((block) => (
+        <pointLight
+          key={block.id}
+          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
+          color={blockDef?.properties?.color || '#FFE135'}
+          intensity={glowFactor * 2}
+          distance={glowFactor * 3}
+          decay={2}
+        />
+      ))}
+    </>
   );
 };
-
-// Memoize to prevent re-renders when blocks array changes but IDs haven't
-export const InstancedBlockGroup = React.memo(InstancedBlockGroupComponent, (prev, next) => {
-  // Re-render if block count changes
-  if (prev.blocks.length !== next.blocks.length) return false;
-  
-  // Re-render if block type changes
-  if (prev.blockDef.key !== next.blockDef.key) return false;
-  
-  // Re-render if geometry changes
-  if (prev.geometry !== next.geometry) return false;
-  
-  // Don't compare individual block positions - those are updated via matrix in useFrame
-  return true;
-});
