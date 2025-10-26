@@ -205,10 +205,16 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     meshRef.current.instanceMatrix.needsUpdate = true;
     
-    // Set the bounding box and sphere for proper frustum culling
-    meshRef.current.geometry.boundingBox = boundingBox;
-    meshRef.current.geometry.boundingSphere = new THREE.Sphere();
-    boundingBox.getBoundingSphere(meshRef.current.geometry.boundingSphere);
+    // Set bounding box/sphere on the MESH (not geometry) for proper frustum culling
+    // This tells Three.js the bounds of ALL instances combined
+    if (!meshRef.current.boundingBox) {
+      meshRef.current.boundingBox = new THREE.Box3();
+    }
+    if (!meshRef.current.boundingSphere) {
+      meshRef.current.boundingSphere = new THREE.Sphere();
+    }
+    meshRef.current.boundingBox.copy(boundingBox);
+    boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
   }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
