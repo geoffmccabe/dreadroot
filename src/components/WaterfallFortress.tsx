@@ -58,13 +58,21 @@ function CameraTrackedBlocks({ blocks }: { blocks: PlacedBlock[] }) {
   const { camera } = useThree();
   const { blocksByChunk, visualDistance } = useBlocks();
   const [cameraPosition, setCameraPosition] = useState({ x: 0, z: 0 });
+  const lastChunkRef = useRef({ x: 0, z: 0 });
   
-  // Update camera position every frame
+  // Only update when camera moves to a different chunk
   useFrame(() => {
-    setCameraPosition({
-      x: camera.position.x,
-      z: camera.position.z
-    });
+    const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+    const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+    
+    if (currentChunkX !== lastChunkRef.current.x || 
+        currentChunkZ !== lastChunkRef.current.z) {
+      setCameraPosition({
+        x: camera.position.x,
+        z: camera.position.z
+      });
+      lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
+    }
   });
   
   // Filter blocks based on visible chunks

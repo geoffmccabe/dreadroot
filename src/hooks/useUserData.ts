@@ -38,6 +38,37 @@ export const useUserData = () => {
     }
   }, [user?.id, authLoading]);
 
+  // Real-time subscription to profile changes
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('Setting up real-time subscription for user profile:', user.id);
+
+    const channel = supabase
+      .channel(`profile-changes-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_profiles',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Profile updated via real-time:', payload);
+          if (payload.new && typeof payload.new === 'object') {
+            setProfile(payload.new as UserProfile);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('Cleaning up real-time subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const loadUserData = async () => {
     // If no authenticated user, clear state
     if (!user?.id) {
