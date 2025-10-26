@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
-import { FallingBlocks } from '@/components/FallingBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
@@ -1532,10 +1531,7 @@ function Scene({
       {/* Scene objects */}
       <Fortress />
       <BillboardWalls wallPositions={wallPositions} />
-      {/* Only render falling blocks (with expires_at) in FallingBlocks */}
-      <FallingBlocks blocks={blocks.filter(b => b.expires_at)} />
-      {/* Render permanent blocks normally */}
-      <PlacedBlocks blocks={blocks.filter(b => !b.expires_at)} />
+      <PlacedBlocks blocks={blocks} />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         msBetweeenDrops={settings.msBetweeenDrops} 
