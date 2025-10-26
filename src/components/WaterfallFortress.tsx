@@ -1810,49 +1810,34 @@ export default function WaterfallFortress() {
   const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
     if (!placeBlock) return;
     
-    console.log('Starting block rain - spawning at ground level with stacking');
+    console.log('Starting block rain batch placement');
     
     // Set expiration to 10 minutes from now
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    let placedCount = 0;
-    let lastThudTime = 0;
     
-    // Place blocks with staggered delays
-    for (let i = 0; i < positions.length; i++) {
-      const pos = positions[i];
-      const delay = Math.random() * 500; // Random delay 0-500ms
+    // Build local height map from existing blocks
+    const localHeightMap = new Map<string, number>();
+    blocks.forEach(block => {
+      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
+      const currentMax = localHeightMap.get(key) || 0;
+      localHeightMap.set(key, Math.max(currentMax, block.position_y));
+    });
+    
+    // Place all blocks at once using the local height map
+    const placePromises = positions.map(pos => {
+      const key = `${pos.x},${pos.z}`;
+      const groundY = localHeightMap.get(key) || 0;
+      const targetY = groundY + 1;
       
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Update local height map for stacking within this batch
+      localHeightMap.set(key, targetY);
       
-      try {
-        // Find highest block at this x,z position for stacking
-        let targetY = pos.y; // Start at ground level
-        const blocksAtPosition = blocks.filter(b => 
-          Math.round(b.position_x) === pos.x && 
-          Math.round(b.position_z) === pos.z
-        );
-        
-        if (blocksAtPosition.length > 0) {
-          const maxY = Math.max(...blocksAtPosition.map(b => b.position_y));
-          targetY = maxY + 1; // Stack on top
-        }
-        
-        // Place block at correct height
-        await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
-        placedCount++;
-        
-        // Play thud sound (throttled to every 50ms)
-        const now = Date.now();
-        if (mainAudioRefs.current.woodenThud && now - lastThudTime > 50) {
-          mainAudioRefs.current.woodenThud.currentTime = 0;
-          mainAudioRefs.current.woodenThud.volume = 0.3;
-          mainAudioRefs.current.woodenThud.play().catch(() => {});
-          lastThudTime = now;
-        }
-      } catch (error) {
-        console.error('Failed to place block:', error);
-      }
-    }
+      return placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
+    });
+    
+    // Wait for all blocks to be placed
+    const results = await Promise.allSettled(placePromises);
+    const placedCount = results.filter(r => r.status === 'fulfilled').length;
     
     toast({
       title: "Block Rain Complete!",

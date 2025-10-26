@@ -37,7 +37,7 @@ interface InstancedBlockGroupProps {
   onCollision?: (box: THREE.Box3, blockId: string) => void;
 }
 
-export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
+const InstancedBlockGroupComponent: React.FC<InstancedBlockGroupProps> = ({
   blocks,
   blockDef,
   geometry,
@@ -265,3 +265,18 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     />
   );
 };
+
+// Memoize to prevent re-renders when blocks array changes but IDs haven't
+export const InstancedBlockGroup = React.memo(InstancedBlockGroupComponent, (prev, next) => {
+  // Re-render if block count changes
+  if (prev.blocks.length !== next.blocks.length) return false;
+  
+  // Re-render if block type changes
+  if (prev.blockDef.key !== next.blockDef.key) return false;
+  
+  // Re-render if geometry changes
+  if (prev.geometry !== next.geometry) return false;
+  
+  // Don't compare individual block positions - those are updated via matrix in useFrame
+  return true;
+});
