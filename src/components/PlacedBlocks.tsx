@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useCallback, useState, useEffect } from 'react';
+import React, { useRef, useMemo, useCallback, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
@@ -13,8 +13,11 @@ const SharedBlockGeometry = () => {
   return useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
 };
 
-// Track falling blocks with their current Y position
-const fallingBlocksState = new Map<string, { currentY: number; velocity: number; landed: boolean }>();
+// Track falling blocks with their current Y position - exported for stacking calculations
+export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; landed: boolean }>();
+
+// Height map for O(1) stacking lookups
+export const heightMap = new Map<string, number>();
 
 // Component to render all placed blocks with collision detection using instanced rendering
 export const PlacedBlocks: React.FC<{ 
@@ -25,7 +28,6 @@ export const PlacedBlocks: React.FC<{
   const geometry = SharedBlockGeometry();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastThudTime = useRef(0);
-  const [, forceUpdate] = useState(0);
   
   // Initialize audio
   useEffect(() => {
@@ -42,7 +44,7 @@ export const PlacedBlocks: React.FC<{
   // Ensure block definitions are loaded before rendering any blocks
   const { isLoading: blockDefsLoading, blocksMap } = useBlocksData();
   
-  // Initialize falling state for new blocks with expires_at
+  // Initialize falling state for new blocks with expires_at and update height map
   useEffect(() => {
     blocks.forEach(block => {
       if (block.expires_at && !fallingBlocksState.has(block.id)) {
@@ -53,21 +55,33 @@ export const PlacedBlocks: React.FC<{
           landed: false
         });
       }
+      
+      // Update height map for all blocks (for O(1) stacking lookups)
+      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
+      const currentMax = heightMap.get(key) || 0;
+      heightMap.set(key, Math.max(currentMax, block.position_y));
     });
     
-    // Clean up removed blocks
+    // Clean up removed blocks from falling state and height map
     const blockIds = new Set(blocks.map(b => b.id));
     Array.from(fallingBlocksState.keys()).forEach(id => {
       if (!blockIds.has(id)) {
         fallingBlocksState.delete(id);
       }
     });
+    
+    // Rebuild height map from scratch to ensure accuracy
+    heightMap.clear();
+    blocks.forEach(block => {
+      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
+      const currentMax = heightMap.get(key) || 0;
+      heightMap.set(key, Math.max(currentMax, block.position_y));
+    });
   }, [blocks]);
   
-  // Physics update for falling blocks
+  // Physics update for falling blocks (no React re-renders, just update state)
   useFrame((state, delta) => {
     const gravity = 9.8;
-    let hasUpdates = false;
     
     fallingBlocksState.forEach((fallState, blockId) => {
       if (fallState.landed) return;
@@ -78,13 +92,17 @@ export const PlacedBlocks: React.FC<{
       // Apply gravity
       fallState.velocity += gravity * delta;
       fallState.currentY -= fallState.velocity * delta;
-      hasUpdates = true;
       
       // Check if landed
       if (fallState.currentY <= block.position_y) {
         fallState.currentY = block.position_y;
         fallState.velocity = 0;
         fallState.landed = true;
+        
+        // Update height map when block lands
+        const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
+        const currentMax = heightMap.get(key) || 0;
+        heightMap.set(key, Math.max(currentMax, block.position_y));
         
         // Play thud sound (throttled)
         const now = Date.now();
@@ -95,11 +113,6 @@ export const PlacedBlocks: React.FC<{
         }
       }
     });
-    
-    // Force re-render if blocks are moving
-    if (hasUpdates) {
-      forceUpdate(prev => prev + 1);
-    }
     
     // Update animated textures
     if (activeAnimatedTextures.size > 0) {
@@ -137,26 +150,17 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
-  // Group blocks by block_type for instanced rendering
+  // Group blocks by block_type for instanced rendering (stable grouping)
   const groupedBlocks = useMemo(() => {
     const groups = new Map<string, PlacedBlock[]>();
     
-    // Adjust Y position for falling blocks
-    const adjustedBlocks = blocks.map(block => {
-      const fallState = fallingBlocksState.get(block.id);
-      if (fallState && !fallState.landed) {
-        return { ...block, position_y: fallState.currentY };
-      }
-      return block;
-    });
-    
-    adjustedBlocks.forEach(block => {
+    blocks.forEach(block => {
       const existing = groups.get(block.block_type) || [];
       existing.push(block);
       groups.set(block.block_type, existing);
     });
     return groups;
-  }, [blocks]); // Re-compute each render when falling
+  }, [blocks]);
 
   // Don't render blocks until block definitions are loaded
   if (blockDefsLoading || blocks.length === 0) {

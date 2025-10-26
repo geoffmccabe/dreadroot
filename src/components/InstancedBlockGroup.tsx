@@ -1,7 +1,9 @@
 import React, { useRef, useMemo, useEffect } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
+import { fallingBlocksState } from './PlacedBlocks';
 
 // Global texture cache - shared across all instanced groups
 const textureCache = new Map<string, { 
@@ -183,8 +185,9 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     const boundingBox = new THREE.Box3();
     
     blocks.forEach((block, i) => {
+      const fallState = fallingBlocksState.get(block.id);
       const x = block.position_x + 0.5;
-      const y = block.position_y + 0.5;
+      const y = (fallState && !fallState.landed ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
@@ -202,6 +205,32 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     meshRef.current.geometry.boundingSphere = new THREE.Sphere();
     boundingBox.getBoundingSphere(meshRef.current.geometry.boundingSphere);
   }, [blocks]);
+  
+  // Update falling block positions every frame (direct matrix updates, no React re-renders)
+  useFrame(() => {
+    if (!meshRef.current) return;
+    
+    let needsUpdate = false;
+    const matrix = new THREE.Matrix4();
+    
+    blocks.forEach((block, i) => {
+      const fallState = fallingBlocksState.get(block.id);
+      if (fallState && !fallState.landed) {
+        // Update matrix for this falling block
+        const x = block.position_x + 0.5;
+        const y = fallState.currentY + 0.5;
+        const z = block.position_z + 0.5;
+        
+        matrix.setPosition(x, y, z);
+        meshRef.current!.setMatrixAt(i, matrix);
+        needsUpdate = true;
+      }
+    });
+    
+    if (needsUpdate) {
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
+  });
   
   // Create collision boxes for all instances
   useEffect(() => {
