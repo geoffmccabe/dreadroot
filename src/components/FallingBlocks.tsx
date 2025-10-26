@@ -130,7 +130,7 @@ const FallingBlockMesh: React.FC<{
 }> = ({ block, blockDef }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const { texture, updateTexture, isAnimated } = useAnimatedTexture(
-    blockDef.texture_path
+    blockDef.texture_url
   );
 
   useFrame((state, delta) => {
