@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
-import { getVisibleChunkKeys } from '@/lib/chunkManager';
+import { getVisibleChunkKeys, CHUNK_SIZE } from '@/lib/chunkManager';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
 import { FPSCounter, FPSDisplay } from '@/components/FPSCounter';
@@ -1339,7 +1339,33 @@ function Scene({
   const AUDIO_THROTTLE = 100; // Minimum 100ms between audio plays
   
   // Get camera ref for block rain
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
+
+  // Dynamic fog based on visual distance and user preference
+  const { visualDistance, fogEnabled } = useBlocks();
+
+  useEffect(() => {
+    if (fogEnabled) {
+      // Fog starts at 75% of visual distance, fully grey at 100%
+      const fogStart = (visualDistance * 0.75) * CHUNK_SIZE;
+      const fogEnd = visualDistance * CHUNK_SIZE;
+      
+      scene.fog = new THREE.Fog(
+        0xcccccc,  // Light grey fog color
+        fogStart,   // Fog begins to appear
+        fogEnd      // Fully fog color
+      );
+      
+      console.log(`🌫️ Fog enabled: ${fogStart.toFixed(1)} to ${fogEnd.toFixed(1)} blocks`);
+    } else {
+      scene.fog = null;
+      console.log('🌫️ Fog disabled');
+    }
+    
+    return () => {
+      scene.fog = null;
+    };
+  }, [scene, visualDistance, fogEnabled]);
 
   // Single audio context and optimized audio management
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -1582,9 +1608,6 @@ function Scene({
 
       {/* Dynamic Sky with day/night cycle and stars */}
       <DynamicSky weatherSettings={weatherSettings} />
-
-      {/* Fog - starts far away to not wash out colors */}
-      <fog attach="fog" args={['#dff1ff', 400, 600]} />
 
       {/* Scene objects */}
       <Fortress />

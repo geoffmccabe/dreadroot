@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 import { useUserData } from '@/hooks/useUserData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
@@ -62,10 +63,11 @@ interface UserPanelProps {
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
-  const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance } = useUserData();
+  const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const [visualDistance, setVisualDistance] = useState(4);
+  const [fogEnabled, setFogEnabled] = useState(true);
 
   // Sync blockchain address with profile
   useEffect(() => {
@@ -81,6 +83,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     }
   }, [profile?.visual_distance]);
 
+  // Sync fog enabled with profile
+  useEffect(() => {
+    if (profile?.fog_enabled !== undefined) {
+      setFogEnabled(profile.fog_enabled);
+    }
+  }, [profile?.fog_enabled]);
+
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setBlockchainAddress(e.target.value);
   };
@@ -95,6 +104,11 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     const newDistance = value[0];
     setVisualDistance(newDistance); // Update local state immediately
     await updateVisualDistance(newDistance); // Save to database
+  };
+
+  const handleFogToggle = async (checked: boolean) => {
+    setFogEnabled(checked); // Update local state immediately
+    await updateFogEnabled(checked); // Save to database
   };
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
@@ -185,6 +199,24 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 <p className="text-xs text-muted-foreground">
                   Controls how far you can see. Lower = better performance.
                 </p>
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="fog-toggle" className="text-sm font-medium">
+                    Distance Fog
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Gradually fade distant blocks to grey
+                  </p>
+                </div>
+                <Switch
+                  id="fog-toggle"
+                  checked={fogEnabled}
+                  onCheckedChange={handleFogToggle}
+                />
               </div>
             </Card>
           </TabsContent>

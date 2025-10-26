@@ -9,6 +9,7 @@ export interface UserProfile {
   coins: number;
   blockchain_address?: string;
   visual_distance?: number;
+  fog_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -362,6 +363,39 @@ export const useUserData = () => {
     }
   };
 
+  const updateFogEnabled = async (enabled: boolean) => {
+    if (!user?.id || !profile) {
+      console.log('No authenticated user or profile found, cannot update fog setting');
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ fog_enabled: enabled })
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error updating fog setting:', error);
+        throw error;
+      }
+
+      // Update local state
+      setProfile(prev => prev ? { ...prev, fog_enabled: enabled } : null);
+      console.log(`🌫️ Distance fog ${enabled ? 'enabled' : 'disabled'}`);
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating fog setting:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update fog setting",
+        variant: "destructive"
+      });
+      return false;
+    }
+  };
+
   const refreshData = async () => {
     console.log('refreshData called');
     await loadUserData();
@@ -377,6 +411,7 @@ export const useUserData = () => {
     addCoins,
     updateBlockchainAddress,
     updateVisualDistance,
+    updateFogEnabled,
     refreshData
   };
 };

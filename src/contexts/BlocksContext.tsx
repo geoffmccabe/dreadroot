@@ -9,6 +9,7 @@ interface BlocksContextType {
   blocks: PlacedBlock[];
   blocksByChunk: Map<string, PlacedBlock[]>;
   visualDistance: number;
+  fogEnabled: boolean;
   isLoading: boolean;
   placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => Promise<PlacedBlock>;
   removeBlock: (blockId: string) => Promise<boolean>;
@@ -31,10 +32,14 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   // Get visual distance from user profile, default to 4
   const visualDistance = profile?.visual_distance || 4;
   
+  // Get fog enabled from user profile, default to true
+  const fogEnabled = profile?.fog_enabled ?? true;
+  
   const contextValue = {
     ...blocksHook,
     blocksByChunk,
-    visualDistance
+    visualDistance,
+    fogEnabled
   };
   
   return (

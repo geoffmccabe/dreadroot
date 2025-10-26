@@ -248,6 +248,7 @@ export type Database = {
           blockchain_address: string | null
           coins: number
           created_at: string
+          fog_enabled: boolean
           id: string
           updated_at: string
           user_id: string
@@ -257,6 +258,7 @@ export type Database = {
           blockchain_address?: string | null
           coins?: number
           created_at?: string
+          fog_enabled?: boolean
           id?: string
           updated_at?: string
           user_id: string
@@ -266,6 +268,7 @@ export type Database = {
           blockchain_address?: string | null
           coins?: number
           created_at?: string
+          fog_enabled?: boolean
           id?: string
           updated_at?: string
           user_id?: string
