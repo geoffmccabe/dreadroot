@@ -79,13 +79,16 @@ export const PlacedBlocks: React.FC<{
       
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
       const currentMax = heightMap.get(key) || 0;
-      heightMap.set(key, Math.max(currentMax, block.position_y + 1));
+      // Round position_y to ensure integer heights in the map
+      heightMap.set(key, Math.max(currentMax, Math.round(block.position_y) + 1));
     });
   }, [blocks]);
   
   // Physics update for falling blocks (no React re-renders, just update state)
   useFrame((state, delta) => {
     const gravity = 9.8;
+    const maxDelta = 0.1; // Cap delta to prevent physics explosions
+    const cappedDelta = Math.min(delta, maxDelta);
     
     // Apply gravity to falling blocks
     fallingBlocksState.forEach((fallState, blockId) => {
@@ -95,13 +98,13 @@ export const PlacedBlocks: React.FC<{
       if (!block) return;
       
       // Apply gravity
-      fallState.velocity += gravity * delta;
-      fallState.currentY -= fallState.velocity * delta;
+      fallState.velocity += gravity * cappedDelta;
+      fallState.currentY -= fallState.velocity * cappedDelta;
       
       // Find the correct landing height (ground or top of stack)
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
       const stackHeight = heightMap.get(key) || 0;
-      const landingY = stackHeight;
+      const landingY = Math.round(stackHeight); // Ensure integer landing position
       
       // Check if landed
       if (fallState.currentY <= landingY) {
