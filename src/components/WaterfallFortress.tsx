@@ -761,6 +761,14 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     }
   }, [pickColor]);
 
+  // Reuse objects to avoid garbage collection
+  const matrixRef = useRef(new THREE.Matrix4());
+  const positionRef = useRef(new THREE.Vector3());
+  const rotationRef = useRef(new THREE.Euler());
+  const scaleRef = useRef(new THREE.Vector3());
+  const quaternionRef = useRef(new THREE.Quaternion());
+  const colorRef = useRef(new THREE.Color());
+
   useFrame((state, delta) => {
     if (!instancedMeshRef.current) return;
     
@@ -772,11 +780,12 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
       spawnDrop();
     }
     
-    const matrix = new THREE.Matrix4();
-    const position = new THREE.Vector3();
-    const rotation = new THREE.Euler();
-    const scale = new THREE.Vector3();
-    const color = new THREE.Color();
+    // Reuse object references instead of creating new ones
+    const matrix = matrixRef.current;
+    const position = positionRef.current;
+    const rotation = rotationRef.current;
+    const scale = scaleRef.current;
+    const color = colorRef.current;
     
     const mul = flowSpeed;
     let activeCount = 0;
@@ -810,7 +819,8 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
       position.set(drop.position.x, drop.position.y + yOffset, drop.position.z);
       rotation.set(0, 0, 0);
       
-      matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
+      quaternionRef.current.setFromEuler(rotation);
+      matrix.compose(position, quaternionRef.current, scale);
       instancedMeshRef.current.setMatrixAt(activeCount, matrix);
       
       // Set color for this instance
