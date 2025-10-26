@@ -73,9 +73,13 @@ export const PlacedBlocks: React.FC<{
     // Rebuild height map from scratch to ensure accuracy
     heightMap.clear();
     blocks.forEach(block => {
+      // Skip falling blocks that haven't landed yet
+      const fallState = fallingBlocksState.get(block.id);
+      if (fallState && !fallState.landed) return;
+      
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
       const currentMax = heightMap.get(key) || 0;
-      heightMap.set(key, Math.max(currentMax, block.position_y));
+      heightMap.set(key, Math.max(currentMax, block.position_y + 1));
     });
   }, [blocks]);
   
@@ -94,16 +98,19 @@ export const PlacedBlocks: React.FC<{
       fallState.velocity += gravity * delta;
       fallState.currentY -= fallState.velocity * delta;
       
+      // Find the correct landing height (ground or top of stack)
+      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
+      const stackHeight = heightMap.get(key) || 0;
+      const landingY = stackHeight;
+      
       // Check if landed
-      if (fallState.currentY <= block.position_y) {
-        fallState.currentY = Math.round(block.position_y);
+      if (fallState.currentY <= landingY) {
+        fallState.currentY = landingY;
         fallState.velocity = 0;
         fallState.landed = true;
         
         // Update height map when block lands
-        const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-        const currentMax = heightMap.get(key) || 0;
-        heightMap.set(key, Math.max(currentMax, block.position_y));
+        heightMap.set(key, landingY + 1);
         
         // Play thud sound (throttled)
         const now = Date.now();
