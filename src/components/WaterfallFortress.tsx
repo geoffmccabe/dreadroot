@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
+import { FallingBlocks } from '@/components/FallingBlocks';
 import { BlockPreview } from '@/components/BlockPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
@@ -1531,7 +1532,7 @@ function Scene({
       {/* Scene objects */}
       <Fortress />
       <BillboardWalls wallPositions={wallPositions} />
-      <PlacedBlocks blocks={blocks} />
+      <FallingBlocks blocks={blocks} />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         msBetweeenDrops={settings.msBetweeenDrops} 
@@ -1800,18 +1801,17 @@ export default function WaterfallFortress() {
     }, 600); // Animation duration
   }, [addCoins]);
 
-  // Block Rain feature - spawns 100 random blocks high in the sky to fall and stack naturally
+  // Block Rain feature - spawns 100 random blocks at ground level
   const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
     if (!placeBlock) return;
     
-    console.log('Starting block rain - spawning at Y=100');
+    console.log('Starting block rain - calculating ground positions and stacking');
     
     // Set expiration to 10 minutes from now
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     let placedCount = 0;
-    let lastThudTime = 0;
     
-    // Place blocks with staggered delays
+    // Place blocks with staggered delays, checking for stacking
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
       const delay = Math.random() * 500; // Random delay 0-500ms
@@ -1819,18 +1819,22 @@ export default function WaterfallFortress() {
       await new Promise(resolve => setTimeout(resolve, delay));
       
       try {
-        // Spawn at Y=100 (high in sky) - physics will make them fall and stack naturally
-        await placeBlock(pos.x, 100, pos.z, pos.type, expiresAt);
+        // Find highest block at this x,z position for stacking
+        let targetY = pos.y; // Start at ground level
+        const blocksAtPosition = blocks.filter(b => 
+          Math.round(b.position_x) === pos.x && 
+          Math.round(b.position_z) === pos.z
+        );
+        
+        if (blocksAtPosition.length > 0) {
+          const maxY = Math.max(...blocksAtPosition.map(b => b.position_y));
+          targetY = maxY + 1; // Stack on top
+        }
+        
+        // Place block at ground/stack level - will be rendered falling from sky
+        await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
         placedCount++;
         
-        // Play thud sound (throttled to every 50ms)
-        const now = Date.now();
-        if (mainAudioRefs.current.woodenThud && now - lastThudTime > 50) {
-          mainAudioRefs.current.woodenThud.currentTime = 0;
-          mainAudioRefs.current.woodenThud.volume = 0.3;
-          mainAudioRefs.current.woodenThud.play().catch(() => {});
-          lastThudTime = now;
-        }
       } catch (error) {
         console.error('Failed to place block:', error);
       }
@@ -1841,7 +1845,7 @@ export default function WaterfallFortress() {
       description: `${placedCount} blocks falling from sky (expire in 10 min)`,
       duration: 2000
     });
-  }, [toast, placeBlock]);
+  }, [toast, placeBlock, blocks]);
 
   // Block Rain trigger - spawns 100 random blocks for testing
   const handleBlockRain = useCallback(() => {
