@@ -208,12 +208,14 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     boundingBox.getBoundingSphere(meshRef.current.geometry.boundingSphere);
   }, [blocks]);
   
+  // Reuse matrix object to avoid garbage collection
+  const matrixRef = useRef(new THREE.Matrix4());
+  
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   useFrame(() => {
     if (!meshRef.current) return;
     
     let needsUpdate = false;
-    const matrix = new THREE.Matrix4();
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
@@ -223,8 +225,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         const y = fallState.currentY + 0.5;
         const z = block.position_z + 0.5;
         
-        matrix.setPosition(x, y, z);
-        meshRef.current!.setMatrixAt(i, matrix);
+        matrixRef.current.setPosition(x, y, z);
+        meshRef.current!.setMatrixAt(i, matrixRef.current);
         needsUpdate = true;
       }
     });

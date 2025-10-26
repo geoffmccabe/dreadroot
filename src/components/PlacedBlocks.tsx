@@ -42,7 +42,7 @@ export const PlacedBlocks: React.FC<{
   }, []);
   
   // Ensure block definitions are loaded before rendering any blocks
-  const { isLoading: blockDefsLoading, blocksMap } = useBlocksData();
+  const { isLoading: blockDefsLoading, blocksMap: blockDefinitionsMap } = useBlocksData();
   
   // Initialize falling state for new blocks with expires_at and update height map
   useEffect(() => {
@@ -74,6 +74,13 @@ export const PlacedBlocks: React.FC<{
     });
   }, [blocks]);
   
+  // Create block lookup map for O(1) access instead of O(n) find
+  const blocksMap = useMemo(() => {
+    const map = new Map();
+    blocks.forEach(block => map.set(block.id, block));
+    return map;
+  }, [blocks]);
+  
   // Physics update for falling blocks (no React re-renders, just update state)
   useFrame((state, delta) => {
     const gravity = 9.8;
@@ -84,7 +91,7 @@ export const PlacedBlocks: React.FC<{
     fallingBlocksState.forEach((fallState, blockId) => {
       if (fallState.landed) return;
       
-      const block = blocks.find(b => b.id === blockId);
+      const block = blocksMap.get(blockId);
       if (!block) return;
       
       // Apply gravity
@@ -175,7 +182,7 @@ export const PlacedBlocks: React.FC<{
   return (
     <>
       {Array.from(groupedBlocks.entries()).map(([blockType, blocksOfType]) => {
-        const blockDef = blocksMap.get(blockType);
+        const blockDef = blockDefinitionsMap.get(blockType);
         if (!blockDef) return null;
         
         return (

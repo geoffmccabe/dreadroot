@@ -63,13 +63,12 @@ export const FallingBlocks: React.FC<{
     }
   }, [blocks]);
 
-  // Physics update
+  // Physics update - mutate in place to avoid creating new Maps every frame
   useFrame((state, delta) => {
     const gravity = 9.8;
     let hasUpdates = false;
-    const newFallingBlocks = new Map(fallingBlocks);
 
-    newFallingBlocks.forEach((block, id) => {
+    fallingBlocks.forEach((block, id) => {
       if (!block.falling) return;
 
       // Apply gravity
@@ -102,7 +101,8 @@ export const FallingBlocks: React.FC<{
     });
 
     if (hasUpdates) {
-      setFallingBlocks(new Map(newFallingBlocks));
+      // Force React update without creating new Map
+      setFallingBlocks(new Map(fallingBlocks));
     }
   });
 
