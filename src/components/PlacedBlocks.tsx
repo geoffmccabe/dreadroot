@@ -14,7 +14,7 @@ const SharedBlockGeometry = () => {
 };
 
 // Track falling blocks with their current Y position - exported for stacking calculations
-export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; landed: boolean }>();
+export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; landed: boolean; targetY: number }>();
 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
@@ -57,11 +57,12 @@ export const PlacedBlocks: React.FC<{
     // Initialize falling state for new blocks with expires_at
     blocks.forEach(block => {
       if (block.expires_at && !fallingBlocksState.has(block.id)) {
-        // New falling block - start at Y=100
+        // New falling block - start visual fall at Y=100, but land at database position
         fallingBlocksState.set(block.id, {
           currentY: 100,
           velocity: 0,
-          landed: false
+          landed: false,
+          targetY: block.position_y  // Use database position which has stacking logic
         });
       }
     });
@@ -69,14 +70,16 @@ export const PlacedBlocks: React.FC<{
     // Rebuild height map from scratch for accurate stacking
     heightMap.clear();
     blocks.forEach(block => {
-      // Skip falling blocks that haven't landed yet
-      const fallState = fallingBlocksState.get(block.id);
-      if (fallState && !fallState.landed) return;
-      
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
       const currentMax = heightMap.get(key) || 0;
+      
+      // For falling blocks, use their target position to reserve space
+      // For landed blocks, use their actual position
+      const fallState = fallingBlocksState.get(block.id);
+      const blockY = (fallState && !fallState.landed) ? fallState.targetY : block.position_y;
+      
       // Store the Y position where the NEXT block should land (top of this block)
-      const blockTop = Math.round(block.position_y) + 1;
+      const blockTop = Math.round(blockY) + 1;
       heightMap.set(key, Math.max(currentMax, blockTop));
     });
   }, [blocks]);
@@ -98,19 +101,14 @@ export const PlacedBlocks: React.FC<{
       fallState.velocity += gravity * cappedDelta;
       fallState.currentY -= fallState.velocity * cappedDelta;
       
-      // Find the correct landing height (ground or top of stack)
-      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-      const stackHeight = heightMap.get(key) || 0;
-      const landingY = Math.round(stackHeight); // Ensure integer landing position
+      // Use the target landing Y from database (already has stacking logic)
+      const landingY = fallState.targetY;
       
       // Check if landed
       if (fallState.currentY <= landingY) {
         fallState.currentY = landingY;
         fallState.velocity = 0;
         fallState.landed = true;
-        
-        // Update height map when block lands
-        heightMap.set(key, landingY + 1);
         
         // Play thud sound (throttled)
         const now = Date.now();
