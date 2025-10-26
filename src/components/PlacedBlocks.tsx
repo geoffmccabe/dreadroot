@@ -46,6 +46,15 @@ export const PlacedBlocks: React.FC<{
   
   // Initialize falling state for new blocks with expires_at and update height map
   useEffect(() => {
+    // Clean up removed blocks from falling state
+    const blockIds = new Set(blocks.map(b => b.id));
+    Array.from(fallingBlocksState.keys()).forEach(id => {
+      if (!blockIds.has(id)) {
+        fallingBlocksState.delete(id);
+      }
+    });
+    
+    // Initialize falling state for new blocks with expires_at
     blocks.forEach(block => {
       if (block.expires_at && !fallingBlocksState.has(block.id)) {
         // New falling block - start at Y=100
@@ -55,22 +64,9 @@ export const PlacedBlocks: React.FC<{
           landed: false
         });
       }
-      
-      // Update height map for all blocks (for O(1) stacking lookups)
-      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-      const currentMax = heightMap.get(key) || 0;
-      heightMap.set(key, Math.max(currentMax, block.position_y));
     });
     
-    // Clean up removed blocks from falling state and height map
-    const blockIds = new Set(blocks.map(b => b.id));
-    Array.from(fallingBlocksState.keys()).forEach(id => {
-      if (!blockIds.has(id)) {
-        fallingBlocksState.delete(id);
-      }
-    });
-    
-    // Rebuild height map from scratch to ensure accuracy
+    // Rebuild height map from scratch for accurate stacking
     heightMap.clear();
     blocks.forEach(block => {
       // Skip falling blocks that haven't landed yet
@@ -79,8 +75,9 @@ export const PlacedBlocks: React.FC<{
       
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
       const currentMax = heightMap.get(key) || 0;
-      // Round position_y to ensure integer heights in the map
-      heightMap.set(key, Math.max(currentMax, Math.round(block.position_y) + 1));
+      // Store the Y position where the NEXT block should land (top of this block)
+      const blockTop = Math.round(block.position_y) + 1;
+      heightMap.set(key, Math.max(currentMax, blockTop));
     });
   }, [blocks]);
   
