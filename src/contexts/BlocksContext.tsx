@@ -1,10 +1,14 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 import { PlacedBlock } from '@/types/blocks';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserData } from '@/hooks/useUserData';
+import { organizeBlocksByChunk } from '@/lib/chunkManager';
 
 interface BlocksContextType {
   blocks: PlacedBlock[];
+  blocksByChunk: Map<string, PlacedBlock[]>;
+  visualDistance: number;
   isLoading: boolean;
   placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => Promise<PlacedBlock>;
   removeBlock: (blockId: string) => Promise<boolean>;
@@ -16,10 +20,25 @@ const BlocksContext = createContext<BlocksContextType | undefined>(undefined);
 
 export function BlocksProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { profile } = useUserData();
   const blocksHook = usePlacedBlocksWithCache(user?.id || null);
   
+  // Organize blocks by chunks for efficient rendering
+  const blocksByChunk = useMemo(() => {
+    return organizeBlocksByChunk(blocksHook.blocks);
+  }, [blocksHook.blocks]);
+
+  // Get visual distance from user profile, default to 4
+  const visualDistance = profile?.visual_distance || 4;
+  
+  const contextValue = {
+    ...blocksHook,
+    blocksByChunk,
+    visualDistance
+  };
+  
   return (
-    <BlocksContext.Provider value={blocksHook}>
+    <BlocksContext.Provider value={contextValue}>
       {children}
     </BlocksContext.Provider>
   );

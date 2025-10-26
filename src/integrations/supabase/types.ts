@@ -251,6 +251,7 @@ export type Database = {
           id: string
           updated_at: string
           user_id: string
+          visual_distance: number
         }
         Insert: {
           blockchain_address?: string | null
@@ -259,6 +260,7 @@ export type Database = {
           id?: string
           updated_at?: string
           user_id: string
+          visual_distance?: number
         }
         Update: {
           blockchain_address?: string | null
@@ -267,6 +269,7 @@ export type Database = {
           id?: string
           updated_at?: string
           user_id?: string
+          visual_distance?: number
         }
         Relationships: []
       }

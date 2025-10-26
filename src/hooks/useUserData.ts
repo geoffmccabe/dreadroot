@@ -8,6 +8,7 @@ export interface UserProfile {
   user_id: string;
   coins: number;
   blockchain_address?: string;
+  visual_distance?: number;
   created_at: string;
   updated_at: string;
 }
@@ -325,6 +326,42 @@ export const useUserData = () => {
     }
   };
 
+  const updateVisualDistance = async (distance: number) => {
+    if (!user?.id || !profile) {
+      console.log('No authenticated user or profile found, cannot update visual distance');
+      return false;
+    }
+
+    // Ensure distance is within valid range
+    const clampedDistance = Math.max(1, Math.min(20, distance));
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ visual_distance: clampedDistance })
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error updating visual distance:', error);
+        throw error;
+      }
+
+      // Update local state
+      setProfile(prev => prev ? { ...prev, visual_distance: clampedDistance } : null);
+      console.log(`🔭 Visual distance changed: ${clampedDistance} chunks (${clampedDistance * 16} blocks radius)`);
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating visual distance:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update visual distance",
+        variant: "destructive"
+      });
+      return false;
+    }
+  };
+
   const refreshData = async () => {
     console.log('refreshData called');
     await loadUserData();
@@ -339,6 +376,7 @@ export const useUserData = () => {
     useBlock,
     addCoins,
     updateBlockchainAddress,
+    updateVisualDistance,
     refreshData
   };
 };

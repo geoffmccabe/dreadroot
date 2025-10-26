@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 import { useUserData } from '@/hooks/useUserData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
@@ -61,9 +62,10 @@ interface UserPanelProps {
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
-  const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress } = useUserData();
+  const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const [blockchainAddress, setBlockchainAddress] = useState('');
+  const [visualDistance, setVisualDistance] = useState(4);
 
   // Sync blockchain address with profile
   useEffect(() => {
@@ -71,6 +73,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
       setBlockchainAddress(profile.blockchain_address);
     }
   }, [profile?.blockchain_address]);
+
+  // Sync visual distance with profile
+  useEffect(() => {
+    if (profile?.visual_distance !== undefined) {
+      setVisualDistance(profile.visual_distance);
+    }
+  }, [profile?.visual_distance]);
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setBlockchainAddress(e.target.value);
@@ -80,6 +89,12 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     if (blockchainAddress !== (profile?.blockchain_address || '')) {
       await updateBlockchainAddress(blockchainAddress);
     }
+  };
+
+  const handleVisualDistanceChange = async (value: number[]) => {
+    const newDistance = value[0];
+    setVisualDistance(newDistance); // Update local state immediately
+    await updateVisualDistance(newDistance); // Save to database
   };
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
@@ -148,6 +163,28 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Email</Label>
                 <div className="text-lg font-semibold">{user?.email || 'Not logged in'}</div>
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Visual Distance</Label>
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {visualDistance} chunks ({visualDistance * 16} blocks)
+                  </span>
+                </div>
+                <Slider
+                  value={[visualDistance]}
+                  onValueChange={handleVisualDistanceChange}
+                  min={1}
+                  max={20}
+                  step={1}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Controls how far you can see. Lower = better performance.
+                </p>
               </div>
             </Card>
           </TabsContent>
