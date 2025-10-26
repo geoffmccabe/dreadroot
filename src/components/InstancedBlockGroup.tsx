@@ -186,11 +186,11 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
-      // Render at exact database position (no offset)
-      const x = block.position_x;
+      // Add 0.5 offset because Three.js positions by center, database stores corner
+      const x = block.position_x + 0.5;
       // Only use fallState for blocks with expires_at (actively falling)
-      const y = (block.expires_at && fallState ? fallState.currentY : block.position_y);
-      const z = block.position_z;
+      const y = (block.expires_at && fallState ? fallState.currentY : block.position_y) + 0.5;
+      const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
       meshRef.current!.setMatrixAt(i, matrix);
@@ -218,10 +218,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
       if (fallState && !fallState.landed) {
-        // Update matrix for this falling block (exact position, no offset)
-        const x = block.position_x;
-        const y = fallState.currentY;
-        const z = block.position_z;
+        // Add 0.5 offset because Three.js positions by center, database stores corner
+        const x = block.position_x + 0.5;
+        const y = fallState.currentY + 0.5;
+        const z = block.position_z + 0.5;
         
         matrix.setPosition(x, y, z);
         meshRef.current!.setMatrixAt(i, matrix);
@@ -288,7 +288,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       {glowingBlocks.map((block) => (
         <pointLight
           key={block.id}
-          position={[block.position_x, block.position_y, block.position_z]}
+          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
           color={blockDef?.properties?.color || '#FFE135'}
           intensity={glowFactor * 2}
           distance={glowFactor * 3}
