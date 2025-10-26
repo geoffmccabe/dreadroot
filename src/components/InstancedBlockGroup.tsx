@@ -1,5 +1,5 @@
 import React, { useRef, useMemo, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
@@ -46,6 +46,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
+  const { camera } = useThree();
   
   // Reuse matrix to avoid garbage collection
   const matrixRef = useRef(new THREE.Matrix4());
@@ -283,9 +284,23 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       return true;
     });
     
-    // Limit to 10 nearest glowing blocks for performance
-    return uniqueBlocks.slice(0, 10);
-  }, [blocks, shouldGlow]);
+    // Calculate distance from camera to each block's center
+    const blocksWithDistance = uniqueBlocks.map(block => {
+      const blockCenter = new THREE.Vector3(
+        block.position_x + 0.5,
+        block.position_y + 0.5,
+        block.position_z + 0.5
+      );
+      const distance = camera.position.distanceTo(blockCenter);
+      return { block, distance };
+    });
+    
+    // Sort by distance (nearest first) and take the 10 closest
+    return blocksWithDistance
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 10)
+      .map(item => item.block);
+  }, [blocks, shouldGlow, camera.position]);
   
   if (!material) return null;
 
