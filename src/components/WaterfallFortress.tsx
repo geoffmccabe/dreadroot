@@ -1319,6 +1319,16 @@ function Scene({
       const spreadRadius = 5; // 5 blocks in each direction
       const blockPositions: Array<{ x: number; y: number; z: number; type: string }> = [];
       
+      // Calculate positions for 100 blocks
+      const localHeightMap = new Map<string, number>();
+      
+      // Initialize local height map with existing blocks
+      blocks.forEach(block => {
+        const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
+        const currentMax = localHeightMap.get(key) || 0;
+        localHeightMap.set(key, Math.max(currentMax, block.position_y + 1));
+      });
+      
       // Create positions for 100 blocks
       for (let i = 0; i < 100; i++) {
         const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
@@ -1330,30 +1340,10 @@ function Scene({
         // Round to grid
         const gridX = Math.round(randomX);
         const gridZ = Math.round(randomZ);
-        
-        // Find the highest existing block at this X,Z position for stacking
-        // Use height map for O(1) lookup instead of iterating all blocks
         const key = `${gridX},${gridZ}`;
-        let groundY = 0;
         
-        // Check height map first (includes landed blocks)
-        const { heightMap, fallingBlocksState } = await import('./PlacedBlocks');
-        const mapHeight = heightMap.get(key) || 0;
-        groundY = mapHeight;
-        
-        // Also check falling blocks that haven't landed yet at this position
-        blocks.forEach(block => {
-          if (Math.round(block.position_x) === gridX && Math.round(block.position_z) === gridZ) {
-            const fallState = fallingBlocksState.get(block.id);
-            if (fallState && !fallState.landed) {
-              // Use current falling position, not database position
-              groundY = Math.max(groundY, fallState.currentY);
-            }
-          }
-        });
-        
-        // Add 1 to stack on top
-        if (groundY > 0) groundY += 1;
+        // Get current height at this position from local map
+        const groundY = localHeightMap.get(key) || 0;
         
         blockPositions.push({
           x: gridX,
@@ -1361,6 +1351,9 @@ function Scene({
           z: gridZ,
           type: randomBlockType
         });
+        
+        // Update local height map for next block at this position
+        localHeightMap.set(key, groundY + 1);
       }
       
       console.log('Calculated', blockPositions.length, 'block positions');
