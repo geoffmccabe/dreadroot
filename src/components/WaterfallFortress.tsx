@@ -240,6 +240,9 @@ function FirstPersonControls({
   const lastFireTime = useRef(0);
   const FIRE_RATE_LIMIT = 150; // Minimum 150ms between shots
 
+  // Cache for block collision boxes to avoid recreating them on every render
+  const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
+
   // Collision boxes for fortress walls and placed blocks
   const colliders = useMemo(() => {
     const cliffW = 40, cliffH = 20, frontT = 2;
@@ -273,18 +276,27 @@ function FirstPersonControls({
       )
     ];
 
-    // Add placed blocks as colliders for jumping/collision
-    const blockColliders = existingBlocks.map(block => {
-      const collider = new THREE.Box3(
-        new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5),
-        new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5)
-      );
-      console.log(`Block collider at (${block.position_x}, ${block.position_y}, ${block.position_z}):`, collider);
-      return collider;
-    });
+    // Incrementally update block colliders cache
+    const currentBlockIds = new Set(existingBlocks.map(b => b.id));
     
-    console.log(`Total colliders: ${fortressColliders.length} fortress + ${blockColliders.length} blocks = ${fortressColliders.length + blockColliders.length}`);
-    return [...fortressColliders, ...blockColliders];
+    // Remove collision boxes for deleted blocks
+    for (const id of blockCollisionCache.current.keys()) {
+      if (!currentBlockIds.has(id)) {
+        blockCollisionCache.current.delete(id);
+      }
+    }
+    
+    // Add collision boxes for new blocks only
+    for (const block of existingBlocks) {
+      if (!blockCollisionCache.current.has(block.id)) {
+        blockCollisionCache.current.set(block.id, new THREE.Box3(
+          new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5),
+          new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5)
+        ));
+      }
+    }
+    
+    return [...fortressColliders, ...Array.from(blockCollisionCache.current.values())];
   }, [existingBlocks]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
