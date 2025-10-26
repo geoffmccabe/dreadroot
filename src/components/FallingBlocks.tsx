@@ -163,8 +163,8 @@ const FallingBlockMesh: React.FC<{
       <boxGeometry args={[1, 1, 1]} />
       <meshLambertMaterial 
         map={texture}
-        transparent={blockDef.transparent}
-        opacity={blockDef.opacity}
+        transparent={blockDef.properties?.transparent ?? false}
+        opacity={blockDef.properties?.opacity ?? 1}
       />
     </mesh>
   );
