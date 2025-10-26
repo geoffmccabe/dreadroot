@@ -1322,8 +1322,8 @@ function Scene({
       // Initialize local height map with existing blocks
       blocks.forEach(block => {
         const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-        const currentMax = localHeightMap.get(key) || 0;
-        localHeightMap.set(key, Math.max(currentMax, block.position_y + 1));
+        const currentMax = localHeightMap.get(key) || -1;
+        localHeightMap.set(key, Math.max(currentMax, block.position_y));
       });
       
       // Create positions for 100 blocks
@@ -1340,7 +1340,7 @@ function Scene({
         const key = `${gridX},${gridZ}`;
         
         // Get current height at this position from local map
-        const groundY = localHeightMap.get(key) || 0;
+        const groundY = (localHeightMap.get(key) || -1) + 1;
         
         blockPositions.push({
           x: gridX,
@@ -1819,20 +1819,19 @@ export default function WaterfallFortress() {
     const localHeightMap = new Map<string, number>();
     blocks.forEach(block => {
       const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-      const currentMax = localHeightMap.get(key) || 0;
+      const currentMax = localHeightMap.get(key) || -1;
       localHeightMap.set(key, Math.max(currentMax, block.position_y));
     });
     
     // Place all blocks at once using the local height map
     const placePromises = positions.map(pos => {
       const key = `${pos.x},${pos.z}`;
-      const groundY = localHeightMap.get(key) || 0;
-      const targetY = groundY + 1;
+      const groundY = (localHeightMap.get(key) || -1) + 1;
       
       // Update local height map for stacking within this batch
-      localHeightMap.set(key, targetY);
+      localHeightMap.set(key, groundY);
       
-      return placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
+      return placeBlock(pos.x, groundY, pos.z, pos.type, expiresAt);
     });
     
     // Wait for all blocks to be placed
