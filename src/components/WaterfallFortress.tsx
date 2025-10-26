@@ -1532,7 +1532,10 @@ function Scene({
       {/* Scene objects */}
       <Fortress />
       <BillboardWalls wallPositions={wallPositions} />
-      <FallingBlocks blocks={blocks} />
+      {/* Only render falling blocks (with expires_at) in FallingBlocks */}
+      <FallingBlocks blocks={blocks.filter(b => b.expires_at)} />
+      {/* Render permanent blocks normally */}
+      <PlacedBlocks blocks={blocks.filter(b => !b.expires_at)} />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         msBetweeenDrops={settings.msBetweeenDrops} 
