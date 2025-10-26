@@ -1365,9 +1365,39 @@ function Scene({
       );
       
       console.log(`🌫️ Fog enabled: ${fogStart.toFixed(1)} to ${fogEnd.toFixed(1)} blocks`);
+      
+      // Force all materials to update their fog uniforms
+      scene.traverse((object) => {
+        if ((object as any).isMesh) {
+          const mesh = object as THREE.Mesh;
+          if (mesh.material) {
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            materials.forEach((mat) => {
+              if ((mat as any).isMaterial) {
+                mat.needsUpdate = true;
+              }
+            });
+          }
+        }
+      });
     } else {
       scene.fog = null;
       console.log('🌫️ Fog disabled');
+      
+      // Force materials to update when fog is disabled
+      scene.traverse((object) => {
+        if ((object as any).isMesh) {
+          const mesh = object as THREE.Mesh;
+          if (mesh.material) {
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            materials.forEach((mat) => {
+              if ((mat as any).isMaterial) {
+                mat.needsUpdate = true;
+              }
+            });
+          }
+        }
+      });
     }
     
     return () => {
@@ -1911,9 +1941,9 @@ export default function WaterfallFortress() {
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
       
-      // Small fixed delay for visual effect only
+      // 100ms delay between each block for visual effect
       if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       try {
