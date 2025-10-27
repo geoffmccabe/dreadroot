@@ -475,7 +475,7 @@ function FirstPersonControls({
   }, []);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (!isLocked.current) return;
+    if (!isLocked.current || !event.movementX || !event.movementY) return;
     
     const sensitivity = 0.002;
     yaw.current -= event.movementX * sensitivity;
@@ -490,7 +490,9 @@ function FirstPersonControls({
   const handleWheel = useCallback((event: WheelEvent) => {
     if (!isLocked.current || !blockPlacementMode) return;
     
+    // Only handle wheel events when pointer is locked and in block placement mode
     event.preventDefault();
+    event.stopPropagation();
     const direction = event.deltaY > 0 ? 'next' : 'prev';
     onCycleBlock(direction);
   }, [blockPlacementMode, onCycleBlock]);

@@ -588,7 +588,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
       </Tabs>
 
       <ScrollArea className="h-[600px] w-full">
-        <div className="pr-4">
+        <div className="pr-4 pb-8">
           {/* Block Rain Controls - only show for BASIC blocks */}
           {activeClass === 'basic' && (
             <Card className="p-4 mb-4">
