@@ -191,25 +191,46 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     const boundingBox = new THREE.Box3();
     const currentBlockIds = new Set(blocks.map(b => b.id));
     
-    // Set matrix for ALL blocks based on current state
+    // Clean up initialized IDs for removed blocks
+    for (const id of initializedBlockIds.current) {
+      if (!currentBlockIds.has(id)) {
+        initializedBlockIds.current.delete(id);
+      }
+    }
+    
+    // Update index map and initialize ONLY new blocks
     blockIndexMap.current.clear();
+    let initializedNewBlocks = false;
+    
     blocks.forEach((block, i) => {
       blockIndexMap.current.set(block.id, i);
       
+      // ONLY initialize if this block ID has never been initialized
+      if (!initializedBlockIds.current.has(block.id)) {
+        const fallState = fallingBlocksState.get(block.id);
+        const x = block.position_x + 0.5;
+        const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+        const z = block.position_z + 0.5;
+        
+        matrix.setPosition(x, y, z);
+        meshRef.current!.setMatrixAt(i, matrix);
+        initializedBlockIds.current.add(block.id);
+        initializedNewBlocks = true;
+      }
+      
+      // Always update bounding box
       const fallState = fallingBlocksState.get(block.id);
       const x = block.position_x + 0.5;
       const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
-      
-      matrix.setPosition(x, y, z);
-      meshRef.current!.setMatrixAt(i, matrix);
-      
-      // Update bounding box
       boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
       boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
     
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    // Only trigger update if we actually initialized new blocks
+    if (initializedNewBlocks) {
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
     
     // Set bounding box/sphere
     if (!meshRef.current.boundingBox) {
@@ -226,37 +247,35 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   useFrame(() => {
     if (!meshRef.current) return;
     
-    let needsUpdate = false;
     const matrix = matrixRef.current;
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
       const x = block.position_x + 0.5;
       const z = block.position_z + 0.5;
+      let y: number;
       
       if (fallState) {
         if (!fallState.landed) {
           // Still falling - use animated position
-          const y = fallState.currentY + 0.5;
-          matrix.setPosition(x, y, z);
-          meshRef.current!.setMatrixAt(i, matrix);
-          needsUpdate = true;
+          y = fallState.currentY + 0.5;
         } else {
           // Just landed - sync to final database position
-          const y = block.position_y + 0.5;
-          matrix.setPosition(x, y, z);
-          meshRef.current!.setMatrixAt(i, matrix);
-          needsUpdate = true;
-          
+          y = block.position_y + 0.5;
           // Remove from state after syncing position
           fallingBlocksState.delete(block.id);
         }
+      } else {
+        // Static block - use database position
+        y = block.position_y + 0.5;
       }
+      
+      matrix.setPosition(x, y, z);
+      meshRef.current!.setMatrixAt(i, matrix);
     });
     
-    if (needsUpdate) {
-      meshRef.current.instanceMatrix.needsUpdate = true;
-    }
+    // Always update since we're managing all positions here
+    meshRef.current.instanceMatrix.needsUpdate = true;
   });
   
   // Create collision boxes for all instances (only when blocks change, not on every frame)
