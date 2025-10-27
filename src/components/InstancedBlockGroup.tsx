@@ -188,15 +188,16 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
+    let needsUpdate = false;
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
       
-      // Skip updating matrix if block just landed - useFrame is handling the final sync
-      if (fallState?.landed) {
+      // Skip updating matrix if block is falling or just landed - useFrame owns these blocks
+      if (fallState) {
         // Still need to include in bounding box calculation
         const x = block.position_x + 0.5;
-        const y = block.position_y + 0.5;
+        const y = (fallState.landed ? block.position_y : fallState.currentY) + 0.5;
         const z = block.position_z + 0.5;
         boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
         boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
@@ -204,17 +205,20 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       }
       
       const x = block.position_x + 0.5;
-      const y = (fallState && !fallState.landed ? fallState.currentY : block.position_y) + 0.5;
+      const y = block.position_y + 0.5;
       const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
       meshRef.current!.setMatrixAt(i, matrix);
+      needsUpdate = true;
       
       boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
       boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
     
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (needsUpdate) {
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
     
     // Set bounding box/sphere on the MESH (not geometry) for proper frustum culling
     if (!meshRef.current.boundingBox) {
@@ -257,8 +261,11 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           meshRef.current!.setMatrixAt(i, matrix);
           needsUpdate = true;
           
-          // Clean up - remove from falling state after syncing position
-          fallingBlocksState.delete(block.id);
+          // Don't delete immediately - let it stay so useEffect knows to skip it
+          // Clean up after a short delay (next frame)
+          setTimeout(() => {
+            fallingBlocksState.delete(block.id);
+          }, 16);
         }
       }
     });
