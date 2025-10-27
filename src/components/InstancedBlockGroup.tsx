@@ -182,24 +182,13 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, []);
   
   // Set up instance matrices and compute bounding box
-  // Store blocks in ref for access in effect without triggering re-runs
-  const blocksRef = useRef(blocks);
-  blocksRef.current = blocks;
-  
-  // Memoize block ID list to prevent unnecessary recalculations
-  const currentBlockIdList = useMemo(() => 
-    blocks.map(b => b.id).sort().join(','), 
-    [blocks.length, blocks.map(b => b.id).join(',')]
-  );
-  
   useEffect(() => {
     if (!meshRef.current) return;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
-    const currentBlocks = blocksRef.current;
     
-    currentBlocks.forEach((block, i) => {
+    blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
       // Add 0.5 offset because Three.js positions by center, database stores corner
       const x = block.position_x + 0.5;
@@ -227,7 +216,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     meshRef.current.boundingBox.copy(boundingBox);
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
-  }, [currentBlockIdList]);
+  }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   useFrame(() => {

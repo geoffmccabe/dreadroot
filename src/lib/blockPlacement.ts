@@ -83,18 +83,13 @@ function createRaycastTargets(existingBlocks: PlacedBlock[]): THREE.Object3D[] {
     targets.push(wallMesh);
   });
   
-  // Add existing blocks (position at center, not corner)
+  // Add existing blocks
   existingBlocks.forEach((block, index) => {
     const blockMesh = new THREE.Mesh(
       new THREE.BoxGeometry(1, 1, 1),
       invisibleMaterial.clone()
     );
-    // Blocks are stored at grid coords but rendered with +0.5 offset for centering
-    blockMesh.position.set(
-      block.position_x + 0.5, 
-      block.position_y + 0.5, 
-      block.position_z + 0.5
-    );
+    blockMesh.position.set(block.position_x, block.position_y, block.position_z);
     blockMesh.name = `block-${index}`;
     targets.push(blockMesh);
   });
