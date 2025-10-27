@@ -146,21 +146,16 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
-  // Store previous groups to stabilize array references
-  const prevGroupsRef = useRef<Map<string, PlacedBlock[]>>(new Map());
-  
   // Group blocks by block_type for instanced rendering (stable grouping)
   // Use block IDs to ensure uniqueness and prevent duplicate renders
-  // Reuse previous array references if block IDs haven't changed to prevent flashing
   const groupedBlocks = useMemo(() => {
     const groups = new Map<string, PlacedBlock[]>();
     const seenIds = new Set<string>();
     
-    // First pass: group blocks and track IDs
-    const currentGroupIds = new Map<string, Set<string>>();
     blocks.forEach(block => {
       // Skip duplicate IDs (happens during temp->real block transitions)
       if (seenIds.has(block.id)) {
+        console.warn('Duplicate block ID detected:', block.id);
         return;
       }
       seenIds.add(block.id);
@@ -168,35 +163,8 @@ export const PlacedBlocks: React.FC<{
       const existing = groups.get(block.block_type) || [];
       existing.push(block);
       groups.set(block.block_type, existing);
-      
-      // Track IDs for this block type
-      if (!currentGroupIds.has(block.block_type)) {
-        currentGroupIds.set(block.block_type, new Set());
-      }
-      currentGroupIds.get(block.block_type)!.add(block.id);
     });
-    
-    // Second pass: reuse previous array references if IDs are the same
-    const stabilizedGroups = new Map<string, PlacedBlock[]>();
-    groups.forEach((blocksArray, blockType) => {
-      const currentIds = currentGroupIds.get(blockType)!;
-      const prevBlocks = prevGroupsRef.current.get(blockType);
-      
-      // If we have previous blocks and the IDs are the same, reuse the array reference
-      if (prevBlocks && prevBlocks.length === currentIds.size) {
-        const prevIds = new Set(prevBlocks.map(b => b.id));
-        if (prevIds.size === currentIds.size && [...currentIds].every(id => prevIds.has(id))) {
-          stabilizedGroups.set(blockType, prevBlocks);
-          return;
-        }
-      }
-      
-      // IDs changed, use new array
-      stabilizedGroups.set(blockType, blocksArray);
-    });
-    
-    prevGroupsRef.current = stabilizedGroups;
-    return stabilizedGroups;
+    return groups;
   }, [blocks]);
 
   // Don't render blocks until block definitions are loaded
