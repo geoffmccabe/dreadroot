@@ -572,11 +572,6 @@ function FirstPersonControls({
   }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, gl.domElement]);
 
   useFrame((state, delta) => {
-    // Keep camera rotation in sync with yaw/pitch every frame
-    if (isLocked.current) {
-      camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
-    }
-    
     // Movement input
     direction.current.set(0, 0, 0);
     if (keys.current.w) direction.current.z += 1;
