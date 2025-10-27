@@ -186,25 +186,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   useEffect(() => {
     if (!meshRef.current) return;
     
-    // Skip GPU re-upload if blocks haven't actually changed (check IDs, not just length)
-    const currentIds = new Set(blocks.map(b => b.id));
-    const prevIds = prevBlockIdsRef.current;
-    
-    if (currentIds.size === prevIds.size && prevIds.size > 0) {
-      let allMatch = true;
-      for (const id of currentIds) {
-        if (!prevIds.has(id)) {
-          allMatch = false;
-          break;
-        }
-      }
-      if (allMatch) {
-        return; // Same blocks, skip GPU re-upload
-      }
-    }
-    
-    prevBlockIdsRef.current = currentIds;
-    
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
     
@@ -247,15 +228,30 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
-      if (fallState && !fallState.landed) {
-        // Add 0.5 offset because Three.js positions by center, database stores corner
-        const x = block.position_x + 0.5;
-        const y = fallState.currentY + 0.5;
-        const z = block.position_z + 0.5;
-        
-        matrix.setPosition(x, y, z);
-        meshRef.current!.setMatrixAt(i, matrix);
-        needsUpdate = true;
+      
+      if (fallState) {
+        if (!fallState.landed) {
+          // Still falling - use animated position
+          const x = block.position_x + 0.5;
+          const y = fallState.currentY + 0.5;
+          const z = block.position_z + 0.5;
+          
+          matrix.setPosition(x, y, z);
+          meshRef.current!.setMatrixAt(i, matrix);
+          needsUpdate = true;
+        } else {
+          // Just landed - sync to final database position immediately
+          const x = block.position_x + 0.5;
+          const y = block.position_y + 0.5;
+          const z = block.position_z + 0.5;
+          
+          matrix.setPosition(x, y, z);
+          meshRef.current!.setMatrixAt(i, matrix);
+          needsUpdate = true;
+          
+          // Clean up - remove from falling state after syncing position
+          fallingBlocksState.delete(block.id);
+        }
       }
     });
     
