@@ -14,7 +14,7 @@ const SharedBlockGeometry = () => {
 };
 
 // Track falling blocks with their current Y position - exported for stacking calculations
-export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; landed: boolean; targetY: number; finalPositionSet?: boolean }>();
+export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; targetY: number }>();
 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
@@ -82,8 +82,6 @@ export const PlacedBlocks: React.FC<{
     
     // Apply gravity to falling blocks
     fallingBlocksState.forEach((fallState, blockId) => {
-      if (fallState.landed) return;
-      
       const block = blocks.find(b => b.id === blockId);
       if (!block) return;
       
@@ -96,10 +94,6 @@ export const PlacedBlocks: React.FC<{
       
       // Check if landed
       if (fallState.currentY <= landingY) {
-        fallState.currentY = landingY;
-        fallState.velocity = 0;
-        fallState.landed = true;
-        
         // Play thud sound (throttled)
         const now = Date.now();
         if (audioRef.current && now - lastThudTime.current > 50) {
@@ -107,6 +101,9 @@ export const PlacedBlocks: React.FC<{
           audioRef.current.play().catch(() => {});
           lastThudTime.current = now;
         }
+        
+        // Remove from falling state entirely - block now uses database position
+        fallingBlocksState.delete(blockId);
       }
     });
     

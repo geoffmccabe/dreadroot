@@ -1963,7 +1963,6 @@ export default function WaterfallFortress() {
           fallingBlocksState.set(placedBlock.id, {
             currentY: 100,
             velocity: 0,
-            landed: false,
             targetY: targetY
           });
           
