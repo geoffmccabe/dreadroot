@@ -148,6 +148,8 @@ export const PlacedBlocks: React.FC<{
 
   // Group blocks by block_type for instanced rendering (stable grouping)
   // Use block IDs to ensure uniqueness and prevent duplicate renders
+  const prevGroupsRef = useRef<Map<string, PlacedBlock[]>>(new Map());
+  
   const groupedBlocks = useMemo(() => {
     const groups = new Map<string, PlacedBlock[]>();
     const seenIds = new Set<string>();
@@ -164,7 +166,31 @@ export const PlacedBlocks: React.FC<{
       existing.push(block);
       groups.set(block.block_type, existing);
     });
-    return groups;
+    
+    // Stabilize arrays: reuse previous array reference if block IDs haven't changed
+    const prevGroups = prevGroupsRef.current;
+    const stabilizedGroups = new Map<string, PlacedBlock[]>();
+    
+    groups.forEach((newBlocks, blockType) => {
+      const prevBlocks = prevGroups.get(blockType);
+      
+      if (prevBlocks && prevBlocks.length === newBlocks.length) {
+        // Check if all IDs match
+        const prevIds = new Set(prevBlocks.map(b => b.id));
+        const allMatch = newBlocks.every(b => prevIds.has(b.id));
+        
+        if (allMatch) {
+          // Reuse previous array reference to prevent InstancedBlockGroup re-render
+          stabilizedGroups.set(blockType, prevBlocks);
+          return;
+        }
+      }
+      
+      stabilizedGroups.set(blockType, newBlocks);
+    });
+    
+    prevGroupsRef.current = stabilizedGroups;
+    return stabilizedGroups;
   }, [blocks]);
 
   // Don't render blocks until block definitions are loaded
