@@ -185,6 +185,11 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   useEffect(() => {
     if (!meshRef.current) return;
     
+    // Only recalculate if blocks were added or removed
+    if (meshRef.current.count === blocks.length) {
+      return;
+    }
+    
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
     
