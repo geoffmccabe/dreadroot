@@ -182,8 +182,18 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, []);
   
   // Set up instance matrices and compute bounding box
+  // Track previous block count to only update when blocks are added/removed
+  const prevBlockCountRef = useRef(blocks.length);
+  
   useEffect(() => {
     if (!meshRef.current) return;
+    
+    // Only recalculate if block count changed (blocks added/removed)
+    // Position updates during falling are handled by useFrame for better performance
+    if (prevBlockCountRef.current === blocks.length) {
+      return;
+    }
+    prevBlockCountRef.current = blocks.length;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
