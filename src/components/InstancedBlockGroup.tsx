@@ -203,24 +203,23 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     blocks.forEach((block, i) => {
       blockIndexMap.current.set(block.id, i);
       
-      const fallState = fallingBlocksState.get(block.id);
-      const x = block.position_x + 0.5;
-      const z = block.position_z + 0.5;
-      
       // ONLY initialize if this block ID has never been initialized
       if (!initializedBlockIds.current.has(block.id)) {
+        const fallState = fallingBlocksState.get(block.id);
+        const x = block.position_x + 0.5;
         const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+        const z = block.position_z + 0.5;
+        
         matrix.setPosition(x, y, z);
         meshRef.current!.setMatrixAt(i, matrix);
         initializedBlockIds.current.add(block.id);
-      } else {
-        // For existing blocks, preserve their current position by re-setting at new index
-        meshRef.current!.getMatrixAt(blockIndexMap.current.get(block.id) || i, matrix);
-        meshRef.current!.setMatrixAt(i, matrix);
       }
       
       // Always update bounding box
+      const fallState = fallingBlocksState.get(block.id);
+      const x = block.position_x + 0.5;
       const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+      const z = block.position_z + 0.5;
       boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
       boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
@@ -247,28 +246,24 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
+      const x = block.position_x + 0.5;
+      const z = block.position_z + 0.5;
       
       if (fallState) {
         if (!fallState.landed) {
           // Still falling - use animated position
-          const x = block.position_x + 0.5;
           const y = fallState.currentY + 0.5;
-          const z = block.position_z + 0.5;
-          
           matrix.setPosition(x, y, z);
           meshRef.current!.setMatrixAt(i, matrix);
           needsUpdate = true;
         } else {
           // Just landed - sync to final database position
-          const x = block.position_x + 0.5;
           const y = block.position_y + 0.5;
-          const z = block.position_z + 0.5;
-          
           matrix.setPosition(x, y, z);
           meshRef.current!.setMatrixAt(i, matrix);
           needsUpdate = true;
           
-          // Remove from state after 1 frame to ensure smooth transition
+          // Remove from state after syncing position
           fallingBlocksState.delete(block.id);
         }
       }
