@@ -14,7 +14,7 @@ const SharedBlockGeometry = () => {
 };
 
 // Track falling blocks with their current Y position - exported for stacking calculations
-export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; landed: boolean; targetY: number }>();
+export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; landed: boolean; targetY: number; finalPositionSet?: boolean }>();
 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
