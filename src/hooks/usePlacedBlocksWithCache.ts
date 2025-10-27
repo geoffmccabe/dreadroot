@@ -474,6 +474,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         const { data } = await supabase.rpc('delete_expired_blocks');
         if (data && data > 0) {
           console.log(`Cleaned up ${data} expired blocks`);
+          await syncWithSupabase();
         }
       } catch (error) {
         console.error('Error cleaning up expired blocks:', error);

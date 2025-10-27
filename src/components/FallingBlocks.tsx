@@ -65,7 +65,7 @@ export const FallingBlocks: React.FC<{
 
   // Physics update
   useFrame((state, delta) => {
-    const gravity = 4.9; // Half of normal gravity (9.8 / 2)
+    const gravity = 9.8;
     let hasUpdates = false;
     const newFallingBlocks = new Map(fallingBlocks);
 

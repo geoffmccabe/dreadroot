@@ -46,8 +46,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
-  const initializedBlockIds = useRef<Set<string>>(new Set());
-  const blockIndexMap = useRef<Map<string, number>>(new Map());
   const { camera } = useThree();
   
   // Reuse matrix to avoid garbage collection
@@ -183,56 +181,43 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, []);
   
-  // Set up instance matrices - ONLY initialize NEW blocks, never re-initialize existing ones
+  // Set up instance matrices and compute bounding box
+  // Only re-run position calculation when block IDs actually change (not just array reference)
+  const blockIdListRef = useRef<string>('');
+  const currentBlockIdList = blocks.map(b => b.id).sort().join(',');
+  
   useEffect(() => {
     if (!meshRef.current) return;
     
+    // Skip if block IDs haven't changed (just a state update, not actual blocks added/removed)
+    if (blockIdListRef.current === currentBlockIdList) {
+      return;
+    }
+    blockIdListRef.current = currentBlockIdList;
+    
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
-    const currentBlockIds = new Set(blocks.map(b => b.id));
-    
-    // Clean up initialized IDs for removed blocks
-    for (const id of initializedBlockIds.current) {
-      if (!currentBlockIds.has(id)) {
-        initializedBlockIds.current.delete(id);
-      }
-    }
-    
-    // Update index map and initialize ONLY new blocks
-    blockIndexMap.current.clear();
-    let initializedNewBlocks = false;
     
     blocks.forEach((block, i) => {
-      blockIndexMap.current.set(block.id, i);
-      
-      // ONLY initialize if this block ID has never been initialized
-      if (!initializedBlockIds.current.has(block.id)) {
-        const fallState = fallingBlocksState.get(block.id);
-        const x = block.position_x + 0.5;
-        const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
-        const z = block.position_z + 0.5;
-        
-        matrix.setPosition(x, y, z);
-        meshRef.current!.setMatrixAt(i, matrix);
-        initializedBlockIds.current.add(block.id);
-        initializedNewBlocks = true;
-      }
-      
-      // Always update bounding box
       const fallState = fallingBlocksState.get(block.id);
+      // Add 0.5 offset because Three.js positions by center, database stores corner
       const x = block.position_x + 0.5;
-      const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+      // Use fallState if actively falling (in-memory only), otherwise use database position
+      const y = (fallState && !fallState.landed ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
+      
+      matrix.setPosition(x, y, z);
+      meshRef.current!.setMatrixAt(i, matrix);
+      
+      // Expand bounding box to include this block (1x1x1 cube)
       boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
       boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
     
-    // Only trigger update if we actually initialized new blocks
-    if (initializedNewBlocks) {
-      meshRef.current.instanceMatrix.needsUpdate = true;
-    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
     
-    // Set bounding box/sphere
+    // Set bounding box/sphere on the MESH (not geometry) for proper frustum culling
+    // This tells Three.js the bounds of ALL instances combined
     if (!meshRef.current.boundingBox) {
       meshRef.current.boundingBox = new THREE.Box3();
     }
@@ -241,41 +226,32 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     meshRef.current.boundingBox.copy(boundingBox);
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
-  }, [blocks]);
+  }, [blocks, currentBlockIdList]);
   
-  // Update ALL block positions every frame (handles both falling and static blocks)
+  // Update falling block positions every frame (direct matrix updates, no React re-renders)
   useFrame(() => {
     if (!meshRef.current) return;
     
+    let needsUpdate = false;
     const matrix = matrixRef.current;
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
-      const x = block.position_x + 0.5;
-      const z = block.position_z + 0.5;
-      let y: number;
-      
-      if (fallState) {
-        if (!fallState.landed) {
-          // Still falling - use animated position
-          y = fallState.currentY + 0.5;
-        } else {
-          // Just landed - sync to final database position
-          y = block.position_y + 0.5;
-          // Remove from state after syncing position
-          fallingBlocksState.delete(block.id);
-        }
-      } else {
-        // Static block - use database position
-        y = block.position_y + 0.5;
+      if (fallState && !fallState.landed) {
+        // Add 0.5 offset because Three.js positions by center, database stores corner
+        const x = block.position_x + 0.5;
+        const y = fallState.currentY + 0.5;
+        const z = block.position_z + 0.5;
+        
+        matrix.setPosition(x, y, z);
+        meshRef.current!.setMatrixAt(i, matrix);
+        needsUpdate = true;
       }
-      
-      matrix.setPosition(x, y, z);
-      meshRef.current!.setMatrixAt(i, matrix);
     });
     
-    // Always update since we're managing all positions here
-    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (needsUpdate) {
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
   });
   
   // Create collision boxes for all instances (only when blocks change, not on every frame)
