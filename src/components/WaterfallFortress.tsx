@@ -1419,7 +1419,7 @@ function Scene({
   useEffect(() => {
     const handleBlockRainEvent = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { blockTypes, batchHandler } = customEvent.detail;
+      const { blockTypes, quantity = 100, expiration = 10, batchHandler } = customEvent.detail;
       
       console.log('Block rain event received in Scene component');
       
@@ -1436,12 +1436,12 @@ function Scene({
       
       console.log('Target position for block rain:', targetPosition);
       
-      // Calculate positions for 100 blocks randomly spread around target
+      // Calculate positions for blocks randomly spread around target
       const spreadRadius = 5; // 5 blocks in each direction
-      const blockPositions: Array<{ x: number; y: number; z: number; type: string }> = [];
+      const blockPositions: Array<{ x: number; y: number; z: number; type: string; expiresAt: string }> = [];
       
-      // Create positions for 100 blocks
-      for (let i = 0; i < 100; i++) {
+      // Create positions based on quantity
+      for (let i = 0; i < quantity; i++) {
         const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
         
         // Random position within spread radius
@@ -1461,11 +1461,15 @@ function Scene({
         const { heightMap, fallingBlocksState } = await import('./PlacedBlocks');
         const groundY = heightMap.get(key) || 0;
         
+        // Calculate expiration time
+        const expiresAt = new Date(Date.now() + expiration * 60 * 1000).toISOString();
+        
         blockPositions.push({
           x: gridX,
           y: groundY,
           z: gridZ,
-          type: randomBlockType
+          type: randomBlockType,
+          expiresAt
         });
       }
       
@@ -1922,14 +1926,11 @@ export default function WaterfallFortress() {
     }, 600); // Animation duration
   }, [addCoins]);
 
-  // Block Rain feature - spawns 100 random blocks at ground level with stacking
-  const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
+  // Block Rain feature - spawns blocks at ground level with stacking
+  const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string; expiresAt: string }>) => {
     if (!placeBlock) return;
     
     console.log('Starting block rain - spawning at ground level with stacking');
-    
-    // Set expiration to 10 minutes from now
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     let placedCount = 0;
     let lastThudTime = 0;
     
@@ -1952,8 +1953,8 @@ export default function WaterfallFortress() {
         // Get the landing Y from localHeightMap (already includes stacking logic)
         const targetY = localHeightMap.get(key) || 0;
         
-        // Place block at correct height
-        const placedBlock = await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
+        // Place block at correct height with custom expiration
+        const placedBlock = await placeBlock(pos.x, targetY, pos.z, pos.type, pos.expiresAt);
         
         // Only update heightMap if block was actually placed
         if (placedBlock) {
@@ -1990,22 +1991,30 @@ export default function WaterfallFortress() {
     });
   }, [toast, placeBlock, blocks]);
 
-  // Block Rain trigger - spawns 100 random blocks for testing
+  // Block Rain trigger - spawns blocks based on admin settings
   const handleBlockRain = useCallback(() => {
     console.log('=== BLOCK RAIN TRIGGERED ===');
     
-    // Use only basic block types
-    const blockTypes = ['fortress_block', 'grass_block', 'crystal_block'];
+    // Get settings from localStorage
+    const quantity = parseInt(localStorage.getItem('blockRainQuantity') || '100');
+    const expiration = parseInt(localStorage.getItem('blockRainExpiration') || '10');
+    const selectedBlocksStr = localStorage.getItem('blockRainSelectedBlocks');
+    const selectedBlocks = selectedBlocksStr ? JSON.parse(selectedBlocksStr) : ['fortress_block', 'grass_block', 'crystal_block'];
+    
+    // Ensure at least one block type is selected
+    const blockTypes = selectedBlocks.length > 0 ? selectedBlocks : ['fortress_block'];
+    
+    console.log('Block rain settings:', { quantity, expiration, blockTypes });
     
     // Trigger block rain in the Scene component via a custom event
     const event = new CustomEvent('triggerBlockRain', {
-      detail: { blockTypes, batchHandler: handleBlockRainBatch }
+      detail: { blockTypes, quantity, expiration, batchHandler: handleBlockRainBatch }
     });
     window.dispatchEvent(event);
     
     toast({
       title: "Block Rain!",
-      description: "Spawning 100 random blocks...",
+      description: `Spawning ${quantity} random blocks...`,
       duration: 1000
     });
   }, [toast, handleBlockRainBatch]);
