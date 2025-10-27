@@ -587,76 +587,77 @@ function BlocksList({ userRoles }: BlocksListProps) {
         </TabsList>
       </Tabs>
 
-      {/* Block Rain Controls - only show for BASIC blocks */}
-      {activeClass === 'basic' && (
-        <Card className="p-4 mb-4">
-          <h3 className="font-bold text-sm mb-3">Block Rain</h3>
-          
-          <div className="space-y-4">
-            {/* Quantity Slider */}
-            <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
-              <Label className="text-xs opacity-85">Quantity</Label>
-              <Slider
-                value={[blockRainQuantity]}
-                onValueChange={([value]) => setBlockRainQuantity(value)}
-                min={20}
-                max={200}
-                step={10}
-                className="flex-1"
-              />
-              <span className="text-xs opacity-75">{blockRainQuantity}</span>
-            </div>
+      <ScrollArea className="h-[600px] w-full">
+        <div className="pr-4">
+          {/* Block Rain Controls - only show for BASIC blocks */}
+          {activeClass === 'basic' && (
+            <Card className="p-4 mb-4">
+              <h3 className="font-bold text-sm mb-3">Block Rain</h3>
+              
+              <div className="space-y-4">
+                {/* Quantity Slider */}
+                <div className="grid grid-cols-[100px_1fr_40px] gap-2 items-center">
+                  <Label className="text-xs opacity-85">Quantity</Label>
+                  <Slider
+                    value={[blockRainQuantity]}
+                    onValueChange={([value]) => setBlockRainQuantity(value)}
+                    min={20}
+                    max={200}
+                    step={10}
+                    className="flex-1"
+                  />
+                  <span className="text-xs opacity-75">{blockRainQuantity}</span>
+                </div>
 
-            {/* Expiration Slider */}
-            <div className="grid grid-cols-[100px_1fr_60px] gap-2 items-center">
-              <Label className="text-xs opacity-85">Expiration</Label>
-              <Slider
-                value={[blockRainExpiration]}
-                onValueChange={([value]) => setBlockRainExpiration(value)}
-                min={1}
-                max={1440}
-                step={1}
-                className="flex-1"
-              />
-              <span className="text-xs opacity-75">{blockRainExpiration}m</span>
-            </div>
+                {/* Expiration Slider */}
+                <div className="grid grid-cols-[100px_1fr_60px] gap-2 items-center">
+                  <Label className="text-xs opacity-85">Expiration</Label>
+                  <Slider
+                    value={[blockRainExpiration]}
+                    onValueChange={([value]) => setBlockRainExpiration(value)}
+                    min={1}
+                    max={1440}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-xs opacity-75">{blockRainExpiration}m</span>
+                </div>
 
-            {/* Block Selection Checkboxes */}
-            <div>
-              <Label className="text-xs opacity-85 font-semibold mb-2 block">Block Types</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {filteredBlocks.map((block) => (
-                  <div key={block.key} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`rain-${block.key}`}
-                      checked={blockRainSelectedBlocks.has(block.key)}
-                      onCheckedChange={(checked) => {
-                        const newSet = new Set(blockRainSelectedBlocks);
-                        if (checked) {
-                          newSet.add(block.key);
-                        } else {
-                          newSet.delete(block.key);
-                        }
-                        setBlockRainSelectedBlocks(newSet);
-                      }}
-                    />
-                    <label
-                      htmlFor={`rain-${block.key}`}
-                      className="text-xs cursor-pointer select-none"
-                    >
-                      {block.name}
-                    </label>
+                {/* Block Selection Checkboxes */}
+                <div>
+                  <Label className="text-xs opacity-85 font-semibold mb-2 block">Block Types</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {filteredBlocks.map((block) => (
+                      <div key={block.key} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`rain-${block.key}`}
+                          checked={blockRainSelectedBlocks.has(block.key)}
+                          onCheckedChange={(checked) => {
+                            const newSet = new Set(blockRainSelectedBlocks);
+                            if (checked) {
+                              newSet.add(block.key);
+                            } else {
+                              newSet.delete(block.key);
+                            }
+                            setBlockRainSelectedBlocks(newSet);
+                          }}
+                        />
+                        <label
+                          htmlFor={`rain-${block.key}`}
+                          className="text-xs cursor-pointer select-none"
+                        >
+                          {block.name}
+                        </label>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
-          </div>
-        </Card>
-      )}
+            </Card>
+          )}
 
-      <ScrollArea className="h-[500px] w-full pr-4">
-        <div className="space-y-2">
-          {filteredBlocks.map((block) => (
+          <div className="space-y-2">
+            {filteredBlocks.map((block) => (
             <Card key={block.id} className="p-3">
               <div className="flex items-start gap-3">
                 {/* Texture Preview */}
@@ -735,6 +736,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
               </div>
             </Card>
           ))}
+          </div>
         </div>
       </ScrollArea>
 
