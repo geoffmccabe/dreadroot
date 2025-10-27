@@ -1941,9 +1941,9 @@ export default function WaterfallFortress() {
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
       
-      // 100ms delay between each block for visual effect
+      // 50ms delay between each block for visual effect
       if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
       
       try {
