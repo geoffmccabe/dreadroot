@@ -46,6 +46,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
+  const blockIndexMap = useRef<Map<string, number>>(new Map());
   const { camera } = useThree();
   
   // Reuse matrix to avoid garbage collection
@@ -182,45 +183,34 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, []);
   
   // Set up instance matrices and compute bounding box
-  // Key: Don't update positions of blocks that just landed (let useFrame handle final position)
+  // ONLY runs when blocks array structure changes (add/remove blocks)
   useEffect(() => {
     if (!meshRef.current) return;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
-    let needsUpdate = false;
     
+    // Update index map
+    blockIndexMap.current.clear();
     blocks.forEach((block, i) => {
+      blockIndexMap.current.set(block.id, i);
+      
+      // Initialize matrix positions ONCE
       const fallState = fallingBlocksState.get(block.id);
-      
-      // Skip updating matrix if block is falling or just landed - useFrame owns these blocks
-      if (fallState) {
-        // Still need to include in bounding box calculation
-        const x = block.position_x + 0.5;
-        const y = (fallState.landed ? block.position_y : fallState.currentY) + 0.5;
-        const z = block.position_z + 0.5;
-        boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
-        boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
-        return;
-      }
-      
       const x = block.position_x + 0.5;
-      const y = block.position_y + 0.5;
+      const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
       meshRef.current!.setMatrixAt(i, matrix);
-      needsUpdate = true;
       
       boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
       boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
     
-    if (needsUpdate) {
-      meshRef.current.instanceMatrix.needsUpdate = true;
-    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
     
-    // Set bounding box/sphere on the MESH (not geometry) for proper frustum culling
+    // Set bounding box/sphere
     if (!meshRef.current.boundingBox) {
       meshRef.current.boundingBox = new THREE.Box3();
     }
@@ -231,7 +221,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
   }, [blocks]);
   
-  // Update falling block positions every frame (direct matrix updates, no React re-renders)
+  // Update ALL block positions every frame (handles both falling and static blocks)
   useFrame(() => {
     if (!meshRef.current) return;
     
@@ -252,7 +242,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           meshRef.current!.setMatrixAt(i, matrix);
           needsUpdate = true;
         } else {
-          // Just landed - sync to final database position immediately
+          // Just landed - sync to final database position
           const x = block.position_x + 0.5;
           const y = block.position_y + 0.5;
           const z = block.position_z + 0.5;
@@ -261,11 +251,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           meshRef.current!.setMatrixAt(i, matrix);
           needsUpdate = true;
           
-          // Don't delete immediately - let it stay so useEffect knows to skip it
-          // Clean up after a short delay (next frame)
-          setTimeout(() => {
-            fallingBlocksState.delete(block.id);
-          }, 16);
+          // Remove from state after 1 frame to ensure smooth transition
+          fallingBlocksState.delete(block.id);
         }
       }
     });
