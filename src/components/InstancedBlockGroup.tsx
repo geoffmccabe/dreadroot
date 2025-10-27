@@ -191,35 +191,20 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     const boundingBox = new THREE.Box3();
     const currentBlockIds = new Set(blocks.map(b => b.id));
     
-    // Clean up initialized IDs for removed blocks
-    for (const id of initializedBlockIds.current) {
-      if (!currentBlockIds.has(id)) {
-        initializedBlockIds.current.delete(id);
-      }
-    }
-    
-    // Update index map and initialize ONLY new blocks
+    // Set matrix for ALL blocks based on current state
     blockIndexMap.current.clear();
     blocks.forEach((block, i) => {
       blockIndexMap.current.set(block.id, i);
       
-      // ONLY initialize if this block ID has never been initialized
-      if (!initializedBlockIds.current.has(block.id)) {
-        const fallState = fallingBlocksState.get(block.id);
-        const x = block.position_x + 0.5;
-        const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
-        const z = block.position_z + 0.5;
-        
-        matrix.setPosition(x, y, z);
-        meshRef.current!.setMatrixAt(i, matrix);
-        initializedBlockIds.current.add(block.id);
-      }
-      
-      // Always update bounding box
       const fallState = fallingBlocksState.get(block.id);
       const x = block.position_x + 0.5;
       const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
+      
+      matrix.setPosition(x, y, z);
+      meshRef.current!.setMatrixAt(i, matrix);
+      
+      // Update bounding box
       boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
       boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
