@@ -46,6 +46,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
+  const prevBlockIdsRef = useRef<Set<string>>(new Set());
   const { camera } = useThree();
   
   // Reuse matrix to avoid garbage collection
@@ -184,6 +185,25 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Set up instance matrices and compute bounding box
   useEffect(() => {
     if (!meshRef.current) return;
+    
+    // Skip GPU re-upload if blocks haven't actually changed (check IDs, not just length)
+    const currentIds = new Set(blocks.map(b => b.id));
+    const prevIds = prevBlockIdsRef.current;
+    
+    if (currentIds.size === prevIds.size && prevIds.size > 0) {
+      let allMatch = true;
+      for (const id of currentIds) {
+        if (!prevIds.has(id)) {
+          allMatch = false;
+          break;
+        }
+      }
+      if (allMatch) {
+        return; // Same blocks, skip GPU re-upload
+      }
+    }
+    
+    prevBlockIdsRef.current = currentIds;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
