@@ -216,7 +216,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     meshRef.current.boundingBox.copy(boundingBox);
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
-  }, [blocks.length, blocks.map(b => b.id).join(',')]);
+  }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   useFrame(() => {
