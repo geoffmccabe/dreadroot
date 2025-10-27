@@ -46,6 +46,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
+  const initializedBlockIds = useRef<Set<string>>(new Set());
   const blockIndexMap = useRef<Map<string, number>>(new Map());
   const { camera } = useThree();
   
@@ -182,28 +183,43 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, []);
   
-  // Set up instance matrices and compute bounding box
-  // ONLY runs when blocks array structure changes (add/remove blocks)
+  // Set up instance matrices - ONLY initialize NEW blocks, never re-initialize existing ones
   useEffect(() => {
     if (!meshRef.current) return;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
+    const currentBlockIds = new Set(blocks.map(b => b.id));
     
-    // Update index map
+    // Clean up initialized IDs for removed blocks
+    for (const id of initializedBlockIds.current) {
+      if (!currentBlockIds.has(id)) {
+        initializedBlockIds.current.delete(id);
+      }
+    }
+    
+    // Update index map and initialize ONLY new blocks
     blockIndexMap.current.clear();
     blocks.forEach((block, i) => {
       blockIndexMap.current.set(block.id, i);
       
-      // Initialize matrix positions ONCE
+      // ONLY initialize if this block ID has never been initialized
+      if (!initializedBlockIds.current.has(block.id)) {
+        const fallState = fallingBlocksState.get(block.id);
+        const x = block.position_x + 0.5;
+        const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+        const z = block.position_z + 0.5;
+        
+        matrix.setPosition(x, y, z);
+        meshRef.current!.setMatrixAt(i, matrix);
+        initializedBlockIds.current.add(block.id);
+      }
+      
+      // Always update bounding box
       const fallState = fallingBlocksState.get(block.id);
       const x = block.position_x + 0.5;
       const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
       const z = block.position_z + 0.5;
-      
-      matrix.setPosition(x, y, z);
-      meshRef.current!.setMatrixAt(i, matrix);
-      
       boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
       boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     });
