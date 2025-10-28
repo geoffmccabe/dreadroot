@@ -1019,22 +1019,24 @@ function Fortress() {
 }
 
 // Coins component using sprites
-function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins }: { 
+function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coinImageUrl }: { 
   coinRate: number; 
   coinSize: number; 
   flowSpeed: number; 
   onGetCoins?: () => { position: THREE.Vector3; visible: boolean; mesh: THREE.Sprite | null }[];
+  coinImageUrl?: string;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const coinTimerRef = useRef(0);
   const maxCoins = 5000;
   const maxExplosionParticles = 1000;
   
-  // Load coin texture
+  // Load coin texture from current theme
   const coinTexture = useMemo(() => {
     const loader = new THREE.TextureLoader();
-    return loader.load('/waterfall_coin.png');
-  }, []);
+    const imageUrl = coinImageUrl || '/waterfall_coin.png';
+    return loader.load(imageUrl);
+  }, [coinImageUrl]);
   
   const coins = useMemo(() => {
     const coinsArray = [];
@@ -1317,10 +1319,12 @@ function Scene({
   onCycleBlock,
   blocks,
   weatherSettings,
-  onBlockRain
+  onBlockRain,
+  coinImageUrl
 }: {
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
+  coinImageUrl?: string;
   wallPositions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
   blockPlacementMode: boolean;
   onBlockPlace: (position: THREE.Vector3) => void;
@@ -1663,6 +1667,7 @@ function Scene({
         coinSize={settings.coinSize} 
         flowSpeed={settings.flowSpeed}
         onGetCoins={() => []}
+        coinImageUrl={coinImageUrl}
       />
       <Bullets bullets={bullets} />
       
@@ -2327,6 +2332,7 @@ export default function WaterfallFortress() {
         onOpenPanel={handleOpenPanel}
         crosshairsEnabled={crosshairsEnabled}
         getBlockQuantity={getBlockQuantity}
+        coinImageUrl={currentTheme?.coin_image_url}
         selectedBlockType={selectedBlockType}
         panelOpen={panelOpen}
         onCycleBlock={cycleSelectedBlock}
@@ -2418,7 +2424,7 @@ export default function WaterfallFortress() {
           onClick={() => openPanel('inventory')}
           title="Open inventory"
         >
-          <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+          <img src={currentTheme?.coin_image_url || '/waterfall_coin.png'} alt="coin" className="w-6 h-6" />
         </div>
         {/* Coin count (clickable to open inventory) */}
         <div 

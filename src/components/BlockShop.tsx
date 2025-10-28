@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { BlockType } from '@/types/blocks';
+import { useTokenTheme } from '@/contexts/TokenThemeContext';
 
 interface BlockShopProps {
   isOpen: boolean;
@@ -126,7 +127,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
       <DialogContent className="max-w-md bg-background/95 backdrop-blur">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+            <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
             Shop - Coins: {profile?.coins || 0}
           </DialogTitle>
         </DialogHeader>
@@ -160,8 +161,8 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
                     {block.description}
                   </p>
                   
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <img src="/waterfall_coin.png" alt="coin" className="w-4 h-4" />
+                    <div className="flex items-center gap-2 flex-wrap">
+                    <img src={coinImageUrl} alt="coin" className="w-4 h-4" />
                     <span className="text-sm font-medium">{block.cost} coins</span>
                     <Badge variant="outline" className="text-xs">
                       {block.category}

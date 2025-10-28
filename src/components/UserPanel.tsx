@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
+import { useTokenTheme } from '@/contexts/TokenThemeContext';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -65,9 +66,12 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { user } = useAuth();
   const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
+  const { currentTheme } = useTokenTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const [visualDistance, setVisualDistance] = useState(4);
   const [fogEnabled, setFogEnabled] = useState(true);
+  
+  const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
 
   // Sync blockchain address with profile
   useEffect(() => {
@@ -158,7 +162,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
       <DialogContent className="user-panel-dialog w-[28rem] max-w-[28rem] bg-background/95 backdrop-blur">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+            <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
             User Panel - Coins: {profile?.coins || 0}
           </DialogTitle>
         </DialogHeader>
@@ -226,7 +230,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             <Card className="p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+                  <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
                   <span className="font-medium">Coins</span>
                 </div>
                 <span className="font-bold text-lg">{profile?.coins || 0}</span>
@@ -340,7 +344,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       </p>
                       
                       <div className="flex items-center gap-2">
-                        <img src="/waterfall_coin.png" alt="coin" className="w-4 h-4" />
+                        <img src={coinImageUrl} alt="coin" className="w-4 h-4" />
                         <span className="text-sm font-medium">{block.cost} coins</span>
                         <Badge variant="outline" className="text-xs ml-auto">
                           {block.category}
