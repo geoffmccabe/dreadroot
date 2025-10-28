@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { useUserData } from '@/hooks/useUserData';
 import { Card } from '@/components/ui/card';
 import { useBlocksData } from '@/hooks/useBlocksData';
+import { useTokenTheme } from '@/contexts/TokenThemeContext';
 
 interface InventoryProps {
   isOpen: boolean;
@@ -14,7 +15,9 @@ interface InventoryProps {
 export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
   const { profile, inventory, isLoading, updateBlockchainAddress } = useUserData();
   const { getBlockByKey } = useBlocksData();
+  const { currentTheme } = useTokenTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
+  const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
 
   // Sync with profile data
   useEffect(() => {
@@ -64,7 +67,7 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <img src="/waterfall_coin.png" alt="coin" className="w-6 h-6" />
+                <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
                 <span className="font-medium">Coins</span>
               </div>
               <span className="font-bold text-lg">{profile?.coins || 0}</span>

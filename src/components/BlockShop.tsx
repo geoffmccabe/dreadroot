@@ -66,7 +66,9 @@ const BlockIcon: React.FC<{ block: BlockType }> = ({ block }) => {
 export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPurchased }) => {
   const { profile, inventory, buyBlock, isLoading: userLoading } = useUserData();
   const { blocks, isLoading: blocksLoading } = useBlocksData();
+  const { currentTheme } = useTokenTheme();
   const [activeClass, setActiveClass] = React.useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
+  const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
 
   // Filter and sort blocks by active class
   const filteredBlocks = React.useMemo(() => {
