@@ -1547,37 +1547,47 @@ export function AdminPanel({
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="coins" className="mt-4">
-            {waterfallSettings && onWaterfallSettingsChange && (
-              <WaterfallControls 
-                settings={waterfallSettings}
-                onSettingsChange={onWaterfallSettingsChange}
+          <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              {waterfallSettings && onWaterfallSettingsChange && (
+                <WaterfallControls 
+                  settings={waterfallSettings}
+                  onSettingsChange={onWaterfallSettingsChange}
+                />
+              )}
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="billboards" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              <BillboardControlPanel 
+                isVisible={true}
+                onWallPositionsChange={onWallPositionsChange}
               />
-            )}
+            </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="billboards" className="mt-4">
-            <BillboardControlPanel 
-              isVisible={true}
-              onWallPositionsChange={onWallPositionsChange}
-            />
+          <TabsContent value="weather" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              {weatherSettings && onWeatherSettingsChange && (
+                <WeatherControls 
+                  settings={weatherSettings}
+                  onSettingsChange={onWeatherSettingsChange}
+                />
+              )}
+            </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="weather" className="mt-4">
-            {weatherSettings && onWeatherSettingsChange && (
-              <WeatherControls 
-                settings={weatherSettings}
-                onSettingsChange={onWeatherSettingsChange}
-              />
-            )}
+          <TabsContent value="users" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              <UsersList />
+            </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="users" className="mt-4">
-            <UsersList />
-          </TabsContent>
-
-          <TabsContent value="blocks" className="mt-4">
-            <BlocksList userRoles={userRoles} />
+          <TabsContent value="blocks" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              <BlocksList userRoles={userRoles} />
+            </ScrollArea>
           </TabsContent>
         </Tabs>
       </DialogContent>
