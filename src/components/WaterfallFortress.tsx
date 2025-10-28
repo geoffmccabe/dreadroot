@@ -1419,9 +1419,9 @@ function Scene({
   useEffect(() => {
     const handleBlockRainEvent = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { blockTypes, batchHandler } = customEvent.detail;
+      const { blockTypes, batchHandler, settings } = customEvent.detail;
       
-      console.log('Block rain event received in Scene component');
+      console.log('Block rain event received in Scene component', settings);
       
       // Raycast from camera to find target point
       const raycaster = new THREE.Raycaster();
@@ -1436,12 +1436,13 @@ function Scene({
       
       console.log('Target position for block rain:', targetPosition);
       
-      // Calculate positions for 100 blocks randomly spread around target
+      // Use settings from admin panel or defaults
+      const totalBlocks = settings?.totalBlocks || 100;
       const spreadRadius = 5; // 5 blocks in each direction
       const blockPositions: Array<{ x: number; y: number; z: number; type: string }> = [];
       
-      // Create positions for 100 blocks
-      for (let i = 0; i < 100; i++) {
+      // Create positions for specified number of blocks
+      for (let i = 0; i < totalBlocks; i++) {
         const randomBlockType = blockTypes[Math.floor(Math.random() * blockTypes.length)];
         
         // Random position within spread radius
@@ -1473,14 +1474,16 @@ function Scene({
       
       // Use batch handler for instant placement
       if (batchHandler) {
-        await batchHandler(blockPositions);
+        await batchHandler(blockPositions, settings);
       }
     };
     
     window.addEventListener('triggerBlockRain', handleBlockRainEvent);
+    window.addEventListener('triggerBlockRainFromAdmin', handleBlockRainEvent);
     
     return () => {
       window.removeEventListener('triggerBlockRain', handleBlockRainEvent);
+      window.removeEventListener('triggerBlockRainFromAdmin', handleBlockRainEvent);
     };
   }, [camera, blocks]);
   
@@ -1922,14 +1925,22 @@ export default function WaterfallFortress() {
     }, 600); // Animation duration
   }, [addCoins]);
 
-  // Block Rain feature - spawns 100 random blocks at ground level with stacking
-  const handleBlockRainBatch = useCallback(async (positions: Array<{ x: number; y: number; z: number; type: string }>) => {
+  // Block Rain feature - spawns random blocks at ground level with stacking
+  const handleBlockRainBatch = useCallback(async (
+    positions: Array<{ x: number; y: number; z: number; type: string }>,
+    settings?: { blocksPerSecond?: number; blockLifeMinutes?: number; totalBlocks?: number }
+  ) => {
     if (!placeBlock) return;
     
-    console.log('Starting block rain - spawning at ground level with stacking');
+    console.log('Starting block rain - spawning at ground level with stacking', settings);
     
-    // Set expiration to 10 minutes from now
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    // Use settings from admin panel or defaults
+    const blockLifeMinutes = settings?.blockLifeMinutes || 10;
+    const blocksPerSecond = settings?.blocksPerSecond || 10;
+    const delayBetweenBlocks = 1000 / blocksPerSecond; // Convert blocks per second to delay in ms
+    
+    // Set expiration based on admin settings
+    const expiresAt = new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
     let placedCount = 0;
     let lastThudTime = 0;
     
@@ -1937,13 +1948,13 @@ export default function WaterfallFortress() {
     const { heightMap, fallingBlocksState } = await import('./PlacedBlocks');
     const localHeightMap = new Map<string, number>(heightMap);
     
-    // Place blocks sequentially (no random delays to prevent race conditions)
+    // Place blocks sequentially with configurable delay
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
       
-      // 100ms delay between each block for visual effect
+      // Delay between each block based on blocks per second setting
       if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, delayBetweenBlocks));
       }
       
       try {
@@ -1984,7 +1995,7 @@ export default function WaterfallFortress() {
     
     toast({
       title: "Block Rain Complete!",
-      description: `${placedCount} blocks placed (expire in 10 min)`,
+      description: `${placedCount} blocks placed (expire in ${blockLifeMinutes} min)`,
       duration: 2000
     });
   }, [toast, placeBlock, blocks]);
