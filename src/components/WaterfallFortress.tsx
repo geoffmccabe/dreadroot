@@ -1930,23 +1930,28 @@ export default function WaterfallFortress() {
   ) => {
     if (!placeBlock) return;
     
-    console.log('Starting block rain - spawning at ground level with stacking', settings);
+    console.log('Starting block rain with settings:', settings);
     
     // Use settings from admin panel or defaults
     const blockLifeMinutes = settings?.blockLifeMinutes || 10;
     const blocksPerSecond = settings?.blocksPerSecond || 10;
-    const delayBetweenBlocks = 1000 / blocksPerSecond; // Convert blocks per second to delay in ms
+    const delayBetweenBlocks = Math.max(20, 1000 / blocksPerSecond); // Min 20ms delay, max 50/sec
+    
+    console.log(`Block rain rate: ${blocksPerSecond}/sec (${delayBetweenBlocks}ms delay)`);
     
     // Set expiration based on admin settings
     const expiresAt = new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
     let placedCount = 0;
     let lastThudTime = 0;
+    const startTime = Date.now();
     
     // Initialize local height map from global heightMap to prevent race conditions
     const { heightMap, fallingBlocksState } = await import('./PlacedBlocks');
     const localHeightMap = new Map<string, number>(heightMap);
     
-    // Place blocks sequentially with configurable delay
+    // Place blocks with minimal delay - fire database writes without awaiting to achieve high rates
+    const placementPromises: Promise<any>[] = [];
+    
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
       
@@ -1955,46 +1960,55 @@ export default function WaterfallFortress() {
         await new Promise(resolve => setTimeout(resolve, delayBetweenBlocks));
       }
       
-      try {
-        const key = `${pos.x},${pos.z}`;
-        
-        // Get the landing Y from localHeightMap (already includes stacking logic)
-        const targetY = localHeightMap.get(key) || 0;
-        
-        // Place block at correct height
-        const placedBlock = await placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
-        
-        // Only update heightMap if block was actually placed
-        if (placedBlock) {
-          localHeightMap.set(key, targetY + 1);
-          
-          // Add to falling blocks state for visual animation (in-memory only)
-          fallingBlocksState.set(placedBlock.id, {
-            currentY: 100,
-            velocity: 0,
-            targetY: targetY
-          });
-          
-          placedCount++;
-        }
-        
-        // Play thud sound (throttled to every 50ms)
-        const now = Date.now();
-        if (mainAudioRefs.current.woodenThud && now - lastThudTime > 50) {
-          mainAudioRefs.current.woodenThud.currentTime = 0;
-          mainAudioRefs.current.woodenThud.volume = 0.3;
-          mainAudioRefs.current.woodenThud.play().catch(() => {});
-          lastThudTime = now;
-        }
-      } catch (error) {
-        console.error('Failed to place block:', error);
+      const key = `${pos.x},${pos.z}`;
+      
+      // Get the landing Y from localHeightMap (already includes stacking logic)
+      const targetY = localHeightMap.get(key) || 0;
+      
+      // Fire off block placement without awaiting (parallel execution)
+      const placementPromise = placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt)
+        .then(placedBlock => {
+          if (placedBlock) {
+            // Add to falling blocks state for visual animation (in-memory only)
+            fallingBlocksState.set(placedBlock.id, {
+              currentY: 100,
+              velocity: 0,
+              targetY: targetY
+            });
+            placedCount++;
+          }
+        })
+        .catch(error => {
+          console.error('Failed to place block:', error);
+        });
+      
+      placementPromises.push(placementPromise);
+      
+      // Optimistically update heightMap for next block
+      localHeightMap.set(key, targetY + 1);
+      
+      // Play thud sound (throttled to every 50ms)
+      const now = Date.now();
+      if (mainAudioRefs.current.woodenThud && now - lastThudTime > 50) {
+        mainAudioRefs.current.woodenThud.currentTime = 0;
+        mainAudioRefs.current.woodenThud.volume = 0.3;
+        mainAudioRefs.current.woodenThud.play().catch(() => {});
+        lastThudTime = now;
       }
     }
     
+    // Wait for all placements to complete
+    await Promise.all(placementPromises);
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    const actualRate = (placedCount / parseFloat(duration)).toFixed(1);
+    
+    console.log(`Block rain complete: ${placedCount} blocks in ${duration}s (${actualRate}/sec)`);
+    
     toast({
       title: "Block Rain Complete!",
-      description: `${placedCount} blocks placed (expire in ${blockLifeMinutes} min)`,
-      duration: 2000
+      description: `${placedCount} blocks placed in ${duration}s (${actualRate}/sec, expire in ${blockLifeMinutes} min)`,
+      duration: 3000
     });
   }, [toast, placeBlock, blocks]);
 
