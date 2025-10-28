@@ -94,6 +94,9 @@ export const PlacedBlocks: React.FC<{
       
       // Check if landed
       if (fallState.currentY <= landingY) {
+        // Snap to exact landing position to prevent sub-pixel flashing
+        fallState.currentY = landingY;
+        
         // Play thud sound (throttled)
         const now = Date.now();
         if (audioRef.current && now - lastThudTime.current > 50) {
@@ -102,8 +105,11 @@ export const PlacedBlocks: React.FC<{
           lastThudTime.current = now;
         }
         
-        // Remove from falling state entirely - block now uses database position
-        fallingBlocksState.delete(blockId);
+        // CRITICAL: Delete from falling state AFTER this frame completes
+        // This ensures InstancedBlockGroup.useFrame renders the final position first
+        setTimeout(() => {
+          fallingBlocksState.delete(blockId);
+        }, 0);
       }
     });
     
