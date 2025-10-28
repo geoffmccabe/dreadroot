@@ -1479,11 +1479,9 @@ function Scene({
     };
     
     window.addEventListener('triggerBlockRain', handleBlockRainEvent);
-    window.addEventListener('triggerBlockRainFromAdmin', handleBlockRainEvent);
     
     return () => {
       window.removeEventListener('triggerBlockRain', handleBlockRainEvent);
-      window.removeEventListener('triggerBlockRainFromAdmin', handleBlockRainEvent);
     };
   }, [camera, blocks]);
   
@@ -2000,22 +1998,45 @@ export default function WaterfallFortress() {
     });
   }, [toast, placeBlock, blocks]);
 
-  // Block Rain trigger - spawns 100 random blocks for testing
+  // Block Rain trigger - uses admin settings if available
   const handleBlockRain = useCallback(() => {
     console.log('=== BLOCK RAIN TRIGGERED ===');
     
-    // Use only basic block types
-    const blockTypes = ['fortress_block', 'grass_block', 'crystal_block'];
+    // Try to load admin settings from localStorage
+    let blockTypes = ['fortress_block', 'grass_block', 'crystal_block'];
+    let settings = {
+      blocksPerSecond: 10,
+      totalBlocks: 100,
+      blockLifeMinutes: 10
+    };
+    
+    try {
+      const adminSettings = localStorage.getItem('adminBlockRainSettings');
+      if (adminSettings) {
+        const parsed = JSON.parse(adminSettings);
+        if (parsed.selectedBlocks && parsed.selectedBlocks.length > 0) {
+          blockTypes = parsed.selectedBlocks;
+        }
+        settings = {
+          blocksPerSecond: parsed.blocksPerSecond || 10,
+          totalBlocks: parsed.totalBlocks || 100,
+          blockLifeMinutes: parsed.blockLifeMinutes || 10
+        };
+        console.log('Using admin block rain settings:', settings, blockTypes);
+      }
+    } catch (error) {
+      console.error('Failed to load admin block rain settings:', error);
+    }
     
     // Trigger block rain in the Scene component via a custom event
     const event = new CustomEvent('triggerBlockRain', {
-      detail: { blockTypes, batchHandler: handleBlockRainBatch }
+      detail: { blockTypes, batchHandler: handleBlockRainBatch, settings }
     });
     window.dispatchEvent(event);
     
     toast({
       title: "Block Rain!",
-      description: "Spawning 100 random blocks...",
+      description: `Spawning ${settings.totalBlocks} random blocks...`,
       duration: 1000
     });
   }, [toast, handleBlockRainBatch]);

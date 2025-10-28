@@ -256,6 +256,28 @@ function BlocksList({ userRoles }: BlocksListProps) {
   const isSuperAdmin = userRoles.includes('superadmin');
   const isAdmin = userRoles.includes('admin') || isSuperAdmin;
   
+  // Load admin block rain settings from localStorage on mount
+  useEffect(() => {
+    if (isAdmin) {
+      try {
+        const saved = localStorage.getItem('adminBlockRainSettings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setBlockRainSettings({
+            blocksPerSecond: parsed.blocksPerSecond || 10,
+            totalBlocks: parsed.totalBlocks || 100,
+            blockLifeMinutes: parsed.blockLifeMinutes || 10
+          });
+          if (parsed.selectedBlocks && Array.isArray(parsed.selectedBlocks)) {
+            setSelectedRainBlocks(new Set(parsed.selectedBlocks));
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load admin block rain settings:', error);
+      }
+    }
+  }, [isAdmin]);
+  
   const handleCleanupSkyBlocks = async () => {
     if (!isSuperAdmin) return;
     
@@ -526,41 +548,6 @@ function BlocksList({ userRoles }: BlocksListProps) {
     }
   };
   
-  const handleTriggerBlockRain = () => {
-    if (!isAdmin) {
-      toast({
-        title: "Access Denied",
-        description: "Only admins can trigger block rain",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (selectedRainBlocks.size === 0) {
-      toast({
-        title: "No Blocks Selected",
-        description: "Please select at least one block for the rain",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const blockTypes = Array.from(selectedRainBlocks);
-    const event = new CustomEvent('triggerBlockRainFromAdmin', {
-      detail: { 
-        blockTypes, 
-        settings: blockRainSettings 
-      }
-    });
-    window.dispatchEvent(event);
-
-    toast({
-      title: "Block Rain Started!",
-      description: `Spawning ${blockRainSettings.totalBlocks} blocks...`,
-      duration: 2000
-    });
-  };
-  
   const toggleBlockRainSelection = (blockKey: string) => {
     setSelectedRainBlocks(prev => {
       const newSet = new Set(prev);
@@ -572,6 +559,18 @@ function BlocksList({ userRoles }: BlocksListProps) {
       return newSet;
     });
   };
+  
+  // Save admin block rain settings to localStorage whenever they change
+  useEffect(() => {
+    if (isAdmin && activeClass === 'basic') {
+      localStorage.setItem('adminBlockRainSettings', JSON.stringify({
+        blocksPerSecond: blockRainSettings.blocksPerSecond,
+        totalBlocks: blockRainSettings.totalBlocks,
+        blockLifeMinutes: blockRainSettings.blockLifeMinutes,
+        selectedBlocks: Array.from(selectedRainBlocks)
+      }));
+    }
+  }, [blockRainSettings, selectedRainBlocks, isAdmin, activeClass]);
 
   if (loading) {
     return <div className="text-sm opacity-75">Loading blocks...</div>;
@@ -615,100 +614,91 @@ function BlocksList({ userRoles }: BlocksListProps) {
         </TabsList>
       </Tabs>
 
-      {/* Block Rain Controls - Only for BASIC class and Admins */}
-      {activeClass === 'basic' && isAdmin && (
-        <Card className="mb-4 p-4">
-          <div 
-            className="flex items-center justify-between mb-3 cursor-pointer"
-            onClick={() => setBlockRainCollapsed(!blockRainCollapsed)}
-          >
-            <h3 className="font-bold text-sm">BLOCK RAIN (Admin Only)</h3>
-            {blockRainCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </div>
-          
-          {!blockRainCollapsed && (
-            <div className="space-y-4 animate-fade-in">
-              {/* Sliders */}
-              <div className="space-y-3">
-                <div className="grid grid-cols-[140px_1fr_60px] gap-2 items-center">
-                  <Label className="text-xs opacity-85">Blocks per second</Label>
-                  <Slider
-                    value={[blockRainSettings.blocksPerSecond]}
-                    onValueChange={([value]) => setBlockRainSettings({ ...blockRainSettings, blocksPerSecond: value })}
-                    min={1}
-                    max={50}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <span className="text-xs opacity-75">{blockRainSettings.blocksPerSecond}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr_60px] gap-2 items-center">
-                  <Label className="text-xs opacity-85">Total Block Rain</Label>
-                  <Slider
-                    value={[blockRainSettings.totalBlocks]}
-                    onValueChange={([value]) => setBlockRainSettings({ ...blockRainSettings, totalBlocks: value })}
-                    min={50}
-                    max={500}
-                    step={10}
-                    className="flex-1"
-                  />
-                  <span className="text-xs opacity-75">{blockRainSettings.totalBlocks}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr_60px] gap-2 items-center">
-                  <Label className="text-xs opacity-85">Block Life (min)</Label>
-                  <Slider
-                    value={[blockRainSettings.blockLifeMinutes]}
-                    onValueChange={([value]) => setBlockRainSettings({ ...blockRainSettings, blockLifeMinutes: value })}
-                    min={1}
-                    max={1440}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <span className="text-xs opacity-75">{blockRainSettings.blockLifeMinutes}</span>
-                </div>
-              </div>
-
-              {/* Block Selection Checkboxes */}
-              <div>
-                <Label className="text-xs opacity-85 font-semibold mb-2 block">Select Blocks for Rain:</Label>
-                <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-y-auto">
-                  {filteredBlocks.map((block) => (
-                    <div key={block.id} className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        id={`rain-block-${block.id}`}
-                        checked={selectedRainBlocks.has(block.key)}
-                        onChange={() => toggleBlockRainSelection(block.key)}
-                        className="w-4 h-4 cursor-pointer"
-                      />
-                      <label htmlFor={`rain-block-${block.id}`} className="cursor-pointer flex-1">
-                        {block.name}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Trigger Button */}
-              <Button 
-                onClick={handleTriggerBlockRain}
-                className="w-full"
-                disabled={selectedRainBlocks.size === 0}
-              >
-                Start Block Rain ({selectedRainBlocks.size} blocks selected)
-              </Button>
-            </div>
-          )}
-        </Card>
-      )}
-
       <ScrollArea className="h-[500px] w-full pr-4">
+        {/* Block Rain Controls - Only for BASIC class and Admins */}
+        {activeClass === 'basic' && isAdmin && (
+          <Card className="mb-4 p-4">
+            <div 
+              className="flex items-center justify-between mb-3 cursor-pointer"
+              onClick={() => setBlockRainCollapsed(!blockRainCollapsed)}
+            >
+              <h3 className="font-bold text-sm">BLOCK RAIN (Admin Only)</h3>
+              {blockRainCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </div>
+            
+            {!blockRainCollapsed && (
+              <div className="space-y-4 animate-fade-in">
+                {/* Sliders */}
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[140px_1fr_60px] gap-2 items-center">
+                    <Label className="text-xs opacity-85">Blocks per second</Label>
+                    <Slider
+                      value={[blockRainSettings.blocksPerSecond]}
+                      onValueChange={([value]) => setBlockRainSettings({ ...blockRainSettings, blocksPerSecond: value })}
+                      min={1}
+                      max={50}
+                      step={1}
+                      className="flex-1"
+                    />
+                    <span className="text-xs opacity-75">{blockRainSettings.blocksPerSecond}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-[140px_1fr_60px] gap-2 items-center">
+                    <Label className="text-xs opacity-85">Total Block Rain</Label>
+                    <Slider
+                      value={[blockRainSettings.totalBlocks]}
+                      onValueChange={([value]) => setBlockRainSettings({ ...blockRainSettings, totalBlocks: value })}
+                      min={50}
+                      max={500}
+                      step={10}
+                      className="flex-1"
+                    />
+                    <span className="text-xs opacity-75">{blockRainSettings.totalBlocks}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-[140px_1fr_60px] gap-2 items-center">
+                    <Label className="text-xs opacity-85">Block Life (min)</Label>
+                    <Slider
+                      value={[blockRainSettings.blockLifeMinutes]}
+                      onValueChange={([value]) => setBlockRainSettings({ ...blockRainSettings, blockLifeMinutes: value })}
+                      min={1}
+                      max={1440}
+                      step={1}
+                      className="flex-1"
+                    />
+                    <span className="text-xs opacity-75">{blockRainSettings.blockLifeMinutes}</span>
+                  </div>
+                </div>
+
+                {/* Block Selection Checkboxes */}
+                <div>
+                  <Label className="text-xs opacity-85 font-semibold mb-2 block">Select Blocks for Rain:</Label>
+                  <div className="grid grid-cols-2 gap-2 max-h-[150px] overflow-y-auto">
+                    {filteredBlocks.map((block) => (
+                      <div key={block.id} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          id={`rain-block-${block.id}`}
+                          checked={selectedRainBlocks.has(block.key)}
+                          onChange={() => toggleBlockRainSelection(block.key)}
+                          className="w-4 h-4 cursor-pointer"
+                        />
+                        <label htmlFor={`rain-block-${block.id}`} className="cursor-pointer flex-1">
+                          {block.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+        
         <div className="space-y-2">
           {filteredBlocks.map((block) => (
             <Card key={block.id} className="p-3">
