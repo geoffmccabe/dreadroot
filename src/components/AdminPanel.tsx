@@ -256,13 +256,14 @@ function BlocksList({ userRoles }: BlocksListProps) {
   const isSuperAdmin = userRoles.includes('superadmin');
   const isAdmin = userRoles.includes('admin') || isSuperAdmin;
   
-  // Load admin block rain settings from localStorage on mount
+  // Load admin block rain settings from localStorage when component mounts or tab changes to BASIC
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin && activeClass === 'basic') {
       try {
         const saved = localStorage.getItem('adminBlockRainSettings');
         if (saved) {
           const parsed = JSON.parse(saved);
+          console.log('Loading saved block rain settings:', parsed);
           setBlockRainSettings({
             blocksPerSecond: parsed.blocksPerSecond || 10,
             totalBlocks: parsed.totalBlocks || 100,
@@ -276,7 +277,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
         console.error('Failed to load admin block rain settings:', error);
       }
     }
-  }, [isAdmin]);
+  }, [isAdmin, activeClass]);
   
   const handleCleanupSkyBlocks = async () => {
     if (!isSuperAdmin) return;
@@ -563,12 +564,14 @@ function BlocksList({ userRoles }: BlocksListProps) {
   // Save admin block rain settings to localStorage whenever they change
   useEffect(() => {
     if (isAdmin && activeClass === 'basic') {
-      localStorage.setItem('adminBlockRainSettings', JSON.stringify({
+      const settingsToSave = {
         blocksPerSecond: blockRainSettings.blocksPerSecond,
         totalBlocks: blockRainSettings.totalBlocks,
         blockLifeMinutes: blockRainSettings.blockLifeMinutes,
         selectedBlocks: Array.from(selectedRainBlocks)
-      }));
+      };
+      console.log('Saving block rain settings:', settingsToSave);
+      localStorage.setItem('adminBlockRainSettings', JSON.stringify(settingsToSave));
     }
   }, [blockRainSettings, selectedRainBlocks, isAdmin, activeClass]);
 
