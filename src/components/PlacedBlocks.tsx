@@ -89,13 +89,13 @@ export const PlacedBlocks: React.FC<{
       fallState.velocity += gravity * cappedDelta;
       fallState.currentY -= fallState.velocity * cappedDelta;
       
-      // Use the target landing Y from database (already has stacking logic)
-      const landingY = fallState.targetY;
+      // Use ACTUAL database position (not targetY) to prevent flash on transition
+      const landingY = block.position_y;
       
       // Check if landed
       if (fallState.currentY <= landingY) {
-        // Snap to exact landing position to prevent sub-pixel flashing
-        fallState.currentY = landingY;
+        // Snap to EXACT database position to prevent flashing
+        fallState.currentY = block.position_y;
         
         // Play thud sound (throttled)
         const now = Date.now();
@@ -105,11 +105,8 @@ export const PlacedBlocks: React.FC<{
           lastThudTime.current = now;
         }
         
-        // CRITICAL: Delete from falling state AFTER this frame completes
-        // This ensures InstancedBlockGroup.useFrame renders the final position first
-        setTimeout(() => {
-          fallingBlocksState.delete(blockId);
-        }, 0);
+        // Remove from falling state - block now uses database position
+        fallingBlocksState.delete(blockId);
       }
     });
     
