@@ -14,6 +14,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocksData } from '@/hooks/useBlocksData';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useTokenTheme } from '@/contexts/TokenThemeContext';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -22,9 +24,56 @@ interface WaterfallControlsProps {
 
 function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { currentTheme, availableThemes, setActiveTheme, updateThemeSettings } = useTokenTheme();
+  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Debounced save to database
+  const handleSettingChange = (key: string, value: any) => {
+    // Update local state immediately
+    onSettingsChange(key, value);
+    
+    // Clear existing timeout
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+    
+    // Set new timeout to save to database
+    const timeout = setTimeout(() => {
+      const dbKey = key === 'flowSpeed' ? 'flow_speed' 
+        : key === 'msBetweeenDrops' ? 'ms_between_drops'
+        : key === 'coinRate' ? 'coin_rate'
+        : key === 'coinSize' ? 'coin_size'
+        : key === 'colorPalette' ? 'color_palette'
+        : key;
+      
+      updateThemeSettings({ [dbKey]: value });
+    }, 500);
+    
+    setSaveTimeout(timeout);
+  };
 
   return (
     <Card className="waterfall-card w-full">
+      {/* Token Theme Selector */}
+      <div className="mb-4 pb-3 border-b border-border">
+        <Label className="text-xs opacity-85 mb-2 block">Active Token</Label>
+        <Select 
+          value={currentTheme?.id || ''} 
+          onValueChange={setActiveTheme}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select token theme" />
+          </SelectTrigger>
+          <SelectContent>
+            {availableThemes.map(theme => (
+              <SelectItem key={theme.id} value={theme.id}>
+                {theme.display_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div 
         className="flex items-center justify-between mb-3 cursor-pointer"
         onClick={() => setIsCollapsed(!isCollapsed)}
@@ -43,7 +92,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
             <Label className="text-xs opacity-85">Flow speed</Label>
             <Slider
               value={[settings.flowSpeed]}
-              onValueChange={([value]) => onSettingsChange('flowSpeed', value)}
+              onValueChange={([value]) => handleSettingChange('flowSpeed', value)}
               min={0.2}
               max={3}
               step={0.01}
@@ -55,7 +104,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
             <Label className="text-xs opacity-85">MS between drops</Label>
             <Slider
               value={[settings.msBetweeenDrops]}
-              onValueChange={([value]) => onSettingsChange('msBetweeenDrops', value)}
+              onValueChange={([value]) => handleSettingChange('msBetweeenDrops', value)}
               min={0.1}
               max={5}
               step={0.1}
@@ -67,7 +116,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
             <Label className="text-xs opacity-85">Coin rate (ps)</Label>
             <Slider
               value={[settings.coinRate]}
-              onValueChange={([value]) => onSettingsChange('coinRate', value)}
+              onValueChange={([value]) => handleSettingChange('coinRate', value)}
               min={0}
               max={10}
               step={1}
@@ -79,7 +128,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
             <Label className="text-xs opacity-85">Coin size</Label>
             <Slider
               value={[settings.coinSize]}
-              onValueChange={([value]) => onSettingsChange('coinSize', value)}
+              onValueChange={([value]) => handleSettingChange('coinSize', value)}
               min={0.2}
               max={1}
               step={0.01}
@@ -104,7 +153,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
                     onChange={(e) => {
                       const newPalette = [...settings.colorPalette];
                       newPalette[index] = { ...newPalette[index], hex: e.target.value };
-                      onSettingsChange('colorPalette', newPalette);
+                      handleSettingChange('colorPalette', newPalette);
                     }}
                     className="w-6 h-6 p-0 border-0 cursor-pointer flex-shrink-0"
                   />
@@ -114,7 +163,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
                     onChange={(e) => {
                       const newPalette = [...settings.colorPalette];
                       newPalette[index] = { ...newPalette[index], weight: parseInt(e.target.value) || 0 };
-                      onSettingsChange('colorPalette', newPalette);
+                      handleSettingChange('colorPalette', newPalette);
                     }}
                     className="w-12 h-6 text-xs p-1 flex-1"
                     min="0"

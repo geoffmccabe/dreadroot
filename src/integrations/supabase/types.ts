@@ -14,6 +14,32 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          active_token_theme_id: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          active_token_theme_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          active_token_theme_id?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_settings_active_token_theme_id_fkey"
+            columns: ["active_token_theme_id"]
+            isOneToOne: false
+            referencedRelation: "token_themes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billboard_walls: {
         Row: {
           created_at: string
@@ -215,6 +241,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      token_themes: {
+        Row: {
+          coin_rate: number
+          coin_size: number
+          color_palette: Json
+          created_at: string
+          display_name: string
+          flow_speed: number
+          id: string
+          is_active: boolean
+          ms_between_drops: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          coin_rate?: number
+          coin_size?: number
+          color_palette?: Json
+          created_at?: string
+          display_name: string
+          flow_speed?: number
+          id?: string
+          is_active?: boolean
+          ms_between_drops?: number
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          coin_rate?: number
+          coin_size?: number
+          color_palette?: Json
+          created_at?: string
+          display_name?: string
+          flow_speed?: number
+          id?: string
+          is_active?: boolean
+          ms_between_drops?: number
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_inventory: {
         Row: {

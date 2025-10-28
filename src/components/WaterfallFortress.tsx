@@ -19,6 +19,7 @@ import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
+import { useTokenTheme } from '@/contexts/TokenThemeContext';
 import { useToast } from '@/hooks/use-toast';
 import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
@@ -1804,6 +1805,8 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
 // Main Waterfall Fortress component
 export default function WaterfallFortress() {
   // Default color/weight pairs - 6 colors as requested
+  const { currentTheme, isLoading: themeLoading } = useTokenTheme();
+  
   const defaultColorPalette = [
     { hex: '#06c8c0', weight: 10 },
     { hex: '#028eef', weight: 10 },
@@ -1815,11 +1818,25 @@ export default function WaterfallFortress() {
 
   const [settings, setSettings] = useState({
     flowSpeed: 1.2,
-    msBetweeenDrops: 1, // 1ms = 1000 drops per second
+    msBetweeenDrops: 1,
     coinRate: 6,
     coinSize: 0.8,
     colorPalette: defaultColorPalette
   });
+  
+  // Load settings from current theme
+  useEffect(() => {
+    if (currentTheme && !themeLoading) {
+      console.log('Loading theme settings:', currentTheme.display_name);
+      setSettings({
+        flowSpeed: currentTheme.flow_speed,
+        msBetweeenDrops: currentTheme.ms_between_drops,
+        coinRate: currentTheme.coin_rate,
+        coinSize: currentTheme.coin_size,
+        colorPalette: currentTheme.color_palette
+      });
+    }
+  }, [currentTheme, themeLoading]);
   
   // Weather settings state
   const [weatherSettings, setWeatherSettings] = useState(() => {
