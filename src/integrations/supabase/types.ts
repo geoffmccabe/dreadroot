@@ -244,43 +244,64 @@ export type Database = {
       }
       token_themes: {
         Row: {
+          blockchain: string | null
+          coin_image_url: string | null
+          coin_name: string | null
           coin_rate: number
           coin_size: number
           color_palette: Json
+          contract_address: string | null
           created_at: string
+          description: string | null
           display_name: string
           flow_speed: number
           id: string
           is_active: boolean
           ms_between_drops: number
           name: string
+          ticker_symbol: string | null
           updated_at: string
+          website_url: string | null
         }
         Insert: {
+          blockchain?: string | null
+          coin_image_url?: string | null
+          coin_name?: string | null
           coin_rate?: number
           coin_size?: number
           color_palette?: Json
+          contract_address?: string | null
           created_at?: string
+          description?: string | null
           display_name: string
           flow_speed?: number
           id?: string
           is_active?: boolean
           ms_between_drops?: number
           name: string
+          ticker_symbol?: string | null
           updated_at?: string
+          website_url?: string | null
         }
         Update: {
+          blockchain?: string | null
+          coin_image_url?: string | null
+          coin_name?: string | null
           coin_rate?: number
           coin_size?: number
           color_palette?: Json
+          contract_address?: string | null
           created_at?: string
+          description?: string | null
           display_name?: string
           flow_speed?: number
           id?: string
           is_active?: boolean
           ms_between_drops?: number
           name?: string
+          ticker_symbol?: string | null
           updated_at?: string
+          website_url?: string | null
         }
         Relationships: []
       }

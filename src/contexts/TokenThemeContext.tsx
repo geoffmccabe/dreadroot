@@ -17,6 +17,13 @@ interface TokenTheme {
   coin_size: number;
   color_palette: ColorWeight[];
   is_active: boolean;
+  coin_image_url?: string | null;
+  coin_name?: string | null;
+  blockchain?: string | null;
+  contract_address?: string | null;
+  ticker_symbol?: string | null;
+  website_url?: string | null;
+  description?: string | null;
 }
 
 interface TokenThemeContextType {

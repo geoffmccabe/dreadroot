@@ -16,6 +16,7 @@ import { useUserData } from '@/hooks/useUserData';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { Textarea } from '@/components/ui/textarea';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -24,8 +25,38 @@ interface WaterfallControlsProps {
 
 function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCoinDetailsCollapsed, setIsCoinDetailsCollapsed] = useState(false);
   const { currentTheme, availableThemes, setActiveTheme, updateThemeSettings } = useTokenTheme();
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [coinDetailsTimeout, setCoinDetailsTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [coinDetails, setCoinDetails] = useState({
+    coinImageUrl: currentTheme?.coin_image_url || '',
+    coinName: currentTheme?.coin_name || '',
+    blockchain: currentTheme?.blockchain || '',
+    contractAddress: currentTheme?.contract_address || '',
+    tickerSymbol: currentTheme?.ticker_symbol || '',
+    websiteUrl: currentTheme?.website_url || '',
+    description: currentTheme?.description || '',
+  });
+
+  // Update coin details when theme changes
+  useEffect(() => {
+    if (currentTheme) {
+      setCoinDetails({
+        coinImageUrl: currentTheme.coin_image_url || '',
+        coinName: currentTheme.coin_name || '',
+        blockchain: currentTheme.blockchain || '',
+        contractAddress: currentTheme.contract_address || '',
+        tickerSymbol: currentTheme.ticker_symbol || '',
+        websiteUrl: currentTheme.website_url || '',
+        description: currentTheme.description || '',
+      });
+    }
+  }, [currentTheme]);
 
   // Debounced save to database
   const handleSettingChange = (key: string, value: any) => {
@@ -52,6 +83,77 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
     setSaveTimeout(timeout);
   };
 
+  // Debounced coin details save
+  const handleCoinDetailsChange = (field: string, value: string) => {
+    setCoinDetails(prev => ({ ...prev, [field]: value }));
+    
+    if (coinDetailsTimeout) {
+      clearTimeout(coinDetailsTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      const dbField = field === 'coinImageUrl' ? 'coin_image_url'
+        : field === 'coinName' ? 'coin_name'
+        : field === 'contractAddress' ? 'contract_address'
+        : field === 'tickerSymbol' ? 'ticker_symbol'
+        : field === 'websiteUrl' ? 'website_url'
+        : field;
+      
+      updateThemeSettings({ [dbField]: value });
+    }, 500);
+    
+    setCoinDetailsTimeout(timeout);
+  };
+
+  // Handle coin image upload
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.match(/^image\/(png|webp)$/)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PNG or WebP image",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${currentTheme?.name}_${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('coin-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('coin-images')
+        .getPublicUrl(filePath);
+
+      handleCoinDetailsChange('coinImageUrl', publicUrl);
+      
+      toast({
+        title: "Image uploaded",
+        description: "Coin image has been updated successfully"
+      });
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload coin image",
+        variant: "destructive"
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   return (
     <Card className="waterfall-card w-full">
       {/* Token Theme Selector */}
@@ -72,6 +174,123 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Coin Details Section */}
+      <div className="mb-4 pb-3 border-b border-border">
+        <div 
+          className="flex items-center justify-between mb-3 cursor-pointer"
+          onClick={() => setIsCoinDetailsCollapsed(!isCoinDetailsCollapsed)}
+        >
+          <h3 className="font-bold text-sm">COIN DETAILS</h3>
+          {isCoinDetailsCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </div>
+
+        {!isCoinDetailsCollapsed && (
+          <div className="space-y-3 animate-fade-in">
+            {/* Coin Image Upload */}
+            <div className="space-y-2">
+              <Label className="text-xs opacity-85">Coin Image</Label>
+              <div className="flex items-center gap-3">
+                {coinDetails.coinImageUrl && (
+                  <img 
+                    src={coinDetails.coinImageUrl} 
+                    alt="Coin" 
+                    className="w-12 h-12 rounded-full object-cover border border-border"
+                  />
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/webp"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingImage}
+                  className="flex-1"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                </Button>
+              </div>
+              <p className="text-xs opacity-60">PNG or WebP format recommended</p>
+            </div>
+
+            {/* Coin Name */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Coin Name</Label>
+              <Input
+                value={coinDetails.coinName}
+                onChange={(e) => handleCoinDetailsChange('coinName', e.target.value)}
+                placeholder="e.g., Waterfall Token"
+                className="text-sm"
+              />
+            </div>
+
+            {/* Ticker Symbol */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Ticker Symbol</Label>
+              <Input
+                value={coinDetails.tickerSymbol}
+                onChange={(e) => handleCoinDetailsChange('tickerSymbol', e.target.value)}
+                placeholder="e.g., WATER"
+                className="text-sm"
+              />
+            </div>
+
+            {/* Blockchain */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Blockchain</Label>
+              <Input
+                value={coinDetails.blockchain}
+                onChange={(e) => handleCoinDetailsChange('blockchain', e.target.value)}
+                placeholder="e.g., Ethereum, Solana"
+                className="text-sm"
+              />
+            </div>
+
+            {/* Contract Address */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Contract Address</Label>
+              <Input
+                value={coinDetails.contractAddress}
+                onChange={(e) => handleCoinDetailsChange('contractAddress', e.target.value)}
+                placeholder="0x..."
+                className="text-sm font-mono"
+              />
+            </div>
+
+            {/* Website URL */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Website URL</Label>
+              <Input
+                value={coinDetails.websiteUrl}
+                onChange={(e) => handleCoinDetailsChange('websiteUrl', e.target.value)}
+                placeholder="https://..."
+                className="text-sm"
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Description</Label>
+              <Textarea
+                value={coinDetails.description}
+                onChange={(e) => handleCoinDetailsChange('description', e.target.value)}
+                placeholder="Brief description of the token..."
+                className="text-sm min-h-[60px]"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div 
