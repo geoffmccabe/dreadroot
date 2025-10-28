@@ -182,8 +182,17 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, []);
   
   // Set up instance matrices and compute bounding box
+  const prevBlocksLengthRef = useRef<number>(0);
+  
   useEffect(() => {
     if (!meshRef.current) return;
+    
+    // Skip GPU re-upload if block count hasn't changed (just a state update from falling block landing)
+    if (prevBlocksLengthRef.current === blocks.length && prevBlocksLengthRef.current > 0) {
+      return;
+    }
+    
+    prevBlocksLengthRef.current = blocks.length;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
