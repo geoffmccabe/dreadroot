@@ -182,18 +182,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, []);
   
   // Set up instance matrices and compute bounding box
-  // Only re-run position calculation when block IDs actually change (not just array reference)
-  const blockIdListRef = useRef<string>('');
-  const currentBlockIdList = blocks.map(b => b.id).sort().join(',');
-  
   useEffect(() => {
     if (!meshRef.current) return;
-    
-    // Skip if block IDs haven't changed (just a state update, not actual blocks added/removed)
-    if (blockIdListRef.current === currentBlockIdList) {
-      return;
-    }
-    blockIdListRef.current = currentBlockIdList;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
@@ -226,7 +216,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     meshRef.current.boundingBox.copy(boundingBox);
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
-  }, [blocks, currentBlockIdList]);
+  }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   useFrame(() => {
