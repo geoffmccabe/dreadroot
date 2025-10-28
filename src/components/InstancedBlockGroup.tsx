@@ -236,16 +236,15 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
-      if (fallState) {
-        // Block is falling - use animated position
-        const x = block.position_x + 0.5;
-        const y = fallState.currentY + 0.5;
-        const z = block.position_z + 0.5;
-        
-        matrix.setPosition(x, y, z);
-        meshRef.current!.setMatrixAt(i, matrix);
-        needsUpdate = true;
-      }
+      
+      // Always update position - use fallState if falling, database position if landed
+      const x = block.position_x + 0.5;
+      const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+      const z = block.position_z + 0.5;
+      
+      matrix.setPosition(x, y, z);
+      meshRef.current!.setMatrixAt(i, matrix);
+      needsUpdate = true;
     });
     
     if (needsUpdate) {
