@@ -690,15 +690,29 @@ function FirstPersonControls({
     
     // Check if standing on any block surface - only when not already colliding vertically
     if (!standingOnSurface && velocity.current.y <= 0.1) {
-      for (const collider of colliders) {
-        // Check if feet are directly on top of a block surface
-        const tolerance = 0.05; // Much tighter tolerance
-        if (feetPosition.x >= collider.min.x - 0.3 && feetPosition.x <= collider.max.x + 0.3 &&
-            feetPosition.z >= collider.min.z - 0.3 && feetPosition.z <= collider.max.z + 0.3 &&
-            Math.abs(feetPosition.y - collider.max.y) <= tolerance) {
-          standingOnSurface = true;
-          break;
+      const playerRadius = 0.4;
+      const tolerance = 0.05; // Vertical tolerance for "on surface"
+      
+      // Check 4 corners of player's collision box bottom surface
+      const corners = [
+        { x: feetPosition.x - playerRadius, z: feetPosition.z - playerRadius }, // Back-left
+        { x: feetPosition.x + playerRadius, z: feetPosition.z - playerRadius }, // Back-right
+        { x: feetPosition.x - playerRadius, z: feetPosition.z + playerRadius }, // Front-left
+        { x: feetPosition.x + playerRadius, z: feetPosition.z + playerRadius }, // Front-right
+      ];
+      
+      // If ANY corner is supported by a block, player is standing
+      for (const corner of corners) {
+        for (const collider of colliders) {
+          // Check if this corner is within the block's XZ bounds and at the right height
+          if (corner.x >= collider.min.x && corner.x <= collider.max.x &&
+              corner.z >= collider.min.z && corner.z <= collider.max.z &&
+              Math.abs(feetPosition.y - collider.max.y) <= tolerance) {
+            standingOnSurface = true;
+            break;
+          }
         }
+        if (standingOnSurface) break;
       }
     }
     
