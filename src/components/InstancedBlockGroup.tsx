@@ -137,22 +137,23 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       map: texture,
     };
     
-    if (blockDef.key !== 'grass_block') {
-      const baseColor = getBaseColor(blockDef);
-      
-      if (cachedIsAnimated) {
-        const lightTint = new THREE.Color(0xffffff).lerp(baseColor, 0.3);
-        materialProps.color = lightTint;
-      } else {
-        materialProps.color = baseColor;
-        
-        if (blockDef.properties?.emissive) {
-          materialProps.emissive = baseColor;
-          const glowFactor = blockDef.properties.glowFactor || 3.0;
-          materialProps.emissiveIntensity = glowFactor * 1.0;
-        }
-      }
+  if (blockDef.key !== 'grass_block') {
+    const baseColor = getBaseColor(blockDef);
+    
+    if (cachedIsAnimated) {
+      const lightTint = new THREE.Color(0xffffff).lerp(baseColor, 0.3);
+      materialProps.color = lightTint;
+    } else if (blockDef.properties?.emissive) {
+      // For emissive blocks, keep color white so texture shows through
+      materialProps.color = new THREE.Color(0xffffff);
+      // Emissive provides the glow effect
+      materialProps.emissive = baseColor;
+      const glowFactor = blockDef.properties.glowFactor || 3.0;
+      materialProps.emissiveIntensity = glowFactor * 0.5;
+    } else {
+      materialProps.color = baseColor;
     }
+  }
     
     let newMaterial: THREE.Material;
     
