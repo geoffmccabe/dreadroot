@@ -674,6 +674,11 @@ function FirstPersonControls({
         if (playerBox.intersectsBox(collider)) {
           collisionFound = true;
           
+          // Log collision details when crouching
+          if (keys.current.ctrl) {
+            console.log(`💥 Collision while crouched: block at y=${collider.min.y.toFixed(2)}-${collider.max.y.toFixed(2)}, player box=${playerBox.min.y.toFixed(2)}-${playerBox.max.y.toFixed(2)}`);
+          }
+          
           // Calculate player center
           const playerCenterX = camera.position.x;
           const playerCenterY = camera.position.y - playerHeight / 2;
