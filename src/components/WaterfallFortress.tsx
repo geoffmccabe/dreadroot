@@ -621,19 +621,27 @@ function FirstPersonControls({
     // Player dimensions
     const playerRadius = 0.4;
     const isCrouching = keys.current.ctrl;
-    const playerHeight = isCrouching ? 0.8 : 1.6;
+    const standingHeight = 1.6;
+    const crouchingHeight = 0.8;
+    const playerHeight = isCrouching ? crouchingHeight : standingHeight;
     
-    // Check if player can stand up when trying to uncrouch
-    if (!isCrouching && keys.current.previouslyCtrl) {
+    // Adjust camera height when transitioning between standing and crouching
+    // Calculate the ground level based on current state
+    const wasStanding = !keys.current.previouslyCtrl;
+    if (isCrouching && wasStanding) {
+      // Transition from standing to crouching - lower camera by 0.8 blocks
+      camera.position.y -= (standingHeight - crouchingHeight);
+    } else if (!isCrouching && !wasStanding) {
+      // Transition from crouching to standing - check if there's space, then raise camera
       const standingBox = new THREE.Box3(
         new THREE.Vector3(
           camera.position.x - playerRadius,
-          camera.position.y - 1.6,
+          camera.position.y - crouchingHeight,
           camera.position.z - playerRadius
         ),
         new THREE.Vector3(
           camera.position.x + playerRadius,
-          camera.position.y,
+          camera.position.y + (standingHeight - crouchingHeight),
           camera.position.z + playerRadius
         )
       );
@@ -646,8 +654,12 @@ function FirstPersonControls({
         }
       }
       
-      if (!canStandUp) {
-        keys.current.ctrl = true; // Force crouch to continue
+      if (canStandUp) {
+        // Raise camera by 0.8 blocks
+        camera.position.y += (standingHeight - crouchingHeight);
+      } else {
+        // Force crouch to continue if can't stand
+        keys.current.ctrl = true;
       }
     }
     keys.current.previouslyCtrl = isCrouching;
