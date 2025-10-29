@@ -633,6 +633,7 @@ function FirstPersonControls({
     
     if (isOnGround && keys.current.ctrl && camera.position.y > playerHeight) {
       // Instantly crouch to proper height
+      console.log(`🧎 Crouching: camera.y from ${camera.position.y.toFixed(2)} to ${playerHeight}`);
       camera.position.y = playerHeight;
     }
     
@@ -642,6 +643,11 @@ function FirstPersonControls({
       onGround.current = true;
     } else {
       onGround.current = false;
+    }
+    
+    // Log player state when crouching
+    if (keys.current.ctrl && Date.now() % 60 < 16) {
+      console.log(`🔍 Crouch state: camera.y=${camera.position.y.toFixed(2)}, playerHeight=${playerHeight}, feetY=${feetY.toFixed(2)}, box: ${(camera.position.y - playerHeight).toFixed(2)} to ${camera.position.y.toFixed(2)}`);
     }
 
     // Wall and block collision detection - push out of any collisions
