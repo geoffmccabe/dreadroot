@@ -687,40 +687,50 @@ function FirstPersonControls({
             collider.max.z - playerBox.min.z
           );
           
-          // Prioritize vertical collision if player is clearly above/below the block
+          // Calculate Y overlap to determine collision type
           const feetY = camera.position.y - playerHeight;
           const headY = camera.position.y;
           
-          // Check if this is vertical collision (standing on top or hitting ceiling)
-          const isStandingOnTop = feetY >= collider.min.y && feetY <= collider.max.y + 0.1 && headY > collider.max.y;
-          const isHittingCeiling = headY <= collider.max.y && headY >= collider.min.y - 0.1 && feetY < collider.min.y;
+          // Calculate what percentage of the player's height overlaps with the block
+          const playerHeightRange = headY - feetY;
+          const overlapBottom = Math.max(feetY, collider.min.y);
+          const overlapTop = Math.min(headY, collider.max.y);
+          const yOverlap = Math.max(0, overlapTop - overlapBottom);
+          const yOverlapPercent = yOverlap / playerHeightRange;
           
-          if (isStandingOnTop) {
-            // Standing on top of block
-            camera.position.y = collider.max.y + playerHeight;
-            velocity.current.y = 0;
-            onGround.current = true;
-          } else if (isHittingCeiling) {
-            // Hitting head on ceiling
-            camera.position.y = collider.min.y;
-            velocity.current.y = 0;
-          } else {
+          // If >50% of player height overlaps with block, it's a horizontal (side) collision
+          if (yOverlapPercent > 0.5) {
             // Horizontal collision - push out on the axis with smallest penetration
-            // But only consider horizontal axes (X and Z)
             if (overlapX <= overlapZ) {
               // Push out on X axis
               if (playerCenterX > colliderCenterX) {
-                camera.position.x = collider.max.x + playerRadius + 0.001;
+                camera.position.x = collider.max.x + playerRadius + 0.01;
               } else {
-                camera.position.x = collider.min.x - playerRadius - 0.001;
+                camera.position.x = collider.min.x - playerRadius - 0.01;
               }
             } else {
               // Push out on Z axis
               if (playerCenterZ > colliderCenterZ) {
-                camera.position.z = collider.max.z + playerRadius + 0.001;
+                camera.position.z = collider.max.z + playerRadius + 0.01;
               } else {
-                camera.position.z = collider.min.z - playerRadius - 0.001;
+                camera.position.z = collider.min.z - playerRadius - 0.01;
               }
+            }
+          } else {
+            // Check if this is vertical collision (standing on top or hitting ceiling)
+            // Standing on top: feet are NEAR the top surface (not inside the block)
+            const isStandingOnTop = feetY >= collider.max.y - 0.15 && feetY <= collider.max.y + 0.15;
+            const isHittingCeiling = headY >= collider.min.y - 0.15 && headY <= collider.min.y + 0.15;
+            
+            if (isStandingOnTop) {
+              // Standing on top of block
+              camera.position.y = collider.max.y + playerHeight;
+              velocity.current.y = 0;
+              onGround.current = true;
+            } else if (isHittingCeiling) {
+              // Hitting head on ceiling
+              camera.position.y = collider.min.y;
+              velocity.current.y = 0;
             }
           }
           
