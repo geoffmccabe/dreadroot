@@ -291,6 +291,7 @@ function FirstPersonControls({
 
   // Collision boxes for fortress walls and placed blocks
   const colliders = useMemo(() => {
+    console.log('[Colliders] Building colliders with', existingBlocks.length, 'blocks');
     const cliffW = 40, cliffH = 20, frontT = 2;
     const courtyardDepth = 30, frontZ = -8;
     const openingHalfW = 2;
@@ -342,7 +343,9 @@ function FirstPersonControls({
       }
     }
     
-    return [...fortressColliders, ...Array.from(blockCollisionCache.current.values())];
+    const result = [...fortressColliders, ...Array.from(blockCollisionCache.current.values())];
+    console.log('[Colliders] Total colliders:', result.length, '(', fortressColliders.length, 'fortress +', blockCollisionCache.current.size, 'blocks)');
+    return result;
   }, [existingBlocks]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -646,6 +649,7 @@ function FirstPersonControls({
     // Iterative collision resolution - handle multiple simultaneous collisions
     let iterationCount = 0;
     const MAX_COLLISION_ITERATIONS = 3;
+    let totalCollisionsDetected = 0;
     
     while (iterationCount < MAX_COLLISION_ITERATIONS) {
       let hadCollision = false;
@@ -653,6 +657,7 @@ function FirstPersonControls({
       for (const collider of colliders) {
         if (playerBox.intersectsBox(collider)) {
           hadCollision = true;
+          totalCollisionsDetected++;
           
           // Calculate overlaps on all axes
           const centerDiffX = camera.position.x - (collider.min.x + collider.max.x) / 2;
@@ -719,6 +724,10 @@ function FirstPersonControls({
       if (!hadCollision) break;
       
       iterationCount++;
+    }
+    
+    if (totalCollisionsDetected > 0) {
+      console.log('[Collision] Detected', totalCollisionsDetected, 'collisions over', iterationCount, 'iterations');
     }
     
     // Check if standing on a block or ground for proper jumping - improved surface detection
