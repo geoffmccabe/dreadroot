@@ -625,7 +625,7 @@ function FirstPersonControls({
     camera.position.copy(intendedPosition);
 
     // Ground collision - dynamic height based on crouch
-    const playerHeight = keys.current.ctrl ? 0.8 : 1.6;
+    const playerHeight = keys.current.ctrl ? 0.4 : 1.6;
     
     // Instantly adjust camera height when crouching on ground
     const feetY = camera.position.y - playerHeight;
