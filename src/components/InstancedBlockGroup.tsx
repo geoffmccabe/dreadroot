@@ -145,12 +145,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       materialProps.color = lightTint;
     } else {
       materialProps.color = baseColor;
-      
-      // Add subtle emissive to brighten texture for glowing blocks
-      if (blockDef.properties?.emissive) {
-        materialProps.emissive = baseColor;
-        materialProps.emissiveIntensity = 0.15; // Subtle brightness boost
-      }
     }
   }
     
@@ -172,6 +166,18 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         ior: 1.5,
         reflectivity: 0.7,
         envMapIntensity: 1.2,
+      });
+    } else if (blockDef.properties?.emissive) {
+      // Use MeshStandardMaterial with emissiveMap for glowing blocks
+      // This makes the texture glow in its own colors, not washed out
+      newMaterial = new THREE.MeshStandardMaterial({
+        map: texture,
+        color: new THREE.Color(0xffffff), // Let texture show through naturally
+        emissiveMap: texture, // Use texture for glow color
+        emissive: new THREE.Color(0xffffff), // Base emissive color
+        emissiveIntensity: 0.4, // Brightness of self-illumination
+        roughness: 0.8,
+        metalness: 0.1,
       });
     } else {
       newMaterial = new THREE.MeshLambertMaterial(materialProps);
