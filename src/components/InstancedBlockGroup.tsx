@@ -144,9 +144,13 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       const lightTint = new THREE.Color(0xffffff).lerp(baseColor, 0.3);
       materialProps.color = lightTint;
     } else {
-      // For blocks with custom textures or colors, use the base color
-      // Don't use emissive material properties - let point lights handle glow
       materialProps.color = baseColor;
+      
+      // Add subtle emissive to brighten texture for glowing blocks
+      if (blockDef.properties?.emissive) {
+        materialProps.emissive = baseColor;
+        materialProps.emissiveIntensity = 0.15; // Subtle brightness boost
+      }
     }
   }
     
