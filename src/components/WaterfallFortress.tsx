@@ -628,9 +628,9 @@ function FirstPersonControls({
       onGround.current = false;
     }
 
-    // Wall and block collision detection - improved
+    // Wall and block collision detection - iterative multi-pass system
     const playerRadius = 0.4;
-    const playerBox = new THREE.Box3(
+    let playerBox = new THREE.Box3(
       new THREE.Vector3(
         camera.position.x - playerRadius,
         camera.position.y - playerHeight,
@@ -643,63 +643,87 @@ function FirstPersonControls({
       )
     );
     
-    for (const collider of colliders) {
-      if (playerBox.intersectsBox(collider)) {
-        // Calculate overlaps on all axes
-        const centerDiffX = camera.position.x - (collider.min.x + collider.max.x) / 2;
-        const centerDiffY = camera.position.y - (collider.min.y + collider.max.y) / 2;
-        const centerDiffZ = camera.position.z - (collider.min.z + collider.max.z) / 2;
-        
-        const overlapX = Math.min(
-          Math.abs(playerBox.max.x - collider.min.x),
-          Math.abs(collider.max.x - playerBox.min.x)
-        );
-        const overlapY = Math.min(
-          Math.abs(playerBox.max.y - collider.min.y),
-          Math.abs(collider.max.y - playerBox.min.y)
-        );
-        const overlapZ = Math.min(
-          Math.abs(playerBox.max.z - collider.min.z), 
-          Math.abs(collider.max.z - playerBox.min.z)
-        );
-        
-        // Resolve collision in direction of smallest overlap
-        if (overlapY <= overlapX && overlapY <= overlapZ) {
-          // Vertical collision
-          if (centerDiffY > 0) {
-            // Landing on top - only if moving downward
-            if (velocity.current.y <= 0) {
-              camera.position.y = collider.max.y + playerHeight;
-              velocity.current.y = 0;
-              onGround.current = true;
+    // Iterative collision resolution - handle multiple simultaneous collisions
+    let iterationCount = 0;
+    const MAX_COLLISION_ITERATIONS = 3;
+    
+    while (iterationCount < MAX_COLLISION_ITERATIONS) {
+      let hadCollision = false;
+      
+      for (const collider of colliders) {
+        if (playerBox.intersectsBox(collider)) {
+          hadCollision = true;
+          
+          // Calculate overlaps on all axes
+          const centerDiffX = camera.position.x - (collider.min.x + collider.max.x) / 2;
+          const centerDiffY = camera.position.y - (collider.min.y + collider.max.y) / 2;
+          const centerDiffZ = camera.position.z - (collider.min.z + collider.max.z) / 2;
+          
+          const overlapX = Math.min(
+            Math.abs(playerBox.max.x - collider.min.x),
+            Math.abs(collider.max.x - playerBox.min.x)
+          );
+          const overlapY = Math.min(
+            Math.abs(playerBox.max.y - collider.min.y),
+            Math.abs(collider.max.y - playerBox.min.y)
+          );
+          const overlapZ = Math.min(
+            Math.abs(playerBox.max.z - collider.min.z), 
+            Math.abs(collider.max.z - playerBox.min.z)
+          );
+          
+          // Resolve collision in direction of smallest overlap
+          if (overlapY <= overlapX && overlapY <= overlapZ) {
+            // Vertical collision
+            if (centerDiffY > 0) {
+              // Landing on top - only if moving downward
+              if (velocity.current.y <= 0) {
+                camera.position.y = collider.max.y + playerHeight;
+                velocity.current.y = 0;
+                onGround.current = true;
+              }
+            } else {
+              // Hitting from below - only if moving upward  
+              if (velocity.current.y > 0) {
+                camera.position.y = collider.min.y;
+                velocity.current.y = 0;
+              }
             }
+          } else if (overlapX <= overlapZ) {
+            // Push along X axis
+            camera.position.x = centerDiffX > 0 ? 
+              collider.max.x + playerRadius + 0.01 : 
+              collider.min.x - playerRadius - 0.01;
           } else {
-            // Hitting from below - only if moving upward  
-            if (velocity.current.y > 0) {
-              camera.position.y = collider.min.y;
-              velocity.current.y = 0;
-            }
+            // Push along Z axis  
+            camera.position.z = centerDiffZ > 0 ? 
+              collider.max.z + playerRadius + 0.01 : 
+              collider.min.z - playerRadius - 0.01;
           }
-        } else if (overlapX <= overlapZ) {
-          // Push along X axis
-          camera.position.x = centerDiffX > 0 ? 
-            collider.max.x + playerRadius + 0.01 : 
-            collider.min.x - playerRadius - 0.01;
-          // Don't reset Y velocity for horizontal collisions
-        } else {
-          // Push along Z axis  
-          camera.position.z = centerDiffZ > 0 ? 
-            collider.max.z + playerRadius + 0.01 : 
-            collider.min.z - playerRadius - 0.01;
-          // Don't reset Y velocity for horizontal collisions
+          
+          // Update player box after position change for next collision check
+          playerBox.min.set(
+            camera.position.x - playerRadius,
+            camera.position.y - playerHeight,
+            camera.position.z - playerRadius
+          );
+          playerBox.max.set(
+            camera.position.x + playerRadius,
+            camera.position.y,
+            camera.position.z + playerRadius
+          );
         }
-        break;
       }
+      
+      // If no collisions occurred this iteration, we're done
+      if (!hadCollision) break;
+      
+      iterationCount++;
     }
     
     // Check if standing on a block or ground for proper jumping - improved surface detection
     const feetPosition = camera.position.clone();
-    feetPosition.y -= 1.6; // Offset to feet level
+    feetPosition.y -= playerHeight; // Offset to feet level - dynamic based on crouch state
     
     let standingOnSurface = feetPosition.y <= 0.05; // Ground level with tighter tolerance
     
