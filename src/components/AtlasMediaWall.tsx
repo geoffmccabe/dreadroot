@@ -100,7 +100,7 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
         return (
           <mesh 
             key={`${wallNumber}-slot-${index + 1}`}
-            position={[x, y, 0.01]}
+            position={[x, y, 0.5]}
             geometry={createSlotGeometry(index)}
           >
             <meshBasicMaterial
@@ -116,7 +116,7 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
       
       {/* Loading indicator */}
       {isLoading && (
-        <mesh position={[0, 0, 0.02]}>
+        <mesh position={[0, 0, 0.6]}>
           <planeGeometry args={[wallWidth * 0.8, wallHeight * 0.1]} />
           <meshBasicMaterial 
             color="#4f46e5" 

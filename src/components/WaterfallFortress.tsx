@@ -685,9 +685,15 @@ function FirstPersonControls({
       const playerBox = createPlayerBox(pos);
       
       for (const collider of colliders) {
-        // Skip blocks that are above crouched player (crawling under)
-        if (skipCrawlable && isCrouching && playerBox.max.y < collider.min.y) {
-          continue;
+        if (skipCrawlable && isCrouching) {
+          // Skip blocks that are above crouched player (crawling under)
+          if (playerBox.max.y <= collider.min.y + 0.01) {
+            continue;
+          }
+          // Skip blocks that player is standing on (at ground level)
+          if (playerBox.min.y + 0.1 >= collider.max.y) {
+            continue;
+          }
         }
         
         if (playerBox.intersectsBox(collider)) {
