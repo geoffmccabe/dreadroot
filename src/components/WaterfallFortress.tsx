@@ -672,6 +672,13 @@ function FirstPersonControls({
       
       for (const collider of colliders) {
         if (playerBox.intersectsBox(collider)) {
+          // When crouching, ignore blocks where the head fits completely below the block
+          const playerHeadY = camera.position.y;
+          if (keys.current.ctrl && playerHeadY < collider.min.y) {
+            console.log(`✅ Crouching under block: head at ${playerHeadY.toFixed(2)} < block bottom ${collider.min.y.toFixed(2)}`);
+            continue; // Skip this collision - player can crouch under it
+          }
+          
           collisionFound = true;
           
           // Log collision details when crouching
