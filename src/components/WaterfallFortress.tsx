@@ -242,7 +242,8 @@ function FirstPersonControls({
   panelOpen,
   onCycleBlock,
   blocks,
-  onBlockRain
+  onBlockRain,
+  userRoles
 }: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -263,6 +264,7 @@ function FirstPersonControls({
   onCycleBlock: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
   onBlockRain: () => void;
+  userRoles: string[];
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -270,7 +272,7 @@ function FirstPersonControls({
   const direction = useRef(new THREE.Vector3());
   const keys = useRef({
     w: false, s: false, a: false, d: false,
-    shift: false, space: false, r: false
+    shift: false, space: false, r: false, ctrl: false
   });
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const onGround = useRef(true);
@@ -380,6 +382,9 @@ function FirstPersonControls({
         keys.current.space = true;
         event.preventDefault();
         break;
+      case 'ControlLeft':
+        keys.current.ctrl = true;
+        break;
       case 'KeyR':
         // Check for Shift+R for block rain
         if (event.shiftKey) {
@@ -471,6 +476,9 @@ function FirstPersonControls({
         break;
       case 'Space':
         keys.current.space = false;
+        break;
+      case 'ControlLeft':
+        keys.current.ctrl = false;
         break;
     }
   }, []);
@@ -579,9 +587,10 @@ function FirstPersonControls({
     if (keys.current.d) direction.current.x += 1;
     direction.current.normalize();
 
-    // Speed calculation
+    // Speed calculation - reduced when crouching
     const baseSpeed = 4.0;
-    const runSpeed = keys.current.shift ? 8.0 : baseSpeed;
+    const crouchSpeed = baseSpeed * 0.6; // 60% speed when crouching
+    const runSpeed = keys.current.ctrl ? crouchSpeed : (keys.current.shift ? 8.0 : baseSpeed);
     
     // Apply movement
     const forward = new THREE.Vector3(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
@@ -591,10 +600,16 @@ function FirstPersonControls({
     deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
     deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
 
-    // Gravity and jumping
+    // Gravity and jumping - variable jump height based on role
     velocity.current.y -= 9.8 * delta;
-    if (keys.current.space && onGround.current) {
-      velocity.current.y = 5.5;
+    if (keys.current.space && onGround.current && !keys.current.ctrl) {
+      // Calculate jump velocity based on desired height
+      // Formula: v = sqrt(2 * g * h) where g=9.8, h=jump height in blocks
+      let jumpHeight = 1.25; // Base: 1.25 blocks
+      if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+        jumpHeight = 2.5; // Admin boost: 2.5 blocks
+      }
+      velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
       onGround.current = false;
     }
     deltaMovement.y += velocity.current.y * delta;
@@ -603,9 +618,10 @@ function FirstPersonControls({
     const prevPosition = camera.position.clone();
     camera.position.add(deltaMovement);
 
-    // Ground collision
-    if (camera.position.y < 1.6) {
-      camera.position.y = 1.6;
+    // Ground collision - dynamic height based on crouch
+    const playerHeight = keys.current.ctrl ? 0.8 : 1.6;
+    if (camera.position.y < playerHeight) {
+      camera.position.y = playerHeight;
       velocity.current.y = 0;
       onGround.current = true;
     } else {
@@ -614,7 +630,6 @@ function FirstPersonControls({
 
     // Wall and block collision detection - improved
     const playerRadius = 0.4;
-    const playerHeight = 1.6;
     const playerBox = new THREE.Box3(
       new THREE.Vector3(
         camera.position.x - playerRadius,
@@ -1334,7 +1349,8 @@ function Scene({
   blocks,
   weatherSettings,
   onBlockRain,
-  coinImageUrl
+  coinImageUrl,
+  userRoles
 }: {
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -1355,6 +1371,7 @@ function Scene({
     cycleDuration: number;
   };
   onBlockRain: () => void;
+  userRoles: string[];
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -1681,6 +1698,7 @@ function Scene({
         onCycleBlock={onCycleBlock}
         blocks={blocks}
         onBlockRain={onBlockRain}
+        userRoles={userRoles}
       />
       
       {/* Dynamic Lighting with weather cycle */}
@@ -1834,7 +1852,7 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
             </div>
 
             <div className="mt-3 text-xs opacity-75">
-              Click to lock mouse • WASD move • Shift run • Space jump • ESC unlock
+              Click to lock mouse • WASD move • Shift run • Space jump • Ctrl crouch • ESC unlock
             </div>
           </div>
         )}
@@ -2404,6 +2422,7 @@ export default function WaterfallFortress() {
         blocks={blocks}
         weatherSettings={weatherSettings}
         onBlockRain={handleBlockRain}
+        userRoles={userRoles}
       />
       
       {/* Block Preview */}
