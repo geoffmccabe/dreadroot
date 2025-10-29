@@ -53,6 +53,16 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   // Load texture with animated GIF support
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  
+  // Debug log for Harold block
+  if (blockDef?.key === 'harold') {
+    console.log('🎨 Loading texture for Harold block:', {
+      key: blockDef.key,
+      textureUrl,
+      hasDiffuse: !!blockDef.texture?.diffuse
+    });
+  }
+  
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture
