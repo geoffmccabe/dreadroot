@@ -272,7 +272,8 @@ function FirstPersonControls({
   const direction = useRef(new THREE.Vector3());
   const keys = useRef({
     w: false, s: false, a: false, d: false,
-    shift: false, space: false, r: false, ctrl: false
+    shift: false, space: false, r: false, ctrl: false,
+    previouslyCtrl: false
   });
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const onGround = useRef(true);
@@ -617,32 +618,17 @@ function FirstPersonControls({
     }
     deltaMovement.y += velocity.current.y * delta;
 
-    // Store previous position for collision detection
-    const prevPosition = camera.position.clone();
-    const intendedPosition = camera.position.clone().add(deltaMovement);
-
-    // Apply intended movement
-    camera.position.copy(intendedPosition);
-
-    // Ground collision - dynamic height based on crouch
-    const playerHeight = keys.current.ctrl ? 0.8 : 1.6;
-    if (camera.position.y < playerHeight) {
-      camera.position.y = playerHeight;
-      velocity.current.y = 0;
-      onGround.current = true;
-    } else {
-      onGround.current = false;
-    }
-
-    // Wall and block collision detection - push out of any collisions
+    // Player dimensions
     const playerRadius = 0.4;
+    const isCrouching = keys.current.ctrl;
+    const playerHeight = isCrouching ? 0.8 : 1.6;
     
-    // Multi-pass collision resolution to handle penetration
-    for (let iteration = 0; iteration < 5; iteration++) {
-      let playerBox = new THREE.Box3(
+    // Check if player can stand up when trying to uncrouch
+    if (!isCrouching && keys.current.previouslyCtrl) {
+      const standingBox = new THREE.Box3(
         new THREE.Vector3(
           camera.position.x - playerRadius,
-          camera.position.y - playerHeight,
+          camera.position.y - 1.6,
           camera.position.z - playerRadius
         ),
         new THREE.Vector3(
@@ -652,127 +638,148 @@ function FirstPersonControls({
         )
       );
       
-      let collisionFound = false;
-      
+      let canStandUp = true;
       for (const collider of colliders) {
-        if (playerBox.intersectsBox(collider)) {
-          collisionFound = true;
-          
-          
-          // Calculate overlap on each axis
-          const overlapX = Math.min(
-            playerBox.max.x - collider.min.x,
-            collider.max.x - playerBox.min.x
-          );
-          const overlapY = Math.min(
-            playerBox.max.y - collider.min.y,
-            collider.max.y - playerBox.min.y
-          );
-          const overlapZ = Math.min(
-            playerBox.max.z - collider.min.z,
-            collider.max.z - playerBox.min.z
-          );
-          
-          // Special case: Check if player should step onto block surface
-          // If player's feet are close to block top and moving horizontally, push up
-          const feetY = camera.position.y - playerHeight;
-          const distanceToBlockTop = Math.abs(feetY - collider.max.y);
-          const isNearBlockTop = distanceToBlockTop < 0.6 && feetY < collider.max.y;
-          const movingHorizontally = Math.abs(velocity.current.y) < 0.5;
-          
-          // Push out in direction of smallest overlap, but prioritize stepping onto surfaces
-          if (isNearBlockTop && movingHorizontally && camera.position.y > collider.max.y) {
-            // Player should step UP onto block surface
-            camera.position.y = collider.max.y + playerHeight;
-            velocity.current.y = 0;
-            onGround.current = true;
-          } else if (overlapY <= overlapX && overlapY <= overlapZ) {
-            // Normal vertical collision
-            const playerCenterToColliderCenterY = camera.position.y - (collider.min.y + collider.max.y) / 2;
-            if (playerCenterToColliderCenterY > 0) {
-              // Player is above the block
-              camera.position.y = collider.max.y + playerHeight;
-              velocity.current.y = 0;
-              onGround.current = true;
-            } else {
-              // Player is below the block (head hitting ceiling)
-              camera.position.y = collider.min.y;
-              velocity.current.y = 0;
-            }
-          } else if (overlapX <= overlapZ) {
-            // X-axis collision - push out based on which side player is on
-            const playerCenterToColliderCenterX = camera.position.x - (collider.min.x + collider.max.x) / 2;
-            if (playerCenterToColliderCenterX > 0) {
-              // Player is on the right side of the block
-              camera.position.x = collider.max.x + playerRadius + 0.001;
-            } else {
-              // Player is on the left side of the block
-              camera.position.x = collider.min.x - playerRadius - 0.001;
-            }
-          } else {
-            // Z-axis collision - push out based on which side player is on
-            const playerCenterToColliderCenterZ = camera.position.z - (collider.min.z + collider.max.z) / 2;
-            if (playerCenterToColliderCenterZ > 0) {
-              // Player is on the positive Z side of the block
-              camera.position.z = collider.max.z + playerRadius + 0.001;
-            } else {
-              // Player is on the negative Z side of the block
-              camera.position.z = collider.min.z - playerRadius - 0.001;
-            }
-          }
-          
-          // Break after first collision and re-check all colliders
+        if (standingBox.intersectsBox(collider)) {
+          canStandUp = false;
           break;
         }
       }
       
-      // If no collision found, we're done
-      if (!collisionFound) break;
+      if (!canStandUp) {
+        keys.current.ctrl = true; // Force crouch to continue
+      }
     }
-    
-    // Check if standing on a block or ground for proper jumping - improved surface detection
-    const feetPosition = camera.position.clone();
-    feetPosition.y -= playerHeight; // Offset to feet level - dynamic based on crouch state
-    
-    let standingOnSurface = feetPosition.y <= 0.05; // Ground level with tighter tolerance
-    
-    // Check if standing on any block surface - only when not already colliding vertically
-    if (!standingOnSurface && velocity.current.y <= 0.1) {
-      const playerRadius = 0.4;
-      const tolerance = 0.15; // More forgiving vertical tolerance for edges
+    keys.current.previouslyCtrl = isCrouching;
+
+    // Helper function to create player bounding box
+    const createPlayerBox = (pos: THREE.Vector3) => {
+      return new THREE.Box3(
+        new THREE.Vector3(
+          pos.x - playerRadius,
+          pos.y - playerHeight,
+          pos.z - playerRadius
+        ),
+        new THREE.Vector3(
+          pos.x + playerRadius,
+          pos.y,
+          pos.z + playerRadius
+        )
+      );
+    };
+
+    // Helper function to check collision on a specific axis
+    const checkAxisCollision = (pos: THREE.Vector3, skipCrawlable: boolean = false) => {
+      const playerBox = createPlayerBox(pos);
       
-      // Check 4 corners + center of player's collision box bottom surface
-      const corners = [
-        { x: feetPosition.x - playerRadius, z: feetPosition.z - playerRadius }, // Back-left
-        { x: feetPosition.x + playerRadius, z: feetPosition.z - playerRadius }, // Back-right
-        { x: feetPosition.x - playerRadius, z: feetPosition.z + playerRadius }, // Front-left
-        { x: feetPosition.x + playerRadius, z: feetPosition.z + playerRadius }, // Front-right
-        { x: feetPosition.x, z: feetPosition.z }, // Center (most important for diagonal gaps!)
-      ];
-      
-      // Count how many support points we have for better stability
-      let supportedPoints = 0;
-      const edgeMargin = 0.1; // Allow corners slightly outside block bounds for edge walking
-      
-      for (const corner of corners) {
-        for (const collider of colliders) {
-          // Check if this corner is within the block's XZ bounds (with margin) and at the right height
-          if (corner.x >= collider.min.x - edgeMargin && corner.x <= collider.max.x + edgeMargin &&
-              corner.z >= collider.min.z - edgeMargin && corner.z <= collider.max.z + edgeMargin &&
-              Math.abs(feetPosition.y - collider.max.y) <= tolerance) {
-            supportedPoints++;
-            break; // This corner is supported, check next corner
-          }
+      for (const collider of colliders) {
+        // Skip blocks that are above crouched player (crawling under)
+        if (skipCrawlable && isCrouching && playerBox.max.y < collider.min.y) {
+          continue;
+        }
+        
+        if (playerBox.intersectsBox(collider)) {
+          return collider;
         }
       }
+      return null;
+    };
+
+    // Store previous position
+    const prevPosition = camera.position.clone();
+
+    // PER-AXIS COLLISION DETECTION
+    // X-axis movement and collision
+    if (deltaMovement.x !== 0) {
+      const testPos = camera.position.clone();
+      testPos.x += deltaMovement.x;
       
-      // Require at least 2 support points (corners or center) for realistic stability
-      standingOnSurface = supportedPoints >= 2;
+      const collision = checkAxisCollision(testPos, true);
+      if (collision) {
+        // Revert X movement
+        camera.position.x = prevPosition.x;
+        velocity.current.x = 0;
+      } else {
+        camera.position.x = testPos.x;
+      }
+    }
+
+    // Y-axis movement and collision
+    if (deltaMovement.y !== 0) {
+      const testPos = camera.position.clone();
+      testPos.y += deltaMovement.y;
+      
+      // Ground collision check
+      if (testPos.y < playerHeight) {
+        camera.position.y = playerHeight;
+        velocity.current.y = 0;
+        onGround.current = true;
+      } else {
+        const collision = checkAxisCollision(testPos, false);
+        if (collision) {
+          // Determine if hitting from above or below
+          if (velocity.current.y < 0) {
+            // Falling down, landing on block top
+            camera.position.y = collision.max.y + playerHeight;
+            velocity.current.y = 0;
+            onGround.current = true;
+          } else {
+            // Moving up, hitting ceiling
+            camera.position.y = collision.min.y;
+            velocity.current.y = 0;
+          }
+        } else {
+          camera.position.y = testPos.y;
+          onGround.current = false;
+        }
+      }
+    }
+
+    // Z-axis movement and collision
+    if (deltaMovement.z !== 0) {
+      const testPos = camera.position.clone();
+      testPos.z += deltaMovement.z;
+      
+      const collision = checkAxisCollision(testPos, true);
+      if (collision) {
+        // Revert Z movement
+        camera.position.z = prevPosition.z;
+        velocity.current.z = 0;
+      } else {
+        camera.position.z = testPos.z;
+      }
+    }
+
+    // Step-up logic for climbing small obstacles
+    if ((deltaMovement.x !== 0 || deltaMovement.z !== 0) && onGround.current) {
+      const stepHeight = 0.6;
+      const feetY = camera.position.y - playerHeight;
+      
+      // Check if there's a block in front that we could step onto
+      const forwardTestPos = camera.position.clone();
+      forwardTestPos.x = prevPosition.x + deltaMovement.x;
+      forwardTestPos.z = prevPosition.z + deltaMovement.z;
+      
+      const blockInFront = checkAxisCollision(forwardTestPos, true);
+      
+      if (blockInFront && blockInFront.max.y - feetY <= stepHeight && blockInFront.max.y > feetY) {
+        // Try to step up
+        const steppedUpPos = camera.position.clone();
+        steppedUpPos.y = blockInFront.max.y + playerHeight;
+        
+        const collisionAfterStepUp = checkAxisCollision(steppedUpPos, true);
+        if (!collisionAfterStepUp) {
+          camera.position.y = steppedUpPos.y;
+          onGround.current = true;
+        }
+      }
     }
     
-    // Only update ground state if not in a vertical collision
-    if (!standingOnSurface || velocity.current.y > 0.1) {
-      onGround.current = standingOnSurface;
+    // Simplified ground detection - already handled in Y-axis collision
+    // Just verify if we're close enough to ground level
+    const feetY = camera.position.y - playerHeight;
+    if (feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1) {
+      onGround.current = true;
     }
   });
 
