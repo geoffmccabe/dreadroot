@@ -681,17 +681,19 @@ function FirstPersonControls({
     };
 
     // Helper function to check collision on a specific axis
-    const checkAxisCollision = (pos: THREE.Vector3, skipCrawlable: boolean = false) => {
+    const checkAxisCollision = (pos: THREE.Vector3, isHorizontal: boolean = false) => {
       const playerBox = createPlayerBox(pos);
       
       for (const collider of colliders) {
-        if (skipCrawlable && isCrouching) {
-          // Skip blocks that are above crouched player (crawling under)
-          if (playerBox.max.y <= collider.min.y + 0.01) {
+        // For horizontal movement, skip blocks the player is standing on top of
+        if (isHorizontal) {
+          const standingOnBlock = Math.abs(playerBox.min.y - collider.max.y) < 0.05;
+          if (standingOnBlock) {
             continue;
           }
-          // Skip blocks that player is standing on (at ground level)
-          if (playerBox.min.y + 0.1 >= collider.max.y) {
+          
+          // When crouching, also skip blocks above the player (crawling under)
+          if (isCrouching && playerBox.max.y <= collider.min.y + 0.01) {
             continue;
           }
         }
