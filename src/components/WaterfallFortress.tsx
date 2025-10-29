@@ -717,29 +717,35 @@ function FirstPersonControls({
     // Check if standing on any block surface - only when not already colliding vertically
     if (!standingOnSurface && velocity.current.y <= 0.1) {
       const playerRadius = 0.4;
-      const tolerance = 0.05; // Vertical tolerance for "on surface"
+      const tolerance = 0.15; // More forgiving vertical tolerance for edges
       
-      // Check 4 corners of player's collision box bottom surface
+      // Check 4 corners + center of player's collision box bottom surface
       const corners = [
         { x: feetPosition.x - playerRadius, z: feetPosition.z - playerRadius }, // Back-left
         { x: feetPosition.x + playerRadius, z: feetPosition.z - playerRadius }, // Back-right
         { x: feetPosition.x - playerRadius, z: feetPosition.z + playerRadius }, // Front-left
         { x: feetPosition.x + playerRadius, z: feetPosition.z + playerRadius }, // Front-right
+        { x: feetPosition.x, z: feetPosition.z }, // Center (most important for diagonal gaps!)
       ];
       
-      // If ANY corner is supported by a block, player is standing
+      // Count how many support points we have for better stability
+      let supportedPoints = 0;
+      const edgeMargin = 0.1; // Allow corners slightly outside block bounds for edge walking
+      
       for (const corner of corners) {
         for (const collider of colliders) {
-          // Check if this corner is within the block's XZ bounds and at the right height
-          if (corner.x >= collider.min.x && corner.x <= collider.max.x &&
-              corner.z >= collider.min.z && corner.z <= collider.max.z &&
+          // Check if this corner is within the block's XZ bounds (with margin) and at the right height
+          if (corner.x >= collider.min.x - edgeMargin && corner.x <= collider.max.x + edgeMargin &&
+              corner.z >= collider.min.z - edgeMargin && corner.z <= collider.max.z + edgeMargin &&
               Math.abs(feetPosition.y - collider.max.y) <= tolerance) {
-            standingOnSurface = true;
-            break;
+            supportedPoints++;
+            break; // This corner is supported, check next corner
           }
         }
-        if (standingOnSurface) break;
       }
+      
+      // Require at least 2 support points (corners or center) for realistic stability
+      standingOnSurface = supportedPoints >= 2;
     }
     
     // Only update ground state if not in a vertical collision
