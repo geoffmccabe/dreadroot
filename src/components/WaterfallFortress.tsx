@@ -658,6 +658,15 @@ function FirstPersonControls({
         if (playerBox.intersectsBox(collider)) {
           collisionFound = true;
           
+          // Debug: Log collision details
+          console.log('[Collision]', {
+            iteration,
+            playerPos: { x: camera.position.x.toFixed(2), y: camera.position.y.toFixed(2), z: camera.position.z.toFixed(2) },
+            colliderMin: { x: collider.min.x.toFixed(2), y: collider.min.y.toFixed(2), z: collider.min.z.toFixed(2) },
+            colliderMax: { x: collider.max.x.toFixed(2), y: collider.max.y.toFixed(2), z: collider.max.z.toFixed(2) }
+          });
+          
+          
           // Calculate overlap on each axis
           const overlapX = Math.min(
             playerBox.max.x - collider.min.x,
@@ -672,9 +681,16 @@ function FirstPersonControls({
             collider.max.z - playerBox.min.z
           );
           
+          console.log('[Overlap]', {
+            X: overlapX.toFixed(3),
+            Y: overlapY.toFixed(3),
+            Z: overlapZ.toFixed(3)
+          });
+          
           // Push out in direction of smallest overlap
           if (overlapY <= overlapX && overlapY <= overlapZ) {
             // Vertical collision
+            console.log('[Resolution] Y-axis');
             const playerCenterToColliderCenterY = camera.position.y - (collider.min.y + collider.max.y) / 2;
             if (playerCenterToColliderCenterY > 0) {
               // Player is above the block
@@ -689,15 +705,21 @@ function FirstPersonControls({
           } else if (overlapX <= overlapZ) {
             // X-axis collision - push out based on which side player is on
             const playerCenterToColliderCenterX = camera.position.x - (collider.min.x + collider.max.x) / 2;
+            console.log('[Resolution] X-axis, centerDiff:', playerCenterToColliderCenterX.toFixed(3));
             if (playerCenterToColliderCenterX > 0) {
               // Player is on the right side of the block
-              camera.position.x = collider.max.x + playerRadius + 0.001;
+              const newX = collider.max.x + playerRadius + 0.001;
+              console.log('[Push] Right: from', camera.position.x.toFixed(3), 'to', newX.toFixed(3));
+              camera.position.x = newX;
             } else {
               // Player is on the left side of the block
-              camera.position.x = collider.min.x - playerRadius - 0.001;
+              const newX = collider.min.x - playerRadius - 0.001;
+              console.log('[Push] Left: from', camera.position.x.toFixed(3), 'to', newX.toFixed(3));
+              camera.position.x = newX;
             }
           } else {
             // Z-axis collision - push out based on which side player is on
+            console.log('[Resolution] Z-axis');
             const playerCenterToColliderCenterZ = camera.position.z - (collider.min.z + collider.max.z) / 2;
             if (playerCenterToColliderCenterZ > 0) {
               // Player is on the positive Z side of the block
