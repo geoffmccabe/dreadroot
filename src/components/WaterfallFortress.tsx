@@ -1457,8 +1457,30 @@ function Scene({
       
       // Use settings from admin panel or defaults
       const totalBlocks = settings?.totalBlocks || 100;
-      const spreadRadius = 5; // 5 blocks in each direction
+      const spreadRadius = settings?.spreadRadius || 5; // Use radius from admin settings
       const blockPositions: Array<{ x: number; y: number; z: number; type: string }> = [];
+      
+      // Helper function to check if position is in forbidden zone
+      const isInForbiddenZone = (x: number, z: number): boolean => {
+        const position = new THREE.Vector3(x, 0, z);
+        const fortressCenter = new THREE.Vector3(0, 0, -20);
+        const fortressMinDistance = 30;
+        const waterfallZ = -6;
+        const waterfallBlockingWidth = 4;
+        
+        // Check distance from fortress
+        const distanceToFortress = position.distanceTo(fortressCenter);
+        if (distanceToFortress < fortressMinDistance) {
+          return true;
+        }
+        
+        // Check if blocking waterfall entrance path (infinite forward path)
+        if (Math.abs(x) < waterfallBlockingWidth / 2 && z > waterfallZ) {
+          return true;
+        }
+        
+        return false;
+      };
       
       // Create positions for specified number of blocks
       for (let i = 0; i < totalBlocks; i++) {
@@ -1962,11 +1984,33 @@ export default function WaterfallFortress() {
   // Block Rain feature - spawns random blocks at ground level with stacking
   const handleBlockRainBatch = useCallback(async (
     positions: Array<{ x: number; y: number; z: number; type: string }>,
-    settings?: { blocksPerSecond?: number; blockLifeMinutes?: number; totalBlocks?: number }
+    settings?: { blocksPerSecond?: number; blockLifeMinutes?: number; totalBlocks?: number; spreadRadius?: number }
   ) => {
     if (!placeBlock) return;
     
     console.log('Starting block rain with settings:', settings);
+    
+    // Helper function to check if position is in forbidden zone
+    const isInForbiddenZone = (x: number, z: number): boolean => {
+      const position = new THREE.Vector3(x, 0, z);
+      const fortressCenter = new THREE.Vector3(0, 0, -20);
+      const fortressMinDistance = 30;
+      const waterfallZ = -6;
+      const waterfallBlockingWidth = 4;
+      
+      // Check distance from fortress
+      const distanceToFortress = position.distanceTo(fortressCenter);
+      if (distanceToFortress < fortressMinDistance) {
+        return true;
+      }
+      
+      // Check if blocking waterfall entrance path (infinite forward path)
+      if (Math.abs(x) < waterfallBlockingWidth / 2 && z > waterfallZ) {
+        return true;
+      }
+      
+      return false;
+    };
     
     // Use settings from admin panel or defaults
     const blockLifeMinutes = settings?.blockLifeMinutes || 10;
@@ -1975,8 +2019,7 @@ export default function WaterfallFortress() {
     
     console.log(`Block rain rate: ${blocksPerSecond}/sec (${delayBetweenBlocks}ms delay)`);
     
-    // Set expiration based on admin settings
-    const expiresAt = new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
+    // Set expiration based on admin settings OR immediate expiration for forbidden zones
     let placedCount = 0;
     let lastThudTime = 0;
     const startTime = Date.now();
@@ -2000,6 +2043,12 @@ export default function WaterfallFortress() {
       
       // Get the landing Y from localHeightMap (already includes stacking logic)
       const targetY = localHeightMap.get(key) || 0;
+      
+      // Check if in forbidden zone - if so, expire immediately
+      const inForbiddenZone = isInForbiddenZone(pos.x, pos.z);
+      const expiresAt = inForbiddenZone 
+        ? new Date(Date.now()).toISOString() // Expire immediately
+        : new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
       
       // Fire off block placement without awaiting (parallel execution)
       const placementPromise = placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt)
@@ -2057,7 +2106,8 @@ export default function WaterfallFortress() {
     let settings = {
       blocksPerSecond: 10,
       totalBlocks: 100,
-      blockLifeMinutes: 10
+      blockLifeMinutes: 10,
+      spreadRadius: 5
     };
     
     try {
@@ -2070,7 +2120,8 @@ export default function WaterfallFortress() {
         settings = {
           blocksPerSecond: parsed.blocksPerSecond || 10,
           totalBlocks: parsed.totalBlocks || 100,
-          blockLifeMinutes: parsed.blockLifeMinutes || 10
+          blockLifeMinutes: parsed.blockLifeMinutes || 10,
+          spreadRadius: parsed.spreadRadius || 5
         };
         console.log('Using admin block rain settings:', settings, blockTypes);
       }

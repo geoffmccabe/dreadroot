@@ -514,7 +514,8 @@ function BlocksList({ userRoles }: BlocksListProps) {
   const [blockRainSettings, setBlockRainSettings] = useState({
     blocksPerSecond: 10,
     totalBlocks: 100,
-    blockLifeMinutes: 10
+    blockLifeMinutes: 10,
+    spreadRadius: 5
   });
   const [selectedRainBlocks, setSelectedRainBlocks] = useState<Set<string>>(new Set());
   const [blockRainCollapsed, setBlockRainCollapsed] = useState(false);
@@ -535,7 +536,8 @@ function BlocksList({ userRoles }: BlocksListProps) {
           setBlockRainSettings({
             blocksPerSecond: parsed.blocksPerSecond || 10,
             totalBlocks: parsed.totalBlocks || 100,
-            blockLifeMinutes: parsed.blockLifeMinutes || 10
+            blockLifeMinutes: parsed.blockLifeMinutes || 10,
+            spreadRadius: parsed.spreadRadius || 5
           });
           if (parsed.selectedBlocks && Array.isArray(parsed.selectedBlocks)) {
             setSelectedRainBlocks(new Set(parsed.selectedBlocks));
@@ -836,6 +838,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
         blocksPerSecond: blockRainSettings.blocksPerSecond,
         totalBlocks: blockRainSettings.totalBlocks,
         blockLifeMinutes: blockRainSettings.blockLifeMinutes,
+        spreadRadius: blockRainSettings.spreadRadius,
         selectedBlocks: Array.from(selectedRainBlocks)
       };
       console.log('Saving block rain settings:', settingsToSave);
@@ -942,6 +945,19 @@ function BlocksList({ userRoles }: BlocksListProps) {
                       className="flex-1"
                     />
                     <span className="text-xs opacity-75">{blockRainSettings.blockLifeMinutes}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-[140px_1fr_60px] gap-2 items-center">
+                    <Label className="text-xs opacity-85">Spread Radius</Label>
+                    <Slider
+                      value={[blockRainSettings.spreadRadius]}
+                      onValueChange={([value]) => setBlockRainSettings({ ...blockRainSettings, spreadRadius: value })}
+                      min={5}
+                      max={50}
+                      step={1}
+                      className="flex-1"
+                    />
+                    <span className="text-xs opacity-75">{blockRainSettings.spreadRadius} blocks</span>
                   </div>
                 </div>
 
