@@ -675,26 +675,35 @@ function FirstPersonControls({
           // Push out in direction of smallest overlap
           if (overlapY <= overlapX && overlapY <= overlapZ) {
             // Vertical collision
-            if (camera.position.y > collider.max.y) {
+            const playerCenterToColliderCenterY = camera.position.y - (collider.min.y + collider.max.y) / 2;
+            if (playerCenterToColliderCenterY > 0) {
+              // Player is above the block
               camera.position.y = collider.max.y + playerHeight;
               velocity.current.y = 0;
               onGround.current = true;
             } else {
+              // Player is below the block
               camera.position.y = collider.min.y;
               velocity.current.y = 0;
             }
           } else if (overlapX <= overlapZ) {
-            // X-axis collision - push out
-            if (camera.position.x > collider.max.x) {
+            // X-axis collision - push out based on which side player is on
+            const playerCenterToColliderCenterX = camera.position.x - (collider.min.x + collider.max.x) / 2;
+            if (playerCenterToColliderCenterX > 0) {
+              // Player is on the right side of the block
               camera.position.x = collider.max.x + playerRadius + 0.001;
             } else {
+              // Player is on the left side of the block
               camera.position.x = collider.min.x - playerRadius - 0.001;
             }
           } else {
-            // Z-axis collision - push out
-            if (camera.position.z > collider.max.z) {
+            // Z-axis collision - push out based on which side player is on
+            const playerCenterToColliderCenterZ = camera.position.z - (collider.min.z + collider.max.z) / 2;
+            if (playerCenterToColliderCenterZ > 0) {
+              // Player is on the positive Z side of the block
               camera.position.z = collider.max.z + playerRadius + 0.001;
             } else {
+              // Player is on the negative Z side of the block
               camera.position.z = collider.min.z - playerRadius - 0.001;
             }
           }
