@@ -627,17 +627,18 @@ function FirstPersonControls({
     // Ground collision - dynamic height based on crouch
     const playerHeight = keys.current.ctrl ? 0.8 : 1.6;
     
-    // Check if standing on ground (with tolerance)
+    // Instantly adjust camera height when crouching on ground
     const feetY = camera.position.y - playerHeight;
     const isOnGround = feetY <= 0.05;
+    
+    if (isOnGround && keys.current.ctrl && camera.position.y > playerHeight) {
+      // Instantly crouch to proper height
+      camera.position.y = playerHeight;
+    }
     
     if (camera.position.y < playerHeight) {
       camera.position.y = playerHeight;
       velocity.current.y = 0;
-      onGround.current = true;
-    } else if (isOnGround && keys.current.ctrl) {
-      // When crouching on ground, smoothly lower camera height
-      camera.position.y = Math.max(playerHeight, camera.position.y - 0.1);
       onGround.current = true;
     } else {
       onGround.current = false;
