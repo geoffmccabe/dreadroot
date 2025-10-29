@@ -634,84 +634,78 @@ function FirstPersonControls({
       onGround.current = false;
     }
 
-    // Wall and block collision detection - sweep test approach
+    // Wall and block collision detection - push out of any collisions
     const playerRadius = 0.4;
-    let playerBox = new THREE.Box3(
-      new THREE.Vector3(
-        camera.position.x - playerRadius,
-        camera.position.y - playerHeight,
-        camera.position.z - playerRadius
-      ),
-      new THREE.Vector3(
-        camera.position.x + playerRadius,
-        camera.position.y,
-        camera.position.z + playerRadius
-      )
-    );
     
-    // Check for any collisions and revert movement if blocked
-    let blockedX = false;
-    let blockedZ = false;
-    let totalCollisionsDetected = 0;
-    
-    for (const collider of colliders) {
-      if (playerBox.intersectsBox(collider)) {
-        totalCollisionsDetected++;
-        
-        // Calculate which direction we're colliding from
-        const prevBox = new THREE.Box3(
-          new THREE.Vector3(prevPosition.x - playerRadius, prevPosition.y - playerHeight, prevPosition.z - playerRadius),
-          new THREE.Vector3(prevPosition.x + playerRadius, prevPosition.y, prevPosition.z + playerRadius)
-        );
-        
-        // Check if we were NOT colliding before (this is a new collision this frame)
-        if (!prevBox.intersectsBox(collider)) {
-          // Determine collision axis by checking overlap amounts
+    // Multi-pass collision resolution to handle penetration
+    for (let iteration = 0; iteration < 5; iteration++) {
+      let playerBox = new THREE.Box3(
+        new THREE.Vector3(
+          camera.position.x - playerRadius,
+          camera.position.y - playerHeight,
+          camera.position.z - playerRadius
+        ),
+        new THREE.Vector3(
+          camera.position.x + playerRadius,
+          camera.position.y,
+          camera.position.z + playerRadius
+        )
+      );
+      
+      let collisionFound = false;
+      
+      for (const collider of colliders) {
+        if (playerBox.intersectsBox(collider)) {
+          collisionFound = true;
+          
+          // Calculate overlap on each axis
           const overlapX = Math.min(
-            Math.abs(playerBox.max.x - collider.min.x),
-            Math.abs(collider.max.x - playerBox.min.x)
+            playerBox.max.x - collider.min.x,
+            collider.max.x - playerBox.min.x
           );
           const overlapY = Math.min(
-            Math.abs(playerBox.max.y - collider.min.y),
-            Math.abs(collider.max.y - playerBox.min.y)
+            playerBox.max.y - collider.min.y,
+            collider.max.y - playerBox.min.y
           );
           const overlapZ = Math.min(
-            Math.abs(playerBox.max.z - collider.min.z),
-            Math.abs(collider.max.z - playerBox.min.z)
+            playerBox.max.z - collider.min.z,
+            collider.max.z - playerBox.min.z
           );
           
-          // Block movement in the direction of smallest overlap (the collision direction)
+          // Push out in direction of smallest overlap
           if (overlapY <= overlapX && overlapY <= overlapZ) {
-            // Vertical collision - handled by ground collision above
-            if (velocity.current.y < 0) {
+            // Vertical collision
+            if (camera.position.y > collider.max.y) {
               camera.position.y = collider.max.y + playerHeight;
               velocity.current.y = 0;
               onGround.current = true;
-            } else if (velocity.current.y > 0) {
+            } else {
               camera.position.y = collider.min.y;
               velocity.current.y = 0;
             }
           } else if (overlapX <= overlapZ) {
-            // X-axis collision - revert X movement
-            blockedX = true;
+            // X-axis collision - push out
+            if (camera.position.x > collider.max.x) {
+              camera.position.x = collider.max.x + playerRadius + 0.001;
+            } else {
+              camera.position.x = collider.min.x - playerRadius - 0.001;
+            }
           } else {
-            // Z-axis collision - revert Z movement
-            blockedZ = true;
+            // Z-axis collision - push out
+            if (camera.position.z > collider.max.z) {
+              camera.position.z = collider.max.z + playerRadius + 0.001;
+            } else {
+              camera.position.z = collider.min.z - playerRadius - 0.001;
+            }
           }
+          
+          // Break after first collision and re-check all colliders
+          break;
         }
       }
-    }
-    
-    // Revert blocked movement axes to previous position
-    if (blockedX) {
-      camera.position.x = prevPosition.x;
-    }
-    if (blockedZ) {
-      camera.position.z = prevPosition.z;
-    }
-    
-    if (totalCollisionsDetected > 0) {
-      console.log('[Collision] Detected', totalCollisionsDetected, 'collisions, blockedX:', blockedX, 'blockedZ:', blockedZ);
+      
+      // If no collision found, we're done
+      if (!collisionFound) break;
     }
     
     // Check if standing on a block or ground for proper jumping - improved surface detection
