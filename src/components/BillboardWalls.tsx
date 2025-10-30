@@ -16,15 +16,17 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
     // Use local positions if available, otherwise fallback to database
     if (wallPositions && wallPositions[wallNumber]) {
       const pos = wallPositions[wallNumber];
+      const rotY = wallNumber === 3 ? pos.rotY + Math.PI : pos.rotY;
       return {
         position: [pos.x, pos.y, pos.z] as [number, number, number],
-        rotation: [pos.rotX, pos.rotY, pos.rotZ] as [number, number, number]
+        rotation: [pos.rotX, rotY, pos.rotZ] as [number, number, number]
       };
     } else {
       const wall = walls.find(w => w.wall_number === wallNumber);
       if (!wall) {
         return { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number] };
       } else {
+        const rotY = wallNumber === 3 ? (wall.rotation_y ?? 0) + Math.PI : (wall.rotation_y ?? 0);
         return {
           position: [
             wall.position_x ?? 0,
@@ -33,7 +35,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
           ] as [number, number, number],
           rotation: [
             wall.rotation_x ?? 0,
-            wall.rotation_y ?? 0,
+            rotY,
             wall.rotation_z ?? 0
           ] as [number, number, number]
         };
