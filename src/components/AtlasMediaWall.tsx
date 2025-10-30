@@ -36,8 +36,14 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   
   // Debug logging for Wall 3
   if (wallNumber === 3) {
-    console.log(`🎨 Wall 3 render state:`, {
+    console.log(`🎨 Wall ${wallNumber} render state:`, {
       hasAtlasTexture: !!atlasTexture,
+      atlasTextureId: atlasTexture?.id,
+      atlasImage: atlasTexture?.image ? {
+        width: atlasTexture.image.width,
+        height: atlasTexture.image.height,
+        complete: atlasTexture.image.complete
+      } : null,
       isLoading,
       error,
       mediaItemsCount: mediaItems.length,
@@ -111,6 +117,9 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
         const mediaItem = mediaItems.find(item => item.slot_number === index + 1);
         const hasImage = mediaItem?.media_type === 'image' && mediaItem.media_url;
         
+        // CRITICAL FIX: Atlas texture contains ALL 6 slots, apply it to all meshes
+        const shouldShowAtlas = !isMoveMode && atlasTexture && !isLoading;
+        
         return (
           <mesh 
             key={`${wallNumber}-slot-${index + 1}`}
@@ -118,11 +127,12 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
             geometry={createSlotGeometry(index)}
           >
             <meshBasicMaterial
-              map={isMoveMode ? null : (hasImage && atlasTexture ? atlasTexture : null)}
-              color={isMoveMode ? "#ff0000" : (hasImage && atlasTexture ? "#ffffff" : "#374151")}
+              map={shouldShowAtlas ? atlasTexture : null}
+              color={isMoveMode ? "#ff0000" : (shouldShowAtlas ? "#ffffff" : "#374151")}
               transparent={true}
-              opacity={isMoveMode ? 0.8 : (hasImage && atlasTexture && !isLoading ? 1 : 0.25)}
+              opacity={isMoveMode ? 0.8 : (shouldShowAtlas ? 1 : (hasImage ? 0.5 : 0.25))}
               side={THREE.DoubleSide}
+              needsUpdate={true}
             />
           </mesh>
         );

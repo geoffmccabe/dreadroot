@@ -446,7 +446,25 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
               <TabsContent key={wallNumber} value={`wall${wallNumber}`} className="space-y-4">
                 <ScrollArea className="h-[400px]">
                   <div className="space-y-4 pr-4">
-                    <h3 className="text-lg font-semibold">Media Grid - Wall {wallNumber}</h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Media Grid - Wall {wallNumber}</h3>
+                      <Button 
+                        onClick={() => {
+                          console.log(`🔨 Manual rebuild triggered for wall ${wallNumber}`);
+                          window.dispatchEvent(new CustomEvent('rebuildAtlas', { 
+                            detail: { wallNumber } 
+                          }));
+                          toast({
+                            title: "Rebuilding Atlas",
+                            description: `Regenerating texture atlas for Wall ${wallNumber}...`
+                          });
+                        }}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Rebuild Atlas
+                      </Button>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       {Array.from({ length: 6 }, (_, index) => {
                         const slotNumber = index + 1;
