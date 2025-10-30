@@ -119,7 +119,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
     }, []);
 
     return (
-      <group position={[posX, posY, posZ]} rotation={[rotX, rotY, rotZ]}>
+      <group position={[posX, posY, posZ]} rotation={[rotX, rotY + Math.PI, rotZ]}>
         {/* Main screen plane - visible from both sides */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
