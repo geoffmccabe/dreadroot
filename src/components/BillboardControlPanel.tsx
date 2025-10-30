@@ -24,12 +24,45 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   const [newUrls, setNewUrls] = useState<Record<number, string>>({});
   const [isCollapsed, setIsCollapsed] = useState(true);
   
+  // Add loading check to prevent operations before data is loaded
+  const isDataLoaded = walls.length > 0;
+  
+  // Debug: Log walls data when it changes
+  useEffect(() => {
+    console.log('📊 Billboard Control Panel walls updated:', {
+      wallCount: walls.length,
+      walls: walls.map(w => ({ number: w.wall_number, id: w.id, type: w.wall_type }))
+    });
+  }, [walls]);
+  
   // Reset collapsed state when panel becomes visible
   useEffect(() => {
     if (isVisible) {
       setIsCollapsed(false);
     }
   }, [isVisible]);
+  
+  // Listen for atlas rebuild completion
+  useEffect(() => {
+    const handleRebuildComplete = (event: CustomEvent) => {
+      const { wallNumber, success, error } = event.detail;
+      if (success) {
+        toast({
+          title: "Atlas Rebuilt",
+          description: `Wall ${wallNumber} texture atlas has been regenerated successfully.`
+        });
+      } else {
+        toast({
+          title: "Rebuild Failed",
+          description: `Failed to rebuild Wall ${wallNumber} atlas: ${error?.message || 'Unknown error'}`,
+          variant: "destructive"
+        });
+      }
+    };
+    
+    window.addEventListener('atlasRebuildComplete', handleRebuildComplete as EventListener);
+    return () => window.removeEventListener('atlasRebuildComplete', handleRebuildComplete as EventListener);
+  }, [toast]);
   const [selectedWallForMoving, setSelectedWallForMoving] = useState<number>(1);
   const [tempPositions, setTempPositions] = useState<Record<number, {x: string, y: string, z: string}>>({});
   const [isUpdatingPosition, setIsUpdatingPosition] = useState(false);
@@ -70,16 +103,28 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
   }, [wall1, newUrls, updateScreenUrl, toast, isUpdatingPosition]);
 
   const handleFileUpload = async (wallNumber: number, slotNumber: number, file: File) => {
-    const wall = walls.find(w => w.wall_number === wallNumber);
-    if (!wall) {
-      console.error('❌ Wall not found:', wallNumber);
+    if (!isDataLoaded) {
+      console.warn('⚠️ Upload attempted before walls data loaded');
       toast({
-        title: "Upload Failed",
-        description: `Wall ${wallNumber} not found.`,
+        title: "Please Wait",
+        description: "Loading billboard data...",
         variant: "destructive"
       });
       return;
     }
+    
+    console.log('🔍 Looking for wall:', { wallNumber, availableWalls: walls.map(w => ({ num: w.wall_number, id: w.id })) });
+    const wall = walls.find(w => w.wall_number === wallNumber);
+    if (!wall) {
+      console.error('❌ Wall not found:', { wallNumber, availableWalls: walls });
+      toast({
+        title: "Upload Failed",
+        description: `Wall ${wallNumber} not found. Please refresh the page.`,
+        variant: "destructive"
+      });
+      return;
+    }
+    console.log('✅ Found wall:', { wallNumber, wallId: wall.id });
 
     console.log('🚀 Starting file upload for wall', wallNumber, 'slot', slotNumber);
     
@@ -386,6 +431,7 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
         onClick={() => setIsCollapsed(!isCollapsed)}
       >
         <h3 className="font-bold text-sm">BILLBOARD CONTROL PANEL</h3>
+        {!isDataLoaded && <span className="text-xs text-yellow-400">Loading...</span>}
         {isCollapsed ? (
           <ChevronRight className="h-4 w-4" />
         ) : (
@@ -450,17 +496,26 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
                       <h3 className="text-lg font-semibold">Media Grid - Wall {wallNumber}</h3>
                       <Button 
                         onClick={() => {
+                          if (!isDataLoaded) {
+                            toast({
+                              title: "Please Wait",
+                              description: "Billboard data is still loading...",
+                              variant: "destructive"
+                            });
+                            return;
+                          }
                           console.log(`🔨 Manual rebuild triggered for wall ${wallNumber}`);
                           window.dispatchEvent(new CustomEvent('rebuildAtlas', { 
                             detail: { wallNumber } 
                           }));
                           toast({
                             title: "Rebuilding Atlas",
-                            description: `Regenerating texture atlas for Wall ${wallNumber}...`
+                            description: `Regenerating texture atlas for Wall ${wallNumber}. This may take a few seconds...`
                           });
                         }}
                         size="sm"
                         variant="outline"
+                        disabled={!isDataLoaded}
                       >
                         Rebuild Atlas
                       </Button>

@@ -82,7 +82,9 @@ export const useStoredTextureAtlas = (
     setError(null);
     
     try {
-      console.log(`🔨 Rebuilding atlas for wall ${wallNumber}`);
+      console.log(`🔨 Rebuilding atlas for wall ${wallNumber}`, {
+        imageUrls: imageUrls.filter(url => url).length + ' images'
+      });
       
       // Dispose previous texture
       if (atlasTexture) {
@@ -99,8 +101,9 @@ export const useStoredTextureAtlas = (
         throw new Error('Could not get canvas context');
       }
       
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Clear canvas with a dark background so we can see if images loaded
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       // Each slot is 800x800 (2400/3 = 800, 1600/2 = 800)
       const slotWidth = Math.floor(canvas.width / 3);
@@ -164,6 +167,8 @@ export const useStoredTextureAtlas = (
       
       await Promise.all(imagePromises);
       
+      console.log(`✅ All images processed for wall ${wallNumber} atlas`);
+      
       // Convert to WebP blob
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
@@ -171,6 +176,11 @@ export const useStoredTextureAtlas = (
           'image/webp',
           0.9
         );
+      });
+      
+      console.log(`📦 Created blob for wall ${wallNumber}:`, {
+        size: blob.size,
+        type: blob.type
       });
       
       // Save to Supabase storage
@@ -206,6 +216,12 @@ export const useStoredTextureAtlas = (
             blobSize: blob.size,
             colorSpace: loadedTexture.colorSpace
           });
+          
+          // Dispatch success event
+          window.dispatchEvent(new CustomEvent('atlasRebuildComplete', {
+            detail: { wallNumber, success: true }
+          }));
+          
           setAtlasTexture(loadedTexture);
           setIsLoading(false);
           URL.revokeObjectURL(blobUrl);
@@ -222,6 +238,11 @@ export const useStoredTextureAtlas = (
       console.error(`❌ Error rebuilding atlas for wall ${wallNumber}:`, err);
       setError(err instanceof Error ? err.message : 'Unknown error rebuilding atlas');
       setIsLoading(false);
+      
+      // Dispatch failure event
+      window.dispatchEvent(new CustomEvent('atlasRebuildComplete', {
+        detail: { wallNumber, success: false, error: err }
+      }));
     }
   };
   
