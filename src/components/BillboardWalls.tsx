@@ -136,11 +136,11 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
         </mesh>
         
         {/* URL buttons at bottom - visible from both sides */}
-        <group position={[6.75, -4.5, 0.03]}>
+        <group position={[-6.75, -4.5, 0.03]}>
           {wall1Urls.slice(0, 4).map((urlData, index) => (
             <group key={urlData.slot_number}>
               <mesh
-                position={[-index * 4.5, 0, 0]}
+                position={[index * 4.5, 0, 0]}
                 onClick={() => {
                   console.log('Switching to URL slot:', urlData.slot_number);
                   setActiveScreenUrl(urlData.slot_number);
@@ -153,7 +153,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
                 />
               </mesh>
               {/* Button label */}
-              <mesh position={[-index * 4.5, 0, 0.01]}>
+              <mesh position={[index * 4.5, 0, 0.01]}>
                 <planeGeometry args={[3.8, 1.8]} />
                 <meshBasicMaterial 
                   color="#ffffff"
