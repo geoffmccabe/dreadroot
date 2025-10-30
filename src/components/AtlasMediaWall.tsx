@@ -34,6 +34,18 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   
   const { atlasTexture, isLoading, error } = useStoredTextureAtlas(wallNumber, imageUrls);
   
+  // Debug logging for Wall 3
+  if (wallNumber === 3) {
+    console.log(`🎨 Wall 3 render state:`, {
+      hasAtlasTexture: !!atlasTexture,
+      isLoading,
+      error,
+      mediaItemsCount: mediaItems.length,
+      mediaItems: mediaItems.map(m => ({ slot: m.slot_number, hasUrl: !!m.media_url, type: m.media_type })),
+      isMoveMode
+    });
+  }
+  
   // Calculate wall dimensions - 3x2 aspect ratio for square slots
   const wallWidth = 30;  // 3x2 aspect ratio: 30:20 = 3:2
   const wallHeight = 20;
