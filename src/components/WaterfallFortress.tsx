@@ -1416,7 +1416,8 @@ function Scene({
   weatherSettings,
   onBlockRain,
   coinImageUrl,
-  userRoles
+  userRoles,
+  isMoveMode
 }: {
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -1438,6 +1439,7 @@ function Scene({
   };
   onBlockRain: () => void;
   userRoles: string[];
+  isMoveMode: boolean;
 }) {
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
@@ -1775,7 +1777,7 @@ function Scene({
 
       {/* Scene objects */}
       <Fortress />
-      <BillboardWalls wallPositions={wallPositions} />
+      <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
       <CameraTrackedBlocks blocks={blocks} />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
@@ -1990,6 +1992,7 @@ export default function WaterfallFortress() {
   
   // Wall positions state for real-time control
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
+  const [isMoveMode, setIsMoveMode] = useState(false);
   
   // User data and block system hooks
   const { profile, inventory, userRoles, addCoins, useBlock, refreshData } = useUserData();
@@ -2489,6 +2492,7 @@ export default function WaterfallFortress() {
         weatherSettings={weatherSettings}
         onBlockRain={handleBlockRain}
         userRoles={userRoles}
+        isMoveMode={isMoveMode}
       />
       
       {/* Block Preview */}
@@ -2560,6 +2564,7 @@ export default function WaterfallFortress() {
       waterfallSettings={settings}
       onWaterfallSettingsChange={handleSettingsChange}
       onWallPositionsChange={setWallPositions}
+      onMoveModeChange={setIsMoveMode}
       weatherSettings={weatherSettings}
       onWeatherSettingsChange={handleWeatherSettingsChange}
     />

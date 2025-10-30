@@ -14,6 +14,7 @@ interface AtlasMediaWallProps {
   position: [number, number, number];
   rotation: [number, number, number];
   mediaItems: MediaItem[];
+  isMoveMode?: boolean;
 }
 
 export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
@@ -21,7 +22,8 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   wallType,
   position,
   rotation,
-  mediaItems
+  mediaItems,
+  isMoveMode = false
 }) => {
   // Extract image URLs in slot order (1-6)
   const imageUrls = Array.from({ length: 6 }, (_, index) => {
@@ -104,10 +106,10 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
             geometry={createSlotGeometry(index)}
           >
             <meshBasicMaterial
-              map={hasImage && atlasTexture ? atlasTexture : null}
-              color={hasImage && atlasTexture ? "#ffffff" : "#374151"}
+              map={isMoveMode ? null : (hasImage && atlasTexture ? atlasTexture : null)}
+              color={isMoveMode ? "#ff0000" : (hasImage && atlasTexture ? "#ffffff" : "#374151")}
               transparent={true}
-              opacity={hasImage && atlasTexture && !isLoading ? 1 : 0.25}
+              opacity={isMoveMode ? 0.8 : (hasImage && atlasTexture && !isLoading ? 1 : 0.25)}
               side={THREE.DoubleSide}
             />
           </mesh>

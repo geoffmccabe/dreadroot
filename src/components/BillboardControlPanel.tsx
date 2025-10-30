@@ -12,9 +12,10 @@ import { useToast } from '@/hooks/use-toast';
 interface BillboardControlPanelProps {
   isVisible: boolean;
   onWallPositionsChange?: (positions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>) => void;
+  onMoveModeChange?: (isMoveMode: boolean) => void;
 }
 
-export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible, onWallPositionsChange }) => {
+export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ isVisible, onWallPositionsChange, onMoveModeChange }) => {
   // Move the visibility check BEFORE all hooks to avoid Rules of Hooks violation
   if (!isVisible) return null;
   
@@ -394,7 +395,12 @@ export const BillboardControlPanel: React.FC<BillboardControlPanelProps> = ({ is
         
         {!isCollapsed && (
           <CardContent className="p-4 animate-fade-in">
-          <Tabs defaultValue="wall1" className="w-full">
+          <Tabs defaultValue="wall1" className="w-full" onValueChange={(value) => {
+            // Notify parent when MOVE tab is active
+            if (onMoveModeChange) {
+              onMoveModeChange(value === 'move');
+            }
+          }}>
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="wall1">Screen (Wall 1)</TabsTrigger>
               <TabsTrigger value="wall2">Wall 2</TabsTrigger>

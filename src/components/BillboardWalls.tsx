@@ -5,9 +5,10 @@ import * as THREE from 'three';
 
 interface BillboardWallsProps {
   wallPositions?: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>;
+  isMoveMode?: boolean;
 }
 
-const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
+const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMode = false }) => {
   const { walls, screenUrls, mediaItems, loading } = useBillboardData();
   const [activeScreenUrl, setActiveScreenUrl] = useState(1);
 
@@ -181,6 +182,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         position={getWallPositionAndRotation(2).position}
         rotation={getWallPositionAndRotation(2).rotation}
         mediaItems={getMediaItemsForWall(2)}
+        isMoveMode={isMoveMode}
       />
       
       {/* Wall 3 - Media Grid (back wall inner) */}
@@ -190,6 +192,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         position={getWallPositionAndRotation(3).position}
         rotation={getWallPositionAndRotation(3).rotation}
         mediaItems={getMediaItemsForWall(3)}
+        isMoveMode={isMoveMode}
       />
       
       {/* Wall 4 - Media Grid (left wall inner) */}
@@ -199,6 +202,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions }) => {
         position={getWallPositionAndRotation(4).position}
         rotation={getWallPositionAndRotation(4).rotation}
         mediaItems={getMediaItemsForWall(4)}
+        isMoveMode={isMoveMode}
       />
     </>
   );

@@ -1531,6 +1531,7 @@ interface AdminPanelProps {
   waterfallSettings?: any;
   onWaterfallSettingsChange?: (key: string, value: any) => void;
   onWallPositionsChange?: (positions: Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>) => void;
+  onMoveModeChange?: (isMoveMode: boolean) => void;
   weatherSettings?: {
     lightingRange: [number, number];
     cycleDuration: number;
@@ -1542,6 +1543,7 @@ export function AdminPanel({
   waterfallSettings, 
   onWaterfallSettingsChange,
   onWallPositionsChange,
+  onMoveModeChange,
   weatherSettings,
   onWeatherSettingsChange
 }: AdminPanelProps) {
@@ -1579,6 +1581,7 @@ export function AdminPanel({
               <BillboardControlPanel 
                 isVisible={true}
                 onWallPositionsChange={onWallPositionsChange}
+                onMoveModeChange={onMoveModeChange}
               />
             </ScrollArea>
           </TabsContent>
