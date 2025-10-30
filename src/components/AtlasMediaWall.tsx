@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useStoredTextureAtlas } from '@/hooks/useStoredTextureAtlas';
 import * as THREE from 'three';
 
@@ -25,6 +25,8 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   mediaItems,
   isMoveMode = false
 }) => {
+  const materialsRef = useRef<THREE.MeshBasicMaterial[]>([]);
+  
   // Extract image URLs in slot order (1-6)
   const imageUrls = Array.from({ length: 6 }, (_, index) => {
     const slotNumber = index + 1;
@@ -33,6 +35,26 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   });
   
   const { atlasTexture, isLoading, error } = useStoredTextureAtlas(wallNumber, imageUrls);
+  
+  // Force material updates when texture changes
+  useEffect(() => {
+    if (atlasTexture && !isMoveMode) {
+      console.log(`🔄 Wall ${wallNumber}: Forcing material update for atlas texture`, {
+        textureId: atlasTexture.id,
+        materialsCount: materialsRef.current.length
+      });
+      
+      materialsRef.current.forEach((material, index) => {
+        if (material) {
+          material.map = atlasTexture;
+          material.color.setHex(0xffffff);
+          material.opacity = 1;
+          material.needsUpdate = true;
+          console.log(`  ✓ Updated material ${index + 1}`);
+        }
+      });
+    }
+  }, [atlasTexture, isMoveMode, wallNumber]);
   
   // Debug logging for Wall 3
   if (wallNumber === 3) {
@@ -127,6 +149,9 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
             geometry={createSlotGeometry(index)}
           >
             <meshBasicMaterial
+              ref={(mat) => {
+                if (mat) materialsRef.current[index] = mat;
+              }}
               map={shouldShowAtlas ? atlasTexture : null}
               color={isMoveMode ? "#ff0000" : (shouldShowAtlas ? "#ffffff" : "#374151")}
               transparent={true}

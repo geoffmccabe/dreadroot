@@ -48,13 +48,15 @@ export const useStoredTextureAtlas = (
           loadedTexture.minFilter = THREE.LinearFilter;
           loadedTexture.magFilter = THREE.LinearFilter;
           loadedTexture.flipY = false;
-          loadedTexture.needsUpdate = true; // Force texture update
+          loadedTexture.colorSpace = THREE.SRGBColorSpace;
+          loadedTexture.needsUpdate = true;
           
           console.log(`✅ Loaded stored atlas for wall ${wallNumber}`, {
             width: loadedTexture.image?.width,
             height: loadedTexture.image?.height,
             format: loadedTexture.format,
-            type: loadedTexture.type
+            type: loadedTexture.type,
+            colorSpace: loadedTexture.colorSpace
           });
           setAtlasTexture(loadedTexture);
           URL.revokeObjectURL(blobUrl);
@@ -195,12 +197,14 @@ export const useStoredTextureAtlas = (
           loadedTexture.minFilter = THREE.LinearFilter;
           loadedTexture.magFilter = THREE.LinearFilter;
           loadedTexture.flipY = false;
-          loadedTexture.needsUpdate = true; // Force texture update
+          loadedTexture.colorSpace = THREE.SRGBColorSpace;
+          loadedTexture.needsUpdate = true;
           
           console.log(`✅ Created and saved new atlas for wall ${wallNumber}`, {
             width: loadedTexture.image?.width,
             height: loadedTexture.image?.height,
-            blobSize: blob.size
+            blobSize: blob.size,
+            colorSpace: loadedTexture.colorSpace
           });
           setAtlasTexture(loadedTexture);
           setIsLoading(false);
