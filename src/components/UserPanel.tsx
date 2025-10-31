@@ -70,6 +70,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const [visualDistance, setVisualDistance] = useState(4);
   const [fogEnabled, setFogEnabled] = useState(true);
+  const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
 
@@ -322,53 +323,77 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 No blocks available in store
               </Card>
             ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {availableBlocks.map((block) => (
-                <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-center gap-3">
-                    <BlockIcon block={block} />
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold truncate">{block.name}</h3>
-                        <Badge 
-                          variant="secondary" 
-                          className={`text-xs ${getRarityColor(block.rarity)}`}
-                        >
-                          {block.rarity}
-                        </Badge>
+              <Tabs value={storeActiveClass} onValueChange={(v) => setStoreActiveClass(v as any)} className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="basic">BASIC</TabsTrigger>
+                  <TabsTrigger value="magic">MAGIC</TabsTrigger>
+                  <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
+                  <TabsTrigger value="iconic">ICONIC</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value={storeActiveClass} className="space-y-4 max-h-96 overflow-y-auto mt-4">
+                  {availableBlocks
+                    .filter(block => block.class === storeActiveClass)
+                    .sort((a, b) => {
+                      // Sort by cost (cheapest first), then by tier
+                      if (a.cost !== b.cost) {
+                        return a.cost - b.cost;
+                      }
+                      return a.tier - b.tier;
+                    })
+                    .map((block) => (
+                    <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-center gap-3">
+                        <BlockIcon block={block} />
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold truncate">{block.name}</h3>
+                            <Badge 
+                              variant="secondary" 
+                              className={`text-xs ${getRarityColor(block.rarity)}`}
+                            >
+                              {block.rarity}
+                            </Badge>
+                          </div>
+                          
+                          <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                            {block.description}
+                          </p>
+                          
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <img src={coinImageUrl} alt="coin" className="w-4 h-4" />
+                            <span className="text-sm font-medium">{block.cost} coins</span>
+                            <Badge variant="outline" className="text-xs">
+                              {block.category}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              Tier {block.tier}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {block.class.toUpperCase()}
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        <div className="text-center flex-shrink-0">
+                          <div className="text-xs text-muted-foreground mb-2">
+                            Owned: {getBlockQuantity(block.key)}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleBuyBlock(block.key, block.cost)}
+                            disabled={!profile || profile.coins < block.cost}
+                            className="min-w-[60px]"
+                          >
+                            Buy
+                          </Button>
+                        </div>
                       </div>
-                      
-                      <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                        {block.description}
-                      </p>
-                      
-                      <div className="flex items-center gap-2">
-                        <img src={coinImageUrl} alt="coin" className="w-4 h-4" />
-                        <span className="text-sm font-medium">{block.cost} coins</span>
-                        <Badge variant="outline" className="text-xs ml-auto">
-                          {block.category}
-                        </Badge>
-                      </div>
-                    </div>
-                    
-                    <div className="text-center flex-shrink-0">
-                      <div className="text-xs text-muted-foreground mb-2">
-                        Owned: {getBlockQuantity(block.key)}
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleBuyBlock(block.key, block.cost)}
-                        disabled={!profile || profile.coins < block.cost}
-                        className="min-w-[60px]"
-                      >
-                        Buy
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-              </div>
+                    </Card>
+                  ))}
+                </TabsContent>
+              </Tabs>
             )}
           </TabsContent>
         </Tabs>
