@@ -666,18 +666,37 @@ function FirstPersonControls({
 
     // Helper function to create player bounding box
     const createPlayerBox = (pos: THREE.Vector3) => {
-      return new THREE.Box3(
-        new THREE.Vector3(
-          pos.x - playerRadius,
-          pos.y - playerHeight,
-          pos.z - playerRadius
-        ),
-        new THREE.Vector3(
-          pos.x + playerRadius,
-          pos.y,
-          pos.z + playerRadius
-        )
-      );
+      if (isCrawling) {
+        // Crawl mode: 0.6m wide (0.3m each side), 0.8m tall (0.1m to 0.9m above ground)
+        const crawlWidth = 0.3; // extends 0.3m to left and right
+        const groundLevel = pos.y - playerHeight;
+        return new THREE.Box3(
+          new THREE.Vector3(
+            pos.x - crawlWidth,
+            groundLevel + 0.1,
+            pos.z - crawlWidth
+          ),
+          new THREE.Vector3(
+            pos.x + crawlWidth,
+            groundLevel + 0.9,
+            pos.z + crawlWidth
+          )
+        );
+      } else {
+        // Standing mode: use normal player dimensions
+        return new THREE.Box3(
+          new THREE.Vector3(
+            pos.x - playerRadius,
+            pos.y - playerHeight,
+            pos.z - playerRadius
+          ),
+          new THREE.Vector3(
+            pos.x + playerRadius,
+            pos.y,
+            pos.z + playerRadius
+          )
+        );
+      }
     };
 
     // Helper function to check collision on a specific axis
