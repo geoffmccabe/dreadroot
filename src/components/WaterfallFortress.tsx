@@ -721,7 +721,7 @@ function FirstPersonControls({
       for (const collider of colliders) {
         // For horizontal movement, skip blocks the player is standing on top of
         if (isHorizontal) {
-          const standingOnBlock = Math.abs(playerBox.min.y - collider.max.y) < 0.05;
+          const standingOnBlock = Math.abs(playerBox.min.y - collider.max.y) < 0.15;
           if (standingOnBlock) {
             continue;
           }
