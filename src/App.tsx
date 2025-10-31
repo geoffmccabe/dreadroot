@@ -59,10 +59,10 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
-        <BlocksProvider>
-          <UserPanelProvider>
-            <AdminPanelProvider>
-              <TokenThemeProvider>
+        <TokenThemeProvider>
+          <BlocksProvider>
+            <UserPanelProvider>
+              <AdminPanelProvider>
                 <Toaster />
                 <Sonner />
                 <BrowserRouter>
@@ -88,10 +88,10 @@ const App = () => (
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </BrowserRouter>
-              </TokenThemeProvider>
-            </AdminPanelProvider>
-          </UserPanelProvider>
-        </BlocksProvider>
+              </AdminPanelProvider>
+            </UserPanelProvider>
+          </BlocksProvider>
+        </TokenThemeProvider>
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
