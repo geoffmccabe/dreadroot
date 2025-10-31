@@ -208,31 +208,35 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   return (
     <Dialog open={isOpen} onOpenChange={closePanel}>
       <DialogContent 
-        className="user-panel-dialog bg-background/95 backdrop-blur relative overflow-hidden"
+        className="user-panel-dialog bg-background/95 backdrop-blur relative p-6"
         style={{ 
           width: `${panelSize.width}px`, 
           height: `${panelSize.height}px`,
           maxWidth: '800px',
-          maxHeight: '90vh'
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
         }}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0 mb-4">
           <DialogTitle className="flex items-center gap-2">
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
             User Panel - Coins: {profile?.coins || 0}
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="user">User</TabsTrigger>
-            <TabsTrigger value="wallet">Wallet</TabsTrigger>
-            <TabsTrigger value="inventory">Inventory</TabsTrigger>
-            <TabsTrigger value="store">Store</TabsTrigger>
-          </TabsList>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+              <TabsTrigger value="user">User</TabsTrigger>
+              <TabsTrigger value="wallet">Wallet</TabsTrigger>
+              <TabsTrigger value="inventory">Inventory</TabsTrigger>
+              <TabsTrigger value="store">Store</TabsTrigger>
+            </TabsList>
 
-          {/* User Tab */}
-          <TabsContent value="user" className="space-y-4">
+            {/* User Tab */}
+            <TabsContent value="user" className="space-y-4 overflow-y-auto" style={{ flex: 1, minHeight: 0 }}>
             <Card className="p-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Email</Label>
@@ -281,8 +285,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             </Card>
           </TabsContent>
 
-          {/* Wallet Tab */}
-          <TabsContent value="wallet" className="space-y-4">
+            {/* Wallet Tab */}
+            <TabsContent value="wallet" className="space-y-4 overflow-y-auto" style={{ flex: 1, minHeight: 0 }}>
             <Card className="p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -318,17 +322,17 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             </Card>
           </TabsContent>
 
-          {/* Inventory Tab */}
-          <TabsContent value="inventory" className="space-y-4">
-            <Tabs value={inventoryActiveClass} onValueChange={(v) => setInventoryActiveClass(v as any)} className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="basic">BASIC</TabsTrigger>
-                <TabsTrigger value="magic">MAGIC</TabsTrigger>
-                <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
-                <TabsTrigger value="iconic">ICONIC</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value={inventoryActiveClass} className="space-y-2 max-h-96 overflow-y-auto mt-4">
+            {/* Inventory Tab */}
+            <TabsContent value="inventory" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <Tabs value={inventoryActiveClass} onValueChange={(v) => setInventoryActiveClass(v as any)} className="w-full" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+                  <TabsTrigger value="basic">BASIC</TabsTrigger>
+                  <TabsTrigger value="magic">MAGIC</TabsTrigger>
+                  <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
+                  <TabsTrigger value="iconic">ICONIC</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value={inventoryActiveClass} className="space-y-2 overflow-y-auto mt-4" style={{ flex: 1, minHeight: 0 }}>
                 {(() => {
                   const blocksInClass = availableBlocks
                     .filter(block => {
@@ -400,13 +404,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       </Card>
                     );
                   });
-                })()}
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
+                  })()}
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
 
-          {/* Store Tab */}
-          <TabsContent value="store" className="space-y-4">
+            {/* Store Tab */}
+            <TabsContent value="store" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {loadingBlocks ? (
               <Card className="p-4 text-center text-muted-foreground">
                 Loading blocks...
@@ -416,15 +420,15 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 No blocks available in store
               </Card>
             ) : (
-              <Tabs value={storeActiveClass} onValueChange={(v) => setStoreActiveClass(v as any)} className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="basic">BASIC</TabsTrigger>
-                  <TabsTrigger value="magic">MAGIC</TabsTrigger>
-                  <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
-                  <TabsTrigger value="iconic">ICONIC</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value={storeActiveClass} className="space-y-4 max-h-96 overflow-y-auto mt-4">
+                <Tabs value={storeActiveClass} onValueChange={(v) => setStoreActiveClass(v as any)} className="w-full" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                  <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+                    <TabsTrigger value="basic">BASIC</TabsTrigger>
+                    <TabsTrigger value="magic">MAGIC</TabsTrigger>
+                    <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
+                    <TabsTrigger value="iconic">ICONIC</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value={storeActiveClass} className="space-y-4 overflow-y-auto mt-4" style={{ flex: 1, minHeight: 0 }}>
                   {availableBlocks
                     .filter(block => block.class === storeActiveClass)
                     .sort((a, b) => {
@@ -489,11 +493,12 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       </div>
                     </Card>
                   ))}
-                </TabsContent>
-              </Tabs>
-            )}
-          </TabsContent>
-        </Tabs>
+                  </TabsContent>
+                </Tabs>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
         
         {/* Resize Handle */}
         <div
