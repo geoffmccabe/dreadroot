@@ -771,8 +771,8 @@ function FirstPersonControls({
       }
     }
 
-    // Step-up logic for climbing small obstacles
-    if ((deltaMovement.x !== 0 || deltaMovement.z !== 0) && onGround.current) {
+    // Step-up logic for climbing small obstacles (disabled while crawling)
+    if ((deltaMovement.x !== 0 || deltaMovement.z !== 0) && onGround.current && !isCrawling) {
       const stepHeight = 0.6;
       const feetY = camera.position.y - playerHeight;
       
