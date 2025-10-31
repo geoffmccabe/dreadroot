@@ -337,9 +337,10 @@ function FirstPersonControls({
     // Add collision boxes for new blocks only
     for (const block of existingBlocks) {
       if (!blockCollisionCache.current.has(block.id)) {
+        // Database stores corner position, blocks are 1x1x1 from position to position+1
         blockCollisionCache.current.set(block.id, new THREE.Box3(
-          new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5),
-          new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5)
+          new THREE.Vector3(block.position_x, block.position_y, block.position_z),
+          new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
         ));
       }
     }
