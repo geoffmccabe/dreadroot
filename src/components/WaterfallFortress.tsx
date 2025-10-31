@@ -670,7 +670,7 @@ function FirstPersonControls({
         // Crawl mode: 0.6m wide (0.3m each side), 0.8m tall (0.1m to 0.9m above ground)
         const crawlWidth = 0.3; // extends 0.3m to left and right
         const groundLevel = pos.y - playerHeight;
-        return new THREE.Box3(
+        const box = new THREE.Box3(
           new THREE.Vector3(
             pos.x - crawlWidth,
             groundLevel + 0.1,
@@ -682,6 +682,20 @@ function FirstPersonControls({
             pos.z + crawlWidth
           )
         );
+        
+        // Debug: Log collider dimensions
+        if (Math.random() < 0.01) { // Log occasionally to avoid spam
+          console.log('[Crawl Collider]', {
+            center: { x: pos.x, y: pos.y, z: pos.z },
+            min: { x: box.min.x, y: box.min.y, z: box.min.z },
+            max: { x: box.max.x, y: box.max.y, z: box.max.z },
+            width: box.max.x - box.min.x,
+            height: box.max.y - box.min.y,
+            depth: box.max.z - box.min.z
+          });
+        }
+        
+        return box;
       } else {
         // Standing mode: use normal player dimensions
         return new THREE.Box3(
