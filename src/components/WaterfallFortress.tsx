@@ -2471,7 +2471,7 @@ export default function WaterfallFortress() {
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
         shadows
-        gl={{ antialias: true, premultipliedAlpha: false }}
+        gl={{ antialias: true }}
         dpr={[1, 2]}
       >
       <Scene

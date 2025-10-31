@@ -97,11 +97,18 @@ export const useStoredTextureAtlas = (
       const canvas = document.createElement('canvas');
       canvas.width = 2400;
       canvas.height = 1600;
-      const ctx = canvas.getContext('2d', { alpha: true });
+      const ctx = canvas.getContext('2d', { 
+        alpha: true,
+        willReadFrequently: false,
+        desynchronized: false
+      });
       
       if (!ctx) {
         throw new Error('Could not get canvas context');
       }
+      
+      // Ensure proper alpha compositing
+      ctx.globalCompositeOperation = 'source-over';
       
       // Clear canvas to transparent to preserve alpha channel
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -170,12 +177,12 @@ export const useStoredTextureAtlas = (
       
       console.log(`✅ All images processed for wall ${wallNumber} atlas`);
       
-      // Convert to WebP blob
+      // Convert to WebP blob with high quality to preserve alpha channel
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
           (blob) => blob ? resolve(blob) : reject(new Error('Failed to create blob')),
           'image/webp',
-          0.9
+          1.0  // Use lossless quality for perfect alpha preservation
         );
       });
       
