@@ -335,7 +335,11 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   {availableBlocks
                     .filter(block => block.class === storeActiveClass)
                     .sort((a, b) => {
-                      // Sort by cost (cheapest first), then by tier
+                      // Mystery blocks: sort by tier only
+                      if (storeActiveClass === 'mystery') {
+                        return a.tier - b.tier;
+                      }
+                      // Other classes: sort by cost (cheapest first), then by tier
                       if (a.cost !== b.cost) {
                         return a.cost - b.cost;
                       }
