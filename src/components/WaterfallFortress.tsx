@@ -1130,7 +1130,14 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
   const coinTexture = useMemo(() => {
     const loader = new THREE.TextureLoader();
     const imageUrl = coinImageUrl || '/waterfall_coin.png';
-    return loader.load(imageUrl);
+    const texture = loader.load(imageUrl);
+    
+    // Configure texture for proper transparency
+    texture.format = THREE.RGBAFormat;
+    texture.premultiplyAlpha = false;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    
+    return texture;
   }, [coinImageUrl]);
   
   const coins = useMemo(() => {
