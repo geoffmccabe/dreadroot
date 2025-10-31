@@ -49,6 +49,8 @@ export const useStoredTextureAtlas = (
           loadedTexture.magFilter = THREE.LinearFilter;
           loadedTexture.flipY = false;
           loadedTexture.colorSpace = THREE.SRGBColorSpace;
+          loadedTexture.format = THREE.RGBAFormat;
+          loadedTexture.premultiplyAlpha = false;
           loadedTexture.needsUpdate = true;
           
           console.log(`✅ Loaded stored atlas for wall ${wallNumber}`, {
@@ -207,6 +209,8 @@ export const useStoredTextureAtlas = (
           loadedTexture.magFilter = THREE.LinearFilter;
           loadedTexture.flipY = false;
           loadedTexture.colorSpace = THREE.SRGBColorSpace;
+          loadedTexture.format = THREE.RGBAFormat;
+          loadedTexture.premultiplyAlpha = false;
           loadedTexture.needsUpdate = true;
           
           console.log(`✅ Created and saved new atlas for wall ${wallNumber}`, {

@@ -157,6 +157,9 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
               transparent={true}
               opacity={isMoveMode ? 0.8 : (shouldShowAtlas ? 1 : (hasImage ? 0.5 : 0.25))}
               side={THREE.DoubleSide}
+              blending={THREE.NormalBlending}
+              depthWrite={false}
+              alphaTest={0.01}
               needsUpdate={true}
             />
           </mesh>
