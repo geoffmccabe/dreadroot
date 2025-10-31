@@ -666,19 +666,15 @@ function FirstPersonControls({
 
     // Helper function to create player bounding box
     const createPlayerBox = (pos: THREE.Vector3) => {
-      // When crouching, offset the collider upward so it fits through 1-block gaps
-      // Collider goes from 0.1m to 0.9m instead of 0m to 0.8m
-      const colliderOffset = isCrouching ? 0.1 : 0;
-      
       return new THREE.Box3(
         new THREE.Vector3(
           pos.x - playerRadius,
-          pos.y - playerHeight + colliderOffset,
+          pos.y - playerHeight,
           pos.z - playerRadius
         ),
         new THREE.Vector3(
           pos.x + playerRadius,
-          pos.y + colliderOffset,
+          pos.y,
           pos.z + playerRadius
         )
       );
@@ -696,27 +692,10 @@ function FirstPersonControls({
             continue;
           }
           
-          // When crouching, check if we can fit through the gap
-          if (isCrouching) {
-            // Skip blocks that are entirely above the crouched player's head
-            if (playerBox.max.y <= collider.min.y + 0.01) {
-              continue;
-            }
-            
-            // For blocks that would normally collide, check if there's a crawl-space gap
-            // Allow movement if the block is above the player's feet and there's enough clearance
-            const blockBottom = collider.min.y;
-            const blockTop = collider.max.y;
-            const playerFeet = playerBox.min.y;
-            const playerHead = playerBox.max.y;
-            
-            // Check if this block is above the player and there's a gap to crawl through
-            // Gap exists if: block bottom is above player feet AND the gap is at least crouching height
-            const gapHeight = blockBottom - playerFeet;
-            if (blockBottom > playerFeet && gapHeight >= crouchingHeight - 0.05) {
-              // There's enough clearance to crawl under this block
-              continue;
-            }
+          // When crouching, ignore blocks that are entirely above the crouch height
+          // This allows crawling through 1-block gaps
+          if (isCrouching && collider.min.y >= playerBox.max.y - 0.01) {
+            continue;
           }
         }
         
