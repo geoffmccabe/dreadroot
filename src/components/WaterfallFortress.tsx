@@ -591,10 +591,10 @@ function FirstPersonControls({
     if (keys.current.d) direction.current.x += 1;
     direction.current.normalize();
 
-    // Speed calculation - reduced when crouching
+    // Speed calculation - reduced when crawling
     const baseSpeed = 4.0;
-    const crouchSpeed = baseSpeed * 0.6; // 60% speed when crouching
-    const runSpeed = keys.current.ctrl ? crouchSpeed : (keys.current.shift ? 8.0 : baseSpeed);
+    const crawlSpeed = baseSpeed * 0.6; // 60% speed when crawling
+    const runSpeed = keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed);
     
     // Apply movement
     const forward = new THREE.Vector3(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
@@ -620,28 +620,28 @@ function FirstPersonControls({
 
     // Player dimensions
     const playerRadius = 0.4;
-    const isCrouching = keys.current.ctrl;
+    const isCrawling = keys.current.ctrl;
     const standingHeight = 1.6;
-    const crouchingHeight = 0.8;
-    const playerHeight = isCrouching ? crouchingHeight : standingHeight;
+    const crawlingHeight = 0.8;
+    const playerHeight = isCrawling ? crawlingHeight : standingHeight;
     
-    // Adjust camera height when transitioning between standing and crouching
+    // Adjust camera height when transitioning between standing and crawling
     // Calculate the ground level based on current state
     const wasStanding = !keys.current.previouslyCtrl;
-    if (isCrouching && wasStanding) {
-      // Transition from standing to crouching - lower camera by 0.8 blocks
-      camera.position.y -= (standingHeight - crouchingHeight);
-    } else if (!isCrouching && !wasStanding) {
-      // Transition from crouching to standing - check if there's space, then raise camera
+    if (isCrawling && wasStanding) {
+      // Transition from standing to crawling - lower camera by 0.8 blocks
+      camera.position.y -= (standingHeight - crawlingHeight);
+    } else if (!isCrawling && !wasStanding) {
+      // Transition from crawling to standing - check if there's space, then raise camera
       const standingBox = new THREE.Box3(
         new THREE.Vector3(
           camera.position.x - playerRadius,
-          camera.position.y - crouchingHeight,
+          camera.position.y - crawlingHeight,
           camera.position.z - playerRadius
         ),
         new THREE.Vector3(
           camera.position.x + playerRadius,
-          camera.position.y + (standingHeight - crouchingHeight),
+          camera.position.y + (standingHeight - crawlingHeight),
           camera.position.z + playerRadius
         )
       );
@@ -656,13 +656,13 @@ function FirstPersonControls({
       
       if (canStandUp) {
         // Raise camera by 0.8 blocks
-        camera.position.y += (standingHeight - crouchingHeight);
+        camera.position.y += (standingHeight - crawlingHeight);
       } else {
-        // Force crouch to continue if can't stand
+        // Force crawl to continue if can't stand
         keys.current.ctrl = true;
       }
     }
-    keys.current.previouslyCtrl = isCrouching;
+    keys.current.previouslyCtrl = isCrawling;
 
     // Helper function to create player bounding box
     const createPlayerBox = (pos: THREE.Vector3) => {
@@ -692,9 +692,9 @@ function FirstPersonControls({
             continue;
           }
           
-          // When crouching, ignore blocks that are entirely above the crouch height
+          // When crawling, ignore blocks that are entirely above the crawl height
           // This allows crawling through 1-block gaps
-          if (isCrouching && collider.min.y >= playerBox.max.y - 0.01) {
+          if (isCrawling && collider.min.y >= playerBox.max.y - 0.01) {
             continue;
           }
         }
@@ -1959,7 +1959,7 @@ function ControlPanel({ settings, onSettingsChange, isVisible }: {
             </div>
 
             <div className="mt-3 text-xs opacity-75">
-              Click to lock mouse • WASD move • Shift run • Space jump • Ctrl crouch • ESC unlock
+              Click to lock mouse • WASD move • Shift run • Space jump • Ctrl crawl • ESC unlock
             </div>
           </div>
         )}
