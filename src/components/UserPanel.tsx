@@ -65,7 +65,7 @@ interface UserPanelProps {
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
-  const { profile, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const { currentTheme } = useTokenTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
@@ -77,6 +77,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [isResizing, setIsResizing] = useState(false);
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
+  const tokenDisplayName = currentTheme?.display_name || 'Waterfall';
   const { blocks: allPlacedBlocks } = useBlocks();
   
   // Count placed blocks by type for current user
@@ -121,12 +122,14 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  // Sync blockchain address with profile
+  // Sync blockchain address with token balance
   useEffect(() => {
-    if (profile?.blockchain_address) {
-      setBlockchainAddress(profile.blockchain_address);
+    if (tokenBalance?.blockchain_address) {
+      setBlockchainAddress(tokenBalance.blockchain_address);
+    } else {
+      setBlockchainAddress('');
     }
-  }, [profile?.blockchain_address]);
+  }, [tokenBalance?.blockchain_address]);
 
   // Sync visual distance with profile
   useEffect(() => {
@@ -147,7 +150,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   };
 
   const handleAddressBlur = async () => {
-    if (blockchainAddress !== (profile?.blockchain_address || '')) {
+    if (blockchainAddress !== (tokenBalance?.blockchain_address || '')) {
       await updateBlockchainAddress(blockchainAddress);
     }
   };
@@ -219,7 +222,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
-            User Panel - Coins: {profile?.coins || 0}
+            User Panel - {tokenDisplayName}: {tokenBalance?.coins || 0}
           </DialogTitle>
         </DialogHeader>
 
@@ -303,16 +306,16 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
-                  <span className="font-medium">Coins</span>
+                  <span className="font-medium">{tokenDisplayName}</span>
                 </div>
-                <span className="font-bold text-lg">{profile?.coins || 0}</span>
+                <span className="font-bold text-lg">{tokenBalance?.coins || 0}</span>
               </div>
             </Card>
 
             <Card className="p-4">
               <div className="space-y-2">
                 <Label htmlFor="blockchain-address" className="text-sm font-medium">
-                  Waterfall Blockchain Address
+                  {tokenDisplayName} Blockchain Address
                 </Label>
                 <Input
                   id="blockchain-address"
@@ -523,14 +526,14 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                           <div className="text-xs text-muted-foreground mb-2">
                             Owned: {getBlockQuantity(block.key)}
                           </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleBuyBlock(block.key, block.cost)}
-                            disabled={!profile || profile.coins < block.cost}
-                            className="min-w-[60px]"
-                          >
-                            Buy
-                          </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleBuyBlock(block.key, block.cost)}
+                              disabled={!tokenBalance || tokenBalance.coins < block.cost}
+                              className="min-w-[60px]"
+                            >
+                              Buy
+                            </Button>
                         </div>
                       </div>
                     </Card>

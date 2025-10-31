@@ -386,6 +386,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_token_balances: {
+        Row: {
+          blockchain_address: string | null
+          coins: number
+          created_at: string
+          id: string
+          token_theme_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          blockchain_address?: string | null
+          coins?: number
+          created_at?: string
+          id?: string
+          token_theme_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          blockchain_address?: string | null
+          coins?: number
+          created_at?: string
+          id?: string
+          token_theme_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
