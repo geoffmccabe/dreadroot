@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import { useUserPanel } from '@/contexts/UserPanelContext';
 import { BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { useBlocks } from '@/contexts/BlocksContext';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -71,8 +72,22 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [visualDistance, setVisualDistance] = useState(4);
   const [fogEnabled, setFogEnabled] = useState(true);
   const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
+  const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
+  const { blocks: allPlacedBlocks } = useBlocks();
+  
+  // Count placed blocks by type for current user
+  const placedBlockCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    allPlacedBlocks.forEach(block => {
+      if (block.user_id === user?.id) {
+        const count = counts.get(block.block_type) || 0;
+        counts.set(block.block_type, count + 1);
+      }
+    });
+    return counts;
+  }, [allPlacedBlocks, user?.id]);
 
   // Sync blockchain address with profile
   useEffect(() => {
@@ -265,51 +280,92 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
 
           {/* Inventory Tab */}
           <TabsContent value="inventory" className="space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-muted-foreground">Blocks</h3>
-              {inventory.filter(item => item.quantity > 0).length === 0 ? (
-                <Card className="p-4 text-center text-muted-foreground">
-                  No blocks in inventory
-                </Card>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {inventory
-                    .filter(item => item.quantity > 0)
-                    .sort((a, b) => {
-                      const blockA = availableBlocks.find(block => block.key === a.item_type);
-                      const blockB = availableBlocks.find(block => block.key === b.item_type);
-                      const costA = blockA?.cost || 0;
-                      const costB = blockB?.cost || 0;
-                      
-                      // Sort by cost descending, then name ascending
-                      if (costB !== costA) return costB - costA;
-                      return (a.item_type || '').localeCompare(b.item_type || '');
+            <Tabs value={inventoryActiveClass} onValueChange={(v) => setInventoryActiveClass(v as any)} className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="basic">BASIC</TabsTrigger>
+                <TabsTrigger value="magic">MAGIC</TabsTrigger>
+                <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
+                <TabsTrigger value="iconic">ICONIC</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value={inventoryActiveClass} className="space-y-2 max-h-96 overflow-y-auto mt-4">
+                {(() => {
+                  const blocksInClass = availableBlocks
+                    .filter(block => {
+                      if (block.class !== inventoryActiveClass) return false;
+                      const inventoryCount = inventory.find(i => i.item_type === block.key)?.quantity || 0;
+                      const placedCount = placedBlockCounts.get(block.key) || 0;
+                      return inventoryCount > 0 || placedCount > 0;
                     })
-                    .map((item) => {
-                      const block = availableBlocks.find(b => b.key === item.item_type);
-                      return (
-                        <Card key={item.id} className="p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {block ? (
-                                <BlockIcon block={block} />
-                              ) : (
-                                <div className="w-9 h-9 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center flex-shrink-0">
-                                  <div className="w-6 h-6 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
-                                </div>
-                              )}
-                              <span className="font-medium capitalize">
-                                {item.item_type.replace(/_/g, ' ')}
-                              </span>
+                    .sort((a, b) => {
+                      // Mystery blocks: sort by tier only
+                      if (inventoryActiveClass === 'mystery') {
+                        return a.tier - b.tier;
+                      }
+                      // Other classes: sort by cost (cheapest first), then by tier
+                      if (a.cost !== b.cost) {
+                        return a.cost - b.cost;
+                      }
+                      return a.tier - b.tier;
+                    });
+                  
+                  if (blocksInClass.length === 0) {
+                    return (
+                      <Card className="p-4 text-center text-muted-foreground">
+                        No blocks in this class
+                      </Card>
+                    );
+                  }
+                  
+                  return blocksInClass.map((block) => {
+                    const inventoryCount = inventory.find(i => i.item_type === block.key)?.quantity || 0;
+                    const placedCount = placedBlockCounts.get(block.key) || 0;
+                    
+                    return (
+                      <Card key={block.key} className="p-3">
+                        <div className="flex items-center gap-3">
+                          <BlockIcon block={block} />
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold truncate">{block.name}</h3>
+                              <Badge 
+                                variant="secondary" 
+                                className={`text-xs ${getRarityColor(block.rarity)}`}
+                              >
+                                {block.rarity}
+                              </Badge>
                             </div>
-                            <span className="font-bold">x{item.quantity}</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className="text-xs">
+                                {block.category}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                Tier {block.tier}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {block.cost} coins
+                              </Badge>
+                            </div>
                           </div>
-                        </Card>
-                      );
-                    })}
-                </div>
-              )}
-            </div>
+                          
+                          <div className="text-right flex-shrink-0 text-xs space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Inventory:</span>
+                              <span className="font-semibold">{inventoryCount}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Placed:</span>
+                              <span className="font-semibold">{placedCount}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  });
+                })()}
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           {/* Store Tab */}
