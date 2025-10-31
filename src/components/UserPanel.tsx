@@ -73,6 +73,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [fogEnabled, setFogEnabled] = useState(true);
   const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
+  const [panelSize, setPanelSize] = useState({ width: 448, height: 600 }); // 28rem = 448px
+  const [isResizing, setIsResizing] = useState(false);
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
   const { blocks: allPlacedBlocks } = useBlocks();
@@ -88,6 +90,36 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     });
     return counts;
   }, [allPlacedBlocks, user?.id]);
+
+  // Handle resize
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = panelSize.width;
+    const startHeight = panelSize.height;
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      
+      setPanelSize({
+        width: Math.max(400, Math.min(800, startWidth + deltaX)),
+        height: Math.max(400, Math.min(900, startHeight + deltaY))
+      });
+    };
+    
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Sync blockchain address with profile
   useEffect(() => {
@@ -175,7 +207,15 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={closePanel}>
-      <DialogContent className="user-panel-dialog w-[28rem] max-w-[28rem] bg-background/95 backdrop-blur">
+      <DialogContent 
+        className="user-panel-dialog bg-background/95 backdrop-blur relative overflow-hidden"
+        style={{ 
+          width: `${panelSize.width}px`, 
+          height: `${panelSize.height}px`,
+          maxWidth: '800px',
+          maxHeight: '90vh'
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
@@ -454,6 +494,21 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             )}
           </TabsContent>
         </Tabs>
+        
+        {/* Resize Handle */}
+        <div
+          className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
+          onMouseDown={handleResizeStart}
+          style={{
+            background: 'linear-gradient(135deg, transparent 50%, currentColor 50%)',
+            opacity: isResizing ? 0.8 : 0.3,
+            transition: 'opacity 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.6'}
+          onMouseLeave={(e) => {
+            if (!isResizing) e.currentTarget.style.opacity = '0.3';
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
