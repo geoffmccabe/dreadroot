@@ -74,12 +74,13 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
   const filteredBlocks = React.useMemo(() => {
     const filtered = blocks.filter(b => b.class === activeClass);
     
-    // Sort mystery blocks by tier, others keep default order
-    if (activeClass === 'mystery') {
-      return [...filtered].sort((a, b) => a.tier - b.tier);
-    }
-    
-    return filtered;
+    // Sort by cost (cheapest first), then by tier
+    return [...filtered].sort((a, b) => {
+      if (a.cost !== b.cost) {
+        return a.cost - b.cost;
+      }
+      return a.tier - b.tier;
+    });
   }, [blocks, activeClass]);
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
