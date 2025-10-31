@@ -154,11 +154,29 @@ export const useStoredTextureAtlas = (
               sourceY = (img.height - sourceHeight) / 2;
             }
             
+            // Save composite operation before drawing
+            const prevComposite = ctx.globalCompositeOperation;
+            ctx.globalCompositeOperation = 'source-over';
+            
             ctx.drawImage(
               img,
               sourceX, sourceY, sourceWidth, sourceHeight,
               x, y, slotWidth, slotHeight
             );
+            
+            // Check if we actually drew transparent pixels
+            const imageData = ctx.getImageData(x, y, Math.min(10, slotWidth), Math.min(10, slotHeight));
+            const hasTransparency = Array.from(imageData.data).some((val, idx) => 
+              idx % 4 === 3 && val < 255
+            );
+            
+            console.log(`Slot ${index + 1} transparency check:`, {
+              hasTransparency,
+              sampleAlpha: imageData.data[3],
+              imageNaturalSize: `${img.naturalWidth}x${img.naturalHeight}`
+            });
+            
+            ctx.globalCompositeOperation = prevComposite;
             
             resolve();
           };
@@ -180,7 +198,20 @@ export const useStoredTextureAtlas = (
       // Convert to WebP blob with high quality to preserve alpha channel
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob(
-          (blob) => blob ? resolve(blob) : reject(new Error('Failed to create blob')),
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to create blob'));
+              return;
+            }
+            
+            console.log(`📊 WebP blob created for wall ${wallNumber}:`, {
+              size: blob.size,
+              type: blob.type,
+              canvasHadAlpha: ctx.getImageData(0, 0, 1, 1).data[3] < 255
+            });
+            
+            resolve(blob);
+          },
           'image/webp',
           1.0  // Use lossless quality for perfect alpha preservation
         );
