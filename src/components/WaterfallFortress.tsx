@@ -666,15 +666,19 @@ function FirstPersonControls({
 
     // Helper function to create player bounding box
     const createPlayerBox = (pos: THREE.Vector3) => {
+      // When crouching, offset the collider upward so it fits through 1-block gaps
+      // Collider goes from 0.1m to 0.9m instead of 0m to 0.8m
+      const colliderOffset = isCrouching ? 0.1 : 0;
+      
       return new THREE.Box3(
         new THREE.Vector3(
           pos.x - playerRadius,
-          pos.y - playerHeight,
+          pos.y - playerHeight + colliderOffset,
           pos.z - playerRadius
         ),
         new THREE.Vector3(
           pos.x + playerRadius,
-          pos.y,
+          pos.y + colliderOffset,
           pos.z + playerRadius
         )
       );
