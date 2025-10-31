@@ -22,8 +22,10 @@ export const heightMap = new Map<string, number>();
 // Component to render all placed blocks with collision detection using instanced rendering
 export const PlacedBlocks: React.FC<{ 
   blocks: PlacedBlock[]; 
-  onCollision?: (boxes: THREE.Box3[]) => void; 
-}> = ({ blocks, onCollision }) => {
+  onCollision?: (boxes: THREE.Box3[]) => void;
+  showOwnershipOutline?: boolean;
+  currentUserId?: string;
+}> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -185,6 +187,8 @@ export const PlacedBlocks: React.FC<{
             blockDef={blockDef}
             geometry={geometry}
             onCollision={handleBlockCollision}
+            showOwnershipOutline={showOwnershipOutline}
+            currentUserId={currentUserId}
           />
         );
       })}

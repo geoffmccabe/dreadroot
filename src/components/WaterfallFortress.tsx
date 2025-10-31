@@ -57,7 +57,11 @@ function useWeatherCycle(weatherSettings: {
 }
 
 // Camera-tracked block renderer with chunk culling
-function CameraTrackedBlocks({ blocks }: { blocks: PlacedBlock[] }) {
+function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: { 
+  blocks: PlacedBlock[];
+  showOwnershipOutline: boolean;
+  currentUserId?: string;
+}) {
   const { camera } = useThree();
   const { blocksByChunk, visualDistance } = useBlocks();
   const [cameraPosition, setCameraPosition] = useState({ x: 0, z: 0 });
@@ -94,7 +98,7 @@ function CameraTrackedBlocks({ blocks }: { blocks: PlacedBlock[] }) {
     return filtered;
   }, [cameraPosition.x, cameraPosition.z, visualDistance, blocksByChunk, blocks.length]);
   
-  return <PlacedBlocks blocks={visibleBlocks} />;
+  return <PlacedBlocks blocks={visibleBlocks} showOwnershipOutline={showOwnershipOutline} currentUserId={currentUserId} />;
 }
 
 // Sky component with space texture
@@ -1550,6 +1554,33 @@ function Scene({
   // Multiplayer - track and display other players
   const { players, broadcastPosition, isConnected } = useMultiplayer('fortress-main');
   
+  // Track TAB key for ownership outline
+  const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
+  const { user } = useAuth();
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && blockPlacementMode) {
+        e.preventDefault();
+        setShowOwnershipOutline(true);
+      }
+    };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        setShowOwnershipOutline(false);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [blockPlacementMode]);
+  
   // Log multiplayer status
   useEffect(() => {
     if (isConnected) {
@@ -1883,7 +1914,11 @@ function Scene({
       {/* Scene objects */}
       <Fortress />
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
-      <CameraTrackedBlocks blocks={blocks} />
+      <CameraTrackedBlocks 
+        blocks={blocks} 
+        showOwnershipOutline={showOwnershipOutline && blockPlacementMode} 
+        currentUserId={user?.id}
+      />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         msBetweeenDrops={settings.msBetweeenDrops} 

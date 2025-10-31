@@ -35,13 +35,17 @@ interface InstancedBlockGroupProps {
   blockDef: BlockType;
   geometry: THREE.BoxGeometry;
   onCollision?: (box: THREE.Box3, blockId: string) => void;
+  showOwnershipOutline?: boolean;
+  currentUserId?: string;
 }
 
 export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   blocks,
   blockDef,
   geometry,
-  onCollision
+  onCollision,
+  showOwnershipOutline = false,
+  currentUserId
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
@@ -328,6 +332,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   if (!material) return null;
 
+  // Filter blocks owned by current user for outline rendering
+  const ownedBlocks = useMemo(() => {
+    if (!showOwnershipOutline || !currentUserId) return [];
+    return blocks.filter(block => block.user_id === currentUserId);
+  }, [blocks, showOwnershipOutline, currentUserId]);
+
   return (
     <>
       <instancedMesh
@@ -347,6 +357,20 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           decay={2}
         />
       ))}
+      {/* Render red outlines for owned blocks */}
+      {showOwnershipOutline && ownedBlocks.map((block) => {
+        const fallState = fallingBlocksState.get(block.id);
+        const x = block.position_x + 0.5;
+        const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+        const z = block.position_z + 0.5;
+        
+        return (
+          <lineSegments key={`outline-${block.id}`} position={[x, y, z]}>
+            <edgesGeometry args={[geometry]} />
+            <lineBasicMaterial color="#ff0000" linewidth={1} />
+          </lineSegments>
+        );
+      })}
     </>
   );
 };
