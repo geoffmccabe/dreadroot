@@ -343,9 +343,6 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                               <Badge variant="outline" className="text-xs">
                                 Tier {block.tier}
                               </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                {block.cost} coins
-                              </Badge>
                             </div>
                           </div>
                           
