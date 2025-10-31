@@ -1335,12 +1335,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
           visible={false}
           scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
         >
-          <spriteMaterial 
-            map={coinTexture} 
-            transparent 
-            depthWrite={false}
-            blending={THREE.NormalBlending}
-          />
+          <spriteMaterial map={coinTexture} transparent />
         </sprite>
       ))}
       {explosionParticles.map((particle, index) => (
@@ -1350,12 +1345,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
           visible={false}
           scale={[0.5, 0.5, 1]}
         >
-          <spriteMaterial 
-            map={coinTexture} 
-            transparent 
-            depthWrite={false}
-            blending={THREE.NormalBlending}
-          />
+          <spriteMaterial map={coinTexture} transparent />
         </sprite>
       ))}
     </group>
