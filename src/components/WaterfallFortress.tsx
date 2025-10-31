@@ -692,9 +692,27 @@ function FirstPersonControls({
             continue;
           }
           
-          // When crouching, also skip blocks above the player (crawling under)
-          if (isCrouching && playerBox.max.y <= collider.min.y + 0.01) {
-            continue;
+          // When crouching, check if we can fit through the gap
+          if (isCrouching) {
+            // Skip blocks that are entirely above the crouched player's head
+            if (playerBox.max.y <= collider.min.y + 0.01) {
+              continue;
+            }
+            
+            // For blocks that would normally collide, check if there's a crawl-space gap
+            // Allow movement if the block is above the player's feet and there's enough clearance
+            const blockBottom = collider.min.y;
+            const blockTop = collider.max.y;
+            const playerFeet = playerBox.min.y;
+            const playerHead = playerBox.max.y;
+            
+            // Check if this block is above the player and there's a gap to crawl through
+            // Gap exists if: block bottom is above player feet AND the gap is at least crouching height
+            const gapHeight = blockBottom - playerFeet;
+            if (blockBottom > playerFeet && gapHeight >= crouchingHeight - 0.05) {
+              // There's enough clearance to crawl under this block
+              continue;
+            }
           }
         }
         
