@@ -415,4 +415,43 @@ All colors MUST be HSL.
       opacity: 1;
     }
   }
+
+  /* User Panel Resize Layout Fix */
+  .user-panel-dialog {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .user-panel-tabs {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .user-panel-tab-content {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    margin-top: 0 !important;
+    padding-top: 1rem !important;
+    min-height: 0 !important;
+  }
+
+  .user-panel-nested-tabs {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+
+  .user-panel-nested-tab-content {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    margin-top: 0 !important;
+    padding-top: 1rem !important;
+  }
 }
