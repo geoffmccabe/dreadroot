@@ -25,6 +25,8 @@ import { PlacedBlock } from '@/types/blocks';
 import { Toaster } from '@/components/ui/toaster';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
 import { supabase } from '@/integrations/supabase/client';
+import { useMultiplayer } from '@/hooks/useMultiplayer';
+import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 
 // Custom hook for weather cycle - shared by sky and lighting
 function useWeatherCycle(weatherSettings: {
@@ -243,7 +245,8 @@ function FirstPersonControls({
   onCycleBlock,
   blocks,
   onBlockRain,
-  userRoles
+  userRoles,
+  broadcastPosition
 }: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -265,6 +268,7 @@ function FirstPersonControls({
   blocks: PlacedBlock[];
   onBlockRain: () => void;
   userRoles: string[];
+  broadcastPosition?: (position: THREE.Vector3, yaw: number, pitch: number) => void;
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -844,6 +848,11 @@ function FirstPersonControls({
     const feetY = camera.position.y - playerHeight;
     if (feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1) {
       onGround.current = true;
+    }
+    
+    // Broadcast position to multiplayer (throttled internally)
+    if (broadcastPosition) {
+      broadcastPosition(camera.position, yaw.current, pitch.current);
     }
   });
 
@@ -1538,6 +1547,16 @@ function Scene({
   // Dynamic fog based on visual distance and user preference
   const { visualDistance, fogEnabled } = useBlocks();
 
+  // Multiplayer - track and display other players
+  const { players, broadcastPosition, isConnected } = useMultiplayer('fortress-main');
+  
+  // Log multiplayer status
+  useEffect(() => {
+    if (isConnected) {
+      console.log('[Multiplayer] Connected to fortress-main, players:', players.size);
+    }
+  }, [isConnected, players.size]);
+
   useEffect(() => {
     if (fogEnabled) {
       // Fog starts at 75% of visual distance, fully grey at 100%
@@ -1849,7 +1868,11 @@ function Scene({
         blocks={blocks}
         onBlockRain={onBlockRain}
         userRoles={userRoles}
+        broadcastPosition={broadcastPosition}
       />
+      
+      {/* Multiplayer - render other players */}
+      <MultiplayerPlayers players={players} />
       
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting weatherSettings={weatherSettings} />
