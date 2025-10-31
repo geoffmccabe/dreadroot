@@ -367,7 +367,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         return (
           <lineSegments key={`outline-${block.id}`} position={[x, y, z]}>
             <edgesGeometry args={[geometry]} />
-            <lineBasicMaterial color="#ff0000" linewidth={1} />
+            <lineBasicMaterial color="#ff0000" linewidth={2} />
           </lineSegments>
         );
       })}

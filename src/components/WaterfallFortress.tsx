@@ -1554,30 +1554,22 @@ function Scene({
   // Multiplayer - track and display other players
   const { players, broadcastPosition, isConnected } = useMultiplayer('fortress-main');
   
-  // Track TAB key for ownership outline
+  // Track TAB key for ownership outline (toggle on/off)
   const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
   const { user } = useAuth();
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab' && blockPlacementMode) {
+      if (e.key === 'Tab' && blockPlacementMode && !e.repeat) {
         e.preventDefault();
-        setShowOwnershipOutline(true);
-      }
-    };
-    
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
-        setShowOwnershipOutline(false);
+        setShowOwnershipOutline(prev => !prev);
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
     };
   }, [blockPlacementMode]);
   
