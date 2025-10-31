@@ -1127,17 +1127,40 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
   const maxExplosionParticles = 1000;
   
   // Load coin texture from current theme
-  const coinTexture = useMemo(() => {
+  const [coinTexture, setCoinTexture] = useState<THREE.Texture | null>(null);
+  
+  useEffect(() => {
     const loader = new THREE.TextureLoader();
     const imageUrl = coinImageUrl || '/waterfall_coin.png';
-    const texture = loader.load(imageUrl);
     
-    // Configure texture for proper transparency
-    texture.format = THREE.RGBAFormat;
-    texture.premultiplyAlpha = false;
-    texture.colorSpace = THREE.SRGBColorSpace;
+    loader.load(
+      imageUrl,
+      (texture) => {
+        // Configure texture for proper transparency AFTER it loads
+        texture.format = THREE.RGBAFormat;
+        texture.premultiplyAlpha = false;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+        
+        console.log('🪙 Coin texture loaded with transparency:', {
+          format: texture.format,
+          premultiplyAlpha: texture.premultiplyAlpha,
+          size: `${texture.image?.width}x${texture.image?.height}`
+        });
+        
+        setCoinTexture(texture);
+      },
+      undefined,
+      (error) => {
+        console.error('Failed to load coin texture:', error);
+      }
+    );
     
-    return texture;
+    return () => {
+      if (coinTexture) {
+        coinTexture.dispose();
+      }
+    };
   }, [coinImageUrl]);
   
   const coins = useMemo(() => {
@@ -1312,7 +1335,12 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
           visible={false}
           scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
         >
-          <spriteMaterial map={coinTexture} transparent />
+          <spriteMaterial 
+            map={coinTexture} 
+            transparent 
+            depthWrite={false}
+            blending={THREE.NormalBlending}
+          />
         </sprite>
       ))}
       {explosionParticles.map((particle, index) => (
@@ -1322,7 +1350,12 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
           visible={false}
           scale={[0.5, 0.5, 1]}
         >
-          <spriteMaterial map={coinTexture} transparent />
+          <spriteMaterial 
+            map={coinTexture} 
+            transparent 
+            depthWrite={false}
+            blending={THREE.NormalBlending}
+          />
         </sprite>
       ))}
     </group>
