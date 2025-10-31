@@ -223,9 +223,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <TabsList className="grid w-full grid-cols-4" style={{ flexShrink: 0 }}>
             <TabsTrigger value="user">User</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
@@ -233,7 +233,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           </TabsList>
 
             {/* User Tab */}
-            <TabsContent value="user" className="mt-0 flex-1 overflow-y-auto space-y-4 pt-4">
+            <TabsContent value="user" className="space-y-4" style={{ flex: 1, overflowY: 'auto', marginTop: 0, paddingTop: '1rem' }}>
             <Card className="p-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Email</Label>
@@ -283,7 +283,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           </TabsContent>
 
             {/* Wallet Tab */}
-            <TabsContent value="wallet" className="mt-0 flex-1 overflow-y-auto space-y-4 pt-4">
+            <TabsContent value="wallet" className="space-y-4" style={{ flex: 1, overflowY: 'auto', marginTop: 0, paddingTop: '1rem' }}>
             <Card className="p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -320,16 +320,16 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           </TabsContent>
 
             {/* Inventory Tab */}
-            <TabsContent value="inventory" className="mt-0 flex-1 flex flex-col overflow-hidden pt-4">
-              <Tabs value={inventoryActiveClass} onValueChange={(v) => setInventoryActiveClass(v as any)} className="flex-1 flex flex-col overflow-hidden h-full">
-                <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+            <TabsContent value="inventory" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginTop: 0, paddingTop: '1rem' }}>
+              <Tabs value={inventoryActiveClass} onValueChange={(v) => setInventoryActiveClass(v as any)} style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                <TabsList className="grid w-full grid-cols-4" style={{ flexShrink: 0 }}>
                   <TabsTrigger value="basic">BASIC</TabsTrigger>
                   <TabsTrigger value="magic">MAGIC</TabsTrigger>
                   <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
                   <TabsTrigger value="iconic">ICONIC</TabsTrigger>
                 </TabsList>
                 
-                <TabsContent value={inventoryActiveClass} className="mt-0 flex-1 overflow-y-auto space-y-2 pt-4">
+                <TabsContent value={inventoryActiveClass} className="space-y-2" style={{ flex: 1, overflowY: 'auto', marginTop: 0, paddingTop: '1rem' }}>
                 {(() => {
                   const blocksInClass = availableBlocks
                     .filter(block => {
@@ -407,7 +407,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           </TabsContent>
 
             {/* Store Tab */}
-            <TabsContent value="store" className="mt-0 flex-1 flex flex-col overflow-hidden pt-4">
+            <TabsContent value="store" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', marginTop: 0, paddingTop: '1rem' }}>
               {loadingBlocks ? (
                 <Card className="p-4 text-center text-muted-foreground">
                   Loading blocks...
@@ -417,15 +417,15 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   No blocks available in store
                 </Card>
               ) : (
-                <Tabs value={storeActiveClass} onValueChange={(v) => setStoreActiveClass(v as any)} className="flex-1 flex flex-col overflow-hidden h-full">
-                  <TabsList className="grid w-full grid-cols-4 flex-shrink-0">
+                <Tabs value={storeActiveClass} onValueChange={(v) => setStoreActiveClass(v as any)} style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                  <TabsList className="grid w-full grid-cols-4" style={{ flexShrink: 0 }}>
                     <TabsTrigger value="basic">BASIC</TabsTrigger>
                     <TabsTrigger value="magic">MAGIC</TabsTrigger>
                     <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
                     <TabsTrigger value="iconic">ICONIC</TabsTrigger>
                   </TabsList>
                   
-                  <TabsContent value={storeActiveClass} className="mt-0 flex-1 overflow-y-auto space-y-4 pt-4">
+                  <TabsContent value={storeActiveClass} className="space-y-4" style={{ flex: 1, overflowY: 'auto', marginTop: 0, paddingTop: '1rem' }}>
                   {availableBlocks
                     .filter(block => block.class === storeActiveClass)
                     .sort((a, b) => {
