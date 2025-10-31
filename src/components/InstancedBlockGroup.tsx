@@ -297,6 +297,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     });
   }, [blocks, onCollision]);
   
+  // Filter blocks owned by current user for outline rendering (must be before early returns)
+  const ownedBlocks = useMemo(() => {
+    if (!showOwnershipOutline || !currentUserId) return [];
+    return blocks.filter(block => block.user_id === currentUserId);
+  }, [blocks, showOwnershipOutline, currentUserId]);
+
   // Get glow properties
   const glowFactor = blockDef?.properties?.glowFactor || 0;
   const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
@@ -331,12 +337,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [blocks, shouldGlow, camera.position]);
   
   if (!material) return null;
-
-  // Filter blocks owned by current user for outline rendering
-  const ownedBlocks = useMemo(() => {
-    if (!showOwnershipOutline || !currentUserId) return [];
-    return blocks.filter(block => block.user_id === currentUserId);
-  }, [blocks, showOwnershipOutline, currentUserId]);
 
   return (
     <>
