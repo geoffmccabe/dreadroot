@@ -95,15 +95,14 @@ export const useStoredTextureAtlas = (
       const canvas = document.createElement('canvas');
       canvas.width = 2400;
       canvas.height = 1600;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: true });
       
       if (!ctx) {
         throw new Error('Could not get canvas context');
       }
       
-      // Clear canvas with a dark background so we can see if images loaded
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Clear canvas to transparent to preserve alpha channel
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       // Each slot is 800x800 (2400/3 = 800, 1600/2 = 800)
       const slotWidth = Math.floor(canvas.width / 3);
