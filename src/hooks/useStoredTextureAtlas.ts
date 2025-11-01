@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -14,6 +14,7 @@ export const useStoredTextureAtlas = (
   imageUrls: (string | null | undefined)[]
 ): UseStoredTextureAtlasReturn => {
   const [atlasTexture, setAtlasTexture] = useState<THREE.Texture | null>(null);
+  const textureRef = useRef<THREE.Texture | null>(null); // Track current texture for cleanup
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -60,6 +61,7 @@ export const useStoredTextureAtlas = (
             type: loadedTexture.type,
             colorSpace: loadedTexture.colorSpace
           });
+          textureRef.current = loadedTexture;
           setAtlasTexture(loadedTexture);
           URL.revokeObjectURL(blobUrl);
         },
@@ -89,8 +91,9 @@ export const useStoredTextureAtlas = (
       });
       
       // Dispose previous texture
-      if (atlasTexture) {
-        atlasTexture.dispose();
+      if (textureRef.current) {
+        textureRef.current.dispose();
+        textureRef.current = null;
       }
       
       // Create canvas for atlas - 2400x1600 for 800x800 pixel slots
@@ -263,6 +266,7 @@ export const useStoredTextureAtlas = (
             detail: { wallNumber, success: true }
           }));
           
+          textureRef.current = loadedTexture;
           setAtlasTexture(loadedTexture);
           setIsLoading(false);
           URL.revokeObjectURL(blobUrl);
@@ -323,8 +327,10 @@ export const useStoredTextureAtlas = (
     
     // Cleanup
     return () => {
-      if (atlasTexture) {
-        atlasTexture.dispose();
+      // Dispose texture using ref to get current value
+      if (textureRef.current) {
+        textureRef.current.dispose();
+        textureRef.current = null;
       }
       window.removeEventListener('rebuildAtlas', handleRebuildAtlas as EventListener);
     };

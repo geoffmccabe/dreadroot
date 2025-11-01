@@ -15,6 +15,7 @@ const refreshTimers = new Map<string, number>();
 
 export const useAnimatedTexture = (url: string) => {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const textureRef = useRef<THREE.Texture | null>(null); // Track current texture for cleanup
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const backupCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const framesRef = useRef<GIFFrame[]>([]);
@@ -40,9 +41,10 @@ export const useAnimatedTexture = (url: string) => {
         backgroundRefreshTimerRef.current = null;
       }
       
-      // Dispose texture
-      if (texture) {
-        texture.dispose();
+      // Dispose texture using ref to get current value
+      if (textureRef.current) {
+        textureRef.current.dispose();
+        textureRef.current = null;
       }
       
       // Clean up canvases
@@ -106,8 +108,9 @@ export const useAnimatedTexture = (url: string) => {
         console.log('🆕 Texture updated, hot-swapping');
         
         // Dispose old texture before creating new one
-        if (texture) {
-          texture.dispose();
+        if (textureRef.current) {
+          textureRef.current.dispose();
+          textureRef.current = null;
         }
         
         // Load the new texture
@@ -153,6 +156,7 @@ export const useAnimatedTexture = (url: string) => {
       (loadedTexture) => {
         console.log('✅ Texture loaded successfully');
         if (isMountedRef.current) {
+          textureRef.current = loadedTexture;
           setTexture(loadedTexture);
         } else {
           loadedTexture.dispose();
@@ -212,6 +216,7 @@ export const useAnimatedTexture = (url: string) => {
       canvasTexture.needsUpdate = true; // Mark for initial upload
       
       if (isMountedRef.current) {
+        textureRef.current = canvasTexture;
         setTexture(canvasTexture);
       } else {
         canvasTexture.dispose();
