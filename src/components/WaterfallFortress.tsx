@@ -1,5 +1,6 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Perf } from 'r3f-perf';
 import * as THREE from 'three';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -2606,6 +2607,7 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
+      <Perf position="top-left" minimal={false} />
       <Scene
         settings={settings}
         onCoinHit={handleCoinHit} 
