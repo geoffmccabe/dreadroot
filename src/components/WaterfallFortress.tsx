@@ -1133,10 +1133,21 @@ function Fortress() {
     return texture;
   }, [cliffTexture]);
 
+  const courtyardTexture = useMemo(() => {
+    if (!grassTexture) return null;
+    const texture = grassTexture.clone();
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    // Calculate repeat based on the same scale as main ground (260x260 with 40x40 repeat = 6.5 units per repeat)
+    // For courtyard: (cliffW-4) = 36, (courtyardDepth-2) = 28
+    texture.repeat.set((cliffW-4)/6.5, (courtyardDepth-2)/6.5);
+    clonedTexturesRef.current.push(texture);
+    return texture;
+  }, [grassTexture]);
+
   return (
     <group>
       {/* Wait for textures to load before rendering */}
-      {!grassTexture || !frontTexture || !topTexture || !sideTexture || !backTexture ? null : (
+      {!grassTexture || !frontTexture || !topTexture || !sideTexture || !backTexture || !courtyardTexture ? null : (
         <>
       {/* Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -1188,13 +1199,7 @@ function Fortress() {
       >
         <planeGeometry args={[cliffW-4, courtyardDepth-2]} />
         <meshStandardMaterial 
-          map={(() => {
-            const texture = grassTexture.clone();
-            // Calculate repeat based on the same scale as main ground (260x260 with 40x40 repeat = 6.5 units per repeat)
-            // For courtyard: (cliffW-4) = 36, (courtyardDepth-2) = 28
-            texture.repeat.set((cliffW-4)/6.5, (courtyardDepth-2)/6.5);
-            return texture;
-          })()}
+          map={courtyardTexture}
           metalness={0} 
           roughness={1} 
         />
