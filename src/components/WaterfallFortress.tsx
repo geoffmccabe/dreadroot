@@ -1573,10 +1573,10 @@ function Scene({
     };
   }, [blockPlacementMode]);
   
-  // Log multiplayer status
+  // Multiplayer connection status
   useEffect(() => {
     if (isConnected) {
-      console.log('[Multiplayer] Connected to fortress-main, players:', players.size);
+      // Connected
     }
   }, [isConnected, players.size]);
 

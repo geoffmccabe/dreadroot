@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import * as THREE from 'three';
@@ -21,12 +21,18 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
   const [players, setPlayers] = useState<Map<string, PlayerState>>(new Map());
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const isSettingUpRef = useRef(false);
 
   useEffect(() => {
+    if (isSettingUpRef.current) return;
+    
     const setupMultiplayer = async () => {
-      // Get current user
+      isSettingUpRef.current = true;
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        isSettingUpRef.current = false;
+        return;
+      }
 
       // Create channel for this room
       const multiplayerChannel = supabase.channel(`room:${roomId}`, {
@@ -84,11 +90,12 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
     setupMultiplayer();
 
     return () => {
+      isSettingUpRef.current = false;
       if (channel) {
         supabase.removeChannel(channel);
       }
     };
-  }, [roomId]);
+  }, []);
 
   const broadcastPosition = useCallback((position: THREE.Vector3, yaw: number, pitch: number) => {
     if (!channel || !isConnected) return;
