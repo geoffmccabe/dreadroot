@@ -1135,6 +1135,9 @@ function Fortress() {
 
   return (
     <group>
+      {/* Wait for textures to load before rendering */}
+      {!grassTexture || !frontTexture || !topTexture || !sideTexture || !backTexture ? null : (
+        <>
       {/* Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[260, 260]} />
@@ -1196,6 +1199,8 @@ function Fortress() {
           roughness={1} 
         />
       </mesh>
+        </>
+      )}
     </group>
   );
 }
