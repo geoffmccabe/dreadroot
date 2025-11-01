@@ -1057,10 +1057,43 @@ function Fortress() {
   const courtyardDepth = 30, frontZ = -8;
   const openingHalfW = 2, openingH = 5;
 
-  // Load textures
-  const cliffTexture = useMemo(() => {
+  // Track textures for disposal
+  const [cliffTexture, setCliffTexture] = useState<THREE.Texture | null>(null);
+  const [grassTexture, setGrassTexture] = useState<THREE.Texture | null>(null);
+  const cliffTextureRef = useRef<THREE.Texture | null>(null);
+  const grassTextureRef = useRef<THREE.Texture | null>(null);
+  const clonedTexturesRef = useRef<THREE.Texture[]>([]);
+
+  // Load base textures
+  useEffect(() => {
     const loader = new THREE.TextureLoader();
-    return loader.load('/cliff_texture_seamless.webp');
+    
+    loader.load('/cliff_texture_seamless.webp', (texture) => {
+      cliffTextureRef.current = texture;
+      setCliffTexture(texture);
+    });
+    
+    loader.load('/grass_texture_seamless.webp', (texture) => {
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(40, 40);
+      grassTextureRef.current = texture;
+      setGrassTexture(texture);
+    });
+    
+    return () => {
+      // Dispose base textures
+      if (cliffTextureRef.current) {
+        cliffTextureRef.current.dispose();
+        cliffTextureRef.current = null;
+      }
+      if (grassTextureRef.current) {
+        grassTextureRef.current.dispose();
+        grassTextureRef.current = null;
+      }
+      // Dispose all cloned textures
+      clonedTexturesRef.current.forEach(tex => tex.dispose());
+      clonedTexturesRef.current = [];
+    };
   }, []);
 
   // Create individual textures for each wall with proper scaling
@@ -1068,7 +1101,8 @@ function Fortress() {
     if (!cliffTexture) return null;
     const texture = cliffTexture.clone();
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(3.6, 4); // (cliffW/2 - openingHalfW) / 5, cliffH / 5
+    texture.repeat.set(3.6, 4);
+    clonedTexturesRef.current.push(texture);
     return texture;
   }, [cliffTexture]);
 
@@ -1076,7 +1110,8 @@ function Fortress() {
     if (!cliffTexture) return null;
     const texture = cliffTexture.clone();
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(0.8, 3); // (openingHalfW*2) / 5, (cliffH-openingH) / 5
+    texture.repeat.set(0.8, 3);
+    clonedTexturesRef.current.push(texture);
     return texture;
   }, [cliffTexture]);
 
@@ -1084,7 +1119,8 @@ function Fortress() {
     if (!cliffTexture) return null;
     const texture = cliffTexture.clone();
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(6, 4); // courtyardDepth / 5, cliffH / 5
+    texture.repeat.set(6, 4);
+    clonedTexturesRef.current.push(texture);
     return texture;
   }, [cliffTexture]);
 
@@ -1092,17 +1128,10 @@ function Fortress() {
     if (!cliffTexture) return null;
     const texture = cliffTexture.clone();
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(8, 4); // cliffW / 5, cliffH / 5
+    texture.repeat.set(8, 4);
+    clonedTexturesRef.current.push(texture);
     return texture;
   }, [cliffTexture]);
-
-  const grassTexture = useMemo(() => {
-    const loader = new THREE.TextureLoader();
-    const texture = loader.load('/grass_texture_seamless.webp');
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(40, 40);
-    return texture;
-  }, []);
 
   return (
     <group>
@@ -1186,6 +1215,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
   
   // Load coin texture from current theme
   const [coinTexture, setCoinTexture] = useState<THREE.Texture | null>(null);
+  const coinTextureRef = useRef<THREE.Texture | null>(null);
   
   useEffect(() => {
     const loader = new THREE.TextureLoader();
@@ -1206,6 +1236,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
           size: `${texture.image?.width}x${texture.image?.height}`
         });
         
+        coinTextureRef.current = texture;
         setCoinTexture(texture);
       },
       undefined,
@@ -1215,8 +1246,9 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
     );
     
     return () => {
-      if (coinTexture) {
-        coinTexture.dispose();
+      if (coinTextureRef.current) {
+        coinTextureRef.current.dispose();
+        coinTextureRef.current = null;
       }
     };
   }, [coinImageUrl]);

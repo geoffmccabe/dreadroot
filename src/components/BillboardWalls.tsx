@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { AtlasMediaWall } from '@/components/AtlasMediaWall';
 import * as THREE from 'three';
@@ -67,17 +67,27 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
     const [posX, posY, posZ] = position;
     const [rotX, rotY, rotZ] = rotation;
 
-    // Stable texture creation - only create once per URL
-    const iframeTexture = useMemo(() => {
+    // Stable texture creation with proper cleanup
+    const [iframeTexture, setIframeTexture] = useState<THREE.CanvasTexture | null>(null);
+    const iframeTextureRef = useRef<THREE.CanvasTexture | null>(null);
+    
+    useEffect(() => {
       const urlString = currentUrl?.url;
-      if (!urlString) return null;
+      if (!urlString) {
+        if (iframeTextureRef.current) {
+          iframeTextureRef.current.dispose();
+          iframeTextureRef.current = null;
+          setIframeTexture(null);
+        }
+        return;
+      }
 
       // Check if URL is valid
       try {
         new URL(urlString);
       } catch {
         console.warn('Invalid URL:', urlString);
-        return null;
+        return;
       }
 
       // Create a simple placeholder texture with URL info
@@ -98,11 +108,23 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
       context.font = '30px Arial';
       context.fillText(urlString, canvas.width / 2, canvas.height / 2 + 50);
       
-      return new THREE.CanvasTexture(canvas);
+      const texture = new THREE.CanvasTexture(canvas);
+      iframeTextureRef.current = texture;
+      setIframeTexture(texture);
+      
+      return () => {
+        if (iframeTextureRef.current) {
+          iframeTextureRef.current.dispose();
+          iframeTextureRef.current = null;
+        }
+      };
     }, [currentUrl?.url]);
 
     // Fallback texture for when no URL is set
-    const fallbackTexture = useMemo(() => {
+    const [fallbackTexture, setFallbackTexture] = useState<THREE.CanvasTexture | null>(null);
+    const fallbackTextureRef = useRef<THREE.CanvasTexture | null>(null);
+    
+    useEffect(() => {
       const canvas = document.createElement('canvas');
       canvas.width = 1024;
       canvas.height = 768;
@@ -117,7 +139,16 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
       context.textBaseline = 'middle';
       context.fillText('No URL Selected', canvas.width / 2, canvas.height / 2);
       
-      return new THREE.CanvasTexture(canvas);
+      const texture = new THREE.CanvasTexture(canvas);
+      fallbackTextureRef.current = texture;
+      setFallbackTexture(texture);
+      
+      return () => {
+        if (fallbackTextureRef.current) {
+          fallbackTextureRef.current.dispose();
+          fallbackTextureRef.current = null;
+        }
+      };
     }, []);
 
     return (
