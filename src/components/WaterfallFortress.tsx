@@ -2159,6 +2159,7 @@ export default function WaterfallFortress() {
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
+  const [showPerfMonitor, setShowPerfMonitor] = useState(false);
   
   // Wall positions state for real-time control
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
@@ -2636,6 +2637,22 @@ export default function WaterfallFortress() {
     };
   }, []);
 
+  // Toggle performance monitor with Command/Ctrl + P
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Command (Mac) or Ctrl (Windows/Linux) + P
+      if ((event.metaKey || event.ctrlKey) && event.key === 'p') {
+        event.preventDefault(); // Prevent default print dialog
+        setShowPerfMonitor(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
       <Canvas
@@ -2644,7 +2661,7 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
-      <Perf position="top-left" minimal={false} />
+      {showPerfMonitor && <Perf position="top-left" minimal={false} />}
       <Scene
         settings={settings}
         onCoinHit={handleCoinHit} 
