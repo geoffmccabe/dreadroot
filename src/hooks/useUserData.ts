@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,69 +43,10 @@ export const useUserData = () => {
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
   const { currentTheme } = useTokenTheme();
+  const loadingRef = useRef(false);
 
-  useEffect(() => {
-    // Wait for auth to load and theme to be available before querying user data
-    if (!authLoading && currentTheme) {
-      loadUserData();
-    }
-  }, [user?.id, authLoading, currentTheme?.id]);
-
-  // Real-time subscription to profile and token balance changes
-  useEffect(() => {
-    if (!user?.id || !currentTheme?.id) return;
-
-    console.log('Setting up real-time subscriptions for user:', user.id, 'theme:', currentTheme.id);
-
-    const profileChannel = supabase
-      .channel(`profile-changes-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_profiles',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Profile updated via real-time:', payload);
-          if (payload.new && typeof payload.new === 'object') {
-            setProfile(payload.new as UserProfile);
-          }
-        }
-      )
-      .subscribe();
-
-    const tokenBalanceChannel = supabase
-      .channel(`token-balance-changes-${user.id}-${currentTheme.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_token_balances',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Token balance updated via real-time:', payload);
-          if (payload.new && typeof payload.new === 'object') {
-            const balance = payload.new as UserTokenBalance;
-            if (balance.token_theme_id === currentTheme.id) {
-              setTokenBalance(balance);
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      console.log('Cleaning up real-time subscriptions');
-      supabase.removeChannel(profileChannel);
-      supabase.removeChannel(tokenBalanceChannel);
-    };
-  }, [user?.id, currentTheme?.id]);
-
-  const loadUserData = async () => {
+  const loadUserData = useCallback(async () => {
+    if (loadingRef.current) return;
     // If no authenticated user or theme, clear state
     if (!user?.id || !currentTheme?.id) {
       setProfile(null);
@@ -117,8 +58,8 @@ export const useUserData = () => {
     }
 
     try {
+      loadingRef.current = true;
       setIsLoading(true);
-      console.log('Loading user data for user:', user.id, 'theme:', currentTheme.id);
       
       // Load profile, token balance, inventory, and roles in parallel
       const [
@@ -148,26 +89,10 @@ export const useUserData = () => {
           .eq('user_id', user.id)
       ]);
 
-      if (profileError) {
-        console.error('Error loading profile:', profileError);
-        throw profileError;
-      }
-
-      if (tokenBalanceError) {
-        console.error('Error loading token balance:', tokenBalanceError);
-      }
-
-      if (inventoryError) {
-        console.error('Error loading inventory:', inventoryError);
-        throw inventoryError;
-      }
-
-      if (rolesError) {
-        console.error('Error loading roles:', rolesError);
-      }
+      if (profileError) throw profileError;
+      if (inventoryError) throw inventoryError;
 
       if (!existingProfile) {
-        console.error('Profile not found for user:', user.id);
         toast({
           title: "Profile Error",
           description: "Please sign in to continue.",
@@ -177,9 +102,7 @@ export const useUserData = () => {
         return;
       }
 
-      // If no token balance exists, create one
       if (!tokenBalanceData) {
-        console.log('Creating new token balance for theme:', currentTheme.id);
         const { data: newBalance, error: createError } = await supabase
           .from('user_token_balances')
           .insert({
@@ -190,11 +113,7 @@ export const useUserData = () => {
           .select()
           .single();
 
-        if (createError) {
-          console.error('Error creating token balance:', createError);
-        } else {
-          setTokenBalance(newBalance);
-        }
+        if (!createError) setTokenBalance(newBalance);
       } else {
         setTokenBalance(tokenBalanceData);
       }
@@ -202,13 +121,7 @@ export const useUserData = () => {
       setProfile(existingProfile);
       setInventory(inventoryData || []);
       setUserRoles(rolesData?.map(r => r.role) || []);
-      console.log('Loaded profile:', existingProfile);
-      console.log('Loaded token balance:', tokenBalanceData);
-      console.log('Loaded inventory:', inventoryData);
-      console.log('Loaded roles:', rolesData);
-
     } catch (error) {
-      console.error('Error loading user data:', error);
       toast({
         title: "Error",
         description: "Failed to load user data",
@@ -216,8 +129,59 @@ export const useUserData = () => {
       });
     } finally {
       setIsLoading(false);
+      loadingRef.current = false;
     }
-  };
+  }, [user, currentTheme?.id]);
+
+  useEffect(() => {
+    if (!authLoading && currentTheme) {
+      loadUserData();
+    }
+  }, [user?.id, authLoading, currentTheme?.id, loadUserData]);
+
+  // Consolidated real-time subscription
+  useEffect(() => {
+    if (!user?.id || !currentTheme?.id) return;
+
+    const channel = supabase
+      .channel('user-data-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_profiles',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.new && typeof payload.new === 'object') {
+            setProfile(payload.new as UserProfile);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_token_balances',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.new && typeof payload.new === 'object') {
+            const balance = payload.new as UserTokenBalance;
+            if (balance.token_theme_id === currentTheme.id) {
+              setTokenBalance(balance);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, currentTheme?.id]);
 
   const buyBlock = async (itemType: string, cost: number) => {
     if (!user?.id || !currentTheme?.id) {
@@ -239,7 +203,6 @@ export const useUserData = () => {
     }
 
     try {
-      console.log(`Starting purchase: ${itemType} for ${cost} coins. Current coins: ${tokenBalance.coins}`);
       
       // Deduct coins from token balance
       const newCoinAmount = tokenBalance.coins - cost;
@@ -249,11 +212,7 @@ export const useUserData = () => {
         .eq('user_id', user.id)
         .eq('token_theme_id', currentTheme.id);
 
-      if (coinsError) {
-        console.error('Error updating coins:', coinsError);
-        throw coinsError;
-      }
-      console.log(`Coins updated: ${tokenBalance.coins} -> ${newCoinAmount}`);
+      if (coinsError) throw coinsError;
 
       // Add to inventory
       const existingItem = inventory.find(item => item.item_type === itemType);
@@ -266,11 +225,7 @@ export const useUserData = () => {
           .update({ quantity: newQuantity })
           .eq('id', existingItem.id);
 
-        if (updateError) {
-          console.error('Error updating inventory:', updateError);
-          throw updateError;
-        }
-        console.log(`Inventory updated: ${itemType} quantity ${existingItem.quantity} -> ${newQuantity}`);
+        if (updateError) throw updateError;
       } else {
         // Create new inventory item
         const { error: insertError } = await supabase
@@ -281,11 +236,7 @@ export const useUserData = () => {
             quantity: 1
           }]);
 
-        if (insertError) {
-          console.error('Error inserting inventory item:', insertError);
-          throw insertError;
-        }
-        console.log(`New inventory item created: ${itemType} with quantity 1`);
+        if (insertError) throw insertError;
       }
 
       // Update local state immediately for better UX
@@ -313,11 +264,8 @@ export const useUserData = () => {
 
   const useBlock = async (itemType: string) => {
     const item = inventory.find(i => i.item_type === itemType);
-    console.log(`useBlock called for ${itemType}. Found item:`, item);
-    console.log('Current inventory:', inventory);
     
     if (!item || item.quantity <= 0) {
-      console.log(`No ${itemType} blocks available in inventory`);
       toast({
         title: "No blocks available",
         description: `You don't have any ${itemType} blocks in your inventory`,
@@ -327,8 +275,6 @@ export const useUserData = () => {
     }
 
     try {
-      console.log(`Using ${itemType} block. Current quantity: ${item.quantity}`);
-      
       const newQuantity = item.quantity - 1;
       const { error } = await supabase
         .from('user_inventory')
@@ -342,12 +288,9 @@ export const useUserData = () => {
         i.id === item.id 
           ? { ...i, quantity: newQuantity }
           : i
-      )); // Keep items with 0 quantity to maintain UI consistency
-
-      console.log(`Successfully used ${itemType} block. New quantity: ${newQuantity}`);
-      console.log('Updated inventory state:', inventory.map(i => `${i.item_type}:${i.quantity}`));
+      ));
       
-      // Refresh data to ensure consistency
+      await loadUserData();
       await loadUserData();
       
       return true;
@@ -363,13 +306,9 @@ export const useUserData = () => {
   };
 
   const addCoins = async (amount: number) => {
-    if (!user?.id || !currentTheme?.id || !tokenBalance) {
-      console.log('No authenticated user, theme, or token balance found, cannot add coins');
-      return false;
-    }
+    if (!user?.id || !currentTheme?.id || !tokenBalance) return false;
 
     try {
-      console.log(`Adding ${amount} coins to token balance for theme:`, currentTheme.id);
       const newCoinAmount = tokenBalance.coins + amount;
       const { error } = await supabase
         .from('user_token_balances')
@@ -377,14 +316,9 @@ export const useUserData = () => {
         .eq('user_id', user.id)
         .eq('token_theme_id', currentTheme.id);
 
-      if (error) {
-        console.error('Error updating coins:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Update local state
       setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
-      console.log(`Successfully added ${amount} coins. New total: ${newCoinAmount}`);
       
       return true;
     } catch (error) {
@@ -399,24 +333,17 @@ export const useUserData = () => {
   };
 
   const updateBlockchainAddress = async (address: string) => {
-    if (!user?.id || !currentTheme?.id || !tokenBalance) {
-      console.log('No authenticated user, theme, or token balance found, cannot update blockchain address');
-      return false;
-    }
+    if (!user?.id || !currentTheme?.id || !tokenBalance) return false;
 
-    try {
+    try{
       const { error } = await supabase
         .from('user_token_balances')
         .update({ blockchain_address: address })
         .eq('user_id', user.id)
         .eq('token_theme_id', currentTheme.id);
 
-      if (error) {
-        console.error('Error updating blockchain address:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Update local state
       setTokenBalance(prev => prev ? { ...prev, blockchain_address: address } : null);
       
       return true;
@@ -432,12 +359,8 @@ export const useUserData = () => {
   };
 
   const updateVisualDistance = async (distance: number) => {
-    if (!user?.id || !profile) {
-      console.log('No authenticated user or profile found, cannot update visual distance');
-      return false;
-    }
+    if (!user?.id || !profile) return false;
 
-    // Ensure distance is within valid range
     const clampedDistance = Math.max(1, Math.min(20, distance));
 
     try {
@@ -446,14 +369,9 @@ export const useUserData = () => {
         .update({ visual_distance: clampedDistance })
         .eq('user_id', user.id);
 
-      if (error) {
-        console.error('Error updating visual distance:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Update local state
       setProfile(prev => prev ? { ...prev, visual_distance: clampedDistance } : null);
-      console.log(`🔭 Visual distance changed: ${clampedDistance} chunks (${clampedDistance * 16} blocks radius)`);
       
       return true;
     } catch (error) {
@@ -468,10 +386,7 @@ export const useUserData = () => {
   };
 
   const updateFogEnabled = async (enabled: boolean) => {
-    if (!user?.id || !profile) {
-      console.log('No authenticated user or profile found, cannot update fog setting');
-      return false;
-    }
+    if (!user?.id || !profile) return false;
 
     try {
       const { error } = await supabase
@@ -479,14 +394,9 @@ export const useUserData = () => {
         .update({ fog_enabled: enabled })
         .eq('user_id', user.id);
 
-      if (error) {
-        console.error('Error updating fog setting:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Update local state
       setProfile(prev => prev ? { ...prev, fog_enabled: enabled } : null);
-      console.log(`🌫️ Distance fog ${enabled ? 'enabled' : 'disabled'}`);
       
       return true;
     } catch (error) {

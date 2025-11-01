@@ -31,35 +31,13 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   // Track if user is in block mode for periodic syncing
   const isBlockModeRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const syncingRef = useRef(false);
 
-  // Load blocks when userId becomes available
-  useEffect(() => {
-    if (userId) {
-      console.log('✅ User authenticated, loading blocks for:', userId);
-      initializeCache();
-    } else {
-      console.log('⏳ Waiting for user authentication...');
-      setIsLoading(true);
-      setBlocks([]);
-    }
-    
-    const cleanup = setupRealtimeSubscription();
-    return cleanup;
-  }, [userId]); // Re-run when userId changes
-
-  // Initialize IndexedDB and load blocks
-  const initializeCache = async () => {
-    if (!userId) {
-      console.warn('⚠️ Cannot initialize cache without userId');
-      setIsLoading(false);
-      return;
-    }
+  const syncWithSupabase = useCallback(async () => {
+    if (syncingRef.current) return;
     
     try {
-      setIsLoading(true);
-      await initDB();
-      
-      console.log('💾 Loading blocks from IndexedDB...');
+      syncingRef.current = true;
       
       // Load blocks from IndexedDB first (instant)
       const cachedBlocks = await getAllBlocks();
@@ -74,19 +52,6 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         updated_at: block.updated_at
       })));
 
-      // Then sync with Supabase in background
-      await syncWithSupabase();
-    } catch (error) {
-      console.error('Error initializing cache:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Sync with Supabase - load all blocks and update cache
-  const syncWithSupabase = async () => {
-    try {
-      console.log('Syncing with Supabase...');
       
       // Get all blocks from Supabase
       const { data: supabaseBlocks, error } = await supabase
@@ -116,17 +81,45 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         await addBlock(dbBlock);
       }
 
-      // Update local state
       setBlocks(supabaseBlocks || []);
-      
-      console.log(`Synced ${supabaseBlocks?.length || 0} blocks from Supabase`);
     } catch (error) {
-      console.error('Error syncing with Supabase:', error);
+      console.error('Error syncing:', error);
+    } finally {
+      syncingRef.current = false;
     }
-  };
+  }, []);
 
-  // Setup real-time subscription for other users' changes
-  const setupRealtimeSubscription = () => {
+  const initializeCache = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      await initDB();
+      
+      const cachedBlocks = await getAllBlocks();
+      setBlocks(cachedBlocks.map(block => ({
+        id: block.id,
+        user_id: block.user_id,
+        position_x: block.position_x,
+        position_y: block.position_y,
+        position_z: block.position_z,
+        block_type: block.block_type,
+        created_at: block.created_at,
+        updated_at: block.updated_at
+      })));
+
+      await syncWithSupabase();
+    } catch (error) {
+      console.error('Error initializing:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId, syncWithSupabase]);
+
+  const setupRealtimeSubscription = useCallback(() => {
     const channel = supabase
       .channel('placed_blocks_changes')
       .on(
@@ -137,8 +130,6 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
           table: 'placed_blocks'
         },
         async (payload) => {
-          console.log('Real-time event received:', payload.eventType);
-          
           if (payload.eventType === 'INSERT') {
             const newBlock = payload.new as PlacedBlock;
             
@@ -185,7 +176,19 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  };
+  }, []);
+
+  useEffect(() => {
+    if (userId) {
+      initializeCache();
+    } else {
+      setIsLoading(true);
+      setBlocks([]);
+    }
+    
+    const cleanup = setupRealtimeSubscription();
+    return cleanup;
+  }, [userId, initializeCache, setupRealtimeSubscription]);
 
   // Optimized block placement with instant local feedback
   const placeBlock = async (x: number, y: number, z: number, blockType: string, expiresAt?: string) => {
@@ -210,10 +213,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         block.position_z === z
       );
       
-      if (isDuplicate) {
-        console.warn('Block already exists at position', {x, y, z}, '- skipping placement');
-        return null;
-      }
+      if (isDuplicate) return null;
       
       // Generate temporary ID for instant feedback
       const tempId = `temp-${Date.now()}-${Math.random()}`;
@@ -235,15 +235,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         optimisticBlock.expires_at = expiresAt;
       }
 
-      // Add to local state immediately
-      setBlocks(prev => {
-        console.log('Adding new block to state, previous count:', prev.length);
-        const updated = [...prev, optimisticBlock];
-        console.log('New block count:', updated.length);
-        return updated;
-      });
-      
-      console.log('Block placed successfully, returning ID:', tempId);
+      setBlocks(prev => [...prev, optimisticBlock]);
 
       // Add to IndexedDB (not synced yet)
       const dbBlock: DBBlock = {
@@ -255,10 +247,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
 
       // If not in block mode, sync in background (non-blocking for instant placement)
       if (!isBlockModeRef.current) {
-        syncBlockToSupabase(dbBlock).catch(error => {
-          console.error('Background sync failed:', error);
-          // Block remains in IndexedDB as unsynced and will retry with next batch sync
-        });
+        syncBlockToSupabase(dbBlock).catch(() => {});
       }
 
       return optimisticBlock;
@@ -277,11 +266,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   const syncBlockToSupabase = async (dbBlock: DBBlock) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        console.error('Cannot sync: user not authenticated');
-        return;
-      }
+      if (!user) return;
 
       const blockData: any = {
         user_id: user.id,
@@ -307,9 +292,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         .single();
 
       if (error) {
-        // Handle unique constraint violation gracefully
         if (error.code === '23505') {
-          console.log('Block position already occupied, removing local temp block');
           await removeFromDB(dbBlock.id);
           return;
         }
@@ -340,31 +323,19 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   const batchSyncBlocks = async () => {
     try {
       const unsyncedBlocks = await getUnsyncedBlocks();
-      if (unsyncedBlocks.length === 0) {
-        console.log('No unsynced blocks to process');
-        return;
-      }
-      
-      console.log(`Syncing ${unsyncedBlocks.length} unsynced blocks...`);
+      if (unsyncedBlocks.length === 0) return;
 
       for (const block of unsyncedBlocks) {
         try {
           await syncBlockToSupabase(block);
-        } catch (error) {
-          console.error(`Failed to sync block ${block.id}:`, error);
-          // Don't retry immediately to prevent spam
-        }
+        } catch (error) {}
       }
-    } catch (error) {
-      console.error('Error in batch sync:', error);
-      // Don't propagate the error to prevent sync loop
-    }
+    } catch (error) {}
   };
 
   // Remove block with ownership check
   const removeBlock = async (blockId: string) => {
     try {
-      console.log('Attempting to remove block:', blockId);
       
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -379,11 +350,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
 
       // Check ownership before attempting delete
       const blockToRemove = blocks.find(b => b.id === blockId);
-      
-      if (!blockToRemove) {
-        console.error('Block not found in local state');
-        return false;
-      }
+      if (!blockToRemove) return false;
 
       // Check if user owns the block or is admin
       const { data: roles } = await supabase
@@ -413,7 +380,6 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         .eq('id', blockId);
       
       if (error) {
-        console.error('Failed to remove block from Supabase:', error);
         toast({
           title: "Failed to remove block",
           description: "Could not remove this block",
@@ -424,10 +390,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         return false;
       }
       
-      // Remove from IndexedDB
       await removeFromDB(blockId);
       
-      console.log('Block removed successfully');
       toast({
         title: "Block removed",
         description: "Block removed successfully",
@@ -444,15 +408,11 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     }
   };
 
-  // Enable/disable block mode with periodic syncing
   const setBlockMode = useCallback((enabled: boolean) => {
     isBlockModeRef.current = enabled;
-    console.log(`Block mode ${enabled ? 'enabled' : 'disabled'} - periodic sync ${enabled ? 'started' : 'stopped'}`);
 
     if (enabled) {
-      // Start periodic sync every 5 seconds
       syncIntervalRef.current = setInterval(() => {
-        console.log('Periodic sync triggered...');
         batchSyncBlocks();
       }, 5000);
     } else {
@@ -461,8 +421,6 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         clearInterval(syncIntervalRef.current);
         syncIntervalRef.current = null;
       }
-      // Final sync when exiting block mode
-      console.log('Performing final sync before exiting block mode...');
       batchSyncBlocks();
     }
   }, []);
@@ -473,13 +431,10 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       try {
         const { data } = await supabase.rpc('delete_expired_blocks');
         if (data && data > 0) {
-          console.log(`Cleaned up ${data} expired blocks`);
           await syncWithSupabase();
         }
-      } catch (error) {
-        console.error('Error cleaning up expired blocks:', error);
-      }
-    }, 60000); // Every 60 seconds
+      } catch (error) {}
+    }, 60000);
 
     return () => {
       clearInterval(cleanupInterval);

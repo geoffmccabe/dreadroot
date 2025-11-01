@@ -26,12 +26,7 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
     const setupMultiplayer = async () => {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('[Multiplayer] No user logged in');
-        return;
-      }
-
-      console.log('[Multiplayer] Setting up room:', roomId);
+      if (!user) return;
 
       // Create channel for this room
       const multiplayerChannel = supabase.channel(`room:${roomId}`, {
@@ -46,8 +41,6 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
       multiplayerChannel
         .on('presence', { event: 'sync' }, () => {
           const state = multiplayerChannel.presenceState();
-          console.log('[Multiplayer] Presence sync:', Object.keys(state).length, 'players');
-          
           const newPlayers = new Map<string, PlayerState>();
           
           Object.entries(state).forEach(([userId, presences]: [string, any[]]) => {
@@ -65,17 +58,12 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
           
           setPlayers(newPlayers);
         })
-        .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-          console.log('[Multiplayer] Player joined:', key);
-        })
-        .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-          console.log('[Multiplayer] Player left:', key);
-        });
+        .on('presence', { event: 'join' }, () => {})
+        .on('presence', { event: 'leave' }, () => {});
 
       // Subscribe and set initial presence
       await multiplayerChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          console.log('[Multiplayer] Connected to room');
           setIsConnected(true);
           
           // Set initial presence with a random color for this player
@@ -95,10 +83,8 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
 
     setupMultiplayer();
 
-    // Cleanup
     return () => {
       if (channel) {
-        console.log('[Multiplayer] Cleaning up channel');
         supabase.removeChannel(channel);
       }
     };

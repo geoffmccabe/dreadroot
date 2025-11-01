@@ -55,18 +55,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Reuse matrix to avoid garbage collection
   const matrixRef = useRef(new THREE.Matrix4());
   
-  // Load texture with animated GIF support
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  
-  // Debug log for Harold block
-  if (blockDef?.key === 'harold') {
-    console.log('🎨 Loading texture for Harold block:', {
-      key: blockDef.key,
-      textureUrl,
-      hasDiffuse: !!blockDef.texture?.diffuse
-    });
-  }
-  
   const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture
@@ -102,10 +91,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const texture = cachedTextureData?.texture || null;
   const cachedIsAnimated = cachedTextureData?.isAnimated || false;
   
-  // Register animated texture update function
   useEffect(() => {
     if (cachedTextureData?.isAnimated && cachedTextureData.updateFn && textureUrl) {
-      console.log('🎬 Registering animated texture:', textureUrl);
       activeAnimatedTextures.set(textureUrl, cachedTextureData.updateFn);
     }
   }, [cachedTextureData, textureUrl]);

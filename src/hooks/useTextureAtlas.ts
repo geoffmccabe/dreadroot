@@ -11,31 +11,22 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
   const [atlasTexture, setAtlasTexture] = useState<THREE.Texture | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+  const creatingRef = useRef(false);
   const lastUrlsRef = useRef<string>('');
   
-  // Create a stable array of URLs for comparison
   const urlsString = useMemo(() => {
-    const result = JSON.stringify(imageUrls.map(url => url || ''));
-    console.log('🔄 useTextureAtlas - URLs changed:', result);
-    return result;
+    return JSON.stringify(imageUrls.map(url => url || ''));
   }, [imageUrls]);
   
   useEffect(() => {
-    console.log('🔄 useTextureAtlas effect triggered');
-    console.log('Current URLs:', urlsString);
-    console.log('Last URLs:', lastUrlsRef.current);
+    if (lastUrlsRef.current === urlsString || creatingRef.current) return;
     
-    // Don't regenerate if URLs haven't actually changed
-    if (lastUrlsRef.current === urlsString) {
-      console.log('⏭️ URLs unchanged, skipping atlas regeneration');
-      return;
-    }
-    
-    console.log('🚀 Starting atlas regeneration...');
     lastUrlsRef.current = urlsString;
     
     const createAtlas = async () => {
+      if (creatingRef.current) return;
+      
+      creatingRef.current = true;
       setIsLoading(true);
       setError(null);
       
@@ -64,9 +55,7 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
         
         // Load and draw images
         const imagePromises = imageUrls.map(async (url, index) => {
-          if (!url) return; // Skip empty slots
-          
-          console.log(`Loading image for slot ${index + 1}:`, url);
+          if (!url) return;
           
           try {
             const img = new Image();
@@ -80,9 +69,7 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
                 const x = col * slotWidth;
                 const y = row * slotHeight;
                 
-                console.log(`Drawing image ${index + 1} at canvas position (${x}, ${y}), col=${col}, row=${row}`);
-                
-                // Implement proper "cover" behavior like CSS background-size: cover
+                // Implement "cover" behavior
                 const imageAspect = img.width / img.height;
                 const slotAspect = slotWidth / slotHeight;
                 
@@ -108,16 +95,11 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
                 resolve();
               };
               
-              img.onerror = () => {
-                console.warn(`Failed to load image: ${url}`);
-                resolve(); // Continue even if image fails
-              };
+              img.onerror = () => resolve();
               
               img.src = url;
             });
-          } catch (error) {
-            console.warn(`Error loading image ${url}:`, error);
-          }
+          } catch (error) {}
         });
         
         // Wait for all images to load (or fail)
@@ -165,8 +147,9 @@ export const useTextureAtlas = (imageUrls: (string | null | undefined)[]): UseTe
         );
         
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error creating atlas');
+        setError(err instanceof Error ? err.message : 'Unknown error');
         setIsLoading(false);
+        creatingRef.current = false;
       }
     };
     
