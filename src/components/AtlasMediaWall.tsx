@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { useStoredTextureAtlas } from '@/hooks/useStoredTextureAtlas';
 import * as THREE from 'three';
 
@@ -17,7 +17,7 @@ interface AtlasMediaWallProps {
   isMoveMode?: boolean;
 }
 
-export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
+export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = React.memo(({
   wallNumber,
   wallType,
   position,
@@ -28,51 +28,26 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
   const materialsRef = useRef<THREE.MeshBasicMaterial[]>([]);
   
   // Extract image URLs in slot order (1-6)
-  const imageUrls = Array.from({ length: 6 }, (_, index) => {
+  const imageUrls = useMemo(() => Array.from({ length: 6 }, (_, index) => {
     const slotNumber = index + 1;
     const mediaItem = mediaItems.find(item => item.slot_number === slotNumber);
     return mediaItem?.media_type === 'image' ? mediaItem.media_url : null;
-  });
+  }), [mediaItems]);
   
   const { atlasTexture, isLoading, error } = useStoredTextureAtlas(wallNumber, imageUrls);
   
-  // Force material updates when texture changes
   useEffect(() => {
     if (atlasTexture && !isMoveMode) {
-      console.log(`🔄 Wall ${wallNumber}: Forcing material update for atlas texture`, {
-        textureId: atlasTexture.id,
-        materialsCount: materialsRef.current.length
-      });
-      
-      materialsRef.current.forEach((material, index) => {
+      materialsRef.current.forEach((material) => {
         if (material) {
           material.map = atlasTexture;
           material.color.setHex(0xffffff);
           material.opacity = 1;
           material.needsUpdate = true;
-          console.log(`  ✓ Updated material ${index + 1}`);
         }
       });
     }
-  }, [atlasTexture, isMoveMode, wallNumber]);
-  
-  // Debug logging for Wall 3
-  if (wallNumber === 3) {
-    console.log(`🎨 Wall ${wallNumber} render state:`, {
-      hasAtlasTexture: !!atlasTexture,
-      atlasTextureId: atlasTexture?.id,
-      atlasImage: atlasTexture?.image ? {
-        width: atlasTexture.image.width,
-        height: atlasTexture.image.height,
-        complete: atlasTexture.image.complete
-      } : null,
-      isLoading,
-      error,
-      mediaItemsCount: mediaItems.length,
-      mediaItems: mediaItems.map(m => ({ slot: m.slot_number, hasUrl: !!m.media_url, type: m.media_type })),
-      isMoveMode
-    });
-  }
+  }, [atlasTexture, isMoveMode]);
   
   // Calculate wall dimensions - 3x2 aspect ratio for square slots
   const wallWidth = 30;  // 3x2 aspect ratio: 30:20 = 3:2
@@ -104,22 +79,24 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
     return [uMin, vMin, uMax, vMax];
   };
   
-  // Create geometry with custom UV mapping for each slot
-  const createSlotGeometry = (slotIndex: number) => {
-    const geometry = new THREE.PlaneGeometry(slotWidth, slotHeight);
-    const [uMin, vMin, uMax, vMax] = getSlotUVs(slotIndex);
-    
-    // Update UV coordinates - PlaneGeometry vertices are:
-    // 0: bottom-left, 1: bottom-right, 2: top-left, 3: top-right
-    const uvs = geometry.attributes.uv;
-    uvs.setXY(0, uMin, vMin); // Bottom-left vertex
-    uvs.setXY(1, uMax, vMin); // Bottom-right vertex  
-    uvs.setXY(2, uMin, vMax); // Top-left vertex
-    uvs.setXY(3, uMax, vMax); // Top-right vertex
-    uvs.needsUpdate = true;
-    
-    return geometry;
-  };
+  // Memoize slot geometries - only create once
+  const slotGeometries = useMemo(() => {
+    const geometries: THREE.PlaneGeometry[] = [];
+    for (let slotIndex = 0; slotIndex < 6; slotIndex++) {
+      const geometry = new THREE.PlaneGeometry(slotWidth, slotHeight);
+      const [uMin, vMin, uMax, vMax] = getSlotUVs(slotIndex);
+      
+      const uvs = geometry.attributes.uv;
+      uvs.setXY(0, uMin, vMin);
+      uvs.setXY(1, uMax, vMin);
+      uvs.setXY(2, uMin, vMax);
+      uvs.setXY(3, uMax, vMax);
+      uvs.needsUpdate = true;
+      
+      geometries.push(geometry);
+    }
+    return geometries;
+  }, []);
   
   if (error) {
     console.warn(`Atlas error for wall ${wallNumber}:`, error);
@@ -146,7 +123,7 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
           <mesh 
             key={`${wallNumber}-slot-${index + 1}`}
             position={[x, y, 0.5]}
-            geometry={createSlotGeometry(index)}
+            geometry={slotGeometries[index]}
           >
             <meshBasicMaterial
               ref={(mat) => {
@@ -180,4 +157,4 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = ({
       )}
     </group>
   );
-};
+});
