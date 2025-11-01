@@ -508,7 +508,6 @@ function BlocksList({ userRoles }: BlocksListProps) {
     texture: null as File | null
   });
   const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
-  const [cleaningUp, setCleaningUp] = useState(false);
   
   // Block Rain settings
   const [blockRainSettings, setBlockRainSettings] = useState({
@@ -549,30 +548,6 @@ function BlocksList({ userRoles }: BlocksListProps) {
     }
   }, [isAdmin, activeClass]);
   
-  const handleCleanupSkyBlocks = async () => {
-    if (!isSuperAdmin) return;
-    
-    setCleaningUp(true);
-    try {
-      const { data, error } = await supabase.rpc('remove_sky_blocks');
-      
-      if (error) throw error;
-      
-      toast({
-        title: "Sky Blocks Removed",
-        description: `Removed ${data} blocks stuck in the sky`,
-      });
-    } catch (error) {
-      console.error('Failed to cleanup sky blocks:', error);
-      toast({
-        title: "Cleanup Failed",
-        description: "Failed to remove sky blocks",
-        variant: "destructive"
-      });
-    } finally {
-      setCleaningUp(false);
-    }
-  };
   
   // Filter blocks by active class and sort mystery blocks by tier
   const filteredBlocks = blocks
@@ -846,7 +821,9 @@ function BlocksList({ userRoles }: BlocksListProps) {
     }
   }, [blockRainSettings, selectedRainBlocks, isAdmin, activeClass]);
 
-  if (loading) {
+  // Show loading only if we have no blocks yet (initial load)
+  // This prevents showing loading during block rain when blocks are already loaded
+  if (loading && blocks.length === 0) {
     return <div className="text-sm opacity-75">Loading blocks...</div>;
   }
 
@@ -856,24 +833,14 @@ function BlocksList({ userRoles }: BlocksListProps) {
         <h3 className="text-sm font-semibold">Blocks Registry</h3>
         <div className="flex gap-2">
           {isSuperAdmin && (
-            <>
-              <Button 
-                size="sm"
-                variant="outline"
-                onClick={handleCleanupSkyBlocks}
-                disabled={cleaningUp}
-              >
-                {cleaningUp ? "Cleaning..." : "Cleanup Sky Blocks"}
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={() => setShowNewBlockDialog(true)}
-                className="gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                New Block
-              </Button>
-            </>
+            <Button 
+              size="sm" 
+              onClick={() => setShowNewBlockDialog(true)}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Block
+            </Button>
           )}
         </div>
       </div>
