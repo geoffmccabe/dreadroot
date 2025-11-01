@@ -137,7 +137,6 @@ export const AtlasMediaWall: React.FC<AtlasMediaWallProps> = React.memo(({
               blending={THREE.NormalBlending}
               depthWrite={false}
               alphaTest={0.01}
-              needsUpdate={true}
             />
           </mesh>
         );
