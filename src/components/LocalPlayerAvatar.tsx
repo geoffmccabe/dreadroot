@@ -14,12 +14,14 @@ export function LocalPlayerAvatar() {
   const fbx = useFBX('/y-bot.fbx');
   const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
 
-  // Configure avatar materials, shadows, and animations
-  useEffect(() => {
-    if (!fbx) return;
+  // Clone and configure avatar
+  const avatarClone = React.useMemo(() => {
+    if (!fbx) return null;
     
-    // Configure materials and shadows on the original fbx
-    fbx.traverse((child) => {
+    const clone = fbx.clone();
+    
+    // Configure materials and shadows on the CLONE only
+    clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
@@ -29,9 +31,16 @@ export function LocalPlayerAvatar() {
         }
       }
     });
+    
+    return clone;
+  }, [fbx]);
 
-    // Setup animation mixer
-    mixerRef.current = new THREE.AnimationMixer(fbx);
+  // Setup animation mixer on the clone
+  useEffect(() => {
+    if (!avatarClone) return;
+
+    // Setup animation mixer on the clone
+    mixerRef.current = new THREE.AnimationMixer(avatarClone);
     
     // Load walk animation
     if (walkAnim && walkAnim.animations.length > 0) {
@@ -43,12 +52,7 @@ export function LocalPlayerAvatar() {
     return () => {
       mixerRef.current?.stopAllAction();
     };
-  }, [fbx, walkAnim]);
-
-  const avatarClone = React.useMemo(() => {
-    if (!fbx) return null;
-    return fbx.clone();
-  }, [fbx]);
+  }, [avatarClone, walkAnim]);
 
   // Follow camera and update animations
   useFrame((_, delta) => {
