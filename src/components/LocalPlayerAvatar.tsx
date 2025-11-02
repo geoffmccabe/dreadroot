@@ -14,36 +14,12 @@ export function LocalPlayerAvatar() {
   const fbx = useFBX('/y-bot.fbx');
   const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
 
-  // Clone the FBX for rendering
-  const avatarClone = React.useMemo(() => {
-    if (!fbx) return null;
-    const clone = fbx.clone();
-    
-    // Debug: Log the FBX hierarchy and scales
-    console.log('🤖 FBX Root scale:', fbx.scale);
-    fbx.traverse((child) => {
-      if (child instanceof THREE.Object3D) {
-        console.log(`  - ${child.type} scale:`, child.scale, 'position:', child.position);
-      }
-    });
-    
-    // Force scale on ALL objects in the hierarchy
-    clone.traverse((child) => {
-      if (child instanceof THREE.Object3D && child !== clone) {
-        child.scale.set(1, 1, 1); // Reset any baked scaling
-      }
-    });
-    clone.scale.set(0.01, 0.01, 0.01);
-    
-    return clone;
-  }, [fbx]);
-
-  // Configure avatar materials, shadows, and animations on the clone
+  // Configure avatar materials, shadows, and animations
   useEffect(() => {
-    if (!avatarClone) return;
+    if (!fbx) return;
     
     // Configure materials and shadows
-    avatarClone.traverse((child) => {
+    fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
@@ -54,8 +30,8 @@ export function LocalPlayerAvatar() {
       }
     });
 
-    // Setup animation mixer on the clone
-    mixerRef.current = new THREE.AnimationMixer(avatarClone);
+    // Setup animation mixer
+    mixerRef.current = new THREE.AnimationMixer(fbx);
     
     // Load walk animation
     if (walkAnim?.animations.length > 0) {
@@ -67,7 +43,7 @@ export function LocalPlayerAvatar() {
     return () => {
       mixerRef.current?.stopAllAction();
     };
-  }, [avatarClone, walkAnim]);
+  }, [fbx, walkAnim]);
 
   // Follow camera and update animations
   useFrame((_, delta) => {
@@ -112,9 +88,10 @@ export function LocalPlayerAvatar() {
 
   return (
     <group ref={groupRef}>
-      {avatarClone && (
+      {fbx && (
         <primitive 
-          object={avatarClone} 
+          object={fbx} 
+          scale={0.01}
           position={[0, -0.9, 0]}
         />
       )}
