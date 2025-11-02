@@ -1941,9 +1941,6 @@ function Scene({
       {/* Multiplayer - render other players */}
       <MultiplayerPlayers players={players} />
       
-      {/* Local player avatar */}
-      <LocalPlayerAvatar />
-      
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting weatherSettings={weatherSettings} />
 
