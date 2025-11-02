@@ -9,20 +9,10 @@ export function LocalPlayerAvatar() {
   const actionsRef = useRef<{ [key: string]: THREE.AnimationAction | null }>({});
   const currentActionRef = useRef<string>('idle');
   const lastPositionRef = useRef(new THREE.Vector3());
-  const [loadError, setLoadError] = React.useState(false);
   
   const { camera } = useThree();
-  
-  let fbx = null;
-  let walkAnim = null;
-  
-  try {
-    fbx = useFBX('/y-bot.fbx');
-    walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
-  } catch (error) {
-    console.error('Failed to load FBX models for local player:', error);
-    if (!loadError) setLoadError(true);
-  }
+  const fbx = useFBX('/y-bot.fbx');
+  const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
 
   // Configure avatar materials, shadows, and animations
   useEffect(() => {
@@ -102,25 +92,13 @@ export function LocalPlayerAvatar() {
 
   return (
     <group ref={groupRef}>
-      {/* 3D Avatar Model or fallback capsule */}
-      {avatarClone && !loadError ? (
+      {/* 3D Avatar Model */}
+      {avatarClone && (
         <primitive 
           object={avatarClone} 
           scale={0.01}
           position={[0, 0, 0]}
         />
-      ) : (
-        <>
-          {/* Fallback: Simple capsule for local player */}
-          <mesh position={[0, 0, 0]} castShadow receiveShadow>
-            <capsuleGeometry args={[0.3, 1.2, 8, 16]} />
-            <meshStandardMaterial color="#4a9eff" />
-          </mesh>
-          <mesh position={[0, 0.8, 0]} castShadow>
-            <sphereGeometry args={[0.2, 16, 16]} />
-            <meshStandardMaterial color="#4a9eff" emissive="#4a9eff" emissiveIntensity={0.3} />
-          </mesh>
-        </>
       )}
     </group>
   );
