@@ -762,95 +762,87 @@ function FirstPersonControls({
     // Store previous position
     const prevPosition = camera.position.clone();
 
-    // PER-AXIS COLLISION DETECTION
-    // X-axis movement and collision
-    if (deltaMovement.x !== 0) {
-      const testPos = camera.position.clone();
-      testPos.x += deltaMovement.x;
-      
-      const collision = checkAxisCollision(testPos, true);
-      if (collision) {
-        // Revert X movement
-        camera.position.x = prevPosition.x;
-        velocity.current.x = 0;
-      } else {
-        camera.position.x = testPos.x;
-      }
+    // COMBINED COLLISION DETECTION - Test full movement before applying
+    const targetPos = camera.position.clone().add(deltaMovement);
+    
+    // Ground collision check
+    if (targetPos.y < playerHeight) {
+      targetPos.y = playerHeight;
+      velocity.current.y = 0;
+      onGround.current = true;
     }
-
-    // Y-axis movement and collision
-    if (deltaMovement.y !== 0) {
-      const testPos = camera.position.clone();
-      testPos.y += deltaMovement.y;
+    
+    // Check collision at target position
+    const collision = checkAxisCollision(targetPos, false);
+    
+    if (collision) {
+      // Try sliding along each axis separately
+      let moved = false;
       
-      // Ground collision check
-      if (testPos.y < playerHeight) {
-        camera.position.y = playerHeight;
-        velocity.current.y = 0;
-        onGround.current = true;
-      } else {
-        const collision = checkAxisCollision(testPos, false);
-        if (collision) {
-          // Determine if hitting from above or below
-          if (velocity.current.y < 0) {
-            // Falling down, landing on block top
-            camera.position.y = collision.max.y + playerHeight;
-            velocity.current.y = 0;
-            onGround.current = true;
-          } else {
-            // Moving up, hitting ceiling
-            camera.position.y = collision.min.y;
-            velocity.current.y = 0;
-          }
+      // Try X-only movement
+      if (!moved && deltaMovement.x !== 0) {
+        const xOnlyPos = camera.position.clone();
+        xOnlyPos.x += deltaMovement.x;
+        if (!checkAxisCollision(xOnlyPos, true)) {
+          camera.position.x = xOnlyPos.x;
+          moved = true;
         } else {
-          camera.position.y = testPos.y;
-          onGround.current = false;
+          velocity.current.x = 0;
         }
       }
-    }
-
-    // Z-axis movement and collision
-    if (deltaMovement.z !== 0) {
-      const testPos = camera.position.clone();
-      testPos.z += deltaMovement.z;
       
-      const collision = checkAxisCollision(testPos, true);
-      if (collision) {
-        // Revert Z movement
-        camera.position.z = prevPosition.z;
-        velocity.current.z = 0;
-      } else {
-        camera.position.z = testPos.z;
+      // Try Z-only movement
+      if (!moved && deltaMovement.z !== 0) {
+        const zOnlyPos = camera.position.clone();
+        zOnlyPos.z += deltaMovement.z;
+        if (!checkAxisCollision(zOnlyPos, true)) {
+          camera.position.z = zOnlyPos.z;
+          moved = true;
+        } else {
+          velocity.current.z = 0;
+        }
       }
+      
+      // Handle Y collision
+      if (deltaMovement.y < 0) {
+        // Falling - land on top
+        camera.position.y = collision.max.y + playerHeight;
+        velocity.current.y = 0;
+        onGround.current = true;
+      } else if (deltaMovement.y > 0) {
+        // Jumping - hit ceiling
+        camera.position.y = collision.min.y;
+        velocity.current.y = 0;
+      }
+    } else {
+      // No collision - apply full movement
+      camera.position.copy(targetPos);
+      onGround.current = false;
     }
-
-    // Step-up logic for climbing small obstacles (disabled while crawling)
+    
+    // Step-up logic (simplified)
     if ((deltaMovement.x !== 0 || deltaMovement.z !== 0) && onGround.current && !isCrawling) {
       const stepHeight = 0.6;
       const feetY = camera.position.y - playerHeight;
       
-      // Check if there's a block in front that we could step onto
       const forwardTestPos = camera.position.clone();
-      forwardTestPos.x = prevPosition.x + deltaMovement.x;
-      forwardTestPos.z = prevPosition.z + deltaMovement.z;
+      forwardTestPos.x += deltaMovement.x * 0.1;
+      forwardTestPos.z += deltaMovement.z * 0.1;
       
       const blockInFront = checkAxisCollision(forwardTestPos, true);
       
       if (blockInFront && blockInFront.max.y - feetY <= stepHeight && blockInFront.max.y > feetY) {
-        // Try to step up
         const steppedUpPos = camera.position.clone();
         steppedUpPos.y = blockInFront.max.y + playerHeight;
         
-        const collisionAfterStepUp = checkAxisCollision(steppedUpPos, true);
-        if (!collisionAfterStepUp) {
+        if (!checkAxisCollision(steppedUpPos, true)) {
           camera.position.y = steppedUpPos.y;
           onGround.current = true;
         }
       }
     }
     
-    // Simplified ground detection - already handled in Y-axis collision
-    // Just verify if we're close enough to ground level
+    // Ground detection
     const feetY = camera.position.y - playerHeight;
     if (feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1) {
       onGround.current = true;
