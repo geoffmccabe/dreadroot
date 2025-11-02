@@ -182,18 +182,14 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
     waterfallBlockingWidth = 4,
   } = config;
   
-  // Create raycaster from screen center (where hand cursor is displayed)
-  // NDC coordinates: (0, 0) = center of screen
+  // For pointer-locked first-person camera, raycast in camera's forward direction
+  // The hand cursor visually represents where the camera is looking
   const raycaster = new THREE.Raycaster();
-  const screenCenter = new THREE.Vector2(0, 0);
+  const direction = new THREE.Vector3(0, 0, -1);
+  direction.applyQuaternion(camera.quaternion);
+  direction.normalize();
   
-  // Ensure camera matrices are up to date before raycasting
-  camera.updateMatrixWorld();
-  if ('updateProjectionMatrix' in camera && typeof camera.updateProjectionMatrix === 'function') {
-    (camera as any).updateProjectionMatrix();
-  }
-  
-  raycaster.setFromCamera(screenCenter, camera);
+  raycaster.set(camera.position, direction);
   raycaster.far = 1000;
   
   // Create temporary raycasting targets
