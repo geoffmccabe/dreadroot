@@ -28,6 +28,7 @@ import { calculateBlockPlacement } from '@/lib/blockPlacement';
 import { supabase } from '@/integrations/supabase/client';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
+import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 
 // Custom hook for weather cycle - shared by sky and lighting
 function useWeatherCycle(weatherSettings: {
@@ -1939,6 +1940,9 @@ function Scene({
       
       {/* Multiplayer - render other players */}
       <MultiplayerPlayers players={players} />
+      
+      {/* Local player avatar */}
+      <LocalPlayerAvatar />
       
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting weatherSettings={weatherSettings} />
