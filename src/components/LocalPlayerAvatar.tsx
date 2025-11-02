@@ -53,17 +53,24 @@ export function LocalPlayerAvatar() {
 
   // Follow camera and update animations
   useFrame((_, delta) => {
-    if (!groupRef.current) return;
+    if (!groupRef.current) {
+      console.log('[LocalPlayerAvatar] groupRef.current is null');
+      return;
+    }
     
     // Position avatar behind and below camera
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
-    groupRef.current.position.set(
-      camera.position.x - cameraDirection.x * 0.3,
-      camera.position.y - 0.9,
-      camera.position.z - cameraDirection.z * 0.3
-    );
+    const newX = camera.position.x - cameraDirection.x * 0.3;
+    const newY = camera.position.y - 0.9;
+    const newZ = camera.position.z - cameraDirection.z * 0.3;
+    
+    groupRef.current.position.set(newX, newY, newZ);
+    
+    console.log('[LocalPlayerAvatar] Camera pos:', camera.position.x.toFixed(2), camera.position.y.toFixed(2), camera.position.z.toFixed(2));
+    console.log('[LocalPlayerAvatar] Avatar pos:', newX.toFixed(2), newY.toFixed(2), newZ.toFixed(2));
+    console.log('[LocalPlayerAvatar] Avatar scale:', groupRef.current.scale.x);
 
     // Rotate to match camera yaw
     const yaw = Math.atan2(cameraDirection.x, cameraDirection.z);
