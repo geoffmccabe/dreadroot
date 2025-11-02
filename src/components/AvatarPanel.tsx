@@ -1,0 +1,310 @@
+import React, { useState } from 'react';
+import { useAvatar, AnimationConfig } from '@/contexts/AvatarContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Play, Trash2, Plus } from 'lucide-react';
+
+export function AvatarPanel() {
+  const { 
+    avatarConfig, 
+    updateAvatarConfig, 
+    updateAnimation, 
+    addAnimation,
+    removeAnimation,
+    triggerAnimation,
+    currentAnimation 
+  } = useAvatar();
+
+  const [newAnim, setNewAnim] = useState<Partial<AnimationConfig>>({
+    name: '',
+    file: '',
+    trigger: 'manual',
+    speed: 1.0,
+    loop: true,
+    fadeInDuration: 0.2,
+    fadeOutDuration: 0.2,
+  });
+
+  const handleAddAnimation = () => {
+    if (newAnim.name && newAnim.file) {
+      addAnimation(newAnim as AnimationConfig);
+      setNewAnim({
+        name: '',
+        file: '',
+        trigger: 'manual',
+        speed: 1.0,
+        loop: true,
+        fadeInDuration: 0.2,
+        fadeOutDuration: 0.2,
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="model" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="model">Model</TabsTrigger>
+          <TabsTrigger value="animations">Animations</TabsTrigger>
+          <TabsTrigger value="add">Add Animation</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="model" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Model Settings</CardTitle>
+              <CardDescription>Configure the avatar model and positioning</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="model">Model Path</Label>
+                <Input
+                  id="model"
+                  value={avatarConfig.model}
+                  onChange={(e) => updateAvatarConfig({ model: e.target.value })}
+                  placeholder="/y-bot.fbx"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="scale">Scale: {avatarConfig.scale.toFixed(3)}</Label>
+                <Slider
+                  id="scale"
+                  min={0.001}
+                  max={0.1}
+                  step={0.001}
+                  value={[avatarConfig.scale]}
+                  onValueChange={([value]) => updateAvatarConfig({ scale: value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="color">Avatar Color</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="color"
+                    type="color"
+                    value={avatarConfig.color}
+                    onChange={(e) => updateAvatarConfig({ color: e.target.value })}
+                    className="w-20 h-10"
+                  />
+                  <Input
+                    value={avatarConfig.color}
+                    onChange={(e) => updateAvatarConfig({ color: e.target.value })}
+                    placeholder="#4a9eff"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="offsetX">Offset X: {avatarConfig.offsetX.toFixed(2)}</Label>
+                  <Slider
+                    id="offsetX"
+                    min={-2}
+                    max={2}
+                    step={0.1}
+                    value={[avatarConfig.offsetX]}
+                    onValueChange={([value]) => updateAvatarConfig({ offsetX: value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="offsetY">Offset Y: {avatarConfig.offsetY.toFixed(2)}</Label>
+                  <Slider
+                    id="offsetY"
+                    min={-2}
+                    max={2}
+                    step={0.1}
+                    value={[avatarConfig.offsetY]}
+                    onValueChange={([value]) => updateAvatarConfig({ offsetY: value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="offsetZ">Offset Z: {avatarConfig.offsetZ.toFixed(2)}</Label>
+                  <Slider
+                    id="offsetZ"
+                    min={-2}
+                    max={2}
+                    step={0.1}
+                    value={[avatarConfig.offsetZ]}
+                    onValueChange={([value]) => updateAvatarConfig({ offsetZ: value })}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="animations" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Animation Library</CardTitle>
+              <CardDescription>Manage and test avatar animations</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {avatarConfig.animations.map((anim) => (
+                <Card key={anim.name} className={currentAnimation === anim.name ? 'border-primary' : ''}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">{anim.name}</CardTitle>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => triggerAnimation(anim.name)}
+                        >
+                          <Play className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => removeAnimation(anim.name)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="text-sm text-muted-foreground">{anim.file}</div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Trigger</Label>
+                        <Select
+                          value={anim.trigger}
+                          onValueChange={(value) => updateAnimation(anim.name, { trigger: value as any })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="movement">Movement</SelectItem>
+                            <SelectItem value="idle">Idle</SelectItem>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            <SelectItem value="jump">Jump</SelectItem>
+                            <SelectItem value="crouch">Crouch</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Speed: {anim.speed.toFixed(2)}</Label>
+                        <Slider
+                          min={0.1}
+                          max={3}
+                          step={0.1}
+                          value={[anim.speed]}
+                          onValueChange={([value]) => updateAnimation(anim.name, { speed: value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Fade In: {anim.fadeInDuration.toFixed(2)}s</Label>
+                        <Slider
+                          min={0}
+                          max={2}
+                          step={0.1}
+                          value={[anim.fadeInDuration]}
+                          onValueChange={([value]) => updateAnimation(anim.name, { fadeInDuration: value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Fade Out: {anim.fadeOutDuration.toFixed(2)}s</Label>
+                        <Slider
+                          min={0}
+                          max={2}
+                          step={0.1}
+                          value={[anim.fadeOutDuration]}
+                          onValueChange={([value]) => updateAnimation(anim.name, { fadeOutDuration: value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        checked={anim.loop}
+                        onCheckedChange={(checked) => updateAnimation(anim.name, { loop: checked })}
+                      />
+                      <Label>Loop Animation</Label>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="add" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Add New Animation</CardTitle>
+              <CardDescription>Add a new animation to the library</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-name">Animation Name</Label>
+                <Input
+                  id="new-name"
+                  value={newAnim.name}
+                  onChange={(e) => setNewAnim({ ...newAnim, name: e.target.value })}
+                  placeholder="Run"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="new-file">File Path</Label>
+                <Input
+                  id="new-file"
+                  value={newAnim.file}
+                  onChange={(e) => setNewAnim({ ...newAnim, file: e.target.value })}
+                  placeholder="/Running.fbx"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="new-trigger">Trigger</Label>
+                <Select
+                  value={newAnim.trigger}
+                  onValueChange={(value) => setNewAnim({ ...newAnim, trigger: value as any })}
+                >
+                  <SelectTrigger id="new-trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="movement">Movement</SelectItem>
+                    <SelectItem value="idle">Idle</SelectItem>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="jump">Jump</SelectItem>
+                    <SelectItem value="crouch">Crouch</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  checked={newAnim.loop}
+                  onCheckedChange={(checked) => setNewAnim({ ...newAnim, loop: checked })}
+                />
+                <Label>Loop Animation</Label>
+              </div>
+
+              <Button onClick={handleAddAnimation} className="w-full">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Animation
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

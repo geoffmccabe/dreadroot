@@ -17,6 +17,7 @@ import { useBlocksData } from '@/hooks/useBlocksData';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
 import { Textarea } from '@/components/ui/textarea';
+import { AvatarPanel } from '@/components/AvatarPanel';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -1524,10 +1525,11 @@ export function AdminPanel({
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
+          <TabsList className="grid w-full grid-cols-6 flex-shrink-0">
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
             <TabsTrigger value="weather">Weather</TabsTrigger>
+            <TabsTrigger value="avatar">Avatar</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
           </TabsList>
@@ -1561,6 +1563,12 @@ export function AdminPanel({
                   onSettingsChange={onWeatherSettingsChange}
                 />
               )}
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="avatar" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              <AvatarPanel />
             </ScrollArea>
           </TabsContent>
 

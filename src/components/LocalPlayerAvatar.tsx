@@ -2,17 +2,31 @@ import React, { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useFBX } from '@react-three/drei';
+import { useAvatar } from '@/contexts/AvatarContext';
 
 export function LocalPlayerAvatar() {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<{ [key: string]: THREE.AnimationAction | null }>({});
   const currentActionRef = useRef<string>('idle');
+  const velocityRef = useRef(new THREE.Vector3());
   const lastPositionRef = useRef(new THREE.Vector3());
   
   const { camera } = useThree();
-  const fbx = useFBX('/y-bot.fbx');
-  const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
+  const { avatarConfig, currentAnimation } = useAvatar();
+  
+  const fbx = useFBX(avatarConfig.model);
+  
+  // Load all animations dynamically
+  const animationFiles = avatarConfig.animations.reduce((acc, anim) => {
+    acc[anim.name] = anim.file;
+    return acc;
+  }, {} as Record<string, string>);
+  
+  // Load animation FBX files
+  const loadedAnims = Object.fromEntries(
+    Object.entries(animationFiles).map(([name, file]) => [name, useFBX(file)])
+  );
 
   // Configure avatar materials, shadows, and animations
   useEffect(() => {
@@ -25,7 +39,7 @@ export function LocalPlayerAvatar() {
         child.receiveShadow = true;
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
-          material.color.set('#4a9eff'); // Blue for local player
+          material.color.set(avatarConfig.color);
         }
       }
     });
@@ -33,31 +47,50 @@ export function LocalPlayerAvatar() {
     // Setup animation mixer
     mixerRef.current = new THREE.AnimationMixer(fbx);
     
-    // Load walk animation
-    if (walkAnim?.animations.length > 0) {
-      const walkAction = mixerRef.current.clipAction(walkAnim.animations[0]);
-      walkAction.play();
-      actionsRef.current.walk = walkAction;
-    }
+    // Load all animations
+    avatarConfig.animations.forEach((animConfig) => {
+      const animFBX = loadedAnims[animConfig.name];
+      if (animFBX?.animations.length > 0) {
+        const action = mixerRef.current!.clipAction(animFBX.animations[0]);
+        action.setLoop(animConfig.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+        action.timeScale = animConfig.speed;
+        actionsRef.current[animConfig.name] = action;
+        
+        // Start idle animation by default
+        if (animConfig.trigger === 'idle') {
+          action.play();
+          currentActionRef.current = animConfig.name;
+        }
+      }
+    });
 
     return () => {
       mixerRef.current?.stopAllAction();
     };
-  }, [fbx, walkAnim]);
+  }, [fbx, avatarConfig, loadedAnims]);
 
-  // Follow camera and update animations
+  // Follow camera and update animations with smooth interpolation
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     
-    // Position avatar behind and below camera
+    // Calculate camera velocity
+    const currentPos = camera.position.clone();
+    velocityRef.current.copy(currentPos).sub(lastPositionRef.current);
+    
+    // Get camera direction for positioning
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
-    const newX = camera.position.x - cameraDirection.x * 0.3;
-    const newY = camera.position.y - 0.9;
-    const newZ = camera.position.z - cameraDirection.z * 0.3;
+    // Calculate target position (behind and below camera)
+    const targetX = currentPos.x - cameraDirection.x * Math.abs(avatarConfig.offsetZ);
+    const targetY = currentPos.y + avatarConfig.offsetY;
+    const targetZ = currentPos.z - cameraDirection.z * Math.abs(avatarConfig.offsetZ);
     
-    groupRef.current.position.set(newX, newY, newZ);
+    // Smoothly interpolate to target position to match camera movement
+    groupRef.current.position.lerp(
+      new THREE.Vector3(targetX, targetY, targetZ),
+      0.3 // Smooth follow factor
+    );
 
     // Rotate to match camera yaw
     const yaw = Math.atan2(cameraDirection.x, cameraDirection.z);
@@ -68,19 +101,38 @@ export function LocalPlayerAvatar() {
       mixerRef.current.update(delta);
     }
 
-    // Detect movement
-    const currentPos = camera.position;
-    const distanceMoved = currentPos.distanceTo(lastPositionRef.current);
-    const isMoving = distanceMoved > 0.01;
+    // Detect movement based on velocity
+    const speed = velocityRef.current.length();
+    const isMoving = speed > 0.01;
     
-    const desiredAction = isMoving ? 'walk' : 'idle';
+    // Find appropriate animation based on trigger and state
+    let desiredAction = currentAnimation;
+    
+    // Auto-trigger animations based on movement
+    const movementAnim = avatarConfig.animations.find(a => a.trigger === 'movement');
+    const idleAnim = avatarConfig.animations.find(a => a.trigger === 'idle');
+    
+    if (isMoving && movementAnim) {
+      desiredAction = movementAnim.name;
+    } else if (!isMoving && idleAnim && currentAnimation !== 'manual') {
+      desiredAction = idleAnim.name;
+    }
+    
+    // Handle animation transitions
     if (desiredAction !== currentActionRef.current) {
-      if (desiredAction === 'walk' && actionsRef.current.walk) {
-        actionsRef.current.walk.reset().fadeIn(0.2).play();
-      } else if (desiredAction === 'idle' && actionsRef.current.walk) {
-        actionsRef.current.walk.fadeOut(0.2);
+      const currentAction = actionsRef.current[currentActionRef.current];
+      const newAction = actionsRef.current[desiredAction];
+      
+      if (newAction) {
+        const animConfig = avatarConfig.animations.find(a => a.name === desiredAction);
+        if (animConfig) {
+          if (currentAction) {
+            currentAction.fadeOut(animConfig.fadeOutDuration);
+          }
+          newAction.reset().fadeIn(animConfig.fadeInDuration).play();
+          currentActionRef.current = desiredAction;
+        }
       }
-      currentActionRef.current = desiredAction;
     }
 
     lastPositionRef.current.copy(currentPos);
@@ -91,8 +143,8 @@ export function LocalPlayerAvatar() {
       {fbx && (
         <primitive 
           object={fbx} 
-          scale={0.01}
-          position={[0, -0.9, 0]}
+          scale={avatarConfig.scale}
+          position={[avatarConfig.offsetX, 0, 0]}
         />
       )}
     </group>

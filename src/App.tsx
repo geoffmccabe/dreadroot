@@ -8,6 +8,7 @@ import { BlocksProvider } from "@/contexts/BlocksContext";
 import { UserPanelProvider } from "@/contexts/UserPanelContext";
 import { AdminPanelProvider } from "@/contexts/AdminPanelContext";
 import { TokenThemeProvider } from "@/contexts/TokenThemeContext";
+import { AvatarProvider } from "@/contexts/AvatarContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ClearSession from "./pages/ClearSession";
@@ -61,35 +62,37 @@ const App = () => (
       <TooltipProvider>
         <TokenThemeProvider>
           <BlocksProvider>
-            <UserPanelProvider>
-              <AdminPanelProvider>
-                <Toaster />
-                <Sonner />
-                <BrowserRouter>
-                  <Routes>
-                    <Route path="/clear-session" element={<ClearSession />} />
-                    <Route 
-                      path="/" 
-                      element={
-                        <ProtectedRoute>
-                          <Index />
-                        </ProtectedRoute>
-                      } 
-                    />
-                    <Route 
-                      path="/auth" 
-                      element={
-                        <AuthRoute>
-                          <Auth />
-                        </AuthRoute>
-                      } 
-                    />
-                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </BrowserRouter>
-              </AdminPanelProvider>
-            </UserPanelProvider>
+            <AvatarProvider>
+              <UserPanelProvider>
+                <AdminPanelProvider>
+                  <Toaster />
+                  <Sonner />
+                  <BrowserRouter>
+                    <Routes>
+                      <Route path="/clear-session" element={<ClearSession />} />
+                      <Route 
+                        path="/" 
+                        element={
+                          <ProtectedRoute>
+                            <Index />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/auth" 
+                        element={
+                          <AuthRoute>
+                            <Auth />
+                          </AuthRoute>
+                        } 
+                      />
+                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </BrowserRouter>
+                </AdminPanelProvider>
+              </UserPanelProvider>
+            </AvatarProvider>
           </BlocksProvider>
         </TokenThemeProvider>
       </TooltipProvider>
