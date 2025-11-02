@@ -759,8 +759,10 @@ function FirstPersonControls({
       return null;
     };
 
-    // Store previous position
+    // Store previous position and track collisions
     const prevPosition = camera.position.clone();
+    let xBlocked = false;
+    let zBlocked = false;
 
     // PER-AXIS COLLISION DETECTION (Standard for voxel games)
     // X-axis movement and collision
@@ -772,6 +774,7 @@ function FirstPersonControls({
       if (collision) {
         camera.position.x = prevPosition.x;
         velocity.current.x = 0;
+        xBlocked = true;
       } else {
         camera.position.x = testPos.x;
       }
@@ -816,21 +819,27 @@ function FirstPersonControls({
       if (collision) {
         camera.position.z = prevPosition.z;
         velocity.current.z = 0;
+        zBlocked = true;
       } else {
         camera.position.z = testPos.z;
       }
     }
 
-    // FIXED Step-up logic - Use ACTUAL camera position after collision handling
-    if ((deltaMovement.x !== 0 || deltaMovement.z !== 0) && onGround.current && !isCrawling) {
+    // Step-up logic - Only trigger when horizontal movement was BLOCKED
+    if ((xBlocked || zBlocked) && onGround.current && !isCrawling) {
       const stepHeight = 0.6;
       const feetY = camera.position.y - playerHeight;
       
-      // Check slightly ahead using normalized direction
-      const moveLength = Math.sqrt(deltaMovement.x * deltaMovement.x + deltaMovement.z * deltaMovement.z);
+      // Use ORIGINAL intended movement direction (before blocking)
+      const intendedX = deltaMovement.x;
+      const intendedZ = deltaMovement.z;
+      const moveLength = Math.sqrt(intendedX * intendedX + intendedZ * intendedZ);
+      
       if (moveLength > 0) {
-        const normalizedX = (deltaMovement.x / moveLength) * 0.3;
-        const normalizedZ = (deltaMovement.z / moveLength) * 0.3;
+        // Test position in the intended direction
+        const testDistance = 0.4;
+        const normalizedX = (intendedX / moveLength) * testDistance;
+        const normalizedZ = (intendedZ / moveLength) * testDistance;
         
         const forwardTestPos = camera.position.clone();
         forwardTestPos.x += normalizedX;
@@ -838,12 +847,15 @@ function FirstPersonControls({
         
         const blockInFront = checkAxisCollision(forwardTestPos, true);
         
+        // Check if we can step up onto this block
         if (blockInFront && blockInFront.max.y - feetY <= stepHeight && blockInFront.max.y > feetY) {
+          // Try stepping up and forward
           const steppedUpPos = camera.position.clone();
+          steppedUpPos.y = blockInFront.max.y + playerHeight;
           steppedUpPos.x += normalizedX;
           steppedUpPos.z += normalizedZ;
-          steppedUpPos.y = blockInFront.max.y + playerHeight;
           
+          // Verify no collision at stepped position
           if (!checkAxisCollision(steppedUpPos, true)) {
             camera.position.copy(steppedUpPos);
             onGround.current = true;
