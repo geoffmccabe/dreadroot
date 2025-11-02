@@ -54,14 +54,14 @@ export function LocalPlayerAvatar() {
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     
-    // Position avatar at player's feet (behind camera so it's not visible in first person)
+    // Position avatar directly at camera position (player's body)
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
     groupRef.current.position.set(
-      camera.position.x - cameraDirection.x * 0.2,
-      camera.position.y - 1.7,
-      camera.position.z - cameraDirection.z * 0.2
+      camera.position.x,
+      camera.position.y,
+      camera.position.z
     );
 
     // Rotate avatar to match camera yaw (not pitch)
@@ -94,12 +94,12 @@ export function LocalPlayerAvatar() {
 
   return (
     <group ref={groupRef}>
-      {/* 3D Avatar Model */}
+      {/* 3D Avatar Model - scaled to 1.8m height */}
       {avatarClone && (
         <primitive 
           object={avatarClone} 
-          scale={0.01}
-          position={[0, -0.9, 0]}
+          scale={0.00018}
+          position={[0, -1.8, 0]}
         />
       )}
     </group>
