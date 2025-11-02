@@ -35,8 +35,10 @@ export function LocalPlayerAvatar() {
     // Configure materials and shadows
     fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
+        // Keep shadows but hide the mesh from camera view
         child.castShadow = true;
         child.receiveShadow = true;
+        child.layers.set(1); // Move to layer 1 (invisible to default camera on layer 0)
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
           material.color.set(avatarConfig.color);
