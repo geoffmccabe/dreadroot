@@ -18,13 +18,11 @@ export function LocalPlayerAvatar() {
   useEffect(() => {
     if (!fbx) return;
     
+    console.log('Configuring local player avatar for shadows');
     fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
-        child.receiveShadow = true;
-        // Make invisible to camera (layer 1 only) but still cast shadows
-        child.layers.disableAll();
-        child.layers.enable(1); // Only on layer 1, camera is on layer 0
+        child.receiveShadow = false;
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
           material.color.set('#4a9eff'); // Blue for local player
@@ -50,11 +48,11 @@ export function LocalPlayerAvatar() {
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
     const clone = fbx.clone();
-    // Apply layer settings to cloned object - only layer 1
+    // Ensure shadows are enabled on clone
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.layers.disableAll();
-        child.layers.enable(1);
+        child.castShadow = true;
+        child.receiveShadow = false;
       }
     });
     return clone;
@@ -64,16 +62,18 @@ export function LocalPlayerAvatar() {
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     
-    // Position avatar relative to camera (slightly below and in front)
+    // Position avatar slightly behind and below the camera so it's out of view
+    // but close enough to cast a shadow where the player is
+    const cameraDirection = new THREE.Vector3();
+    camera.getWorldDirection(cameraDirection);
+    
     groupRef.current.position.set(
-      camera.position.x,
-      camera.position.y - 0.9, // Lower to ground level
-      camera.position.z
+      camera.position.x - cameraDirection.x * 0.3, // Slightly behind camera
+      camera.position.y - 1.7, // At ground level (camera is at 1.8m, avatar is ~1.8m tall)
+      camera.position.z - cameraDirection.z * 0.3
     );
 
     // Rotate avatar to match camera yaw (not pitch)
-    const cameraDirection = new THREE.Vector3();
-    camera.getWorldDirection(cameraDirection);
     const yaw = Math.atan2(cameraDirection.x, cameraDirection.z);
     groupRef.current.rotation.y = yaw;
 
