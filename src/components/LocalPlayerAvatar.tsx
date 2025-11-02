@@ -22,9 +22,9 @@ export function LocalPlayerAvatar() {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
-        // Make invisible to camera but visible in reflections and shadows
-        child.layers.set(1); // Layer 1 for avatar (camera is on layer 0)
-        child.layers.enable(0); // Also enable layer 0 so it appears in reflections
+        // Make invisible to camera (layer 1 only) but still cast shadows
+        child.layers.disableAll();
+        child.layers.enable(1); // Only on layer 1, camera is on layer 0
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
           material.color.set('#4a9eff'); // Blue for local player
@@ -50,11 +50,11 @@ export function LocalPlayerAvatar() {
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
     const clone = fbx.clone();
-    // Apply layer settings to cloned object
+    // Apply layer settings to cloned object - only layer 1
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.layers.set(1);
-        child.layers.enable(0);
+        child.layers.disableAll();
+        child.layers.enable(1);
       }
     });
     return clone;
@@ -107,7 +107,7 @@ export function LocalPlayerAvatar() {
       {avatarClone && (
         <primitive 
           object={avatarClone} 
-          scale={0.01}
+          scale={0.018}
           position={[0, 0, 0]}
         />
       )}
