@@ -2666,6 +2666,12 @@ export default function WaterfallFortress() {
         shadows
         gl={{ antialias: true }}
         dpr={[1, 2]}
+        onCreated={({ camera }) => {
+          // Configure camera to only render layer 0 (main scene)
+          // Avatar is on layer 1, so it won't be directly visible but will cast shadows
+          camera.layers.disableAll();
+          camera.layers.enable(0);
+        }}
       >
       {showPerfMonitor && <Perf position="top-left" minimal={false} />}
       <Scene
