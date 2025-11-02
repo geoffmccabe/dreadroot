@@ -54,14 +54,13 @@ export function LocalPlayerAvatar() {
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     
-    // Position avatar at ground level (camera is 1.7m above ground at eye level)
-    // Position slightly behind camera so it's not directly visible in first-person view
+    // Position group at ground level where feet should be
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
     groupRef.current.position.set(
       camera.position.x - cameraDirection.x * 0.3,
-      camera.position.y - 1.7, // Ground level (camera at eye level)
+      camera.position.y - 0.8, // Adjusted for avatar height
       camera.position.z - cameraDirection.z * 0.3
     );
 
@@ -101,12 +100,12 @@ export function LocalPlayerAvatar() {
         <meshStandardMaterial color="red" />
       </mesh>
       
-      {/* 3D Avatar Model - same scale as multiplayer avatars */}
+      {/* 3D Avatar Model - testing much smaller scale */}
       {avatarClone && (
         <primitive 
           object={avatarClone} 
-          scale={0.01}
-          position={[0, -0.9, 0]}
+          scale={0.00018}
+          position={[0, 0, 0]}
         />
       )}
     </group>
