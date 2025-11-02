@@ -99,6 +99,14 @@ export function LocalPlayerAvatar() {
     lastPositionRef.current.copy(currentPos);
   });
 
+  // Debug log to check if clone exists
+  React.useEffect(() => {
+    console.log('[LocalPlayerAvatar] avatarClone exists:', !!avatarClone);
+    if (avatarClone) {
+      console.log('[LocalPlayerAvatar] avatarClone scale:', avatarClone.scale);
+    }
+  }, [avatarClone]);
+
   return (
     <group ref={groupRef}>
       {avatarClone && (
