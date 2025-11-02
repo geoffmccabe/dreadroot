@@ -188,17 +188,53 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
   const screenCenter = new THREE.Vector2(0, 0);
   raycaster.setFromCamera(screenCenter, camera);
   
+  // Set far distance for raycast to find where cursor is actually pointing
+  raycaster.far = 1000;
+  
   // Create temporary raycasting targets
   const targets = createRaycastTargets(existingBlocks);
   
   try {
-    // Perform raycasting
-    const intersects = raycaster.intersectObjects(targets, true)
-      .filter(i => i.distance <= maxDistance);
+    // Perform raycasting (get ALL intersections first, then validate distance)
+    const allIntersects = raycaster.intersectObjects(targets, true);
+    const intersects = allIntersects.filter(i => i.distance <= maxDistance);
     
-    // If no intersection found, use fallback placement
+    // If no intersection within maxDistance, check if there's ANY intersection beyond
     if (intersects.length === 0) {
-      // Fallback: place block at maxDistance in front of player at ground level
+      // Check if cursor is pointing at something beyond maxDistance
+      if (allIntersects.length > 0) {
+        // There's a surface beyond maxDistance - clamp to maxDistance
+        const direction = raycaster.ray.direction.clone();
+        const fallbackPosition = camera.position.clone().add(direction.multiplyScalar(maxDistance));
+        
+        // Snap to voxel grid
+        fallbackPosition.x = Math.round(fallbackPosition.x);
+        fallbackPosition.y = Math.max(0, Math.round(fallbackPosition.y));
+        fallbackPosition.z = Math.round(fallbackPosition.z);
+        
+        // Validate fallback placement
+        const validation = validatePlacement(fallbackPosition, existingBlocks, {
+          fortressCenter,
+          fortressMinDistance,
+          waterfallZ,
+          waterfallBlockingWidth,
+        });
+        
+        const renderPosition = new THREE.Vector3(
+          fallbackPosition.x + 0.5,
+          fallbackPosition.y + 0.5,
+          fallbackPosition.z + 0.5
+        );
+        
+        return {
+          isValid: false, // Invalid because beyond maxDistance
+          position: fallbackPosition,
+          reason: 'no-surface',
+          renderPosition,
+        };
+      }
+      
+      // No intersection at all - place at maxDistance where cursor is pointing
       const direction = raycaster.ray.direction.clone();
       const fallbackPosition = camera.position.clone().add(direction.multiplyScalar(maxDistance));
       
