@@ -48,23 +48,12 @@ export function LocalPlayerAvatar() {
   // Clone the FBX for rendering
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
-    const clone = fbx.clone();
-    console.log('[LocalPlayerAvatar] Clone created, scale:', clone.scale);
-    console.log('[LocalPlayerAvatar] Clone children:', clone.children.length);
-    return clone;
+    return fbx.clone();
   }, [fbx]);
 
   // Follow camera and update animations
   useFrame((_, delta) => {
-    if (!groupRef.current) {
-      console.log('[LocalPlayerAvatar] groupRef.current is null');
-      return;
-    }
-    
-    // Log the actual avatar scale if it exists
-    if (avatarClone) {
-      console.log('[LocalPlayerAvatar] avatarClone.scale inside group:', avatarClone.scale.x);
-    }
+    if (!groupRef.current) return;
     
     // Position avatar behind and below camera
     const cameraDirection = new THREE.Vector3();
@@ -75,10 +64,6 @@ export function LocalPlayerAvatar() {
     const newZ = camera.position.z - cameraDirection.z * 0.3;
     
     groupRef.current.position.set(newX, newY, newZ);
-    
-    console.log('[LocalPlayerAvatar] Camera pos:', camera.position.x.toFixed(2), camera.position.y.toFixed(2), camera.position.z.toFixed(2));
-    console.log('[LocalPlayerAvatar] Avatar pos:', newX.toFixed(2), newY.toFixed(2), newZ.toFixed(2));
-    console.log('[LocalPlayerAvatar] Avatar scale:', groupRef.current.scale.x);
 
     // Rotate to match camera yaw
     const yaw = Math.atan2(cameraDirection.x, cameraDirection.z);
@@ -107,20 +92,12 @@ export function LocalPlayerAvatar() {
     lastPositionRef.current.copy(currentPos);
   });
 
-  // Debug log to check if clone exists
-  React.useEffect(() => {
-    console.log('[LocalPlayerAvatar] avatarClone exists:', !!avatarClone);
-    if (avatarClone) {
-      console.log('[LocalPlayerAvatar] avatarClone scale:', avatarClone.scale);
-    }
-  }, [avatarClone]);
-
   return (
     <group ref={groupRef}>
       {avatarClone && (
         <primitive 
           object={avatarClone} 
-          scale={0.01}
+          scale={[0.01, 0.01, 0.01]}
           position={[0, -0.9, 0]}
         />
       )}
