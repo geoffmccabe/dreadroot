@@ -16,19 +16,26 @@ export function LocalPlayerAvatar() {
 
   // Configure avatar materials, shadows, and animations
   useEffect(() => {
-    if (!fbx) return;
+    if (!fbx) {
+      console.log('LocalPlayerAvatar: FBX not loaded yet');
+      return;
+    }
     
-    console.log('Configuring local player avatar for shadows');
+    console.log('LocalPlayerAvatar: Configuring avatar for shadows', fbx);
+    let meshCount = 0;
     fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
+        meshCount++;
         child.castShadow = true;
         child.receiveShadow = false;
+        console.log('LocalPlayerAvatar: Configured mesh', child.name, 'for shadows');
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
           material.color.set('#4a9eff'); // Blue for local player
         }
       }
     });
+    console.log('LocalPlayerAvatar: Total meshes configured:', meshCount);
 
     // Setup animation mixer
     mixerRef.current = new THREE.AnimationMixer(fbx);
@@ -103,6 +110,12 @@ export function LocalPlayerAvatar() {
 
   return (
     <group ref={groupRef}>
+      {/* Debug sphere - should always cast shadow */}
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <sphereGeometry args={[0.3]} />
+        <meshStandardMaterial color="red" />
+      </mesh>
+      
       {/* 3D Avatar Model */}
       {avatarClone && (
         <primitive 
