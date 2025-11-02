@@ -48,7 +48,10 @@ export function LocalPlayerAvatar() {
   // Clone the FBX for rendering
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
-    return fbx.clone();
+    const clone = fbx.clone();
+    console.log('[LocalPlayerAvatar] Clone created, scale:', clone.scale);
+    console.log('[LocalPlayerAvatar] Clone children:', clone.children.length);
+    return clone;
   }, [fbx]);
 
   // Follow camera and update animations
@@ -56,6 +59,11 @@ export function LocalPlayerAvatar() {
     if (!groupRef.current) {
       console.log('[LocalPlayerAvatar] groupRef.current is null');
       return;
+    }
+    
+    // Log the actual avatar scale if it exists
+    if (avatarClone) {
+      console.log('[LocalPlayerAvatar] avatarClone.scale inside group:', avatarClone.scale.x);
     }
     
     // Position avatar behind and below camera
