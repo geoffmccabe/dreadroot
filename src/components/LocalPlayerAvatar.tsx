@@ -95,6 +95,12 @@ export function LocalPlayerAvatar() {
 
   return (
     <group ref={groupRef}>
+      {/* Debug: 1.8m tall capsule to verify correct scale */}
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <capsuleGeometry args={[0.3, 1.2, 8, 16]} />
+        <meshStandardMaterial color="red" />
+      </mesh>
+      
       {/* 3D Avatar Model - same scale as multiplayer avatars */}
       {avatarClone && (
         <primitive 
