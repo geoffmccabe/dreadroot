@@ -17,7 +17,25 @@ export function LocalPlayerAvatar() {
   // Clone the FBX for rendering
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
-    return fbx.clone();
+    const clone = fbx.clone();
+    
+    // Debug: Log the FBX hierarchy and scales
+    console.log('🤖 FBX Root scale:', fbx.scale);
+    fbx.traverse((child) => {
+      if (child instanceof THREE.Object3D) {
+        console.log(`  - ${child.type} scale:`, child.scale, 'position:', child.position);
+      }
+    });
+    
+    // Force scale on ALL objects in the hierarchy
+    clone.traverse((child) => {
+      if (child instanceof THREE.Object3D && child !== clone) {
+        child.scale.set(1, 1, 1); // Reset any baked scaling
+      }
+    });
+    clone.scale.set(0.01, 0.01, 0.01);
+    
+    return clone;
   }, [fbx]);
 
   // Configure avatar materials, shadows, and animations on the clone
@@ -97,7 +115,6 @@ export function LocalPlayerAvatar() {
       {avatarClone && (
         <primitive 
           object={avatarClone} 
-          scale={0.01}
           position={[0, -0.9, 0]}
         />
       )}
