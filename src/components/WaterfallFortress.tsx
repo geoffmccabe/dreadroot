@@ -1941,6 +1941,9 @@ function Scene({
       {/* Multiplayer - render other players */}
       <MultiplayerPlayers players={players} />
       
+      {/* Local player avatar - visible only in shadows and reflections */}
+      <LocalPlayerAvatar />
+      
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting weatherSettings={weatherSettings} />
 
