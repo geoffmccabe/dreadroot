@@ -826,55 +826,8 @@ function FirstPersonControls({
       }
     }
 
-    // CONSERVATIVE Step-up logic - Only in clear, unambiguous situations
-    // Requirements: walking forward, blocked by ONE axis only, significant movement intent
-    if (onGround.current && !isCrawling && Math.abs(velocity.current.y) < 0.1) {
-      const stepHeight = 0.6;
-      const feetY = camera.position.y - playerHeight;
-      
-      // Only step up if blocked in exactly ONE horizontal direction with significant movement
-      const xBlockedOnly = xBlocked && !zBlocked && Math.abs(deltaMovement.x) > 0.05;
-      const zBlockedOnly = zBlocked && !xBlocked && Math.abs(deltaMovement.z) > 0.05;
-      
-      if (xBlockedOnly || zBlockedOnly) {
-        // Use the original intended direction (before collision stopped it)
-        const checkDist = 0.35;
-        const testX = xBlockedOnly ? (deltaMovement.x > 0 ? checkDist : -checkDist) : 0;
-        const testZ = zBlockedOnly ? (deltaMovement.z > 0 ? checkDist : -checkDist) : 0;
-        
-        const forwardTestPos = camera.position.clone();
-        forwardTestPos.x += testX;
-        forwardTestPos.z += testZ;
-        
-        const blockInFront = checkAxisCollision(forwardTestPos, true);
-        
-        if (blockInFront) {
-          const blockHeight = blockInFront.max.y - feetY;
-          
-          // Only step up if block is within step range and higher than current position
-          if (blockHeight > 0.1 && blockHeight <= stepHeight) {
-            // Check for FULL player height clearance above target surface
-            const clearancePos = forwardTestPos.clone();
-            clearancePos.y = blockInFront.max.y + playerHeight * 0.5; // Check at torso height
-            
-            const hasClearance = !checkAxisCollision(clearancePos, true);
-            
-            if (hasClearance) {
-              // Final check: no collision at the final stepped position
-              const finalPos = camera.position.clone();
-              finalPos.y = blockInFront.max.y + playerHeight;
-              finalPos.x += testX * 0.8; // Move slightly forward
-              finalPos.z += testZ * 0.8;
-              
-              if (!checkAxisCollision(finalPos, true)) {
-                camera.position.copy(finalPos);
-                onGround.current = true;
-              }
-            }
-          }
-        }
-      }
-    }
+    // DISABLED step-up logic to prevent wall hooking
+    // TODO: Implement proper step-up that doesn't hook onto edges
     
     // Ground detection
     const feetY = camera.position.y - playerHeight;
@@ -882,20 +835,25 @@ function FirstPersonControls({
       onGround.current = true;
     }
     
-    // Periodic ground validation check - unhook if no block beneath player
+    // Aggressive ground validation check - unhook if no block beneath player
+    // Check every 100ms to quickly unhook from bad positions
     const currentTime = Date.now();
-    if (currentTime - lastGroundCheck.current >= 1000 && onGround.current) {
+    if (currentTime - lastGroundCheck.current >= 100 && onGround.current) {
       lastGroundCheck.current = currentTime;
       
-      // Check directly beneath the player's feet
+      // Check directly beneath the player's feet with a larger search area
       const feetCheckPos = camera.position.clone();
-      feetCheckPos.y -= 0.1; // Just below feet
+      feetCheckPos.y -= 0.2; // Check below feet
       
       const hasBlockBeneath = checkAxisCollision(feetCheckPos, false);
       
       // If no block beneath and not on ground level, unhook and let them fall
       if (!hasBlockBeneath && feetY > 0.1) {
         onGround.current = false;
+        // Also ensure we start falling
+        if (Math.abs(velocity.current.y) < 0.1) {
+          velocity.current.y = -0.1;
+        }
       }
     }
     
