@@ -825,47 +825,50 @@ function FirstPersonControls({
       }
     }
 
-    // Step-up logic - Only trigger when horizontal movement was BLOCKED
-    if ((xBlocked || zBlocked) && onGround.current && !isCrawling) {
+    // CONSERVATIVE Step-up logic - Only in clear, unambiguous situations
+    // Requirements: walking forward, blocked by ONE axis only, significant movement intent
+    if (onGround.current && !isCrawling && Math.abs(velocity.current.y) < 0.1) {
       const stepHeight = 0.6;
       const feetY = camera.position.y - playerHeight;
       
-      // Only use movement from unblocked axes to prevent corner hooking
-      const effectiveX = xBlocked ? 0 : deltaMovement.x;
-      const effectiveZ = zBlocked ? 0 : deltaMovement.z;
-      const moveLength = Math.sqrt(effectiveX * effectiveX + effectiveZ * effectiveZ);
+      // Only step up if blocked in exactly ONE horizontal direction with significant movement
+      const xBlockedOnly = xBlocked && !zBlocked && Math.abs(deltaMovement.x) > 0.05;
+      const zBlockedOnly = zBlocked && !xBlocked && Math.abs(deltaMovement.z) > 0.05;
       
-      if (moveLength > 0) {
-        // Test position in the effective direction
-        const testDistance = 0.4;
-        const normalizedX = (effectiveX / moveLength) * testDistance;
-        const normalizedZ = (effectiveZ / moveLength) * testDistance;
+      if (xBlockedOnly || zBlockedOnly) {
+        // Use the original intended direction (before collision stopped it)
+        const checkDist = 0.35;
+        const testX = xBlockedOnly ? (deltaMovement.x > 0 ? checkDist : -checkDist) : 0;
+        const testZ = zBlockedOnly ? (deltaMovement.z > 0 ? checkDist : -checkDist) : 0;
         
         const forwardTestPos = camera.position.clone();
-        forwardTestPos.x += normalizedX;
-        forwardTestPos.z += normalizedZ;
+        forwardTestPos.x += testX;
+        forwardTestPos.z += testZ;
         
         const blockInFront = checkAxisCollision(forwardTestPos, true);
         
-        // Check if we can step up onto this block
-        if (blockInFront && blockInFront.max.y - feetY <= stepHeight && blockInFront.max.y > feetY) {
-          // Validate there's clearance above the target block (not covered)
-          const clearanceTestPos = camera.position.clone();
-          clearanceTestPos.x += normalizedX;
-          clearanceTestPos.z += normalizedZ;
-          clearanceTestPos.y = blockInFront.max.y + playerHeight + 0.1; // Test slightly above
+        if (blockInFront) {
+          const blockHeight = blockInFront.max.y - feetY;
           
-          // Only step up if there's no block directly above (prevents hooking onto covered edges)
-          if (!checkAxisCollision(clearanceTestPos, false)) {
-            const steppedUpPos = camera.position.clone();
-            steppedUpPos.y = blockInFront.max.y + playerHeight;
-            steppedUpPos.x += normalizedX;
-            steppedUpPos.z += normalizedZ;
+          // Only step up if block is within step range and higher than current position
+          if (blockHeight > 0.1 && blockHeight <= stepHeight) {
+            // Check for FULL player height clearance above target surface
+            const clearancePos = forwardTestPos.clone();
+            clearancePos.y = blockInFront.max.y + playerHeight * 0.5; // Check at torso height
             
-            // Final validation: no collision at stepped position
-            if (!checkAxisCollision(steppedUpPos, true)) {
-              camera.position.copy(steppedUpPos);
-              onGround.current = true;
+            const hasClearance = !checkAxisCollision(clearancePos, true);
+            
+            if (hasClearance) {
+              // Final check: no collision at the final stepped position
+              const finalPos = camera.position.clone();
+              finalPos.y = blockInFront.max.y + playerHeight;
+              finalPos.x += testX * 0.8; // Move slightly forward
+              finalPos.z += testZ * 0.8;
+              
+              if (!checkAxisCollision(finalPos, true)) {
+                camera.position.copy(finalPos);
+                onGround.current = true;
+              }
             }
           }
         }
