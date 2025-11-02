@@ -186,16 +186,15 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
   // NDC coordinates: (0, 0) = center of screen
   const raycaster = new THREE.Raycaster();
   const screenCenter = new THREE.Vector2(0, 0);
+  
+  // Ensure camera matrices are up to date before raycasting
+  camera.updateMatrixWorld();
+  if ('updateProjectionMatrix' in camera && typeof camera.updateProjectionMatrix === 'function') {
+    (camera as any).updateProjectionMatrix();
+  }
+  
   raycaster.setFromCamera(screenCenter, camera);
-  
-  // Set far distance for raycast to find where cursor is actually pointing
   raycaster.far = 1000;
-  
-  // Debug: Log raycast direction (remove after testing)
-  console.log('Raycast origin:', raycaster.ray.origin.toArray());
-  console.log('Raycast direction:', raycaster.ray.direction.toArray());
-  console.log('Camera position:', camera.position.toArray());
-  console.log('Camera quaternion:', camera.quaternion.toArray());
   
   // Create temporary raycasting targets
   const targets = createRaycastTargets(existingBlocks);
@@ -205,44 +204,21 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
     const allIntersects = raycaster.intersectObjects(targets, true);
     const intersects = allIntersects.filter(i => i.distance <= maxDistance);
     
-    // If no intersection within maxDistance, check if there's ANY intersection beyond
+    // If no intersection within maxDistance, place at ground level where cursor points
     if (intersects.length === 0) {
-      // Check if cursor is pointing at something beyond maxDistance
-      if (allIntersects.length > 0) {
-        // There's a surface beyond maxDistance - clamp to maxDistance
-        const direction = raycaster.ray.direction.clone();
-        const fallbackPosition = camera.position.clone().add(direction.multiplyScalar(maxDistance));
-        
-        // Snap to voxel grid
-        fallbackPosition.x = Math.round(fallbackPosition.x);
-        fallbackPosition.y = Math.max(0, Math.round(fallbackPosition.y));
-        fallbackPosition.z = Math.round(fallbackPosition.z);
-        
-        // Validate fallback placement
-        const validation = validatePlacement(fallbackPosition, existingBlocks, {
-          fortressCenter,
-          fortressMinDistance,
-          waterfallZ,
-          waterfallBlockingWidth,
-        });
-        
-        const renderPosition = new THREE.Vector3(
-          fallbackPosition.x + 0.5,
-          fallbackPosition.y + 0.5,
-          fallbackPosition.z + 0.5
-        );
-        
-        return {
-          isValid: false, // Invalid because beyond maxDistance
-          position: fallbackPosition,
-          reason: 'no-surface',
-          renderPosition,
-        };
-      }
+      // Place at ground level (y=0) where the raycast intersects ground plane
+      const direction = raycaster.ray.direction.clone().normalize();
+      const origin = raycaster.ray.origin.clone();
       
-      // No intersection at all - place at maxDistance where cursor is pointing
-      const direction = raycaster.ray.direction.clone();
-      const fallbackPosition = camera.position.clone().add(direction.multiplyScalar(maxDistance));
+      // Calculate where ray hits y=0 plane
+      // ray equation: point = origin + direction * t
+      // For y=0: origin.y + direction.y * t = 0
+      // t = -origin.y / direction.y
+      const t = direction.y !== 0 ? -origin.y / direction.y : maxDistance;
+      
+      // Clamp to maxDistance
+      const distance = Math.min(Math.abs(t), maxDistance);
+      const fallbackPosition = origin.clone().add(direction.multiplyScalar(distance));
       
       // Snap to voxel grid
       fallbackPosition.x = Math.round(fallbackPosition.x);
