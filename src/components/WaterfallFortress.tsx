@@ -289,6 +289,7 @@ function FirstPersonControls({
   const onGround = useRef(true);
   const yaw = useRef(0);
   const pitch = useRef(0);
+  const lastGroundCheck = useRef(0);
   
   // Use blocks from props instead of context (context doesn't cross Canvas boundary)
   const existingBlocks = blocks;
@@ -879,6 +880,23 @@ function FirstPersonControls({
     const feetY = camera.position.y - playerHeight;
     if (feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1) {
       onGround.current = true;
+    }
+    
+    // Periodic ground validation check - unhook if no block beneath player
+    const currentTime = Date.now();
+    if (currentTime - lastGroundCheck.current >= 1000 && onGround.current) {
+      lastGroundCheck.current = currentTime;
+      
+      // Check directly beneath the player's feet
+      const feetCheckPos = camera.position.clone();
+      feetCheckPos.y -= 0.1; // Just below feet
+      
+      const hasBlockBeneath = checkAxisCollision(feetCheckPos, false);
+      
+      // If no block beneath and not on ground level, unhook and let them fall
+      if (!hasBlockBeneath && feetY > 0.1) {
+        onGround.current = false;
+      }
     }
     
     // Broadcast position to multiplayer (throttled internally)
