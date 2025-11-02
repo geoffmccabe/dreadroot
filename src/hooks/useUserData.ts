@@ -274,35 +274,39 @@ export const useUserData = () => {
       return false;
     }
 
-    try {
-      const newQuantity = item.quantity - 1;
-      const { error } = await supabase
-        .from('user_inventory')
-        .update({ quantity: newQuantity })
-        .eq('id', item.id);
+    const newQuantity = item.quantity - 1;
+    
+    // Update local state IMMEDIATELY for instant feedback (optimistic update)
+    setInventory(prev => prev.map(i => 
+      i.id === item.id 
+        ? { ...i, quantity: newQuantity }
+        : i
+    ));
 
-      if (error) throw error;
-
-      // Update local state immediately for instant feedback
-      setInventory(prev => prev.map(i => 
-        i.id === item.id 
-          ? { ...i, quantity: newQuantity }
-          : i
-      ));
-      
-      await loadUserData();
-      await loadUserData();
-      
-      return true;
-    } catch (error) {
-      console.error('Error using block:', error);
-      toast({
-        title: "Error",
-        description: "Failed to use block from inventory",
-        variant: "destructive"
+    // Sync to database in background (non-blocking)
+    supabase
+      .from('user_inventory')
+      .update({ quantity: newQuantity })
+      .eq('id', item.id)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Error syncing inventory:', error);
+          // Revert optimistic update on error
+          setInventory(prev => prev.map(i => 
+            i.id === item.id 
+              ? { ...i, quantity: item.quantity }
+              : i
+          ));
+          toast({
+            title: "Sync Error",
+            description: "Failed to sync inventory. Block not placed.",
+            variant: "destructive"
+          });
+        }
       });
-      return false;
-    }
+    
+    // Return immediately - don't wait for database
+    return true;
   };
 
   const addCoins = async (amount: number) => {

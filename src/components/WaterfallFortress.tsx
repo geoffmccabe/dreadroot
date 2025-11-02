@@ -2472,36 +2472,33 @@ export default function WaterfallFortress() {
           description: `${selectedBlockType} placed at (${placedBlock.position_x}, ${placedBlock.position_y}, ${placedBlock.position_z})`,
         });
         
-        // Check if we still have blocks of this type after placing
-        // Wait a moment for the inventory to update
-        setTimeout(() => {
-          const currentItem = inventory.find(item => item.item_type === selectedBlockType);
-          const stillHasBlocks = currentItem && currentItem.quantity > 0;
+        // Check if we still have blocks (inventory is already updated optimistically)
+        const currentItem = inventory.find(item => item.item_type === selectedBlockType);
+        const stillHasBlocks = currentItem && currentItem.quantity > 0;
+        
+        if (!stillHasBlocks) {
+          // Find next available block type
+          const availableBlocks = inventory.filter(item => item.quantity > 0 && item.item_type !== selectedBlockType);
+          console.log('No more blocks of type', selectedBlockType, 'available blocks:', availableBlocks);
           
-          if (!stillHasBlocks) {
-            // Find next available block type
-            const availableBlocks = inventory.filter(item => item.quantity > 0 && item.item_type !== selectedBlockType);
-            console.log('No more blocks of type', selectedBlockType, 'available blocks:', availableBlocks);
-            
-            if (availableBlocks.length > 0) {
-              const nextBlock = availableBlocks[0];
-              setSelectedBlockType(nextBlock.item_type);
-              toast({
-                title: "Auto-switched block type",
-                description: `Switched to ${nextBlock.item_type} (${nextBlock.quantity} available)`,
-                duration: 2000
-              });
-            } else {
-              // No blocks available, exit block mode
-              handleModeChange(null);
-              toast({
-                title: "No more blocks",
-                description: "All blocks used! Purchase more from the shop.",
-                duration: 3000
-              });
-            }
+          if (availableBlocks.length > 0) {
+            const nextBlock = availableBlocks[0];
+            setSelectedBlockType(nextBlock.item_type);
+            toast({
+              title: "Auto-switched block type",
+              description: `Switched to ${nextBlock.item_type} (${nextBlock.quantity} available)`,
+              duration: 2000
+            });
+          } else {
+            // No blocks available, exit block mode
+            handleModeChange(null);
+            toast({
+              title: "No more blocks",
+              description: "All blocks used! Purchase more from the shop.",
+              duration: 3000
+            });
           }
-        }, 500); // Give time for inventory update to propagate
+        }
       } else {
         console.log('placeBlock returned null/undefined');
       }
