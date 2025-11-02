@@ -1495,6 +1495,13 @@ function DynamicLighting({ weatherSettings }: {
   
   const { lightingPercentage } = useWeatherCycle(weatherSettings);
   
+  // Configure shadow camera to see both layer 0 and layer 1 (for avatar shadows)
+  useEffect(() => {
+    if (directionalRef.current) {
+      directionalRef.current.shadow.camera.layers.enableAll();
+    }
+  }, []);
+  
   useFrame(() => {
     // Ensure minimum 5% ambient light so nothing turns pure black
     const baseIntensity = Math.max(0.05, lightingPercentage / 100);
