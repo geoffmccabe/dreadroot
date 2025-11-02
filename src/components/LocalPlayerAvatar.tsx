@@ -5,7 +5,6 @@ import { useFBX } from '@react-three/drei';
 
 export function LocalPlayerAvatar() {
   const groupRef = useRef<THREE.Group>(null);
-  const cloneRef = useRef<THREE.Group | null>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<{ [key: string]: THREE.AnimationAction | null }>({});
   const currentActionRef = useRef<string>('idle');
@@ -15,29 +14,24 @@ export function LocalPlayerAvatar() {
   const fbx = useFBX('/y-bot.fbx');
   const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
 
-  // Create clone once and configure it
+  // Configure avatar materials, shadows, and animations
   useEffect(() => {
-    if (!fbx || cloneRef.current) return;
+    if (!fbx) return;
     
-    // Clone the model
-    const clone = fbx.clone();
-    cloneRef.current = clone;
-    
-    // Configure materials and shadows on the clone
-    clone.traverse((child) => {
+    // Configure materials and shadows on the original FBX
+    fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
         if (child.material) {
-          const material = (child.material as THREE.MeshStandardMaterial).clone();
-          material.color.set('#4a9eff');
-          child.material = material;
+          const material = child.material as THREE.MeshStandardMaterial;
+          material.color.set('#4a9eff'); // Blue for local player
         }
       }
     });
 
     // Setup animation mixer
-    mixerRef.current = new THREE.AnimationMixer(clone);
+    mixerRef.current = new THREE.AnimationMixer(fbx);
     
     // Load walk animation
     if (walkAnim?.animations.length > 0) {
@@ -48,9 +42,14 @@ export function LocalPlayerAvatar() {
 
     return () => {
       mixerRef.current?.stopAllAction();
-      cloneRef.current = null;
     };
   }, [fbx, walkAnim]);
+
+  // Clone the FBX for rendering
+  const avatarClone = React.useMemo(() => {
+    if (!fbx) return null;
+    return fbx.clone();
+  }, [fbx]);
 
   // Follow camera and update animations
   useFrame((_, delta) => {
@@ -62,7 +61,7 @@ export function LocalPlayerAvatar() {
     
     groupRef.current.position.set(
       camera.position.x - cameraDirection.x * 0.3,
-      camera.position.y - 1.7,
+      camera.position.y - 0.9,
       camera.position.z - cameraDirection.z * 0.3
     );
 
@@ -95,11 +94,11 @@ export function LocalPlayerAvatar() {
 
   return (
     <group ref={groupRef}>
-      {cloneRef.current && (
+      {avatarClone && (
         <primitive 
-          object={cloneRef.current} 
-          scale={0.018}
-          position={[0, 0, 0]}
+          object={avatarClone} 
+          scale={0.01}
+          position={[0, -0.9, 0]}
         />
       )}
     </group>
