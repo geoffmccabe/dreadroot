@@ -191,6 +191,12 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
   // Set far distance for raycast to find where cursor is actually pointing
   raycaster.far = 1000;
   
+  // Debug: Log raycast direction (remove after testing)
+  console.log('Raycast origin:', raycaster.ray.origin.toArray());
+  console.log('Raycast direction:', raycaster.ray.direction.toArray());
+  console.log('Camera position:', camera.position.toArray());
+  console.log('Camera quaternion:', camera.quaternion.toArray());
+  
   // Create temporary raycasting targets
   const targets = createRaycastTargets(existingBlocks);
   
