@@ -14,9 +14,18 @@ function OtherPlayer({ player }: { player: PlayerState }) {
   const actionsRef = useRef<{ [key: string]: THREE.AnimationAction | null }>({});
   const currentActionRef = useRef<string>('idle');
   const lastPositionRef = useRef(new THREE.Vector3(player.position.x, player.position.y, player.position.z));
+  const [loadError, setLoadError] = React.useState(false);
   
-  const fbx = useFBX('/y-bot.fbx');
-  const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
+  let fbx = null;
+  let walkAnim = null;
+  
+  try {
+    fbx = useFBX('/y-bot.fbx');
+    walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
+  } catch (error) {
+    console.error('Failed to load FBX models:', error);
+    if (!loadError) setLoadError(true);
+  }
   
   const targetPosition = useRef(new THREE.Vector3(
     player.position.x,
@@ -110,15 +119,29 @@ function OtherPlayer({ player }: { player: PlayerState }) {
     return fbx.clone();
   }, [fbx]);
 
+  const color = player.color || '#ff6b6b';
+
   return (
     <group ref={meshRef} position={[player.position.x, player.position.y, player.position.z]}>
-      {/* 3D Avatar Model */}
-      {avatarClone && (
+      {/* 3D Avatar Model or fallback capsule */}
+      {avatarClone && !loadError ? (
         <primitive 
           object={avatarClone} 
           scale={0.01}
           position={[0, -0.9, 0]}
         />
+      ) : (
+        <>
+          {/* Fallback: Simple capsule player */}
+          <mesh position={[0, 0, 0]} castShadow receiveShadow>
+            <capsuleGeometry args={[0.3, 1.2, 8, 16]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+          <mesh position={[0, 0.8, 0]} castShadow>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
+          </mesh>
+        </>
       )}
 
       {/* Username label above player */}
