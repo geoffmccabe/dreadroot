@@ -182,11 +182,11 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
     waterfallBlockingWidth = 4,
   } = config;
   
-  // Create raycaster from camera
+  // Create raycaster from screen center (where hand cursor is displayed)
+  // NDC coordinates: (0, 0) = center of screen
   const raycaster = new THREE.Raycaster();
-  const direction = new THREE.Vector3(0, 0, -1);
-  direction.applyQuaternion(camera.quaternion);
-  raycaster.set(camera.position, direction);
+  const screenCenter = new THREE.Vector2(0, 0);
+  raycaster.setFromCamera(screenCenter, camera);
   
   // Create temporary raycasting targets
   const targets = createRaycastTargets(existingBlocks);
@@ -199,7 +199,8 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
     // If no intersection found, use fallback placement
     if (intersects.length === 0) {
       // Fallback: place block at maxDistance in front of player at ground level
-      const fallbackPosition = camera.position.clone().add(direction.clone().multiplyScalar(maxDistance));
+      const direction = raycaster.ray.direction.clone();
+      const fallbackPosition = camera.position.clone().add(direction.multiplyScalar(maxDistance));
       
       // Snap to voxel grid
       fallbackPosition.x = Math.round(fallbackPosition.x);
