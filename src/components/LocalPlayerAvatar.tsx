@@ -21,21 +21,7 @@ export function LocalPlayerAvatar() {
       return;
     }
     
-    console.log('LocalPlayerAvatar: Configuring avatar for shadows', fbx);
-    let meshCount = 0;
-    fbx.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        meshCount++;
-        child.castShadow = true;
-        child.receiveShadow = false;
-        console.log('LocalPlayerAvatar: Configured mesh', child.name, 'for shadows');
-        if (child.material) {
-          const material = child.material as THREE.MeshStandardMaterial;
-          material.color.set('#4a9eff'); // Blue for local player
-        }
-      }
-    });
-    console.log('LocalPlayerAvatar: Total meshes configured:', meshCount);
+    console.log('LocalPlayerAvatar: Configuring avatar', fbx);
 
     // Setup animation mixer
     mixerRef.current = new THREE.AnimationMixer(fbx);
@@ -55,11 +41,15 @@ export function LocalPlayerAvatar() {
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
     const clone = fbx.clone();
-    // Ensure shadows are enabled on clone
+    // Configure clone for shadows and local player color
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = false;
+        if (child.material) {
+          const material = child.material as THREE.MeshStandardMaterial;
+          material.color.set('#4a9eff'); // Blue for local player
+        }
       }
     });
     return clone;
@@ -110,18 +100,12 @@ export function LocalPlayerAvatar() {
 
   return (
     <group ref={groupRef}>
-      {/* Debug sphere - should always cast shadow */}
-      <mesh position={[0, 0.9, 0]} castShadow>
-        <sphereGeometry args={[0.3]} />
-        <meshStandardMaterial color="red" />
-      </mesh>
-      
       {/* 3D Avatar Model */}
       {avatarClone && (
         <primitive 
           object={avatarClone} 
-          scale={0.018}
-          position={[0, 0, 0]}
+          scale={0.01}
+          position={[0, -0.9, 0]}
         />
       )}
     </group>
