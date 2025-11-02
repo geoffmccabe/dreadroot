@@ -830,16 +830,16 @@ function FirstPersonControls({
       const stepHeight = 0.6;
       const feetY = camera.position.y - playerHeight;
       
-      // Use ORIGINAL intended movement direction (before blocking)
-      const intendedX = deltaMovement.x;
-      const intendedZ = deltaMovement.z;
-      const moveLength = Math.sqrt(intendedX * intendedX + intendedZ * intendedZ);
+      // Only use movement from unblocked axes to prevent corner hooking
+      const effectiveX = xBlocked ? 0 : deltaMovement.x;
+      const effectiveZ = zBlocked ? 0 : deltaMovement.z;
+      const moveLength = Math.sqrt(effectiveX * effectiveX + effectiveZ * effectiveZ);
       
       if (moveLength > 0) {
-        // Test position in the intended direction
+        // Test position in the effective direction
         const testDistance = 0.4;
-        const normalizedX = (intendedX / moveLength) * testDistance;
-        const normalizedZ = (intendedZ / moveLength) * testDistance;
+        const normalizedX = (effectiveX / moveLength) * testDistance;
+        const normalizedZ = (effectiveZ / moveLength) * testDistance;
         
         const forwardTestPos = camera.position.clone();
         forwardTestPos.x += normalizedX;
@@ -849,16 +849,24 @@ function FirstPersonControls({
         
         // Check if we can step up onto this block
         if (blockInFront && blockInFront.max.y - feetY <= stepHeight && blockInFront.max.y > feetY) {
-          // Try stepping up and forward
-          const steppedUpPos = camera.position.clone();
-          steppedUpPos.y = blockInFront.max.y + playerHeight;
-          steppedUpPos.x += normalizedX;
-          steppedUpPos.z += normalizedZ;
+          // Validate there's clearance above the target block (not covered)
+          const clearanceTestPos = camera.position.clone();
+          clearanceTestPos.x += normalizedX;
+          clearanceTestPos.z += normalizedZ;
+          clearanceTestPos.y = blockInFront.max.y + playerHeight + 0.1; // Test slightly above
           
-          // Verify no collision at stepped position
-          if (!checkAxisCollision(steppedUpPos, true)) {
-            camera.position.copy(steppedUpPos);
-            onGround.current = true;
+          // Only step up if there's no block directly above (prevents hooking onto covered edges)
+          if (!checkAxisCollision(clearanceTestPos, false)) {
+            const steppedUpPos = camera.position.clone();
+            steppedUpPos.y = blockInFront.max.y + playerHeight;
+            steppedUpPos.x += normalizedX;
+            steppedUpPos.z += normalizedZ;
+            
+            // Final validation: no collision at stepped position
+            if (!checkAxisCollision(steppedUpPos, true)) {
+              camera.position.copy(steppedUpPos);
+              onGround.current = true;
+            }
           }
         }
       }
