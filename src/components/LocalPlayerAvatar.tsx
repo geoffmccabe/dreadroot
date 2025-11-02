@@ -48,9 +48,7 @@ export function LocalPlayerAvatar() {
   // Clone the FBX for rendering
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
-    const clone = fbx.clone();
-    clone.scale.set(0.01, 0.01, 0.01);
-    return clone;
+    return fbx.clone();
   }, [fbx]);
 
   // Follow camera and update animations
@@ -95,11 +93,11 @@ export function LocalPlayerAvatar() {
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} scale={0.01}>
       {avatarClone && (
         <primitive 
           object={avatarClone} 
-          position={[0, -0.9, 0]}
+          position={[0, -90, 0]}
         />
       )}
     </group>
