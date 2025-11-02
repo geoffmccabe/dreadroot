@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlayerState } from '@/hooks/useMultiplayer';
-import { Text } from '@react-three/drei';
+import { Text, useFBX } from '@react-three/drei';
 
 interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
@@ -10,6 +10,7 @@ interface MultiplayerPlayersProps {
 
 function OtherPlayer({ player }: { player: PlayerState }) {
   const meshRef = useRef<THREE.Group>(null);
+  const fbx = useFBX('/y-bot.fbx');
   const targetPosition = useRef(new THREE.Vector3(
     player.position.x,
     player.position.y,
@@ -27,6 +28,23 @@ function OtherPlayer({ player }: { player: PlayerState }) {
     targetRotation.current = player.rotation.yaw;
   }, [player.position.x, player.position.y, player.position.z, player.rotation.yaw]);
 
+  // Configure avatar materials and shadows
+  React.useEffect(() => {
+    if (fbx) {
+      const color = player.color || '#ff6b6b';
+      fbx.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (child.material) {
+            const material = child.material as THREE.MeshStandardMaterial;
+            material.color.set(color);
+          }
+        }
+      });
+    }
+  }, [fbx, player.color]);
+
   // Smooth interpolation
   useFrame(() => {
     if (!meshRef.current) return;
@@ -43,21 +61,21 @@ function OtherPlayer({ player }: { player: PlayerState }) {
     );
   });
 
-  const color = player.color || '#ff6b6b';
+  const avatarClone = React.useMemo(() => {
+    if (!fbx) return null;
+    return fbx.clone();
+  }, [fbx]);
 
   return (
     <group ref={meshRef} position={[player.position.x, player.position.y, player.position.z]}>
-      {/* Body - Capsule-like player */}
-      <mesh position={[0, 0, 0]}>
-        <capsuleGeometry args={[0.3, 1.2, 8, 16]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-
-      {/* Head indicator */}
-      <mesh position={[0, 0.8, 0]}>
-        <sphereGeometry args={[0.2, 16, 16]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
-      </mesh>
+      {/* 3D Avatar Model */}
+      {avatarClone && (
+        <primitive 
+          object={avatarClone} 
+          scale={0.01}
+          position={[0, -0.9, 0]}
+        />
+      )}
 
       {/* Username label above player */}
       <Text
@@ -71,12 +89,6 @@ function OtherPlayer({ player }: { player: PlayerState }) {
       >
         {player.username || 'Player'}
       </Text>
-
-      {/* Direction indicator (small cone pointing forward) */}
-      <mesh position={[0, 0.9, 0.4]} rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[0.1, 0.2, 8]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
-      </mesh>
     </group>
   );
 }
