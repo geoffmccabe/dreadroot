@@ -39,7 +39,11 @@ export function LocalPlayerAvatar() {
   }, [fbx, walkAnim]);
 
   const avatarClone = React.useMemo(() => {
-    if (!fbx) return null;
+    if (!fbx) {
+      console.log('LocalPlayerAvatar: No FBX to clone');
+      return null;
+    }
+    console.log('LocalPlayerAvatar: Cloning FBX avatar');
     const clone = fbx.clone();
     // Configure clone for shadows and local player color
     clone.traverse((child) => {
@@ -52,6 +56,7 @@ export function LocalPlayerAvatar() {
         }
       }
     });
+    console.log('LocalPlayerAvatar: Avatar clone ready');
     return clone;
   }, [fbx]);
 
@@ -59,15 +64,14 @@ export function LocalPlayerAvatar() {
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     
-    // Position avatar slightly behind and below the camera so it's out of view
-    // but close enough to cast a shadow where the player is
+    // Position avatar at player's feet (directly under camera, slightly behind)
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
     
     groupRef.current.position.set(
-      camera.position.x - cameraDirection.x * 0.3, // Slightly behind camera
-      camera.position.y - 1.7, // At ground level (camera is at 1.8m, avatar is ~1.8m tall)
-      camera.position.z - cameraDirection.z * 0.3
+      camera.position.x - cameraDirection.x * 0.2,
+      camera.position.y - 1.7,
+      camera.position.z - cameraDirection.z * 0.2
     );
 
     // Rotate avatar to match camera yaw (not pitch)
@@ -98,15 +102,28 @@ export function LocalPlayerAvatar() {
     lastPositionRef.current.copy(currentPos);
   });
 
+  console.log('LocalPlayerAvatar render, avatarClone:', !!avatarClone);
+
   return (
     <group ref={groupRef}>
+      {/* Debug sphere */}
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <sphereGeometry args={[0.2]} />
+        <meshStandardMaterial color="yellow" />
+      </mesh>
+      
       {/* 3D Avatar Model */}
-      {avatarClone && (
+      {avatarClone ? (
         <primitive 
           object={avatarClone} 
           scale={0.01}
           position={[0, -0.9, 0]}
         />
+      ) : (
+        <mesh position={[0, 0, 0]} castShadow>
+          <boxGeometry args={[0.5, 1.8, 0.3]} />
+          <meshStandardMaterial color="blue" />
+        </mesh>
       )}
     </group>
   );
