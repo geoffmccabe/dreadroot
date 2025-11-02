@@ -13,7 +13,7 @@ interface BlockPreviewProps {
 
 export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, existingBlocks = [] }) => {
   const meshRef = useRef<THREE.Mesh>(null);
-  const { camera, clock } = useThree();
+  const { camera } = useThree();
   const [previewPosition, setPreviewPosition] = useState<THREE.Vector3>(new THREE.Vector3());
   const { getBlockByKey } = useBlocksData();
   
@@ -45,7 +45,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     const placementResult = calculateBlockPlacement({
       camera,
       existingBlocks: existingBlocks as any,
-      maxDistance: 100, // Increased to handle far distances
+      maxDistance: 5,
     });
     
     // Use placement result for positioning and validity
@@ -64,14 +64,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     const isEmissive = blockDef?.properties?.emissive || false;
     const isTransparent = blockDef?.properties?.transparent || false;
     
-    // Pulsing opacity animation (30% to 60% every second)
-    const pulseSpeed = 2.0; // Complete cycle every second (2 * PI / 2)
-    const baseOpacity = 0.45; // Midpoint between 0.3 and 0.6
-    const pulseAmount = 0.15; // Amplitude (0.45 ± 0.15 = 0.3 to 0.6)
-    const pulsedOpacity = baseOpacity + Math.sin(clock.getElapsedTime() * pulseSpeed) * pulseAmount;
-    
     material.transparent = true;
-    material.opacity = pulsedOpacity;
+    material.opacity = isTransparent ? 0.5 : 0.7;
     
     if (isValid) {
       material.color.set(baseColor);
