@@ -829,32 +829,23 @@ function FirstPersonControls({
     // DISABLED step-up logic to prevent wall hooking
     // TODO: Implement proper step-up that doesn't hook onto edges
     
-    // Ground detection
+    // ACTUAL ground detection - check every frame if there's a block beneath the player
     const feetY = camera.position.y - playerHeight;
-    if (feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1) {
-      onGround.current = true;
-    }
     
-    // Aggressive ground validation check - unhook if no block beneath player
-    // Check every 100ms to quickly unhook from bad positions
-    const currentTime = Date.now();
-    if (currentTime - lastGroundCheck.current >= 100 && onGround.current) {
-      lastGroundCheck.current = currentTime;
-      
-      // Check directly beneath the player's feet with a larger search area
-      const feetCheckPos = camera.position.clone();
-      feetCheckPos.y -= 0.2; // Check below feet
-      
-      const hasBlockBeneath = checkAxisCollision(feetCheckPos, false);
-      
-      // If no block beneath and not on ground level, unhook and let them fall
-      if (!hasBlockBeneath && feetY > 0.1) {
-        onGround.current = false;
-        // Also ensure we start falling
-        if (Math.abs(velocity.current.y) < 0.1) {
-          velocity.current.y = -0.1;
-        }
-      }
+    // Check if player is on the ground level (y = 0)
+    const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
+    
+    // Check if there's actually a block beneath the player's feet
+    const feetCheckPos = camera.position.clone();
+    feetCheckPos.y = camera.position.y - playerHeight - 0.05; // Just below feet
+    const hasBlockBeneath = checkAxisCollision(feetCheckPos, false);
+    
+    // Player is on ground ONLY if they're on ground level OR there's a block beneath them
+    if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
+      onGround.current = true;
+    } else {
+      // No block beneath and not on ground level = falling
+      onGround.current = false;
     }
     
     // Broadcast position to multiplayer (throttled internally)
