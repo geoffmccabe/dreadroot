@@ -11,7 +11,7 @@ interface AvatarModelPreviewProps {
   animationPath?: string;
 }
 
-function Model({ modelPath, color, animationPath }: AvatarModelPreviewProps) {
+function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const fbx = useFBX(modelPath);
@@ -47,15 +47,12 @@ function Model({ modelPath, color, animationPath }: AvatarModelPreviewProps) {
             const action = mixerRef.current.clipAction(animFBX.animations[0]);
             action.setLoop(THREE.LoopRepeat, Infinity);
             action.play();
-            console.log('✅ Preview animation playing:', animationPath);
           }
         },
         undefined,
         (error) => console.warn('Failed to load preview animation:', error)
       );
     }
-    
-    console.log('✅ Preview model configured');
 
     return () => {
       mixerRef.current?.stopAllAction();
@@ -74,7 +71,7 @@ function Model({ modelPath, color, animationPath }: AvatarModelPreviewProps) {
 
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={0.01} position={[0, -0.9, 0]} />
+      <primitive object={fbx} scale={scale} position={[0, -0.9, 0]} />
     </group>
   );
 }
