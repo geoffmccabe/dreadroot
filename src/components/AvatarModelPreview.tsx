@@ -83,6 +83,11 @@ function Model({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath 
 }
 
 function Scene({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath }: AvatarModelPreviewProps) {
+  // Calculate avatar height in world units (base model ~100 units * scale * scaleY)
+  const avatarHeight = scale * scaleY * 100;
+  // Position target at 40% of avatar height from feet to show feet at ~1/3 from bottom
+  const targetY = -0.9 + (avatarHeight * 0.4);
+  
   return (
     <>
       <ambientLight intensity={0.8} />
@@ -91,7 +96,7 @@ function Scene({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath 
       <React.Suspense fallback={null}>
         <Model modelPath={modelPath} color={color} scale={scale} scaleX={scaleX} scaleY={scaleY} scaleZ={scaleZ} animationPath={animationPath} />
       </React.Suspense>
-      <OrbitControls enablePan={false} enableZoom={true} target={[0, 0.1, 0]} />
+      <OrbitControls enablePan={false} enableZoom={true} target={[0, targetY, 0]} />
       <gridHelper args={[10, 10]} position={[0, -0.9, 0]} />
     </>
   );
