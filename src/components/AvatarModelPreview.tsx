@@ -69,9 +69,13 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
     }
   });
 
+  // Scale the Y position proportionally with the avatar size
+  // Base position is -0.9 at scale 0.01
+  const yPosition = -0.9 * (scale / 0.01);
+
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={scale} position={[0, -0.9, 0]} />
+      <primitive object={fbx} scale={scale} position={[0, yPosition, 0]} />
     </group>
   );
 }
