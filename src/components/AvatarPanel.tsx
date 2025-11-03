@@ -311,7 +311,8 @@ export function AvatarPanel() {
                         <SelectItem value="idle">Idle</SelectItem>
                         <SelectItem value="manual">Manual</SelectItem>
                         <SelectItem value="jump">Jump</SelectItem>
-                         <SelectItem value="attack">Attack</SelectItem>
+                        <SelectItem value="crouch">Crouch</SelectItem>
+                        <SelectItem value="attack">Attack</SelectItem>
                         <SelectItem value="death">Death</SelectItem>
                       </SelectContent>
                     </Select>
@@ -405,6 +406,7 @@ export function AvatarPanel() {
                 <SelectItem value="idle">Idle</SelectItem>
                 <SelectItem value="manual">Manual</SelectItem>
                 <SelectItem value="jump">Jump</SelectItem>
+                <SelectItem value="crouch">Crouch</SelectItem>
                 <SelectItem value="attack">Attack</SelectItem>
                 <SelectItem value="death">Death</SelectItem>
               </SelectContent>
