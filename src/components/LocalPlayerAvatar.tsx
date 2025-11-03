@@ -4,6 +4,55 @@ import * as THREE from 'three';
 import { useFBX } from '@react-three/drei';
 import { useAvatar } from '@/contexts/AvatarContext';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+// Global animation cache to prevent reloading the same files
+const animationCache = new Map<string, THREE.AnimationClip>();
+
+// Universal loader that handles multiple formats
+const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> => {
+  // Check cache first
+  if (animationCache.has(url)) {
+    console.log(`✅ Using cached animation: ${url}`);
+    return animationCache.get(url)!.clone();
+  }
+
+  console.log(`📥 Loading animation from network: ${url}`);
+  
+  const extension = url.split('.').pop()?.toLowerCase();
+  
+  try {
+    if (extension === 'fbx') {
+      const loader = new FBXLoader();
+      const fbx = await new Promise<THREE.Group>((resolve, reject) => {
+        loader.load(url, resolve, undefined, reject);
+      });
+      
+      if (fbx.animations && fbx.animations.length > 0) {
+        const clip = fbx.animations[0];
+        animationCache.set(url, clip);
+        console.log(`✅ Cached FBX animation: ${url}`);
+        return clip.clone();
+      }
+    } else if (extension === 'glb' || extension === 'gltf') {
+      const loader = new GLTFLoader();
+      const gltf = await new Promise<any>((resolve, reject) => {
+        loader.load(url, resolve, undefined, reject);
+      });
+      
+      if (gltf.animations && gltf.animations.length > 0) {
+        const clip = gltf.animations[0];
+        animationCache.set(url, clip);
+        console.log(`✅ Cached GLTF animation: ${url}`);
+        return clip.clone();
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to load animation: ${url}`, error);
+  }
+  
+  return null;
+};
 
 export function LocalPlayerAvatar() {
   const groupRef = useRef<THREE.Group>(null);
@@ -53,32 +102,27 @@ export function LocalPlayerAvatar() {
     mixerRef.current = new THREE.AnimationMixer(fbx);
     actionsRef.current.clear();
     
-    // Load all animations from config
-    const loader = new FBXLoader();
-    
-    avatarConfig.animations.forEach(animConfig => {
-      loader.load(
-        animConfig.file,
-        (animFBX) => {
-          if (animFBX.animations && animFBX.animations.length > 0 && mixerRef.current) {
-            const action = mixerRef.current.clipAction(animFBX.animations[0]);
-            action.setLoop(animConfig.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-            action.timeScale = animConfig.speed;
-            actionsRef.current.set(animConfig.name, action);
-            
-            // Start idle animation by default
-            if (animConfig.trigger === 'idle') {
-              action.play();
-              currentActionRef.current = animConfig.name;
-            }
+    // Load all animations using cache
+    const loadAnimations = async () => {
+      for (const animConfig of avatarConfig.animations) {
+        const clip = await loadAnimation(animConfig.file);
+        
+        if (clip && mixerRef.current) {
+          const action = mixerRef.current.clipAction(clip);
+          action.setLoop(animConfig.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+          action.timeScale = animConfig.speed;
+          actionsRef.current.set(animConfig.name, action);
+          
+          // Start idle animation by default
+          if (animConfig.trigger === 'idle') {
+            action.play();
+            currentActionRef.current = animConfig.name;
           }
-        },
-        undefined,
-        (error) => {
-          console.warn(`Failed to load animation: ${animConfig.file}`, error);
         }
-      );
-    });
+      }
+    };
+    
+    loadAnimations();
 
     return () => {
       mixerRef.current?.stopAllAction();
