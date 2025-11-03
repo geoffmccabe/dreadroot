@@ -91,7 +91,7 @@ function Scene({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath 
       <React.Suspense fallback={null}>
         <Model modelPath={modelPath} color={color} scale={scale} scaleX={scaleX} scaleY={scaleY} scaleZ={scaleZ} animationPath={animationPath} />
       </React.Suspense>
-      <OrbitControls enablePan={false} enableZoom={true} target={[0, -0.9, 0]} />
+      <OrbitControls enablePan={false} enableZoom={true} target={[0, 0.1, 0]} />
       <gridHelper args={[10, 10]} position={[0, -0.9, 0]} />
     </>
   );
