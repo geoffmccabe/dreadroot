@@ -51,8 +51,30 @@ export function AvatarPanel() {
   return (
     <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-8rem)] pr-2">
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle>MODEL</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById('model-file-input')?.click()}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            IMPORT MODEL
+          </Button>
+          <input
+            id="model-file-input"
+            type="file"
+            accept=".fbx,.glb,.gltf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                // For now, just show the file name - actual upload functionality to be implemented
+                console.log('Model file selected:', file.name);
+                // TODO: Implement file upload to storage
+              }
+            }}
+          />
         </CardHeader>
         <CardContent>
           <Select
