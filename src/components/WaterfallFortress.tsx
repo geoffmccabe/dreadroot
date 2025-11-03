@@ -75,7 +75,10 @@ function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: {
 }) {
   const { camera } = useThree();
   const { blocksByChunk, visualDistance } = useBlocks();
-  const [cameraPosition, setCameraPosition] = useState({ x: 0, z: 0 });
+  
+  // Use ref instead of state to avoid React re-renders in useFrame
+  const cameraPositionRef = useRef({ x: 0, z: 0 });
+  const [visibleChunks, setVisibleChunks] = useState<Set<string>>(new Set());
   const lastChunkRef = useRef({ x: 0, z: 0 });
   
   // Only update when camera moves to a different chunk
@@ -85,29 +88,36 @@ function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: {
     
     if (currentChunkX !== lastChunkRef.current.x || 
         currentChunkZ !== lastChunkRef.current.z) {
-      setCameraPosition({
+      cameraPositionRef.current = {
         x: camera.position.x,
         z: camera.position.z
-      });
+      };
       lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
+      
+      // Update visible chunks for filtering (only on chunk change, not every frame)
+      const visibleChunkKeys = getVisibleChunkKeys(
+        cameraPositionRef.current.x, 
+        cameraPositionRef.current.z, 
+        visualDistance
+      );
+      setVisibleChunks(new Set(visibleChunkKeys));
     }
   });
   
-  // Filter blocks based on visible chunks
+  // Filter blocks based on visible chunks (only recalculates when visibleChunks changes)
   const visibleBlocks = useMemo(() => {
-    const visibleChunkKeys = getVisibleChunkKeys(cameraPosition.x, cameraPosition.z, visualDistance);
     const filtered: PlacedBlock[] = [];
     
-    for (const chunkKey of visibleChunkKeys) {
+    for (const chunkKey of visibleChunks) {
       const chunksBlocks = blocksByChunk.get(chunkKey);
       if (chunksBlocks) {
         filtered.push(...chunksBlocks);
       }
     }
     
-    console.log(`📦 Rendering ${filtered.length}/${blocks.length} blocks from ${visibleChunkKeys.length} chunks (distance: ${visualDistance})`);
+    console.log(`📦 Rendering ${filtered.length}/${blocks.length} blocks from ${visibleChunks.size} chunks (distance: ${visualDistance})`);
     return filtered;
-  }, [cameraPosition.x, cameraPosition.z, visualDistance, blocksByChunk, blocks.length]);
+  }, [visibleChunks, blocksByChunk, blocks.length, visualDistance]);
   
   return <PlacedBlocks blocks={visibleBlocks} showOwnershipOutline={showOwnershipOutline} currentUserId={currentUserId} />;
 }
@@ -1501,9 +1511,19 @@ function DynamicLighting({ weatherSettings }: {
   
   const { lightingPercentage } = useWeatherCycle(weatherSettings);
   
+  // Cache previous lighting value to avoid unnecessary updates
+  const prevLightingRef = useRef(lightingPercentage);
+  
   useFrame(() => {
+    // Only update if lighting changed significantly (>1% change)
+    const currentLighting = lightingPercentage;
+    if (Math.abs(currentLighting - prevLightingRef.current) < 1) {
+      return;
+    }
+    prevLightingRef.current = currentLighting;
+    
     // Ensure minimum 5% ambient light so nothing turns pure black
-    const baseIntensity = Math.max(0.05, lightingPercentage / 100);
+    const baseIntensity = Math.max(0.05, currentLighting / 100);
     
     if (hemisphereRef.current) {
       hemisphereRef.current.intensity = 1.1 * baseIntensity;
