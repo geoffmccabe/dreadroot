@@ -67,7 +67,7 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
 
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={scale} position={[0, -0.9, 0]} />
+      <primitive object={fbx} scale={scale * 100} position={[0, 0, 0]} />
     </group>
   );
 }
@@ -95,13 +95,20 @@ export function AvatarModelPreview({ modelPath, color, scale, animationPath }: A
       )}
       <Canvas
         camera={{ position: [0, 1, 3], fov: 50 }}
-        gl={{ alpha: true, antialias: true }}
+        gl={{ alpha: false, antialias: true }}
+        style={{ background: '#1a1a2e' }}
         onCreated={() => console.log('Canvas created for preview')}
       >
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[5, 5, 5]} intensity={1.2} castShadow />
-        <directionalLight position={[-5, 5, -5]} intensity={0.6} />
-        <pointLight position={[0, 2, 0]} intensity={0.5} />
+        <color attach="background" args={['#1a1a2e']} />
+        <ambientLight intensity={1} />
+        <directionalLight position={[5, 5, 5]} intensity={1} />
+        <directionalLight position={[-5, 5, -5]} intensity={0.8} />
+        
+        {/* Test cube to verify rendering */}
+        <mesh position={[1.5, 0, 0]}>
+          <boxGeometry args={[0.3, 0.3, 0.3]} />
+          <meshStandardMaterial color="red" />
+        </mesh>
         
         <Suspense fallback={<LoadingIndicator />}>
           <Model 
