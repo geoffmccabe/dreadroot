@@ -171,6 +171,69 @@ export type Database = {
           },
         ]
       }
+      models: {
+        Row: {
+          animations: Json
+          cost: number | null
+          created_at: string
+          default_color: string
+          default_scale: number
+          default_scale_x: number
+          default_scale_y: number
+          default_scale_z: number
+          description: string | null
+          file_format: string
+          id: string
+          is_active: boolean
+          key: string
+          model_type: string
+          model_url: string
+          name: string
+          rarity: string
+          updated_at: string
+        }
+        Insert: {
+          animations?: Json
+          cost?: number | null
+          created_at?: string
+          default_color?: string
+          default_scale?: number
+          default_scale_x?: number
+          default_scale_y?: number
+          default_scale_z?: number
+          description?: string | null
+          file_format: string
+          id?: string
+          is_active?: boolean
+          key: string
+          model_type: string
+          model_url: string
+          name: string
+          rarity?: string
+          updated_at?: string
+        }
+        Update: {
+          animations?: Json
+          cost?: number | null
+          created_at?: string
+          default_color?: string
+          default_scale?: number
+          default_scale_x?: number
+          default_scale_y?: number
+          default_scale_z?: number
+          description?: string | null
+          file_format?: string
+          id?: string
+          is_active?: boolean
+          key?: string
+          model_type?: string
+          model_url?: string
+          name?: string
+          rarity?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       placed_blocks: {
         Row: {
           block_type: string

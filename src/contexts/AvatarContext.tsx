@@ -1,14 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-
-export interface AnimationConfig {
-  name: string;
-  file: string;
-  trigger: 'movement' | 'manual' | 'idle' | 'jump' | 'crouch';
-  speed: number;
-  loop: boolean;
-  fadeInDuration: number;
-  fadeOutDuration: number;
-}
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { AnimationConfig } from '@/types/models';
+import { useModelsData } from '@/hooks/useModelsData';
 
 export interface AvatarConfig {
   model: string;
@@ -30,42 +22,39 @@ interface AvatarContextType {
   currentAnimation: string;
 }
 
-const defaultAnimations: AnimationConfig[] = [
-  {
-    name: 'Walk',
-    file: '/Unarmed_Walk_Forward.fbx',
-    trigger: 'movement',
-    speed: 1.0,
-    loop: true,
-    fadeInDuration: 0.2,
-    fadeOutDuration: 0.2,
-  },
-  {
-    name: 'Idle',
-    file: '/Sitting_Laughing.fbx',
-    trigger: 'idle',
-    speed: 1.0,
-    loop: true,
-    fadeInDuration: 0.3,
-    fadeOutDuration: 0.3,
-  },
-];
-
-const defaultConfig: AvatarConfig = {
-  model: '/y-bot.fbx',
-  scale: 0.01,
-  scaleX: 1.0,
-  scaleY: 1.0,
-  scaleZ: 1.0,
-  color: '#4a9eff',
-  animations: defaultAnimations,
-};
-
 const AvatarContext = createContext<AvatarContextType | undefined>(undefined);
 
 export function AvatarProvider({ children }: { children: React.ReactNode }) {
-  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(defaultConfig);
+  const { getModelByKey, isLoading } = useModelsData();
+  
+  const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>({
+    model: '/y-bot.fbx',
+    scale: 0.01,
+    scaleX: 1.0,
+    scaleY: 1.0,
+    scaleZ: 1.0,
+    color: '#4a9eff',
+    animations: [],
+  });
   const [currentAnimation, setCurrentAnimation] = useState<string>('Idle');
+
+  // Load default model from database
+  useEffect(() => {
+    if (!isLoading) {
+      const yBotModel = getModelByKey('y-bot');
+      if (yBotModel) {
+        setAvatarConfig({
+          model: yBotModel.model_url,
+          scale: yBotModel.default_scale,
+          scaleX: yBotModel.default_scale_x,
+          scaleY: yBotModel.default_scale_y,
+          scaleZ: yBotModel.default_scale_z,
+          color: yBotModel.default_color,
+          animations: yBotModel.animations,
+        });
+      }
+    }
+  }, [isLoading, getModelByKey]);
 
   const updateAvatarConfig = useCallback((updates: Partial<AvatarConfig>) => {
     setAvatarConfig(prev => ({ ...prev, ...updates }));

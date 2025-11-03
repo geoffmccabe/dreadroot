@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useAvatar, AnimationConfig } from '@/contexts/AvatarContext';
+import { useAvatar } from '@/contexts/AvatarContext';
+import { useModelsData } from '@/hooks/useModelsData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +10,10 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Play, Trash2, Plus } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { AvatarModelPreview } from './AvatarModelPreview';
+import { AnimationConfig } from '@/types/models';
 
 export function AvatarPanel() {
   const { 
@@ -21,6 +25,8 @@ export function AvatarPanel() {
     triggerAnimation,
     currentAnimation 
   } = useAvatar();
+
+  const { models, isLoading: modelsLoading } = useModelsData();
 
   const [isGiantMode, setIsGiantMode] = useState(false);
   const [newAnim, setNewAnim] = useState<Partial<AnimationConfig>>({
@@ -78,20 +84,59 @@ export function AvatarPanel() {
         </CardHeader>
         <CardContent>
           <Select
-            value="y-bot"
+            value={avatarConfig.model}
             onValueChange={(value) => {
-              if (value === 'y-bot') {
-                updateAvatarConfig({ model: '/y-bot.fbx' });
+              const model = models.find(m => m.model_url === value);
+              if (model) {
+                updateAvatarConfig({
+                  model: model.model_url,
+                  scale: model.default_scale,
+                  scaleX: model.default_scale_x,
+                  scaleY: model.default_scale_y,
+                  scaleZ: model.default_scale_z,
+                  color: model.default_color,
+                  animations: model.animations,
+                });
               }
             }}
+            disabled={modelsLoading}
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select a model"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="y-bot">Y-Bot</SelectItem>
+              {['Character', 'NPC', 'Enemy'].map(type => {
+                const typeModels = models.filter(m => m.model_type === type);
+                if (typeModels.length === 0) return null;
+                return (
+                  <div key={type}>
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                      {type}s
+                    </div>
+                    {typeModels.map(model => (
+                      <SelectItem key={model.id} value={model.model_url}>
+                        <div className="flex items-center gap-2">
+                          <span>{model.name}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {model.rarity}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </div>
+                );
+              })}
             </SelectContent>
           </Select>
+          
+          {avatarConfig.model && (() => {
+            const currentModel = models.find(m => m.model_url === avatarConfig.model);
+            return currentModel?.description ? (
+              <p className="text-sm text-muted-foreground mt-2">
+                {currentModel.description}
+              </p>
+            ) : null;
+          })()}
         </CardContent>
       </Card>
 
@@ -266,7 +311,8 @@ export function AvatarPanel() {
                         <SelectItem value="idle">Idle</SelectItem>
                         <SelectItem value="manual">Manual</SelectItem>
                         <SelectItem value="jump">Jump</SelectItem>
-                        <SelectItem value="crouch">Crouch</SelectItem>
+                         <SelectItem value="attack">Attack</SelectItem>
+                        <SelectItem value="death">Death</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -359,7 +405,8 @@ export function AvatarPanel() {
                 <SelectItem value="idle">Idle</SelectItem>
                 <SelectItem value="manual">Manual</SelectItem>
                 <SelectItem value="jump">Jump</SelectItem>
-                <SelectItem value="crouch">Crouch</SelectItem>
+                <SelectItem value="attack">Attack</SelectItem>
+                <SelectItem value="death">Death</SelectItem>
               </SelectContent>
             </Select>
           </div>
