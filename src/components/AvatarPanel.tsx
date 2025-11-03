@@ -52,7 +52,7 @@ export function AvatarPanel() {
     <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-8rem)] pr-2">
       <Card>
         <CardHeader>
-          <CardTitle>Model Type</CardTitle>
+          <CardTitle>MODEL</CardTitle>
         </CardHeader>
         <CardContent>
           <Select
