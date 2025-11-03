@@ -95,10 +95,15 @@ function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
 }
 
 export function AvatarModelPreview({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
+  // Scale the camera distance based on model scale
+  // At scale 0.01 (default), use base distance
+  // Camera scales proportionally with model
+  const distance = scale * 200; // 0.01 -> 2, 0.02 -> 4, etc.
+  
   return (
     <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [2, 0.5, 3], fov: 50 }}
+        camera={{ position: [distance, distance * 0.25, distance * 1.5], fov: 50 }}
         style={{ width: '100%', height: '100%' }}
       >
         <Scene 
