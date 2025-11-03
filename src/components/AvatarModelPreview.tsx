@@ -80,6 +80,11 @@ function Model({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
 }
 
 function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
+  // Calculate camera distance based on scale to keep model in view
+  const baseDistance = 100; // Distance for scale 0.01
+  const cameraDistance = (scale / 0.01) * baseDistance;
+  const cameraY = cameraDistance * 0.25;
+  
   return (
     <>
       <ambientLight intensity={0.8} />
@@ -88,17 +93,22 @@ function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
       <React.Suspense fallback={null}>
         <Model modelPath={modelPath} color={color} scale={scale} offsetX={offsetX} offsetY={offsetY} offsetZ={offsetZ} animationPath={animationPath} />
       </React.Suspense>
-      <OrbitControls enablePan={false} enableZoom={true} />
-      <gridHelper args={[10, 10]} position={[0, -1, 0]} />
+      <OrbitControls enablePan={false} enableZoom={true} target={[offsetX, offsetY, offsetZ]} />
+      <gridHelper args={[10, 10]} position={[0, offsetY - 1, 0]} />
     </>
   );
 }
 
 export function AvatarModelPreview({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
+  // Calculate camera distance based on scale
+  const baseDistance = 100;
+  const cameraDistance = (scale / 0.01) * baseDistance;
+  const cameraY = cameraDistance * 0.25;
+  
   return (
     <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [2, 0.5, 3], fov: 50 }}
+        camera={{ position: [cameraDistance * 0.6, cameraY, cameraDistance * 0.8], fov: 50 }}
         style={{ width: '100%', height: '100%' }}
       >
         <Scene 
