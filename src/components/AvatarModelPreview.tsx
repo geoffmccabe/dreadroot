@@ -1,4 +1,4 @@
-import React, { useRef, Suspense } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useFBX, OrbitControls } from '@react-three/drei';
@@ -10,38 +10,32 @@ interface AvatarModelPreviewProps {
   animationPath?: string;
 }
 
-
-function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
+function Model({ modelPath, color }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const fbx = useFBX(modelPath);
 
-  React.useEffect(() => {
-    if (fbx) {
-      let meshCount = 0;
-      fbx.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          meshCount++;
-          console.log('🔍 Found mesh:', child.name, 'Has material:', !!child.material);
-          if (child.material) {
-            const mat = child.material as THREE.MeshStandardMaterial;
-            mat.color.set(color);
-            mat.visible = true;
-            mat.opacity = 1;
-            mat.transparent = false;
-            mat.side = THREE.DoubleSide;
-            mat.needsUpdate = true;
-          }
+  useEffect(() => {
+    if (!fbx) return;
+    
+    // Configure materials and shadows - same as LocalPlayerAvatar but keep visible
+    fbx.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        // Keep on default layer 0 so it's visible
+        child.layers.enable(0);
+        child.castShadow = true;
+        child.receiveShadow = true;
+        
+        if (child.material) {
+          const material = child.material as THREE.MeshStandardMaterial;
+          material.color.set(color);
+          material.metalness = 0.3;
+          material.roughness = 0.7;
         }
-      });
-      
-      // Calculate bounding box to see actual size
-      const box = new THREE.Box3().setFromObject(fbx);
-      const size = box.getSize(new THREE.Vector3());
-      console.log('🎯 FBX SIZE:', size.x, size.y, size.z);
-      console.log('🎯 Total meshes found:', meshCount);
-      console.log('🎯 FBX children:', fbx.children.length);
-    }
-  }, [fbx, color, scale]);
+      }
+    });
+    
+    console.log('✅ Preview model configured');
+  }, [fbx, color]);
 
   useFrame(() => {
     if (groupRef.current) {
@@ -51,12 +45,7 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
 
   return (
     <group ref={groupRef}>
-      {/* Marker sphere to show where model should be */}
-      <mesh position={[0, 1, 0]}>
-        <sphereGeometry args={[0.1, 16, 16]} />
-        <meshStandardMaterial color="red" emissive="red" emissiveIntensity={0.5} />
-      </mesh>
-      <primitive object={fbx} scale={200} position={[0, 0, 0]} />
+      <primitive object={fbx} scale={0.01} position={[0, -0.9, 0]} />
     </group>
   );
 }
@@ -65,13 +54,13 @@ function Scene({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
   return (
     <>
       <ambientLight intensity={0.8} />
-      <directionalLight position={[5, 5, 5]} intensity={1} />
+      <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
       <directionalLight position={[-5, 3, -5]} intensity={0.5} />
-      <Suspense fallback={null}>
+      <React.Suspense fallback={null}>
         <Model modelPath={modelPath} color={color} scale={scale} animationPath={animationPath} />
-      </Suspense>
+      </React.Suspense>
       <OrbitControls enablePan={false} enableZoom={true} />
-      <gridHelper args={[10, 10]} />
+      <gridHelper args={[10, 10]} position={[0, -1, 0]} />
     </>
   );
 }
@@ -80,7 +69,7 @@ export function AvatarModelPreview({ modelPath, color, scale, animationPath }: A
   return (
     <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [2, 1, 3], fov: 50 }}
+        camera={{ position: [2, 0.5, 3], fov: 50 }}
         style={{ width: '100%', height: '100%' }}
       >
         <Scene 
