@@ -14,7 +14,7 @@ interface AvatarModelPreviewProps {
 function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const clonedFbxRef = useRef<THREE.Group | null>(null);
+  const [clonedFbx, setClonedFbx] = useState<THREE.Group | null>(null);
   
   let fbx;
   try {
@@ -33,11 +33,11 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
     console.log('Preview: FBX loaded successfully', fbx);
     
     // Clone the FBX to avoid conflicts with the main scene
-    const clonedFbx = fbx.clone();
-    clonedFbxRef.current = clonedFbx;
+    const clonedModel = fbx.clone();
+    setClonedFbx(clonedModel);
     
     // Configure materials
-    clonedFbx.traverse((child) => {
+    clonedModel.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
@@ -58,8 +58,8 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
       loader.load(
         animationPath,
         (animFBX) => {
-          if (animFBX.animations && animFBX.animations.length > 0 && clonedFbx) {
-            mixerRef.current = new THREE.AnimationMixer(clonedFbx);
+          if (animFBX.animations && animFBX.animations.length > 0 && clonedModel) {
+            mixerRef.current = new THREE.AnimationMixer(clonedModel);
             const action = mixerRef.current.clipAction(animFBX.animations[0]);
             action.setLoop(THREE.LoopRepeat, Infinity);
             action.play();
@@ -88,11 +88,11 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
     }
   });
 
-  if (!clonedFbxRef.current) return null;
+  if (!clonedFbx) return null;
 
   return (
     <group ref={groupRef}>
-      <primitive object={clonedFbxRef.current} scale={scale} />
+      <primitive object={clonedFbx} scale={scale} />
     </group>
   );
 }
