@@ -14,7 +14,7 @@ const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> =
   // Check cache first
   if (animationCache.has(url)) {
     console.log(`✅ Using cached animation: ${url}`);
-    return animationCache.get(url)!.clone();
+    return animationCache.get(url)!;
   }
 
   console.log(`📥 Loading animation from network: ${url}`);
@@ -32,7 +32,7 @@ const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> =
         const clip = fbx.animations[0];
         animationCache.set(url, clip);
         console.log(`✅ Cached FBX animation: ${url}`);
-        return clip.clone();
+        return clip;
       }
     } else if (extension === 'glb' || extension === 'gltf') {
       const loader = new GLTFLoader();
@@ -44,7 +44,7 @@ const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> =
         const clip = gltf.animations[0];
         animationCache.set(url, clip);
         console.log(`✅ Cached GLTF animation: ${url}`);
-        return clip.clone();
+        return clip;
       }
     }
   } catch (error) {
@@ -61,6 +61,14 @@ export function LocalPlayerAvatar() {
   const currentActionRef = useRef<string>('Idle');
   const velocityRef = useRef(new THREE.Vector3());
   const lastPositionRef = useRef(new THREE.Vector3());
+  
+  // Reusable Vector3 objects to prevent garbage collection
+  const tempVectorRef = useRef(new THREE.Vector3());
+  const cameraDirectionRef = useRef(new THREE.Vector3());
+  
+  // Cache animation lookups
+  const movementAnimRef = useRef<string | null>(null);
+  const idleAnimRef = useRef<string | null>(null);
   
   const { camera } = useThree();
   const { avatarConfig, currentAnimation } = useAvatar();
@@ -123,6 +131,12 @@ export function LocalPlayerAvatar() {
     };
     
     loadAnimations();
+    
+    // Update animation lookup cache
+    const movementAnim = avatarConfig.animations.find(a => a.trigger === 'movement');
+    const idleAnim = avatarConfig.animations.find(a => a.trigger === 'idle');
+    movementAnimRef.current = movementAnim?.name || null;
+    idleAnimRef.current = idleAnim?.name || null;
 
     return () => {
       mixerRef.current?.stopAllAction();
@@ -133,19 +147,19 @@ export function LocalPlayerAvatar() {
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     
-    // Calculate camera velocity
-    const currentPos = camera.position.clone();
-    velocityRef.current.copy(currentPos).sub(lastPositionRef.current);
+    // Calculate camera velocity using reusable vector
+    tempVectorRef.current.copy(camera.position).sub(lastPositionRef.current);
+    const speed = tempVectorRef.current.length();
+    velocityRef.current.copy(tempVectorRef.current);
     
-    // Get camera direction for positioning
-    const cameraDirection = new THREE.Vector3();
-    camera.getWorldDirection(cameraDirection);
+    // Get camera direction using reusable vector
+    camera.getWorldDirection(cameraDirectionRef.current);
     
     // Position avatar exactly with camera (no lerp to avoid desyncing)
-    groupRef.current.position.copy(currentPos);
+    groupRef.current.position.copy(camera.position);
 
     // Rotate to match camera yaw
-    const yaw = Math.atan2(cameraDirection.x, cameraDirection.z);
+    const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z);
     groupRef.current.rotation.y = yaw;
 
     // Update animations
@@ -154,20 +168,16 @@ export function LocalPlayerAvatar() {
     }
 
     // Detect movement based on velocity
-    const speed = velocityRef.current.length();
     const isMoving = speed > 0.01;
     
     // Determine which animation should play based on movement
     let desiredAnimation = currentAnimation;
     
-    // Override with movement/idle if using automatic triggers
-    const movementAnim = avatarConfig.animations.find(a => a.trigger === 'movement');
-    const idleAnim = avatarConfig.animations.find(a => a.trigger === 'idle');
-    
-    if (isMoving && movementAnim) {
-      desiredAnimation = movementAnim.name;
-    } else if (!isMoving && idleAnim) {
-      desiredAnimation = idleAnim.name;
+    // Override with movement/idle if using automatic triggers (use cached refs)
+    if (isMoving && movementAnimRef.current) {
+      desiredAnimation = movementAnimRef.current;
+    } else if (!isMoving && idleAnimRef.current) {
+      desiredAnimation = idleAnimRef.current;
     }
     
     // Handle animation transitions
@@ -188,7 +198,7 @@ export function LocalPlayerAvatar() {
       }
     }
 
-    lastPositionRef.current.copy(currentPos);
+    lastPositionRef.current.copy(camera.position);
   });
 
   return (
