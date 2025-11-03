@@ -89,7 +89,7 @@ function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
         <Model modelPath={modelPath} color={color} scale={scale} offsetX={offsetX} offsetY={offsetY} offsetZ={offsetZ} animationPath={animationPath} />
       </React.Suspense>
       <OrbitControls enablePan={false} enableZoom={true} target={[offsetX, offsetY, offsetZ]} />
-      <gridHelper args={[10, 10]} position={[0, 0, 0]} />
+      <gridHelper args={[10, 10]} position={[0, offsetY, 0]} />
     </>
   );
 }
