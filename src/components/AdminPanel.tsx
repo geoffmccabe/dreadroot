@@ -1529,7 +1529,7 @@ export function AdminPanel({
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
             <TabsTrigger value="weather">Weather</TabsTrigger>
-            <TabsTrigger value="avatar">Avatar</TabsTrigger>
+            <TabsTrigger value="models">Models</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
           </TabsList>
@@ -1566,7 +1566,7 @@ export function AdminPanel({
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="avatar" className="mt-4 flex-1 overflow-hidden">
+          <TabsContent value="models" className="mt-4 flex-1 overflow-hidden">
             <ScrollArea className="h-full pr-4">
               <AvatarPanel />
             </ScrollArea>
