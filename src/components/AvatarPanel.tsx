@@ -127,6 +127,7 @@ export function AvatarPanel() {
 
                 <div className="w-96 h-96 flex-shrink-0">
                   <AvatarModelPreview
+                    key={`${avatarConfig.model}-${avatarConfig.scale}`}
                     modelPath={avatarConfig.model}
                     color={avatarConfig.color}
                     scale={avatarConfig.scale}
