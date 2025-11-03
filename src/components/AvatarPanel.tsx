@@ -63,7 +63,7 @@ export function AvatarPanel() {
               <CardDescription>Configure the avatar model and positioning</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-4">
+              <div className="flex gap-6">
                 <div className="flex-1 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="modelType">Model Type</Label>
@@ -93,44 +93,44 @@ export function AvatarPanel() {
                       placeholder="/y-bot.fbx"
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="scale">Scale: {avatarConfig.scale.toFixed(3)}</Label>
+                    <Slider
+                      id="scale"
+                      min={0.001}
+                      max={0.1}
+                      step={0.001}
+                      value={[avatarConfig.scale]}
+                      onValueChange={([value]) => updateAvatarConfig({ scale: value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="color">Avatar Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="color"
+                        type="color"
+                        value={avatarConfig.color}
+                        onChange={(e) => updateAvatarConfig({ color: e.target.value })}
+                        className="w-20 h-10"
+                      />
+                      <Input
+                        value={avatarConfig.color}
+                        onChange={(e) => updateAvatarConfig({ color: e.target.value })}
+                        placeholder="#4a9eff"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="w-48 h-48 flex-shrink-0">
+                <div className="w-96 h-96 flex-shrink-0">
                   <AvatarModelPreview
                     modelPath={avatarConfig.model}
                     color={avatarConfig.color}
                     scale={avatarConfig.scale}
                     animationPath={avatarConfig.animations.find(a => a.trigger === 'idle')?.file}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="scale">Scale: {avatarConfig.scale.toFixed(3)}</Label>
-                <Slider
-                  id="scale"
-                  min={0.001}
-                  max={0.1}
-                  step={0.001}
-                  value={[avatarConfig.scale]}
-                  onValueChange={([value]) => updateAvatarConfig({ scale: value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="color">Avatar Color</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="color"
-                    type="color"
-                    value={avatarConfig.color}
-                    onChange={(e) => updateAvatarConfig({ color: e.target.value })}
-                    className="w-20 h-10"
-                  />
-                  <Input
-                    value={avatarConfig.color}
-                    onChange={(e) => updateAvatarConfig({ color: e.target.value })}
-                    placeholder="#4a9eff"
                   />
                 </div>
               </div>
