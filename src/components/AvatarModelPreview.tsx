@@ -88,6 +88,11 @@ function Scene({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath 
   // Position target at 40% of avatar height from feet to show feet at ~1/3 from bottom
   const targetY = -0.9 + (avatarHeight * 0.4);
   
+  // Scale grid based on avatar height (height in meters = scale / 0.01 * 1.7)
+  const heightInMeters = scale / 0.01 * 1.7;
+  const gridSize = Math.max(10, heightInMeters * 6); // 10 is minimum, scales up with height
+  const gridDivisions = Math.max(10, Math.floor(gridSize / 1)); // 1 meter per division
+  
   return (
     <>
       <ambientLight intensity={0.8} />
@@ -97,7 +102,7 @@ function Scene({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath 
         <Model modelPath={modelPath} color={color} scale={scale} scaleX={scaleX} scaleY={scaleY} scaleZ={scaleZ} animationPath={animationPath} />
       </React.Suspense>
       <OrbitControls enablePan={false} enableZoom={true} target={[0, targetY, 0]} />
-      <gridHelper args={[10, 10]} position={[0, -0.9, 0]} />
+      <gridHelper args={[gridSize, gridDivisions]} position={[0, -0.9, 0]} />
     </>
   );
 }
