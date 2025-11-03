@@ -1,7 +1,7 @@
 export interface AnimationConfig {
   name: string;
   file: string;
-  trigger: 'movement' | 'manual' | 'idle' | 'jump' | 'crouch' | 'attack' | 'death';
+  trigger: 'movement' | 'manual' | 'idle' | 'jump' | 'crawl' | 'attack' | 'death';
   speed: number;
   loop: boolean;
   fadeInDuration: number;
