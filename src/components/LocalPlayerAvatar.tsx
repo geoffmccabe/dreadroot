@@ -18,7 +18,7 @@ export function LocalPlayerAvatar() {
   
   const fbx = useFBX(avatarConfig.model);
 
-  // Configure avatar materials, shadows, and animations
+  // Configure avatar materials and shadows (Effect 1: Cheap operations)
   useEffect(() => {
     if (!fbx) return;
     
@@ -43,6 +43,11 @@ export function LocalPlayerAvatar() {
         }
       }
     });
+  }, [fbx, avatarConfig.color, camera]);
+
+  // Load animations (Effect 2: Expensive operations - only run when animations change)
+  useEffect(() => {
+    if (!fbx) return;
 
     // Setup animation mixer
     mixerRef.current = new THREE.AnimationMixer(fbx);
@@ -78,7 +83,7 @@ export function LocalPlayerAvatar() {
     return () => {
       mixerRef.current?.stopAllAction();
     };
-  }, [fbx, avatarConfig, camera]);
+  }, [fbx, avatarConfig.animations]);
 
   // Follow camera and update animations with smooth interpolation
   useFrame((_, delta) => {
