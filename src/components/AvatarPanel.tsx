@@ -49,33 +49,37 @@ export function AvatarPanel() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-8rem)] pr-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Model Type</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Select
+            value="y-bot"
+            onValueChange={(value) => {
+              if (value === 'y-bot') {
+                updateAvatarConfig({ model: '/y-bot.fbx' });
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="y-bot">Y-Bot</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="flex gap-6">
             <div className="flex-1 space-y-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle>Model Settings</CardTitle>
-                  <CardDescription>Configure the avatar model and positioning</CardDescription>
-                </div>
-                <div className="w-48">
-                  <Select
-                    value="y-bot"
-                    onValueChange={(value) => {
-                      if (value === 'y-bot') {
-                        updateAvatarConfig({ model: '/y-bot.fbx' });
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="y-bot">Y-Bot</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <CardTitle>Model Settings</CardTitle>
+                <CardDescription>Configure the avatar model and positioning</CardDescription>
               </div>
 
               <div className="space-y-2">
