@@ -83,16 +83,12 @@ function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
   const { camera } = useThree();
   
   useEffect(() => {
-    // Calculate camera distance with safe bounds
-    // For scale 0.01 (default), distance = 4; for 0.02, distance = 8
-    const baseDistance = Math.max(4, Math.min(15, scale * 400));
-    const camX = baseDistance * 0.6;
-    const camY = baseDistance * 0.3;
-    const camZ = baseDistance * 0.8;
-    
-    camera.position.set(camX, camY, camZ);
-    camera.lookAt(offsetX, offsetY, offsetZ);
-    camera.updateProjectionMatrix();
+    // Simple camera positioning: scale * 200 gives good framing
+    // At scale 0.01, distance is 2 units
+    // At scale 0.02, distance is 4 units
+    const distance = scale * 200;
+    camera.position.set(distance, distance * 0.5, distance * 1.2);
+    camera.lookAt(offsetX, offsetY + (scale * 50), offsetZ); // Look at model center
   }, [camera, scale, offsetX, offsetY, offsetZ]);
   
   return (
