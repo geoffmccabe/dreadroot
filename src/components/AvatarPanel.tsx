@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Play, Trash2, Plus } from 'lucide-react';
+import { AvatarModelPreview } from './AvatarModelPreview';
 
 export function AvatarPanel() {
   const { 
@@ -62,14 +63,46 @@ export function AvatarPanel() {
               <CardDescription>Configure the avatar model and positioning</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="model">Model Path</Label>
-                <Input
-                  id="model"
-                  value={avatarConfig.model}
-                  onChange={(e) => updateAvatarConfig({ model: e.target.value })}
-                  placeholder="/y-bot.fbx"
-                />
+              <div className="flex gap-4">
+                <div className="flex-1 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="modelType">Model Type</Label>
+                    <Select
+                      value="y-bot"
+                      onValueChange={(value) => {
+                        if (value === 'y-bot') {
+                          updateAvatarConfig({ model: '/y-bot.fbx' });
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="modelType">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="y-bot">Y-Bot</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="model">Model Path</Label>
+                    <Input
+                      id="model"
+                      value={avatarConfig.model}
+                      onChange={(e) => updateAvatarConfig({ model: e.target.value })}
+                      placeholder="/y-bot.fbx"
+                    />
+                  </div>
+                </div>
+
+                <div className="w-48 h-48 flex-shrink-0">
+                  <AvatarModelPreview
+                    modelPath={avatarConfig.model}
+                    color={avatarConfig.color}
+                    scale={avatarConfig.scale}
+                    animationPath={avatarConfig.animations.find(a => a.trigger === 'idle')?.file}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
