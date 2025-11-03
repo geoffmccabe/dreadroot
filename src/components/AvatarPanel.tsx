@@ -101,12 +101,15 @@ export function AvatarPanel() {
                       checked={isGiantMode}
                       onCheckedChange={(checked) => {
                         setIsGiantMode(checked === true);
-                        // When enabling giant mode, ensure height is at least 3.0m
                         if (checked === true) {
+                          // When enabling giant mode, ensure height is at least 3.0m
                           const currentHeight = avatarConfig.scale / 0.01 * 1.7;
                           if (currentHeight < 3.0) {
                             updateAvatarConfig({ scale: 3.0 * 0.01 / 1.7 });
                           }
+                        } else {
+                          // When disabling giant mode, set to standard 1.8m
+                          updateAvatarConfig({ scale: 1.8 * 0.01 / 1.7 });
                         }
                       }}
                     />
