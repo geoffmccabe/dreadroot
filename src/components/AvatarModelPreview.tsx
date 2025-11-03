@@ -16,13 +16,8 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const [clonedFbx, setClonedFbx] = useState<THREE.Group | null>(null);
   
-  let fbx;
-  try {
-    fbx = useFBX(modelPath);
-  } catch (error) {
-    console.error('Preview: Failed to load FBX model:', error);
-    return null;
-  }
+  // Load FBX - this must be at the top level, not in try-catch
+  const fbx = useFBX(modelPath);
 
   useEffect(() => {
     if (!fbx) {
