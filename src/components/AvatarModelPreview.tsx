@@ -83,9 +83,13 @@ function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
   const { camera } = useThree();
   
   useEffect(() => {
-    // Adjust camera based on scale - simple proportional distance
-    const distance = Math.max(3, scale * 300);
-    camera.position.set(distance * 0.6, distance * 0.25, distance * 0.8);
+    // Calculate camera distance proportional to scale
+    const distance = scale * 500; // 500 gives good framing for scale 0.01-0.02 range
+    const camX = distance * 0.6;
+    const camY = offsetY + (distance * 0.3); // Position relative to model's Y offset
+    const camZ = distance * 0.8;
+    
+    camera.position.set(camX, camY, camZ);
     camera.lookAt(offsetX, offsetY, offsetZ);
   }, [camera, scale, offsetX, offsetY, offsetZ]);
   
