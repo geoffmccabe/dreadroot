@@ -1,8 +1,7 @@
-import React, { useRef, useEffect, Suspense, useState } from 'react';
+import React, { useRef, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useFBX } from '@react-three/drei';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { useFBX, OrbitControls } from '@react-three/drei';
 
 interface AvatarModelPreviewProps {
   modelPath: string;
@@ -11,113 +10,67 @@ interface AvatarModelPreviewProps {
   animationPath?: string;
 }
 
-function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+function TestCube() {
+  const meshRef = useRef<THREE.Mesh>(null);
   
-  const fbx = useFBX(modelPath);
-
-  useEffect(() => {
-    if (!fbx) return;
-    
-    console.log('Setting up model materials');
-    
-    // Configure materials directly on the loaded model
-    fbx.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.material) {
-        const mat = child.material as THREE.MeshStandardMaterial;
-        mat.color.set(color);
-        mat.needsUpdate = true;
-      }
-    });
-
-    // Setup animation if provided
-    if (animationPath) {
-      const loader = new FBXLoader();
-      loader.load(
-        animationPath,
-        (animFBX) => {
-          if (animFBX.animations?.length > 0) {
-            mixerRef.current = new THREE.AnimationMixer(fbx);
-            const action = mixerRef.current.clipAction(animFBX.animations[0]);
-            action.setLoop(THREE.LoopRepeat, Infinity);
-            action.play();
-            console.log('Animation loaded and playing');
-          }
-        },
-        undefined,
-        (error) => console.warn('Animation load failed:', error)
-      );
-    }
-
-    return () => {
-      mixerRef.current?.stopAllAction();
-    };
-  }, [fbx, color, animationPath]);
-
-  useFrame((_, delta) => {
-    mixerRef.current?.update(delta);
-    
-    if (groupRef.current) {
-      groupRef.current.rotation.y += delta * 0.3;
+  useFrame(() => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += 0.01;
     }
   });
-
-  console.log('Rendering model with scale:', scale);
-
+  
   return (
-    <group ref={groupRef}>
-      <primitive object={fbx} scale={scale * 100} position={[0, 0, 0]} />
-    </group>
-  );
-}
-
-function LoadingIndicator() {
-  return (
-    <mesh>
+    <mesh ref={meshRef} position={[0, 0, 0]}>
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#4a9eff" />
+      <meshStandardMaterial color="orange" />
     </mesh>
   );
 }
 
-export function AvatarModelPreview({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
-  const [error, setError] = useState<string | null>(null);
-  
-  console.log('Preview render with:', { modelPath, color, scale, animationPath });
-  
+function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
+  const groupRef = useRef<THREE.Group>(null);
+  const fbx = useFBX(modelPath);
+
+  useFrame(() => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += 0.005;
+    }
+  });
+
   return (
-    <div className="w-full h-full bg-background/50 rounded-lg border-2 border-primary/20 overflow-hidden relative">
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center text-destructive text-sm p-4 text-center">
-          {error}
-        </div>
-      )}
+    <group ref={groupRef} position={[0, -1, 0]}>
+      <primitive object={fbx} scale={scale * 100} />
+    </group>
+  );
+}
+
+function Scene({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
+  return (
+    <>
+      <ambientLight intensity={0.8} />
+      <directionalLight position={[5, 5, 5]} intensity={1} />
+      <TestCube />
+      <Suspense fallback={null}>
+        <Model modelPath={modelPath} color={color} scale={scale} animationPath={animationPath} />
+      </Suspense>
+      <OrbitControls enablePan={false} />
+    </>
+  );
+}
+
+export function AvatarModelPreview({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
+  return (
+    <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [0, 1, 3], fov: 50 }}
-        gl={{ alpha: false, antialias: true }}
-        style={{ background: '#1a1a2e' }}
-        onCreated={() => console.log('Canvas created for preview')}
+        camera={{ position: [3, 2, 5], fov: 50 }}
+        style={{ width: '100%', height: '100%' }}
       >
-        <color attach="background" args={['#1a1a2e']} />
-        <ambientLight intensity={1} />
-        <directionalLight position={[5, 5, 5]} intensity={1} />
-        <directionalLight position={[-5, 5, -5]} intensity={0.8} />
-        
-        {/* Test cube to verify rendering */}
-        <mesh position={[1.5, 0, 0]}>
-          <boxGeometry args={[0.3, 0.3, 0.3]} />
-          <meshStandardMaterial color="red" />
-        </mesh>
-        
-        <Suspense fallback={<LoadingIndicator />}>
-          <Model 
-            modelPath={modelPath}
-            color={color}
-            scale={scale}
-            animationPath={animationPath}
-          />
-        </Suspense>
+        <Scene 
+          modelPath={modelPath}
+          color={color}
+          scale={scale}
+          animationPath={animationPath}
+        />
       </Canvas>
     </div>
   );
