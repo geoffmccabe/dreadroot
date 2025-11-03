@@ -112,7 +112,7 @@ export function AvatarPanel() {
                       id="scale"
                       min={isGiantMode ? 3 : 0.1}
                       max={isGiantMode ? 20 : 3}
-                      step={0.1}
+                      step={isGiantMode ? 0.5 : 0.1}
                       value={[avatarConfig.scale / 0.01 * 1.7]}
                       onValueChange={([value]) => updateAvatarConfig({ scale: value * 0.01 / 1.7 })}
                     />
