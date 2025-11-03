@@ -103,7 +103,16 @@ export function AvatarPanel() {
                         <Checkbox 
                           id="giant-mode"
                           checked={isGiantMode}
-                          onCheckedChange={(checked) => setIsGiantMode(checked === true)}
+                          onCheckedChange={(checked) => {
+                            setIsGiantMode(checked === true);
+                            // When enabling giant mode, ensure height is at least 3.0m
+                            if (checked === true) {
+                              const currentHeight = avatarConfig.scale / 0.01 * 1.7;
+                              if (currentHeight < 3.0) {
+                                updateAvatarConfig({ scale: 3.0 * 0.01 / 1.7 });
+                              }
+                            }
+                          }}
                         />
                         <Label htmlFor="giant-mode" className="cursor-pointer">GIANT</Label>
                       </div>
