@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useFBX, OrbitControls } from '@react-three/drei';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -80,10 +80,14 @@ function Model({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
 }
 
 function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
-  // Calculate camera distance based on scale to keep model in view
-  const baseDistance = 100; // Distance for scale 0.01
-  const cameraDistance = (scale / 0.01) * baseDistance;
-  const cameraY = cameraDistance * 0.25;
+  const { camera } = useThree();
+  
+  useEffect(() => {
+    // Adjust camera based on scale - simple proportional distance
+    const distance = Math.max(3, scale * 300);
+    camera.position.set(distance * 0.6, distance * 0.25, distance * 0.8);
+    camera.lookAt(offsetX, offsetY, offsetZ);
+  }, [camera, scale, offsetX, offsetY, offsetZ]);
   
   return (
     <>
@@ -100,15 +104,10 @@ function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
 }
 
 export function AvatarModelPreview({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
-  // Calculate camera distance based on scale
-  const baseDistance = 100;
-  const cameraDistance = (scale / 0.01) * baseDistance;
-  const cameraY = cameraDistance * 0.25;
-  
   return (
     <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [cameraDistance * 0.6, cameraY, cameraDistance * 0.8], fov: 50 }}
+        camera={{ position: [2, 0.5, 3], fov: 50 }}
         style={{ width: '100%', height: '100%' }}
       >
         <Scene 
