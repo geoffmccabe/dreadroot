@@ -130,7 +130,7 @@ export function AvatarPanel() {
                     modelPath={avatarConfig.model}
                     color={avatarConfig.color}
                     scale={avatarConfig.scale}
-                    animationPath={avatarConfig.animations.find(a => a.trigger === 'idle')?.file}
+                    animationPath={avatarConfig.animations.find(a => a.trigger === 'movement')?.file}
                   />
                 </div>
               </div>
