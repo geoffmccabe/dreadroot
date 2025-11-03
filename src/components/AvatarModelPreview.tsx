@@ -10,26 +10,22 @@ interface AvatarModelPreviewProps {
   animationPath?: string;
 }
 
-function TestCube() {
-  const meshRef = useRef<THREE.Mesh>(null);
-  
-  useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.01;
-    }
-  });
-  
-  return (
-    <mesh ref={meshRef} position={[0, 0, 0]}>
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="orange" />
-    </mesh>
-  );
-}
 
 function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const fbx = useFBX(modelPath);
+
+  React.useEffect(() => {
+    if (fbx) {
+      fbx.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const mat = child.material as THREE.MeshStandardMaterial;
+          mat.color.set(color);
+        }
+      });
+      console.log('FBX model loaded and configured');
+    }
+  }, [fbx, color]);
 
   useFrame(() => {
     if (groupRef.current) {
@@ -38,8 +34,8 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
   });
 
   return (
-    <group ref={groupRef} position={[0, -1, 0]}>
-      <primitive object={fbx} scale={scale * 100} />
+    <group ref={groupRef}>
+      <primitive object={fbx} scale={1} position={[0, -0.9, 0]} />
     </group>
   );
 }
@@ -49,11 +45,12 @@ function Scene({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
     <>
       <ambientLight intensity={0.8} />
       <directionalLight position={[5, 5, 5]} intensity={1} />
-      <TestCube />
+      <directionalLight position={[-5, 3, -5]} intensity={0.5} />
       <Suspense fallback={null}>
         <Model modelPath={modelPath} color={color} scale={scale} animationPath={animationPath} />
       </Suspense>
-      <OrbitControls enablePan={false} />
+      <OrbitControls enablePan={false} enableZoom={true} />
+      <gridHelper args={[10, 10]} />
     </>
   );
 }
@@ -62,7 +59,7 @@ export function AvatarModelPreview({ modelPath, color, scale, animationPath }: A
   return (
     <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [3, 2, 5], fov: 50 }}
+        camera={{ position: [2, 1, 3], fov: 50 }}
         style={{ width: '100%', height: '100%' }}
       >
         <Scene 
