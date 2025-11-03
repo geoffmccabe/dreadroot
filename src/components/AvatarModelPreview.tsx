@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useFBX, OrbitControls } from '@react-three/drei';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
 interface AvatarModelPreviewProps {
   modelPath: string;
@@ -10,8 +11,9 @@ interface AvatarModelPreviewProps {
   animationPath?: string;
 }
 
-function Model({ modelPath, color }: AvatarModelPreviewProps) {
+function Model({ modelPath, color, animationPath }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const fbx = useFBX(modelPath);
 
   useEffect(() => {
@@ -33,11 +35,38 @@ function Model({ modelPath, color }: AvatarModelPreviewProps) {
         }
       }
     });
+
+    // Load animation if provided
+    if (animationPath) {
+      const loader = new FBXLoader();
+      loader.load(
+        animationPath,
+        (animFBX) => {
+          if (animFBX.animations?.length > 0) {
+            mixerRef.current = new THREE.AnimationMixer(fbx);
+            const action = mixerRef.current.clipAction(animFBX.animations[0]);
+            action.setLoop(THREE.LoopRepeat, Infinity);
+            action.play();
+            console.log('✅ Preview animation playing:', animationPath);
+          }
+        },
+        undefined,
+        (error) => console.warn('Failed to load preview animation:', error)
+      );
+    }
     
     console.log('✅ Preview model configured');
-  }, [fbx, color]);
 
-  useFrame(() => {
+    return () => {
+      mixerRef.current?.stopAllAction();
+    };
+  }, [fbx, color, animationPath]);
+
+  useFrame((_, delta) => {
+    if (mixerRef.current) {
+      mixerRef.current.update(delta);
+    }
+    
     if (groupRef.current) {
       groupRef.current.rotation.y += 0.005;
     }
