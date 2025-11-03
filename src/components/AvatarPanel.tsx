@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Play, Trash2, Plus } from 'lucide-react';
 import { AvatarModelPreview } from './AvatarModelPreview';
 
@@ -22,6 +23,7 @@ export function AvatarPanel() {
     currentAnimation 
   } = useAvatar();
 
+  const [isGiantMode, setIsGiantMode] = useState(false);
   const [newAnim, setNewAnim] = useState<Partial<AnimationConfig>>({
     name: '',
     file: '',
@@ -95,11 +97,21 @@ export function AvatarPanel() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="scale">Height: {(avatarConfig.scale / 0.01 * 1.7).toFixed(2)}m</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="scale">Height: {(avatarConfig.scale / 0.01 * 1.7).toFixed(2)}m</Label>
+                      <div className="flex items-center gap-2">
+                        <Checkbox 
+                          id="giant-mode"
+                          checked={isGiantMode}
+                          onCheckedChange={(checked) => setIsGiantMode(checked === true)}
+                        />
+                        <Label htmlFor="giant-mode" className="cursor-pointer">GIANT</Label>
+                      </div>
+                    </div>
                     <Slider
                       id="scale"
-                      min={0.1}
-                      max={3}
+                      min={isGiantMode ? 3 : 0.1}
+                      max={isGiantMode ? 20 : 3}
                       step={0.1}
                       value={[avatarConfig.scale / 0.01 * 1.7]}
                       onValueChange={([value]) => updateAvatarConfig({ scale: value * 0.01 / 1.7 })}
