@@ -40,11 +40,11 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
   return (
     <group ref={groupRef}>
       {/* Marker sphere to show where model should be */}
-      <mesh position={[0, 0, 0]}>
+      <mesh position={[0, 1, 0]}>
         <sphereGeometry args={[0.1, 16, 16]} />
         <meshStandardMaterial color="red" emissive="red" emissiveIntensity={0.5} />
       </mesh>
-      <primitive object={fbx} scale={100} position={[0, -0.9, 0]} />
+      <primitive object={fbx} scale={200} position={[0, 0, 0]} />
     </group>
   );
 }
