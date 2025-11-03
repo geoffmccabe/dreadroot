@@ -27,7 +27,7 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
       // Calculate bounding box to see actual size
       const box = new THREE.Box3().setFromObject(fbx);
       const size = box.getSize(new THREE.Vector3());
-      console.log('FBX model loaded. Size:', size, 'Scale:', scale);
+      console.log('🎯 FBX SIZE:', size.x, size.y, size.z, '| Scale being used:', 0.01);
     }
   }, [fbx, color, scale]);
 
@@ -37,12 +37,14 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
     }
   });
 
-  // Try multiple scales to find the model
-  const actualScale = 0.01; // Match the default scale from avatar config
-
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={actualScale} position={[0, -0.9, 0]} />
+      {/* Marker sphere to show where model should be */}
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[0.1, 16, 16]} />
+        <meshStandardMaterial color="red" emissive="red" emissiveIntensity={0.5} />
+      </mesh>
+      <primitive object={fbx} scale={0.01} position={[0, -0.9, 0]} />
     </group>
   );
 }
