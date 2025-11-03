@@ -93,11 +93,7 @@ export function LocalPlayerAvatar() {
     camera.getWorldDirection(cameraDirection);
     
     // Position avatar exactly with camera (no lerp to avoid desyncing)
-    groupRef.current.position.set(
-      currentPos.x + avatarConfig.offsetX,
-      currentPos.y + avatarConfig.offsetY,
-      currentPos.z + avatarConfig.offsetZ
-    );
+    groupRef.current.position.copy(currentPos);
 
     // Rotate to match camera yaw
     const yaw = Math.atan2(cameraDirection.x, cameraDirection.z);
@@ -147,11 +143,15 @@ export function LocalPlayerAvatar() {
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={[0, -0.9, 0]}>
       {fbx && (
         <primitive 
           object={fbx} 
-          scale={avatarConfig.scale}
+          scale={[
+            avatarConfig.scale * avatarConfig.scaleX,
+            avatarConfig.scale * avatarConfig.scaleY,
+            avatarConfig.scale * avatarConfig.scaleZ
+          ]}
         />
       )}
     </group>

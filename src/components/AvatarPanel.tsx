@@ -131,9 +131,9 @@ export function AvatarPanel() {
                     modelPath={avatarConfig.model}
                     color={avatarConfig.color}
                     scale={avatarConfig.scale}
-                    offsetX={avatarConfig.offsetX}
-                    offsetY={avatarConfig.offsetY}
-                    offsetZ={avatarConfig.offsetZ}
+                    scaleX={avatarConfig.scaleX}
+                    scaleY={avatarConfig.scaleY}
+                    scaleZ={avatarConfig.scaleZ}
                     animationPath={avatarConfig.animations.find(a => a.trigger === 'movement')?.file}
                   />
                 </div>
@@ -141,36 +141,36 @@ export function AvatarPanel() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="offsetX">Offset X: {avatarConfig.offsetX.toFixed(2)}</Label>
+                  <Label htmlFor="scaleX">Width (X): {avatarConfig.scaleX.toFixed(2)}x</Label>
                   <Slider
-                    id="offsetX"
-                    min={-2}
+                    id="scaleX"
+                    min={0.5}
                     max={2}
                     step={0.1}
-                    value={[avatarConfig.offsetX]}
-                    onValueChange={([value]) => updateAvatarConfig({ offsetX: value })}
+                    value={[avatarConfig.scaleX]}
+                    onValueChange={([value]) => updateAvatarConfig({ scaleX: value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="offsetY">Offset Y: {avatarConfig.offsetY.toFixed(2)}</Label>
+                  <Label htmlFor="scaleY">Height (Y): {avatarConfig.scaleY.toFixed(2)}x</Label>
                   <Slider
-                    id="offsetY"
-                    min={-2}
+                    id="scaleY"
+                    min={0.5}
                     max={2}
                     step={0.1}
-                    value={[avatarConfig.offsetY]}
-                    onValueChange={([value]) => updateAvatarConfig({ offsetY: value })}
+                    value={[avatarConfig.scaleY]}
+                    onValueChange={([value]) => updateAvatarConfig({ scaleY: value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="offsetZ">Offset Z: {avatarConfig.offsetZ.toFixed(2)}</Label>
+                  <Label htmlFor="scaleZ">Depth (Z): {avatarConfig.scaleZ.toFixed(2)}x</Label>
                   <Slider
-                    id="offsetZ"
-                    min={-2}
+                    id="scaleZ"
+                    min={0.5}
                     max={2}
                     step={0.1}
-                    value={[avatarConfig.offsetZ]}
-                    onValueChange={([value]) => updateAvatarConfig({ offsetZ: value })}
+                    value={[avatarConfig.scaleZ]}
+                    onValueChange={([value]) => updateAvatarConfig({ scaleZ: value })}
                   />
                 </div>
               </div>

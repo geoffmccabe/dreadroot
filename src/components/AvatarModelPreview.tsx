@@ -8,13 +8,13 @@ interface AvatarModelPreviewProps {
   modelPath: string;
   color: string;
   scale: number;
-  offsetX: number;
-  offsetY: number;
-  offsetZ: number;
+  scaleX: number;
+  scaleY: number;
+  scaleZ: number;
   animationPath?: string;
 }
 
-function Model({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
+function Model({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const fbx = useFBX(modelPath);
@@ -73,28 +73,31 @@ function Model({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
   });
 
   return (
-    <group ref={groupRef}>
-      <primitive object={fbx} scale={scale} position={[offsetX, offsetY, offsetZ]} />
+    <group ref={groupRef} position={[0, -0.9, 0]}>
+      <primitive 
+        object={fbx} 
+        scale={[scale * scaleX, scale * scaleY, scale * scaleZ]} 
+      />
     </group>
   );
 }
 
-function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
+function Scene({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath }: AvatarModelPreviewProps) {
   return (
     <>
       <ambientLight intensity={0.8} />
       <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
       <directionalLight position={[-5, 3, -5]} intensity={0.5} />
       <React.Suspense fallback={null}>
-        <Model modelPath={modelPath} color={color} scale={scale} offsetX={offsetX} offsetY={offsetY} offsetZ={offsetZ} animationPath={animationPath} />
+        <Model modelPath={modelPath} color={color} scale={scale} scaleX={scaleX} scaleY={scaleY} scaleZ={scaleZ} animationPath={animationPath} />
       </React.Suspense>
-      <OrbitControls enablePan={false} enableZoom={true} target={[offsetX, offsetY, offsetZ]} />
-      <gridHelper args={[10, 10]} position={[0, offsetY, 0]} />
+      <OrbitControls enablePan={false} enableZoom={true} target={[0, -0.9, 0]} />
+      <gridHelper args={[10, 10]} position={[0, -0.9, 0]} />
     </>
   );
 }
 
-export function AvatarModelPreview({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
+export function AvatarModelPreview({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath }: AvatarModelPreviewProps) {
   // Scale the camera distance based on model scale
   // At scale 0.01 (default), use base distance
   // Camera scales proportionally with model
@@ -110,9 +113,9 @@ export function AvatarModelPreview({ modelPath, color, scale, offsetX, offsetY, 
           modelPath={modelPath}
           color={color}
           scale={scale}
-          offsetX={offsetX}
-          offsetY={offsetY}
-          offsetZ={offsetZ}
+          scaleX={scaleX}
+          scaleY={scaleY}
+          scaleZ={scaleZ}
           animationPath={animationPath}
         />
       </Canvas>

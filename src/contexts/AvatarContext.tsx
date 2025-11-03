@@ -13,9 +13,9 @@ export interface AnimationConfig {
 export interface AvatarConfig {
   model: string;
   scale: number;
-  offsetX: number;
-  offsetY: number;
-  offsetZ: number;
+  scaleX: number;
+  scaleY: number;
+  scaleZ: number;
   color: string;
   animations: AnimationConfig[];
 }
@@ -54,9 +54,9 @@ const defaultAnimations: AnimationConfig[] = [
 const defaultConfig: AvatarConfig = {
   model: '/y-bot.fbx',
   scale: 0.01,
-  offsetX: 0,
-  offsetY: -0.9,
-  offsetZ: 0,
+  scaleX: 1.0,
+  scaleY: 1.0,
+  scaleZ: 1.0,
   color: '#4a9eff',
   animations: defaultAnimations,
 };
