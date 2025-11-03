@@ -58,13 +58,13 @@ export function AvatarPanel() {
 
         <TabsContent value="model" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Model Settings</CardTitle>
-              <CardDescription>Configure the avatar model and positioning</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="pt-6 space-y-4">
               <div className="flex gap-6">
                 <div className="flex-1 space-y-4">
+                  <div>
+                    <CardTitle>Model Settings</CardTitle>
+                    <CardDescription>Configure the avatar model and positioning</CardDescription>
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="modelType">Model Type</Label>
                     <Select

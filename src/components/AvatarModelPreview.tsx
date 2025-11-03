@@ -15,21 +15,27 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const fbx = useFBX(modelPath);
+  const clonedFbxRef = useRef<THREE.Group | null>(null);
 
   useEffect(() => {
     if (!fbx) return;
     
+    // Clone the FBX to avoid conflicts with the main scene
+    const clonedFbx = fbx.clone();
+    clonedFbxRef.current = clonedFbx;
+    
     // Configure materials
-    fbx.traverse((child) => {
+    clonedFbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.castShadow = true;
         child.receiveShadow = true;
         
         if (child.material) {
-          const material = child.material as THREE.MeshStandardMaterial;
+          const material = (child.material as THREE.MeshStandardMaterial).clone();
           material.color.set(color);
           material.metalness = 0.3;
           material.roughness = 0.7;
+          child.material = material;
         }
       }
     });
@@ -40,8 +46,8 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
       loader.load(
         animationPath,
         (animFBX) => {
-          if (animFBX.animations && animFBX.animations.length > 0) {
-            mixerRef.current = new THREE.AnimationMixer(fbx);
+          if (animFBX.animations && animFBX.animations.length > 0 && clonedFbx) {
+            mixerRef.current = new THREE.AnimationMixer(clonedFbx);
             const action = mixerRef.current.clipAction(animFBX.animations[0]);
             action.setLoop(THREE.LoopRepeat, Infinity);
             action.play();
@@ -70,9 +76,11 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
     }
   });
 
+  if (!clonedFbxRef.current) return null;
+
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={scale} />
+      <primitive object={clonedFbxRef.current} scale={scale} />
     </group>
   );
 }
@@ -81,12 +89,13 @@ export function AvatarModelPreview({ modelPath, color, scale, animationPath }: A
   return (
     <div className="w-full h-full bg-background/50 rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [0, 1, 3], fov: 50 }}
+        camera={{ position: [0, 0.8, 2.5], fov: 50 }}
         gl={{ alpha: true, antialias: true }}
       >
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
-        <directionalLight position={[-5, 5, -5]} intensity={0.5} />
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[5, 5, 5]} intensity={1.2} castShadow />
+        <directionalLight position={[-5, 5, -5]} intensity={0.6} />
+        <pointLight position={[0, 2, 0]} intensity={0.5} />
         
         <Suspense fallback={null}>
           <Model 
