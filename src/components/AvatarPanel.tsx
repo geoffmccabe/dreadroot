@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -51,318 +50,305 @@ export function AvatarPanel() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="model" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="model">Model</TabsTrigger>
-          <TabsTrigger value="animations">Animations</TabsTrigger>
-          <TabsTrigger value="add">Add Animation</TabsTrigger>
-        </TabsList>
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex gap-6">
+            <div className="flex-1 space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Model Settings</CardTitle>
+                  <CardDescription>Configure the avatar model and positioning</CardDescription>
+                </div>
+                <div className="w-48">
+                  <Select
+                    value="y-bot"
+                    onValueChange={(value) => {
+                      if (value === 'y-bot') {
+                        updateAvatarConfig({ model: '/y-bot.fbx' });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="y-bot">Y-Bot</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-        <TabsContent value="model" className="space-y-4">
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex gap-6">
-                <div className="flex-1 space-y-4">
-                  <div>
-                    <CardTitle>Model Settings</CardTitle>
-                    <CardDescription>Configure the avatar model and positioning</CardDescription>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="modelType">Model Type</Label>
-                    <Select
-                      value="y-bot"
-                      onValueChange={(value) => {
-                        if (value === 'y-bot') {
-                          updateAvatarConfig({ model: '/y-bot.fbx' });
+              <div className="space-y-2">
+                <Label htmlFor="model">Model Path</Label>
+                <Input
+                  id="model"
+                  value={avatarConfig.model}
+                  onChange={(e) => updateAvatarConfig({ model: e.target.value })}
+                  placeholder="/y-bot.fbx"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="scale">Height: {(avatarConfig.scale / 0.01 * 1.7).toFixed(2)}m</Label>
+                  <div className="flex items-center gap-2">
+                    <Checkbox 
+                      id="giant-mode"
+                      checked={isGiantMode}
+                      onCheckedChange={(checked) => {
+                        setIsGiantMode(checked === true);
+                        // When enabling giant mode, ensure height is at least 3.0m
+                        if (checked === true) {
+                          const currentHeight = avatarConfig.scale / 0.01 * 1.7;
+                          if (currentHeight < 3.0) {
+                            updateAvatarConfig({ scale: 3.0 * 0.01 / 1.7 });
+                          }
                         }
                       }}
+                    />
+                    <Label htmlFor="giant-mode" className="cursor-pointer">GIANT</Label>
+                  </div>
+                </div>
+                <Slider
+                  id="scale"
+                  min={isGiantMode ? 3 : 0.1}
+                  max={isGiantMode ? 20 : 3}
+                  step={isGiantMode ? 0.5 : 0.1}
+                  value={[avatarConfig.scale / 0.01 * 1.7]}
+                  onValueChange={([value]) => updateAvatarConfig({ scale: value * 0.01 / 1.7 })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="color">Avatar Color</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="color"
+                    type="color"
+                    value={avatarConfig.color}
+                    onChange={(e) => updateAvatarConfig({ color: e.target.value })}
+                    className="w-20 h-10"
+                  />
+                  <Input
+                    value={avatarConfig.color}
+                    onChange={(e) => updateAvatarConfig({ color: e.target.value })}
+                    placeholder="#4a9eff"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="w-96 h-96 flex-shrink-0">
+              <AvatarModelPreview
+                key={`${avatarConfig.model}-${avatarConfig.scale}-${avatarConfig.scaleX}-${avatarConfig.scaleY}-${avatarConfig.scaleZ}`}
+                modelPath={avatarConfig.model}
+                color={avatarConfig.color}
+                scale={avatarConfig.scale}
+                scaleX={avatarConfig.scaleX}
+                scaleY={avatarConfig.scaleY}
+                scaleZ={avatarConfig.scaleZ}
+                animationPath={avatarConfig.animations.find(a => a.trigger === 'movement')?.file}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="scaleX">Width (X): {avatarConfig.scaleX.toFixed(2)}x</Label>
+              <Slider
+                id="scaleX"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={[avatarConfig.scaleX]}
+                onValueChange={([value]) => updateAvatarConfig({ scaleX: value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="scaleY">Height (Y): {avatarConfig.scaleY.toFixed(2)}x</Label>
+              <Slider
+                id="scaleY"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={[avatarConfig.scaleY]}
+                onValueChange={([value]) => updateAvatarConfig({ scaleY: value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="scaleZ">Depth (Z): {avatarConfig.scaleZ.toFixed(2)}x</Label>
+              <Slider
+                id="scaleZ"
+                min={0.5}
+                max={2}
+                step={0.1}
+                value={[avatarConfig.scaleZ]}
+                onValueChange={([value]) => updateAvatarConfig({ scaleZ: value })}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Animation Library</CardTitle>
+          <CardDescription>Manage and test avatar animations</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {avatarConfig.animations.map((anim) => (
+            <Card key={anim.name} className={currentAnimation === anim.name ? 'border-primary' : ''}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">{anim.name}</CardTitle>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => triggerAnimation(anim.name)}
                     >
-                      <SelectTrigger id="modelType">
+                      <Play className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => removeAnimation(anim.name)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-sm text-muted-foreground">{anim.file}</div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Trigger</Label>
+                    <Select
+                      value={anim.trigger}
+                      onValueChange={(value) => updateAnimation(anim.name, { trigger: value as any })}
+                    >
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="y-bot">Y-Bot</SelectItem>
+                        <SelectItem value="movement">Movement</SelectItem>
+                        <SelectItem value="idle">Idle</SelectItem>
+                        <SelectItem value="manual">Manual</SelectItem>
+                        <SelectItem value="jump">Jump</SelectItem>
+                        <SelectItem value="crouch">Crouch</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="model">Model Path</Label>
-                    <Input
-                      id="model"
-                      value={avatarConfig.model}
-                      onChange={(e) => updateAvatarConfig({ model: e.target.value })}
-                      placeholder="/y-bot.fbx"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="scale">Height: {(avatarConfig.scale / 0.01 * 1.7).toFixed(2)}m</Label>
-                      <div className="flex items-center gap-2">
-                        <Checkbox 
-                          id="giant-mode"
-                          checked={isGiantMode}
-                          onCheckedChange={(checked) => {
-                            setIsGiantMode(checked === true);
-                            // When enabling giant mode, ensure height is at least 3.0m
-                            if (checked === true) {
-                              const currentHeight = avatarConfig.scale / 0.01 * 1.7;
-                              if (currentHeight < 3.0) {
-                                updateAvatarConfig({ scale: 3.0 * 0.01 / 1.7 });
-                              }
-                            }
-                          }}
-                        />
-                        <Label htmlFor="giant-mode" className="cursor-pointer">GIANT</Label>
-                      </div>
-                    </div>
+                    <Label>Speed: {anim.speed.toFixed(2)}</Label>
                     <Slider
-                      id="scale"
-                      min={isGiantMode ? 3 : 0.1}
-                      max={isGiantMode ? 20 : 3}
-                      step={isGiantMode ? 0.5 : 0.1}
-                      value={[avatarConfig.scale / 0.01 * 1.7]}
-                      onValueChange={([value]) => updateAvatarConfig({ scale: value * 0.01 / 1.7 })}
+                      min={0.1}
+                      max={3}
+                      step={0.1}
+                      value={[anim.speed]}
+                      onValueChange={([value]) => updateAnimation(anim.name, { speed: value })}
                     />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="color">Avatar Color</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="color"
-                        type="color"
-                        value={avatarConfig.color}
-                        onChange={(e) => updateAvatarConfig({ color: e.target.value })}
-                        className="w-20 h-10"
-                      />
-                      <Input
-                        value={avatarConfig.color}
-                        onChange={(e) => updateAvatarConfig({ color: e.target.value })}
-                        placeholder="#4a9eff"
-                      />
-                    </div>
+                    <Label>Fade In: {anim.fadeInDuration.toFixed(2)}s</Label>
+                    <Slider
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      value={[anim.fadeInDuration]}
+                      onValueChange={([value]) => updateAnimation(anim.name, { fadeInDuration: value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fade Out: {anim.fadeOutDuration.toFixed(2)}s</Label>
+                    <Slider
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      value={[anim.fadeOutDuration]}
+                      onValueChange={([value]) => updateAnimation(anim.name, { fadeOutDuration: value })}
+                    />
                   </div>
                 </div>
 
-                <div className="w-96 h-96 flex-shrink-0">
-                  <AvatarModelPreview
-                    key={`${avatarConfig.model}-${avatarConfig.scale}-${avatarConfig.scaleX}-${avatarConfig.scaleY}-${avatarConfig.scaleZ}`}
-                    modelPath={avatarConfig.model}
-                    color={avatarConfig.color}
-                    scale={avatarConfig.scale}
-                    scaleX={avatarConfig.scaleX}
-                    scaleY={avatarConfig.scaleY}
-                    scaleZ={avatarConfig.scaleZ}
-                    animationPath={avatarConfig.animations.find(a => a.trigger === 'movement')?.file}
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={anim.loop}
+                    onCheckedChange={(checked) => updateAnimation(anim.name, { loop: checked })}
                   />
+                  <Label>Loop Animation</Label>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          ))}
+        </CardContent>
+      </Card>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="scaleX">Width (X): {avatarConfig.scaleX.toFixed(2)}x</Label>
-                  <Slider
-                    id="scaleX"
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    value={[avatarConfig.scaleX]}
-                    onValueChange={([value]) => updateAvatarConfig({ scaleX: value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scaleY">Height (Y): {avatarConfig.scaleY.toFixed(2)}x</Label>
-                  <Slider
-                    id="scaleY"
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    value={[avatarConfig.scaleY]}
-                    onValueChange={([value]) => updateAvatarConfig({ scaleY: value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scaleZ">Depth (Z): {avatarConfig.scaleZ.toFixed(2)}x</Label>
-                  <Slider
-                    id="scaleZ"
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    value={[avatarConfig.scaleZ]}
-                    onValueChange={([value]) => updateAvatarConfig({ scaleZ: value })}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+      <Card>
+        <CardHeader>
+          <CardTitle>Add New Animation</CardTitle>
+          <CardDescription>Add a new animation to the library</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-name">Animation Name</Label>
+            <Input
+              id="new-name"
+              value={newAnim.name}
+              onChange={(e) => setNewAnim({ ...newAnim, name: e.target.value })}
+              placeholder="Run"
+            />
+          </div>
 
-        <TabsContent value="animations" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Animation Library</CardTitle>
-              <CardDescription>Manage and test avatar animations</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {avatarConfig.animations.map((anim) => (
-                <Card key={anim.name} className={currentAnimation === anim.name ? 'border-primary' : ''}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{anim.name}</CardTitle>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => triggerAnimation(anim.name)}
-                        >
-                          <Play className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => removeAnimation(anim.name)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="text-sm text-muted-foreground">{anim.file}</div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Trigger</Label>
-                        <Select
-                          value={anim.trigger}
-                          onValueChange={(value) => updateAnimation(anim.name, { trigger: value as any })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="movement">Movement</SelectItem>
-                            <SelectItem value="idle">Idle</SelectItem>
-                            <SelectItem value="manual">Manual</SelectItem>
-                            <SelectItem value="jump">Jump</SelectItem>
-                            <SelectItem value="crouch">Crouch</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-file">File Path</Label>
+            <Input
+              id="new-file"
+              value={newAnim.file}
+              onChange={(e) => setNewAnim({ ...newAnim, file: e.target.value })}
+              placeholder="/Running.fbx"
+            />
+          </div>
 
-                      <div className="space-y-2">
-                        <Label>Speed: {anim.speed.toFixed(2)}</Label>
-                        <Slider
-                          min={0.1}
-                          max={3}
-                          step={0.1}
-                          value={[anim.speed]}
-                          onValueChange={([value]) => updateAnimation(anim.name, { speed: value })}
-                        />
-                      </div>
-                    </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-trigger">Trigger</Label>
+            <Select
+              value={newAnim.trigger}
+              onValueChange={(value) => setNewAnim({ ...newAnim, trigger: value as any })}
+            >
+              <SelectTrigger id="new-trigger">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="movement">Movement</SelectItem>
+                <SelectItem value="idle">Idle</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="jump">Jump</SelectItem>
+                <SelectItem value="crouch">Crouch</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Fade In: {anim.fadeInDuration.toFixed(2)}s</Label>
-                        <Slider
-                          min={0}
-                          max={2}
-                          step={0.1}
-                          value={[anim.fadeInDuration]}
-                          onValueChange={([value]) => updateAnimation(anim.name, { fadeInDuration: value })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Fade Out: {anim.fadeOutDuration.toFixed(2)}s</Label>
-                        <Slider
-                          min={0}
-                          max={2}
-                          step={0.1}
-                          value={[anim.fadeOutDuration]}
-                          onValueChange={([value]) => updateAnimation(anim.name, { fadeOutDuration: value })}
-                        />
-                      </div>
-                    </div>
+          <div className="flex items-center space-x-2">
+            <Switch
+              checked={newAnim.loop}
+              onCheckedChange={(checked) => setNewAnim({ ...newAnim, loop: checked })}
+            />
+            <Label>Loop Animation</Label>
+          </div>
 
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        checked={anim.loop}
-                        onCheckedChange={(checked) => updateAnimation(anim.name, { loop: checked })}
-                      />
-                      <Label>Loop Animation</Label>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="add" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add New Animation</CardTitle>
-              <CardDescription>Add a new animation to the library</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-name">Animation Name</Label>
-                <Input
-                  id="new-name"
-                  value={newAnim.name}
-                  onChange={(e) => setNewAnim({ ...newAnim, name: e.target.value })}
-                  placeholder="Run"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="new-file">File Path</Label>
-                <Input
-                  id="new-file"
-                  value={newAnim.file}
-                  onChange={(e) => setNewAnim({ ...newAnim, file: e.target.value })}
-                  placeholder="/Running.fbx"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="new-trigger">Trigger</Label>
-                <Select
-                  value={newAnim.trigger}
-                  onValueChange={(value) => setNewAnim({ ...newAnim, trigger: value as any })}
-                >
-                  <SelectTrigger id="new-trigger">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="movement">Movement</SelectItem>
-                    <SelectItem value="idle">Idle</SelectItem>
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="jump">Jump</SelectItem>
-                    <SelectItem value="crouch">Crouch</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={newAnim.loop}
-                  onCheckedChange={(checked) => setNewAnim({ ...newAnim, loop: checked })}
-                />
-                <Label>Loop Animation</Label>
-              </div>
-
-              <Button onClick={handleAddAnimation} className="w-full">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Animation
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          <Button onClick={handleAddAnimation} className="w-full">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Animation
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
