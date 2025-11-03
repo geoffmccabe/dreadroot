@@ -23,9 +23,13 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
           mat.color.set(color);
         }
       });
-      console.log('FBX model loaded and configured');
+      
+      // Calculate bounding box to see actual size
+      const box = new THREE.Box3().setFromObject(fbx);
+      const size = box.getSize(new THREE.Vector3());
+      console.log('FBX model loaded. Size:', size, 'Scale:', scale);
     }
-  }, [fbx, color]);
+  }, [fbx, color, scale]);
 
   useFrame(() => {
     if (groupRef.current) {
@@ -33,9 +37,12 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
     }
   });
 
+  // Try multiple scales to find the model
+  const actualScale = 0.01; // Match the default scale from avatar config
+
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={1} position={[0, -0.9, 0]} />
+      <primitive object={fbx} scale={actualScale} position={[0, -0.9, 0]} />
     </group>
   );
 }
