@@ -83,14 +83,16 @@ function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
   const { camera } = useThree();
   
   useEffect(() => {
-    // Calculate camera distance proportional to scale
-    const distance = scale * 500; // 500 gives good framing for scale 0.01-0.02 range
-    const camX = distance * 0.6;
-    const camY = offsetY + (distance * 0.3); // Position relative to model's Y offset
-    const camZ = distance * 0.8;
+    // Calculate camera distance with safe bounds
+    // For scale 0.01 (default), distance = 4; for 0.02, distance = 8
+    const baseDistance = Math.max(4, Math.min(15, scale * 400));
+    const camX = baseDistance * 0.6;
+    const camY = baseDistance * 0.3;
+    const camZ = baseDistance * 0.8;
     
     camera.position.set(camX, camY, camZ);
     camera.lookAt(offsetX, offsetY, offsetZ);
+    camera.updateProjectionMatrix();
   }, [camera, scale, offsetX, offsetY, offsetZ]);
   
   return (
