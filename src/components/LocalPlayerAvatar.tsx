@@ -69,6 +69,7 @@ export function LocalPlayerAvatar() {
   // Cache animation lookups
   const movementAnimRef = useRef<string | null>(null);
   const idleAnimRef = useRef<string | null>(null);
+  const animationConfigMapRef = useRef(new Map<string, any>());
   
   const { camera } = useThree();
   const { avatarConfig, currentAnimation } = useAvatar();
@@ -137,6 +138,13 @@ export function LocalPlayerAvatar() {
     const idleAnim = avatarConfig.animations.find(a => a.trigger === 'idle');
     movementAnimRef.current = movementAnim?.name || null;
     idleAnimRef.current = idleAnim?.name || null;
+    
+    // Build animation config map for fast lookup
+    const configMap = new Map();
+    avatarConfig.animations.forEach(config => {
+      configMap.set(config.name, config);
+    });
+    animationConfigMapRef.current = configMap;
 
     return () => {
       mixerRef.current?.stopAllAction();
@@ -186,7 +194,7 @@ export function LocalPlayerAvatar() {
       const newAction = actionsRef.current.get(desiredAnimation);
       
       if (newAction) {
-        const animConfig = avatarConfig.animations.find(a => a.name === desiredAnimation);
+        const animConfig = animationConfigMapRef.current.get(desiredAnimation);
         const fadeOutDuration = animConfig?.fadeOutDuration || 0.2;
         const fadeInDuration = animConfig?.fadeInDuration || 0.2;
         

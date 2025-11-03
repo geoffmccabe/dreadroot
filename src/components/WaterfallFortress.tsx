@@ -35,11 +35,14 @@ function useWeatherCycle(weatherSettings: {
   lightingRange: [number, number];
   cycleDuration: number;
 }) {
-  const [cycleState, setCycleState] = useState({
+  // Use ref to avoid triggering React re-renders 60 times per second
+  const cycleStateRef = useRef({
     lightingPercentage: weatherSettings.lightingRange[0],
     cyclePosition: 0,
     isNight: false
   });
+  
+  const [isNight, setIsNight] = useState(false);
 
   useFrame(() => {
     const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
@@ -50,12 +53,18 @@ function useWeatherCycle(weatherSettings: {
     const [minLighting, maxLighting] = weatherSettings.lightingRange;
     const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
     
-    const isNight = lightingPercentage < 50;
+    const newIsNight = lightingPercentage < 50;
     
-    setCycleState({ lightingPercentage, cyclePosition, isNight });
+    // Update ref values without triggering re-render
+    cycleStateRef.current = { lightingPercentage, cyclePosition, isNight: newIsNight };
+    
+    // Only trigger React update on day/night transition
+    if (newIsNight !== isNight) {
+      setIsNight(newIsNight);
+    }
   });
 
-  return cycleState;
+  return cycleStateRef.current;
 }
 
 // Camera-tracked block renderer with chunk culling
@@ -290,6 +299,11 @@ function FirstPersonControls({
   const yaw = useRef(0);
   const pitch = useRef(0);
   const lastGroundCheck = useRef(0);
+  
+  // Reusable Vector3 objects to prevent garbage collection
+  const forwardVecRef = useRef(new THREE.Vector3());
+  const rightVecRef = useRef(new THREE.Vector3());
+  const deltaMovementRef = useRef(new THREE.Vector3());
   
   // Use blocks from props instead of context (context doesn't cross Canvas boundary)
   const existingBlocks = blocks;
@@ -608,11 +622,11 @@ function FirstPersonControls({
     const crawlSpeed = baseSpeed * 0.6; // 60% speed when crawling
     const runSpeed = keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed);
     
-    // Apply movement
-    const forward = new THREE.Vector3(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
-    const right = new THREE.Vector3(Math.cos(yaw.current), 0, -Math.sin(yaw.current));
+    // Apply movement (reuse vector objects to prevent garbage collection)
+    const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
+    const right = rightVecRef.current.set(Math.cos(yaw.current), 0, -Math.sin(yaw.current));
     
-    const deltaMovement = new THREE.Vector3();
+    const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
     deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
     deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
 
