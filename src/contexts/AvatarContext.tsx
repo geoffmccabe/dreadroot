@@ -54,7 +54,8 @@ export function AvatarProvider({ children }: { children: React.ReactNode }) {
         });
       }
     }
-  }, [isLoading, getModelByKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
 
   const updateAvatarConfig = useCallback((updates: Partial<AvatarConfig>) => {
     setAvatarConfig(prev => ({ ...prev, ...updates }));
