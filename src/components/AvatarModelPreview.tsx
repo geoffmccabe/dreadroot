@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useFBX, OrbitControls } from '@react-three/drei';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
@@ -80,17 +80,6 @@ function Model({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPa
 }
 
 function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
-  const { camera } = useThree();
-  
-  useEffect(() => {
-    // Simple camera positioning: scale * 200 gives good framing
-    // At scale 0.01, distance is 2 units
-    // At scale 0.02, distance is 4 units
-    const distance = scale * 200;
-    camera.position.set(distance, distance * 0.5, distance * 1.2);
-    camera.lookAt(offsetX, offsetY + (scale * 50), offsetZ); // Look at model center
-  }, [camera, scale, offsetX, offsetY, offsetZ]);
-  
   return (
     <>
       <ambientLight intensity={0.8} />
