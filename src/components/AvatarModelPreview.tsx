@@ -8,10 +8,13 @@ interface AvatarModelPreviewProps {
   modelPath: string;
   color: string;
   scale: number;
+  offsetX: number;
+  offsetY: number;
+  offsetZ: number;
   animationPath?: string;
 }
 
-function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
+function Model({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const fbx = useFBX(modelPath);
@@ -71,19 +74,19 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
 
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={scale} position={[0, -0.9, 0]} />
+      <primitive object={fbx} scale={scale} position={[offsetX, offsetY, offsetZ]} />
     </group>
   );
 }
 
-function Scene({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
+function Scene({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
   return (
     <>
       <ambientLight intensity={0.8} />
       <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
       <directionalLight position={[-5, 3, -5]} intensity={0.5} />
       <React.Suspense fallback={null}>
-        <Model modelPath={modelPath} color={color} scale={scale} animationPath={animationPath} />
+        <Model modelPath={modelPath} color={color} scale={scale} offsetX={offsetX} offsetY={offsetY} offsetZ={offsetZ} animationPath={animationPath} />
       </React.Suspense>
       <OrbitControls enablePan={false} enableZoom={true} />
       <gridHelper args={[10, 10]} position={[0, -1, 0]} />
@@ -91,11 +94,10 @@ function Scene({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
   );
 }
 
-export function AvatarModelPreview({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
+export function AvatarModelPreview({ modelPath, color, scale, offsetX, offsetY, offsetZ, animationPath }: AvatarModelPreviewProps) {
   return (
     <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        key={scale}
         camera={{ position: [2, 0.5, 3], fov: 50 }}
         style={{ width: '100%', height: '100%' }}
       >
@@ -103,6 +105,9 @@ export function AvatarModelPreview({ modelPath, color, scale, animationPath }: A
           modelPath={modelPath}
           color={color}
           scale={scale}
+          offsetX={offsetX}
+          offsetY={offsetY}
+          offsetZ={offsetZ}
           animationPath={animationPath}
         />
       </Canvas>

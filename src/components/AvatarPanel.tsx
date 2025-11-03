@@ -130,6 +130,9 @@ export function AvatarPanel() {
                     modelPath={avatarConfig.model}
                     color={avatarConfig.color}
                     scale={avatarConfig.scale}
+                    offsetX={avatarConfig.offsetX}
+                    offsetY={avatarConfig.offsetY}
+                    offsetZ={avatarConfig.offsetZ}
                     animationPath={avatarConfig.animations.find(a => a.trigger === 'movement')?.file}
                   />
                 </div>
