@@ -17,17 +17,29 @@ function Model({ modelPath, color, scale }: AvatarModelPreviewProps) {
 
   React.useEffect(() => {
     if (fbx) {
+      let meshCount = 0;
       fbx.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          mat.color.set(color);
+        if (child instanceof THREE.Mesh) {
+          meshCount++;
+          console.log('🔍 Found mesh:', child.name, 'Has material:', !!child.material);
+          if (child.material) {
+            const mat = child.material as THREE.MeshStandardMaterial;
+            mat.color.set(color);
+            mat.visible = true;
+            mat.opacity = 1;
+            mat.transparent = false;
+            mat.side = THREE.DoubleSide;
+            mat.needsUpdate = true;
+          }
         }
       });
       
       // Calculate bounding box to see actual size
       const box = new THREE.Box3().setFromObject(fbx);
       const size = box.getSize(new THREE.Vector3());
-      console.log('🎯 FBX SIZE:', size.x, size.y, size.z, '| Scale being used:', 0.01);
+      console.log('🎯 FBX SIZE:', size.x, size.y, size.z);
+      console.log('🎯 Total meshes found:', meshCount);
+      console.log('🎯 FBX children:', fbx.children.length);
     }
   }, [fbx, color, scale]);
 
