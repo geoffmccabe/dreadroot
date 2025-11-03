@@ -69,22 +69,14 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
     }
   });
 
-  // Scale the Y position proportionally with the avatar size
-  // Base position is -0.9 at scale 0.01
-  const yPosition = -0.9 * (scale / 0.01);
-
   return (
     <group ref={groupRef}>
-      <primitive object={fbx} scale={scale} position={[0, yPosition, 0]} />
+      <primitive object={fbx} scale={scale} position={[0, -0.9, 0]} />
     </group>
   );
 }
 
 function Scene({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
-  // Calculate dynamic grid and camera positions based on scale
-  const heightInMeters = (scale / 0.01) * 1.7;
-  const gridY = -heightInMeters * 0.5;
-  
   return (
     <>
       <ambientLight intensity={0.8} />
@@ -93,21 +85,18 @@ function Scene({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
       <React.Suspense fallback={null}>
         <Model modelPath={modelPath} color={color} scale={scale} animationPath={animationPath} />
       </React.Suspense>
-      <OrbitControls enablePan={false} enableZoom={true} target={[0, 0, 0]} />
-      <gridHelper args={[10, 10]} position={[0, gridY, 0]} />
+      <OrbitControls enablePan={false} enableZoom={true} />
+      <gridHelper args={[10, 10]} position={[0, -1, 0]} />
     </>
   );
 }
 
 export function AvatarModelPreview({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
-  // Calculate dynamic camera distance based on avatar height
-  const heightInMeters = (scale / 0.01) * 1.7;
-  const cameraDistance = Math.max(2, heightInMeters * 1.5);
-  
   return (
     <div className="w-full h-full rounded-lg border-2 border-primary/20 overflow-hidden">
       <Canvas
-        camera={{ position: [cameraDistance, heightInMeters * 0.3, cameraDistance], fov: 50 }}
+        key={scale}
+        camera={{ position: [2, 0.5, 3], fov: 50 }}
         style={{ width: '100%', height: '100%' }}
       >
         <Scene 
