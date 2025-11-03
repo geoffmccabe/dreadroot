@@ -95,14 +95,14 @@ export function AvatarPanel() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="scale">Scale: {avatarConfig.scale.toFixed(3)}</Label>
+                    <Label htmlFor="scale">Height: {(avatarConfig.scale / 0.01 * 1.7).toFixed(2)}m</Label>
                     <Slider
                       id="scale"
-                      min={0.001}
-                      max={0.1}
-                      step={0.001}
-                      value={[avatarConfig.scale]}
-                      onValueChange={([value]) => updateAvatarConfig({ scale: value })}
+                      min={0.1}
+                      max={3}
+                      step={0.1}
+                      value={[avatarConfig.scale / 0.01 * 1.7]}
+                      onValueChange={([value]) => updateAvatarConfig({ scale: value * 0.01 / 1.7 })}
                     />
                   </div>
 
