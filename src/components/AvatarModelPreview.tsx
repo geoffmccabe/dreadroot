@@ -14,56 +14,39 @@ interface AvatarModelPreviewProps {
 function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const [clonedFbx, setClonedFbx] = useState<THREE.Group | null>(null);
   
-  // Load FBX - this must be at the top level, not in try-catch
   const fbx = useFBX(modelPath);
 
   useEffect(() => {
-    if (!fbx) {
-      console.log('Preview: No FBX loaded yet');
-      return;
-    }
+    if (!fbx) return;
     
-    console.log('Preview: FBX loaded successfully', fbx);
+    console.log('Setting up model materials');
     
-    // Clone the FBX to avoid conflicts with the main scene
-    const clonedModel = fbx.clone();
-    setClonedFbx(clonedModel);
-    
-    // Configure materials
-    clonedModel.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        
-        if (child.material) {
-          const material = (child.material as THREE.MeshStandardMaterial).clone();
-          material.color.set(color);
-          material.metalness = 0.3;
-          material.roughness = 0.7;
-          child.material = material;
-        }
+    // Configure materials directly on the loaded model
+    fbx.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mat = child.material as THREE.MeshStandardMaterial;
+        mat.color.set(color);
+        mat.needsUpdate = true;
       }
     });
 
-    // Setup animation
+    // Setup animation if provided
     if (animationPath) {
       const loader = new FBXLoader();
       loader.load(
         animationPath,
         (animFBX) => {
-          if (animFBX.animations && animFBX.animations.length > 0 && clonedModel) {
-            mixerRef.current = new THREE.AnimationMixer(clonedModel);
+          if (animFBX.animations?.length > 0) {
+            mixerRef.current = new THREE.AnimationMixer(fbx);
             const action = mixerRef.current.clipAction(animFBX.animations[0]);
             action.setLoop(THREE.LoopRepeat, Infinity);
             action.play();
+            console.log('Animation loaded and playing');
           }
         },
         undefined,
-        (error) => {
-          console.warn('Failed to load preview animation:', error);
-        }
+        (error) => console.warn('Animation load failed:', error)
       );
     }
 
@@ -73,21 +56,18 @@ function Model({ modelPath, color, scale, animationPath }: AvatarModelPreviewPro
   }, [fbx, color, animationPath]);
 
   useFrame((_, delta) => {
-    if (mixerRef.current) {
-      mixerRef.current.update(delta);
-    }
+    mixerRef.current?.update(delta);
     
-    // Slow rotation for better view
     if (groupRef.current) {
       groupRef.current.rotation.y += delta * 0.3;
     }
   });
 
-  if (!clonedFbx) return null;
+  console.log('Rendering model with scale:', scale);
 
   return (
     <group ref={groupRef}>
-      <primitive object={clonedFbx} scale={scale} />
+      <primitive object={fbx} scale={scale} position={[0, -0.9, 0]} />
     </group>
   );
 }
@@ -114,9 +94,9 @@ export function AvatarModelPreview({ modelPath, color, scale, animationPath }: A
         </div>
       )}
       <Canvas
-        camera={{ position: [0, 0.8, 2.5], fov: 50 }}
+        camera={{ position: [0, 1, 3], fov: 50 }}
         gl={{ alpha: true, antialias: true }}
-        onCreated={() => console.log('Canvas created')}
+        onCreated={() => console.log('Canvas created for preview')}
       >
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 5, 5]} intensity={1.2} castShadow />
