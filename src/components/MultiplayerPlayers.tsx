@@ -8,36 +8,99 @@ interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
 }
 
-function OtherPlayer({ player }: { player: PlayerState }) {
-  const meshRef = useRef<THREE.Group>(null);
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const actionsRef = useRef<{ [key: string]: THREE.AnimationAction | null }>({});
-  const currentActionRef = useRef<string>('idle');
-  const lastPositionRef = useRef(new THREE.Vector3(player.position.x, player.position.y, player.position.z));
-  
+// Load FBX assets once at the top level
+function SharedAssetsLoader({ children }: { children: (fbx: THREE.Group, walkClip: THREE.AnimationClip) => React.ReactNode }) {
   const fbx = useFBX('/y-bot.fbx');
   const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
   
-  const targetPosition = useRef(new THREE.Vector3(
-    player.position.x,
-    player.position.y,
-    player.position.z
-  ));
-  const targetRotation = useRef(player.rotation.yaw);
+  if (!fbx || !walkAnim || !walkAnim.animations[0]) {
+    return null;
+  }
+  
+  return <>{children(fbx, walkAnim.animations[0])}</>;
+}
 
-  // Update target when player state changes
-  React.useEffect(() => {
-    targetPosition.current.set(
-      player.position.x,
-      player.position.y,
-      player.position.z
-    );
-    targetRotation.current = player.rotation.yaw;
-  }, [player.position.x, player.position.y, player.position.z, player.rotation.yaw]);
+// Single useFrame loop for ALL players (instead of one per player)
+function PlayersController({ players, fbx, walkClip }: MultiplayerPlayersProps & { fbx: THREE.Group; walkClip: THREE.AnimationClip }) {
+  const playersRefs = useRef<Map<string, {
+    mesh: THREE.Group;
+    mixer: THREE.AnimationMixer;
+    actions: { walk: THREE.AnimationAction | null };
+    currentAction: string;
+    lastPosition: THREE.Vector3;
+    targetPosition: THREE.Vector3;
+    targetRotation: number;
+  }>>(new Map());
+  
+  // ONE useFrame for ALL players (massive performance gain)
+  useFrame((_, delta) => {
+    playersRefs.current.forEach((playerData) => {
+      if (!playerData.mesh) return;
+      
+      // Lerp position
+      playerData.mesh.position.lerp(playerData.targetPosition, 0.3);
+      
+      // Lerp rotation
+      const currentYaw = playerData.mesh.rotation.y;
+      playerData.mesh.rotation.y = THREE.MathUtils.lerp(
+        currentYaw,
+        playerData.targetRotation,
+        0.3
+      );
+
+      // Update animation mixer
+      if (playerData.mixer) {
+        playerData.mixer.update(delta);
+      }
+
+      // Detect movement for animation switching
+      const currentPos = playerData.mesh.position;
+      const distanceMoved = currentPos.distanceTo(playerData.lastPosition);
+      const isMoving = distanceMoved > 0.01;
+      
+      // Switch between idle and walk
+      const desiredAction = isMoving ? 'walk' : 'idle';
+      if (desiredAction !== playerData.currentAction) {
+        if (desiredAction === 'walk' && playerData.actions.walk) {
+          playerData.actions.walk.reset().fadeIn(0.2).play();
+        } else if (desiredAction === 'idle' && playerData.actions.walk) {
+          playerData.actions.walk.fadeOut(0.2);
+        }
+        playerData.currentAction = desiredAction;
+      }
+
+      playerData.lastPosition.copy(currentPos);
+    });
+  });
+  
+  return (
+    <>
+      {Array.from(players.values()).map((player) => (
+        <OtherPlayer 
+          key={player.userId} 
+          player={player} 
+          playersRefs={playersRefs}
+          fbx={fbx}
+          walkClip={walkClip}
+        />
+      ))}
+    </>
+  );
+}
+
+function OtherPlayer({ player, playersRefs, fbx, walkClip }: { 
+  player: PlayerState;
+  playersRefs: React.MutableRefObject<Map<string, any>>;
+  fbx: THREE.Group;
+  walkClip: THREE.AnimationClip;
+}) {
+  const meshRef = useRef<THREE.Group>(null);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const actionsRef = useRef<{ walk: THREE.AnimationAction | null }>({ walk: null });
 
   // Configure avatar materials, shadows, and animations
   React.useEffect(() => {
-    if (!fbx) return;
+    if (!fbx || !meshRef.current) return;
     
     const color = player.color || '#ff6b6b';
     fbx.traverse((child) => {
@@ -54,56 +117,40 @@ function OtherPlayer({ player }: { player: PlayerState }) {
     // Setup animation mixer
     mixerRef.current = new THREE.AnimationMixer(fbx);
     
-    // Load walk animation
-    if (walkAnim && walkAnim.animations.length > 0) {
-      const walkAction = mixerRef.current.clipAction(walkAnim.animations[0]);
-      walkAction.play();
-      actionsRef.current.walk = walkAction;
-    }
+    // Use shared walk animation clip
+    const walkAction = mixerRef.current.clipAction(walkClip);
+    walkAction.play();
+    actionsRef.current.walk = walkAction;
+    
+    // Register this player in the controller
+    playersRefs.current.set(player.userId, {
+      mesh: meshRef.current,
+      mixer: mixerRef.current,
+      actions: actionsRef.current,
+      currentAction: 'idle',
+      lastPosition: new THREE.Vector3(player.position.x, player.position.y, player.position.z),
+      targetPosition: new THREE.Vector3(player.position.x, player.position.y, player.position.z),
+      targetRotation: player.rotation.yaw
+    });
 
     return () => {
       mixerRef.current?.stopAllAction();
+      playersRefs.current.delete(player.userId);
     };
-  }, [fbx, walkAnim, player.color]);
-
-  // Smooth interpolation and animation updates
-  useFrame((_, delta) => {
-    if (!meshRef.current) return;
-    
-    // Lerp position
-    meshRef.current.position.lerp(targetPosition.current, 0.3);
-    
-    // Lerp rotation
-    const currentYaw = meshRef.current.rotation.y;
-    meshRef.current.rotation.y = THREE.MathUtils.lerp(
-      currentYaw,
-      targetRotation.current,
-      0.3
-    );
-
-    // Update animation mixer
-    if (mixerRef.current) {
-      mixerRef.current.update(delta);
+  }, [fbx, player.color, player.userId]);
+  
+  // Update target position when player moves (no useFrame needed per player!)
+  React.useEffect(() => {
+    const playerData = playersRefs.current.get(player.userId);
+    if (playerData) {
+      playerData.targetPosition.set(
+        player.position.x,
+        player.position.y,
+        player.position.z
+      );
+      playerData.targetRotation = player.rotation.yaw;
     }
-
-    // Detect movement for animation switching
-    const currentPos = meshRef.current.position;
-    const distanceMoved = currentPos.distanceTo(lastPositionRef.current);
-    const isMoving = distanceMoved > 0.01;
-    
-    // Switch between idle and walk
-    const desiredAction = isMoving ? 'walk' : 'idle';
-    if (desiredAction !== currentActionRef.current) {
-      if (desiredAction === 'walk' && actionsRef.current.walk) {
-        actionsRef.current.walk.reset().fadeIn(0.2).play();
-      } else if (desiredAction === 'idle' && actionsRef.current.walk) {
-        actionsRef.current.walk.fadeOut(0.2);
-      }
-      currentActionRef.current = desiredAction;
-    }
-
-    lastPositionRef.current.copy(currentPos);
-  });
+  }, [player.position.x, player.position.y, player.position.z, player.rotation.yaw, player.userId]);
 
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
@@ -138,17 +185,16 @@ function OtherPlayer({ player }: { player: PlayerState }) {
 }
 
 export function MultiplayerPlayers({ players }: MultiplayerPlayersProps) {
-  const playerArray = Array.from(players.values());
-
-  if (playerArray.length === 0) {
+  if (players.size === 0) {
     return null;
   }
 
+  // Load assets once and pass them to all players
   return (
-    <>
-      {playerArray.map((player) => (
-        <OtherPlayer key={player.userId} player={player} />
-      ))}
-    </>
+    <SharedAssetsLoader>
+      {(fbx, walkClip) => (
+        <PlayersController players={players} fbx={fbx} walkClip={walkClip} />
+      )}
+    </SharedAssetsLoader>
   );
 }
