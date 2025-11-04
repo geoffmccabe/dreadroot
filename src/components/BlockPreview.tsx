@@ -17,6 +17,10 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   const [previewPosition, setPreviewPosition] = useState<THREE.Vector3>(new THREE.Vector3());
   const { getBlockByKey } = useBlocksData();
   
+  // Throttle expensive raycasting
+  const frameCountRef = useRef(0);
+  const cachedPlacementRef = useRef<any>(null);
+  
   // Get block definition from database
   const blockDef = useMemo(() => getBlockByKey(blockType), [blockType, getBlockByKey]);
   
@@ -33,6 +37,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   }, [texture]);
 
   useFrame((state, delta) => {
+    frameCountRef.current++;
+    
     // Update animated texture
     if (isAnimated && updateTexture) {
       updateTexture(delta);
@@ -40,13 +46,16 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     
     if (!visible || !meshRef.current) return;
 
-    // Use centralized block placement system to get accurate placement position
-    // This ensures preview matches actual placement (including overlap detection)
-    const placementResult = calculateBlockPlacement({
-      camera,
-      existingBlocks: existingBlocks as any,
-      maxDistance: 5,
-    });
+    // Throttle raycasting to every 3 frames (20 FPS instead of 60 FPS)
+    if (frameCountRef.current % 3 === 0 || !cachedPlacementRef.current) {
+      cachedPlacementRef.current = calculateBlockPlacement({
+        camera,
+        existingBlocks: existingBlocks as any,
+        maxDistance: 5,
+      });
+    }
+    
+    const placementResult = cachedPlacementRef.current;
     
     // Use placement result for positioning and validity
     const newPosition = placementResult.position || new THREE.Vector3();

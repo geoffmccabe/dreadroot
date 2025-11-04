@@ -30,43 +30,6 @@ import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 
-// Custom hook for weather cycle - shared by sky and lighting
-function useWeatherCycle(weatherSettings: {
-  lightingRange: [number, number];
-  cycleDuration: number;
-}) {
-  // Use ref to avoid triggering React re-renders 60 times per second
-  const cycleStateRef = useRef({
-    lightingPercentage: weatherSettings.lightingRange[0],
-    cyclePosition: 0,
-    isNight: false
-  });
-  
-  const [isNight, setIsNight] = useState(false);
-
-  useFrame(() => {
-    const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
-    const currentTime = Date.now();
-    const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
-    
-    const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
-    const [minLighting, maxLighting] = weatherSettings.lightingRange;
-    const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
-    
-    const newIsNight = lightingPercentage < 50;
-    
-    // Update ref values without triggering re-render
-    cycleStateRef.current = { lightingPercentage, cyclePosition, isNight: newIsNight };
-    
-    // Only trigger React update on day/night transition
-    if (newIsNight !== isNight) {
-      setIsNight(newIsNight);
-    }
-  });
-
-  return cycleStateRef.current;
-}
-
 // Camera-tracked block renderer with chunk culling
 function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: { 
   blocks: PlacedBlock[];
@@ -143,7 +106,15 @@ function getSkyColor(lightingPercentage: number): number {
   return interpolateColor(nightColor, dayColor, lightingPercentage / 100);
 }
 
-function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
+function SkyTexture({ 
+  cycleStateRef, 
+  weatherSettings,
+  onRefsReady 
+}: { 
+  cycleStateRef: React.MutableRefObject<{ lightingPercentage: number; cyclePosition: number; isNight: boolean }>;
+  weatherSettings: { lightingRange: [number, number]; cycleDuration: number };
+  onRefsReady: (refs: { skyMeshRef: React.RefObject<THREE.Mesh>; starMeshRef: React.RefObject<THREE.Mesh> }) => void;
+}) {
   const { scene } = useThree();
   const starMeshRef = useRef<THREE.Mesh | null>(null);
   const skyMeshRef = useRef<THREE.Mesh | null>(null);
@@ -198,6 +169,9 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       console.log('✓ Stars loaded:', loadedTexture.image.width, 'x', loadedTexture.image.height);
     });
     
+    // Notify parent of refs
+    onRefsReady({ skyMeshRef, starMeshRef });
+    
     return () => {
       if (skyMeshRef.current) {
         scene.remove(skyMeshRef.current);
@@ -211,47 +185,76 @@ function SkyTexture({ lightingPercentage }: { lightingPercentage: number }) {
       }
       textureRef.current?.dispose();
     };
-  }, [scene]);
+  }, [scene, onRefsReady]);
   
-  // Smooth transitions every frame
-  useFrame(() => {
-    // Update sky color layer
-    if (skyMeshRef.current) {
-      const mat = skyMeshRef.current.material as THREE.MeshBasicMaterial;
-      
-      // Smooth interpolation from black to bright sky blue
-      const t = lightingPercentage / 100;
-      mat.color.setRGB(135/255 * t, 206/255 * t, 235/255 * t);
-      mat.opacity = t; // Fade in sky color as day progresses
-    }
-    
-    // Update star layer
-    if (starMeshRef.current) {
-      const mat = starMeshRef.current.material as THREE.MeshBasicMaterial;
-      
-      // Stars visible at night (0-30%), fade out smoothly
-      if (lightingPercentage <= 30) {
-        mat.opacity = 1.0 - (lightingPercentage / 30);
-      } else {
-        mat.opacity = 0;
-      }
-    }
-  });
+  // Sky updates moved to consolidated useFrame in DynamicSky
   
   return null;
 }
 
 // Star field removed - using space texture instead
 
-// Dynamic sky controller - responds to weather cycle
-function DynamicSky({ weatherSettings }: {
+// Dynamic sky controller with CONSOLIDATED environment useFrame loop
+function DynamicSky({ 
+  weatherSettings,
+  cycleStateRef 
+}: {
   weatherSettings: {
     lightingRange: [number, number];
     cycleDuration: number;
-  }
+  };
+  cycleStateRef: React.MutableRefObject<{ lightingPercentage: number; cyclePosition: number; isNight: boolean }>;
 }) {
-  const { lightingPercentage } = useWeatherCycle(weatherSettings);
-  return <SkyTexture lightingPercentage={lightingPercentage} />;
+  const [isNight, setIsNight] = useState(false);
+  const skyRefs = useRef<{ skyMeshRef: React.RefObject<THREE.Mesh>; starMeshRef: React.RefObject<THREE.Mesh> } | null>(null);
+  
+  const handleRefsReady = useCallback((refs: { skyMeshRef: React.RefObject<THREE.Mesh>; starMeshRef: React.RefObject<THREE.Mesh> }) => {
+    skyRefs.current = refs;
+  }, []);
+  
+  // CONSOLIDATED: Weather + Sky in ONE useFrame
+  useFrame(() => {
+    // 1. Update weather cycle
+    const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
+    const currentTime = Date.now();
+    const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
+    
+    const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
+    const [minLighting, maxLighting] = weatherSettings.lightingRange;
+    const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
+    
+    const newIsNight = lightingPercentage < 50;
+    
+    cycleStateRef.current = { lightingPercentage, cyclePosition, isNight: newIsNight };
+    
+    if (newIsNight !== isNight) {
+      setIsNight(newIsNight);
+    }
+    
+    // 2. Update sky transitions
+    if (skyRefs.current) {
+      const skyMesh = skyRefs.current.skyMeshRef.current;
+      const starMesh = skyRefs.current.starMeshRef.current;
+      
+      if (skyMesh) {
+        const mat = skyMesh.material as THREE.MeshBasicMaterial;
+        const t = lightingPercentage / 100;
+        mat.color.setRGB(135/255 * t, 206/255 * t, 235/255 * t);
+        mat.opacity = t;
+      }
+      
+      if (starMesh) {
+        const mat = starMesh.material as THREE.MeshBasicMaterial;
+        if (lightingPercentage <= 30) {
+          mat.opacity = 1.0 - (lightingPercentage / 30);
+        } else {
+          mat.opacity = 0;
+        }
+      }
+    }
+  });
+  
+  return <SkyTexture cycleStateRef={cycleStateRef} weatherSettings={weatherSettings} onRefsReady={handleRefsReady} />;
 }
 
 // First person controls component
@@ -1498,25 +1501,20 @@ function Bullets({ bullets }: {
   );
 }
 
-// Dynamic lighting component that uses shared weather cycle
-function DynamicLighting({ weatherSettings }: { 
-  weatherSettings: {
-    lightingRange: [number, number];
-    cycleDuration: number;
-  } 
+// Dynamic lighting component - now reads from shared cycleStateRef
+function DynamicLighting({ cycleStateRef }: { 
+  cycleStateRef: React.MutableRefObject<{ lightingPercentage: number; cyclePosition: number; isNight: boolean }>;
 }) {
   const hemisphereRef = useRef<THREE.HemisphereLight>(null);
   const directionalRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
   
-  const { lightingPercentage } = useWeatherCycle(weatherSettings);
-  
   // Cache previous lighting value to avoid unnecessary updates
-  const prevLightingRef = useRef(lightingPercentage);
+  const prevLightingRef = useRef(0);
   
   useFrame(() => {
     // Only update if lighting changed significantly (>1% change)
-    const currentLighting = lightingPercentage;
+    const currentLighting = cycleStateRef.current.lightingPercentage;
     if (Math.abs(currentLighting - prevLightingRef.current) < 1) {
       return;
     }
@@ -1606,6 +1604,12 @@ function Scene({
   userRoles: string[];
   isMoveMode: boolean;
 }) {
+  // Create shared cycleStateRef for weather/sky/lighting
+  const cycleStateRef = useRef({
+    lightingPercentage: weatherSettings.lightingRange[0],
+    cyclePosition: 0,
+    isNight: false
+  });
   // Performance-optimized bullet system with object pooling
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
@@ -1971,10 +1975,10 @@ function Scene({
       <LocalPlayerAvatar />
       
       {/* Dynamic Lighting with weather cycle */}
-      <DynamicLighting weatherSettings={weatherSettings} />
+      <DynamicLighting cycleStateRef={cycleStateRef} />
 
       {/* Dynamic Sky with day/night cycle and stars */}
-      <DynamicSky weatherSettings={weatherSettings} />
+      <DynamicSky weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
 
       {/* Scene objects */}
       <Fortress />
