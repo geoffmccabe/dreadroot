@@ -1446,24 +1446,11 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
     }
   }, [coins, onGetCoins, createExplosion]);
 
-  // Force sprite material updates when texture changes
-  useEffect(() => {
-    if (!coinTexture || !groupRef.current) return;
-    
-    // Update all existing sprite materials with new texture
-    groupRef.current.children.forEach((child) => {
-      if (child instanceof THREE.Sprite && child.material) {
-        child.material.map = coinTexture;
-        child.material.needsUpdate = true;
-      }
-    });
-  }, [coinTexture]);
-
   return (
     <group ref={groupRef}>
       {coins.map((coin, index) => (
         <sprite 
-          key={`${index}-${coinTexture?.uuid || 'loading'}`}
+          key={index}
           ref={(ref) => { coin.mesh = ref; }}
           visible={false}
           scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
@@ -1477,7 +1464,7 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
       ))}
       {explosionParticles.map((particle, index) => (
         <sprite 
-          key={`particle-${index}-${coinTexture?.uuid || 'loading'}`}
+          key={`particle-${index}`}
           ref={(ref) => { particle.mesh = ref; }}
           visible={false}
           scale={[0.5, 0.5, 1]}
