@@ -13,11 +13,8 @@ const animationCache = new Map<string, THREE.AnimationClip>();
 const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> => {
   // Check cache first
   if (animationCache.has(url)) {
-    console.log(`✅ Using cached animation: ${url}`);
     return animationCache.get(url)!;
   }
-
-  console.log(`📥 Loading animation from network: ${url}`);
   
   const extension = url.split('.').pop()?.toLowerCase();
   
@@ -31,7 +28,6 @@ const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> =
       if (fbx.animations && fbx.animations.length > 0) {
         const clip = fbx.animations[0];
         animationCache.set(url, clip);
-        console.log(`✅ Cached FBX animation: ${url}`);
         return clip;
       }
     } else if (extension === 'glb' || extension === 'gltf') {
@@ -43,12 +39,11 @@ const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> =
       if (gltf.animations && gltf.animations.length > 0) {
         const clip = gltf.animations[0];
         animationCache.set(url, clip);
-        console.log(`✅ Cached GLTF animation: ${url}`);
         return clip;
       }
     }
   } catch (error) {
-    console.warn(`Failed to load animation: ${url}`, error);
+    return null;
   }
   
   return null;

@@ -144,8 +144,6 @@ export function MultiplayerPlayers({ players }: MultiplayerPlayersProps) {
     return null;
   }
 
-  console.log('[MultiplayerPlayers] Rendering', playerArray.length, 'other players');
-
   return (
     <>
       {playerArray.map((player) => (
