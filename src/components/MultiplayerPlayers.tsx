@@ -152,10 +152,11 @@ function OtherPlayer({ player, playersRefs, fbx, walkClip }: {
     }
   }, [player.position.x, player.position.y, player.position.z, player.rotation.yaw, player.userId]);
 
+  // Clone the FBX ONCE per player, not on every render
   const avatarClone = React.useMemo(() => {
     if (!fbx) return null;
     return fbx.clone();
-  }, [fbx]);
+  }, []); // Empty deps - clone once when component mounts
 
   return (
     <group ref={meshRef} position={[player.position.x, player.position.y, player.position.z]}>
