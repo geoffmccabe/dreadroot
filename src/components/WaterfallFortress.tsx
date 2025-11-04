@@ -78,7 +78,6 @@ function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: {
       }
     }
     
-    console.log(`📦 Rendering ${filtered.length}/${blocks.length} blocks from ${visibleChunks.size} chunks (distance: ${visualDistance})`);
     return filtered;
   }, [visibleChunks, blocksByChunk, blocks.length, visualDistance]);
   
@@ -384,7 +383,6 @@ function FirstPersonControls({
     }
     
     const result = [...fortressColliders, ...Array.from(blockCollisionCache.current.values())];
-    console.log('[Colliders] Total colliders:', result.length, '(', fortressColliders.length, 'fortress +', blockCollisionCache.current.size, 'blocks)');
     return result;
   }, [existingBlocks]);
 
@@ -1665,8 +1663,6 @@ function Scene({
         fogStart,   // Fog begins to appear
         fogEnd      // Fully fog color
       );
-      
-      console.log(`🌫️ Fog enabled: ${fogStart.toFixed(1)} to ${fogEnd.toFixed(1)} blocks`);
       
       // Force all materials to update their fog uniforms
       scene.traverse((object) => {
