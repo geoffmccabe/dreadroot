@@ -70,19 +70,12 @@ export const FallingBlocks: React.FC<{
     const newFallingBlocks = new Map(fallingBlocks);
 
     newFallingBlocks.forEach((block, id) => {
-      if (!block.falling) return;
-
       // Apply gravity
       const newVelocity = block.velocity + gravity * delta;
       const newY = block.currentY - newVelocity * delta;
 
       // Check if landed at target position
       if (newY <= block.position_y) {
-        block.currentY = block.position_y;
-        block.velocity = 0;
-        block.falling = false;
-        hasUpdates = true;
-
         // Play thud sound (throttled)
         const now = Date.now();
         if (audioRef.current && now - lastThudTime.current > 50) {
@@ -94,6 +87,10 @@ export const FallingBlocks: React.FC<{
         if (onLanded) {
           onLanded(id);
         }
+
+        // Remove the block from falling blocks since it has landed
+        newFallingBlocks.delete(id);
+        hasUpdates = true;
       } else {
         block.currentY = newY;
         block.velocity = newVelocity;
