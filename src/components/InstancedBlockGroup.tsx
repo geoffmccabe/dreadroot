@@ -234,9 +234,9 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
   }, [blocks]);
   
-  // Update ONLY falling block positions every frame (skip static blocks for performance)
+  // Update falling block positions every frame (direct matrix updates, no React re-renders)
   useFrame(() => {
-    if (!meshRef.current || fallingBlocksState.size === 0) return;
+    if (!meshRef.current) return;
     
     let needsUpdate = false;
     const matrix = matrixRef.current;
@@ -244,16 +244,14 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     blocks.forEach((block, i) => {
       const fallState = fallingBlocksState.get(block.id);
       
-      // ONLY update if this block is currently falling
-      if (fallState) {
-        const x = block.position_x + 0.5;
-        const y = fallState.currentY + 0.5;
-        const z = block.position_z + 0.5;
-        
-        matrix.setPosition(x, y, z);
-        meshRef.current!.setMatrixAt(i, matrix);
-        needsUpdate = true;
-      }
+      // Always update position - use fallState if falling, database position if landed
+      const x = block.position_x + 0.5;
+      const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+      const z = block.position_z + 0.5;
+      
+      matrix.setPosition(x, y, z);
+      meshRef.current!.setMatrixAt(i, matrix);
+      needsUpdate = true;
     });
     
     if (needsUpdate) {

@@ -115,6 +115,7 @@ function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: {
       }
     }
     
+    console.log(`📦 Rendering ${filtered.length}/${blocks.length} blocks from ${visibleChunks.size} chunks (distance: ${visualDistance})`);
     return filtered;
   }, [visibleChunks, blocksByChunk, blocks.length, visualDistance]);
   
@@ -324,8 +325,9 @@ function FirstPersonControls({
   // Cache for block collision boxes to avoid recreating them on every render
   const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
 
-    // Collision boxes for fortress walls and placed blocks
+  // Collision boxes for fortress walls and placed blocks
   const colliders = useMemo(() => {
+    console.log('[Colliders] Building colliders with', existingBlocks.length, 'blocks');
     const cliffW = 40, cliffH = 20, frontT = 2;
     const courtyardDepth = 30, frontZ = -8;
     const openingHalfW = 2;
@@ -378,7 +380,9 @@ function FirstPersonControls({
       }
     }
     
-    return [...fortressColliders, ...Array.from(blockCollisionCache.current.values())];
+    const result = [...fortressColliders, ...Array.from(blockCollisionCache.current.values())];
+    console.log('[Colliders] Total colliders:', result.length, '(', fortressColliders.length, 'fortress +', blockCollisionCache.current.size, 'blocks)');
+    return result;
   }, [existingBlocks]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -715,6 +719,18 @@ function FirstPersonControls({
           )
         );
         
+        // Debug: Log collider dimensions
+        if (Math.random() < 0.01) { // Log occasionally to avoid spam
+          console.log('[Crawl Collider]', {
+            center: { x: pos.x, y: pos.y, z: pos.z },
+            min: { x: box.min.x, y: box.min.y, z: box.min.z },
+            max: { x: box.max.x, y: box.max.y, z: box.max.z },
+            width: box.max.x - box.min.x,
+            height: box.max.y - box.min.y,
+            depth: box.max.z - box.min.z
+          });
+        }
+        
         return box;
       } else {
         // Standing mode: use normal player dimensions
@@ -742,6 +758,15 @@ function FirstPersonControls({
         if (isHorizontal) {
           const standingOnBlock = Math.abs(playerBox.min.y - collider.max.y) < 0.25;
           if (standingOnBlock) {
+            // Debug occasionally
+            if (Math.random() < 0.01) {
+              console.log('[Standing Check]', {
+                playerMinY: playerBox.min.y,
+                colliderMaxY: collider.max.y,
+                diff: Math.abs(playerBox.min.y - collider.max.y),
+                skipping: true
+              });
+            }
             continue;
           }
           

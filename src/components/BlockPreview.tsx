@@ -32,30 +32,23 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     texture.repeat.set(1, 1);
   }, [texture]);
 
-  // Throttle expensive raycast to every 3 frames for performance
-  const frameCountRef = useRef(0);
-  const cachedPlacementRef = useRef<any>(null);
-  
   useFrame((state, delta) => {
-    // Update animated texture every frame
+    // Update animated texture
     if (isAnimated && updateTexture) {
       updateTexture(delta);
     }
     
     if (!visible || !meshRef.current) return;
 
-    frameCountRef.current++;
+    // Use centralized block placement system to get accurate placement position
+    // This ensures preview matches actual placement (including overlap detection)
+    const placementResult = calculateBlockPlacement({
+      camera,
+      existingBlocks: existingBlocks as any,
+      maxDistance: 5,
+    });
     
-    // Only recalculate placement every 3 frames (20ms at 60fps)
-    if (frameCountRef.current % 3 === 0 || !cachedPlacementRef.current) {
-      cachedPlacementRef.current = calculateBlockPlacement({
-        camera,
-        existingBlocks: existingBlocks as any,
-        maxDistance: 5,
-      });
-    }
-    
-    const placementResult = cachedPlacementRef.current;
+    // Use placement result for positioning and validity
     const newPosition = placementResult.position || new THREE.Vector3();
     const renderPosition = placementResult.renderPosition || new THREE.Vector3();
     const isValid = placementResult.isValid;
@@ -73,7 +66,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     
     // Pulsing opacity effect (30% to 60% every second)
     const time = clock.getElapsedTime();
-    const pulseOpacity = 0.45 + Math.sin(time * Math.PI * 2) * 0.15;
+    const pulseOpacity = 0.45 + Math.sin(time * Math.PI * 2) * 0.15; // Oscillates between 0.3 and 0.6
     
     material.transparent = true;
     material.opacity = isTransparent ? pulseOpacity * 0.7 : pulseOpacity;
@@ -89,8 +82,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
         material.emissiveIntensity = 0;
       }
     } else {
-      material.color.setRGB(1, 0.2, 0.2);
-      material.emissive.setRGB(0.3, 0.1, 0.1);
+      material.color.setRGB(1, 0.2, 0.2); // Red tint for invalid placement
+      material.emissive.setRGB(0.3, 0.1, 0.1); // Add red glow
       material.emissiveIntensity = 0.5;
     }
   });
