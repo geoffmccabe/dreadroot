@@ -315,7 +315,7 @@ function FirstPersonControls({
   const keys = useRef({
     w: false, s: false, a: false, d: false,
     shift: false, space: false, r: false, ctrl: false,
-    previouslyCtrl: false
+    previouslyCtrl: false, rightMouse: false
   });
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const onGround = useRef(true);
@@ -404,15 +404,6 @@ function FirstPersonControls({
     if (panelOpen || 
         document.activeElement?.tagName === 'INPUT' || 
         document.activeElement?.tagName === 'TEXTAREA') {
-      return;
-    }
-    
-    // Handle Caps Lock for block removal
-    if (event.getModifierState && event.getModifierState('CapsLock') && blockPlacementMode && hoveredBlockId && onBlockRemove) {
-      event.preventDefault();
-      console.log('Caps Lock pressed, removing block:', hoveredBlockId);
-      onBlockRemove(hoveredBlockId);
-      setHoveredBlockId(null);
       return;
     }
     
@@ -572,7 +563,18 @@ function FirstPersonControls({
     
     if (!isLocked.current) {
       gl.domElement.requestPointerLock();
-    } else if (blockPlacementMode && onBlockPlace) {
+      return;
+    }
+    
+    // If in block mode with ownership outline shown and a block is hovered, remove it
+    if (blockPlacementMode && showOwnershipOutline && hoveredBlockId && onBlockRemove) {
+      console.log('Removing hovered block:', hoveredBlockId);
+      onBlockRemove(hoveredBlockId);
+      setHoveredBlockId(null);
+      return;
+    }
+    
+    if (blockPlacementMode && onBlockPlace) {
       console.log('Attempting block placement...');
       // Minecraft-style block placement with surface detection
       const raycaster = new THREE.Raycaster();
@@ -617,51 +619,30 @@ function FirstPersonControls({
       // Play gunshot sound using preloaded audio
       playAudio(audioRefs.gunshot);
     }
-  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks, selectedBlockType]);
+  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove]);
 
-  // Right-click handler for removing blocks
+  // Right-click handler for selecting blocks to remove
   const handleRightClick = useCallback((event: MouseEvent) => {
-    if (!isLocked.current || !showOwnershipOutline || !onBlockRemove || !currentUserId) return;
-    
+    if (!isLocked.current || !blockPlacementMode || !showOwnershipOutline) return;
     event.preventDefault();
+  }, [blockPlacementMode, showOwnershipOutline]);
+
+  // Mouse down/up handlers for right-click hold
+  const handleMouseDown = useCallback((event: MouseEvent) => {
+    if (!isLocked.current) return;
     
-    // Raycast to find clicked block
-    const raycaster = new THREE.Raycaster();
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(camera.quaternion);
-    raycaster.set(camera.position, direction);
-    
-    // Find the closest block within range
-    const maxDistance = 5;
-    let closestBlock: PlacedBlock | null = null;
-    let closestDistance = maxDistance;
-    
-    for (const block of existingBlocks || []) {
-      // Only consider blocks owned by the current user
-      if (block.user_id !== currentUserId) continue;
-      
-      const blockPos = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
-      const distance = camera.position.distanceTo(blockPos);
-      
-      if (distance < closestDistance) {
-        // Check if ray intersects with block (1x1x1 cube)
-        const min = new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5);
-        const max = new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5);
-        const box = new THREE.Box3(min, max);
-        
-        const ray = new THREE.Ray(camera.position, direction);
-        if (ray.intersectsBox(box)) {
-          closestBlock = block;
-          closestDistance = distance;
-        }
-      }
+    if (event.button === 2) { // Right mouse button
+      keys.current.rightMouse = true;
     }
-    
-    if (closestBlock) {
-      console.log('Removing block:', closestBlock.id);
-      onBlockRemove(closestBlock.id);
+  }, []);
+
+  const handleMouseUp = useCallback((event: MouseEvent) => {
+    if (event.button === 2) { // Right mouse button
+      keys.current.rightMouse = false;
+      // Clear hovered block when releasing right mouse
+      setHoveredBlockId(null);
     }
-  }, [camera, existingBlocks, showOwnershipOutline, onBlockRemove, currentUserId]);
+  }, []);
 
   const handlePointerLockChange = useCallback(() => {
     isLocked.current = document.pointerLockElement === gl.domElement;
@@ -675,6 +656,8 @@ function FirstPersonControls({
     document.addEventListener('pointerlockchange', handlePointerLockChange);
     gl.domElement.addEventListener('click', handleClick);
     gl.domElement.addEventListener('contextmenu', handleRightClick);
+    gl.domElement.addEventListener('mousedown', handleMouseDown);
+    gl.domElement.addEventListener('mouseup', handleMouseUp);
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
@@ -684,12 +667,14 @@ function FirstPersonControls({
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
       gl.domElement.removeEventListener('click', handleClick);
       gl.domElement.removeEventListener('contextmenu', handleRightClick);
+      gl.domElement.removeEventListener('mousedown', handleMouseDown);
+      gl.domElement.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, gl.domElement, blockPlacementMode, hoveredBlockId, currentUserId]);
+  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
 
   useFrame((state, delta) => {
-    // Hover detection for block mode
-    if (blockPlacementMode && currentUserId) {
+    // Hover detection for block mode - only when ownership outline is shown (TAB pressed)
+    if (blockPlacementMode && currentUserId && showOwnershipOutline && keys.current.rightMouse) {
       const raycaster = new THREE.Raycaster();
       const direction = new THREE.Vector3(0, 0, -1);
       direction.applyQuaternion(camera.quaternion);
