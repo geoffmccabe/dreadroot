@@ -12,6 +12,29 @@ interface DBBlock extends PlacedBlock {
 
 // Removed temp UUID hack - now using real Supabase authentication
 
+// Helper to check if blocks arrays are shallowly equal
+const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
+  if (a.length !== b.length) return false;
+  
+  // Create maps for O(1) lookup
+  const mapA = new Map(a.map(block => [block.id, block]));
+  const mapB = new Map(b.map(block => [block.id, block]));
+  
+  // Check if all IDs match and positions match
+  for (const [id, blockA] of mapA) {
+    const blockB = mapB.get(id);
+    if (!blockB) return false;
+    if (blockA.position_x !== blockB.position_x ||
+        blockA.position_y !== blockB.position_y ||
+        blockA.position_z !== blockB.position_z ||
+        blockA.block_type !== blockB.block_type) {
+      return false;
+    }
+  }
+  
+  return true;
+};
+
 export const usePlacedBlocksWithCache = (userId: string | null) => {
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,12 +49,30 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     init: initDB
   } = useIndexedDB();
 
+  // Track previous blocks to prevent unnecessary updates
+  const prevBlocksRef = useRef<PlacedBlock[]>([]);
+
   // Removed temp UUID - using real authentication now
 
   // Track if user is in block mode for periodic syncing
   const isBlockModeRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const syncingRef = useRef(false);
+
+  // Safe setBlocks that only updates if array actually changed
+  const setBlocksIfChanged = useCallback((newBlocks: PlacedBlock[] | ((prev: PlacedBlock[]) => PlacedBlock[])) => {
+    setBlocks(prev => {
+      const nextBlocks = typeof newBlocks === 'function' ? newBlocks(prev) : newBlocks;
+      
+      // Only update if arrays are actually different
+      if (arraysShallowEqual(prevBlocksRef.current, nextBlocks)) {
+        return prev; // Return previous reference to prevent re-render
+      }
+      
+      prevBlocksRef.current = nextBlocks;
+      return nextBlocks;
+    });
+  }, []);
 
   const syncWithSupabase = useCallback(async () => {
     if (syncingRef.current) return;
@@ -41,7 +82,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       
       // Load blocks from IndexedDB first (instant)
       const cachedBlocks = await getAllBlocks();
-      setBlocks(cachedBlocks.map(block => ({
+      setBlocksIfChanged(cachedBlocks.map(block => ({
         id: block.id,
         user_id: block.user_id,
         position_x: block.position_x,
@@ -81,7 +122,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         await addBlock(dbBlock);
       }
 
-      setBlocks(supabaseBlocks || []);
+      setBlocksIfChanged(supabaseBlocks || []);
     } catch (error) {
       console.error('Error syncing:', error);
     } finally {
@@ -100,7 +141,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       await initDB();
       
       const cachedBlocks = await getAllBlocks();
-      setBlocks(cachedBlocks.map(block => ({
+      setBlocksIfChanged(cachedBlocks.map(block => ({
         id: block.id,
         user_id: block.user_id,
         position_x: block.position_x,
@@ -138,7 +179,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
             await addBlock(dbBlock);
             
             // Update local state - replace temp block or add new block
-            setBlocks(prev => {
+            setBlocksIfChanged(prev => {
               // Check if this is replacing a temp block at the same position
               const tempBlockIndex = prev.findIndex(block => 
                 block.id.startsWith('temp-') &&
@@ -167,7 +208,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
             await removeFromDB(deletedId);
             
             // Update local state
-            setBlocks(prev => prev.filter(block => block.id !== deletedId));
+            setBlocksIfChanged(prev => prev.filter(block => block.id !== deletedId));
           }
         }
       )
@@ -183,7 +224,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       initializeCache();
     } else {
       setIsLoading(true);
-      setBlocks([]);
+      setBlocksIfChanged([]);
     }
     
     const cleanup = setupRealtimeSubscription();
@@ -235,7 +276,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         optimisticBlock.expires_at = expiresAt;
       }
 
-      setBlocks(prev => [...prev, optimisticBlock]);
+      setBlocksIfChanged(prev => [...prev, optimisticBlock]);
 
       // Add to IndexedDB (not synced yet)
       const dbBlock: DBBlock = {
@@ -308,7 +349,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       });
 
       // Update local state
-      setBlocks(prev => prev.map(block => 
+      setBlocksIfChanged(prev => prev.map(block => 
         block.id === dbBlock.id ? data : block
       ));
 
@@ -371,7 +412,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       }
 
       // Optimistically remove from UI
-      setBlocks(prev => prev.filter(block => block.id !== blockId));
+      setBlocksIfChanged(prev => prev.filter(block => block.id !== blockId));
       
       // Remove from Supabase (RLS will enforce ownership)
       const { error } = await supabase
