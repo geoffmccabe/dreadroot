@@ -312,6 +312,7 @@ function FirstPersonControls({
   const pitch = useRef(0);
   const lastGroundCheck = useRef(0);
   const stuckTimer = useRef(0);
+  const lastPositionLog = useRef(0);
   
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
@@ -871,6 +872,40 @@ function FirstPersonControls({
       stuckTimer.current += delta;
     } else {
       stuckTimer.current = 0;
+    }
+    
+    // Position tracking for debugging - log every 0.1 seconds while moving
+    const isMoving = keys.current.w || keys.current.s || keys.current.a || keys.current.d || 
+                     keys.current.space || Math.abs(velocity.current.y) > 0.1;
+    if (isMoving && state.clock.elapsedTime - lastPositionLog.current > 0.1) {
+      console.log('[POSITION TRACK]', {
+        time: state.clock.elapsedTime.toFixed(2),
+        pos: {
+          x: camera.position.x.toFixed(3),
+          y: camera.position.y.toFixed(3),
+          z: camera.position.z.toFixed(3)
+        },
+        velocity: {
+          x: velocity.current.x.toFixed(3),
+          y: velocity.current.y.toFixed(3),
+          z: velocity.current.z.toFixed(3)
+        },
+        state: {
+          onGround: onGround.current,
+          xBlocked,
+          zBlocked,
+          isStuck: isStuckHorizontally,
+          stuckTime: stuckTimer.current.toFixed(2)
+        },
+        keys: {
+          w: keys.current.w,
+          s: keys.current.s,
+          a: keys.current.a,
+          d: keys.current.d,
+          space: keys.current.space
+        }
+      });
+      lastPositionLog.current = state.clock.elapsedTime;
     }
     
     // ACTUAL ground detection - check every frame if there's a block beneath the player
