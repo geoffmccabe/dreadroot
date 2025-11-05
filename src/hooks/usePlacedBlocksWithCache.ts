@@ -64,8 +64,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     setBlocks(prev => {
       const nextBlocks = typeof newBlocks === 'function' ? newBlocks(prev) : newBlocks;
       
-      // Only update if arrays are actually different
-      if (arraysShallowEqual(prevBlocksRef.current, nextBlocks)) {
+      // Only update if arrays are actually different (compare with prev state, not ref)
+      if (arraysShallowEqual(prev, nextBlocks)) {
         return prev; // Return previous reference to prevent re-render
       }
       
