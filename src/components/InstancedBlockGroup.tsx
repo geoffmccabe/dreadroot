@@ -38,6 +38,7 @@ interface InstancedBlockGroupProps {
   showOwnershipOutline?: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
+  onMeshReady?: (mesh: THREE.InstancedMesh | null) => void;
 }
 
 export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
@@ -47,7 +48,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   onCollision,
   showOwnershipOutline = false,
   currentUserId,
-  hoveredBlockId = null
+  hoveredBlockId = null,
+  onMeshReady
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
@@ -204,6 +206,18 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   // Set up instance matrices and compute bounding box
   const prevBlocksLengthRef = useRef<number>(0);
+  
+  // Notify parent when mesh is ready for raycasting
+  useEffect(() => {
+    if (meshRef.current && onMeshReady) {
+      onMeshReady(meshRef.current);
+    }
+    return () => {
+      if (onMeshReady) {
+        onMeshReady(null);
+      }
+    };
+  }, [onMeshReady]);
   
   useEffect(() => {
     if (!meshRef.current) return;

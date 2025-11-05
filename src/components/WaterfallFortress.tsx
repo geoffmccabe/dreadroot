@@ -29,13 +29,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
+import { useRaycaster } from '@/hooks/useRaycaster';
 
 // Camera-tracked block renderer with chunk culling
-function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId, hoveredBlockId }: { 
+function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId, hoveredBlockId, onMeshReady }: { 
   blocks: PlacedBlock[];
   showOwnershipOutline: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
+  onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
 }) {
   const { camera } = useThree();
   const { blocksByChunk, visualDistance } = useBlocks();
@@ -82,7 +84,13 @@ function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId, hove
     return filtered;
   }, [visibleChunks, blocksByChunk, blocks.length, visualDistance]);
   
-  return <PlacedBlocks blocks={visibleBlocks} showOwnershipOutline={showOwnershipOutline} currentUserId={currentUserId} hoveredBlockId={hoveredBlockId || null} />;
+  return <PlacedBlocks 
+    blocks={visibleBlocks} 
+    showOwnershipOutline={showOwnershipOutline} 
+    currentUserId={currentUserId} 
+    hoveredBlockId={hoveredBlockId || null}
+    onMeshReady={onMeshReady}
+  />;
 }
 
 // Sky component with space texture
@@ -279,7 +287,8 @@ function FirstPersonControls({
   showOwnershipOutline,
   currentUserId,
   hoveredBlockId,
-  setHoveredBlockId
+  setHoveredBlockId,
+  instancedMeshesRef
 }: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -307,8 +316,10 @@ function FirstPersonControls({
   currentUserId?: string;
   hoveredBlockId: string | null;
   setHoveredBlockId: (id: string | null) => void;
+  instancedMeshesRef: React.MutableRefObject<Map<string, THREE.InstancedMesh>>;
 }) {
   const { camera, gl } = useThree();
+  const { raycastMeshes } = useRaycaster();
   const isLocked = useRef(false);
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
@@ -673,43 +684,40 @@ function FirstPersonControls({
   }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
 
   useFrame((state, delta) => {
-    // Hover detection for block mode - only when ownership outline is shown (TAB pressed)
+    // Hover detection for block mode - OPTIMIZED with unified raycaster
+    // Throttle to every 10 frames (at 60fps = 6 checks/sec instead of 60/sec)
     if (blockPlacementMode && currentUserId && showOwnershipOutline && keys.current.rightMouse) {
-      const raycaster = new THREE.Raycaster();
-      const direction = new THREE.Vector3(0, 0, -1);
-      direction.applyQuaternion(camera.quaternion);
-      raycaster.set(camera.position, direction);
-      
-      const maxDistance = 5;
-      let closestBlock: PlacedBlock | null = null;
-      let closestDistance = maxDistance;
-      
-      for (const block of existingBlocks || []) {
-        // Only consider blocks owned by the current user
-        if (block.user_id !== currentUserId) continue;
+      // Throttle check: only raycast every 10th frame
+      if (state.clock.elapsedTime * 60 % 10 < 1) {
+        const meshes = Array.from(instancedMeshesRef.current.values());
         
-        const blockCenter = new THREE.Vector3(
-          block.position_x + 0.5,
-          block.position_y + 0.5,
-          block.position_z + 0.5
-        );
-        const distance = camera.position.distanceTo(blockCenter);
-        
-        if (distance < closestDistance) {
-          // Check if ray intersects with block (1x1x1 cube)
-          const min = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
-          const max = new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1);
-          const box = new THREE.Box3(min, max);
+        if (meshes.length > 0) {
+          const result = raycastMeshes(meshes, 5);
           
-          const ray = new THREE.Ray(camera.position, direction);
-          if (ray.intersectsBox(box)) {
-            closestBlock = block;
-            closestDistance = distance;
+          if (result && result.instanceId !== undefined) {
+            // Find the block at this instanceId
+            const mesh = result.object as THREE.InstancedMesh;
+            const blockType = Array.from(instancedMeshesRef.current.entries())
+              .find(([_, m]) => m === mesh)?.[0];
+            
+            if (blockType) {
+              // Get blocks of this type and find the one at instanceId
+              const blocksOfType = blocks.filter(b => b.block_type === blockType && b.user_id === currentUserId);
+              if (blocksOfType[result.instanceId]) {
+                setHoveredBlockId(blocksOfType[result.instanceId].id);
+              } else {
+                setHoveredBlockId(null);
+              }
+            } else {
+              setHoveredBlockId(null);
+            }
+          } else {
+            setHoveredBlockId(null);
           }
+        } else {
+          setHoveredBlockId(null);
         }
       }
-      
-      setHoveredBlockId(closestBlock?.id || null);
     } else if (hoveredBlockId) {
       setHoveredBlockId(null);
     }
@@ -1706,6 +1714,21 @@ function Scene({
   // Get camera ref for block rain
   const { camera, scene } = useThree();
 
+  // Unified raycasting system
+  const { raycastMeshes } = useRaycaster();
+  
+  // Store references to all instanced meshes for raycasting
+  const instancedMeshesRef = useRef<Map<string, THREE.InstancedMesh>>(new Map());
+  
+  // Callback to collect mesh refs from PlacedBlocks
+  const handleMeshReady = useCallback((blockType: string, mesh: THREE.InstancedMesh | null) => {
+    if (mesh) {
+      instancedMeshesRef.current.set(blockType, mesh);
+    } else {
+      instancedMeshesRef.current.delete(blockType);
+    }
+  }, []);
+
   // Dynamic fog based on visual distance and user preference
   const { visualDistance, fogEnabled } = useBlocks();
 
@@ -2052,6 +2075,7 @@ function Scene({
         currentUserId={currentUserId}
         hoveredBlockId={hoveredBlockId}
         setHoveredBlockId={setHoveredBlockId}
+        instancedMeshesRef={instancedMeshesRef}
       />
       
       {/* Multiplayer - render other players */}
@@ -2074,6 +2098,7 @@ function Scene({
         showOwnershipOutline={showOwnershipOutline && blockPlacementMode} 
         currentUserId={user?.id}
         hoveredBlockId={hoveredBlockId}
+        onMeshReady={handleMeshReady}
       />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
