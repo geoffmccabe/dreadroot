@@ -330,6 +330,15 @@ function FirstPersonControls({
   const rightVecRef = useRef(new THREE.Vector3());
   const deltaMovementRef = useRef(new THREE.Vector3());
   
+  // Reusable objects for hover detection to prevent garbage collection
+  const raycasterRef = useRef(new THREE.Raycaster());
+  const rayDirectionRef = useRef(new THREE.Vector3());
+  const blockCenterRef = useRef(new THREE.Vector3());
+  const blockBoxRef = useRef(new THREE.Box3());
+  const blockMinRef = useRef(new THREE.Vector3());
+  const blockMaxRef = useRef(new THREE.Vector3());
+  const hoverFrameCounter = useRef(0);
+  
   // Use blocks from props instead of context (context doesn't cross Canvas boundary)
   const existingBlocks = blocks;
   
@@ -673,12 +682,13 @@ function FirstPersonControls({
   }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
 
   useFrame((state, delta) => {
-    // Hover detection for block mode - only when ownership outline is shown (TAB pressed)
-    if (blockPlacementMode && currentUserId && showOwnershipOutline && keys.current.rightMouse) {
-      const raycaster = new THREE.Raycaster();
-      const direction = new THREE.Vector3(0, 0, -1);
-      direction.applyQuaternion(camera.quaternion);
-      raycaster.set(camera.position, direction);
+    // Hover detection for block mode - throttled to every 3 frames to reduce performance impact
+    hoverFrameCounter.current++;
+    if (blockPlacementMode && currentUserId && showOwnershipOutline && keys.current.rightMouse && hoverFrameCounter.current % 3 === 0) {
+      // Reuse raycaster and direction objects
+      rayDirectionRef.current.set(0, 0, -1);
+      rayDirectionRef.current.applyQuaternion(camera.quaternion);
+      raycasterRef.current.set(camera.position, rayDirectionRef.current);
       
       const maxDistance = 5;
       let closestBlock: PlacedBlock | null = null;
@@ -688,21 +698,21 @@ function FirstPersonControls({
         // Only consider blocks owned by the current user
         if (block.user_id !== currentUserId) continue;
         
-        const blockCenter = new THREE.Vector3(
+        // Reuse blockCenter vector
+        blockCenterRef.current.set(
           block.position_x + 0.5,
           block.position_y + 0.5,
           block.position_z + 0.5
         );
-        const distance = camera.position.distanceTo(blockCenter);
+        const distance = camera.position.distanceTo(blockCenterRef.current);
         
         if (distance < closestDistance) {
-          // Check if ray intersects with block (1x1x1 cube)
-          const min = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
-          const max = new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1);
-          const box = new THREE.Box3(min, max);
+          // Use raycaster's ray and reuse Box3 and Vector3 objects
+          blockMinRef.current.set(block.position_x, block.position_y, block.position_z);
+          blockMaxRef.current.set(block.position_x + 1, block.position_y + 1, block.position_z + 1);
+          blockBoxRef.current.set(blockMinRef.current, blockMaxRef.current);
           
-          const ray = new THREE.Ray(camera.position, direction);
-          if (ray.intersectsBox(box)) {
+          if (raycasterRef.current.ray.intersectsBox(blockBoxRef.current)) {
             closestBlock = block;
             closestDistance = distance;
           }
@@ -710,7 +720,7 @@ function FirstPersonControls({
       }
       
       setHoveredBlockId(closestBlock?.id || null);
-    } else if (hoveredBlockId) {
+    } else if (!keys.current.rightMouse && hoveredBlockId) {
       setHoveredBlockId(null);
     }
     
