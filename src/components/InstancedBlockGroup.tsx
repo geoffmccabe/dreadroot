@@ -37,6 +37,7 @@ interface InstancedBlockGroupProps {
   onCollision?: (box: THREE.Box3, blockId: string) => void;
   showOwnershipOutline?: boolean;
   currentUserId?: string;
+  hoveredBlockId?: string | null;
 }
 
 export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
@@ -45,14 +46,17 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   geometry,
   onCollision,
   showOwnershipOutline = false,
-  currentUserId
+  currentUserId,
+  hoveredBlockId = null
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
   const { camera } = useThree();
   const outlineMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
+  const hoveredMaterialRef = useRef<THREE.Material | null>(null);
   const timeRef = useRef(0);
+  const hoverTimeRef = useRef(0);
   
   // Create outline material once
   if (!outlineMaterialRef.current) {
@@ -276,6 +280,17 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       const hue = cycle * 60; // 0 (red) to 60 (yellow)
       outlineMaterialRef.current.color.setHSL(hue / 360, 1, 0.5);
     }
+    
+    // Animate hovered block opacity
+    if (hoveredBlock && hoveredMaterialRef.current) {
+      hoverTimeRef.current += delta;
+      // Cycle every 1 second: from full opacity (1) to transparent (0)
+      const cycle = (hoverTimeRef.current % 1) / 1; // 0 to 1
+      const opacity = Math.abs(Math.sin(cycle * Math.PI)); // 0 to 1 to 0
+      (hoveredMaterialRef.current as THREE.MeshLambertMaterial).opacity = opacity;
+    } else {
+      hoverTimeRef.current = 0;
+    }
   });
   
   // Create collision boxes for all instances (only when blocks change, not on every frame)
@@ -308,6 +323,36 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     if (!showOwnershipOutline || !currentUserId) return [];
     return blocks.filter(block => block.user_id === currentUserId);
   }, [blocks, showOwnershipOutline, currentUserId]);
+  
+  // Find the hovered block
+  const hoveredBlock = useMemo(() => {
+    if (!hoveredBlockId) return null;
+    return blocks.find(block => block.id === hoveredBlockId);
+  }, [blocks, hoveredBlockId]);
+  
+  // Create transparent material for hovered block
+  useEffect(() => {
+    if (hoveredBlock && texture) {
+      if (hoveredMaterialRef.current) {
+        hoveredMaterialRef.current.dispose();
+      }
+      
+      const baseColor = getBaseColor(blockDef);
+      hoveredMaterialRef.current = new THREE.MeshLambertMaterial({
+        map: texture,
+        color: baseColor,
+        transparent: true,
+        opacity: 0.5
+      });
+    }
+    
+    return () => {
+      if (hoveredMaterialRef.current) {
+        hoveredMaterialRef.current.dispose();
+        hoveredMaterialRef.current = null;
+      }
+    };
+  }, [hoveredBlock, texture, blockDef]);
 
   // Get glow properties
   const glowFactor = blockDef?.properties?.glowFactor || 0;
@@ -363,6 +408,20 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           decay={2}
         />
       ))}
+      {/* Render hovered block with animated opacity */}
+      {hoveredBlock && hoveredMaterialRef.current && (
+        <mesh
+          position={[
+            hoveredBlock.position_x + 0.5,
+            hoveredBlock.position_y + 0.5,
+            hoveredBlock.position_z + 0.5
+          ]}
+          geometry={geometry}
+          material={hoveredMaterialRef.current}
+          castShadow
+          receiveShadow
+        />
+      )}
       {/* Render animated outlines for owned blocks */}
       {showOwnershipOutline && outlineMaterialRef.current && ownedBlocks.map((block) => {
         const fallState = fallingBlocksState.get(block.id);

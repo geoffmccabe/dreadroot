@@ -25,7 +25,8 @@ export const PlacedBlocks: React.FC<{
   onCollision?: (boxes: THREE.Box3[]) => void;
   showOwnershipOutline?: boolean;
   currentUserId?: string;
-}> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId }) => {
+  hoveredBlockId?: string | null;
+}> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId, hoveredBlockId = null }) => {
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -186,10 +187,11 @@ export const PlacedBlocks: React.FC<{
             blocks={blocksOfType}
             blockDef={blockDef}
             geometry={geometry}
-            onCollision={handleBlockCollision}
-            showOwnershipOutline={showOwnershipOutline}
-            currentUserId={currentUserId}
-          />
+          onCollision={handleBlockCollision}
+          showOwnershipOutline={showOwnershipOutline}
+          currentUserId={currentUserId}
+          hoveredBlockId={hoveredBlockId}
+        />
         );
       })}
     </>

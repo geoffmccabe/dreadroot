@@ -31,10 +31,11 @@ import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 
 // Camera-tracked block renderer with chunk culling
-function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: { 
+function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId, hoveredBlockId }: { 
   blocks: PlacedBlock[];
   showOwnershipOutline: boolean;
   currentUserId?: string;
+  hoveredBlockId?: string | null;
 }) {
   const { camera } = useThree();
   const { blocksByChunk, visualDistance } = useBlocks();
@@ -81,7 +82,7 @@ function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId }: {
     return filtered;
   }, [visibleChunks, blocksByChunk, blocks.length, visualDistance]);
   
-  return <PlacedBlocks blocks={visibleBlocks} showOwnershipOutline={showOwnershipOutline} currentUserId={currentUserId} />;
+  return <PlacedBlocks blocks={visibleBlocks} showOwnershipOutline={showOwnershipOutline} currentUserId={currentUserId} hoveredBlockId={hoveredBlockId || null} />;
 }
 
 // Sky component with space texture
@@ -276,7 +277,9 @@ function FirstPersonControls({
   broadcastPosition,
   onBlockRemove,
   showOwnershipOutline,
-  currentUserId
+  currentUserId,
+  hoveredBlockId,
+  setHoveredBlockId
 }: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -302,6 +305,8 @@ function FirstPersonControls({
   onBlockRemove?: (blockId: string) => Promise<void>;
   showOwnershipOutline: boolean;
   currentUserId?: string;
+  hoveredBlockId: string | null;
+  setHoveredBlockId: (id: string | null) => void;
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -395,14 +400,22 @@ function FirstPersonControls({
   }, [existingBlocks]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-  // Don't process key events when dialogs are open or input fields are focused
-  if (panelOpen || 
-      document.activeElement?.tagName === 'INPUT' || 
-      document.activeElement?.tagName === 'TEXTAREA') {
-    return;
-  }
-  
-  switch (event.code) {
+    // Don't process key events when dialogs are open or input fields are focused
+    if (panelOpen || 
+        document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA') {
+      return;
+    }
+    
+    // Handle Caps Lock for block removal
+    if (event.code === 'CapsLock' && blockPlacementMode && hoveredBlockId && onBlockRemove) {
+      event.preventDefault();
+      onBlockRemove(hoveredBlockId);
+      setHoveredBlockId(null);
+      return;
+    }
+    
+    switch (event.code) {
     case 'KeyI':
       event.preventDefault();
       onOpenPanel('inventory');
@@ -671,9 +684,50 @@ function FirstPersonControls({
       gl.domElement.removeEventListener('click', handleClick);
       gl.domElement.removeEventListener('contextmenu', handleRightClick);
     };
-  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, gl.domElement]);
+  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, gl.domElement, blockPlacementMode, hoveredBlockId, currentUserId]);
 
   useFrame((state, delta) => {
+    // Hover detection for block mode
+    if (blockPlacementMode && currentUserId) {
+      const raycaster = new THREE.Raycaster();
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(camera.quaternion);
+      raycaster.set(camera.position, direction);
+      
+      const maxDistance = 5;
+      let closestBlock: PlacedBlock | null = null;
+      let closestDistance = maxDistance;
+      
+      for (const block of existingBlocks || []) {
+        // Only consider blocks owned by the current user
+        if (block.user_id !== currentUserId) continue;
+        
+        const blockCenter = new THREE.Vector3(
+          block.position_x + 0.5,
+          block.position_y + 0.5,
+          block.position_z + 0.5
+        );
+        const distance = camera.position.distanceTo(blockCenter);
+        
+        if (distance < closestDistance) {
+          // Check if ray intersects with block (1x1x1 cube)
+          const min = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
+          const max = new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1);
+          const box = new THREE.Box3(min, max);
+          
+          const ray = new THREE.Ray(camera.position, direction);
+          if (ray.intersectsBox(box)) {
+            closestBlock = block;
+            closestDistance = distance;
+          }
+        }
+      }
+      
+      setHoveredBlockId(closestBlock?.id || null);
+    } else if (hoveredBlockId) {
+      setHoveredBlockId(null);
+    }
+    
     // Movement input
     direction.current.set(0, 0, 0);
     if (keys.current.w) direction.current.z += 1;
@@ -1617,7 +1671,9 @@ function Scene({
   isMoveMode,
   onBlockRemove,
   showOwnershipOutline,
-  currentUserId
+  currentUserId,
+  hoveredBlockId,
+  setHoveredBlockId
 }: {
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -1643,6 +1699,8 @@ function Scene({
   onBlockRemove?: (blockId: string) => Promise<void>;
   showOwnershipOutline: boolean;
   currentUserId?: string;
+  hoveredBlockId: string | null;
+  setHoveredBlockId: (id: string | null) => void;
 }) {
   // Create shared cycleStateRef for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -2006,6 +2064,8 @@ function Scene({
         onBlockRemove={onBlockRemove}
         showOwnershipOutline={showOwnershipOutline}
         currentUserId={currentUserId}
+        hoveredBlockId={hoveredBlockId}
+        setHoveredBlockId={setHoveredBlockId}
       />
       
       {/* Multiplayer - render other players */}
@@ -2027,6 +2087,7 @@ function Scene({
         blocks={blocks} 
         showOwnershipOutline={showOwnershipOutline && blockPlacementMode} 
         currentUserId={user?.id}
+        hoveredBlockId={hoveredBlockId}
       />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
@@ -2241,6 +2302,7 @@ export default function WaterfallFortress() {
   const [blockPlacementMode, setBlockPlacementMode] = useState<boolean>(false);
   const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
   const [showPerfMonitor, setShowPerfMonitor] = useState(false);
+  const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
   
   // Wall positions state for real-time control
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
@@ -2254,8 +2316,44 @@ export default function WaterfallFortress() {
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
   
-  // Handle block removal with Tab + right-click
+  // Handle block removal with Caps Lock
   const handleBlockRemove = useCallback(async (blockId: string) => {
+    // Play reversed wooden thud sound
+    if (mainAudioRefs.current.woodenThud) {
+      const audio = mainAudioRefs.current.woodenThud;
+      audio.playbackRate = -1; // Attempt to reverse (may not work in all browsers)
+      audio.currentTime = audio.duration || 0;
+      audio.play().catch(() => {});
+      
+      // Fallback: play normally but reversed via Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      fetch('/wooden_thud_sound.mp3')
+        .then(response => response.arrayBuffer())
+        .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+        .then(audioBuffer => {
+          // Reverse the audio buffer
+          const reversedBuffer = audioContext.createBuffer(
+            audioBuffer.numberOfChannels,
+            audioBuffer.length,
+            audioBuffer.sampleRate
+          );
+          
+          for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+            const inputData = audioBuffer.getChannelData(channel);
+            const outputData = reversedBuffer.getChannelData(channel);
+            for (let i = 0; i < audioBuffer.length; i++) {
+              outputData[i] = inputData[audioBuffer.length - 1 - i];
+            }
+          }
+          
+          const source = audioContext.createBufferSource();
+          source.buffer = reversedBuffer;
+          source.connect(audioContext.destination);
+          source.start(0);
+        })
+        .catch(error => console.warn('Failed to play reversed sound:', error));
+    }
+    
     const success = await removeBlock(blockId);
     if (success) {
       toast({
@@ -2788,6 +2886,8 @@ export default function WaterfallFortress() {
         onBlockRemove={handleBlockRemove}
         showOwnershipOutline={showOwnershipOutline}
         currentUserId={user?.id}
+        hoveredBlockId={hoveredBlockId}
+        setHoveredBlockId={setHoveredBlockId}
       />
       
       {/* Block Preview */}
