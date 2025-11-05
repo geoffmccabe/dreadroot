@@ -457,10 +457,10 @@ function FirstPersonControls({
         }
         break;
       case 'KeyB':
-        // Toggle block placement mode - check for any buildable block type
-        console.log('B key pressed - current mode:', selectedBlockType ? 'building' : 'none');
+        // Toggle block placement mode
+        console.log('B key pressed - current blockPlacementMode:', blockPlacementMode);
         
-        if (selectedBlockType) {
+        if (blockPlacementMode) {
           // Exit block mode
           console.log('Exiting block mode');
           onModeChange(null);
