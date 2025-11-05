@@ -2735,7 +2735,7 @@ export default function WaterfallFortress() {
     };
   }, []);
 
-  // Toggle performance monitor with Command/Ctrl + P
+  // Toggle performance monitor with Command/Ctrl + P and ownership outline with Tab
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Check for Command (Mac) or Ctrl (Windows/Linux) + P
@@ -2743,13 +2743,19 @@ export default function WaterfallFortress() {
         event.preventDefault(); // Prevent default print dialog
         setShowPerfMonitor(prev => !prev);
       }
+      
+      // Toggle ownership outline with Tab when in block mode
+      if (event.key === 'Tab' && blockPlacementMode) {
+        event.preventDefault();
+        setShowOwnershipOutline(prev => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [blockPlacementMode]);
 
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
@@ -2913,9 +2919,9 @@ export default function WaterfallFortress() {
         </div>
         
         {/* Block mode indicator */}
-        {blockPlacementMode && (
+        {blockPlacementMode && selectedBlockType && (
           <div className="bg-blue-500/70 text-white px-2 py-1 rounded text-xs">
-            BLOCK MODE{selectedBlockType ? `: ${selectedBlockType}` : ' (No blocks)'}
+            BLOCK MODE: {selectedBlockType}
           </div>
         )}
       </div>
