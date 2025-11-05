@@ -273,7 +273,10 @@ function FirstPersonControls({
   blocks,
   onBlockRain,
   userRoles,
-  broadcastPosition
+  broadcastPosition,
+  onBlockRemove,
+  showOwnershipOutline,
+  currentUserId
 }: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -296,6 +299,9 @@ function FirstPersonControls({
   onBlockRain: () => void;
   userRoles: string[];
   broadcastPosition?: (position: THREE.Vector3, yaw: number, pitch: number) => void;
+  onBlockRemove?: (blockId: string) => Promise<void>;
+  showOwnershipOutline: boolean;
+  currentUserId?: string;
 }) {
   const { camera, gl } = useThree();
   const isLocked = useRef(false);
@@ -597,7 +603,51 @@ function FirstPersonControls({
       // Play gunshot sound using preloaded audio
       playAudio(audioRefs.gunshot);
     }
-  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks]);
+  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks, selectedBlockType]);
+
+  // Right-click handler for removing blocks
+  const handleRightClick = useCallback((event: MouseEvent) => {
+    if (!isLocked.current || !showOwnershipOutline || !onBlockRemove || !currentUserId) return;
+    
+    event.preventDefault();
+    
+    // Raycast to find clicked block
+    const raycaster = new THREE.Raycaster();
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(camera.quaternion);
+    raycaster.set(camera.position, direction);
+    
+    // Find the closest block within range
+    const maxDistance = 5;
+    let closestBlock: PlacedBlock | null = null;
+    let closestDistance = maxDistance;
+    
+    for (const block of existingBlocks || []) {
+      // Only consider blocks owned by the current user
+      if (block.user_id !== currentUserId) continue;
+      
+      const blockPos = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
+      const distance = camera.position.distanceTo(blockPos);
+      
+      if (distance < closestDistance) {
+        // Check if ray intersects with block (1x1x1 cube)
+        const min = new THREE.Vector3(block.position_x - 0.5, block.position_y - 0.5, block.position_z - 0.5);
+        const max = new THREE.Vector3(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5);
+        const box = new THREE.Box3(min, max);
+        
+        const ray = new THREE.Ray(camera.position, direction);
+        if (ray.intersectsBox(box)) {
+          closestBlock = block;
+          closestDistance = distance;
+        }
+      }
+    }
+    
+    if (closestBlock) {
+      console.log('Removing block:', closestBlock.id);
+      onBlockRemove(closestBlock.id);
+    }
+  }, [camera, existingBlocks, showOwnershipOutline, onBlockRemove, currentUserId]);
 
   const handlePointerLockChange = useCallback(() => {
     isLocked.current = document.pointerLockElement === gl.domElement;
@@ -610,6 +660,7 @@ function FirstPersonControls({
     document.addEventListener('wheel', handleWheel);
     document.addEventListener('pointerlockchange', handlePointerLockChange);
     gl.domElement.addEventListener('click', handleClick);
+    gl.domElement.addEventListener('contextmenu', handleRightClick);
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
@@ -618,8 +669,9 @@ function FirstPersonControls({
       document.removeEventListener('wheel', handleWheel);
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
       gl.domElement.removeEventListener('click', handleClick);
+      gl.domElement.removeEventListener('contextmenu', handleRightClick);
     };
-  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, gl.domElement]);
+  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, gl.domElement]);
 
   useFrame((state, delta) => {
     // Movement input
@@ -1562,7 +1614,10 @@ function Scene({
   onBlockRain,
   coinImageUrl,
   userRoles,
-  isMoveMode
+  isMoveMode,
+  onBlockRemove,
+  showOwnershipOutline,
+  currentUserId
 }: {
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -1585,6 +1640,9 @@ function Scene({
   onBlockRain: () => void;
   userRoles: string[];
   isMoveMode: boolean;
+  onBlockRemove?: (blockId: string) => Promise<void>;
+  showOwnershipOutline: boolean;
+  currentUserId?: string;
 }) {
   // Create shared cycleStateRef for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -1610,15 +1668,14 @@ function Scene({
   // Multiplayer - track and display other players
   const { players, broadcastPosition, isConnected } = useMultiplayer('fortress-main');
   
-  // Track TAB key for ownership outline (toggle on/off)
-  const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
+  // Use showOwnershipOutline from props
   const { user } = useAuth();
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab' && blockPlacementMode && !e.repeat) {
+      if (e.key === 'Tab' && !e.repeat) {
         e.preventDefault();
-        setShowOwnershipOutline(prev => !prev);
+        // Toggle is now handled in parent component, just prevent default here
       }
     };
     
@@ -1946,6 +2003,9 @@ function Scene({
         onBlockRain={onBlockRain}
         userRoles={userRoles}
         broadcastPosition={broadcastPosition}
+        onBlockRemove={onBlockRemove}
+        showOwnershipOutline={showOwnershipOutline}
+        currentUserId={currentUserId}
       />
       
       {/* Multiplayer - render other players */}
@@ -2178,6 +2238,8 @@ export default function WaterfallFortress() {
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
+  const [blockPlacementMode, setBlockPlacementMode] = useState<boolean>(false);
+  const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
   const [showPerfMonitor, setShowPerfMonitor] = useState(false);
   
   // Wall positions state for real-time control
@@ -2186,11 +2248,23 @@ export default function WaterfallFortress() {
   
   // User data and block system hooks
   const { profile, inventory, userRoles, addCoins, useBlock, refreshData } = useUserData();
-  const { blocks, placeBlock, setBlockMode } = useBlocks();
+  const { blocks, placeBlock, removeBlock, setBlockMode } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
+  
+  // Handle block removal with Tab + right-click
+  const handleBlockRemove = useCallback(async (blockId: string) => {
+    const success = await removeBlock(blockId);
+    if (success) {
+      toast({
+        title: "Block removed",
+        description: "Block returned to inventory",
+        duration: 2000
+      });
+    }
+  }, [removeBlock, toast]);
   
   
   // Main component audio refs for placement sounds
@@ -2551,6 +2625,7 @@ export default function WaterfallFortress() {
         console.log('Setting block mode with available block:', availableItem.item_type, 'quantity:', availableItem.quantity);
         setSelectedBlockType(availableItem.item_type);
         setCrosshairsEnabled(false);
+        setBlockPlacementMode(true);
         setBlockMode(true); // Enable periodic syncing
         
         toast({
@@ -2562,7 +2637,8 @@ export default function WaterfallFortress() {
         console.log('Entering block mode with no blocks available in inventory:', inventory);
         setSelectedBlockType(null);
         setCrosshairsEnabled(false);
-        setBlockMode(true); // Enable block mode even without blocks
+        setBlockPlacementMode(true); // Enable block mode even without blocks
+        setBlockMode(true); // Enable periodic syncing
         
         toast({
           title: "You don't have any blocks to place",
@@ -2573,11 +2649,13 @@ export default function WaterfallFortress() {
     } else if (mode === 'shooting') {
       console.log('Setting shooting mode');
       setSelectedBlockType(null);
+      setBlockPlacementMode(false);
       setCrosshairsEnabled(true);
       setBlockMode(false); // Disable periodic syncing
     } else {
       console.log('Setting null mode (exit block mode)');
       setSelectedBlockType(null);
+      setBlockPlacementMode(false);
       setCrosshairsEnabled(false);
       setBlockMode(false); // Disable periodic syncing
       
@@ -2686,7 +2764,7 @@ export default function WaterfallFortress() {
         settings={settings}
         onCoinHit={handleCoinHit} 
         wallPositions={wallPositions}
-        blockPlacementMode={!!selectedBlockType}
+        blockPlacementMode={blockPlacementMode}
         onBlockPlace={handleBlockPlace}
         onModeChange={handleModeChange}
         onOpenPanel={handleOpenPanel}
@@ -2701,6 +2779,9 @@ export default function WaterfallFortress() {
         onBlockRain={handleBlockRain}
         userRoles={userRoles}
         isMoveMode={isMoveMode}
+        onBlockRemove={handleBlockRemove}
+        showOwnershipOutline={showOwnershipOutline}
+        currentUserId={user?.id}
       />
       
       {/* Block Preview */}
