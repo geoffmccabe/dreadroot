@@ -330,15 +330,6 @@ function FirstPersonControls({
   const rightVecRef = useRef(new THREE.Vector3());
   const deltaMovementRef = useRef(new THREE.Vector3());
   
-  // Reusable objects for hover detection (to prevent frame-by-frame allocation)
-  const hoverRaycasterRef = useRef(new THREE.Raycaster());
-  const hoverDirectionRef = useRef(new THREE.Vector3());
-  const hoverBlockCenterRef = useRef(new THREE.Vector3());
-  const hoverBlockMinRef = useRef(new THREE.Vector3());
-  const hoverBlockMaxRef = useRef(new THREE.Vector3());
-  const hoverRayRef = useRef(new THREE.Ray());
-  const hoverFrameCounter = useRef(0);
-  
   // Use blocks from props instead of context (context doesn't cross Canvas boundary)
   const existingBlocks = blocks;
   
@@ -682,47 +673,43 @@ function FirstPersonControls({
   }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
 
   useFrame((state, delta) => {
-    // Hover detection for block mode - throttled and optimized
-    hoverFrameCounter.current++;
-    
+    // Hover detection for block mode - only when ownership outline is shown (TAB pressed)
     if (blockPlacementMode && currentUserId && showOwnershipOutline && keys.current.rightMouse) {
-      // Only check every 3rd frame to reduce overhead
-      if (hoverFrameCounter.current % 3 === 0) {
-        const direction = hoverDirectionRef.current.set(0, 0, -1);
-        direction.applyQuaternion(camera.quaternion);
-        hoverRaycasterRef.current.set(camera.position, direction);
+      const raycaster = new THREE.Raycaster();
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(camera.quaternion);
+      raycaster.set(camera.position, direction);
+      
+      const maxDistance = 5;
+      let closestBlock: PlacedBlock | null = null;
+      let closestDistance = maxDistance;
+      
+      for (const block of existingBlocks || []) {
+        // Only consider blocks owned by the current user
+        if (block.user_id !== currentUserId) continue;
         
-        const maxDistance = 5;
-        let closestBlock: PlacedBlock | null = null;
-        let closestDistance = maxDistance;
+        const blockCenter = new THREE.Vector3(
+          block.position_x + 0.5,
+          block.position_y + 0.5,
+          block.position_z + 0.5
+        );
+        const distance = camera.position.distanceTo(blockCenter);
         
-        for (const block of existingBlocks || []) {
-          // Only consider blocks owned by the current user
-          if (block.user_id !== currentUserId) continue;
+        if (distance < closestDistance) {
+          // Check if ray intersects with block (1x1x1 cube)
+          const min = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
+          const max = new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1);
+          const box = new THREE.Box3(min, max);
           
-          const blockCenter = hoverBlockCenterRef.current.set(
-            block.position_x + 0.5,
-            block.position_y + 0.5,
-            block.position_z + 0.5
-          );
-          const distance = camera.position.distanceTo(blockCenter);
-          
-          if (distance < closestDistance) {
-            // Check if ray intersects with block - reuse objects
-            const min = hoverBlockMinRef.current.set(block.position_x, block.position_y, block.position_z);
-            const max = hoverBlockMaxRef.current.set(block.position_x + 1, block.position_y + 1, block.position_z + 1);
-            const box = new THREE.Box3(min, max);
-            
-            hoverRayRef.current.set(camera.position, direction);
-            if (hoverRayRef.current.intersectsBox(box)) {
-              closestBlock = block;
-              closestDistance = distance;
-            }
+          const ray = new THREE.Ray(camera.position, direction);
+          if (ray.intersectsBox(box)) {
+            closestBlock = block;
+            closestDistance = distance;
           }
         }
-        
-        setHoveredBlockId(closestBlock?.id || null);
       }
+      
+      setHoveredBlockId(closestBlock?.id || null);
     } else if (hoveredBlockId) {
       setHoveredBlockId(null);
     }
