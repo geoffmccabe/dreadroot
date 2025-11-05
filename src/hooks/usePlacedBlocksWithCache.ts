@@ -466,21 +466,10 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     }
   }, []);
 
-  // Periodic cleanup of expired blocks
+  // Server-side cleanup still runs independently via scheduled jobs
+  // Client-side filtering happens in BlocksContext to avoid FPS drops
   useEffect(() => {
-    const cleanupInterval = setInterval(async () => {
-      try {
-        const { data } = await supabase.rpc('delete_expired_blocks');
-        // Only sync if blocks were actually deleted
-        if (data && data > 0) {
-          console.log(`🧹 Cleaned up ${data} expired blocks`);
-          await syncWithSupabase();
-        }
-      } catch (error) {}
-    }, 60000);
-
     return () => {
-      clearInterval(cleanupInterval);
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current);
       }
