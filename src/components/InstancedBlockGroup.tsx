@@ -51,8 +51,16 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
   const { camera } = useThree();
-  const outlineColorRef = useRef(new THREE.Color());
+  const outlineMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
   const timeRef = useRef(0);
+  
+  // Create outline material once
+  if (!outlineMaterialRef.current) {
+    outlineMaterialRef.current = new THREE.LineBasicMaterial({ 
+      color: new THREE.Color(1, 0, 0),
+      linewidth: 2 
+    });
+  }
   
   // Reuse matrix to avoid garbage collection
   const matrixRef = useRef(new THREE.Matrix4());
@@ -261,12 +269,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     
     // Animate outline color: red -> orange -> bright yellow -> back
-    if (showOwnershipOutline) {
+    if (showOwnershipOutline && outlineMaterialRef.current) {
       timeRef.current += delta;
       // Cycle every 2 seconds (0 to 60 hue in HSL)
       const cycle = (timeRef.current % 2) / 2; // 0 to 1
       const hue = cycle * 60; // 0 (red) to 60 (yellow)
-      outlineColorRef.current.setHSL(hue / 360, 1, 0.5);
+      outlineMaterialRef.current.color.setHSL(hue / 360, 1, 0.5);
     }
   });
   
@@ -356,7 +364,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         />
       ))}
       {/* Render animated outlines for owned blocks */}
-      {showOwnershipOutline && ownedBlocks.map((block) => {
+      {showOwnershipOutline && outlineMaterialRef.current && ownedBlocks.map((block) => {
         const fallState = fallingBlocksState.get(block.id);
         const x = block.position_x + 0.5;
         const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
@@ -365,7 +373,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         return (
           <lineSegments key={`outline-${block.id}`} position={[x, y, z]}>
             <edgesGeometry args={[geometry]} />
-            <lineBasicMaterial color={outlineColorRef.current} linewidth={2} />
+            <primitive object={outlineMaterialRef.current} attach="material" />
           </lineSegments>
         );
       })}
