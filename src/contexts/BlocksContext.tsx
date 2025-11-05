@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
 import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 import { PlacedBlock } from '@/types/blocks';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,13 +24,20 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const { profile } = useUserData();
   const blocksHook = usePlacedBlocksWithCache(user?.id || null);
   
+  // Trigger re-filter every 30s to remove expired blocks without FPS impact
+  const [filterTick, setFilterTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setFilterTick(t => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
+  
   // Filter out expired blocks client-side to avoid periodic FPS drops
   const activeBlocks = useMemo(() => {
     const now = new Date().toISOString();
     return blocksHook.blocks.filter(block => 
       !block.expires_at || block.expires_at > now
     );
-  }, [blocksHook.blocks]);
+  }, [blocksHook.blocks, filterTick]);
   
   // Organize blocks by chunks for efficient rendering
   const blocksByChunk = useMemo(() => {
