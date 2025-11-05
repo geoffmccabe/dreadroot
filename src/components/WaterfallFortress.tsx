@@ -408,8 +408,9 @@ function FirstPersonControls({
     }
     
     // Handle Caps Lock for block removal
-    if (event.code === 'CapsLock' && blockPlacementMode && hoveredBlockId && onBlockRemove) {
+    if (event.getModifierState && event.getModifierState('CapsLock') && blockPlacementMode && hoveredBlockId && onBlockRemove) {
       event.preventDefault();
+      console.log('Caps Lock pressed, removing block:', hoveredBlockId);
       onBlockRemove(hoveredBlockId);
       setHoveredBlockId(null);
       return;

@@ -281,11 +281,11 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       outlineMaterialRef.current.color.setHSL(hue / 360, 1, 0.5);
     }
     
-    // Animate hovered block opacity
+    // Animate hovered block opacity - double speed (0.5s cycle)
     if (hoveredBlock && hoveredMaterialRef.current) {
       hoverTimeRef.current += delta;
-      // Cycle every 1 second: from full opacity (1) to transparent (0)
-      const cycle = (hoverTimeRef.current % 1) / 1; // 0 to 1
+      // Cycle every 0.5 seconds: from full opacity (1) to transparent (0)
+      const cycle = (hoverTimeRef.current % 0.5) / 0.5; // 0 to 1
       const opacity = Math.abs(Math.sin(cycle * Math.PI)); // 0 to 1 to 0
       (hoveredMaterialRef.current as THREE.MeshLambertMaterial).opacity = opacity;
     } else {
