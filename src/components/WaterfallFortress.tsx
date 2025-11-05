@@ -311,6 +311,7 @@ function FirstPersonControls({
   const yaw = useRef(0);
   const pitch = useRef(0);
   const lastGroundCheck = useRef(0);
+  const stuckTimer = useRef(0);
   
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
@@ -643,7 +644,11 @@ function FirstPersonControls({
 
     // Gravity and jumping - variable jump height based on role
     velocity.current.y -= 9.8 * delta;
-    if (keys.current.space && onGround.current && !keys.current.ctrl) {
+    
+    // Allow jump if on ground OR if stuck for >0.3 seconds (desperation jump)
+    const canJump = (onGround.current || stuckTimer.current > 0.3) && !keys.current.ctrl;
+    
+    if (keys.current.space && canJump) {
       // Calculate jump velocity based on desired height
       // Formula: v = sqrt(2 * g * h) where g=9.8, h=jump height in blocks
       let jumpHeight = 1.25; // Base: 1.25 blocks
@@ -652,6 +657,7 @@ function FirstPersonControls({
       }
       velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
       onGround.current = false;
+      stuckTimer.current = 0; // Reset stuck timer after successful jump
     }
     deltaMovement.y += velocity.current.y * delta;
 
@@ -806,10 +812,11 @@ function FirstPersonControls({
       }
     }
 
-    // Y-axis movement and collision
+    // Y-axis movement and collision (test independently to prevent screen shake)
     if (deltaMovement.y !== 0) {
       const testPos = camera.position.clone();
       testPos.y += deltaMovement.y;
+      // Don't include X/Z movement in this test to avoid feedback loops
       
       // Ground collision check
       if (testPos.y < playerHeight) {
@@ -825,9 +832,10 @@ function FirstPersonControls({
             velocity.current.y = 0;
             onGround.current = true;
           } else {
-            // Jumping - hit ceiling
-            camera.position.y = collision.min.y;
+            // Jumping - hit ceiling with buffer to prevent rapid collision
+            camera.position.y = collision.min.y - 0.01;
             velocity.current.y = 0;
+            // Don't set onGround when hitting ceiling
           }
         } else {
           camera.position.y = testPos.y;
@@ -854,19 +862,34 @@ function FirstPersonControls({
     // DISABLED step-up logic to prevent wall hooking
     // TODO: Implement proper step-up that doesn't hook onto edges
     
+    // Detect if player is stuck (all horizontal movement blocked)
+    const isStuckHorizontally = xBlocked && zBlocked && 
+      (keys.current.w || keys.current.s || keys.current.a || keys.current.d);
+    
+    // Track stuck time for desperation jump
+    if (isStuckHorizontally) {
+      stuckTimer.current += delta;
+    } else {
+      stuckTimer.current = 0;
+    }
+    
     // ACTUAL ground detection - check every frame if there's a block beneath the player
     const feetY = camera.position.y - playerHeight;
     
     // Check if player is on the ground level (y = 0)
     const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
     
-    // Check if there's actually a block beneath the player's feet
+    // When stuck, check a larger area below feet to be more lenient
+    const checkDistance = isStuckHorizontally ? 0.15 : 0.05;
     const feetCheckPos = camera.position.clone();
-    feetCheckPos.y = camera.position.y - playerHeight - 0.05; // Just below feet
+    feetCheckPos.y = camera.position.y - playerHeight - checkDistance;
     const hasBlockBeneath = checkAxisCollision(feetCheckPos, false);
     
-    // Player is on ground ONLY if they're on ground level OR there's a block beneath them
+    // Player is on ground if on ground level OR there's a block beneath them
     if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
+      onGround.current = true;
+    } else if (isStuckHorizontally) {
+      // If stuck and trying to move, assume on ground to allow jump escape
       onGround.current = true;
     } else {
       // No block beneath and not on ground level = falling
