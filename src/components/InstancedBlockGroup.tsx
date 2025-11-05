@@ -51,6 +51,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
   const { camera } = useThree();
+  const outlineColorRef = useRef(new THREE.Color());
+  const timeRef = useRef(0);
   
   // Reuse matrix to avoid garbage collection
   const matrixRef = useRef(new THREE.Matrix4());
@@ -235,7 +237,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!meshRef.current) return;
     
     let needsUpdate = false;
@@ -256,6 +258,15 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     if (needsUpdate) {
       meshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    
+    // Animate outline color: red -> orange -> bright yellow -> back
+    if (showOwnershipOutline) {
+      timeRef.current += delta;
+      // Cycle every 2 seconds (0 to 60 hue in HSL)
+      const cycle = (timeRef.current % 2) / 2; // 0 to 1
+      const hue = cycle * 60; // 0 (red) to 60 (yellow)
+      outlineColorRef.current.setHSL(hue / 360, 1, 0.5);
     }
   });
   
@@ -344,7 +355,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           decay={2}
         />
       ))}
-      {/* Render red outlines for owned blocks */}
+      {/* Render animated outlines for owned blocks */}
       {showOwnershipOutline && ownedBlocks.map((block) => {
         const fallState = fallingBlocksState.get(block.id);
         const x = block.position_x + 0.5;
@@ -354,7 +365,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         return (
           <lineSegments key={`outline-${block.id}`} position={[x, y, z]}>
             <edgesGeometry args={[geometry]} />
-            <lineBasicMaterial color="#ff0000" linewidth={2} />
+            <lineBasicMaterial color={outlineColorRef.current} linewidth={2} />
           </lineSegments>
         );
       })}
