@@ -2559,11 +2559,15 @@ export default function WaterfallFortress() {
           duration: 3000
         });
       } else {
-        console.log('Cannot set block mode - no blocks available in inventory:', inventory);
+        console.log('Entering block mode with no blocks available in inventory:', inventory);
+        setSelectedBlockType(null);
+        setCrosshairsEnabled(false);
+        setBlockMode(true); // Enable block mode even without blocks
+        
         toast({
-          title: "No blocks available",
-          description: "You need to purchase blocks from the shop first (Press O to open shop)",
-          variant: "destructive"
+          title: "You don't have any blocks to place",
+          description: "Press letter O to Open the Shop and purchase blocks",
+          duration: 4000
         });
       }
     } else if (mode === 'shooting') {
