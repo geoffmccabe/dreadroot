@@ -827,6 +827,16 @@ function FirstPersonControls({
       } else {
         const collision = checkAxisCollision(testPos, false);
         if (collision) {
+          console.log('[Y-COLLISION]', {
+            time: state.clock.elapsedTime.toFixed(2),
+            velocity_y: velocity.current.y.toFixed(3),
+            currentY: camera.position.y.toFixed(3),
+            testY: testPos.y.toFixed(3),
+            collision_min_y: collision.min.y.toFixed(3),
+            collision_max_y: collision.max.y.toFixed(3),
+            action: velocity.current.y < 0 ? 'FALLING' : 'JUMPING'
+          });
+          
           if (velocity.current.y < 0) {
             // Falling - land on top
             camera.position.y = collision.max.y + playerHeight;
