@@ -669,92 +669,12 @@ function FirstPersonControls({
     const crawlingHeight = 0.8;
     const playerHeight = isCrawling ? crawlingHeight : standingHeight;
     
-    // Adjust camera height when transitioning between standing and crawling
-    // Calculate the ground level based on current state
-    const wasStanding = !keys.current.previouslyCtrl;
-    if (isCrawling && wasStanding) {
-      // Transition from standing to crawling - lower camera by 0.8 blocks
-      camera.position.y -= (standingHeight - crawlingHeight);
-    } else if (!isCrawling && !wasStanding) {
-      // Transition from crawling to standing - check if there's space, then raise camera
-      const standingBox = new THREE.Box3(
-        new THREE.Vector3(
-          camera.position.x - playerRadius,
-          camera.position.y - crawlingHeight,
-          camera.position.z - playerRadius
-        ),
-        new THREE.Vector3(
-          camera.position.x + playerRadius,
-          camera.position.y + (standingHeight - crawlingHeight),
-          camera.position.z + playerRadius
-        )
-      );
-      
-      let canStandUp = true;
-      for (const collider of colliders) {
-        if (standingBox.intersectsBox(collider)) {
-          canStandUp = false;
-          break;
-        }
-      }
-      
-      if (canStandUp) {
-        // Raise camera by 0.8 blocks
-        camera.position.y += (standingHeight - crawlingHeight);
-      } else {
-        // Force crawl to continue if can't stand
-        keys.current.ctrl = true;
-      }
-    }
-    keys.current.previouslyCtrl = isCrawling;
-
     // Helper function to create player bounding box
     const createPlayerBox = (pos: THREE.Vector3) => {
-      if (isCrawling) {
-        // Crawl mode: 0.6m wide (0.3m each side), 0.8m tall (0.1m to 0.9m above ground)
-        const crawlWidth = 0.3; // extends 0.3m to left and right
-        const groundLevel = pos.y - playerHeight;
-        const box = new THREE.Box3(
-          new THREE.Vector3(
-            pos.x - crawlWidth,
-            groundLevel + 0.1,
-            pos.z - crawlWidth
-          ),
-          new THREE.Vector3(
-            pos.x + crawlWidth,
-            groundLevel + 0.9,
-            pos.z + crawlWidth
-          )
-        );
-        
-        // Debug: Log collider dimensions
-        if (Math.random() < 0.01) { // Log occasionally to avoid spam
-          console.log('[Crawl Collider]', {
-            center: { x: pos.x, y: pos.y, z: pos.z },
-            min: { x: box.min.x, y: box.min.y, z: box.min.z },
-            max: { x: box.max.x, y: box.max.y, z: box.max.z },
-            width: box.max.x - box.min.x,
-            height: box.max.y - box.min.y,
-            depth: box.max.z - box.min.z
-          });
-        }
-        
-        return box;
-      } else {
-        // Standing mode: use normal player dimensions
-        return new THREE.Box3(
-          new THREE.Vector3(
-            pos.x - playerRadius,
-            pos.y - playerHeight,
-            pos.z - playerRadius
-          ),
-          new THREE.Vector3(
-            pos.x + playerRadius,
-            pos.y,
-            pos.z + playerRadius
-          )
-        );
-      }
+      return new THREE.Box3(
+        new THREE.Vector3(pos.x - playerRadius, pos.y - playerHeight, pos.z - playerRadius),
+        new THREE.Vector3(pos.x + playerRadius, pos.y, pos.z + playerRadius)
+      );
     };
 
     // Helper function to check collision on a specific axis
@@ -777,12 +697,6 @@ function FirstPersonControls({
             }
             continue;
           }
-          
-          // When crawling, ignore blocks that are entirely above the crawl height
-          // This allows crawling through 1-block gaps
-          if (isCrawling && collider.min.y >= playerBox.max.y - 0.01) {
-            continue;
-          }
         }
         
         if (playerBox.intersectsBox(collider)) {
@@ -794,6 +708,8 @@ function FirstPersonControls({
 
     // Store previous position and track collisions
     const prevPosition = camera.position.clone();
+    // Store original position BEFORE any collision resolution for Y-axis testing
+    const originalPos = camera.position.clone();
     let xBlocked = false;
     let zBlocked = false;
 
@@ -813,11 +729,11 @@ function FirstPersonControls({
       }
     }
 
-    // Y-axis movement and collision (test independently to prevent screen shake)
+    // Y-axis movement and collision (test from ORIGINAL position to prevent X/Z interference)
     if (deltaMovement.y !== 0) {
-      const testPos = camera.position.clone();
+      const testPos = originalPos.clone();
       testPos.y += deltaMovement.y;
-      // Don't include X/Z movement in this test to avoid feedback loops
+      // Use original position so X/Z collision doesn't affect Y collision detection
       
       // Ground collision check
       if (testPos.y < playerHeight) {
