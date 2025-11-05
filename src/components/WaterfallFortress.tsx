@@ -2885,7 +2885,7 @@ export default function WaterfallFortress() {
         {/* Block inventory - Only show total of blocks with quantity > 0 */}
         <div 
           className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
-            selectedBlockType ? 'bg-blue-500/70' : 'hover:bg-black/70'
+            blockPlacementMode ? 'bg-blue-500/70' : 'hover:bg-black/70'
           }`}
           onClick={() => {
             const availableBlocks = inventory.filter(item => item.quantity > 0);
@@ -2913,9 +2913,9 @@ export default function WaterfallFortress() {
         </div>
         
         {/* Block mode indicator */}
-        {selectedBlockType && (
+        {blockPlacementMode && (
           <div className="bg-blue-500/70 text-white px-2 py-1 rounded text-xs">
-            BLOCK MODE: {selectedBlockType}
+            BLOCK MODE{selectedBlockType ? `: ${selectedBlockType}` : ' (No blocks)'}
           </div>
         )}
       </div>
@@ -2923,7 +2923,7 @@ export default function WaterfallFortress() {
     
     {/* Instructions */}
     <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
-      <div>{selectedBlockType ? 'Click to place block • ESC to cancel' : 'R for crosshairs • Click to shoot'}</div>
+      <div>{blockPlacementMode ? (selectedBlockType ? 'Click to place block • Tab to see placed blocks' : 'Tab to see placed blocks • O to buy blocks') : 'R for crosshairs • Click to shoot'}</div>
       <div className="text-xs opacity-75 mt-1">
         B = Block mode • O = Open Shop • I = Inventory
       </div>
@@ -2934,7 +2934,7 @@ export default function WaterfallFortress() {
     
     {/* Crosshair - conditional class for different modes */}
     <div className={`waterfall-crosshair ${
-      selectedBlockType ? 'block-mode' : 
+      blockPlacementMode ? 'block-mode' : 
       crosshairsEnabled ? 'active' : ''
     }`} />
     
