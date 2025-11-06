@@ -39,6 +39,9 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
     coinName: currentTheme?.coin_name || '',
     blockchain: currentTheme?.blockchain || '',
     contractAddress: currentTheme?.contract_address || '',
+    rpcUrl: currentTheme?.rpc_url || '',
+    chainId: currentTheme?.chain_id || '',
+    blockExplorerUrl: currentTheme?.block_explorer_url || '',
     tickerSymbol: currentTheme?.ticker_symbol || '',
     websiteUrl: currentTheme?.website_url || '',
     description: currentTheme?.description || '',
@@ -52,6 +55,9 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
         coinName: currentTheme.coin_name || '',
         blockchain: currentTheme.blockchain || '',
         contractAddress: currentTheme.contract_address || '',
+        rpcUrl: currentTheme.rpc_url || '',
+        chainId: currentTheme.chain_id || '',
+        blockExplorerUrl: currentTheme.block_explorer_url || '',
         tickerSymbol: currentTheme.ticker_symbol || '',
         websiteUrl: currentTheme.website_url || '',
         description: currentTheme.description || '',
@@ -96,6 +102,9 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
       const dbField = field === 'coinImageUrl' ? 'coin_image_url'
         : field === 'coinName' ? 'coin_name'
         : field === 'contractAddress' ? 'contract_address'
+        : field === 'rpcUrl' ? 'rpc_url'
+        : field === 'chainId' ? 'chain_id'
+        : field === 'blockExplorerUrl' ? 'block_explorer_url'
         : field === 'tickerSymbol' ? 'ticker_symbol'
         : field === 'websiteUrl' ? 'website_url'
         : field;
@@ -266,6 +275,39 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
                 onChange={(e) => handleCoinDetailsChange('contractAddress', e.target.value)}
                 placeholder="0x..."
                 className="text-sm font-mono"
+              />
+            </div>
+
+            {/* RPC URL */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">RPC URL</Label>
+              <Input
+                value={coinDetails.rpcUrl}
+                onChange={(e) => handleCoinDetailsChange('rpcUrl', e.target.value)}
+                placeholder="https://..."
+                className="text-sm"
+              />
+            </div>
+
+            {/* Chain ID */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Chain ID</Label>
+              <Input
+                value={coinDetails.chainId}
+                onChange={(e) => handleCoinDetailsChange('chainId', e.target.value)}
+                placeholder="e.g., 1, 56, 137"
+                className="text-sm"
+              />
+            </div>
+
+            {/* Block Explorer URL */}
+            <div className="space-y-1">
+              <Label className="text-xs opacity-85">Block Explorer URL</Label>
+              <Input
+                value={coinDetails.blockExplorerUrl}
+                onChange={(e) => handleCoinDetailsChange('blockExplorerUrl', e.target.value)}
+                placeholder="https://etherscan.io"
+                className="text-sm"
               />
             </div>
 

@@ -21,6 +21,9 @@ interface TokenTheme {
   coin_name?: string | null;
   blockchain?: string | null;
   contract_address?: string | null;
+  rpc_url?: string | null;
+  chain_id?: string | null;
+  block_explorer_url?: string | null;
   ticker_symbol?: string | null;
   website_url?: string | null;
   description?: string | null;
