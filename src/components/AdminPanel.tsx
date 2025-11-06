@@ -27,12 +27,34 @@ interface WaterfallControlsProps {
 function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCoinDetailsCollapsed, setIsCoinDetailsCollapsed] = useState(false);
-  const { currentTheme, availableThemes, setActiveTheme, updateThemeSettings } = useTokenTheme();
+  const [showAddCoinDialog, setShowAddCoinDialog] = useState(false);
+  const { currentTheme, availableThemes, setActiveTheme, updateThemeSettings, refreshThemes } = useTokenTheme();
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [coinDetailsTimeout, setCoinDetailsTimeout] = useState<NodeJS.Timeout | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [creatingCoin, setCreatingCoin] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const newCoinImageRef = useRef<HTMLInputElement>(null);
+  
+  const [newCoin, setNewCoin] = useState({
+    displayName: '',
+    name: '',
+    coinName: '',
+    tickerSymbol: '',
+    coinImageUrl: '',
+    blockchain: '',
+    contractAddress: '',
+    rpcUrl: '',
+    chainId: '',
+    blockExplorerUrl: '',
+    websiteUrl: '',
+    description: '',
+    flowSpeed: 1.2,
+    msBetweeenDrops: 1,
+    coinRate: 6,
+    coinSize: 0.8,
+  });
   
   const [coinDetails, setCoinDetails] = useState({
     coinImageUrl: currentTheme?.coin_image_url || '',
@@ -164,11 +186,210 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
     }
   };
 
+  // Handle new coin image upload
+  const handleNewCoinImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.match(/^image\/(png|webp)$/)) {
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PNG or WebP image",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${newCoin.name || 'new'}_${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('coin-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('coin-images')
+        .getPublicUrl(filePath);
+
+      setNewCoin(prev => ({ ...prev, coinImageUrl: publicUrl }));
+      
+      toast({
+        title: "Image uploaded",
+        description: "Coin image ready for new token"
+      });
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload coin image",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Create new coin
+  const handleCreateCoin = async () => {
+    // Validation
+    if (!newCoin.displayName.trim() || !newCoin.name.trim() || !newCoin.coinName.trim() || !newCoin.tickerSymbol.trim()) {
+      toast({
+        title: "Missing required fields",
+        description: "Display Name, Internal Name, Coin Name, and Ticker Symbol are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!newCoin.coinImageUrl) {
+      toast({
+        title: "Missing coin image",
+        description: "Please upload a coin image before creating the token",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setCreatingCoin(true);
+    try {
+      // Check if name already exists
+      const { data: existingThemes } = await supabase
+        .from('token_themes')
+        .select('name, display_name')
+        .or(`name.eq.${newCoin.name},display_name.eq.${newCoin.displayName}`);
+
+      if (existingThemes && existingThemes.length > 0) {
+        toast({
+          title: "Name already exists",
+          description: "A token with this name or display name already exists",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Default color palette
+      const defaultColorPalette = [
+        { hex: '#06c8c0', weight: 10 },
+        { hex: '#028eef', weight: 10 },
+        { hex: '#194ca8', weight: 20 },
+        { hex: '#18488a', weight: 30 },
+        { hex: '#103d6a', weight: 30 },
+        { hex: '#0a2847', weight: 15 }
+      ];
+
+      // Insert new token theme
+      const { data: newTheme, error: insertError } = await supabase
+        .from('token_themes')
+        .insert({
+          name: newCoin.name.trim(),
+          display_name: newCoin.displayName.trim(),
+          coin_name: newCoin.coinName.trim(),
+          ticker_symbol: newCoin.tickerSymbol.trim(),
+          coin_image_url: newCoin.coinImageUrl,
+          blockchain: newCoin.blockchain.trim() || null,
+          contract_address: newCoin.contractAddress.trim() || null,
+          rpc_url: newCoin.rpcUrl.trim() || null,
+          chain_id: newCoin.chainId.trim() || null,
+          block_explorer_url: newCoin.blockExplorerUrl.trim() || null,
+          website_url: newCoin.websiteUrl.trim() || null,
+          description: newCoin.description.trim() || null,
+          flow_speed: newCoin.flowSpeed,
+          ms_between_drops: newCoin.msBetweeenDrops,
+          coin_rate: newCoin.coinRate,
+          coin_size: newCoin.coinSize,
+          color_palette: defaultColorPalette,
+          is_active: false
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Get all existing users
+      const { data: users, error: usersError } = await supabase
+        .from('user_profiles')
+        .select('user_id');
+
+      if (usersError) throw usersError;
+
+      // Create token balances for all existing users
+      if (users && users.length > 0) {
+        const balances = users.map(user => ({
+          user_id: user.user_id,
+          token_theme_id: newTheme.id,
+          coins: 100
+        }));
+
+        const { error: balancesError } = await supabase
+          .from('user_token_balances')
+          .insert(balances);
+
+        if (balancesError) throw balancesError;
+      }
+
+      toast({
+        title: "Token created successfully",
+        description: `${newCoin.displayName} has been created and is ready to use`
+      });
+
+      // Reset form
+      setNewCoin({
+        displayName: '',
+        name: '',
+        coinName: '',
+        tickerSymbol: '',
+        coinImageUrl: '',
+        blockchain: '',
+        contractAddress: '',
+        rpcUrl: '',
+        chainId: '',
+        blockExplorerUrl: '',
+        websiteUrl: '',
+        description: '',
+        flowSpeed: 1.2,
+        msBetweeenDrops: 1,
+        coinRate: 6,
+        coinSize: 0.8,
+      });
+
+      // Refresh themes and close dialog
+      await refreshThemes();
+      setShowAddCoinDialog(false);
+
+      // Auto-select the new theme
+      if (newTheme?.id) {
+        await setActiveTheme(newTheme.id);
+      }
+    } catch (error) {
+      console.error('Failed to create token:', error);
+      toast({
+        title: "Failed to create token",
+        description: "Please try again",
+        variant: "destructive"
+      });
+    } finally {
+      setCreatingCoin(false);
+    }
+  };
+
   return (
     <Card className="waterfall-card w-full">
       {/* Token Theme Selector */}
       <div className="mb-4 pb-3 border-b border-border">
-        <Label className="text-xs opacity-85 mb-2 block">Active Token</Label>
+        <div className="flex items-center justify-between mb-2">
+          <Label className="text-xs opacity-85">Active Token</Label>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddCoinDialog(true)}
+            className="h-7 px-2"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add Coin
+          </Button>
+        </div>
         <Select 
           value={currentTheme?.id || ''} 
           onValueChange={setActiveTheme}
@@ -437,6 +658,225 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
           </div>
         </div>
       )}
+
+      {/* Add Coin Dialog */}
+      <Dialog open={showAddCoinDialog} onOpenChange={setShowAddCoinDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New Token</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Display Name */}
+            <div className="space-y-1">
+              <Label>Display Name *</Label>
+              <Input
+                value={newCoin.displayName}
+                onChange={(e) => setNewCoin({ ...newCoin, displayName: e.target.value })}
+                placeholder="e.g., Bitcoin"
+              />
+            </div>
+
+            {/* Internal Name */}
+            <div className="space-y-1">
+              <Label>Internal Name *</Label>
+              <Input
+                value={newCoin.name}
+                onChange={(e) => setNewCoin({ ...newCoin, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                placeholder="e.g., bitcoin (lowercase, no spaces)"
+              />
+              <p className="text-xs text-muted-foreground">Used internally, must be unique</p>
+            </div>
+
+            {/* Coin Name */}
+            <div className="space-y-1">
+              <Label>Coin Name *</Label>
+              <Input
+                value={newCoin.coinName}
+                onChange={(e) => setNewCoin({ ...newCoin, coinName: e.target.value })}
+                placeholder="e.g., Bitcoin Token"
+              />
+            </div>
+
+            {/* Ticker Symbol */}
+            <div className="space-y-1">
+              <Label>Ticker Symbol *</Label>
+              <Input
+                value={newCoin.tickerSymbol}
+                onChange={(e) => setNewCoin({ ...newCoin, tickerSymbol: e.target.value.toUpperCase() })}
+                placeholder="e.g., BTC"
+                maxLength={10}
+              />
+            </div>
+
+            {/* Coin Image Upload */}
+            <div className="space-y-2">
+              <Label>Coin Image *</Label>
+              <div className="flex items-center gap-3">
+                {newCoin.coinImageUrl && (
+                  <img 
+                    src={newCoin.coinImageUrl} 
+                    alt="Coin" 
+                    className="w-12 h-12 rounded-full object-cover border border-border"
+                  />
+                )}
+                <input
+                  ref={newCoinImageRef}
+                  type="file"
+                  accept="image/png,image/webp"
+                  onChange={handleNewCoinImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => newCoinImageRef.current?.click()}
+                  className="flex-1"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload Image
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">PNG or WebP format recommended</p>
+            </div>
+
+            {/* Blockchain */}
+            <div className="space-y-1">
+              <Label>Blockchain</Label>
+              <Input
+                value={newCoin.blockchain}
+                onChange={(e) => setNewCoin({ ...newCoin, blockchain: e.target.value })}
+                placeholder="e.g., Ethereum, Solana, BSC"
+              />
+            </div>
+
+            {/* Contract Address */}
+            <div className="space-y-1">
+              <Label>Contract Address</Label>
+              <Input
+                value={newCoin.contractAddress}
+                onChange={(e) => setNewCoin({ ...newCoin, contractAddress: e.target.value })}
+                placeholder="0x..."
+                className="font-mono text-sm"
+              />
+            </div>
+
+            {/* RPC URL */}
+            <div className="space-y-1">
+              <Label>RPC URL</Label>
+              <Input
+                value={newCoin.rpcUrl}
+                onChange={(e) => setNewCoin({ ...newCoin, rpcUrl: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+
+            {/* Chain ID */}
+            <div className="space-y-1">
+              <Label>Chain ID</Label>
+              <Input
+                value={newCoin.chainId}
+                onChange={(e) => setNewCoin({ ...newCoin, chainId: e.target.value })}
+                placeholder="e.g., 1, 56, 137"
+              />
+            </div>
+
+            {/* Block Explorer URL */}
+            <div className="space-y-1">
+              <Label>Block Explorer URL</Label>
+              <Input
+                value={newCoin.blockExplorerUrl}
+                onChange={(e) => setNewCoin({ ...newCoin, blockExplorerUrl: e.target.value })}
+                placeholder="https://etherscan.io"
+              />
+            </div>
+
+            {/* Website URL */}
+            <div className="space-y-1">
+              <Label>Website URL</Label>
+              <Input
+                value={newCoin.websiteUrl}
+                onChange={(e) => setNewCoin({ ...newCoin, websiteUrl: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1">
+              <Label>Description</Label>
+              <Textarea
+                value={newCoin.description}
+                onChange={(e) => setNewCoin({ ...newCoin, description: e.target.value })}
+                placeholder="Brief description of the token..."
+                className="min-h-[60px]"
+              />
+            </div>
+
+            {/* Initial Visual Settings */}
+            <div className="pt-4 border-t space-y-3">
+              <h4 className="font-semibold text-sm">Initial Visual Settings</h4>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">Flow Speed</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={newCoin.flowSpeed}
+                    onChange={(e) => setNewCoin({ ...newCoin, flowSpeed: parseFloat(e.target.value) || 1.2 })}
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <Label className="text-xs">MS Between Drops</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={newCoin.msBetweeenDrops}
+                    onChange={(e) => setNewCoin({ ...newCoin, msBetweeenDrops: parseFloat(e.target.value) || 1 })}
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <Label className="text-xs">Coin Rate</Label>
+                  <Input
+                    type="number"
+                    value={newCoin.coinRate}
+                    onChange={(e) => setNewCoin({ ...newCoin, coinRate: parseInt(e.target.value) || 6 })}
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <Label className="text-xs">Coin Size</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={newCoin.coinSize}
+                    onChange={(e) => setNewCoin({ ...newCoin, coinSize: parseFloat(e.target.value) || 0.8 })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 justify-end pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => setShowAddCoinDialog(false)}
+                disabled={creatingCoin}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateCoin}
+                disabled={creatingCoin}
+              >
+                {creatingCoin ? 'Creating...' : 'Create Token'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
