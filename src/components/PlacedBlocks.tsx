@@ -84,23 +84,10 @@ export const PlacedBlocks: React.FC<{
     const maxDelta = 0.1; // Cap delta to prevent physics explosions
     const cappedDelta = Math.min(delta, maxDelta);
     
-    // Filter expired blocks instantly at 60fps - no React re-renders, zero FPS impact
-    const now = new Date().toISOString();
-    const activeBlockIds = new Set(
-      blocks.filter(b => !b.expires_at || b.expires_at > now).map(b => b.id)
-    );
-    
-    // Remove falling state for expired blocks
-    fallingBlocksState.forEach((_, blockId) => {
-      if (!activeBlockIds.has(blockId)) {
-        fallingBlocksState.delete(blockId);
-      }
-    });
-    
     // Apply gravity to falling blocks
     fallingBlocksState.forEach((fallState, blockId) => {
       const block = blocks.find(b => b.id === blockId);
-      if (!block || !activeBlockIds.has(blockId)) return;
+      if (!block) return;
       
       // Apply gravity
       fallState.velocity += gravity * cappedDelta;

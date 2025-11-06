@@ -266,19 +266,22 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   useFrame((_, delta) => {
     if (!meshRef.current) return;
     
+    // Only update matrices for falling blocks - static blocks use matrices set in useEffect
     let needsUpdate = false;
     const matrix = matrixRef.current;
     
-    blocks.forEach((block, i) => {
-      const fallState = fallingBlocksState.get(block.id);
+    fallingBlocksState.forEach((fallState, blockId) => {
+      // Find the block and its index
+      const blockIndex = blocks.findIndex(b => b.id === blockId);
+      if (blockIndex === -1) return;
       
-      // Always update position - use fallState if falling, database position if landed
+      const block = blocks[blockIndex];
       const x = block.position_x + 0.5;
-      const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+      const y = fallState.currentY + 0.5;
       const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
-      meshRef.current!.setMatrixAt(i, matrix);
+      meshRef.current!.setMatrixAt(blockIndex, matrix);
       needsUpdate = true;
     });
     
