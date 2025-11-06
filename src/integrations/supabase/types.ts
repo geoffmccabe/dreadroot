@@ -307,7 +307,9 @@ export type Database = {
       }
       token_themes: {
         Row: {
+          block_explorer_url: string | null
           blockchain: string | null
+          chain_id: string | null
           coin_image_url: string | null
           coin_name: string | null
           coin_rate: number
@@ -322,12 +324,15 @@ export type Database = {
           is_active: boolean
           ms_between_drops: number
           name: string
+          rpc_url: string | null
           ticker_symbol: string | null
           updated_at: string
           website_url: string | null
         }
         Insert: {
+          block_explorer_url?: string | null
           blockchain?: string | null
+          chain_id?: string | null
           coin_image_url?: string | null
           coin_name?: string | null
           coin_rate?: number
@@ -342,12 +347,15 @@ export type Database = {
           is_active?: boolean
           ms_between_drops?: number
           name: string
+          rpc_url?: string | null
           ticker_symbol?: string | null
           updated_at?: string
           website_url?: string | null
         }
         Update: {
+          block_explorer_url?: string | null
           blockchain?: string | null
+          chain_id?: string | null
           coin_image_url?: string | null
           coin_name?: string | null
           coin_rate?: number
@@ -362,6 +370,7 @@ export type Database = {
           is_active?: boolean
           ms_between_drops?: number
           name?: string
+          rpc_url?: string | null
           ticker_symbol?: string | null
           updated_at?: string
           website_url?: string | null
