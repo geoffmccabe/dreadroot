@@ -2320,7 +2320,7 @@ export default function WaterfallFortress() {
   const [isMoveMode, setIsMoveMode] = useState(false);
   
   // User data and block system hooks
-  const { profile, inventory, userRoles, addCoins, useBlock, refreshData } = useUserData();
+  const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData } = useUserData();
   const { blocks, placeBlock, removeBlock, setBlockMode } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
@@ -2993,7 +2993,7 @@ export default function WaterfallFortress() {
           onClick={() => openPanel('inventory')}
           title="Open inventory"
         >
-          <span className="font-bold">x{profile?.coins || 0}</span>
+          <span className="font-bold">x{tokenBalance?.coins || 0}</span>
         </div>
       </div>
       
