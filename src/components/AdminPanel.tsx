@@ -1577,7 +1577,7 @@ export function AdminPanel({
           </TabsList>
 
           <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-4">
+            <ScrollArea className="h-[calc(90vh-180px)] pr-4">
               {waterfallSettings && onWaterfallSettingsChange && (
                 <WaterfallControls 
                   settings={waterfallSettings}
