@@ -126,7 +126,7 @@ const FallingBlockMesh: React.FC<{
   blockDef: any;
 }> = ({ block, blockDef }) => {
   const meshRef = useRef<THREE.Mesh>(null);
-  const { texture, updateTexture, isAnimated } = useAnimatedTexture(
+  const { texture, isAnimated } = useAnimatedTexture(
     blockDef.texture_url
   );
 
@@ -139,11 +139,6 @@ const FallingBlockMesh: React.FC<{
       block.currentY,
       block.position_z
     );
-
-    // Update animated texture
-    if (isAnimated && updateTexture) {
-      updateTexture(delta);
-    }
 
     // Add slight rotation while falling for visual effect
     if (block.falling) {

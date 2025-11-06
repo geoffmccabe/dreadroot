@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
-import { InstancedBlockGroup, activeAnimatedTextures, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
+import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
 
 // Re-export clearTextureCache for backward compatibility
 export const clearTextureCache = clearInstancedTextureCache;
@@ -113,13 +113,6 @@ export const PlacedBlocks: React.FC<{
         fallingBlocksState.delete(blockId);
       }
     });
-    
-    // Update animated textures
-    if (activeAnimatedTextures.size > 0) {
-      activeAnimatedTextures.forEach((updateFn) => {
-        updateFn(delta);
-      });
-    }
   });
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {

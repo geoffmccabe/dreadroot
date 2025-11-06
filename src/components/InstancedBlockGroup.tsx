@@ -8,19 +8,14 @@ import { fallingBlocksState } from './PlacedBlocks';
 // Global texture cache - shared across all instanced groups
 const textureCache = new Map<string, { 
   texture: THREE.Texture; 
-  isAnimated: boolean; 
-  updateFn?: (delta: number) => void;
+  isAnimated: boolean;
   refCount: number;
 }>();
-
-// Track which textures need frame updates
-export const activeAnimatedTextures = new Map<string, (delta: number) => void>();
 
 // Function to clear texture cache
 export const clearTextureCache = () => {
   textureCache.forEach(({ texture }) => texture.dispose());
   textureCache.clear();
-  activeAnimatedTextures.clear();
 };
 
 // Helper to get base color from block definition
@@ -72,7 +67,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const matrixRef = useRef(new THREE.Matrix4());
   
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  const { texture: loadedTexture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  const { texture: loadedTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture
   const cachedTextureData = useMemo(() => {
@@ -94,24 +89,17 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     const cached = { 
       texture: loadedTexture, 
-      isAnimated, 
-      updateFn: updateTexture,
+      isAnimated,
       refCount: 1 
     };
     textureCache.set(textureUrl, cached);
     hasIncrementedRef.current = true;
     
     return cached;
-  }, [loadedTexture, textureUrl, isAnimated, updateTexture]);
+  }, [loadedTexture, textureUrl, isAnimated]);
   
   const texture = cachedTextureData?.texture || null;
   const cachedIsAnimated = cachedTextureData?.isAnimated || false;
-  
-  useEffect(() => {
-    if (cachedTextureData?.isAnimated && cachedTextureData.updateFn && textureUrl) {
-      activeAnimatedTextures.set(textureUrl, cachedTextureData.updateFn);
-    }
-  }, [cachedTextureData, textureUrl]);
   
   // Cleanup: Decrement ref count when component unmounts
   useEffect(() => {
@@ -125,7 +113,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         if (cached.refCount <= 0) {
           cached.texture.dispose();
           textureCache.delete(textureUrl);
-          activeAnimatedTextures.delete(textureUrl);
         }
       }
     };

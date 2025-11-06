@@ -24,6 +24,7 @@ export const useAnimatedTexture = (url: string) => {
   const isGifRef = useRef(false);
   const isMountedRef = useRef(true);
   const backgroundRefreshTimerRef = useRef<number | null>(null);
+  const animationTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -39,6 +40,12 @@ export const useAnimatedTexture = (url: string) => {
       if (backgroundRefreshTimerRef.current) {
         clearTimeout(backgroundRefreshTimerRef.current);
         backgroundRefreshTimerRef.current = null;
+      }
+      
+      // Clear animation timer
+      if (animationTimerRef.current) {
+        clearTimeout(animationTimerRef.current);
+        animationTimerRef.current = null;
       }
       
       // Dispose texture using ref to get current value
@@ -218,6 +225,9 @@ export const useAnimatedTexture = (url: string) => {
       if (isMountedRef.current) {
         textureRef.current = canvasTexture;
         setTexture(canvasTexture);
+        
+        // Start animation loop for GIFs
+        scheduleNextFrame();
       } else {
         canvasTexture.dispose();
       }
@@ -295,25 +305,28 @@ export const useAnimatedTexture = (url: string) => {
     }
   };
 
-  // Animation update function to be called in useFrame
-  const updateTexture = (deltaTime: number) => {
-    if (!isGifRef.current || !texture || framesRef.current.length <= 1) return;
-
-    const currentTime = performance.now();
+  // Self-scheduling animation loop - each GIF animates on its own timer
+  const scheduleNextFrame = () => {
+    if (!isMountedRef.current || !isGifRef.current || framesRef.current.length <= 1) return;
+    
     const currentFrame = framesRef.current[currentFrameRef.current];
-    const frameDelay = currentFrame.delay || 100; // Default 100ms if no delay
-
-    if (currentTime - lastFrameTimeRef.current >= frameDelay) {
+    const frameDelay = currentFrame.delay || 100;
+    
+    animationTimerRef.current = window.setTimeout(() => {
+      if (!isMountedRef.current || !textureRef.current) return;
+      
+      // Advance to next frame
       currentFrameRef.current = (currentFrameRef.current + 1) % framesRef.current.length;
       renderFrame(currentFrameRef.current);
       
-      if (texture instanceof THREE.CanvasTexture) {
-        texture.needsUpdate = true;
+      if (textureRef.current instanceof THREE.CanvasTexture) {
+        textureRef.current.needsUpdate = true;
       }
       
-      lastFrameTimeRef.current = currentTime;
-    }
+      // Schedule next frame
+      scheduleNextFrame();
+    }, frameDelay);
   };
 
-  return { texture, updateTexture, isAnimated: isGifRef.current };
+  return { texture, isAnimated: isGifRef.current };
 };

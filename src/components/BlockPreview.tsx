@@ -26,7 +26,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   
   // Load texture with animated GIF support
   const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-  const { texture, updateTexture, isAnimated } = useAnimatedTexture(textureUrl);
+  const { texture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Set up texture properties
   useMemo(() => {
@@ -38,11 +38,6 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
 
   useFrame((state, delta) => {
     frameCountRef.current++;
-    
-    // Update animated texture
-    if (isAnimated && updateTexture) {
-      updateTexture(delta);
-    }
     
     if (!visible || !meshRef.current) return;
 
