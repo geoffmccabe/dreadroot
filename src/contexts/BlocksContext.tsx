@@ -24,25 +24,10 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const { profile } = useUserData();
   const blocksHook = usePlacedBlocksWithCache(user?.id || null);
   
-  // Trigger re-filter every 30s to remove expired blocks without FPS impact
-  const [filterTick, setFilterTick] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => setFilterTick(t => t + 1), 30000);
-    return () => clearInterval(interval);
-  }, []);
-  
-  // Filter out expired blocks client-side to avoid periodic FPS drops
-  const activeBlocks = useMemo(() => {
-    const now = new Date().toISOString();
-    return blocksHook.blocks.filter(block => 
-      !block.expires_at || block.expires_at > now
-    );
-  }, [blocksHook.blocks, filterTick]);
-  
   // Organize blocks by chunks for efficient rendering
   const blocksByChunk = useMemo(() => {
-    return organizeBlocksByChunk(activeBlocks);
-  }, [activeBlocks]);
+    return organizeBlocksByChunk(blocksHook.blocks);
+  }, [blocksHook.blocks]);
 
   // Get visual distance from user profile, default to 4
   const visualDistance = profile?.visual_distance || 4;
@@ -52,7 +37,6 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   
   const contextValue = {
     ...blocksHook,
-    blocks: activeBlocks,
     blocksByChunk,
     visualDistance,
     fogEnabled
