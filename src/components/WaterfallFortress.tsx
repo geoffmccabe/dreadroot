@@ -746,6 +746,14 @@ function FirstPersonControls({
     // Gravity and jumping - variable jump height based on role
     velocity.current.y -= 9.8 * delta;
     
+    // Auto-unstuck: If stuck for >0.5 seconds, nudge player upward
+    if (stuckTimer.current > 0.5) {
+      camera.position.y += 0.05; // Nudge up 5cm
+      velocity.current.y = 0;
+      onGround.current = true;
+      console.log('[AUTO-UNSTUCK] Nudging player up from stuck position');
+    }
+    
     // Allow jump if on ground OR if stuck for >0.3 seconds (desperation jump)
     const canJump = (onGround.current || stuckTimer.current > 0.3) && !keys.current.ctrl;
     
@@ -784,17 +792,9 @@ function FirstPersonControls({
       for (const collider of colliders) {
         // For horizontal movement, skip blocks the player is standing on top of
         if (isHorizontal) {
-          const standingOnBlock = Math.abs(playerBox.min.y - collider.max.y) < 0.25;
+          // More lenient threshold (0.5 instead of 0.25) to help escape from tight spaces
+          const standingOnBlock = Math.abs(playerBox.min.y - collider.max.y) < 0.5;
           if (standingOnBlock) {
-            // Debug occasionally
-            if (Math.random() < 0.01) {
-              console.log('[Standing Check]', {
-                playerMinY: playerBox.min.y,
-                colliderMaxY: collider.max.y,
-                diff: Math.abs(playerBox.min.y - collider.max.y),
-                skipping: true
-              });
-            }
             continue;
           }
         }
