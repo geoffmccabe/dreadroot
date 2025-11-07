@@ -746,16 +746,8 @@ function FirstPersonControls({
     // Gravity and jumping - variable jump height based on role
     velocity.current.y -= 9.8 * delta;
     
-    // Auto-unstuck: If stuck for >0.5 seconds, nudge player upward
-    if (stuckTimer.current > 0.5) {
-      camera.position.y += 0.05; // Nudge up 5cm
-      velocity.current.y = 0;
-      onGround.current = true;
-      console.log('[AUTO-UNSTUCK] Nudging player up from stuck position');
-    }
-    
-    // Allow jump if on ground OR if stuck for >0.3 seconds (desperation jump)
-    const canJump = (onGround.current || stuckTimer.current > 0.3) && !keys.current.ctrl;
+    // Allow jump if on ground OR if stuck for >0.5 seconds (desperation jump with boost)
+    const canJump = (onGround.current || stuckTimer.current > 0.5) && !keys.current.ctrl;
     
     if (keys.current.space && canJump) {
       // Calculate jump velocity based on desired height
@@ -764,6 +756,13 @@ function FirstPersonControls({
       if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
         jumpHeight = 2.5; // Admin boost: 2.5 blocks
       }
+      
+      // If stuck for >0.5s, boost the jump to help escape
+      if (stuckTimer.current > 0.5) {
+        jumpHeight *= 1.5; // 50% boost when stuck
+        console.log('[DESPERATION JUMP] Boosted jump to escape stuck position');
+      }
+      
       velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
       onGround.current = false;
       stuckTimer.current = 0; // Reset stuck timer after successful jump
@@ -790,12 +789,19 @@ function FirstPersonControls({
       const playerBox = createPlayerBox(pos);
       
       for (const collider of colliders) {
-        // For horizontal movement, skip blocks the player is standing on top of
+        // For horizontal movement, skip blocks the player is standing directly on top of
         if (isHorizontal) {
-          // More lenient threshold (0.5 instead of 0.25) to help escape from tight spaces
-          const standingOnBlock = Math.abs(playerBox.min.y - collider.max.y) < 0.5;
+          // Check if player's feet are on top of this block (within 0.1 units)
+          const feetY = playerBox.min.y;
+          const blockTopY = collider.max.y;
+          const standingOnBlock = Math.abs(feetY - blockTopY) < 0.1;
+          
           if (standingOnBlock) {
-            continue;
+            // Also check that player is above the block, not inside it
+            const playerIsAboveBlock = playerBox.min.y >= collider.max.y - 0.1;
+            if (playerIsAboveBlock) {
+              continue;
+            }
           }
         }
         
@@ -854,10 +860,16 @@ function FirstPersonControls({
           });
           
           if (velocity.current.y < 0) {
-            // Falling - land on top
-            camera.position.y = collision.max.y + playerHeight;
+            // Falling - land on top with precise positioning
+            const landingY = collision.max.y + playerHeight;
+            camera.position.y = landingY;
             velocity.current.y = 0;
             onGround.current = true;
+            console.log('[LANDED]', {
+              time: state.clock.elapsedTime.toFixed(2),
+              landingY: landingY.toFixed(3),
+              blockTop: collision.max.y.toFixed(3)
+            });
           } else {
             // Jumping - hit ceiling with buffer to prevent rapid collision
             camera.position.y = collision.min.y - 0.01;
