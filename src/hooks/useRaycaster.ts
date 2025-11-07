@@ -46,6 +46,7 @@ export const useRaycaster = () => {
     // Update direction from camera without creating new objects
     direction.current.set(0, 0, -1);
     direction.current.applyQuaternion(camera.quaternion);
+    direction.current.normalize();
     
     // Update raycaster
     raycaster.current.set(camera.position, direction.current);
@@ -75,6 +76,7 @@ export const useRaycaster = () => {
     // Update direction from camera
     direction.current.set(0, 0, -1);
     direction.current.applyQuaternion(camera.quaternion);
+    direction.current.normalize();
     
     // Update raycaster
     raycaster.current.set(camera.position, direction.current);
