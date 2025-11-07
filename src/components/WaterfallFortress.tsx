@@ -288,7 +288,10 @@ function FirstPersonControls({
   currentUserId,
   hoveredBlockId,
   setHoveredBlockId,
-  instancedMeshesRef
+  instancedMeshesRef,
+  meshesArrayCache,
+  meshToBlockTypeCache,
+  blocksByTypeAndUser
 }: {
   onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void; 
   showCrosshairs: boolean;
@@ -317,6 +320,9 @@ function FirstPersonControls({
   hoveredBlockId: string | null;
   setHoveredBlockId: (id: string | null) => void;
   instancedMeshesRef: React.MutableRefObject<Map<string, THREE.InstancedMesh>>;
+  meshesArrayCache: React.MutableRefObject<THREE.InstancedMesh[]>;
+  meshToBlockTypeCache: React.MutableRefObject<Map<THREE.InstancedMesh, string>>;
+  blocksByTypeAndUser: React.MutableRefObject<Map<string, PlacedBlock[]>>;
 }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -683,27 +689,45 @@ function FirstPersonControls({
     };
   }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
 
+  // Cache blocks by type and user for fast lookup
+  useEffect(() => {
+    const cache = new Map<string, PlacedBlock[]>();
+    blocks.forEach(block => {
+      if (block.user_id === currentUserId) {
+        const key = block.block_type;
+        if (!cache.has(key)) {
+          cache.set(key, []);
+        }
+        cache.get(key)!.push(block);
+      }
+    });
+    blocksByTypeAndUser.current = cache;
+  }, [blocks, currentUserId]);
+
+  // Frame counter for proper throttling
+  const hoverCheckFrameCounter = useRef(0);
+
   useFrame((state, delta) => {
-    // Hover detection for block mode - OPTIMIZED with unified raycaster
+    // Hover detection for block mode - OPTIMIZED with cached lookups
     // Throttle to every 10 frames (at 60fps = 6 checks/sec instead of 60/sec)
     if (blockPlacementMode && currentUserId && showOwnershipOutline && keys.current.rightMouse) {
-      // Throttle check: only raycast every 10th frame
-      if (state.clock.elapsedTime * 60 % 10 < 1) {
-        const meshes = Array.from(instancedMeshesRef.current.values());
+      hoverCheckFrameCounter.current++;
+      // Proper throttle: only raycast every 10th frame
+      if (hoverCheckFrameCounter.current % 10 === 0) {
+        const meshes = meshesArrayCache.current;
         
         if (meshes.length > 0) {
           const result = raycastMeshes(meshes, 5);
           
           if (result && result.instanceId !== undefined) {
-            // Find the block at this instanceId
+            // Find the block at this instanceId using cached lookup
             const mesh = result.object as THREE.InstancedMesh;
-            const blockType = Array.from(instancedMeshesRef.current.entries())
-              .find(([_, m]) => m === mesh)?.[0];
+            const blockType = meshToBlockTypeCache.current.get(mesh);
             
             if (blockType) {
-              // Get blocks of this type and find the one at instanceId
-              const blocksOfType = blocks.filter(b => b.block_type === blockType && b.user_id === currentUserId);
-              if (blocksOfType[result.instanceId]) {
+              // Get blocks of this type using cached map
+              const blocksOfType = blocksByTypeAndUser.current.get(blockType);
+              if (blocksOfType && blocksOfType[result.instanceId]) {
                 setHoveredBlockId(blocksOfType[result.instanceId].id);
               } else {
                 setHoveredBlockId(null);
@@ -1720,10 +1744,18 @@ function Scene({
   // Store references to all instanced meshes for raycasting
   const instancedMeshesRef = useRef<Map<string, THREE.InstancedMesh>>(new Map());
   
+  // Cache for raycasting optimization - avoid creating arrays every frame
+  const meshesArrayCache = useRef<THREE.InstancedMesh[]>([]);
+  const meshToBlockTypeCache = useRef<Map<THREE.InstancedMesh, string>>(new Map());
+  const blocksByTypeAndUser = useRef<Map<string, PlacedBlock[]>>(new Map());
+  
   // Callback to collect mesh refs from PlacedBlocks
   const handleMeshReady = useCallback((blockType: string, mesh: THREE.InstancedMesh | null) => {
     if (mesh) {
       instancedMeshesRef.current.set(blockType, mesh);
+      // Update caches
+      meshToBlockTypeCache.current.set(mesh, blockType);
+      meshesArrayCache.current = Array.from(instancedMeshesRef.current.values());
     } else {
       instancedMeshesRef.current.delete(blockType);
     }
@@ -2076,6 +2108,9 @@ function Scene({
         hoveredBlockId={hoveredBlockId}
         setHoveredBlockId={setHoveredBlockId}
         instancedMeshesRef={instancedMeshesRef}
+        meshesArrayCache={meshesArrayCache}
+        meshToBlockTypeCache={meshToBlockTypeCache}
+        blocksByTypeAndUser={blocksByTypeAndUser}
       />
       
       {/* Multiplayer - render other players */}
