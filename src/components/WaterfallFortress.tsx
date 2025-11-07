@@ -786,6 +786,15 @@ function FirstPersonControls({
         if (isHorizontal) {
           const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.25) && (playerBox.min.y <= collider.max.y + 0.25);
           if (standingOnBlock) {
+            // Debug occasionally
+            if (Math.random() < 0.01) {
+              console.log('[Standing Check]', {
+                playerMinY: playerBox.min.y,
+                colliderMaxY: collider.max.y,
+                diff: Math.abs(playerBox.min.y - collider.max.y),
+                skipping: true
+              });
+            }
             continue;
           }
         }
@@ -834,6 +843,16 @@ function FirstPersonControls({
       } else {
         const collision = checkAxisCollision(testPos, false);
         if (collision) {
+          console.log('[Y-COLLISION]', {
+            time: state.clock.elapsedTime.toFixed(2),
+            velocity_y: velocity.current.y.toFixed(3),
+            currentY: camera.position.y.toFixed(3),
+            testY: testPos.y.toFixed(3),
+            collision_min_y: collision.min.y.toFixed(3),
+            collision_max_y: collision.max.y.toFixed(3),
+            action: velocity.current.y < 0 ? 'FALLING' : 'JUMPING'
+          });
+          
           if (velocity.current.y < 0) {
             // Falling - land on top
             camera.position.y = collision.max.y + playerHeight;
@@ -879,6 +898,40 @@ function FirstPersonControls({
       stuckTimer.current += delta;
     } else {
       stuckTimer.current = 0;
+    }
+    
+    // Position tracking for debugging - log every 0.1 seconds while moving
+    const isMoving = keys.current.w || keys.current.s || keys.current.a || keys.current.d || 
+                     keys.current.space || Math.abs(velocity.current.y) > 0.1;
+    if (isMoving && state.clock.elapsedTime - lastPositionLog.current > 0.1) {
+      console.log('[POSITION TRACK]', {
+        time: state.clock.elapsedTime.toFixed(2),
+        pos: {
+          x: camera.position.x.toFixed(3),
+          y: camera.position.y.toFixed(3),
+          z: camera.position.z.toFixed(3)
+        },
+        velocity: {
+          x: velocity.current.x.toFixed(3),
+          y: velocity.current.y.toFixed(3),
+          z: velocity.current.z.toFixed(3)
+        },
+        state: {
+          onGround: onGround.current,
+          xBlocked,
+          zBlocked,
+          isStuck: isStuckHorizontally,
+          stuckTime: stuckTimer.current.toFixed(2)
+        },
+        keys: {
+          w: keys.current.w,
+          s: keys.current.s,
+          a: keys.current.a,
+          d: keys.current.d,
+          space: keys.current.space
+        }
+      });
+      lastPositionLog.current = state.clock.elapsedTime;
     }
     
     // ACTUAL ground detection - check every frame if there's a block beneath the player
