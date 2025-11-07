@@ -25,7 +25,6 @@ export const useAnimatedTexture = (url: string) => {
   const isMountedRef = useRef(true);
   const backgroundRefreshTimerRef = useRef<number | null>(null);
   const animationTimerRef = useRef<number | null>(null);
-  const frameCounterRef = useRef(0); // Counter to throttle GPU uploads
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -320,9 +319,7 @@ export const useAnimatedTexture = (url: string) => {
       currentFrameRef.current = (currentFrameRef.current + 1) % framesRef.current.length;
       renderFrame(currentFrameRef.current);
       
-      // Only update GPU texture every 3 frames to reduce upload pressure
-      frameCounterRef.current++;
-      if (textureRef.current instanceof THREE.CanvasTexture && frameCounterRef.current % 3 === 0) {
+      if (textureRef.current instanceof THREE.CanvasTexture) {
         textureRef.current.needsUpdate = true;
       }
       
