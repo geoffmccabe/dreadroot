@@ -789,19 +789,14 @@ function FirstPersonControls({
       const playerBox = createPlayerBox(pos);
       
       for (const collider of colliders) {
-        // For horizontal movement, skip blocks the player is standing directly on top of
+        // For horizontal movement, skip blocks the player is standing on top of
         if (isHorizontal) {
-          // Check if player's feet are on top of this block (within 0.1 units)
           const feetY = playerBox.min.y;
           const blockTopY = collider.max.y;
-          const standingOnBlock = Math.abs(feetY - blockTopY) < 0.1;
-          
+          // More lenient: within 0.6 units and feet above or at block top
+          const standingOnBlock = Math.abs(feetY - blockTopY) < 0.6 && feetY >= blockTopY - 0.1;
           if (standingOnBlock) {
-            // Also check that player is above the block, not inside it
-            const playerIsAboveBlock = playerBox.min.y >= collider.max.y - 0.1;
-            if (playerIsAboveBlock) {
-              continue;
-            }
+            continue;
           }
         }
         
@@ -812,6 +807,23 @@ function FirstPersonControls({
       return null;
     };
 
+    // Emergency unstuck: If player is inside a block, push them up
+    const currentPlayerBox = createPlayerBox(camera.position);
+    for (const collider of colliders) {
+      if (currentPlayerBox.intersectsBox(collider)) {
+        // Player is stuck inside this block - push them to the top
+        const blockTop = collider.max.y;
+        const targetY = blockTop + playerHeight;
+        if (camera.position.y < targetY) {
+          camera.position.y = targetY;
+          velocity.current.y = 0;
+          onGround.current = true;
+          console.log('[EMERGENCY UNSTUCK] Pushed player to Y =', targetY.toFixed(3));
+          break;
+        }
+      }
+    }
+    
     // Store previous position and track collisions
     const prevPosition = camera.position.clone();
     // Store original position BEFORE any collision resolution for Y-axis testing
