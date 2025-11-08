@@ -565,6 +565,7 @@ function FirstPersonControls({
     pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
     
     camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
+    camera.quaternion.setFromEuler(camera.rotation);
   }, [camera]);
 
   const handleWheel = useCallback((event: WheelEvent) => {
@@ -597,6 +598,7 @@ function FirstPersonControls({
       const raycaster = new THREE.Raycaster();
       const direction = new THREE.Vector3(0, 0, -1);
       direction.applyQuaternion(camera.quaternion);
+      direction.normalize();
       raycaster.set(camera.position, direction);
       
       
