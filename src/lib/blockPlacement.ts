@@ -69,6 +69,7 @@ function createRaycastTargets(existingBlocks: PlacedBlock[]): THREE.Object3D[] {
   const groundMesh = new THREE.Mesh(groundGeometry, invisibleMaterial.clone());
   groundMesh.rotation.x = -Math.PI / 2;
   groundMesh.position.set(0, 0, 0);
+  groundMesh.updateMatrixWorld(true); // Update matrix for raycasting
   groundMesh.name = 'ground';
   targets.push(groundMesh);
   
@@ -79,6 +80,7 @@ function createRaycastTargets(existingBlocks: PlacedBlock[]): THREE.Object3D[] {
       invisibleMaterial.clone()
     );
     wallMesh.position.set(wall.position[0], wall.position[1], wall.position[2]);
+    wallMesh.updateMatrixWorld(true); // Update matrix for raycasting
     wallMesh.name = `fortress-wall-${index}`;
     targets.push(wallMesh);
   });
@@ -95,6 +97,7 @@ function createRaycastTargets(existingBlocks: PlacedBlock[]): THREE.Object3D[] {
       block.position_y + 0.5, 
       block.position_z + 0.5
     );
+    blockMesh.updateMatrixWorld(true); // Update matrix for raycasting
     blockMesh.name = `block-${index}`;
     targets.push(blockMesh);
   });
@@ -245,14 +248,22 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
     
     const intersection = intersects[0];
     const hitPoint = intersection.point;
-    const normal = intersection.face?.normal;
+    const faceNormal = intersection.face?.normal;
     
-    if (!normal) {
+    if (!faceNormal) {
       return { isValid: false, position: null, reason: 'no-surface' };
     }
     
+    // Transform face normal from local space to world space
+    const worldNormal = faceNormal.clone();
+    const mesh = intersection.object as THREE.Mesh;
+    if (mesh.matrixWorld) {
+      worldNormal.transformDirection(mesh.matrixWorld);
+    }
+    worldNormal.normalize();
+    
     // Calculate placement position adjacent to hit surface
-    const placePosition = hitPoint.clone().add(normal.clone().multiplyScalar(0.5));
+    const placePosition = hitPoint.clone().add(worldNormal.multiplyScalar(0.5));
     
     // Snap to voxel grid (integer coordinates) - use floor for consistent grid alignment
     placePosition.x = Math.floor(placePosition.x);
