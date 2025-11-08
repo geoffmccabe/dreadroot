@@ -216,10 +216,10 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
       const distance = Math.min(Math.abs(t), maxDistance);
       const fallbackPosition = origin.clone().add(direction.multiplyScalar(distance));
       
-      // Snap to voxel grid
-      fallbackPosition.x = Math.round(fallbackPosition.x);
-      fallbackPosition.y = Math.max(0, Math.round(fallbackPosition.y));
-      fallbackPosition.z = Math.round(fallbackPosition.z);
+      // Snap to voxel grid - use floor for consistent grid alignment
+      fallbackPosition.x = Math.floor(fallbackPosition.x);
+      fallbackPosition.y = Math.max(0, Math.floor(fallbackPosition.y));
+      fallbackPosition.z = Math.floor(fallbackPosition.z);
       
       // Validate fallback placement
       const validation = validatePlacement(fallbackPosition, existingBlocks, {
@@ -254,10 +254,10 @@ export function calculateBlockPlacement(config: PlacementConfig): PlacementResul
     // Calculate placement position adjacent to hit surface
     const placePosition = hitPoint.clone().add(normal.clone().multiplyScalar(0.5));
     
-    // Snap to voxel grid (integer coordinates)
-    placePosition.x = Math.round(placePosition.x);
-    placePosition.y = Math.max(0, Math.round(placePosition.y)); // Keep above ground
-    placePosition.z = Math.round(placePosition.z);
+    // Snap to voxel grid (integer coordinates) - use floor for consistent grid alignment
+    placePosition.x = Math.floor(placePosition.x);
+    placePosition.y = Math.max(0, Math.floor(placePosition.y)); // Keep above ground
+    placePosition.z = Math.floor(placePosition.z);
     
     // Validate placement
     const validation = validatePlacement(placePosition, existingBlocks, {
