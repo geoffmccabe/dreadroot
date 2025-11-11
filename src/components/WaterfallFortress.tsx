@@ -30,6 +30,7 @@ import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { useRaycaster } from '@/hooks/useRaycaster';
+import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
 
 // Camera-tracked block renderer with chunk culling
 function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId, hoveredBlockId, onMeshReady }: { 
@@ -2658,8 +2659,9 @@ export default function WaterfallFortress() {
       return;
     }
     
-    // Check if user has blocks in inventory
-    const hasBlocks = inventory.some(item => item.item_type === selectedBlockType && item.quantity > 0);
+    // Check if user has blocks in inventory (supports both item_type and item_id)
+    const hasBlocks = findInventoryItem(inventory, selectedBlockType) !== undefined && 
+                      getInventoryQuantity(inventory, selectedBlockType) > 0;
     console.log('Has blocks in inventory:', hasBlocks, 'inventory:', inventory);
     
     if (!hasBlocks) {
@@ -2707,20 +2709,21 @@ export default function WaterfallFortress() {
         });
         
         // Check if we still have blocks (inventory is already updated optimistically)
-        const currentItem = inventory.find(item => item.item_type === selectedBlockType);
-        const stillHasBlocks = currentItem && currentItem.quantity > 0;
+        const stillHasBlocks = getInventoryQuantity(inventory, selectedBlockType) > 0;
         
         if (!stillHasBlocks) {
           // Find next available block type
-          const availableBlocks = inventory.filter(item => item.quantity > 0 && item.item_type !== selectedBlockType);
+          const availableBlocks = inventory.filter(item => item.quantity > 0 && 
+            (item.item_type !== selectedBlockType && item.item_id !== selectedBlockType));
           console.log('No more blocks of type', selectedBlockType, 'available blocks:', availableBlocks);
           
           if (availableBlocks.length > 0) {
             const nextBlock = availableBlocks[0];
-            setSelectedBlockType(nextBlock.item_type);
+            const nextItemKey = nextBlock.item_id || nextBlock.item_type;
+            setSelectedBlockType(nextItemKey);
             toast({
               title: "Auto-switched block type",
-              description: `Switched to ${nextBlock.item_type} (${nextBlock.quantity} available)`,
+              description: `Switched to ${nextItemKey} (${nextBlock.quantity} available)`,
               duration: 2000
             });
           } else {
@@ -2753,23 +2756,24 @@ export default function WaterfallFortress() {
     console.log('Data refreshed after purchase');
   }, [refreshData]);
 
-  const getBlockQuantity = (itemType: string) => {
-    const item = inventory.find(i => i.item_type === itemType);
-    return item?.quantity || 0;
+  const getBlockQuantity = (itemKey: string) => {
+    return getInventoryQuantity(inventory, itemKey);
   };
 
   // Mode change handler
   const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
     console.log('Mode change requested:', mode);
     const availableItems = inventory.filter(item => item.quantity > 0);
-    console.log('Available inventory items:', availableItems.map(item => `${item.item_type}:${item.quantity}`));
+    console.log('Available inventory items:', availableItems.map(item => 
+      `${item.item_id || item.item_type}:${item.quantity}`));
     
     if (mode === 'building') {
       // Find first available block type from inventory
       const availableItem = availableItems[0];
       if (availableItem) {
-        console.log('Setting block mode with available block:', availableItem.item_type, 'quantity:', availableItem.quantity);
-        setSelectedBlockType(availableItem.item_type);
+        const itemKey = availableItem.item_id || availableItem.item_type;
+        console.log('Setting block mode with available block:', itemKey, 'quantity:', availableItem.quantity);
+        setSelectedBlockType(itemKey);
         setCrosshairsEnabled(false);
         setBlockPlacementMode(true);
         setBlockMode(true); // Enable periodic syncing
@@ -2823,10 +2827,11 @@ export default function WaterfallFortress() {
     // If no block is selected, select the first one
     if (!selectedBlockType) {
       const firstBlock = availableBlocks[0];
-      setSelectedBlockType(firstBlock.item_type);
+      const firstItemKey = firstBlock.item_id || firstBlock.item_type;
+      setSelectedBlockType(firstItemKey);
       toast({
         title: "Block selected",
-        description: `Selected ${firstBlock.item_type} (${firstBlock.quantity} available)`,
+        description: `Selected ${firstItemKey} (${firstBlock.quantity} available)`,
         duration: 1000
       });
       return;
@@ -2834,14 +2839,17 @@ export default function WaterfallFortress() {
     
     if (availableBlocks.length <= 1) return;
     
-    const currentIndex = availableBlocks.findIndex(item => item.item_type === selectedBlockType);
+    const currentIndex = availableBlocks.findIndex(item => 
+      item.item_type === selectedBlockType || item.item_id === selectedBlockType
+    );
     if (currentIndex === -1) {
       // Current block not found, select the first available
       const firstBlock = availableBlocks[0];
-      setSelectedBlockType(firstBlock.item_type);
+      const firstItemKey = firstBlock.item_id || firstBlock.item_type;
+      setSelectedBlockType(firstItemKey);
       toast({
         title: "Block selected", 
-        description: `Selected ${firstBlock.item_type} (${firstBlock.quantity} available)`,
+        description: `Selected ${firstItemKey} (${firstBlock.quantity} available)`,
         duration: 1000
       });
       return;
@@ -2855,11 +2863,12 @@ export default function WaterfallFortress() {
     }
     
     const nextBlock = availableBlocks[nextIndex];
-    setSelectedBlockType(nextBlock.item_type);
+    const nextItemKey = nextBlock.item_id || nextBlock.item_type;
+    setSelectedBlockType(nextItemKey);
     
     toast({
       title: "Block selected",
-      description: `Selected ${nextBlock.item_type} (${nextBlock.quantity} available)`,
+      description: `Selected ${nextItemKey} (${nextBlock.quantity} available)`,
       duration: 1000
     });
   }, [selectedBlockType, inventory, toast]);

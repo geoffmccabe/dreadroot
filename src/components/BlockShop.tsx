@@ -8,6 +8,7 @@ import { useUserData } from '@/hooks/useUserData';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { BlockType } from '@/types/blocks';
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 
 interface BlockShopProps {
   isOpen: boolean;
@@ -107,9 +108,8 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     }
   };
 
-  const getBlockQuantity = (itemType: string) => {
-    const item = inventory.find(i => i.item_type === itemType);
-    return item?.quantity || 0;
+  const getBlockQuantity = (itemKey: string) => {
+    return getInventoryQuantity(inventory, itemKey);
   };
 
   if (userLoading || blocksLoading) {

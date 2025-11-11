@@ -6,6 +6,7 @@ import { useUserData } from '@/hooks/useUserData';
 import { Card } from '@/components/ui/card';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { findInventoryItem } from '@/lib/inventoryHelpers';
 
 interface InventoryProps {
   isOpen: boolean;
@@ -110,7 +111,9 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
               inventory
                 .filter(item => item.quantity > 0)
                 .map((item) => {
-                  const blockDef = getBlockByKey(item.item_type);
+                  // Look up by item_id first (new), then item_type (legacy)
+                  const itemKey = item.item_id || item.item_type;
+                  const blockDef = getBlockByKey(itemKey);
                   const textureUrl = blockDef?.texture?.diffuse;
                   const color = blockDef?.properties?.color || '#8B7355';
                   

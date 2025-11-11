@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { findInventoryItem } from '@/lib/inventoryHelpers';
 
 export interface UserProfile {
   id: string;
@@ -232,7 +233,7 @@ export const useUserData = () => {
       if (coinsError) throw coinsError;
 
       // Add to inventory
-      const existingItem = inventory.find(item => item.item_type === itemType);
+      const existingItem = findInventoryItem(inventory, itemType);
       
       if (existingItem) {
         // Update existing inventory item
@@ -280,13 +281,12 @@ export const useUserData = () => {
     }
   };
 
-  const useBlock = async (itemType: string) => {
-    const item = inventory.find(i => i.item_type === itemType || i.item_id === itemType);
-    
+  const useBlock = async (itemKey: string) => {
+    const item = findInventoryItem(inventory, itemKey);
     if (!item || item.quantity <= 0) {
       toast({
         title: "No blocks available",
-        description: `You don't have any ${itemType} blocks in your inventory`,
+        description: `You don't have any ${itemKey} blocks in your inventory`,
         variant: "destructive"
       });
       return false;

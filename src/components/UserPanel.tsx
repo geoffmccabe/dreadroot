@@ -15,6 +15,7 @@ import { BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
 import { useBlocks } from '@/contexts/BlocksContext';
+import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -190,9 +191,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     }
   };
 
-  const getBlockQuantity = (itemType: string) => {
-    const item = inventory.find(i => i.item_type === itemType);
-    return item?.quantity || 0;
+  const getBlockQuantity = (itemKey: string) => {
+    return getInventoryQuantity(inventory, itemKey);
   };
 
   if (isLoading) {
@@ -367,7 +367,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   const blocksInClass = availableBlocks
                     .filter(block => {
                       if (block.class !== inventoryActiveClass) return false;
-                      const inventoryCount = inventory.find(i => i.item_type === block.key)?.quantity || 0;
+                      const inventoryCount = getInventoryQuantity(inventory, block.key);
                       const placedCount = placedBlockCounts.get(block.key) || 0;
                       return inventoryCount > 0 || placedCount > 0;
                     })
@@ -392,7 +392,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   }
                   
                   return blocksInClass.map((block) => {
-                    const inventoryCount = inventory.find(i => i.item_type === block.key)?.quantity || 0;
+                    const inventoryCount = getInventoryQuantity(inventory, block.key);
                     const placedCount = placedBlockCounts.get(block.key) || 0;
                     
                     return (
