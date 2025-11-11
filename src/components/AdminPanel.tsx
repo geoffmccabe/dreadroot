@@ -1038,6 +1038,32 @@ function UsersList({}: UsersListProps) {
     );
   };
 
+  const cleanupFakeUsers = async () => {
+    if (!confirm(`This will permanently delete ${users.filter(u => !u.has_profile).length} users without profiles. Continue?`)) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('cleanup-fake-users');
+
+      if (error) throw error;
+
+      toast({
+        title: "Cleanup Complete",
+        description: `Deleted ${data.deleted_count} fake users`,
+      });
+
+      await loadUsers();
+    } catch (error) {
+      console.error('Failed to cleanup users:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete fake users",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredUsers = users.filter(user => {
     // Filter by profile status
     if (!showWithoutProfiles && !user.has_profile) {
@@ -1079,6 +1105,15 @@ function UsersList({}: UsersListProps) {
         <Button variant="outline" size="sm" onClick={loadUsers}>
           Refresh
         </Button>
+        {users.filter(u => !u.has_profile).length > 0 && (
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            onClick={cleanupFakeUsers}
+          >
+            Delete {users.filter(u => !u.has_profile).length} Fake Users
+          </Button>
+        )}
       </div>
 
       <ScrollArea className="h-[500px] w-full">
