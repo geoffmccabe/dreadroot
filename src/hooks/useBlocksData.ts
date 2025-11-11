@@ -36,7 +36,7 @@ export const useBlocksData = () => {
       fetchPromise = (async () => {
         try {
       const { data, error } = await supabase
-        .from('blocks')
+        .from('items')
         .select('*')
         .order('class', { ascending: true })
         .order('tier', { ascending: true })
@@ -44,22 +44,22 @@ export const useBlocksData = () => {
 
           if (error) throw error;
 
-          console.log('Fetched blocks from DB:', data?.slice(0, 5).map(b => ({ name: b.name, class: b.class, tier: b.tier })));
+          console.log('Fetched items from DB:', data?.slice(0, 5).map(b => ({ name: b.name, class: b.class, tier: b.tier })));
 
-          const typedBlocks: BlockType[] = (data || []).map(block => ({
-            id: block.id,
-            key: block.key,
-            name: block.name,
-            description: block.description || '',
-            cost: block.cost,
-            category: block.category as BlockType['category'],
-            rarity: block.rarity as BlockType['rarity'],
-            class: block.class as BlockType['class'],
-            tier: block.tier || 0,
-            texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
+          const typedBlocks: BlockType[] = (data || []).map(item => ({
+            id: item.id,
+            key: item.key,
+            name: item.name,
+            description: item.description || '',
+            cost: item.cost,
+            category: (item.item_category === 'block' ? 'building' : item.item_category) as BlockType['category'],
+            rarity: item.rarity as BlockType['rarity'],
+            class: item.class as BlockType['class'],
+            tier: item.tier || 0,
+            texture: item.texture_url ? { diffuse: item.texture_url } : undefined,
             properties: {
-              ...(block.properties as BlockType['properties']),
-              glowFactor: block.glow_factor || undefined
+              ...(item.properties as BlockType['properties']),
+              glowFactor: item.glow_factor || undefined
             }
           }));
           
@@ -117,7 +117,7 @@ export const useBlocksData = () => {
     
     try {
       const { data, error } = await supabase
-        .from('blocks')
+        .from('items')
         .select('*')
         .order('class', { ascending: true })
         .order('tier', { ascending: true })
@@ -125,20 +125,20 @@ export const useBlocksData = () => {
 
       if (error) throw error;
 
-      const typedBlocks: BlockType[] = (data || []).map(block => ({
-        id: block.id,
-        key: block.key,
-        name: block.name,
-        description: block.description || '',
-        cost: block.cost,
-        category: block.category as BlockType['category'],
-        rarity: block.rarity as BlockType['rarity'],
-        class: block.class as BlockType['class'],
-        tier: block.tier || 0,
-        texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
+      const typedBlocks: BlockType[] = (data || []).map(item => ({
+        id: item.id,
+        key: item.key,
+        name: item.name,
+        description: item.description || '',
+        cost: item.cost,
+        category: (item.item_category === 'block' ? 'building' : item.item_category) as BlockType['category'],
+        rarity: item.rarity as BlockType['rarity'],
+        class: item.class as BlockType['class'],
+        tier: item.tier || 0,
+        texture: item.texture_url ? { diffuse: item.texture_url } : undefined,
         properties: {
-          ...(block.properties as BlockType['properties']),
-          glowFactor: block.glow_factor || undefined
+          ...(item.properties as BlockType['properties']),
+          glowFactor: item.glow_factor || undefined
         }
       }));
       

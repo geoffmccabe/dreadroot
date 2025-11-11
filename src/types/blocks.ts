@@ -11,7 +11,7 @@ export interface PlacedBlock {
 }
 
 export interface BlockType {
-  id: number;
+  id: string;
   key: string;
   name: string;
   description: string;
@@ -38,6 +38,7 @@ export interface InventoryItem {
   id: string;
   user_id: string | null;
   item_type: string;
+  item_id: string | null;
   quantity: number;
   created_at: string;
   updated_at: string;

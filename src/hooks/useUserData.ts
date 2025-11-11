@@ -29,6 +29,7 @@ export interface UserInventoryItem {
   id: string;
   user_id: string;
   item_type: string;
+  item_id: string | null;
   quantity: number;
   created_at: string;
   updated_at: string;
@@ -203,7 +204,23 @@ export const useUserData = () => {
     }
 
     try {
-      
+      // Get item_id from items table
+      const { data: itemData, error: itemError } = await supabase
+        .from('items')
+        .select('id')
+        .eq('key', itemType)
+        .maybeSingle();
+
+      if (itemError) throw itemError;
+      if (!itemData) {
+        toast({
+          title: "Item not found",
+          description: "This item is not available",
+          variant: "destructive"
+        });
+        return false;
+      }
+
       // Deduct coins from token balance
       const newCoinAmount = tokenBalance.coins - cost;
       const { error: coinsError } = await supabase
@@ -227,12 +244,13 @@ export const useUserData = () => {
 
         if (updateError) throw updateError;
       } else {
-        // Create new inventory item
+        // Create new inventory item with both item_type (legacy) and item_id (new)
         const { error: insertError } = await supabase
           .from('user_inventory')
           .insert([{
             user_id: user.id,
             item_type: itemType,
+            item_id: itemData.id,
             quantity: 1
           }]);
 
@@ -263,7 +281,7 @@ export const useUserData = () => {
   };
 
   const useBlock = async (itemType: string) => {
-    const item = inventory.find(i => i.item_type === itemType);
+    const item = inventory.find(i => i.item_type === itemType || i.item_id === itemType);
     
     if (!item || item.quantity <= 0) {
       toast({
