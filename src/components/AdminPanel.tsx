@@ -909,6 +909,7 @@ function UsersList({}: UsersListProps) {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showWithoutProfiles, setShowWithoutProfiles] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [editCoinsOpen, setEditCoinsOpen] = useState(false);
   const [manageRolesOpen, setManageRolesOpen] = useState(false);
@@ -1037,12 +1038,20 @@ function UsersList({}: UsersListProps) {
     );
   };
 
-  const filteredUsers = users.filter(user => 
-    user.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.profile?.blockchain_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.roles?.some(r => r.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredUsers = users.filter(user => {
+    // Filter by profile status
+    if (!showWithoutProfiles && !user.has_profile) {
+      return false;
+    }
+    
+    // Filter by search term
+    return (
+      user.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.profile?.blockchain_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.roles?.some(r => r.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+  });
 
   if (loading) {
     return <div className="text-sm opacity-75">Loading users...</div>;
@@ -1050,13 +1059,23 @@ function UsersList({}: UsersListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Input
           placeholder="Search by email, user ID, wallet, or role..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
         />
+        <div className="flex items-center gap-2">
+          <Checkbox 
+            id="show-without-profiles"
+            checked={showWithoutProfiles}
+            onCheckedChange={(checked) => setShowWithoutProfiles(checked as boolean)}
+          />
+          <Label htmlFor="show-without-profiles" className="text-sm cursor-pointer">
+            Show users without profiles ({users.filter(u => !u.has_profile).length})
+          </Label>
+        </div>
         <Button variant="outline" size="sm" onClick={loadUsers}>
           Refresh
         </Button>
