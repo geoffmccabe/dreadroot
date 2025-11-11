@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
 import { Textarea } from '@/components/ui/textarea';
 import { AvatarPanel } from '@/components/AvatarPanel';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -883,9 +886,28 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
 
 interface UsersListProps {}
 
+interface UserData {
+  user_id: string;
+  coins: number;
+  blockchain_address: string | null;
+  created_at: string;
+  visual_distance: number;
+  fog_enabled: boolean;
+  user_roles: { role: string }[];
+  user_inventory: { item_type: string; quantity: number }[];
+  user_token_balances: { coins: number; token_theme_id: string }[];
+}
+
 function UsersList({}: UsersListProps) {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+  const [editCoinsOpen, setEditCoinsOpen] = useState(false);
+  const [manageRolesOpen, setManageRolesOpen] = useState(false);
+  const [coinsInput, setCoinsInput] = useState('');
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadUsers();
@@ -893,59 +915,305 @@ function UsersList({}: UsersListProps) {
 
   const loadUsers = async () => {
     try {
-      // Query user profiles with roles
-      const { data, error } = await supabase
+      // Query profiles with related data
+      const { data: profilesData, error: profilesError } = await supabase
         .from('user_profiles')
-        .select(`
-          user_id,
-          coins,
-          blockchain_address,
-          user_roles (role)
-        `)
-        .order('user_id');
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (profilesError) throw profilesError;
 
-      setUsers(data || []);
+      // Get roles for all users
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      // Get inventory for all users
+      const { data: inventoryData } = await supabase
+        .from('user_inventory')
+        .select('user_id, item_type, quantity');
+
+      // Get token balances for all users
+      const { data: balancesData } = await supabase
+        .from('user_token_balances')
+        .select('user_id, coins, token_theme_id');
+
+      // Combine data
+      const combinedUsers = profilesData?.map(profile => ({
+        ...profile,
+        user_roles: rolesData?.filter(r => r.user_id === profile.user_id) || [],
+        user_inventory: inventoryData?.filter(i => i.user_id === profile.user_id) || [],
+        user_token_balances: balancesData?.filter(b => b.user_id === profile.user_id) || [],
+      })) || [];
+
+      setUsers(combinedUsers as UserData[]);
     } catch (error) {
       console.error('Failed to load users:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load users",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
+
+  const handleEditCoins = (user: UserData) => {
+    setSelectedUser(user);
+    setCoinsInput(user.coins.toString());
+    setEditCoinsOpen(true);
+  };
+
+  const handleManageRoles = (user: UserData) => {
+    setSelectedUser(user);
+    setSelectedRoles(user.user_roles?.map(r => r.role) || ['user']);
+    setManageRolesOpen(true);
+  };
+
+  const saveCoins = async () => {
+    if (!selectedUser) return;
+    
+    const newCoins = parseInt(coinsInput);
+    if (isNaN(newCoins) || newCoins < 0) {
+      toast({
+        title: "Invalid Input",
+        description: "Please enter a valid number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ coins: newCoins })
+        .eq('user_id', selectedUser.user_id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "User coins updated successfully",
+      });
+      
+      setEditCoinsOpen(false);
+      loadUsers();
+    } catch (error) {
+      console.error('Failed to update coins:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update coins",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const saveRoles = async () => {
+    if (!selectedUser) return;
+
+    try {
+      // Delete existing roles
+      await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', selectedUser.user_id);
+
+      // Insert new roles
+      if (selectedRoles.length > 0) {
+        const { error } = await supabase
+          .from('user_roles')
+          .insert(selectedRoles.map(role => ({
+            user_id: selectedUser.user_id,
+            role: role as 'user' | 'moderator' | 'admin' | 'superadmin'
+          })));
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Success",
+        description: "User roles updated successfully",
+      });
+      
+      setManageRolesOpen(false);
+      loadUsers();
+    } catch (error) {
+      console.error('Failed to update roles:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update roles",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleRole = (role: string) => {
+    setSelectedRoles(prev => 
+      prev.includes(role) 
+        ? prev.filter(r => r !== role)
+        : [...prev, role]
+    );
+  };
+
+  const filteredUsers = users.filter(user => 
+    user.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.blockchain_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.user_roles?.some(r => r.role.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   if (loading) {
     return <div className="text-sm opacity-75">Loading users...</div>;
   }
 
   return (
-    <ScrollArea className="h-[500px] w-full">
-      <div className="space-y-2">
-        {users.map((user) => (
-          <Card key={user.user_id} className="p-3">
-            <div className="text-xs space-y-1">
-              <div className="font-mono text-[10px] opacity-50">{user.user_id}</div>
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">Coins:</span>
-                <span>{user.coins}</span>
-              </div>
-              {user.blockchain_address && (
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">Wallet:</span>
-                  <span className="font-mono text-[10px]">{user.blockchain_address.slice(0, 8)}...</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">Roles:</span>
-                <span className="text-brand-1">
-                  {user.user_roles?.map((r: any) => r.role).join(', ') || 'user'}
-                </span>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Input
+          placeholder="Search by user ID, wallet, or role..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="max-w-sm"
+        />
+        <Button variant="outline" size="sm" onClick={loadUsers}>
+          Refresh
+        </Button>
+      </div>
+
+      <ScrollArea className="h-[500px] w-full">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User ID</TableHead>
+              <TableHead>Coins</TableHead>
+              <TableHead>Roles</TableHead>
+              <TableHead>Inventory</TableHead>
+              <TableHead>Wallet</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredUsers.map((user) => {
+              const totalItems = user.user_inventory?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+              const roles = user.user_roles?.map(r => r.role).join(', ') || 'user';
+              
+              return (
+                <TableRow key={user.user_id}>
+                  <TableCell className="font-mono text-xs max-w-[120px] truncate">
+                    {user.user_id.slice(0, 8)}...
+                  </TableCell>
+                  <TableCell>{user.coins}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="text-xs">
+                      {roles}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{totalItems} items</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {user.blockchain_address ? `${user.blockchain_address.slice(0, 6)}...` : '-'}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {new Date(user.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleEditCoins(user)}
+                      >
+                        Edit Coins
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleManageRoles(user)}
+                      >
+                        Roles
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </ScrollArea>
+
+      {/* Edit Coins Dialog */}
+      <Dialog open={editCoinsOpen} onOpenChange={setEditCoinsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User Coins</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>User ID</Label>
+              <div className="font-mono text-xs opacity-50 mt-1">
+                {selectedUser?.user_id}
               </div>
             </div>
-          </Card>
-        ))}
-      </div>
-    </ScrollArea>
+            <div>
+              <Label htmlFor="coins">Coins</Label>
+              <Input
+                id="coins"
+                type="number"
+                value={coinsInput}
+                onChange={(e) => setCoinsInput(e.target.value)}
+                min="0"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditCoinsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveCoins}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Roles Dialog */}
+      <Dialog open={manageRolesOpen} onOpenChange={setManageRolesOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage User Roles</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>User ID</Label>
+              <div className="font-mono text-xs opacity-50 mt-1">
+                {selectedUser?.user_id}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Roles</Label>
+              <div className="space-y-2">
+                {['user', 'moderator', 'admin', 'superadmin'].map(role => (
+                  <div key={role} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={role}
+                      checked={selectedRoles.includes(role)}
+                      onCheckedChange={() => toggleRole(role)}
+                    />
+                    <Label htmlFor={role} className="capitalize cursor-pointer">
+                      {role}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageRolesOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveRoles}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
