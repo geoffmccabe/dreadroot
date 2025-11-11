@@ -1,1 +1,4 @@
 project_id = "ditecxjpkgbqkeckebzb"
+
+[functions.get-all-users]
+verify_jwt = true
