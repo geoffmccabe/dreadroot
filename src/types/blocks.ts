@@ -11,7 +11,7 @@ export interface PlacedBlock {
 }
 
 export interface BlockType {
-  id: string;
+  id: number;
   key: string;
   name: string;
   description: string;

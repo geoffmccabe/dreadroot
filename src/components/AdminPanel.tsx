@@ -1288,12 +1288,12 @@ function UsersList({}: UsersListProps) {
 // AdminPanel uses database field names directly (texture_url, glow_factor)
 // This differs from BlockType which uses nested structure (texture.diffuse, properties.glowFactor)
 interface AdminBlock {
-  id: string; // UUID from items table
+  id: number;
   key: string;
   name: string;
   description: string;
   cost: number;
-  item_category: string; // items table uses item_category, not category
+  category: string;
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'divine' | 'mystic' | 'rainbow' | 'apocalyptic' | 'infinite';
   class: 'basic' | 'magic' | 'mystery' | 'iconic';
   tier: number;
@@ -1326,7 +1326,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
     rarity: 'common' as AdminBlock['rarity'],
     texture: null as File | null
   });
-  const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
+  const [uploadingBlockId, setUploadingBlockId] = useState<number | null>(null);
   
   // Block Rain settings
   const [blockRainSettings, setBlockRainSettings] = useState({
@@ -1385,7 +1385,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
   const loadBlocks = async () => {
     try {
       const { data, error } = await supabase
-        .from('items')
+        .from('blocks')
         .select('*')
         .order('cost', { ascending: true })
         .order('name', { ascending: true });
@@ -1414,7 +1414,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
     }
   };
 
-  const handleTextureUpload = async (blockId: string, file: File) => {
+  const handleTextureUpload = async (blockId: number, file: File) => {
     if (!isSuperAdmin) {
       toast({
         title: "Access Denied",
@@ -1443,9 +1443,9 @@ function BlocksList({ userRoles }: BlocksListProps) {
         .from('block-textures')
         .getPublicUrl(filePath);
 
-      // Update item record
+      // Update block record
       const { error: updateError } = await supabase
-        .from('items')
+        .from('blocks')
         .update({ texture_url: urlData.publicUrl })
         .eq('id', blockId);
 
@@ -1521,15 +1521,15 @@ function BlocksList({ userRoles }: BlocksListProps) {
         textureUrl = urlData.publicUrl;
       }
 
-      // Insert into items table (UUID generated automatically)
+      // Insert into blocks table
       const { error, data } = await supabase
-        .from('items')
+        .from('blocks')
         .insert([{
           key: newBlockData.key,
           name: newBlockData.name,
           description: newBlockData.description,
           cost: newBlockData.cost,
-          item_category: 'block', // items table uses item_category
+          category: 'building',
           rarity: newBlockData.rarity,
           class: activeClass, // Automatically assign to the active class tab
           tier: newBlockData.tier,
@@ -1574,13 +1574,13 @@ function BlocksList({ userRoles }: BlocksListProps) {
 
     try {
       const { error } = await supabase
-        .from('items')
+        .from('blocks')
         .update({
           key: editingBlock.key,
           name: editingBlock.name,
           description: editingBlock.description,
           cost: editingBlock.cost,
-          item_category: editingBlock.item_category,
+          category: editingBlock.category,
           rarity: editingBlock.rarity,
           class: editingBlock.class,
           tier: editingBlock.tier,
@@ -1818,7 +1818,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   <div className="opacity-75 line-clamp-2">{block.description || 'No description'}</div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="px-2 py-0.5 rounded bg-secondary text-secondary-foreground text-[10px]">
-                      {block.item_category}
+                      {block.category}
                     </span>
                     <span className="px-2 py-0.5 rounded bg-accent text-accent-foreground text-[10px]">
                       {block.rarity}
@@ -2019,7 +2019,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                       await loadBlocks();
                       // Update the editingBlock state with the new texture URL
                       const { data: updatedBlock } = await supabase
-                        .from('items')
+                        .from('blocks')
                         .select('*')
                         .eq('id', editingBlock.id)
                         .single();
@@ -2109,13 +2109,11 @@ function BlocksList({ userRoles }: BlocksListProps) {
                 <Label htmlFor="edit-block-category">Category</Label>
                 <select
                   id="edit-block-category"
-                  value={editingBlock.item_category}
-                  onChange={(e) => setEditingBlock({ ...editingBlock, item_category: e.target.value })}
+                  value={editingBlock.category}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, category: e.target.value })}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mb-2"
                 >
-                  <option value="block">Block</option>
-                  <option value="weapon">Weapon</option>
-                  <option value="armor">Armor</option>
+                  <option value="building">Building</option>
                   <option value="decoration">Decoration</option>
                   <option value="special">Special</option>
                 </select>
@@ -2126,7 +2124,7 @@ function BlocksList({ userRoles }: BlocksListProps) {
                   onClick={() => {
                     const newCategory = prompt("Enter new category name:");
                     if (newCategory && newCategory.trim()) {
-                      setEditingBlock({ ...editingBlock, item_category: newCategory.trim().toLowerCase() });
+                      setEditingBlock({ ...editingBlock, category: newCategory.trim().toLowerCase() });
                     }
                   }}
                 >
