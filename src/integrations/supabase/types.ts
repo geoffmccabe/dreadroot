@@ -133,6 +133,57 @@ export type Database = {
         }
         Relationships: []
       }
+      items: {
+        Row: {
+          class: string
+          cost: number
+          created_at: string
+          description: string | null
+          glow_factor: number | null
+          id: string
+          item_category: string
+          key: string
+          name: string
+          properties: Json | null
+          rarity: string
+          texture_url: string | null
+          tier: number
+          updated_at: string
+        }
+        Insert: {
+          class?: string
+          cost?: number
+          created_at?: string
+          description?: string | null
+          glow_factor?: number | null
+          id?: string
+          item_category?: string
+          key: string
+          name: string
+          properties?: Json | null
+          rarity?: string
+          texture_url?: string | null
+          tier?: number
+          updated_at?: string
+        }
+        Update: {
+          class?: string
+          cost?: number
+          created_at?: string
+          description?: string | null
+          glow_factor?: number | null
+          id?: string
+          item_category?: string
+          key?: string
+          name?: string
+          properties?: Json | null
+          rarity?: string
+          texture_url?: string | null
+          tier?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       media_grid_items: {
         Row: {
           created_at: string
@@ -377,10 +428,43 @@ export type Database = {
         }
         Relationships: []
       }
+      user_equipped_items: {
+        Row: {
+          equipped_at: string
+          id: string
+          item_id: string
+          slot_type: string
+          user_id: string
+        }
+        Insert: {
+          equipped_at?: string
+          id?: string
+          item_id: string
+          slot_type: string
+          user_id: string
+        }
+        Update: {
+          equipped_at?: string
+          id?: string
+          item_id?: string
+          slot_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_equipped_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_inventory: {
         Row: {
           created_at: string
           id: string
+          item_id: string | null
           item_type: string
           quantity: number
           updated_at: string
@@ -389,6 +473,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          item_id?: string | null
           item_type?: string
           quantity?: number
           updated_at?: string
@@ -397,12 +482,21 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          item_id?: string | null
           item_type?: string
           quantity?: number
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_inventory_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_profiles: {
         Row: {
