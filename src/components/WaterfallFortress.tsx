@@ -558,22 +558,20 @@ function FirstPersonControls({
   // Reusable Euler object to prevent GC and avoid precision errors from object creation
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
   
-  // Store handleMouseMove in a ref to prevent event listener re-attachment
-  const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
-  
   // Flag to indicate camera rotation needs update
   const needsCameraUpdate = useRef(false);
   
-  // Track pointer lock entry time to filter initial erroneous events
-  const pointerLockEntryTime = useRef(0);
+  // Store ALL handlers in refs to prevent event listener re-attachment
+  const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
+  const handleWheelRef = useRef<(event: WheelEvent) => void>();
+  const handleClickRef = useRef<() => void>();
+  const handleRightClickRef = useRef<(event: MouseEvent) => void>();
+  const handleMouseDownRef = useRef<(event: MouseEvent) => void>();
+  const handleMouseUpRef = useRef<(event: MouseEvent) => void>();
+  const handlePointerLockChangeRef = useRef<() => void>();
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
-    
-    // Filter out erroneous events in first 100ms after pointer lock
-    // Browsers fire phantom events right after entering pointer lock
-    const timeSinceEntry = Date.now() - pointerLockEntryTime.current;
-    if (timeSinceEntry < 100) return;
     
     const sensitivity = 0.002;
     const deltaYaw = -event.movementX * sensitivity;
@@ -591,13 +589,8 @@ function FirstPersonControls({
     needsCameraUpdate.current = true;
   }, []);
   
-  // Update the ref whenever handleMouseMove changes
+  // Update refs whenever handlers change
   handleMouseMoveRef.current = handleMouseMove;
-  
-  // Create a stable event listener that calls through the ref
-  const stableMouseMoveListener = useCallback((event: MouseEvent) => {
-    handleMouseMoveRef.current?.(event);
-  }, []);
 
   const handleWheel = useCallback((event: WheelEvent) => {
     if (!isLocked.current || !blockPlacementMode) return;
@@ -606,23 +599,14 @@ function FirstPersonControls({
     const direction = event.deltaY > 0 ? 'next' : 'prev';
     onCycleBlock(direction);
   }, [blockPlacementMode, onCycleBlock]);
+  
+  handleWheelRef.current = handleWheel;
 
   const handleClick = useCallback(() => {
     console.log('Click detected, isLocked:', isLocked.current, 'blockPlacementMode:', blockPlacementMode);
     
     if (!isLocked.current) {
-      // Request pointer lock with unadjustedMovement to disable mouse acceleration
-      // and reduce phantom movement events (known browser bug fix)
-      const promise = gl.domElement.requestPointerLock({ unadjustedMovement: true } as any);
-      
-      // Fallback for browsers that don't support unadjustedMovement
-      if (promise?.catch) {
-        promise.catch((error: Error) => {
-          if (error.name === "NotSupportedError") {
-            gl.domElement.requestPointerLock();
-          }
-        });
-      }
+      gl.domElement.requestPointerLock();
       return;
     }
     
@@ -681,12 +665,16 @@ function FirstPersonControls({
       playAudio(audioRefs.gunshot);
     }
   }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove]);
+  
+  handleClickRef.current = handleClick;
 
   // Right-click handler for selecting blocks to remove
   const handleRightClick = useCallback((event: MouseEvent) => {
     if (!isLocked.current || !blockPlacementMode || !showOwnershipOutline) return;
     event.preventDefault();
   }, [blockPlacementMode, showOwnershipOutline]);
+  
+  handleRightClickRef.current = handleRightClick;
 
   // Mouse down/up handlers for right-click hold
   const handleMouseDown = useCallback((event: MouseEvent) => {
@@ -696,6 +684,8 @@ function FirstPersonControls({
       keys.current.rightMouse = true;
     }
   }, []);
+  
+  handleMouseDownRef.current = handleMouseDown;
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
     if (event.button === 2) { // Right mouse button
@@ -704,40 +694,68 @@ function FirstPersonControls({
       setHoveredBlockId(null);
     }
   }, []);
+  
+  handleMouseUpRef.current = handleMouseUp;
 
   const handlePointerLockChange = useCallback(() => {
-    const nowLocked = document.pointerLockElement === gl.domElement;
-    isLocked.current = nowLocked;
-    
-    // Record entry time to filter initial phantom events
-    if (nowLocked) {
-      pointerLockEntryTime.current = Date.now();
-    }
+    isLocked.current = document.pointerLockElement === gl.domElement;
   }, [gl]);
+  
+  handlePointerLockChangeRef.current = handlePointerLockChange;
 
+  // Stable wrapper functions that call through refs (never recreated)
+  const stableMouseMoveListener = useCallback((event: MouseEvent) => {
+    handleMouseMoveRef.current?.(event);
+  }, []);
+  
+  const stableWheelListener = useCallback((event: WheelEvent) => {
+    handleWheelRef.current?.(event);
+  }, []);
+  
+  const stableClickListener = useCallback(() => {
+    handleClickRef.current?.();
+  }, []);
+  
+  const stableRightClickListener = useCallback((event: MouseEvent) => {
+    handleRightClickRef.current?.(event);
+  }, []);
+  
+  const stableMouseDownListener = useCallback((event: MouseEvent) => {
+    handleMouseDownRef.current?.(event);
+  }, []);
+  
+  const stableMouseUpListener = useCallback((event: MouseEvent) => {
+    handleMouseUpRef.current?.(event);
+  }, []);
+  
+  const stablePointerLockChangeListener = useCallback(() => {
+    handlePointerLockChangeRef.current?.();
+  }, []);
+
+  // Attach event listeners ONCE - they never detach/reattach
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
     document.addEventListener('mousemove', stableMouseMoveListener);
-    document.addEventListener('wheel', handleWheel);
-    document.addEventListener('pointerlockchange', handlePointerLockChange);
-    gl.domElement.addEventListener('click', handleClick);
-    gl.domElement.addEventListener('contextmenu', handleRightClick);
-    gl.domElement.addEventListener('mousedown', handleMouseDown);
-    gl.domElement.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('wheel', stableWheelListener);
+    document.addEventListener('pointerlockchange', stablePointerLockChangeListener);
+    gl.domElement.addEventListener('click', stableClickListener);
+    gl.domElement.addEventListener('contextmenu', stableRightClickListener);
+    gl.domElement.addEventListener('mousedown', stableMouseDownListener);
+    gl.domElement.addEventListener('mouseup', stableMouseUpListener);
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
       document.removeEventListener('mousemove', stableMouseMoveListener);
-      document.removeEventListener('wheel', handleWheel);
-      document.removeEventListener('pointerlockchange', handlePointerLockChange);
-      gl.domElement.removeEventListener('click', handleClick);
-      gl.domElement.removeEventListener('contextmenu', handleRightClick);
-      gl.domElement.removeEventListener('mousedown', handleMouseDown);
-      gl.domElement.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('wheel', stableWheelListener);
+      document.removeEventListener('pointerlockchange', stablePointerLockChangeListener);
+      gl.domElement.removeEventListener('click', stableClickListener);
+      gl.domElement.removeEventListener('contextmenu', stableRightClickListener);
+      gl.domElement.removeEventListener('mousedown', stableMouseDownListener);
+      gl.domElement.removeEventListener('mouseup', stableMouseUpListener);
     };
-  }, [handleKeyDown, handleKeyUp, stableMouseMoveListener, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
+  }, [handleKeyDown, handleKeyUp, stableMouseMoveListener, stableWheelListener, stablePointerLockChangeListener, stableClickListener, stableRightClickListener, stableMouseDownListener, stableMouseUpListener, gl.domElement]);
 
   // Cache blocks by type and user for fast lookup
   useEffect(() => {
