@@ -2063,7 +2063,7 @@ function Scene({
     allBlocks.filter(block => block.class === 'basic'),
     [allBlocks]
   );
-  const { wispState, collectWisp } = useWispBlock(basicBlocks, blocks);
+  const { wispState, wispPositionRef, collectWisp } = useWispBlock(basicBlocks, blocks);
   const wispMeshRef = useRef<THREE.Mesh | null>(null);
   
   // Particle system for wisp collection
@@ -2349,8 +2349,8 @@ function Scene({
         // Add block to inventory
         collectWispBlock(collectedBlock.key);
         
-        // Create particle explosion
-        const explosionPos = wispState.position.clone();
+        // Create particle explosion (read from ref)
+        const explosionPos = wispPositionRef.current.clone();
         const newParticles = [];
         for (let i = 0; i < 20; i++) {
           const angle = (Math.PI * 2 * i) / 20;
@@ -2376,7 +2376,7 @@ function Scene({
       }
     }
     return false;
-  }, [wispState, collectWisp, camera, collectWispBlock, toast]);
+  }, [wispState, wispPositionRef, collectWisp, camera, collectWispBlock, toast]);
 
   // Performance-optimized bullet creation with object pooling
   const handleShoot = useCallback((origin: THREE.Vector3, direction: THREE.Vector3) => {
@@ -2545,7 +2545,7 @@ function Scene({
       {/* Will-o-wisp block */}
       {wispState && (
         <WispBlock 
-          position={wispState.position}
+          positionRef={wispPositionRef}
           blockType={wispState.blockType}
           onMeshReady={(mesh) => { wispMeshRef.current = mesh; }}
         />

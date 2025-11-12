@@ -3,7 +3,6 @@ import { PlacedBlock, BlockType } from '@/types/blocks';
 import * as THREE from 'three';
 
 interface WispState {
-  position: THREE.Vector3;
   blockType: BlockType;
   spawnTime: number;
   lifetime: number; // 5-30 seconds
@@ -24,8 +23,10 @@ export const useWispBlock = (
   placedBlocks: PlacedBlock[]
 ) => {
   const [wispState, setWispState] = useState<WispState | null>(null);
+  const wispPositionRef = useRef<THREE.Vector3>(new THREE.Vector3());
   const moveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lifetimeCheckRef = useRef<NodeJS.Timeout | null>(null);
+  const reusableVector = useRef(new THREE.Vector3());
 
   // Generate random position within bounds, avoiding existing blocks
   const generateRandomPosition = useCallback((blocks: PlacedBlock[]): THREE.Vector3 => {
@@ -67,8 +68,10 @@ export const useWispBlock = (
     // Random lifetime between 5-30 seconds
     const lifetime = 5000 + Math.random() * 25000;
     
+    // Set position in ref (no re-render)
+    wispPositionRef.current = generateRandomPosition(placedBlocks);
+    
     const newWisp: WispState = {
-      position: generateRandomPosition(placedBlocks),
       blockType: randomBlock,
       spawnTime: Date.now(),
       lifetime,
@@ -88,54 +91,64 @@ export const useWispBlock = (
 
   // Move wisp 2-4 blocks in random direction (jumps around quickly)
   const moveWisp = useCallback(() => {
-    setWispState(prev => {
-      if (!prev) return prev;
+    if (!wispState) return;
+    
+    const currentPos = wispPositionRef.current;
+    const maxAttempts = 5;
+    
+    // Pre-filter blocks within 10 meters for collision checks
+    const nearbyBlocks = placedBlocks.filter(block => {
+      const dx = block.position_x - currentPos.x;
+      const dz = block.position_z - currentPos.z;
+      return (dx * dx + dz * dz) < 100; // 10m radius squared
+    });
+    
+    for (let i = 0; i < maxAttempts; i++) {
+      // Random direction (0-360 degrees)
+      const angle = Math.random() * Math.PI * 2;
       
-      const maxAttempts = 5;
+      // Random distance (2-4 blocks/meters)
+      const distance = 2 + Math.random() * 2;
       
-      for (let i = 0; i < maxAttempts; i++) {
-        // Random direction (0-360 degrees)
-        const angle = Math.random() * Math.PI * 2;
+      // Calculate movement vector
+      const dx = Math.cos(angle) * distance;
+      const dz = Math.sin(angle) * distance;
+      
+      // Random Y movement (-1 to +1 for more vertical variation)
+      const dy = (Math.random() - 0.5) * 2;
+      
+      // Calculate destination position (reuse vector to avoid allocation)
+      const newX = currentPos.x + dx;
+      const newY = currentPos.y + dy;
+      const newZ = currentPos.z + dz;
+      
+      // Clamp to map bounds
+      const clampedX = Math.max(MAP_BOUNDS.minX, Math.min(MAP_BOUNDS.maxX, newX));
+      const clampedY = Math.max(MAP_BOUNDS.minY, Math.min(MAP_BOUNDS.maxY, newY));
+      const clampedZ = Math.max(MAP_BOUNDS.minZ, Math.min(MAP_BOUNDS.maxZ, newZ));
+      
+      // Check collision with nearby blocks only (reuse vector)
+      let collides = false;
+      for (const block of nearbyBlocks) {
+        reusableVector.current.set(block.position_x, block.position_y, block.position_z);
+        const dx = clampedX - reusableVector.current.x;
+        const dy = clampedY - reusableVector.current.y;
+        const dz = clampedZ - reusableVector.current.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
         
-        // Random distance (2-4 blocks/meters)
-        const distance = 2 + Math.random() * 2;
-        
-        // Calculate movement vector
-        const dx = Math.cos(angle) * distance;
-        const dz = Math.sin(angle) * distance;
-        
-        // Random Y movement (-1 to +1 for more vertical variation)
-        const dy = (Math.random() - 0.5) * 2;
-        
-        // Calculate destination position
-        const newPos = new THREE.Vector3(
-          prev.position.x + dx,
-          prev.position.y + dy,
-          prev.position.z + dz
-        );
-        
-        // Clamp to map bounds
-        newPos.x = Math.max(MAP_BOUNDS.minX, Math.min(MAP_BOUNDS.maxX, newPos.x));
-        newPos.y = Math.max(MAP_BOUNDS.minY, Math.min(MAP_BOUNDS.maxY, newPos.y));
-        newPos.z = Math.max(MAP_BOUNDS.minZ, Math.min(MAP_BOUNDS.maxZ, newPos.z));
-        
-        // Check collision with placed blocks (only check nearby)
-        const collides = placedBlocks.some(block => {
-          const blockPos = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
-          // Only check blocks within 5m (increased range for larger jumps)
-          if (newPos.distanceTo(blockPos) > 5) return false;
-          return newPos.distanceTo(blockPos) < 1.2; // Collision threshold
-        });
-        
-        if (!collides) {
-          return { ...prev, position: newPos };
+        if (distSq < 1.44) { // 1.2m threshold squared
+          collides = true;
+          break;
         }
       }
       
-      // If all attempts fail, don't move this cycle
-      return prev;
-    });
-  }, [placedBlocks]);
+      if (!collides) {
+        // Update position ref directly (no React re-render)
+        wispPositionRef.current.set(clampedX, clampedY, clampedZ);
+        return;
+      }
+    }
+  }, [placedBlocks, wispState]);
 
   // Initialize wisp on mount
   useEffect(() => {
@@ -183,6 +196,7 @@ export const useWispBlock = (
 
   return {
     wispState,
+    wispPositionRef,
     collectWisp
   };
 };

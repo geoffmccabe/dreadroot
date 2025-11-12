@@ -4,20 +4,19 @@ import * as THREE from 'three';
 import { BlockType } from '@/types/blocks';
 
 interface WispBlockProps {
-  position: THREE.Vector3;
+  positionRef: React.MutableRefObject<THREE.Vector3>;
   blockType: BlockType;
   onMeshReady?: (mesh: THREE.Mesh | null) => void;
 }
 
 export const WispBlock: React.FC<WispBlockProps> = ({ 
-  position, 
+  positionRef, 
   blockType,
   onMeshReady 
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowIntensityRef = useRef(0.5);
   const glowDirectionRef = useRef(1);
-  const targetPositionRef = useRef(position.clone());
   
   // Load texture if available
   const texture = useMemo(() => {
@@ -48,11 +47,6 @@ export const WispBlock: React.FC<WispBlockProps> = ({
     });
   }, [texture, blockType.properties?.color]);
 
-  // Update target position when prop changes
-  useEffect(() => {
-    targetPositionRef.current = position.clone();
-  }, [position.x, position.y, position.z]);
-
   // Notify parent when mesh is ready
   useEffect(() => {
     if (meshRef.current && onMeshReady) {
@@ -69,8 +63,11 @@ export const WispBlock: React.FC<WispBlockProps> = ({
   useFrame((state, delta) => {
     if (!meshRef.current) return;
     
+    // Read target position from ref (no re-renders)
+    const targetPos = positionRef.current;
+    
     // Smooth position interpolation (lerp to target position)
-    meshRef.current.position.lerp(targetPositionRef.current, 0.3);
+    meshRef.current.position.lerp(targetPos, 0.3);
     
     // Pulsing glow effect
     glowIntensityRef.current += glowDirectionRef.current * delta * 2;
@@ -90,7 +87,7 @@ export const WispBlock: React.FC<WispBlockProps> = ({
     
     // Gentle floating/bobbing animation
     const bobOffset = Math.sin(state.clock.elapsedTime * 2) * 0.1;
-    meshRef.current.position.y = targetPositionRef.current.y + bobOffset;
+    meshRef.current.position.y = targetPos.y + bobOffset;
     
     // Gentle rotation
     meshRef.current.rotation.y += delta * 0.5;
@@ -99,7 +96,7 @@ export const WispBlock: React.FC<WispBlockProps> = ({
   return (
     <mesh 
       ref={meshRef} 
-      position={[position.x, position.y, position.z]}
+      position={[positionRef.current.x, positionRef.current.y, positionRef.current.z]}
       material={material}
     >
       <boxGeometry args={[1, 1, 1]} />
