@@ -557,9 +557,39 @@ function FirstPersonControls({
 
   // Reusable Euler object to prevent GC and avoid precision errors from object creation
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+  
+  // Debug: Track mouse events to find drift source
+  const mouseEventLog = useRef<Array<{time: number, movementX: number, movementY: number}>>([]);
+  const lastLogTime = useRef(0);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
+    
+    // DEBUG: Log ALL mouse events to find phantom movements
+    const now = Date.now();
+    mouseEventLog.current.push({
+      time: now,
+      movementX: event.movementX,
+      movementY: event.movementY
+    });
+    
+    // Log summary every 2 seconds
+    if (now - lastLogTime.current > 2000) {
+      const events = mouseEventLog.current;
+      const nonZeroEvents = events.filter(e => Math.abs(e.movementX) > 0.01 || Math.abs(e.movementY) > 0.01);
+      const leftDrift = events.filter(e => e.movementX < -0.01);
+      
+      console.log('[MOUSE DEBUG]', {
+        totalEvents: events.length,
+        nonZeroEvents: nonZeroEvents.length,
+        leftDriftEvents: leftDrift.length,
+        avgMovementX: events.reduce((sum, e) => sum + e.movementX, 0) / events.length,
+        samples: events.slice(-5) // Last 5 events
+      });
+      
+      mouseEventLog.current = [];
+      lastLogTime.current = now;
+    }
     
     const sensitivity = 0.002;
     const deltaYaw = -event.movementX * sensitivity;
