@@ -1071,8 +1071,17 @@ function FirstPersonControls({
             // Don't set onGround when hitting ceiling
           }
         } else {
-          camera.position.y = testPos.y;
-          onGround.current = false;
+          // No block collision detected - check ground level
+          if (testPos.y < playerHeight && velocity.current.y < 0) {
+            // Falling below ground level - land on ground
+            camera.position.y = playerHeight;
+            velocity.current.y = 0;
+            onGround.current = true;
+          } else {
+            // Move freely
+            camera.position.y = testPos.y;
+            onGround.current = false;
+          }
         }
       }
     }
