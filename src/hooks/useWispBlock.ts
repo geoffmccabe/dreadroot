@@ -86,7 +86,7 @@ export const useWispBlock = (
     }, lifetime);
   }, [basicBlocks, placedBlocks, generateRandomPosition]);
 
-  // Move wisp in random direction by 1 block width (1m)
+  // Move wisp 2-4 blocks in random direction (jumps around quickly)
   const moveWisp = useCallback(() => {
     setWispState(prev => {
       if (!prev) return prev;
@@ -94,15 +94,20 @@ export const useWispBlock = (
       const maxAttempts = 5;
       
       for (let i = 0; i < maxAttempts; i++) {
-        // Random direction in XZ plane
+        // Random direction (0-360 degrees)
         const angle = Math.random() * Math.PI * 2;
-        const dx = Math.cos(angle);
-        const dz = Math.sin(angle);
         
-        // Random Y movement (-0.5 to +0.5)
-        const dy = (Math.random() - 0.5);
+        // Random distance (2-4 blocks/meters)
+        const distance = 2 + Math.random() * 2;
         
-        // Calculate destination (1 meter in random direction)
+        // Calculate movement vector
+        const dx = Math.cos(angle) * distance;
+        const dz = Math.sin(angle) * distance;
+        
+        // Random Y movement (-1 to +1 for more vertical variation)
+        const dy = (Math.random() - 0.5) * 2;
+        
+        // Calculate destination position
         const newPos = new THREE.Vector3(
           prev.position.x + dx,
           prev.position.y + dy,
@@ -117,8 +122,8 @@ export const useWispBlock = (
         // Check collision with placed blocks (only check nearby)
         const collides = placedBlocks.some(block => {
           const blockPos = new THREE.Vector3(block.position_x, block.position_y, block.position_z);
-          // Only check blocks within 3m
-          if (newPos.distanceTo(blockPos) > 3) return false;
+          // Only check blocks within 5m (increased range for larger jumps)
+          if (newPos.distanceTo(blockPos) > 5) return false;
           return newPos.distanceTo(blockPos) < 1.2; // Collision threshold
         });
         
