@@ -1995,7 +1995,9 @@ function Scene({
   showOwnershipOutline,
   currentUserId,
   hoveredBlockId,
-  setHoveredBlockId
+  setHoveredBlockId,
+  collectWispBlock,
+  toast
 }: {
   settings: { flowSpeed: number; msBetweeenDrops: number; coinRate: number; coinSize: number; colorPalette: any };
   onCoinHit: (position: THREE.Vector3) => void;
@@ -2023,6 +2025,8 @@ function Scene({
   currentUserId?: string;
   hoveredBlockId: string | null;
   setHoveredBlockId: (id: string | null) => void;
+  collectWispBlock: (blockKey: string) => Promise<boolean>;
+  toast: any;
 }) {
   // Create shared cycleStateRef for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -2342,6 +2346,10 @@ function Scene({
     if (intersects.length > 0 && intersects[0].distance < 100) {
       const collectedBlock = collectWisp();
       if (collectedBlock) {
+        // Add block to inventory
+        collectWispBlock(collectedBlock.key);
+        
+        // Create particle explosion
         const explosionPos = wispState.position.clone();
         const newParticles = [];
         for (let i = 0; i < 20; i++) {
@@ -2357,11 +2365,18 @@ function Scene({
         setWispParticles(newParticles);
         playAudio(audioRefs.current.wispBoom);
         playAudio(audioRefs.current.wispCheer);
+        
+        // Show success toast
+        toast({
+          title: "Wisp Collected!",
+          description: `+1 ${collectedBlock.name} added to inventory`,
+        });
+        
         return true;
       }
     }
     return false;
-  }, [wispState, collectWisp, camera]);
+  }, [wispState, collectWisp, camera, collectWispBlock, toast]);
 
   // Performance-optimized bullet creation with object pooling
   const handleShoot = useCallback((origin: THREE.Vector3, direction: THREE.Vector3) => {
@@ -2526,6 +2541,23 @@ function Scene({
         coinImageUrl={coinImageUrl}
       />
       <Bullets bullets={bullets} />
+      
+      {/* Will-o-wisp block */}
+      {wispState && (
+        <WispBlock 
+          position={wispState.position}
+          blockType={wispState.blockType}
+          onMeshReady={(mesh) => { wispMeshRef.current = mesh; }}
+        />
+      )}
+      
+      {/* Wisp collection particles */}
+      {wispParticles.map((particle, i) => (
+        <mesh key={i} position={particle.position.toArray()}>
+          <sphereGeometry args={[0.1, 8, 8]} />
+          <meshBasicMaterial color={particle.color} transparent opacity={particle.life} />
+        </mesh>
+      ))}
       
       {/* FPS Counter */}
       <FPSCounter />
@@ -2733,7 +2765,7 @@ export default function WaterfallFortress() {
   const [isMoveMode, setIsMoveMode] = useState(false);
   
   // User data and block system hooks
-  const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData } = useUserData();
+  const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock } = useUserData();
   const { blocks, placeBlock, removeBlock, setBlockMode } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
@@ -3320,6 +3352,8 @@ export default function WaterfallFortress() {
         currentUserId={user?.id}
         hoveredBlockId={hoveredBlockId}
         setHoveredBlockId={setHoveredBlockId}
+        collectWispBlock={collectWispBlock}
+        toast={toast}
       />
       
       {/* Block Preview */}
