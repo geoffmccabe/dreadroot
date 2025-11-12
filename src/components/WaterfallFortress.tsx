@@ -31,6 +31,9 @@ import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
+import { useWispBlock } from '@/hooks/useWispBlock';
+import { WispBlock } from '@/components/WispBlock';
+import { useBlocksData } from '@/hooks/useBlocksData';
 
 // Camera-tracked block renderer with chunk culling
 function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId, hoveredBlockId, onMeshReady }: { 
@@ -2050,6 +2053,23 @@ function Scene({
   const meshToBlockTypeCache = useRef<Map<THREE.InstancedMesh, string>>(new Map());
   const blocksByTypeAndUser = useRef<Map<string, PlacedBlock[]>>(new Map());
   
+  // Wisp block system
+  const { blocks: allBlocks } = useBlocksData();
+  const basicBlocks = useMemo(() => 
+    allBlocks.filter(block => block.class === 'basic'),
+    [allBlocks]
+  );
+  const { wispState, collectWisp } = useWispBlock(basicBlocks, blocks);
+  const wispMeshRef = useRef<THREE.Mesh | null>(null);
+  
+  // Particle system for wisp collection
+  const [wispParticles, setWispParticles] = useState<Array<{
+    position: THREE.Vector3;
+    velocity: THREE.Vector3;
+    life: number;
+    color: string;
+  }>>([]);
+  
   // Callback to collect mesh refs from PlacedBlocks
   const handleMeshReady = useCallback((blockType: string, mesh: THREE.InstancedMesh | null) => {
     if (mesh) {
@@ -2307,8 +2327,42 @@ function Scene({
     }
   }, []);
 
+  // Check for wisp hits
+  const checkWispHit = useCallback(() => {
+    if (!wispMeshRef.current || !wispState) return false;
+    
+    const raycaster = new THREE.Raycaster();
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(camera.quaternion);
+    raycaster.set(camera.position, direction);
+    
+    const intersects = raycaster.intersectObject(wispMeshRef.current);
+    if (intersects.length > 0 && intersects[0].distance < 100) {
+      const collectedBlock = collectWisp();
+      if (collectedBlock) {
+        const explosionPos = wispState.position.clone();
+        const newParticles = [];
+        for (let i = 0; i < 20; i++) {
+          const angle = (Math.PI * 2 * i) / 20;
+          const speed = 3 + Math.random() * 2;
+          newParticles.push({
+            position: explosionPos.clone(),
+            velocity: new THREE.Vector3(Math.cos(angle) * speed, Math.random() * 2 + 1, Math.sin(angle) * speed),
+            life: 1.0,
+            color: collectedBlock.properties?.color || '#ffffff'
+          });
+        }
+        setWispParticles(newParticles);
+        playThrottledAudio(audioRefs.current.coinHit);
+        return true;
+      }
+    }
+    return false;
+  }, [wispState, collectWisp, camera]);
+
   // Performance-optimized bullet creation with object pooling
   const handleShoot = useCallback((origin: THREE.Vector3, direction: THREE.Vector3) => {
+    if (checkWispHit()) return;
     setBullets(prev => {
       // Limit bullets to prevent memory issues
       const newBullets = prev.slice(-MAX_BULLETS + 1);
@@ -2381,6 +2435,26 @@ function Scene({
       }
       
       return activeBullets;
+    });
+    
+    // Update wisp particles
+    setWispParticles(prev => {
+      if (prev.length === 0) return prev;
+      
+      return prev
+        .map(particle => ({
+          ...particle,
+          position: particle.position.clone().add(
+            particle.velocity.clone().multiplyScalar(delta)
+          ),
+          velocity: new THREE.Vector3(
+            particle.velocity.x,
+            particle.velocity.y - 9.8 * delta, // Gravity
+            particle.velocity.z
+          ),
+          life: particle.life - delta
+        }))
+        .filter(particle => particle.life > 0 && particle.position.y > 0);
     });
   });
 

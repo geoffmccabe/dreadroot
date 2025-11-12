@@ -437,6 +437,102 @@ export const useUserData = () => {
     await loadUserData();
   };
 
+  // Collect wisp block (free addition to inventory)
+  const collectWispBlock = async (blockKey: string) => {
+    if (!user?.id) {
+      toast({
+        title: "Authentication required",
+        description: "Please wait for authentication to complete",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    try {
+      // Get item_id from items table
+      const { data: itemData, error: itemError } = await supabase
+        .from('items')
+        .select('id')
+        .eq('key', blockKey)
+        .maybeSingle();
+
+      if (itemError) throw itemError;
+      if (!itemData) {
+        toast({
+          title: "Item not found",
+          description: "This item is not available",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      // Add to inventory
+      const existingItem = findInventoryItem(inventory, blockKey);
+      
+      if (existingItem) {
+        // Update existing inventory item
+        const newQuantity = existingItem.quantity + 1;
+        const { error: updateError } = await supabase
+          .from('user_inventory')
+          .update({ quantity: newQuantity })
+          .eq('id', existingItem.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new inventory item
+        const { error: insertError } = await supabase
+          .from('user_inventory')
+          .insert([{
+            user_id: user.id,
+            item_type: blockKey,
+            item_id: itemData.id,
+            quantity: 1
+          }]);
+
+        if (insertError) throw insertError;
+      }
+
+      // Update local state immediately for better UX
+      setInventory(prev => {
+        if (existingItem) {
+          return prev.map(i => 
+            i.id === existingItem.id 
+              ? { ...i, quantity: i.quantity + 1 }
+              : i
+          );
+        } else {
+          return [...prev, {
+            id: crypto.randomUUID(),
+            user_id: user.id,
+            item_type: blockKey,
+            item_id: itemData.id,
+            quantity: 1,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }];
+        }
+      });
+      
+      // Refresh data to ensure consistency
+      await loadUserData();
+      
+      toast({
+        title: "Wisp collected!",
+        description: `You caught a ${blockKey} wisp! +1 block added to inventory`,
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error collecting wisp:', error);
+      toast({
+        title: "Collection failed",
+        description: "Failed to add wisp block to inventory",
+        variant: "destructive"
+      });
+      return false;
+    }
+  };
+
   return {
     profile,
     tokenBalance,
@@ -449,6 +545,7 @@ export const useUserData = () => {
     updateBlockchainAddress,
     updateVisualDistance,
     updateFogEnabled,
-    refreshData
+    refreshData,
+    collectWispBlock
   };
 };
