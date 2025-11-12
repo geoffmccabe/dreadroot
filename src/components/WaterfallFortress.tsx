@@ -1011,8 +1011,6 @@ function FirstPersonControls({
 
     // Store previous position and track collisions
     const prevPosition = camera.position.clone();
-    // Store original position BEFORE any collision resolution for Y-axis testing
-    const originalPos = camera.position.clone();
     let xBlocked = false;
     let zBlocked = false;
 
@@ -1032,11 +1030,10 @@ function FirstPersonControls({
       }
     }
 
-    // Y-axis movement and collision (test from ORIGINAL position to prevent X/Z interference)
+    // Y-axis movement and collision (test from CURRENT position after X/Z resolution)
     if (deltaMovement.y !== 0) {
-      const testPos = originalPos.clone();
+      const testPos = camera.position.clone();
       testPos.y += deltaMovement.y;
-      // Use original position so X/Z collision doesn't affect Y collision detection
       
       // Ground collision check
       if (testPos.y < playerHeight) {
