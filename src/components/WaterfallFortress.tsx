@@ -966,7 +966,7 @@ function FirstPersonControls({
     deltaMovement.y += velocity.current.y * delta;
 
     // Player dimensions
-    const playerRadius = 0.4;
+    const playerRadius = 0.3;
     const isCrawling = keys.current.ctrl;
     const standingHeight = 1.6;
     const crawlingHeight = 0.8;
@@ -987,7 +987,7 @@ function FirstPersonControls({
       for (const collider of colliders) {
         // For horizontal movement, skip blocks the player is standing on top of
         if (isHorizontal) {
-          const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.25) && (playerBox.min.y <= collider.max.y + 0.25);
+          const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.1) && (playerBox.min.y <= collider.max.y + 0.1);
           if (standingOnBlock) {
             // Debug occasionally
             if (Math.random() < 0.01) {
