@@ -949,8 +949,11 @@ function FirstPersonControls({
     // Gravity and jumping - variable jump height based on role
     velocity.current.y -= 9.8 * delta;
     
-    // Allow jump if on ground OR if stuck for >0.3 seconds (desperation jump)
-    const canJump = (onGround.current || stuckTimer.current > 0.3) && !keys.current.ctrl;
+    // OLD - TO BE DELETED: Allow jump if on ground OR if stuck for >0.3 seconds (desperation jump)
+    // const canJump = (onGround.current || stuckTimer.current > 0.3) && !keys.current.ctrl;
+    
+    // NEW: Simple ground-only jump check
+    const canJump = onGround.current && !keys.current.ctrl;
     
     if (keys.current.space && canJump) {
       // Calculate jump velocity based on desired height
@@ -961,7 +964,7 @@ function FirstPersonControls({
       }
       velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
       onGround.current = false;
-      stuckTimer.current = 0; // Reset stuck timer after successful jump
+      // OLD - TO BE DELETED: stuckTimer.current = 0; // Reset stuck timer after successful jump
     }
     deltaMovement.y += velocity.current.y * delta;
 
@@ -1035,12 +1038,15 @@ function FirstPersonControls({
       const testPos = camera.position.clone();
       testPos.y += deltaMovement.y;
       
-      // Ground collision check
-      if (testPos.y < playerHeight) {
-        camera.position.y = playerHeight;
-        velocity.current.y = 0;
-        onGround.current = true;
-      } else {
+      // OLD - TO BE DELETED: Premature ground collision check that causes teleportation
+      // if (testPos.y < playerHeight) {
+      //   camera.position.y = playerHeight;
+      //   velocity.current.y = 0;
+      //   onGround.current = true;
+      // } else {
+      
+      // NEW: Check block collision first, ground check will be added later
+      {
         const collision = checkAxisCollision(testPos, false);
         if (collision) {
           console.log('[Y-COLLISION]', {
@@ -1089,16 +1095,16 @@ function FirstPersonControls({
     // DISABLED step-up logic to prevent wall hooking
     // TODO: Implement proper step-up that doesn't hook onto edges
     
-    // Detect if player is stuck (all horizontal movement blocked)
-    const isStuckHorizontally = xBlocked && zBlocked && 
-      (keys.current.w || keys.current.s || keys.current.a || keys.current.d);
-    
-    // Track stuck time for desperation jump
-    if (isStuckHorizontally) {
-      stuckTimer.current += delta;
-    } else {
-      stuckTimer.current = 0;
-    }
+    // OLD - TO BE DELETED: Stuck detection for desperation jump
+    // const isStuckHorizontally = xBlocked && zBlocked && 
+    //   (keys.current.w || keys.current.s || keys.current.a || keys.current.d);
+    // 
+    // // Track stuck time for desperation jump
+    // if (isStuckHorizontally) {
+    //   stuckTimer.current += delta;
+    // } else {
+    //   stuckTimer.current = 0;
+    // }
     
     // Position tracking for debugging - log every 0.1 seconds while moving
     const isMoving = keys.current.w || keys.current.s || keys.current.a || keys.current.d || 
@@ -1120,8 +1126,8 @@ function FirstPersonControls({
           onGround: onGround.current,
           xBlocked,
           zBlocked,
-          isStuck: isStuckHorizontally,
-          stuckTime: stuckTimer.current.toFixed(2)
+          // OLD - TO BE DELETED: isStuck: isStuckHorizontally,
+          // OLD - TO BE DELETED: stuckTime: stuckTimer.current.toFixed(2)
         },
         keys: {
           w: keys.current.w,
