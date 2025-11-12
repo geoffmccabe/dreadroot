@@ -1033,6 +1033,21 @@ function FirstPersonControls({
       }
     }
 
+    // Z-axis movement and collision
+    if (deltaMovement.z !== 0) {
+      const testPos = camera.position.clone();
+      testPos.z += deltaMovement.z;
+      
+      const collision = checkAxisCollision(testPos, true);
+      if (collision) {
+        camera.position.z = prevPosition.z;
+        velocity.current.z = 0;
+        zBlocked = true;
+      } else {
+        camera.position.z = testPos.z;
+      }
+    }
+
     // Y-axis movement and collision (test from CURRENT position after X/Z resolution)
     if (deltaMovement.y !== 0) {
       const testPos = camera.position.clone();
@@ -1083,21 +1098,6 @@ function FirstPersonControls({
             onGround.current = false;
           }
         }
-      }
-    }
-
-    // Z-axis movement and collision
-    if (deltaMovement.z !== 0) {
-      const testPos = camera.position.clone();
-      testPos.z += deltaMovement.z;
-      
-      const collision = checkAxisCollision(testPos, true);
-      if (collision) {
-        camera.position.z = prevPosition.z;
-        velocity.current.z = 0;
-        zBlocked = true;
-      } else {
-        camera.position.z = testPos.z;
       }
     }
 
