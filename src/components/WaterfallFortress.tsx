@@ -561,32 +561,15 @@ function FirstPersonControls({
   // Store handleMouseMove in a ref to prevent event listener re-attachment
   const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
   
-  // Track last movement to filter phantom events (browser bug)
-  const lastMovement = useRef({ x: 0, y: 0, count: 0 });
+  // Flag to indicate camera rotation needs update
+  const needsCameraUpdate = useRef(false);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
     
-    // CRITICAL FIX: Filter phantom mousemove events (known browser bug in pointer lock)
-    // https://bugzilla.mozilla.org/show_bug.cgi?id=1641074
-    // Browsers fire repeated mousemove events with same movement values even when mouse isn't moving
-    const movementX = event.movementX;
-    const movementY = event.movementY;
-    
-    // If this is the same movement as last 3+ times, it's a phantom event - ignore it
-    if (movementX === lastMovement.current.x && movementY === lastMovement.current.y) {
-      lastMovement.current.count++;
-      if (lastMovement.current.count >= 3) {
-        return; // Skip phantom repeated events
-      }
-    } else {
-      // New movement detected - reset counter
-      lastMovement.current = { x: movementX, y: movementY, count: 0 };
-    }
-    
     const sensitivity = 0.002;
-    const deltaYaw = -movementX * sensitivity;
-    const deltaPitch = -movementY * sensitivity;
+    const deltaYaw = -event.movementX * sensitivity;
+    const deltaPitch = -event.movementY * sensitivity;
     
     // Update tracked angles
     yaw.current += deltaYaw;
@@ -596,10 +579,8 @@ function FirstPersonControls({
     const maxPitch = Math.PI / 2 - 0.01;
     pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
     
-    // CRITICAL: Reuse Euler object and remove camera from dependencies
-    // This prevents handleMouseMove from being recreated when camera ref changes
-    eulerRef.current.set(pitch.current, yaw.current, 0);
-    camera.quaternion.setFromEuler(eulerRef.current);
+    // Signal that camera needs update (will happen in useFrame)
+    needsCameraUpdate.current = true;
   }, []);
   
   // Update the ref whenever handleMouseMove changes
@@ -752,6 +733,13 @@ function FirstPersonControls({
   const hoverCheckFrameCounter = useRef(0);
 
   useFrame((state, delta) => {
+    // Update camera rotation from mouse input (R3F-safe: only update in render loop)
+    if (needsCameraUpdate.current) {
+      eulerRef.current.set(pitch.current, yaw.current, 0);
+      camera.quaternion.setFromEuler(eulerRef.current);
+      needsCameraUpdate.current = false;
+    }
+    
     // Hover detection for block mode - OPTIMIZED with cached lookups
     // Throttle to every 10 frames (at 60fps = 6 checks/sec instead of 60/sec)
     if (blockPlacementMode && currentUserId && showOwnershipOutline && keys.current.rightMouse) {
