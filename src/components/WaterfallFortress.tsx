@@ -561,42 +561,32 @@ function FirstPersonControls({
   // Store handleMouseMove in a ref to prevent event listener re-attachment
   const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
   
-  // Debug: Track mouse events
-  const mouseEventLog = useRef<Array<{time: number, movementX: number, movementY: number}>>([]);
-  const lastLogTime = useRef(0);
+  // Track last movement to filter phantom events (browser bug)
+  const lastMovement = useRef({ x: 0, y: 0, count: 0 });
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
     
-    // DEBUG: Log mouse events
-    const now = Date.now();
-    mouseEventLog.current.push({
-      time: now,
-      movementX: event.movementX,
-      movementY: event.movementY
-    });
+    // CRITICAL FIX: Filter phantom mousemove events (known browser bug in pointer lock)
+    // https://bugzilla.mozilla.org/show_bug.cgi?id=1641074
+    // Browsers fire repeated mousemove events with same movement values even when mouse isn't moving
+    const movementX = event.movementX;
+    const movementY = event.movementY;
     
-    // Log summary every 2 seconds
-    if (now - lastLogTime.current > 2000) {
-      const events = mouseEventLog.current;
-      const nonZeroEvents = events.filter(e => Math.abs(e.movementX) > 0.01 || Math.abs(e.movementY) > 0.01);
-      const leftDrift = events.filter(e => e.movementX < -0.01);
-      
-      console.log('[MOUSE DEBUG]', {
-        totalEvents: events.length,
-        nonZeroEvents: nonZeroEvents.length,
-        leftDriftEvents: leftDrift.length,
-        avgMovementX: events.reduce((sum, e) => sum + e.movementX, 0) / events.length,
-        samples: events.slice(-5)
-      });
-      
-      mouseEventLog.current = [];
-      lastLogTime.current = now;
+    // If this is the same movement as last 3+ times, it's a phantom event - ignore it
+    if (movementX === lastMovement.current.x && movementY === lastMovement.current.y) {
+      lastMovement.current.count++;
+      if (lastMovement.current.count >= 3) {
+        return; // Skip phantom repeated events
+      }
+    } else {
+      // New movement detected - reset counter
+      lastMovement.current = { x: movementX, y: movementY, count: 0 };
     }
     
     const sensitivity = 0.002;
-    const deltaYaw = -event.movementX * sensitivity;
-    const deltaPitch = -event.movementY * sensitivity;
+    const deltaYaw = -movementX * sensitivity;
+    const deltaPitch = -movementY * sensitivity;
     
     // Update tracked angles
     yaw.current += deltaYaw;
