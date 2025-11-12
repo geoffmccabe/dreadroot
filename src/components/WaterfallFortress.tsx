@@ -570,12 +570,70 @@ function FirstPersonControls({
   const handleMouseUpRef = useRef<(event: MouseEvent) => void>();
   const handlePointerLockChangeRef = useRef<() => void>();
 
+  // Track mouse movement for debugging
+  const mouseDebugData = useRef({
+    totalEvents: 0,
+    nonZeroEvents: 0,
+    leftDriftEvents: 0,
+    rightDriftEvents: 0,
+    recentMovements: [] as Array<{x: number, y: number, timestamp: number}>
+  });
+
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
+    
+    // Debug tracking
+    mouseDebugData.current.totalEvents++;
+    if (event.movementX !== 0 || event.movementY !== 0) {
+      mouseDebugData.current.nonZeroEvents++;
+    }
+    if (event.movementX < 0) {
+      mouseDebugData.current.leftDriftEvents++;
+    }
+    if (event.movementX > 0) {
+      mouseDebugData.current.rightDriftEvents++;
+    }
+    
+    // Track recent movements
+    mouseDebugData.current.recentMovements.push({
+      x: event.movementX,
+      y: event.movementY,
+      timestamp: Date.now()
+    });
+    if (mouseDebugData.current.recentMovements.length > 100) {
+      mouseDebugData.current.recentMovements.shift();
+    }
+    
+    // Log every 50 events
+    if (mouseDebugData.current.totalEvents % 50 === 0) {
+      const recent = mouseDebugData.current.recentMovements.slice(-10);
+      console.log('[MOUSE DEBUG]', {
+        totalEvents: mouseDebugData.current.totalEvents,
+        nonZeroEvents: mouseDebugData.current.nonZeroEvents,
+        leftDriftEvents: mouseDebugData.current.leftDriftEvents,
+        rightDriftEvents: mouseDebugData.current.rightDriftEvents,
+        avgMovementX: mouseDebugData.current.recentMovements.reduce((sum, m) => sum + m.x, 0) / mouseDebugData.current.recentMovements.length,
+        samples: recent.map(m => `(${m.x},${m.y})`)
+      });
+    }
     
     const sensitivity = 0.002;
     const deltaYaw = -event.movementX * sensitivity;
     const deltaPitch = -event.movementY * sensitivity;
+    
+    // Log significant movements
+    if (Math.abs(event.movementX) > 0 || Math.abs(event.movementY) > 0) {
+      if (mouseDebugData.current.totalEvents % 10 === 0) {
+        console.log('[MOUSE MOVE]', {
+          movementX: event.movementX,
+          movementY: event.movementY,
+          deltaYaw: deltaYaw.toFixed(4),
+          deltaPitch: deltaPitch.toFixed(4),
+          newYaw: (yaw.current + deltaYaw).toFixed(4),
+          newPitch: (pitch.current + deltaPitch).toFixed(4)
+        });
+      }
+    }
     
     // Update tracked angles
     yaw.current += deltaYaw;
@@ -778,9 +836,19 @@ function FirstPersonControls({
   useFrame((state, delta) => {
     // Update camera rotation from mouse input (R3F-safe: only update in render loop)
     if (needsCameraUpdate.current) {
+      const oldYaw = eulerRef.current.y;
       eulerRef.current.set(pitch.current, yaw.current, 0);
       camera.quaternion.setFromEuler(eulerRef.current);
       needsCameraUpdate.current = false;
+      
+      // Log camera rotation changes
+      if (Math.abs(yaw.current - oldYaw) > 0.001) {
+        console.log('[CAMERA ROTATION]', {
+          yaw: yaw.current.toFixed(4),
+          pitch: pitch.current.toFixed(4),
+          yawDelta: (yaw.current - oldYaw).toFixed(4)
+        });
+      }
     }
     
     // Hover detection for block mode - OPTIMIZED with cached lookups
