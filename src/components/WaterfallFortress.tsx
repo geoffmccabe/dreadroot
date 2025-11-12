@@ -565,9 +565,10 @@ function FirstPersonControls({
     const maxPitch = Math.PI / 2 - 0.01;
     pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
     
-    // ONLY update quaternion - never set rotation.set() which causes Euler/Quaternion drift
-    const euler = new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ');
-    camera.quaternion.setFromEuler(euler);
+    // Explicitly set camera.rotation, then sync quaternion from it
+    // This prevents Euler/Quaternion desynchronization that causes drift
+    camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
+    camera.quaternion.setFromEuler(camera.rotation);
   }, [camera]);
 
   const handleWheel = useCallback((event: WheelEvent) => {
