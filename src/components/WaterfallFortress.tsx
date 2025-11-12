@@ -558,6 +558,9 @@ function FirstPersonControls({
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
     
+    // Ignore if no actual movement (prevent drift from phantom events)
+    if (event.movementX === 0 && event.movementY === 0) return;
+    
     const sensitivity = 0.002;
     yaw.current -= event.movementX * sensitivity;
     pitch.current -= event.movementY * sensitivity;
