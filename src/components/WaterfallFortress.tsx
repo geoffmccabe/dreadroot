@@ -563,9 +563,17 @@ function FirstPersonControls({
   
   // Flag to indicate camera rotation needs update
   const needsCameraUpdate = useRef(false);
+  
+  // Track pointer lock entry time to filter initial erroneous events
+  const pointerLockEntryTime = useRef(0);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
+    
+    // Filter out erroneous events in first 100ms after pointer lock
+    // Browsers fire phantom events right after entering pointer lock
+    const timeSinceEntry = Date.now() - pointerLockEntryTime.current;
+    if (timeSinceEntry < 100) return;
     
     const sensitivity = 0.002;
     const deltaYaw = -event.movementX * sensitivity;
@@ -603,7 +611,18 @@ function FirstPersonControls({
     console.log('Click detected, isLocked:', isLocked.current, 'blockPlacementMode:', blockPlacementMode);
     
     if (!isLocked.current) {
-      gl.domElement.requestPointerLock();
+      // Request pointer lock with unadjustedMovement to disable mouse acceleration
+      // and reduce phantom movement events (known browser bug fix)
+      const promise = gl.domElement.requestPointerLock({ unadjustedMovement: true } as any);
+      
+      // Fallback for browsers that don't support unadjustedMovement
+      if (promise?.catch) {
+        promise.catch((error: Error) => {
+          if (error.name === "NotSupportedError") {
+            gl.domElement.requestPointerLock();
+          }
+        });
+      }
       return;
     }
     
@@ -687,7 +706,13 @@ function FirstPersonControls({
   }, []);
 
   const handlePointerLockChange = useCallback(() => {
-    isLocked.current = document.pointerLockElement === gl.domElement;
+    const nowLocked = document.pointerLockElement === gl.domElement;
+    isLocked.current = nowLocked;
+    
+    // Record entry time to filter initial phantom events
+    if (nowLocked) {
+      pointerLockEntryTime.current = Date.now();
+    }
   }, [gl]);
 
   useEffect(() => {
