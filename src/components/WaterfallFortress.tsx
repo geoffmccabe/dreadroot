@@ -555,17 +555,32 @@ function FirstPersonControls({
     }
   }, []);
 
+  // Quaternion rotation axes (reused to prevent GC)
+  const rotationAxisY = useRef(new THREE.Vector3(0, 1, 0));
+  const rotationAxisX = useRef(new THREE.Vector3());
+
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
     
-    const sensitivity = 0.002;
-    yaw.current -= event.movementX * sensitivity;
-    pitch.current -= event.movementY * sensitivity;
+    // Ignore events with zero or near-zero movement (phantom events / sensor noise)
+    const DEADZONE = 0.5; // Ignore movements smaller than 0.5 pixels
+    if (Math.abs(event.movementX) < DEADZONE && Math.abs(event.movementY) < DEADZONE) {
+      return;
+    }
     
+    const sensitivity = 0.002;
+    const deltaYaw = -event.movementX * sensitivity;
+    const deltaPitch = -event.movementY * sensitivity;
+    
+    // Update tracked angles
+    yaw.current += deltaYaw;
+    pitch.current += deltaPitch;
+    
+    // Clamp pitch
     const maxPitch = Math.PI / 2 - 0.01;
     pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
     
-    // ONLY update quaternion - never set rotation.set() which causes Euler/Quaternion drift
+    // Reconstruct quaternion from clean Euler angles to prevent drift accumulation
     const euler = new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ');
     camera.quaternion.setFromEuler(euler);
   }, [camera]);
