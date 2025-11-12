@@ -558,38 +558,11 @@ function FirstPersonControls({
   // Reusable Euler object to prevent GC and avoid precision errors from object creation
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
   
-  // Debug: Track mouse events to find drift source
-  const mouseEventLog = useRef<Array<{time: number, movementX: number, movementY: number}>>([]);
-  const lastLogTime = useRef(0);
+  // Store handleMouseMove in a ref to prevent event listener re-attachment
+  const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
-    
-    // DEBUG: Log ALL mouse events to find phantom movements
-    const now = Date.now();
-    mouseEventLog.current.push({
-      time: now,
-      movementX: event.movementX,
-      movementY: event.movementY
-    });
-    
-    // Log summary every 2 seconds
-    if (now - lastLogTime.current > 2000) {
-      const events = mouseEventLog.current;
-      const nonZeroEvents = events.filter(e => Math.abs(e.movementX) > 0.01 || Math.abs(e.movementY) > 0.01);
-      const leftDrift = events.filter(e => e.movementX < -0.01);
-      
-      console.log('[MOUSE DEBUG]', {
-        totalEvents: events.length,
-        nonZeroEvents: nonZeroEvents.length,
-        leftDriftEvents: leftDrift.length,
-        avgMovementX: events.reduce((sum, e) => sum + e.movementX, 0) / events.length,
-        samples: events.slice(-5) // Last 5 events
-      });
-      
-      mouseEventLog.current = [];
-      lastLogTime.current = now;
-    }
     
     const sensitivity = 0.002;
     const deltaYaw = -event.movementX * sensitivity;
@@ -607,7 +580,15 @@ function FirstPersonControls({
     // This prevents handleMouseMove from being recreated when camera ref changes
     eulerRef.current.set(pitch.current, yaw.current, 0);
     camera.quaternion.setFromEuler(eulerRef.current);
-  }, []); // Empty deps - camera is stable, and we don't need it as a dependency
+  }, []);
+  
+  // Update the ref whenever handleMouseMove changes
+  handleMouseMoveRef.current = handleMouseMove;
+  
+  // Create a stable event listener that calls through the ref
+  const stableMouseMoveListener = useCallback((event: MouseEvent) => {
+    handleMouseMoveRef.current?.(event);
+  }, []);
 
   const handleWheel = useCallback((event: WheelEvent) => {
     if (!isLocked.current || !blockPlacementMode) return;
@@ -711,7 +692,7 @@ function FirstPersonControls({
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
-    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mousemove', stableMouseMoveListener);
     document.addEventListener('wheel', handleWheel);
     document.addEventListener('pointerlockchange', handlePointerLockChange);
     gl.domElement.addEventListener('click', handleClick);
@@ -722,7 +703,7 @@ function FirstPersonControls({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
-      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mousemove', stableMouseMoveListener);
       document.removeEventListener('wheel', handleWheel);
       document.removeEventListener('pointerlockchange', handlePointerLockChange);
       gl.domElement.removeEventListener('click', handleClick);
@@ -730,7 +711,7 @@ function FirstPersonControls({
       gl.domElement.removeEventListener('mousedown', handleMouseDown);
       gl.domElement.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [handleKeyDown, handleKeyUp, handleMouseMove, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
+  }, [handleKeyDown, handleKeyUp, stableMouseMoveListener, handleWheel, handlePointerLockChange, handleClick, handleRightClick, handleMouseDown, handleMouseUp, gl.domElement]);
 
   // Cache blocks by type and user for fast lookup
   useEffect(() => {
