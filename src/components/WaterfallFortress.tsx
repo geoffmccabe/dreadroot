@@ -2334,7 +2334,7 @@ function Scene({
   }, []);
 
   // Check for wisp hits
-  const checkWispHit = useCallback(() => {
+  const checkWispHit = useCallback(async () => {
     if (!wispMeshRef.current || !wispState) return false;
     
     const raycaster = new THREE.Raycaster();
@@ -2346,31 +2346,27 @@ function Scene({
     if (intersects.length > 0 && intersects[0].distance < 100) {
       const collectedBlock = collectWisp();
       if (collectedBlock) {
-        // Add block to inventory
-        collectWispBlock(collectedBlock.key);
+        // Add block to inventory (await the async operation)
+        const success = await collectWispBlock(collectedBlock.key);
         
-        // Create particle explosion (read from ref)
-        const explosionPos = wispPositionRef.current.clone();
-        const newParticles = [];
-        for (let i = 0; i < 20; i++) {
-          const angle = (Math.PI * 2 * i) / 20;
-          const speed = 3 + Math.random() * 2;
-          newParticles.push({
-            position: explosionPos.clone(),
-            velocity: new THREE.Vector3(Math.cos(angle) * speed, Math.random() * 2 + 1, Math.sin(angle) * speed),
-            life: 1.0,
-            color: collectedBlock.properties?.color || '#ffffff'
-          });
+        if (success) {
+          // Create particle explosion (read from ref)
+          const explosionPos = wispPositionRef.current.clone();
+          const newParticles = [];
+          for (let i = 0; i < 20; i++) {
+            const angle = (Math.PI * 2 * i) / 20;
+            const speed = 3 + Math.random() * 2;
+            newParticles.push({
+              position: explosionPos.clone(),
+              velocity: new THREE.Vector3(Math.cos(angle) * speed, Math.random() * 2 + 1, Math.sin(angle) * speed),
+              life: 1.0,
+              color: collectedBlock.properties?.color || '#ffffff'
+            });
+          }
+          setWispParticles(newParticles);
+          playAudio(audioRefs.current.wispBoom);
+          playAudio(audioRefs.current.wispCheer);
         }
-        setWispParticles(newParticles);
-        playAudio(audioRefs.current.wispBoom);
-        playAudio(audioRefs.current.wispCheer);
-        
-        // Show success toast
-        toast({
-          title: "Wisp Collected!",
-          description: `+1 ${collectedBlock.name} added to inventory`,
-        });
         
         return true;
       }
@@ -2379,8 +2375,8 @@ function Scene({
   }, [wispState, wispPositionRef, collectWisp, camera, collectWispBlock, toast]);
 
   // Performance-optimized bullet creation with object pooling
-  const handleShoot = useCallback((origin: THREE.Vector3, direction: THREE.Vector3) => {
-    if (checkWispHit()) return;
+  const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3) => {
+    if (await checkWispHit()) return;
     setBullets(prev => {
       // Limit bullets to prevent memory issues
       const newBullets = prev.slice(-MAX_BULLETS + 1);
@@ -2399,7 +2395,7 @@ function Scene({
       return newBullets;
     });
     setShowCrosshairs(true);
-  }, []);
+  }, [checkWispHit]);
 
   // Optimized frame loop with reduced garbage collection and throttling
   const frameCount = useRef(0);
