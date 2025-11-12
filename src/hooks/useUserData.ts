@@ -449,24 +449,24 @@ export const useUserData = () => {
     }
 
     try {
-      // Get item_id from items table
-      const { data: itemData, error: itemError } = await supabase
-        .from('items')
-        .select('id')
+      // Verify block exists in blocks table
+      const { data: blockData, error: blockError } = await supabase
+        .from('blocks')
+        .select('id, name')
         .eq('key', blockKey)
         .maybeSingle();
 
-      if (itemError) throw itemError;
-      if (!itemData) {
+      if (blockError) throw blockError;
+      if (!blockData) {
         toast({
-          title: "Item not found",
-          description: "This item is not available",
+          title: "Block not found",
+          description: "This block type is not available",
           variant: "destructive"
         });
         return false;
       }
 
-      // Add to inventory
+      // Add to inventory (blocks use item_type with NULL item_id)
       const existingItem = findInventoryItem(inventory, blockKey);
       
       if (existingItem) {
@@ -478,43 +478,37 @@ export const useUserData = () => {
           .eq('id', existingItem.id);
 
         if (updateError) throw updateError;
+        
+        // Update local state
+        setInventory(prev => 
+          prev.map(i => 
+            i.id === existingItem.id 
+              ? { ...i, quantity: i.quantity + 1 }
+              : i
+          )
+        );
       } else {
-        // Create new inventory item
-        const { error: insertError } = await supabase
+        // Create new inventory item for block (item_id is NULL for blocks)
+        const { data: newItem, error: insertError } = await supabase
           .from('user_inventory')
           .insert([{
             user_id: user.id,
             item_type: blockKey,
-            item_id: itemData.id,
+            item_id: null,
             quantity: 1
-          }]);
+          }])
+          .select()
+          .single();
 
         if (insertError) throw insertError;
-      }
-
-      // Update local state immediately for better UX
-      setInventory(prev => {
-        if (existingItem) {
-          return prev.map(i => 
-            i.id === existingItem.id 
-              ? { ...i, quantity: i.quantity + 1 }
-              : i
-          );
-        } else {
-          return [...prev, {
-            id: crypto.randomUUID(),
-            user_id: user.id,
-            item_type: blockKey,
-            item_id: itemData.id,
-            quantity: 1,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }];
+        
+        // Update local state
+        if (newItem) {
+          setInventory(prev => [...prev, newItem]);
         }
-      });
+      }
       
-      // Refresh data to ensure consistency
-      await loadUserData();
+      console.log(`✨ Wisp collected: +1 ${blockData.name} (${blockKey})`);
       
       toast({
         title: "Wisp collected!",
