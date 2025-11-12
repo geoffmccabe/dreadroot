@@ -164,7 +164,7 @@ export const useWispBlock = (
         clearTimeout(lifetimeCheckRef.current);
       }
     };
-  }, [basicBlocks.length > 0]); // Only re-run if basicBlocks changes from empty to populated
+  }, [basicBlocks.length, spawnWisp]);
 
   // Set up movement interval
   useEffect(() => {
