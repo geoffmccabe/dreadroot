@@ -342,7 +342,6 @@ function FirstPersonControls({
   const lastGroundCheck = useRef(0);
   const stuckTimer = useRef(0);
   const lastPositionLog = useRef(0);
-  const wasStuckInsideBlock = useRef(false);
   
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
@@ -1160,129 +1159,6 @@ function FirstPersonControls({
       // No block beneath and not on ground level = falling
       onGround.current = false;
     }
-    
-    // STUCK-INSIDE-BLOCK DETECTION - Check if player box significantly intersects any collider
-    // Small overlaps (<0.2) are normal when standing next to blocks and should be ignored
-    const currentPlayerBox = createPlayerBox(camera.position);
-    let stuckInsideBlock = false;
-    let stuckBlockInfo = null;
-    
-    for (const collider of colliders) {
-      if (currentPlayerBox.intersectsBox(collider)) {
-        const overlapX = Math.min(currentPlayerBox.max.x, collider.max.x) - Math.max(currentPlayerBox.min.x, collider.min.x);
-        const overlapY = Math.min(currentPlayerBox.max.y, collider.max.y) - Math.max(currentPlayerBox.min.y, collider.min.y);
-        const overlapZ = Math.min(currentPlayerBox.max.z, collider.max.z) - Math.max(currentPlayerBox.min.z, collider.min.z);
-        
-        // Only consider "stuck" if there's significant overlap (>0.2) on at least 2 axes
-        // Small edge overlaps are normal when standing next to blocks
-        const significantOverlapX = overlapX > 0.2;
-        const significantOverlapY = overlapY > 0.2;
-        const significantOverlapZ = overlapZ > 0.2;
-        const significantOverlapCount = [significantOverlapX, significantOverlapY, significantOverlapZ].filter(Boolean).length;
-        
-        if (significantOverlapCount >= 2) {
-          stuckInsideBlock = true;
-          stuckBlockInfo = {
-            collider: {
-              min: { x: collider.min.x.toFixed(3), y: collider.min.y.toFixed(3), z: collider.min.z.toFixed(3) },
-              max: { x: collider.max.x.toFixed(3), y: collider.max.y.toFixed(3), z: collider.max.z.toFixed(3) }
-            },
-            playerBox: {
-              min: { x: currentPlayerBox.min.x.toFixed(3), y: currentPlayerBox.min.y.toFixed(3), z: currentPlayerBox.min.z.toFixed(3) },
-              max: { x: currentPlayerBox.max.x.toFixed(3), y: currentPlayerBox.max.y.toFixed(3), z: currentPlayerBox.max.z.toFixed(3) }
-            },
-            overlap: {
-              x: overlapX.toFixed(3),
-              y: overlapY.toFixed(3),
-              z: overlapZ.toFixed(3)
-            }
-          };
-          break;
-        }
-      }
-    }
-    
-    // Log when stuck state first begins
-    if (stuckInsideBlock && !wasStuckInsideBlock.current) {
-      console.error('[🚨 JUST GOT STUCK]', {
-        time: state.clock.elapsedTime.toFixed(2),
-        position: {
-          x: camera.position.x.toFixed(3),
-          y: camera.position.y.toFixed(3),
-          z: camera.position.z.toFixed(3)
-        },
-        previousPosition: {
-          x: prevPosition.x.toFixed(3),
-          y: prevPosition.y.toFixed(3),
-          z: prevPosition.z.toFixed(3)
-        },
-        deltaMovement: {
-          x: deltaMovement.x.toFixed(3),
-          y: deltaMovement.y.toFixed(3),
-          z: deltaMovement.z.toFixed(3)
-        },
-        playerState: {
-          height: playerHeight.toFixed(2),
-          radius: playerRadius.toFixed(2),
-          isCrawling,
-          onGround: onGround.current
-        },
-        collision: stuckBlockInfo,
-        movementState: {
-          velocity_y: velocity.current.y.toFixed(3),
-          xBlocked,
-          zBlocked,
-          isStuckHorizontally
-        },
-        keysPressed: {
-          w: keys.current.w,
-          s: keys.current.s,
-          a: keys.current.a,
-          d: keys.current.d,
-          space: keys.current.space,
-          ctrl: keys.current.ctrl
-        }
-      });
-    }
-    
-    // Log every frame while stuck
-    if (stuckInsideBlock) {
-      console.error('[🚨 STUCK INSIDE BLOCK]', {
-        time: state.clock.elapsedTime.toFixed(2),
-        position: {
-          x: camera.position.x.toFixed(3),
-          y: camera.position.y.toFixed(3),
-          z: camera.position.z.toFixed(3)
-        },
-        playerState: {
-          height: playerHeight.toFixed(2),
-          radius: playerRadius.toFixed(2),
-          isCrawling,
-          onGround: onGround.current
-        },
-        collision: stuckBlockInfo,
-        movementState: {
-          deltaMovement: {
-            x: deltaMovement.x.toFixed(3),
-            y: deltaMovement.y.toFixed(3),
-            z: deltaMovement.z.toFixed(3)
-          },
-          velocity_y: velocity.current.y.toFixed(3),
-          xBlocked,
-          zBlocked
-        },
-        keysPressed: {
-          w: keys.current.w,
-          s: keys.current.s,
-          a: keys.current.a,
-          d: keys.current.d,
-          space: keys.current.space,
-          ctrl: keys.current.ctrl
-        }
-      });
-    }
-    
-    wasStuckInsideBlock.current = stuckInsideBlock;
     
     // Broadcast position to multiplayer (throttled internally)
     if (broadcastPosition) {
