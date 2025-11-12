@@ -488,15 +488,23 @@ export const useUserData = () => {
         return false;
       }
 
-      // Add to inventory (blocks use item_type with NULL item_id)
-      const existingItem = findInventoryItem(inventory, blockKey);
+      // Query database directly to avoid race conditions with local state
+      const { data: existingItems, error: queryError } = await supabase
+        .from('user_inventory')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('item_type', blockKey)
+        .is('item_id', null);
+
+      if (queryError) throw queryError;
       
-      if (existingItem) {
+      if (existingItems && existingItems.length > 0) {
         // Update existing inventory item
+        const existingItem = existingItems[0];
         const newQuantity = existingItem.quantity + 1;
         const { error: updateError } = await supabase
           .from('user_inventory')
-          .update({ quantity: newQuantity })
+          .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
           .eq('id', existingItem.id);
 
         if (updateError) throw updateError;
@@ -505,7 +513,7 @@ export const useUserData = () => {
         setInventory(prev => 
           prev.map(i => 
             i.id === existingItem.id 
-              ? { ...i, quantity: i.quantity + 1 }
+              ? { ...i, quantity: newQuantity, updated_at: new Date().toISOString() }
               : i
           )
         );
