@@ -1101,8 +1101,90 @@ function FirstPersonControls({
       }
     }
 
-    // DISABLED step-up logic to prevent wall hooking
-    // TODO: Implement proper step-up that doesn't hook onto edges
+    // Step-up mechanic: Allow climbing onto blocks when horizontally blocked
+    const stepUpHeight = 0.6; // Maximum height player can step up
+    if ((xBlocked || zBlocked) && onGround.current) {
+      // Check if there's a block we can step up onto
+      const currentFootY = camera.position.y - playerHeight;
+      
+      // Look for blocks within step-up range above current foot level
+      let bestStepUpY = null;
+      
+      for (const collider of colliders) {
+        const blockTopY = collider.max.y;
+        const blockBottomY = collider.min.y;
+        
+        // Block top must be above our feet but within step-up range
+        if (blockTopY > currentFootY && blockTopY <= currentFootY + stepUpHeight) {
+          // Check if this block is in our horizontal path
+          const playerBox = new THREE.Box3(
+            new THREE.Vector3(
+              camera.position.x - playerRadius,
+              blockTopY, // Check at the block's top level
+              camera.position.z - playerRadius
+            ),
+            new THREE.Vector3(
+              camera.position.x + playerRadius,
+              blockTopY + playerHeight, // Full player height above block
+              camera.position.z + playerRadius
+            )
+          );
+          
+          // Check if player would collide with this block horizontally
+          const horizontalOverlap = !(
+            playerBox.max.x <= collider.min.x ||
+            playerBox.min.x >= collider.max.x ||
+            playerBox.max.z <= collider.min.z ||
+            playerBox.min.z >= collider.max.z
+          );
+          
+          if (horizontalOverlap) {
+            // This block is blocking us, check if we can step onto it
+            // Verify there's clearance above the block for player height
+            const clearanceBox = new THREE.Box3(
+              new THREE.Vector3(
+                camera.position.x - playerRadius,
+                blockTopY,
+                camera.position.z - playerRadius
+              ),
+              new THREE.Vector3(
+                camera.position.x + playerRadius,
+                blockTopY + playerHeight,
+                camera.position.z + playerRadius
+              )
+            );
+            
+            let hasClearance = true;
+            for (const otherCollider of colliders) {
+              if (otherCollider !== collider && clearanceBox.intersectsBox(otherCollider)) {
+                hasClearance = false;
+                break;
+              }
+            }
+            
+            if (hasClearance) {
+              // Found a valid step-up target
+              if (bestStepUpY === null || blockTopY < bestStepUpY) {
+                bestStepUpY = blockTopY;
+              }
+            }
+          }
+        }
+      }
+      
+      // Apply step-up if we found a valid target
+      if (bestStepUpY !== null) {
+        camera.position.y = bestStepUpY + playerHeight;
+        velocity.current.y = 0;
+        onGround.current = true;
+        console.log('[STEP-UP]', {
+          time: state.clock.elapsedTime.toFixed(2),
+          from_y: currentFootY.toFixed(3),
+          to_y: bestStepUpY.toFixed(3),
+          step_height: (bestStepUpY - currentFootY).toFixed(3)
+        });
+      }
+    }
     
     // OLD - TO BE DELETED: Stuck detection for desperation jump
     // const isStuckHorizontally = xBlocked && zBlocked && 
