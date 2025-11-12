@@ -13,11 +13,16 @@ export function findInventoryItem(
   inventory: UserInventoryItem[],
   itemKey: string
 ): UserInventoryItem | undefined {
-  // Try item_id first (UUID foreign key - preferred)
+  // For blocks, prioritize entries with item_id=NULL (correct architecture)
+  // Then try item_id lookup (for non-block items)
+  // Finally fallback to item_type (legacy)
+  
+  const byItemTypeWithNullId = inventory.find(i => i.item_type === itemKey && i.item_id === null);
+  if (byItemTypeWithNullId) return byItemTypeWithNullId;
+  
   const byItemId = inventory.find(i => i.item_id === itemKey);
   if (byItemId) return byItemId;
   
-  // Fallback to item_type (legacy string key)
   return inventory.find(i => i.item_type === itemKey);
 }
 
