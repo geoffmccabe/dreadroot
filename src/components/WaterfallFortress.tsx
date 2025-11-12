@@ -990,8 +990,15 @@ function FirstPersonControls({
     // Helper function to check collision on a specific axis
     const checkAxisCollision = (pos: THREE.Vector3, isHorizontal: boolean = false) => {
       const playerBox = createPlayerBox(pos);
+      const spatialRadius = 2.0; // Only check blocks within 2 meters
       
       for (const collider of colliders) {
+        // OPTIMIZATION: Spatial filtering - skip blocks too far away
+        const colliderCenterX = (collider.max.x + collider.min.x) / 2;
+        const colliderCenterZ = (collider.max.z + collider.min.z) / 2;
+        const distX = Math.abs(colliderCenterX - pos.x);
+        const distZ = Math.abs(colliderCenterZ - pos.z);
+        if (Math.sqrt(distX * distX + distZ * distZ) > spatialRadius) continue;
         // For horizontal movement, skip blocks the player is standing on top of
         if (isHorizontal) {
           const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.1) && (playerBox.min.y <= collider.max.y + 0.1);
