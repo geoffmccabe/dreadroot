@@ -1143,17 +1143,14 @@ function FirstPersonControls({
     // Check if player is on the ground level (y = 0)
     const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
     
-    // When stuck, check a larger area below feet to be more lenient
-    const checkDistance = isStuckHorizontally ? 0.15 : 0.05;
+    // Check if there's a solid block directly beneath the player's feet
     const feetCheckPos = camera.position.clone();
-    feetCheckPos.y = camera.position.y - playerHeight - checkDistance;
+    feetCheckPos.y = camera.position.y - playerHeight - 0.05;
     const hasBlockBeneath = checkAxisCollision(feetCheckPos, false);
     
-    // Player is on ground if on ground level OR there's a block beneath them
+    // Player is on ground ONLY if on ground level OR there's a block beneath them
+    // Don't force onGround when stuck - let physics handle it
     if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
-      onGround.current = true;
-    } else if (isStuckHorizontally) {
-      // If stuck and trying to move, assume on ground to allow jump escape
       onGround.current = true;
     } else {
       // No block beneath and not on ground level = falling
