@@ -178,6 +178,28 @@ export const useUserData = () => {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_inventory',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            setInventory(prev => [...prev, payload.new as UserInventoryItem]);
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            setInventory(prev =>
+              prev.map(item =>
+                item.id === (payload.new as UserInventoryItem).id ? payload.new as UserInventoryItem : item
+              )
+            );
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setInventory(prev => prev.filter(item => item.id !== (payload.old as UserInventoryItem).id));
+          }
+        }
+      )
       .subscribe();
 
     return () => {
