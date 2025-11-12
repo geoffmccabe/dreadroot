@@ -1161,34 +1161,44 @@ function FirstPersonControls({
       onGround.current = false;
     }
     
-    // STUCK-INSIDE-BLOCK DETECTION - Check if player box intersects any collider
+    // STUCK-INSIDE-BLOCK DETECTION - Check if player box significantly intersects any collider
+    // Small overlaps (<0.2) are normal when standing next to blocks and should be ignored
     const currentPlayerBox = createPlayerBox(camera.position);
     let stuckInsideBlock = false;
     let stuckBlockInfo = null;
     
     for (const collider of colliders) {
       if (currentPlayerBox.intersectsBox(collider)) {
-        stuckInsideBlock = true;
         const overlapX = Math.min(currentPlayerBox.max.x, collider.max.x) - Math.max(currentPlayerBox.min.x, collider.min.x);
         const overlapY = Math.min(currentPlayerBox.max.y, collider.max.y) - Math.max(currentPlayerBox.min.y, collider.min.y);
         const overlapZ = Math.min(currentPlayerBox.max.z, collider.max.z) - Math.max(currentPlayerBox.min.z, collider.min.z);
         
-        stuckBlockInfo = {
-          collider: {
-            min: { x: collider.min.x.toFixed(3), y: collider.min.y.toFixed(3), z: collider.min.z.toFixed(3) },
-            max: { x: collider.max.x.toFixed(3), y: collider.max.y.toFixed(3), z: collider.max.z.toFixed(3) }
-          },
-          playerBox: {
-            min: { x: currentPlayerBox.min.x.toFixed(3), y: currentPlayerBox.min.y.toFixed(3), z: currentPlayerBox.min.z.toFixed(3) },
-            max: { x: currentPlayerBox.max.x.toFixed(3), y: currentPlayerBox.max.y.toFixed(3), z: currentPlayerBox.max.z.toFixed(3) }
-          },
-          overlap: {
-            x: overlapX.toFixed(3),
-            y: overlapY.toFixed(3),
-            z: overlapZ.toFixed(3)
-          }
-        };
-        break;
+        // Only consider "stuck" if there's significant overlap (>0.2) on at least 2 axes
+        // Small edge overlaps are normal when standing next to blocks
+        const significantOverlapX = overlapX > 0.2;
+        const significantOverlapY = overlapY > 0.2;
+        const significantOverlapZ = overlapZ > 0.2;
+        const significantOverlapCount = [significantOverlapX, significantOverlapY, significantOverlapZ].filter(Boolean).length;
+        
+        if (significantOverlapCount >= 2) {
+          stuckInsideBlock = true;
+          stuckBlockInfo = {
+            collider: {
+              min: { x: collider.min.x.toFixed(3), y: collider.min.y.toFixed(3), z: collider.min.z.toFixed(3) },
+              max: { x: collider.max.x.toFixed(3), y: collider.max.y.toFixed(3), z: collider.max.z.toFixed(3) }
+            },
+            playerBox: {
+              min: { x: currentPlayerBox.min.x.toFixed(3), y: currentPlayerBox.min.y.toFixed(3), z: currentPlayerBox.min.z.toFixed(3) },
+              max: { x: currentPlayerBox.max.x.toFixed(3), y: currentPlayerBox.max.y.toFixed(3), z: currentPlayerBox.max.z.toFixed(3) }
+            },
+            overlap: {
+              x: overlapX.toFixed(3),
+              y: overlapY.toFixed(3),
+              z: overlapZ.toFixed(3)
+            }
+          };
+          break;
+        }
       }
     }
     
