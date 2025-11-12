@@ -348,6 +348,10 @@ function FirstPersonControls({
   const rightVecRef = useRef(new THREE.Vector3());
   const deltaMovementRef = useRef(new THREE.Vector3());
   
+  // Reusable Box3 objects for step-up mechanic (performance optimization)
+  const stepUpPlayerBoxRef = useRef(new THREE.Box3());
+  const stepUpClearanceBoxRef = useRef(new THREE.Box3());
+  
   // Use blocks from props instead of context (context doesn't cross Canvas boundary)
   const existingBlocks = blocks;
   
@@ -1104,44 +1108,48 @@ function FirstPersonControls({
     // Step-up mechanic: Allow climbing onto blocks when horizontally blocked
     const stepUpHeight = 0.6; // Maximum height player can step up
     if ((xBlocked || zBlocked) && onGround.current) {
-      // Check if there's a block we can step up onto
       const currentFootY = camera.position.y - playerHeight;
+      const spatialRadius = 2.0; // Only check blocks within 2 meters
       
       // Look for blocks within step-up range above current foot level
       let bestStepUpY = null;
       
       for (const collider of colliders) {
+        // OPTIMIZATION: Spatial filtering - skip blocks too far away
+        const distX = Math.abs(collider.max.x + collider.min.x) / 2 - camera.position.x;
+        const distZ = Math.abs(collider.max.z + collider.min.z) / 2 - camera.position.z;
+        if (Math.sqrt(distX * distX + distZ * distZ) > spatialRadius) continue;
+        
         const blockTopY = collider.max.y;
         const blockBottomY = collider.min.y;
         
         // Block top must be above our feet but within step-up range
         if (blockTopY > currentFootY && blockTopY <= currentFootY + stepUpHeight) {
-          // Check if this block is in our horizontal path
-          const playerBox = new THREE.Box3(
+          // OPTIMIZATION: Reuse Box3 instead of creating new one
+          stepUpPlayerBoxRef.current.set(
             new THREE.Vector3(
               camera.position.x - playerRadius,
-              blockTopY, // Check at the block's top level
+              blockTopY,
               camera.position.z - playerRadius
             ),
             new THREE.Vector3(
               camera.position.x + playerRadius,
-              blockTopY + playerHeight, // Full player height above block
+              blockTopY + playerHeight,
               camera.position.z + playerRadius
             )
           );
           
           // Check if player would collide with this block horizontally
           const horizontalOverlap = !(
-            playerBox.max.x <= collider.min.x ||
-            playerBox.min.x >= collider.max.x ||
-            playerBox.max.z <= collider.min.z ||
-            playerBox.min.z >= collider.max.z
+            stepUpPlayerBoxRef.current.max.x <= collider.min.x ||
+            stepUpPlayerBoxRef.current.min.x >= collider.max.x ||
+            stepUpPlayerBoxRef.current.max.z <= collider.min.z ||
+            stepUpPlayerBoxRef.current.min.z >= collider.max.z
           );
           
           if (horizontalOverlap) {
-            // This block is blocking us, check if we can step onto it
-            // Verify there's clearance above the block for player height
-            const clearanceBox = new THREE.Box3(
+            // OPTIMIZATION: Reuse Box3 for clearance check
+            stepUpClearanceBoxRef.current.set(
               new THREE.Vector3(
                 camera.position.x - playerRadius,
                 blockTopY,
@@ -1154,9 +1162,21 @@ function FirstPersonControls({
               )
             );
             
+            // OPTIMIZATION: Only check blocks in step-up height range
             let hasClearance = true;
             for (const otherCollider of colliders) {
-              if (otherCollider !== collider && clearanceBox.intersectsBox(otherCollider)) {
+              if (otherCollider === collider) continue;
+              
+              // Skip blocks outside the step-up height range
+              if (otherCollider.min.y > blockTopY + playerHeight) continue;
+              if (otherCollider.max.y < blockTopY) continue;
+              
+              // Skip blocks too far horizontally
+              const otherDistX = Math.abs(otherCollider.max.x + otherCollider.min.x) / 2 - camera.position.x;
+              const otherDistZ = Math.abs(otherCollider.max.z + otherCollider.min.z) / 2 - camera.position.z;
+              if (Math.sqrt(otherDistX * otherDistX + otherDistZ * otherDistZ) > spatialRadius) continue;
+              
+              if (stepUpClearanceBoxRef.current.intersectsBox(otherCollider)) {
                 hasClearance = false;
                 break;
               }
