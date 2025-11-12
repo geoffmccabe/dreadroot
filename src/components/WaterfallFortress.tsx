@@ -576,8 +576,12 @@ function FirstPersonControls({
     nonZeroEvents: 0,
     leftDriftEvents: 0,
     rightDriftEvents: 0,
+    phantomEventsFiltered: 0,
     recentMovements: [] as Array<{x: number, y: number, timestamp: number}>
   });
+
+  // Track last few movements to detect phantom event patterns
+  const lastMovements = useRef<Array<{x: number, y: number}>>([]);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
@@ -594,7 +598,38 @@ function FirstPersonControls({
       mouseDebugData.current.rightDriftEvents++;
     }
     
-    // Track recent movements
+    // Track recent movements for pattern detection
+    lastMovements.current.push({x: event.movementX, y: event.movementY});
+    if (lastMovements.current.length > 5) {
+      lastMovements.current.shift();
+    }
+    
+    // PHANTOM EVENT DETECTION: Browser bug causes repeated identical tiny movements
+    // Real user input varies in magnitude and direction
+    // Phantom events are always the same fixed value (typically -1,0 or 1,0)
+    if (lastMovements.current.length >= 4) {
+      const last4 = lastMovements.current.slice(-4);
+      const allIdentical = last4.every(m => 
+        m.x === last4[0].x && m.y === last4[0].y
+      );
+      const allTiny = last4.every(m => 
+        Math.abs(m.x) <= 1 && Math.abs(m.y) <= 1
+      );
+      
+      // If we see 4+ identical tiny movements in a row, it's a phantom event
+      if (allIdentical && allTiny && (Math.abs(event.movementX) > 0 || Math.abs(event.movementY) > 0)) {
+        mouseDebugData.current.phantomEventsFiltered++;
+        console.log('[PHANTOM EVENT FILTERED]', {
+          movementX: event.movementX,
+          movementY: event.movementY,
+          pattern: last4.map(m => `(${m.x},${m.y})`),
+          totalFiltered: mouseDebugData.current.phantomEventsFiltered
+        });
+        return; // Ignore this phantom event
+      }
+    }
+    
+    // Track all movements for debugging
     mouseDebugData.current.recentMovements.push({
       x: event.movementX,
       y: event.movementY,
@@ -612,6 +647,7 @@ function FirstPersonControls({
         nonZeroEvents: mouseDebugData.current.nonZeroEvents,
         leftDriftEvents: mouseDebugData.current.leftDriftEvents,
         rightDriftEvents: mouseDebugData.current.rightDriftEvents,
+        phantomEventsFiltered: mouseDebugData.current.phantomEventsFiltered,
         avgMovementX: mouseDebugData.current.recentMovements.reduce((sum, m) => sum + m.x, 0) / mouseDebugData.current.recentMovements.length,
         samples: recent.map(m => `(${m.x},${m.y})`)
       });
