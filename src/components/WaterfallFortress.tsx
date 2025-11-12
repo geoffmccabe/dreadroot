@@ -555,18 +555,11 @@ function FirstPersonControls({
     }
   }, []);
 
-  // Quaternion rotation axes (reused to prevent GC)
-  const rotationAxisY = useRef(new THREE.Vector3(0, 1, 0));
-  const rotationAxisX = useRef(new THREE.Vector3());
+  // Reusable Euler object to prevent GC and avoid precision errors from object creation
+  const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
-    
-    // Ignore events with zero or near-zero movement (phantom events / sensor noise)
-    const DEADZONE = 0.5; // Ignore movements smaller than 0.5 pixels
-    if (Math.abs(event.movementX) < DEADZONE && Math.abs(event.movementY) < DEADZONE) {
-      return;
-    }
     
     const sensitivity = 0.002;
     const deltaYaw = -event.movementX * sensitivity;
@@ -580,10 +573,11 @@ function FirstPersonControls({
     const maxPitch = Math.PI / 2 - 0.01;
     pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
     
-    // Reconstruct quaternion from clean Euler angles to prevent drift accumulation
-    const euler = new THREE.Euler(pitch.current, yaw.current, 0, 'YXZ');
-    camera.quaternion.setFromEuler(euler);
-  }, [camera]);
+    // CRITICAL: Reuse Euler object and remove camera from dependencies
+    // This prevents handleMouseMove from being recreated when camera ref changes
+    eulerRef.current.set(pitch.current, yaw.current, 0);
+    camera.quaternion.setFromEuler(eulerRef.current);
+  }, []); // Empty deps - camera is stable, and we don't need it as a dependency
 
   const handleWheel = useCallback((event: WheelEvent) => {
     if (!isLocked.current || !blockPlacementMode) return;
