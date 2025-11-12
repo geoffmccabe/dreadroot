@@ -1107,7 +1107,11 @@ function FirstPersonControls({
 
     // Step-up mechanic: Allow climbing onto blocks when horizontally blocked
     const stepUpHeight = 0.6; // Maximum height player can step up
-    if ((xBlocked || zBlocked) && onGround.current) {
+    
+    // OPTIMIZATION: Only check step-up when actively moving horizontally
+    const isMovingHorizontally = Math.abs(deltaMovementRef.current.x) > 0.001 || Math.abs(deltaMovementRef.current.z) > 0.001;
+    
+    if ((xBlocked || zBlocked) && onGround.current && isMovingHorizontally) {
       const currentFootY = camera.position.y - playerHeight;
       const spatialRadius = 2.0; // Only check blocks within 2 meters
       
