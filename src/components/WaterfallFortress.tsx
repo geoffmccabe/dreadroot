@@ -2171,7 +2171,9 @@ function Scene({
     pistolHolster: new Audio('/holster_pistol_sound.mp3'),
     gunshot: new Audio('/space_gunshot.mp3'),
     coinHit: new Audio('/coin_hit_sound.mp3'),
-    woodenThud: new Audio('/wooden_thud_sound.mp3')
+    woodenThud: new Audio('/wooden_thud_sound.mp3'),
+    wispBoom: new Audio('/space_gunshot.mp3'), // Using gunshot as boom effect
+    wispCheer: new Audio('/coin_hit_sound.mp3') // Using coin hit as cheer effect
   });
 
   // Block Rain handler - triggered by custom event
@@ -2353,7 +2355,8 @@ function Scene({
           });
         }
         setWispParticles(newParticles);
-        playThrottledAudio(audioRefs.current.coinHit);
+        playAudio(audioRefs.current.wispBoom);
+        playAudio(audioRefs.current.wispCheer);
         return true;
       }
     }
