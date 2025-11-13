@@ -375,9 +375,24 @@ function FirstPersonControls({
 
   // Cache for block collision boxes to avoid recreating them on every render
   const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
+  
+  // Track block IDs to only rebuild colliders when blocks actually change
+  const lastBlockIds = useRef<string>('');
 
   // Collision boxes for fortress walls and placed blocks
   const colliders = useMemo(() => {
+    // Create stable key from block IDs to avoid rebuilding on every render
+    const blockIds = existingBlocks.map(b => b.id).sort().join(',');
+    
+    // Only rebuild if blocks actually changed
+    if (blockIds === lastBlockIds.current && blockCollisionCache.current.size > 0) {
+      if (DEBUG_LOGGING) {
+        console.log('[Colliders] Using cached colliders');
+      }
+      return Array.from(blockCollisionCache.current.values());
+    }
+    
+    lastBlockIds.current = blockIds;
     console.log('[Colliders] Building colliders with', existingBlocks.length, 'blocks');
     const cliffW = 40, cliffH = 20, frontT = 2;
     const courtyardDepth = 30, frontZ = -8;
