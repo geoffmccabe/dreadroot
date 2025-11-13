@@ -3348,7 +3348,7 @@ export default function WaterfallFortress() {
         gl={{ antialias: true }}
         dpr={[1, 2]}
       >
-      {showPerfMonitor && <Perf position="top-left" minimal={false} />}
+      {showPerfMonitor && <Perf position="top-left" minimal={true} />}
       <Scene
         settings={settings}
         onCoinHit={handleCoinHit} 
