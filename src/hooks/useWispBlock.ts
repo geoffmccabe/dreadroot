@@ -31,6 +31,9 @@ export const useWispBlock = (
   // Spatial cache for nearby blocks to avoid filtering 10x per second
   const nearbyBlocksCache = useRef<PlacedBlock[]>([]);
   const cacheOriginPosition = useRef<THREE.Vector3 | null>(null);
+  
+  // Ref to avoid callback recreation on every placedBlocks change
+  const placedBlocksRef = useRef<PlacedBlock[]>(placedBlocks);
 
   // Generate random position within bounds, avoiding existing blocks
   const generateRandomPosition = useCallback((blocks: PlacedBlock[]): THREE.Vector3 => {
@@ -73,7 +76,7 @@ export const useWispBlock = (
     const lifetime = 5000 + Math.random() * 25000;
     
     // Set position in ref (no re-render)
-    wispPositionRef.current = generateRandomPosition(placedBlocks);
+    wispPositionRef.current = generateRandomPosition(placedBlocksRef.current);
     
     const newWisp: WispState = {
       blockType: randomBlock,
@@ -91,7 +94,7 @@ export const useWispBlock = (
     lifetimeCheckRef.current = setTimeout(() => {
       spawnWisp(); // Respawn at new location
     }, lifetime);
-  }, [basicBlocks, placedBlocks, generateRandomPosition]);
+  }, [basicBlocks, generateRandomPosition]);
 
   // Move wisp 2-4 blocks in random direction (jumps around quickly)
   const moveWisp = useCallback(() => {
@@ -109,7 +112,7 @@ export const useWispBlock = (
       nearbyBlocks = nearbyBlocksCache.current;
     } else {
       // Cache invalid or doesn't exist, rebuild it
-      nearbyBlocks = placedBlocks.filter(block => {
+      nearbyBlocks = placedBlocksRef.current.filter(block => {
         const dx = block.position_x - currentPos.x;
         const dz = block.position_z - currentPos.z;
         return (dx * dx + dz * dz) < 100; // 10m radius squared
@@ -163,10 +166,11 @@ export const useWispBlock = (
         return;
       }
     }
-  }, [placedBlocks, wispState]);
+  }, [wispState]);
 
-  // Invalidate spatial cache when placedBlocks changes
+  // Update placedBlocksRef and invalidate spatial cache when placedBlocks changes
   useEffect(() => {
+    placedBlocksRef.current = placedBlocks;
     cacheOriginPosition.current = null;
   }, [placedBlocks]);
 
