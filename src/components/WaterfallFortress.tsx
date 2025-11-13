@@ -35,6 +35,17 @@ import { useWispBlock } from '@/hooks/useWispBlock';
 import { WispBlock } from '@/components/WispBlock';
 import { useBlocksData } from '@/hooks/useBlocksData';
 
+// ============================================================
+// DEBUG CONFIGURATION
+// ============================================================
+// Set to true to enable detailed debugging logs for movement, collisions, mouse tracking, etc.
+// WARNING: Enabling this will SEVERELY impact FPS (6-9 FPS) due to high-frequency console spam.
+// These logs run 60-100+ times per second during gameplay and are only needed for debugging
+// specific issues like stuck players, collision problems, or camera drift.
+// Keep this FALSE during normal gameplay.
+const DEBUG_LOGGING = false;
+// ============================================================
+
 // Camera-tracked block renderer with chunk culling
 function CameraTrackedBlocks({ blocks, showOwnershipOutline, currentUserId, hoveredBlockId, onMeshReady }: { 
   blocks: PlacedBlock[];
@@ -626,12 +637,14 @@ function FirstPersonControls({
       // If we see 4+ identical tiny movements in a row, it's a phantom event
       if (allIdentical && allTiny && (Math.abs(event.movementX) > 0 || Math.abs(event.movementY) > 0)) {
         mouseDebugData.current.phantomEventsFiltered++;
-        console.log('[PHANTOM EVENT FILTERED]', {
-          movementX: event.movementX,
-          movementY: event.movementY,
-          pattern: last4.map(m => `(${m.x},${m.y})`),
-          totalFiltered: mouseDebugData.current.phantomEventsFiltered
-        });
+        if (DEBUG_LOGGING) {
+          console.log('[PHANTOM EVENT FILTERED]', {
+            movementX: event.movementX,
+            movementY: event.movementY,
+            pattern: last4.map(m => `(${m.x},${m.y})`),
+            totalFiltered: mouseDebugData.current.phantomEventsFiltered
+          });
+        }
         return; // Ignore this phantom event
       }
     }
@@ -649,15 +662,17 @@ function FirstPersonControls({
     // Log every 50 events
     if (mouseDebugData.current.totalEvents % 50 === 0) {
       const recent = mouseDebugData.current.recentMovements.slice(-10);
-      console.log('[MOUSE DEBUG]', {
-        totalEvents: mouseDebugData.current.totalEvents,
-        nonZeroEvents: mouseDebugData.current.nonZeroEvents,
-        leftDriftEvents: mouseDebugData.current.leftDriftEvents,
-        rightDriftEvents: mouseDebugData.current.rightDriftEvents,
-        phantomEventsFiltered: mouseDebugData.current.phantomEventsFiltered,
-        avgMovementX: mouseDebugData.current.recentMovements.reduce((sum, m) => sum + m.x, 0) / mouseDebugData.current.recentMovements.length,
-        samples: recent.map(m => `(${m.x},${m.y})`)
-      });
+      if (DEBUG_LOGGING) {
+        console.log('[MOUSE DEBUG]', {
+          totalEvents: mouseDebugData.current.totalEvents,
+          nonZeroEvents: mouseDebugData.current.nonZeroEvents,
+          leftDriftEvents: mouseDebugData.current.leftDriftEvents,
+          rightDriftEvents: mouseDebugData.current.rightDriftEvents,
+          phantomEventsFiltered: mouseDebugData.current.phantomEventsFiltered,
+          avgMovementX: mouseDebugData.current.recentMovements.reduce((sum, m) => sum + m.x, 0) / mouseDebugData.current.recentMovements.length,
+          samples: recent.map(m => `(${m.x},${m.y})`)
+        });
+      }
     }
     
     const sensitivity = 0.002;
@@ -667,14 +682,16 @@ function FirstPersonControls({
     // Log significant movements
     if (Math.abs(event.movementX) > 0 || Math.abs(event.movementY) > 0) {
       if (mouseDebugData.current.totalEvents % 10 === 0) {
-        console.log('[MOUSE MOVE]', {
-          movementX: event.movementX,
-          movementY: event.movementY,
-          deltaYaw: deltaYaw.toFixed(4),
-          deltaPitch: deltaPitch.toFixed(4),
-          newYaw: (yaw.current + deltaYaw).toFixed(4),
-          newPitch: (pitch.current + deltaPitch).toFixed(4)
-        });
+        if (DEBUG_LOGGING) {
+          console.log('[MOUSE MOVE]', {
+            movementX: event.movementX,
+            movementY: event.movementY,
+            deltaYaw: deltaYaw.toFixed(4),
+            deltaPitch: deltaPitch.toFixed(4),
+            newYaw: (yaw.current + deltaYaw).toFixed(4),
+            newPitch: (pitch.current + deltaPitch).toFixed(4)
+          });
+        }
       }
     }
     
@@ -886,11 +903,13 @@ function FirstPersonControls({
       
       // Log camera rotation changes
       if (Math.abs(yaw.current - oldYaw) > 0.001) {
-        console.log('[CAMERA ROTATION]', {
-          yaw: yaw.current.toFixed(4),
-          pitch: pitch.current.toFixed(4),
-          yawDelta: (yaw.current - oldYaw).toFixed(4)
-        });
+        if (DEBUG_LOGGING) {
+          console.log('[CAMERA ROTATION]', {
+            yaw: yaw.current.toFixed(4),
+            pitch: pitch.current.toFixed(4),
+            yawDelta: (yaw.current - oldYaw).toFixed(4)
+          });
+        }
       }
     }
     
@@ -1007,7 +1026,7 @@ function FirstPersonControls({
           const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.1) && (playerBox.min.y <= collider.max.y + 0.1);
           if (standingOnBlock) {
             // Debug occasionally
-            if (Math.random() < 0.01) {
+            if (DEBUG_LOGGING && Math.random() < 0.01) {
               console.log('[Standing Check]', {
                 playerMinY: playerBox.min.y,
                 colliderMaxY: collider.max.y,
@@ -1078,15 +1097,17 @@ function FirstPersonControls({
       {
         const collision = checkAxisCollision(testPos, false);
         if (collision) {
-          console.log('[Y-COLLISION]', {
-            time: state.clock.elapsedTime.toFixed(2),
-            velocity_y: velocity.current.y.toFixed(3),
-            currentY: camera.position.y.toFixed(3),
-            testY: testPos.y.toFixed(3),
-            collision_min_y: collision.min.y.toFixed(3),
-            collision_max_y: collision.max.y.toFixed(3),
-            action: velocity.current.y < 0 ? 'FALLING' : 'JUMPING'
-          });
+          if (DEBUG_LOGGING) {
+            console.log('[Y-COLLISION]', {
+              time: state.clock.elapsedTime.toFixed(2),
+              velocity_y: velocity.current.y.toFixed(3),
+              currentY: camera.position.y.toFixed(3),
+              testY: testPos.y.toFixed(3),
+              collision_min_y: collision.min.y.toFixed(3),
+              collision_max_y: collision.max.y.toFixed(3),
+              action: velocity.current.y < 0 ? 'FALLING' : 'JUMPING'
+            });
+          }
           
           if (velocity.current.y < 0) {
             // Falling - land on top
@@ -1211,12 +1232,14 @@ function FirstPersonControls({
         camera.position.y = bestStepUpY + playerHeight;
         velocity.current.y = 0;
         onGround.current = true;
-        console.log('[STEP-UP]', {
-          time: state.clock.elapsedTime.toFixed(2),
-          from_y: currentFootY.toFixed(3),
-          to_y: bestStepUpY.toFixed(3),
-          step_height: (bestStepUpY - currentFootY).toFixed(3)
-        });
+        if (DEBUG_LOGGING) {
+          console.log('[STEP-UP]', {
+            time: state.clock.elapsedTime.toFixed(2),
+            from_y: currentFootY.toFixed(3),
+            to_y: bestStepUpY.toFixed(3),
+            step_height: (bestStepUpY - currentFootY).toFixed(3)
+          });
+        }
       }
     }
     
@@ -1235,7 +1258,8 @@ function FirstPersonControls({
     const isMoving = keys.current.w || keys.current.s || keys.current.a || keys.current.d || 
                      keys.current.space || Math.abs(velocity.current.y) > 0.1;
     if (isMoving && state.clock.elapsedTime - lastPositionLog.current > 0.1) {
-      console.log('[POSITION TRACK]', {
+      if (DEBUG_LOGGING) {
+        console.log('[POSITION TRACK]', {
         time: state.clock.elapsedTime.toFixed(2),
         pos: {
           x: camera.position.x.toFixed(3),
@@ -1262,6 +1286,7 @@ function FirstPersonControls({
           space: keys.current.space
         }
       });
+      }
       lastPositionLog.current = state.clock.elapsedTime;
     }
     
