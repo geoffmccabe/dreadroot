@@ -18,19 +18,10 @@ export const WispBlock: React.FC<WispBlockProps> = ({
   const glowIntensityRef = useRef(0.5);
   const glowDirectionRef = useRef(1);
   
-  // Load texture if available
-  const texture = useMemo(() => {
-    if (blockType.texture?.diffuse) {
-      try {
-        const loader = new THREE.TextureLoader();
-        return loader.load(blockType.texture.diffuse);
-      } catch (error) {
-        console.error('Failed to load wisp texture:', error);
-        return null;
-      }
-    }
-    return null;
-  }, [blockType.texture?.diffuse]);
+  // Load texture with proper caching (useLoader handles caching automatically)
+  const texture = blockType.texture?.diffuse 
+    ? useLoader(THREE.TextureLoader, blockType.texture.diffuse)
+    : null;
 
   // Create material with transparency and glow
   const material = useMemo(() => {
