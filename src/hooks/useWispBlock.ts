@@ -192,10 +192,10 @@ export const useWispBlock = (
   useEffect(() => {
     if (!wispState) return;
     
-    // Move every 0.1 seconds
+    // Move every 0.5 seconds (reduced from 0.1s to prevent performance impact)
     moveIntervalRef.current = setInterval(() => {
       moveWisp();
-    }, 100);
+    }, 500);
     
     return () => {
       if (moveIntervalRef.current) {
