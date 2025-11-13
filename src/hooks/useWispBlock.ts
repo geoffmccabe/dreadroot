@@ -27,6 +27,10 @@ export const useWispBlock = (
   const moveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lifetimeCheckRef = useRef<NodeJS.Timeout | null>(null);
   const reusableVector = useRef(new THREE.Vector3());
+  
+  // Spatial cache for nearby blocks to avoid filtering 10x per second
+  const nearbyBlocksCache = useRef<PlacedBlock[]>([]);
+  const cacheOriginPosition = useRef<THREE.Vector3 | null>(null);
 
   // Generate random position within bounds, avoiding existing blocks
   const generateRandomPosition = useCallback((blocks: PlacedBlock[]): THREE.Vector3 => {
@@ -96,12 +100,23 @@ export const useWispBlock = (
     const currentPos = wispPositionRef.current;
     const maxAttempts = 5;
     
-    // Pre-filter blocks within 10 meters for collision checks
-    const nearbyBlocks = placedBlocks.filter(block => {
-      const dx = block.position_x - currentPos.x;
-      const dz = block.position_z - currentPos.z;
-      return (dx * dx + dz * dz) < 100; // 10m radius squared
-    });
+    // Use spatial cache for nearby blocks to avoid filtering every 0.1s
+    let nearbyBlocks: PlacedBlock[];
+    
+    if (cacheOriginPosition.current && 
+        currentPos.distanceTo(cacheOriginPosition.current) < 10) {
+      // Cache is still valid (wisp within 10m of cache origin), reuse it
+      nearbyBlocks = nearbyBlocksCache.current;
+    } else {
+      // Cache invalid or doesn't exist, rebuild it
+      nearbyBlocks = placedBlocks.filter(block => {
+        const dx = block.position_x - currentPos.x;
+        const dz = block.position_z - currentPos.z;
+        return (dx * dx + dz * dz) < 100; // 10m radius squared
+      });
+      nearbyBlocksCache.current = nearbyBlocks;
+      cacheOriginPosition.current = currentPos.clone();
+    }
     
     for (let i = 0; i < maxAttempts; i++) {
       // Random direction (0-360 degrees)
@@ -149,6 +164,11 @@ export const useWispBlock = (
       }
     }
   }, [placedBlocks, wispState]);
+
+  // Invalidate spatial cache when placedBlocks changes
+  useEffect(() => {
+    cacheOriginPosition.current = null;
+  }, [placedBlocks]);
 
   // Initialize wisp on mount
   useEffect(() => {
