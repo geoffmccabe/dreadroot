@@ -98,8 +98,6 @@ export const useWispBlock = (
 
   // Move wisp 2-4 blocks in random direction (jumps around quickly)
   const moveWisp = useCallback(() => {
-    if (!wispState) return;
-    
     const currentPos = wispPositionRef.current;
     const maxAttempts = 5;
     
@@ -107,15 +105,15 @@ export const useWispBlock = (
     let nearbyBlocks: PlacedBlock[];
     
     if (cacheOriginPosition.current && 
-        currentPos.distanceTo(cacheOriginPosition.current) < 10) {
-      // Cache is still valid (wisp within 10m of cache origin), reuse it
+        currentPos.distanceTo(cacheOriginPosition.current) < 20) {
+      // Cache is still valid (wisp within 20m of cache origin), reuse it
       nearbyBlocks = nearbyBlocksCache.current;
     } else {
       // Cache invalid or doesn't exist, rebuild it
       nearbyBlocks = placedBlocksRef.current.filter(block => {
         const dx = block.position_x - currentPos.x;
         const dz = block.position_z - currentPos.z;
-        return (dx * dx + dz * dz) < 100; // 10m radius squared
+        return (dx * dx + dz * dz) < 400; // 20m radius squared
       });
       nearbyBlocksCache.current = nearbyBlocks;
       cacheOriginPosition.current = currentPos.clone();
@@ -166,7 +164,7 @@ export const useWispBlock = (
         return;
       }
     }
-  }, [wispState]);
+  }, []); // No dependencies - reads from refs only
 
   // Update placedBlocksRef and invalidate spatial cache when placedBlocks changes
   useEffect(() => {
