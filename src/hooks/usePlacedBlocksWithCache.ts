@@ -259,6 +259,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   // Periodic check to filter expired blocks from state (every 5 seconds)
   // This ensures blocks disappear within 5-10 seconds of expiring without FPS impact
   useEffect(() => {
+    const DEBUG_EXPIRATION_LOGGING = false; // Set to true for debugging block expiration
+    
     const interval = setInterval(() => {
       setBlocksIfChanged(prev => {
         const now = new Date();
@@ -266,8 +268,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
           !block.expires_at || new Date(block.expires_at) > now
         );
         
-        // Only update if any blocks were filtered out
-        if (activeBlocks.length !== prev.length) {
+        // Only log if any blocks were filtered out and debug logging enabled
+        if (DEBUG_EXPIRATION_LOGGING && activeBlocks.length !== prev.length) {
           console.log(`[Expiration] Filtered out ${prev.length - activeBlocks.length} expired blocks`);
         }
         
