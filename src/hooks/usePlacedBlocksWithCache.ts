@@ -82,16 +82,23 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       
       // Load blocks from IndexedDB first (instant)
       const cachedBlocks = await getAllBlocks();
-      setBlocksIfChanged(cachedBlocks.map(block => ({
-        id: block.id,
-        user_id: block.user_id,
-        position_x: block.position_x,
-        position_y: block.position_y,
-        position_z: block.position_z,
-        block_type: block.block_type,
-        created_at: block.created_at,
-        updated_at: block.updated_at
-      })));
+      
+      // Filter out expired blocks from cache
+      const nowTime = new Date();
+      const activeCachedBlocks = cachedBlocks
+        .filter(block => !block.expires_at || new Date(block.expires_at) > nowTime)
+        .map(block => ({
+          id: block.id,
+          user_id: block.user_id,
+          position_x: block.position_x,
+          position_y: block.position_y,
+          position_z: block.position_z,
+          block_type: block.block_type,
+          created_at: block.created_at,
+          updated_at: block.updated_at
+        }));
+      
+      setBlocksIfChanged(activeCachedBlocks);
 
       
       // Get all blocks from Supabase
@@ -122,7 +129,13 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         await addBlock(dbBlock);
       }
 
-      setBlocksIfChanged(supabaseBlocks || []);
+      // Filter out expired blocks before setting state
+      const currentTime = new Date();
+      const activeServerBlocks = (supabaseBlocks || []).filter(block => 
+        !block.expires_at || new Date(block.expires_at) > currentTime
+      );
+      
+      setBlocksIfChanged(activeServerBlocks);
     } catch (error) {
       console.error('Error syncing:', error);
     } finally {
@@ -141,16 +154,23 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       await initDB();
       
       const cachedBlocks = await getAllBlocks();
-      setBlocksIfChanged(cachedBlocks.map(block => ({
-        id: block.id,
-        user_id: block.user_id,
-        position_x: block.position_x,
-        position_y: block.position_y,
-        position_z: block.position_z,
-        block_type: block.block_type,
-        created_at: block.created_at,
-        updated_at: block.updated_at
-      })));
+      
+      // Filter out expired blocks from cache
+      const initTime = new Date();
+      const activeInitBlocks = cachedBlocks
+        .filter(block => !block.expires_at || new Date(block.expires_at) > initTime)
+        .map(block => ({
+          id: block.id,
+          user_id: block.user_id,
+          position_x: block.position_x,
+          position_y: block.position_y,
+          position_z: block.position_z,
+          block_type: block.block_type,
+          created_at: block.created_at,
+          updated_at: block.updated_at
+        }));
+      
+      setBlocksIfChanged(activeInitBlocks);
 
       await syncWithSupabase();
     } catch (error) {
@@ -173,6 +193,11 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         async (payload) => {
           if (payload.eventType === 'INSERT') {
             const newBlock = payload.new as PlacedBlock;
+            
+            // Skip if block is already expired
+            if (newBlock.expires_at && new Date(newBlock.expires_at) <= new Date()) {
+              return;
+            }
             
             // Add to IndexedDB
             const dbBlock: DBBlock = { ...newBlock, synced: true };
@@ -230,6 +255,28 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     const cleanup = setupRealtimeSubscription();
     return cleanup;
   }, [userId, initializeCache, setupRealtimeSubscription]);
+
+  // Periodic check to filter expired blocks from state (every 5 seconds)
+  // This ensures blocks disappear within 5-10 seconds of expiring without FPS impact
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBlocksIfChanged(prev => {
+        const now = new Date();
+        const activeBlocks = prev.filter(block => 
+          !block.expires_at || new Date(block.expires_at) > now
+        );
+        
+        // Only update if any blocks were filtered out
+        if (activeBlocks.length !== prev.length) {
+          console.log(`[Expiration] Filtered out ${prev.length - activeBlocks.length} expired blocks`);
+        }
+        
+        return activeBlocks;
+      });
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [setBlocksIfChanged]);
 
   // Optimized block placement with instant local feedback
   const placeBlock = async (x: number, y: number, z: number, blockType: string, expiresAt?: string) => {
