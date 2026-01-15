@@ -78,19 +78,26 @@ export function FPSDisplay({ isAdmin = false }: FPSDisplayProps) {
 
 export function DFlowOutputPanel() {
   const [visible, setVisible] = useState(false);
-  const [output, setOutput] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [sampleCount, setSampleCount] = useState(0);
   
   useEffect(() => {
     const checkOutput = () => {
       if (diagnostics.showOutput && diagnostics.lastOutput) {
-        setOutput(diagnostics.lastOutput);
+        setSampleCount(diagnostics.lastOutput.split('\n').length - 1);
         setVisible(true);
+        setCopied(false);
       }
     };
     
     const interval = setInterval(checkOutput, 200);
     return () => clearInterval(interval);
   }, []);
+  
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(diagnostics.lastOutput);
+    setCopied(true);
+  };
   
   const handleDismiss = () => {
     diagnostics.dismissOutput();
@@ -100,20 +107,25 @@ export function DFlowOutputPanel() {
   if (!visible) return null;
   
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-      <div className="bg-black/90 border border-white/30 rounded-lg p-4 max-w-4xl max-h-[80vh] overflow-auto">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-white font-mono text-sm">D-Flow Results</span>
-          <button 
-            onClick={handleDismiss}
-            className="text-white bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-500"
-          >
-            Close
-          </button>
-        </div>
-        <pre className="text-green-400 font-mono text-xs whitespace-pre overflow-x-auto">
-          {output}
-        </pre>
+    <div className="fixed top-16 left-2 z-[9999] bg-black/90 border border-white/30 rounded-lg p-3">
+      <div className="text-white font-mono text-sm mb-2">
+        D-Flow: {sampleCount} samples
+      </div>
+      <div className="flex gap-2">
+        <button 
+          onClick={handleCopy}
+          className={`px-3 py-1 rounded text-sm font-medium ${
+            copied ? 'bg-green-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-500'
+          }`}
+        >
+          {copied ? '✓ Copied' : 'Copy Data'}
+        </button>
+        <button 
+          onClick={handleDismiss}
+          className="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-500"
+        >
+          Close
+        </button>
       </div>
     </div>
   );
