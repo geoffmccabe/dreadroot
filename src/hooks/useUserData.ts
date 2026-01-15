@@ -51,6 +51,13 @@ export const useUserData = () => {
   const tokenBalanceRef = useRef(tokenBalance);
   const inventoryRef = useRef(inventory);
   
+  // Track pending purchases per item type (for accurate database sync)
+  const pendingPurchasesRef = useRef<Map<string, number>>(new Map());
+  // Track pending coin deductions (for accurate database sync)
+  const pendingCoinDeductionRef = useRef<number>(0);
+  // Debounce timer for database sync
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Keep refs in sync with state
   useEffect(() => {
     tokenBalanceRef.current = tokenBalance;
@@ -243,7 +250,12 @@ export const useUserData = () => {
 
     const newCoinAmount = currentBalance.coins - cost;
     
-    // OPTIMISTIC UPDATE - update UI immediately
+    // Track pending purchase for database sync
+    const currentPending = pendingPurchasesRef.current.get(itemType) || 0;
+    pendingPurchasesRef.current.set(itemType, currentPending + 1);
+    pendingCoinDeductionRef.current += cost;
+    
+    // OPTIMISTIC UPDATE - update UI immediately using refs for fresh state
     setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
     setInventory(prev => {
       const existingItem = prev.find(item => item.item_type === itemType || item.item_id === itemType);
@@ -273,48 +285,76 @@ export const useUserData = () => {
       duration: 2000,
     });
 
-    // Sync to database in background (non-blocking)
-    (async () => {
+    // Debounced database sync - collects rapid purchases into one update
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+    }
+    
+    syncTimerRef.current = setTimeout(async () => {
       try {
-        await supabase
+        const userId = user.id;
+        const themeId = currentTheme.id;
+        
+        // Get current database values and apply ALL pending changes at once
+        const pendingCoins = pendingCoinDeductionRef.current;
+        const pendingItems = new Map(pendingPurchasesRef.current);
+        
+        // Clear pending counters BEFORE async operations
+        pendingCoinDeductionRef.current = 0;
+        pendingPurchasesRef.current.clear();
+        
+        // Fetch current database balance
+        const { data: dbBalance } = await supabase
           .from('user_token_balances')
-          .update({ coins: newCoinAmount })
-          .eq('user_id', user.id)
-          .eq('token_theme_id', currentTheme.id);
-
-        // Get current inventory from database
-        const { data: existingInvItem } = await supabase
-          .from('user_inventory')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('item_type', itemType)
-          .maybeSingle();
-
-        if (existingInvItem) {
+          .select('coins')
+          .eq('user_id', userId)
+          .eq('token_theme_id', themeId)
+          .single();
+        
+        if (dbBalance) {
+          const newDbCoins = dbBalance.coins - pendingCoins;
           await supabase
+            .from('user_token_balances')
+            .update({ coins: newDbCoins })
+            .eq('user_id', userId)
+            .eq('token_theme_id', themeId);
+        }
+
+        // Update inventory for each pending item type
+        for (const [pendingItemType, pendingCount] of pendingItems) {
+          const { data: existingInvItem } = await supabase
             .from('user_inventory')
-            .update({ quantity: existingInvItem.quantity + 1 })
-            .eq('id', existingInvItem.id);
-        } else {
-          const { data: newItem } = await supabase
-            .from('user_inventory')
-            .insert([{ user_id: user.id, item_type: itemType, quantity: 1 }])
-            .select()
-            .single();
-          
-          // Replace temp item with real item
-          if (newItem) {
-            setInventory(prev => prev.map(item => 
-              item.id.startsWith('temp-') && item.item_type === itemType
-                ? { ...newItem } as UserInventoryItem
-                : item
-            ));
+            .select('*')
+            .eq('user_id', userId)
+            .eq('item_type', pendingItemType)
+            .maybeSingle();
+
+          if (existingInvItem) {
+            await supabase
+              .from('user_inventory')
+              .update({ quantity: existingInvItem.quantity + pendingCount })
+              .eq('id', existingInvItem.id);
+          } else {
+            const { data: newItem } = await supabase
+              .from('user_inventory')
+              .insert([{ user_id: userId, item_type: pendingItemType, quantity: pendingCount }])
+              .select()
+              .single();
+            
+            // Replace temp item with real item
+            if (newItem) {
+              setInventory(prev => prev.map(item => 
+                item.id.startsWith('temp-') && item.item_type === pendingItemType
+                  ? { ...newItem } as UserInventoryItem
+                  : item
+              ));
+            }
           }
         }
       } catch (error) {
         console.error('Error syncing purchase:', error);
       }
-    })();
+    }, 300); // 300ms debounce - fast enough to feel instant, slow enough to batch
     
     return true;
   };
