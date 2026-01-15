@@ -790,13 +790,16 @@ function FirstPersonControls({
             
             const source = ctx.createBufferSource();
             source.buffer = rejectionData.buffer;
-            source.playbackRate.value = 16.0; // 16x faster (very quick)
-            source.detune.value = -4800; // 4 octaves down (25% of previous pitch, counters playbackRate pitch increase)
+            source.playbackRate.value = 1.0; // Normal speed
+            source.detune.value = -1200; // 1 octave down (half pitch)
             const gainNode = ctx.createGain();
             gainNode.gain.value = 1.0; // Same volume
             source.connect(gainNode);
             gainNode.connect(ctx.destination);
             source.start(0);
+            // Stop after half the duration to cut sound in half
+            const halfDuration = rejectionData.buffer.duration / 2;
+            source.stop(ctx.currentTime + halfDuration);
           }
         } catch (e) {
           console.warn('Could not play rejection sound:', e);
@@ -2662,7 +2665,7 @@ function Scene({
       ))}
       
       {/* FPS Counter */}
-      <FPSCounter />
+      <FPSCounter isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>
   );
 }
@@ -3533,7 +3536,7 @@ export default function WaterfallFortress() {
     ))}
 
     {/* FPS Display */}
-    <FPSDisplay />
+    <FPSDisplay isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
 
     {/* Top right controls */}
     <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
