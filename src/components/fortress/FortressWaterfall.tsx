@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { WaterfallDrop } from './FortressTypes';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 
 interface WaterfallProps {
   flowSpeed?: number;
@@ -99,105 +100,110 @@ export function Waterfall({
   const rotation = useMemo(() => new THREE.Euler(), []);
   const quaternionRef = useRef(new THREE.Quaternion());
 
-  useFrame((state, delta) => {
-    diagnostics.useFrameCallCount++;
-    
-    // Early exit if mesh not ready or not visible
-    if (!instancedMeshRef.current) return;
-    
-    // Check visibility with throttle
-    const now = Date.now();
-    if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
-      lastVisibilityCheck.current = now;
-      const dx = camera.position.x - fall.centerX;
-      const dz = camera.position.z - fall.z;
-      // Avoid sqrt by comparing squared distances
-      const distSq = dx * dx + dz * dz;
-      const maxDistance = visualDistance * CHUNK_SIZE;
-      const shouldBeVisible = distSq <= maxDistance * maxDistance;
-      if (shouldBeVisible !== isVisible) {
-        setIsVisible(shouldBeVisible);
-      }
-    }
-    
-    if (!isVisible) return;
-
-    const mul = flowSpeed;
-    const msInterval = msBetweeenDrops;
-    timeAccumulatorRef.current += delta * 1000;
-
-    // Spawn new drops - O(1) using tracked index instead of O(n) findIndex
-    while (timeAccumulatorRef.current >= msInterval) {
-      timeAccumulatorRef.current -= msInterval;
-
-      // Find next inactive drop starting from last known position
-      const drops = activeDropsRef.current;
-      let found = false;
-      for (let i = 0; i < drops.length; i++) {
-        const idx = (nextInactiveIndexRef.current + i) % drops.length;
-        if (!drops[idx].active) {
-          const drop = drops[idx];
-          drop.active = true;
-          drop.position.set(
-            fall.centerX + (Math.random() - 0.5) * fall.width,
-            fall.topY,
-            fall.z + (Math.random() - 0.5) * fall.depth
-          );
-          drop.velocity = 0;
-          drop.color = pickColor();
-          nextInactiveIndexRef.current = (idx + 1) % drops.length;
-          found = true;
-          break;
+  // Register with centralized frame loop instead of useFrame
+  useEffect(() => {
+    const unregister = frameLoop.register('waterfall', (delta) => {
+      diagnostics.useFrameCallCount++;
+      
+      // Early exit if mesh not ready or not visible
+      if (!instancedMeshRef.current) return;
+      
+      // Check visibility with throttle
+      const now = Date.now();
+      if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
+        lastVisibilityCheck.current = now;
+        const dx = camera.position.x - fall.centerX;
+        const dz = camera.position.z - fall.z;
+        // Avoid sqrt by comparing squared distances
+        const distSq = dx * dx + dz * dz;
+        const maxDistance = visualDistance * CHUNK_SIZE;
+        const shouldBeVisible = distSq <= maxDistance * maxDistance;
+        if (shouldBeVisible !== isVisible) {
+          setIsVisible(shouldBeVisible);
         }
       }
-      if (!found) break; // All drops active, stop trying
-    }
+      
+      if (!isVisible) return;
 
-    let activeCount = 0;
+      const mul = flowSpeed;
+      const msInterval = msBetweeenDrops;
+      timeAccumulatorRef.current += delta * 1000;
 
-    // Update all active drops
-    activeDropsRef.current.forEach((drop) => {
-      if (!drop.active) return;
+      // Spawn new drops - O(1) using tracked index instead of O(n) findIndex
+      while (timeAccumulatorRef.current >= msInterval) {
+        timeAccumulatorRef.current -= msInterval;
 
-      // Apply gravity
-      drop.velocity += 9.8 * mul * delta;
-      drop.position.y -= drop.velocity * delta;
-
-      // Check if drop reached bottom
-      if (drop.position.y <= fall.bottomY) {
-        drop.active = false;
-        return;
+        // Find next inactive drop starting from last known position
+        const drops = activeDropsRef.current;
+        let found = false;
+        for (let i = 0; i < drops.length; i++) {
+          const idx = (nextInactiveIndexRef.current + i) % drops.length;
+          if (!drops[idx].active) {
+            const drop = drops[idx];
+            drop.active = true;
+            drop.position.set(
+              fall.centerX + (Math.random() - 0.5) * fall.width,
+              fall.topY,
+              fall.z + (Math.random() - 0.5) * fall.depth
+            );
+            drop.velocity = 0;
+            drop.color = pickColor();
+            nextInactiveIndexRef.current = (idx + 1) % drops.length;
+            found = true;
+            break;
+          }
+        }
+        if (!found) break; // All drops active, stop trying
       }
 
-      // Calculate stretch based on fall progress
-      const fallProgress = 1 - (drop.position.y - fall.bottomY) / (fall.topY - fall.bottomY);
-      const stretchMultiplier = 1 + (drop.stretchFactor - 1) * fallProgress;
+      let activeCount = 0;
 
-      // Scale: stretch only in Y
-      const baseSize = 0.1;
-      const scaleY = baseSize * stretchMultiplier;
-      scale.set(baseSize, scaleY, baseSize);
+      // Update all active drops
+      activeDropsRef.current.forEach((drop) => {
+        if (!drop.active) return;
 
-      // Adjust position so bottom edge falls at constant rate
-      const yOffset = (scaleY - baseSize) / 2;
-      position.set(drop.position.x, drop.position.y + yOffset, drop.position.z);
-      rotation.set(0, 0, 0);
+        // Apply gravity
+        drop.velocity += 9.8 * mul * delta;
+        drop.position.y -= drop.velocity * delta;
 
-      quaternionRef.current.setFromEuler(rotation);
-      matrix.compose(position, quaternionRef.current, scale);
-      instancedMeshRef.current!.setMatrixAt(activeCount, matrix);
-      instancedMeshRef.current!.setColorAt(activeCount, drop.color);
+        // Check if drop reached bottom
+        if (drop.position.y <= fall.bottomY) {
+          drop.active = false;
+          return;
+        }
 
-      activeCount++;
-    });
+        // Calculate stretch based on fall progress
+        const fallProgress = 1 - (drop.position.y - fall.bottomY) / (fall.topY - fall.bottomY);
+        const stretchMultiplier = 1 + (drop.stretchFactor - 1) * fallProgress;
 
-    // Update instance count
-    instancedMeshRef.current.count = activeCount;
-    instancedMeshRef.current.instanceMatrix.needsUpdate = true;
-    if (instancedMeshRef.current.instanceColor) {
-      instancedMeshRef.current.instanceColor.needsUpdate = true;
-    }
-  });
+        // Scale: stretch only in Y
+        const baseSize = 0.1;
+        const scaleY = baseSize * stretchMultiplier;
+        scale.set(baseSize, scaleY, baseSize);
+
+        // Adjust position so bottom edge falls at constant rate
+        const yOffset = (scaleY - baseSize) / 2;
+        position.set(drop.position.x, drop.position.y + yOffset, drop.position.z);
+        rotation.set(0, 0, 0);
+
+        quaternionRef.current.setFromEuler(rotation);
+        matrix.compose(position, quaternionRef.current, scale);
+        instancedMeshRef.current!.setMatrixAt(activeCount, matrix);
+        instancedMeshRef.current!.setColorAt(activeCount, drop.color);
+
+        activeCount++;
+      });
+
+      // Update instance count
+      instancedMeshRef.current.count = activeCount;
+      instancedMeshRef.current.instanceMatrix.needsUpdate = true;
+      if (instancedMeshRef.current.instanceColor) {
+        instancedMeshRef.current.instanceColor.needsUpdate = true;
+      }
+    }, 40); // Priority 40 - runs before controls
+
+    return unregister;
+  }, [camera, fall, flowSpeed, msBetweeenDrops, pickColor, isVisible, visualDistance, matrix, position, scale, rotation]);
 
   // Don't render if too far away
   if (!isVisible) return null;
@@ -206,7 +212,7 @@ export function Waterfall({
     <instancedMesh
       ref={instancedMeshRef}
       args={[undefined, undefined, maxDrops]}
-      frustumCulled={false}
+      frustumCulled={true}
     >
       <boxGeometry args={[1, 1, 1]} />
       <meshBasicMaterial
