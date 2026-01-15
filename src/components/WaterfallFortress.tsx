@@ -30,6 +30,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
+import { FirstPersonArms } from '@/components/FirstPersonArms';
+import { SceneReflections } from '@/components/SceneReflections';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { useWispBlock } from '@/hooks/useWispBlock';
@@ -2560,10 +2562,14 @@ function Scene({
       {/* Local player avatar - visible only in shadows and reflections */}
       <LocalPlayerAvatar />
       
+      {/* First-person arms and gun when equipped */}
+      <FirstPersonArms isGunEquipped={crosshairsEnabled} />
+      
+      {/* CubeCamera for real-time reflections (avatar in crystal blocks) */}
+      <SceneReflections />
+      
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting cycleStateRef={cycleStateRef} />
-      
-      {/* Removed Environment preset - it showed fake reflections (yellow house/trees) */}
 
       {/* Dynamic Sky with day/night cycle and stars */}
       <DynamicSky weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
