@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -80,6 +80,12 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
   const tokenDisplayName = currentTheme?.display_name || 'Waterfall';
   const { blocks: allPlacedBlocks } = useBlocks();
+  
+  // Track if we've loaded data at least once to avoid jarring loading screens
+  const hasLoadedOnce = useRef(false);
+  if (!isLoading && !loadingBlocks) {
+    hasLoadedOnce.current = true;
+  }
   
   // Count placed blocks by type for current user
   const placedBlockCounts = useMemo(() => {
@@ -195,7 +201,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     return getInventoryQuantity(inventory, itemKey);
   };
 
-  if (isLoading) {
+  // Only show loading on initial load, not during purchases/refreshes
+  if ((isLoading || loadingBlocks) && !hasLoadedOnce.current) {
     return (
       <Dialog open={isOpen} onOpenChange={closePanel}>
         <DialogContent className="max-w-2xl">
