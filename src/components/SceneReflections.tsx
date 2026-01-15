@@ -1,74 +1,72 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
-interface SceneReflectionsProps {
-  children?: React.ReactNode;
-}
-
 /**
- * SceneReflections component creates a CubeCamera that captures the scene
- * and provides an environment map that can be used for reflections.
- * This allows the avatar and other dynamic objects to be reflected in crystal blocks.
+ * SceneReflections creates a CubeCamera for real-time reflections.
+ * The avatar and scene will be reflected in crystal blocks.
  */
-export function SceneReflections({ children }: SceneReflectionsProps) {
+export function SceneReflections() {
   const { gl, scene, camera } = useThree();
-  const cubeRenderTargetRef = useRef<THREE.WebGLCubeRenderTarget | null>(null);
-  const cubeCameraRef = useRef<THREE.CubeCamera | null>(null);
-  const frameCountRef = useRef(0);
+  const cubeRenderTarget = useRef<THREE.WebGLCubeRenderTarget | null>(null);
+  const cubeCamera = useRef<THREE.CubeCamera | null>(null);
+  const frameCount = useRef(0);
+  const initialized = useRef(false);
   
-  // Create cube camera and render target once
-  useMemo(() => {
-    // Lower resolution for performance (128 or 256)
-    const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(128, {
+  // Initialize once
+  useEffect(() => {
+    // Create render target at moderate resolution
+    const rt = new THREE.WebGLCubeRenderTarget(256, {
       format: THREE.RGBAFormat,
       generateMipmaps: true,
       minFilter: THREE.LinearMipmapLinearFilter,
     });
-    cubeRenderTargetRef.current = cubeRenderTarget;
+    cubeRenderTarget.current = rt;
     
-    // Near/far planes for the cube camera
-    const cubeCamera = new THREE.CubeCamera(0.1, 1000, cubeRenderTarget);
-    cubeCameraRef.current = cubeCamera;
+    // Create cube camera
+    const cam = new THREE.CubeCamera(0.5, 500, rt);
+    cubeCamera.current = cam;
+    scene.add(cam);
+    
+    console.log('✅ CubeCamera initialized for reflections');
     
     return () => {
-      cubeRenderTarget.dispose();
+      scene.remove(cam);
+      rt.dispose();
     };
-  }, []);
-
-  // Update cube camera every few frames for performance
+  }, [scene]);
+  
   useFrame(() => {
-    frameCountRef.current++;
+    if (!cubeCamera.current || !cubeRenderTarget.current) return;
     
-    // Only update every 5 frames to save performance
-    if (frameCountRef.current % 5 !== 0) return;
+    frameCount.current++;
     
-    if (cubeCameraRef.current && cubeRenderTargetRef.current) {
-      // Position cube camera at the main camera position
-      cubeCameraRef.current.position.copy(camera.position);
-      
-      // Update the cube camera (renders the scene from all 6 directions)
-      cubeCameraRef.current.update(gl, scene);
-      
-      // Apply the environment map to the scene for reflections
-      scene.environment = cubeRenderTargetRef.current.texture;
-      
-      // Also update all materials that need the new envMap
+    // Update every 10 frames for performance (6fps updates at 60fps)
+    if (frameCount.current % 10 !== 0) return;
+    
+    // Position at camera location
+    cubeCamera.current.position.copy(camera.position);
+    
+    // Render the scene to cube map
+    cubeCamera.current.update(gl, scene);
+    
+    // Set as scene environment (affects all PBR materials)
+    scene.environment = cubeRenderTarget.current.texture;
+    
+    // First-time setup: apply to existing materials
+    if (!initialized.current) {
+      initialized.current = true;
       scene.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
+        if (child instanceof THREE.Mesh) {
           const mat = child.material as THREE.MeshStandardMaterial;
-          if (mat.envMapIntensity && mat.envMapIntensity > 0) {
-            mat.envMap = cubeRenderTargetRef.current!.texture;
+          if (mat && mat.envMapIntensity !== undefined && mat.envMapIntensity > 0) {
+            mat.envMap = cubeRenderTarget.current!.texture;
             mat.needsUpdate = true;
           }
         }
       });
-      
-      if (frameCountRef.current === 5) {
-        console.log('✅ CubeCamera reflections active');
-      }
     }
   });
-
-  return <>{children}</>;
+  
+  return null;
 }
