@@ -160,8 +160,10 @@ export function Coins({
   useFrame((state, delta) => {
     diagnostics.useFrameCallCount++;
     
-    // Update coin count for diagnostics
-    diagnostics.coinCount = coins.filter(c => c.visible).length;
+    // Update coin count for diagnostics - count without allocating array
+    let visibleCoinCount = 0;
+    for (const c of coins) { if (c.visible) visibleCoinCount++; }
+    diagnostics.coinCount = visibleCoinCount;
     
     // Check visibility with throttle
     const now = Date.now();

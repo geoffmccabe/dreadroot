@@ -260,6 +260,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   // Also track which blocks were falling so we can reset them when they land
   const previouslyFallingRef = useRef<Set<string>>(new Set());
+  // Reuse Set to avoid GC pressure - clear and refill instead of creating new
+  const currentlyFallingRef = useRef<Set<string>>(new Set());
   
   // Create block ID to index map for O(1) lookups instead of O(n) findIndex
   const blockIndexMap = useMemo(() => {
@@ -280,10 +282,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     let needsUpdate = false;
     const matrix = matrixRef.current;
-    const currentlyFalling = new Set<string>();
     
-    // Track Set allocation for diagnostics
-    diagnostics.e4++;
+    // Reuse Set instead of creating new one every frame
+    const currentlyFalling = currentlyFallingRef.current;
+    currentlyFalling.clear();
     
     // Update positions for falling blocks - O(1) lookup per block
     fallingBlocksState.forEach((fallState, blockId) => {
@@ -319,7 +321,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       }
     });
     
-    previouslyFallingRef.current = currentlyFalling;
+    // Swap Sets instead of copying (no allocation)
+    const temp = previouslyFallingRef.current;
+    previouslyFallingRef.current = currentlyFallingRef.current;
+    currentlyFallingRef.current = temp;
     
     if (needsUpdate) {
       meshRef.current.instanceMatrix.needsUpdate = true;

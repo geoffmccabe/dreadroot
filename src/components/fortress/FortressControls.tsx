@@ -76,6 +76,10 @@ export function FirstPersonControls({
   const stepUpPlayerBoxRef = useRef(new THREE.Box3());
   const stepUpClearanceBoxRef = useRef(new THREE.Box3());
   
+  // Reusable vectors for shooting (avoid allocations on every shot)
+  const shootDirectionRef = useRef(new THREE.Vector3());
+  const shootOriginRef = useRef(new THREE.Vector3());
+  
   // Use blocks from props
   const existingBlocks = blocks;
   
@@ -362,9 +366,11 @@ export function FirstPersonControls({
       if (now - lastFireTime.current < FIRE_RATE_LIMIT) return;
       lastFireTime.current = now;
       
-      const shootDirection = new THREE.Vector3(0, 0, -1);
-      shootDirection.applyQuaternion(camera.quaternion);
-      onShoot(camera.position.clone(), shootDirection);
+      // Reuse vectors instead of allocating new ones
+      shootDirectionRef.current.set(0, 0, -1);
+      shootDirectionRef.current.applyQuaternion(camera.quaternion);
+      shootOriginRef.current.copy(camera.position);
+      onShoot(shootOriginRef.current, shootDirectionRef.current);
       playAudio(audioRefs.gunshot);
     }
   }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId, audioRefs, playAudio]);

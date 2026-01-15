@@ -151,12 +151,17 @@ function CameraTrackedBlocks({
       lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
       
       // Update ref directly (no React re-render yet)
+      // Reuse Set instead of creating new one
       const visibleChunkKeys = getVisibleChunkKeys(
         camera.position.x,
         camera.position.z,
         visualDistance
       );
-      visibleChunksRef.current = new Set(visibleChunkKeys);
+      visibleChunksRef.current.clear();
+      for (const key of visibleChunkKeys) {
+        visibleChunksRef.current.add(key);
+      }
+      diagnostics.e4++; // Track chunk update
       
       // Trigger single re-render outside the frame loop
       setRenderTrigger(prev => prev + 1);
@@ -224,8 +229,20 @@ export function FortressScene({
   });
   
   // Bullet system - use refs to avoid useFrame setState
+  // Uses object pool to avoid GC allocations
   const MAX_BULLETS = 20;
   type Bullet = { position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number };
+  
+  // Pre-allocate bullet pool to avoid per-shot allocations
+  const bulletPoolRef = useRef<Bullet[]>(
+    Array.from({ length: MAX_BULLETS }, () => ({
+      position: new THREE.Vector3(),
+      direction: new THREE.Vector3(),
+      speed: 100,
+      life: 0
+    }))
+  );
+  const activeBulletCount = useRef(0);
   const bulletsRef = useRef<Bullet[]>([]);
   const [bulletRenderTrigger, setBulletRenderTrigger] = useState(0);
   const lastBulletRender = useRef(0);
@@ -411,16 +428,29 @@ export function FortressScene({
   const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3) => {
     if (await checkWispHit()) return;
     
-    // Modify ref directly - no setState in hot path
+    // Use bullet from pool instead of allocating new objects
+    const pool = bulletPoolRef.current;
+    let bullet: Bullet;
+    
     if (bulletsRef.current.length >= MAX_BULLETS) {
-      bulletsRef.current.shift();
+      // Reuse oldest bullet
+      bullet = bulletsRef.current.shift()!;
+    } else if (activeBulletCount.current < pool.length) {
+      // Get unused bullet from pool
+      bullet = pool[activeBulletCount.current];
+      activeBulletCount.current++;
+    } else {
+      // Pool exhausted, reuse oldest
+      bullet = bulletsRef.current.shift()!;
     }
-    bulletsRef.current.push({
-      position: new THREE.Vector3().copy(origin),
-      direction: new THREE.Vector3().copy(direction),
-      speed: 100,
-      life: 3.0
-    });
+    
+    // Reuse vectors instead of creating new ones
+    bullet.position.copy(origin);
+    bullet.direction.copy(direction);
+    bullet.speed = 100;
+    bullet.life = 3.0;
+    
+    bulletsRef.current.push(bullet);
     setBulletRenderTrigger(prev => prev + 1);
     setShowCrosshairs(true);
   }, [checkWispHit]);
