@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CycleState } from './FortressTypes';
@@ -15,6 +15,19 @@ export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
 
   // Cache previous lighting value to avoid unnecessary updates
   const prevLightingRef = useRef(0);
+
+  // ONE-TIME shadow layer setup - converted from useFrame to useEffect
+  useEffect(() => {
+    // Use a small delay to ensure directionalRef is populated
+    const timer = setTimeout(() => {
+      if (directionalRef.current?.shadow?.camera) {
+        directionalRef.current.shadow.camera.layers.enableAll();
+        console.log('✅ Shadow camera layers enabled for avatar');
+      }
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   useFrame(() => {
     diagnostics.useFrameCallCount++;
@@ -37,18 +50,6 @@ export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
     }
     if (ambientRef.current) {
       ambientRef.current.intensity = 0.25 * baseIntensity;
-    }
-  });
-
-  // Enable Layer 1 on shadow camera for avatar visibility
-  const shadowLayerSet = useRef(false);
-  useFrame(() => {
-    diagnostics.useFrameCallCount++;
-    
-    if (!shadowLayerSet.current && directionalRef.current?.shadow?.camera) {
-      directionalRef.current.shadow.camera.layers.enableAll();
-      console.log('✅ Shadow camera layers enabled for avatar');
-      shadowLayerSet.current = true;
     }
   });
 

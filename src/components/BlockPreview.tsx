@@ -1,4 +1,4 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useBlocksData } from '@/hooks/useBlocksData';
@@ -38,10 +38,18 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     texture.repeat.set(1, 1);
   }, [texture]);
 
+  // Track mount state to avoid unnecessary work when not visible
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
   useFrame(() => {
     diagnostics.useFrameCallCount++;
     
-    if (!visible || !meshRef.current) return;
+    // Early exit for invisible/unmounted - minimal overhead
+    if (!isMountedRef.current || !visible || !meshRef.current) return;
     
     frameCountRef.current++;
     

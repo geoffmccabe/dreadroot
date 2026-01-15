@@ -102,22 +102,25 @@ export function Waterfall({
   useFrame((state, delta) => {
     diagnostics.useFrameCallCount++;
     
+    // Early exit if mesh not ready or not visible
+    if (!instancedMeshRef.current) return;
+    
     // Check visibility with throttle
     const now = Date.now();
     if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
       lastVisibilityCheck.current = now;
-      const distanceToWaterfall = Math.sqrt(
-        Math.pow(camera.position.x - fall.centerX, 2) +
-        Math.pow(camera.position.z - fall.z, 2)
-      );
+      const dx = camera.position.x - fall.centerX;
+      const dz = camera.position.z - fall.z;
+      // Avoid sqrt by comparing squared distances
+      const distSq = dx * dx + dz * dz;
       const maxDistance = visualDistance * CHUNK_SIZE;
-      const shouldBeVisible = distanceToWaterfall <= maxDistance;
+      const shouldBeVisible = distSq <= maxDistance * maxDistance;
       if (shouldBeVisible !== isVisible) {
         setIsVisible(shouldBeVisible);
       }
     }
     
-    if (!instancedMeshRef.current || !isVisible) return;
+    if (!isVisible) return;
 
     const mul = flowSpeed;
     const msInterval = msBetweeenDrops;
