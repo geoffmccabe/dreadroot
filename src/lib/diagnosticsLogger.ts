@@ -29,12 +29,13 @@ class DiagnosticsLogger {
   e11 = 0; // Network/broadcast calls
   e12 = 0; // Object3D matrix updates
   
-  // Frame timing (in ms, accumulated per sample)
-  frameStartTime = 0;
+  // Frame timing (in ms, accumulated per sample) - INDEPENDENT timers per system
+  timingStarts: { [key: string]: number } = {};
   timeControls = 0;    // Controls/physics time
   timeCoins = 0;       // Coins update time
   timeWaterfall = 0;   // Waterfall update time
   timeBlocks = 0;      // Block rendering time
+  timeFrame = 0;       // Total frame time
   
   // Metrics set by components (just number assignments, no allocations)
   cameraX = 0;
@@ -44,20 +45,26 @@ class DiagnosticsLogger {
   particleCount = 0;
   coinCount = 0;
   
-  startTiming() {
-    if (this.enabled) this.frameStartTime = performance.now();
+  // Real-time metrics for overlay (updated every frame)
+  currentFps = 0;
+  avgFrameTime = 0;
+  
+  startTiming(system: 'controls' | 'coins' | 'waterfall' | 'blocks' | 'frame') {
+    if (this.enabled) this.timingStarts[system] = performance.now();
   }
   
-  recordTiming(system: 'controls' | 'coins' | 'waterfall' | 'blocks') {
+  recordTiming(system: 'controls' | 'coins' | 'waterfall' | 'blocks' | 'frame') {
     if (!this.enabled) return;
-    const elapsed = performance.now() - this.frameStartTime;
+    const start = this.timingStarts[system];
+    if (start === undefined) return;
+    const elapsed = performance.now() - start;
     switch (system) {
       case 'controls': this.timeControls += elapsed; break;
       case 'coins': this.timeCoins += elapsed; break;
       case 'waterfall': this.timeWaterfall += elapsed; break;
       case 'blocks': this.timeBlocks += elapsed; break;
+      case 'frame': this.timeFrame += elapsed; break;
     }
-    this.frameStartTime = performance.now();
   }
   
   toggle() {
