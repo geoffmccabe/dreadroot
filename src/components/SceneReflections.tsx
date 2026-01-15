@@ -15,20 +15,34 @@ export function SceneReflections() {
   
   // Initialize once
   useEffect(() => {
-    // Create render target at moderate resolution
-    const rt = new THREE.WebGLCubeRenderTarget(256, {
+    // Create render target at higher resolution for clearer reflections
+    const rt = new THREE.WebGLCubeRenderTarget(512, {
       format: THREE.RGBAFormat,
       generateMipmaps: true,
       minFilter: THREE.LinearMipmapLinearFilter,
     });
     cubeRenderTarget.current = rt;
     
-    // Create cube camera
-    const cam = new THREE.CubeCamera(0.5, 500, rt);
+    // Create cube camera with closer near plane for better quality
+    const cam = new THREE.CubeCamera(0.1, 500, rt);
     cubeCamera.current = cam;
     scene.add(cam);
     
-    console.log('✅ CubeCamera initialized for reflections');
+    // Make all reflective surfaces highly reflective for testing
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        const mat = child.material as THREE.MeshStandardMaterial;
+        if (mat && mat.envMapIntensity !== undefined) {
+          // Boost reflection intensity significantly
+          mat.envMapIntensity = 2.0;
+          mat.metalness = Math.max(mat.metalness || 0, 0.5);
+          mat.roughness = Math.min(mat.roughness || 1, 0.3);
+          mat.needsUpdate = true;
+        }
+      }
+    });
+    
+    console.log('✅ CubeCamera initialized for reflections (high quality)');
     
     return () => {
       scene.remove(cam);
@@ -41,8 +55,8 @@ export function SceneReflections() {
     
     frameCount.current++;
     
-    // Update every 10 frames for performance (6fps updates at 60fps)
-    if (frameCount.current % 10 !== 0) return;
+    // Update every 3 frames for smoother reflections
+    if (frameCount.current % 3 !== 0) return;
     
     // Position at camera location
     cubeCamera.current.position.copy(camera.position);
@@ -53,14 +67,15 @@ export function SceneReflections() {
     // Set as scene environment (affects all PBR materials)
     scene.environment = cubeRenderTarget.current.texture;
     
-    // First-time setup: apply to existing materials
+    // First-time setup: apply env map to all materials
     if (!initialized.current) {
       initialized.current = true;
       scene.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           const mat = child.material as THREE.MeshStandardMaterial;
-          if (mat && mat.envMapIntensity !== undefined && mat.envMapIntensity > 0) {
+          if (mat && mat.isMeshStandardMaterial) {
             mat.envMap = cubeRenderTarget.current!.texture;
+            mat.envMapIntensity = 2.0;
             mat.needsUpdate = true;
           }
         }

@@ -170,16 +170,23 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
     camera.getWorldDirection(cameraDirectionRef.current);
     
     // Ground is at camera.position.y - 1.6 (standing height)
-    // Position avatar with feet on ground
+    // Position avatar with feet on ground, offset backward by 0.2m
     const groundY = camera.position.y - 1.6;
     
+    // Offset avatar backward from camera (behind the player view)
+    const backwardOffset = 0.2;
+    const offsetX = camera.position.x - cameraDirectionRef.current.x * backwardOffset;
+    const offsetZ = camera.position.z - cameraDirectionRef.current.z * backwardOffset;
+    
     groupRef.current.position.set(
-      camera.position.x,
+      offsetX,
       groundY, // Feet on ground level
-      camera.position.z
+      offsetZ
     );
     
-    // Rotate to face same direction as camera (no offset - model should face forward with camera)
+    // Rotate to face same direction as camera
+    // Gun mode: avatar faces FORWARD (same as camera) - add PI so we see the back/arms
+    // Normal mode: avatar faces FORWARD with camera
     const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z);
     groupRef.current.rotation.y = yaw;
 
