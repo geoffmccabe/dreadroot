@@ -83,13 +83,13 @@ export function LocalPlayerAvatar() {
     // Ensure camera only renders layer 0 (default)
     camera.layers.set(0);
     
-    // Configure materials and shadows - INVISIBLE to local player, visible to shadow camera
+    // Configure materials and shadows - visible to all (camera and shadow camera)
     fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        // Set to layer 1 ONLY - invisible to main camera (layer 0) but visible to shadow camera (layer 1)
-        child.layers.set(1);
+        child.layers.set(0);
+        child.layers.enable(1);
         child.castShadow = true;
-        child.receiveShadow = false; // Don't receive shadows on self
+        child.receiveShadow = true;
         
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
@@ -162,9 +162,11 @@ export function LocalPlayerAvatar() {
     // Get camera direction using reusable vector
     camera.getWorldDirection(cameraDirectionRef.current);
     
-    // Position avatar exactly with camera (no lerp to avoid desyncing)
+    // Position avatar at camera position, offset forward so it's just out of view
+    // Push forward slightly in camera direction (past near clip plane)
     groupRef.current.position.copy(camera.position);
-
+    groupRef.current.position.addScaledVector(cameraDirectionRef.current, 0.3); // Push 0.3 units forward
+    
     // Rotate to match camera yaw
     const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z);
     groupRef.current.rotation.y = yaw;
@@ -209,7 +211,7 @@ export function LocalPlayerAvatar() {
   });
 
   return (
-    <group ref={groupRef} position={[0, -0.9, 0]}>
+    <group ref={groupRef} position={[0, -1.6, 0]}>
       {fbx && (
         <primitive 
           object={fbx} 
