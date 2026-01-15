@@ -40,8 +40,8 @@ export function SceneReflections({ children }: SceneReflectionsProps) {
   useFrame(() => {
     frameCountRef.current++;
     
-    // Only update every 3 frames to save performance
-    if (frameCountRef.current % 3 !== 0) return;
+    // Only update every 5 frames to save performance
+    if (frameCountRef.current % 5 !== 0) return;
     
     if (cubeCameraRef.current && cubeRenderTargetRef.current) {
       // Position cube camera at the main camera position
@@ -52,6 +52,21 @@ export function SceneReflections({ children }: SceneReflectionsProps) {
       
       // Apply the environment map to the scene for reflections
       scene.environment = cubeRenderTargetRef.current.texture;
+      
+      // Also update all materials that need the new envMap
+      scene.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const mat = child.material as THREE.MeshStandardMaterial;
+          if (mat.envMapIntensity && mat.envMapIntensity > 0) {
+            mat.envMap = cubeRenderTargetRef.current!.texture;
+            mat.needsUpdate = true;
+          }
+        }
+      });
+      
+      if (frameCountRef.current === 5) {
+        console.log('✅ CubeCamera reflections active');
+      }
     }
   });
 
