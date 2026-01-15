@@ -1,8 +1,8 @@
 import React, { useRef, useMemo, useEffect } from 'react';
-import { diagnostics } from '@/lib/diagnosticsLogger';
-import { useFrame, useLoader } from '@react-three/fiber';
+import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BlockType } from '@/types/blocks';
+import { frameLoop } from '@/lib/frameLoop';
 
 interface WispBlockProps {
   positionRef: React.MutableRefObject<THREE.Vector3>;
@@ -18,6 +18,7 @@ export const WispBlock: React.FC<WispBlockProps> = ({
   const meshRef = useRef<THREE.Mesh>(null);
   const glowIntensityRef = useRef(0.5);
   const glowDirectionRef = useRef(1);
+  const elapsedRef = useRef(0);
   
   // Load texture with proper caching (useLoader handles caching automatically)
   const texture = blockType.texture?.diffuse 
@@ -51,47 +52,43 @@ export const WispBlock: React.FC<WispBlockProps> = ({
     };
   }, [onMeshReady]);
 
-  // Track if component is mounted to avoid unnecessary work
-  const isMountedRef = useRef(true);
+  // Register with centralized frame loop instead of useFrame
   useEffect(() => {
-    isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
-  }, []);
-
-  // Animate glow and smooth position interpolation
-  useFrame((state, delta) => {
-    // Early exit if unmounted or mesh not ready
-    if (!isMountedRef.current || !meshRef.current) return;
+    const unregister = frameLoop.register('wisp-block', (delta, elapsed) => {
+      if (!meshRef.current) return;
+      
+      elapsedRef.current = elapsed;
+      const targetPos = positionRef.current;
+      
+      // Smooth position interpolation (lerp to target position)
+      meshRef.current.position.lerp(targetPos, 0.3);
+      
+      // Pulsing glow effect
+      glowIntensityRef.current += glowDirectionRef.current * delta * 2;
+      
+      if (glowIntensityRef.current >= 1.0) {
+        glowIntensityRef.current = 1.0;
+        glowDirectionRef.current = -1;
+      } else if (glowIntensityRef.current <= 0.5) {
+        glowIntensityRef.current = 0.5;
+        glowDirectionRef.current = 1;
+      }
+      
+      // Update emissive intensity
+      if (meshRef.current.material instanceof THREE.MeshStandardMaterial) {
+        meshRef.current.material.emissiveIntensity = glowIntensityRef.current;
+      }
+      
+      // Gentle floating/bobbing animation
+      const bobOffset = Math.sin(elapsed * 2) * 0.1;
+      meshRef.current.position.y = targetPos.y + bobOffset;
+      
+      // Gentle rotation
+      meshRef.current.rotation.y += delta * 0.5;
+    }, 60); // Lower priority = runs later
     
-    // Read target position from ref (no re-renders)
-    const targetPos = positionRef.current;
-    
-    // Smooth position interpolation (lerp to target position)
-    meshRef.current.position.lerp(targetPos, 0.3);
-    
-    // Pulsing glow effect
-    glowIntensityRef.current += glowDirectionRef.current * delta * 2;
-    
-    if (glowIntensityRef.current >= 1.0) {
-      glowIntensityRef.current = 1.0;
-      glowDirectionRef.current = -1;
-    } else if (glowIntensityRef.current <= 0.5) {
-      glowIntensityRef.current = 0.5;
-      glowDirectionRef.current = 1;
-    }
-    
-    // Update emissive intensity
-    if (meshRef.current.material instanceof THREE.MeshStandardMaterial) {
-      meshRef.current.material.emissiveIntensity = glowIntensityRef.current;
-    }
-    
-    // Gentle floating/bobbing animation
-    const bobOffset = Math.sin(state.clock.elapsedTime * 2) * 0.1;
-    meshRef.current.position.y = targetPos.y + bobOffset;
-    
-    // Gentle rotation
-    meshRef.current.rotation.y += delta * 0.5;
-  });
+    return unregister;
+  }, [positionRef]);
 
   return (
     <mesh 
