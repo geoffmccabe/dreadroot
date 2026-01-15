@@ -13,12 +13,13 @@ interface CoinsProps {
   coinImageUrl?: string;
 }
 
-// Reusable objects to avoid GC pressure
+// Reusable objects to avoid GC pressure - pre-allocated outside component
 const tempMatrix = new THREE.Matrix4();
 const tempPosition = new THREE.Vector3();
 const tempQuaternion = new THREE.Quaternion();
 const tempScale = new THREE.Vector3();
 const tempColor = new THREE.Color();
+const zAxis = new THREE.Vector3(0, 0, 1); // Pre-allocated for quaternion rotation
 
 export function Coins({
   coinRate = 60,
@@ -199,10 +200,10 @@ export function Coins({
           continue;
         }
 
-        // Update instanced mesh matrix
+        // Update instanced mesh matrix - use pre-allocated zAxis
         const scale = coinSize * coin.scaleJitter;
         tempPosition.copy(coin.position);
-        tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), coin.rotation);
+        tempQuaternion.setFromAxisAngle(zAxis, coin.rotation);
         tempScale.set(scale, scale, 1);
         tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
         coinMeshRef.current.setMatrixAt(visibleCount, tempMatrix);
@@ -221,7 +222,8 @@ export function Coins({
       for (const particle of explosionParticles) {
         if (!particle.active) continue;
 
-        particle.position.add(particle.velocity.clone().multiplyScalar(delta));
+        // Use addScaledVector to avoid clone() allocation
+        particle.position.addScaledVector(particle.velocity, delta);
         particle.velocityY += gravity * delta;
         particle.position.y -= particle.velocityY * delta;
         particle.rotation += particle.rotSpeed * delta;
@@ -233,8 +235,9 @@ export function Coins({
         }
 
         // Update instanced mesh matrix
+        // Use pre-allocated zAxis for quaternion rotation
         tempPosition.copy(particle.position);
-        tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), particle.rotation);
+        tempQuaternion.setFromAxisAngle(zAxis, particle.rotation);
         tempScale.set(particle.scale, particle.scale, 1);
         tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
         particleMeshRef.current.setMatrixAt(activeCount, tempMatrix);

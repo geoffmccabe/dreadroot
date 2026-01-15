@@ -416,17 +416,21 @@ export function FortressScene({
   }, [checkWispHit]);
 
   // Frame loop for bullets and particles - NO setState inside!
+  // Uses in-place array filtering (swap-delete) to avoid GC pressure
   useFrame((state, delta) => {
     const now = Date.now();
     let needsBulletRender = false;
     let needsWispRender = false;
     
-    // Update bullets directly in ref
-    if (bulletsRef.current.length > 0) {
+    // Update bullets directly in ref - IN-PLACE filtering (no new arrays!)
+    const bullets = bulletsRef.current;
+    if (bullets.length > 0) {
       const coins = (window as any).getCoins ? (window as any).getCoins() : [];
-      const activeBullets: Bullet[] = [];
+      let writeIndex = 0;
       
-      for (const bullet of bulletsRef.current) {
+      for (let i = 0; i < bullets.length; i++) {
+        const bullet = bullets[i];
+        // Use addScaledVector to avoid allocation
         bullet.position.addScaledVector(bullet.direction, bullet.speed * delta);
         bullet.life -= delta;
         
@@ -434,7 +438,7 @@ export function FortressScene({
           let hit = false;
           
           for (const coin of coins) {
-            if (coin.visible && coin.mesh) {
+            if (coin.visible) {
               const distance = bullet.position.distanceTo(coin.position);
               if (distance < 0.8) {
                 if ((window as any).createCoinExplosion) {
@@ -452,33 +456,42 @@ export function FortressScene({
           }
           
           if (!hit) {
-            activeBullets.push(bullet);
+            // In-place keep: write to writeIndex position
+            bullets[writeIndex] = bullet;
+            writeIndex++;
           }
         } else {
           needsBulletRender = true;
         }
       }
       
-      bulletsRef.current = activeBullets;
+      // Truncate array in-place (no new array allocation)
+      bullets.length = writeIndex;
     }
     
-    // Update wisp particles directly in ref
-    if (wispParticlesRef.current.length > 0) {
-      const activeParticles: WispParticle[] = [];
+    // Update wisp particles directly in ref - IN-PLACE filtering
+    const particles = wispParticlesRef.current;
+    if (particles.length > 0) {
+      let writeIndex = 0;
       
-      for (const particle of wispParticlesRef.current) {
-        particle.position.add(particle.velocity.clone().multiplyScalar(delta));
+      for (let i = 0; i < particles.length; i++) {
+        const particle = particles[i];
+        // Use addScaledVector to avoid clone() allocation
+        particle.position.addScaledVector(particle.velocity, delta);
         particle.velocity.y -= 9.8 * delta;
         particle.life -= delta;
         
         if (particle.life > 0 && particle.position.y > 0) {
-          activeParticles.push(particle);
+          // In-place keep
+          particles[writeIndex] = particle;
+          writeIndex++;
         } else {
           needsWispRender = true;
         }
       }
       
-      wispParticlesRef.current = activeParticles;
+      // Truncate array in-place
+      particles.length = writeIndex;
     }
     
     // Throttled render triggers - only when something changed
