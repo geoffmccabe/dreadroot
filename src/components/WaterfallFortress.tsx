@@ -1349,7 +1349,7 @@ function Waterfall({ flowSpeed = 1.2, msBetweeenDrops = 10, colorPalette }: {
     active: boolean;
   }>>([]);
   const timeAccumulatorRef = useRef(0);
-  const maxDrops = 20000; // Massive pool to never run out
+  const maxDrops = 500; // Reduced from 20000 - only need ~100-200 active at any time
   
   const fall = {
     width: 6, // Made 2m wider (1m on each side)
@@ -1690,8 +1690,8 @@ function Coins({ coinRate = 60, coinSize = 1.2, flowSpeed = 1.2, onGetCoins, coi
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const coinTimerRef = useRef(0);
-  const maxCoins = 5000;
-  const maxExplosionParticles = 1000;
+  const maxCoins = 200; // Reduced from 5000 - only need ~20-50 active at any time
+  const maxExplosionParticles = 100; // Reduced from 1000 - only ~16 spawn per explosion
   
   // Load coin texture from current theme
   const [coinTexture, setCoinTexture] = useState<THREE.Texture | null>(null);
