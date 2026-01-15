@@ -5,7 +5,7 @@ import * as THREE from 'three';
  * ZERO-ALLOCATION implementation for hot path
  * 
  * Uses numeric cell indices instead of string keys
- * Pre-allocates result array to avoid GC pressure
+ * Uses generation counter for O(1) deduplication instead of O(n²) linear scan
  */
 
 const CELL_SIZE = 4;
@@ -21,6 +21,10 @@ class SpatialHashGrid {
   // Pre-allocated result array - reused every call to avoid GC
   private nearbyResult: THREE.Box3[] = new Array(MAX_NEARBY_RESULTS);
   private nearbyCount = 0;
+  
+  // Generation-based deduplication - O(1) instead of O(n²)
+  private currentGeneration = 0;
+  private colliderGeneration: Map<THREE.Box3, number> = new Map();
   
   constructor() {
     // Pre-allocate grid cells
@@ -60,6 +64,7 @@ class SpatialHashGrid {
     }
     
     this.colliderCellIndices.set(collider, cellIndices);
+    this.colliderGeneration.set(collider, 0); // Initialize generation
   }
   
   /**
@@ -80,6 +85,7 @@ class SpatialHashGrid {
     }
     
     this.colliderCellIndices.delete(collider);
+    this.colliderGeneration.delete(collider);
   }
   
   /**
@@ -90,14 +96,18 @@ class SpatialHashGrid {
       this.cells[i].length = 0; // Clear without reallocating
     }
     this.colliderCellIndices.clear();
+    this.colliderGeneration.clear();
   }
   
   /**
    * Get all colliders near a position - ZERO ALLOCATIONS
+   * Uses generation counter for O(1) deduplication
    * Returns count and fills pre-allocated array
    * Caller must use: for (let i = 0; i < count; i++) { result[i] }
    */
   getNearby(x: number, z: number, radius: number = 2): { result: THREE.Box3[], count: number } {
+    // Increment generation for this query - any collider with this gen is already added
+    this.currentGeneration++;
     this.nearbyCount = 0;
     
     // Calculate cell range to check
@@ -106,9 +116,6 @@ class SpatialHashGrid {
     const minCZ = Math.floor((z - radius) / CELL_SIZE) + GRID_OFFSET;
     const maxCZ = Math.floor((z + radius) / CELL_SIZE) + GRID_OFFSET;
     
-    // Track which colliders we've already added (using the collider itself as marker)
-    // We use a simple linear scan since nearby cells typically have few colliders
-    
     for (let cx = Math.max(0, minCX); cx <= Math.min(GRID_WIDTH - 1, maxCX); cx++) {
       for (let cz = Math.max(0, minCZ); cz <= Math.min(GRID_WIDTH - 1, maxCZ); cz++) {
         const cell = this.cells[cx * GRID_WIDTH + cz];
@@ -116,16 +123,15 @@ class SpatialHashGrid {
         for (let i = 0; i < cell.length; i++) {
           const collider = cell[i];
           
-          // Check if already in result (dedupe without Set allocation)
-          let alreadyAdded = false;
-          for (let j = 0; j < this.nearbyCount; j++) {
-            if (this.nearbyResult[j] === collider) {
-              alreadyAdded = true;
-              break;
-            }
+          // O(1) deduplication using generation counter
+          if (this.colliderGeneration.get(collider) === this.currentGeneration) {
+            continue; // Already added in this query
           }
           
-          if (!alreadyAdded && this.nearbyCount < MAX_NEARBY_RESULTS) {
+          // Mark as added for this generation
+          this.colliderGeneration.set(collider, this.currentGeneration);
+          
+          if (this.nearbyCount < MAX_NEARBY_RESULTS) {
             this.nearbyResult[this.nearbyCount++] = collider;
           }
         }

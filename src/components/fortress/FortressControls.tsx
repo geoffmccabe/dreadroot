@@ -509,19 +509,6 @@ export function FirstPersonControls({
     if (keys.current.a) direction.current.x -= 1;
     if (keys.current.d) direction.current.x += 1;
     direction.current.normalize();
-    
-    // Check if player is trying to move or not grounded (needs physics)
-    const hasMovementInput = direction.current.x !== 0 || direction.current.z !== 0 || keys.current.space;
-    const needsPhysics = hasMovementInput || !onGround.current || Math.abs(velocity.current.y) > 0.01;
-    
-    // EARLY EXIT: Skip all collision if player is idle and grounded
-    if (!needsPhysics) {
-      // Still broadcast position for multiplayer sync
-      if (broadcastPosition) {
-        broadcastPosition(camera.position, yaw.current, pitch.current);
-      }
-      return;
-    }
 
     // Speed calculation
     const baseSpeed = 4.0;
