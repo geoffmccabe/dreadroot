@@ -101,7 +101,7 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
             rotation: { yaw: 0, pitch: 0 },
             username: user.email?.split('@')[0] || 'Player',
             color: randomColor,
-            online_at: new Date().toISOString(),
+            online_at: Date.now(), // Use numeric timestamp instead of ISO string
           });
         }
       });
@@ -139,7 +139,7 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
         yaw: Math.round(yaw * 100) / 100,
         pitch: Math.round(pitch * 100) / 100,
       },
-      online_at: new Date().toISOString(),
+      // Removed online_at to avoid string allocation every 50ms
     });
   }, [channel, isConnected]);
 
