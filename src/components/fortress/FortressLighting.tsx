@@ -1,14 +1,16 @@
-import React, { useRef, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { CycleState } from './FortressTypes';
-import { diagnostics } from '@/lib/diagnosticsLogger';
+
+export interface LightingHandle {
+  update: () => void;
+}
 
 interface DynamicLightingProps {
   cycleStateRef: React.MutableRefObject<CycleState>;
 }
 
-export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
+export const DynamicLighting = forwardRef<LightingHandle, DynamicLightingProps>(({ cycleStateRef }, ref) => {
   const hemisphereRef = useRef<THREE.HemisphereLight>(null);
   const directionalRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
@@ -16,9 +18,8 @@ export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
   // Cache previous lighting value to avoid unnecessary updates
   const prevLightingRef = useRef(0);
 
-  // ONE-TIME shadow layer setup - converted from useFrame to useEffect
+  // ONE-TIME shadow layer setup
   useEffect(() => {
-    // Use a small delay to ensure directionalRef is populated
     const timer = setTimeout(() => {
       if (directionalRef.current?.shadow?.camera) {
         directionalRef.current.shadow.camera.layers.enableAll();
@@ -29,29 +30,30 @@ export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
     return () => clearTimeout(timer);
   }, []);
 
-  useFrame(() => {
-    diagnostics.useFrameCallCount++;
-    
-    // Only update if lighting changed significantly (>1% change)
-    const currentLighting = cycleStateRef.current.lightingPercentage;
-    if (Math.abs(currentLighting - prevLightingRef.current) < 1) {
-      return;
-    }
-    prevLightingRef.current = currentLighting;
+  // Expose update function instead of using useFrame
+  useImperativeHandle(ref, () => ({
+    update: () => {
+      // Only update if lighting changed significantly (>1% change)
+      const currentLighting = cycleStateRef.current.lightingPercentage;
+      if (Math.abs(currentLighting - prevLightingRef.current) < 1) {
+        return;
+      }
+      prevLightingRef.current = currentLighting;
 
-    // Ensure minimum 5% ambient light
-    const baseIntensity = Math.max(0.05, currentLighting / 100);
+      // Ensure minimum 5% ambient light
+      const baseIntensity = Math.max(0.05, currentLighting / 100);
 
-    if (hemisphereRef.current) {
-      hemisphereRef.current.intensity = 1.1 * baseIntensity;
+      if (hemisphereRef.current) {
+        hemisphereRef.current.intensity = 1.1 * baseIntensity;
+      }
+      if (directionalRef.current) {
+        directionalRef.current.intensity = 1.0 * baseIntensity;
+      }
+      if (ambientRef.current) {
+        ambientRef.current.intensity = 0.25 * baseIntensity;
+      }
     }
-    if (directionalRef.current) {
-      directionalRef.current.intensity = 1.0 * baseIntensity;
-    }
-    if (ambientRef.current) {
-      ambientRef.current.intensity = 0.25 * baseIntensity;
-    }
-  });
+  }), [cycleStateRef]);
 
   return (
     <>
@@ -78,4 +80,6 @@ export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
       />
     </>
   );
-}
+});
+
+DynamicLighting.displayName = 'DynamicLighting';

@@ -16,16 +16,16 @@ import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { FirstPersonArms } from '@/components/FirstPersonArms';
 import { SceneReflections } from '@/components/SceneReflections';
-import { FPSCounter } from '@/components/FPSCounter';
+import { FPSCounter, FPSCounterHandle } from '@/components/FPSCounter';
 import { WispBlock } from '@/components/WispBlock';
 
 import { FirstPersonControls } from './FortressControls';
-import { DynamicSky } from './FortressSky';
-import { DynamicLighting } from './FortressLighting';
+import { DynamicSky, SkyHandle } from './FortressSky';
+import { DynamicLighting, LightingHandle } from './FortressLighting';
 import { FortressStructure } from './FortressStructure';
 import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
-import { Bullets } from './FortressBullets';
+import { Bullets, BulletsHandle } from './FortressBullets';
 import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
@@ -38,44 +38,54 @@ const wispParticleMaterial = new THREE.MeshBasicMaterial({ transparent: true });
 const tempMatrix = new THREE.Matrix4();
 const tempColor = new THREE.Color();
 
-function WispParticlesMesh({ particles, renderTrigger }: { particles: WispParticle[]; renderTrigger: number }) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  
-  useFrame(() => {
-    diagnostics.useFrameCallCount++;
-    if (!meshRef.current || particles.length === 0) {
-      if (meshRef.current) meshRef.current.count = 0;
-      return;
-    }
-    
-    let count = 0;
-    for (const particle of particles) {
-      if (count >= MAX_WISP_PARTICLES) break;
-      
-      tempMatrix.setPosition(particle.position.x, particle.position.y, particle.position.z);
-      meshRef.current.setMatrixAt(count, tempMatrix);
-      
-      tempColor.set(particle.color);
-      meshRef.current.setColorAt(count, tempColor);
-      
-      count++;
-    }
-    
-    meshRef.current.count = count;
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) {
-      meshRef.current.instanceColor.needsUpdate = true;
-    }
-  });
-  
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[wispParticleGeometry, wispParticleMaterial, MAX_WISP_PARTICLES]}
-      frustumCulled={false}
-    />
-  );
+export interface WispParticlesMeshHandle {
+  update: () => void;
 }
+
+const WispParticlesMesh = React.forwardRef<WispParticlesMeshHandle, { particles: WispParticle[]; renderTrigger: number }>(
+  ({ particles, renderTrigger }, ref) => {
+    const meshRef = useRef<THREE.InstancedMesh>(null);
+    
+    // Expose update function instead of using useFrame
+    React.useImperativeHandle(ref, () => ({
+      update: () => {
+        if (!meshRef.current || particles.length === 0) {
+          if (meshRef.current) meshRef.current.count = 0;
+          return;
+        }
+        
+        let count = 0;
+        for (const particle of particles) {
+          if (count >= MAX_WISP_PARTICLES) break;
+          
+          tempMatrix.setPosition(particle.position.x, particle.position.y, particle.position.z);
+          meshRef.current.setMatrixAt(count, tempMatrix);
+          
+          tempColor.set(particle.color);
+          meshRef.current.setColorAt(count, tempColor);
+          
+          count++;
+        }
+        
+        meshRef.current.count = count;
+        meshRef.current.instanceMatrix.needsUpdate = true;
+        if (meshRef.current.instanceColor) {
+          meshRef.current.instanceColor.needsUpdate = true;
+        }
+      }
+    }), [particles]);
+    
+    return (
+      <instancedMesh
+        ref={meshRef}
+        args={[wispParticleGeometry, wispParticleMaterial, MAX_WISP_PARTICLES]}
+        frustumCulled={false}
+      />
+    );
+  }
+);
+
+WispParticlesMesh.displayName = 'WispParticlesMesh';
 
 // Camera-tracked block renderer with chunk culling
 function CameraTrackedBlocks({ 
@@ -305,9 +315,16 @@ export function FortressScene({
   
   // Wisp particles - use refs to avoid useFrame setState
   const wispParticlesRef = useRef<WispParticle[]>([]);
+  const wispParticlesMeshRef = useRef<WispParticlesMeshHandle>(null);
   const [wispRenderTrigger, setWispRenderTrigger] = useState(0);
   const lastWispRender = useRef(0);
   const WISP_RENDER_THROTTLE = 50; // ms
+  
+  // Refs for consolidated components (avoid separate useFrame hooks)
+  const bulletsComponentRef = useRef<BulletsHandle>(null);
+  const lightingRef = useRef<LightingHandle>(null);
+  const skyRef = useRef<SkyHandle>(null);
+  const fpsCounterRef = useRef<FPSCounterHandle>(null);
   
   const handleMeshReady = useCallback((blockType: string, mesh: THREE.InstancedMesh | null) => {
     if (mesh) {
@@ -468,6 +485,12 @@ export function FortressScene({
     diagnostics.cameraZ = camera.position.z;
     diagnostics.particleCount = wispParticlesRef.current.length;
     
+    // Call consolidated component updates (eliminates 5 separate useFrame hooks)
+    skyRef.current?.update();
+    lightingRef.current?.update();
+    bulletsComponentRef.current?.update();
+    wispParticlesMeshRef.current?.update();
+    fpsCounterRef.current?.update();
     // Tick the diagnostics system (writes sample every 100ms)
     diagnostics.tick();
     
@@ -594,8 +617,8 @@ export function FortressScene({
       <FirstPersonArms isGunEquipped={crosshairsEnabled} isAiming={isAiming} />
       <SceneReflections />
       
-      <DynamicLighting cycleStateRef={cycleStateRef} />
-      <DynamicSky weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
+      <DynamicLighting ref={lightingRef} cycleStateRef={cycleStateRef} />
+      <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
 
       <FortressStructure />
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
@@ -618,7 +641,7 @@ export function FortressScene({
         onGetCoins={() => []}
         coinImageUrl={coinImageUrl}
       />
-      <Bullets bullets={bulletsRef.current} />
+      <Bullets ref={bulletsComponentRef} bullets={bulletsRef.current} />
       
       {wispState && (
         <WispBlock 
@@ -628,9 +651,9 @@ export function FortressScene({
         />
       )}
       
-      <WispParticlesMesh particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />
+      <WispParticlesMesh ref={wispParticlesMeshRef} particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />
       
-      <FPSCounter isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
+      <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>
   );
 }

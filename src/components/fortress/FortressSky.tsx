@@ -1,8 +1,7 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { WeatherSettings, CycleState } from './FortressTypes';
-import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // Helper function to interpolate between colors
 export function interpolateColor(color1: number, color2: number, factor: number): number {
@@ -107,12 +106,16 @@ export function SkyTexture({ cycleStateRef, weatherSettings, onRefsReady }: SkyT
   return null;
 }
 
+export interface SkyHandle {
+  update: () => void;
+}
+
 interface DynamicSkyProps {
   weatherSettings: WeatherSettings;
   cycleStateRef: React.MutableRefObject<CycleState>;
 }
 
-export function DynamicSky({ weatherSettings, cycleStateRef }: DynamicSkyProps) {
+export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSettings, cycleStateRef }, ref) => {
   const skyRefs = useRef<{ 
     skyMeshRef: React.RefObject<THREE.Mesh>; 
     starMeshRef: React.RefObject<THREE.Mesh> 
@@ -128,47 +131,47 @@ export function DynamicSky({ weatherSettings, cycleStateRef }: DynamicSkyProps) 
     skyRefs.current = refs;
   }, []);
 
-  // Consolidated weather + sky update loop - NO setState inside!
-  useFrame(() => {
-    diagnostics.useFrameCallCount++;
-    
-    // 1. Update weather cycle
-    const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
-    const currentTime = Date.now();
-    const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
+  // Expose update function instead of using useFrame
+  useImperativeHandle(ref, () => ({
+    update: () => {
+      // 1. Update weather cycle
+      const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
+      const currentTime = Date.now();
+      const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
 
-    const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
-    const [minLighting, maxLighting] = weatherSettings.lightingRange;
-    const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
+      const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
+      const [minLighting, maxLighting] = weatherSettings.lightingRange;
+      const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
 
-    const newIsNight = lightingPercentage < 50;
+      const newIsNight = lightingPercentage < 50;
 
-    // Update ref directly - no React setState needed here
-    cycleStateRef.current = { lightingPercentage, cyclePosition, isNight: newIsNight };
-    prevIsNightRef.current = newIsNight;
+      // Update ref directly - no React setState needed here
+      cycleStateRef.current = { lightingPercentage, cyclePosition, isNight: newIsNight };
+      prevIsNightRef.current = newIsNight;
 
-    // 2. Update sky transitions
-    if (skyRefs.current) {
-      const skyMesh = skyRefs.current.skyMeshRef.current;
-      const starMesh = skyRefs.current.starMeshRef.current;
+      // 2. Update sky transitions
+      if (skyRefs.current) {
+        const skyMesh = skyRefs.current.skyMeshRef.current;
+        const starMesh = skyRefs.current.starMeshRef.current;
 
-      if (skyMesh) {
-        const mat = skyMesh.material as THREE.MeshBasicMaterial;
-        const t = lightingPercentage / 100;
-        mat.color.setRGB(135 / 255 * t, 206 / 255 * t, 235 / 255 * t);
-        mat.opacity = t;
-      }
+        if (skyMesh) {
+          const mat = skyMesh.material as THREE.MeshBasicMaterial;
+          const t = lightingPercentage / 100;
+          mat.color.setRGB(135 / 255 * t, 206 / 255 * t, 235 / 255 * t);
+          mat.opacity = t;
+        }
 
-      if (starMesh) {
-        const mat = starMesh.material as THREE.MeshBasicMaterial;
-        if (lightingPercentage <= 30) {
-          mat.opacity = 1.0 - (lightingPercentage / 30);
-        } else {
-          mat.opacity = 0;
+        if (starMesh) {
+          const mat = starMesh.material as THREE.MeshBasicMaterial;
+          if (lightingPercentage <= 30) {
+            mat.opacity = 1.0 - (lightingPercentage / 30);
+          } else {
+            mat.opacity = 0;
+          }
         }
       }
     }
-  });
+  }), [weatherSettings, cycleStateRef]);
 
   return (
     <SkyTexture 
@@ -177,4 +180,6 @@ export function DynamicSky({ weatherSettings, cycleStateRef }: DynamicSkyProps) 
       onRefsReady={handleRefsReady} 
     />
   );
-}
+});
+
+DynamicSky.displayName = 'DynamicSky';
