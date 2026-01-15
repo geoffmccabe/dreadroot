@@ -146,7 +146,8 @@ export function checkAxisCollision(
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
   
   // Use spatial hash grid for O(1) nearby lookup - ZERO allocations
-  const { result: nearbyColliders, count } = collisionGrid.getNearby(pos.x, pos.z, 2);
+  // Use radius of 4 (CELL_SIZE) to ensure we check adjacent cells
+  const { result: nearbyColliders, count } = collisionGrid.getNearby(pos.x, pos.z, 4);
   
   // If grid is empty, fall back to array (should not happen in normal use)
   if (count === 0 && colliders.length > 0) {
@@ -209,7 +210,7 @@ export function findStepUpTarget(
   let bestStepUpY: number | null = null;
   
   // Use spatial hash grid - ZERO allocations
-  const { result: nearbyColliders, count } = collisionGrid.getNearby(camera.position.x, camera.position.z, 2);
+  const { result: nearbyColliders, count } = collisionGrid.getNearby(camera.position.x, camera.position.z, 4);
   
   for (let i = 0; i < count; i++) {
     const collider = nearbyColliders[i];
