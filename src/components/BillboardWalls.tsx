@@ -162,30 +162,32 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
         
         {/* Live website iframe using Html from drei */}
         {currentUrl?.url && (
-          <Html
-            position={[0, 1, 0.05]}
-            transform
-            scale={0.02}
-            style={{
-              width: '850px',
-              height: '500px',
-              background: '#1e293b',
-              borderRadius: '4px',
-              overflow: 'hidden',
-            }}
-          >
-            <iframe
-              src={currentUrl.url}
+          <group position={[0, 1, 0.05]}>
+            <Html
+              transform
+              wrapperClass="monitor-iframe-wrapper"
+              prepend
+              center
               style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
+                width: '1280px',
+                height: '720px',
                 background: 'white',
               }}
-              title="Embedded Website"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            />
-          </Html>
+              scale={17 / 1280}
+            >
+              <iframe
+                src={currentUrl.url}
+                style={{
+                  width: '1280px',
+                  height: '720px',
+                  border: 'none',
+                  background: 'white',
+                }}
+                title="Embedded Website"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              />
+            </Html>
+          </group>
         )}
         
         {/* Fallback when no URL */}
