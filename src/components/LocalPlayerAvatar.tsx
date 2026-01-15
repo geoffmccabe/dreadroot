@@ -88,7 +88,7 @@ export function LocalPlayerAvatar() {
       if (child instanceof THREE.Mesh) {
         // Set to layer 1 so it's invisible to the camera (which is on layer 0)
         child.layers.set(1);
-        // But enable shadow casting - shadows work across layers
+        // Shadow camera must have Layer 1 enabled to see this (done in DynamicLighting)
         child.castShadow = true;
         child.receiveShadow = true;
         
