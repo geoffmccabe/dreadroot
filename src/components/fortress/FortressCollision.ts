@@ -13,6 +13,16 @@ export const courtyardDepth = 30;
 export const frontZ = -8;
 export const openingHalfW = 2;
 
+// Pre-allocated reusable objects to prevent GC pressure
+// These are module-level singletons - safe because collision is single-threaded
+const _playerBoxMin = new THREE.Vector3();
+const _playerBoxMax = new THREE.Vector3();
+const _reusablePlayerBox = new THREE.Box3();
+const _stepUpMin = new THREE.Vector3();
+const _stepUpMax = new THREE.Vector3();
+const _clearanceMin = new THREE.Vector3();
+const _clearanceMax = new THREE.Vector3();
+
 /**
  * Creates collision boxes for the static fortress structure
  */
@@ -75,17 +85,18 @@ export function createBlockColliders(
 }
 
 /**
- * Creates a player bounding box at a given position
+ * Creates a player bounding box at a given position - REUSES pre-allocated box
+ * WARNING: Returns a shared object - do not store the result!
  */
 export function createPlayerBox(
   pos: THREE.Vector3,
   playerRadius: number,
   playerHeight: number
 ): THREE.Box3 {
-  return new THREE.Box3(
-    new THREE.Vector3(pos.x - playerRadius, pos.y - playerHeight, pos.z - playerRadius),
-    new THREE.Vector3(pos.x + playerRadius, pos.y, pos.z + playerRadius)
-  );
+  _playerBoxMin.set(pos.x - playerRadius, pos.y - playerHeight, pos.z - playerRadius);
+  _playerBoxMax.set(pos.x + playerRadius, pos.y, pos.z + playerRadius);
+  _reusablePlayerBox.set(_playerBoxMin, _playerBoxMax);
+  return _reusablePlayerBox;
 }
 
 /**
@@ -99,6 +110,7 @@ export function checkAxisCollision(
   playerHeight: number,
   isHorizontal: boolean = false
 ): THREE.Box3 | null {
+  // Use pre-allocated player box (no allocations!)
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
   const spatialRadius = 2.0;
   
@@ -150,19 +162,18 @@ export function findStepUpTarget(
     
     // Block top must be above our feet but within step-up range
     if (blockTopY > currentFootY && blockTopY <= currentFootY + stepUpHeight) {
-      // Check horizontal overlap
-      playerBoxRef.set(
-        new THREE.Vector3(
-          camera.position.x - playerRadius,
-          blockTopY,
-          camera.position.z - playerRadius
-        ),
-        new THREE.Vector3(
-          camera.position.x + playerRadius,
-          blockTopY + playerHeight,
-          camera.position.z + playerRadius
-        )
+      // Check horizontal overlap - reuse pre-allocated vectors
+      _stepUpMin.set(
+        camera.position.x - playerRadius,
+        blockTopY,
+        camera.position.z - playerRadius
       );
+      _stepUpMax.set(
+        camera.position.x + playerRadius,
+        blockTopY + playerHeight,
+        camera.position.z + playerRadius
+      );
+      playerBoxRef.set(_stepUpMin, _stepUpMax);
       
       const horizontalOverlap = !(
         playerBoxRef.max.x <= collider.min.x ||
@@ -172,19 +183,18 @@ export function findStepUpTarget(
       );
       
       if (horizontalOverlap) {
-        // Check clearance
-        clearanceBoxRef.set(
-          new THREE.Vector3(
-            camera.position.x - playerRadius,
-            blockTopY,
-            camera.position.z - playerRadius
-          ),
-          new THREE.Vector3(
-            camera.position.x + playerRadius,
-            blockTopY + playerHeight,
-            camera.position.z + playerRadius
-          )
+        // Check clearance - reuse pre-allocated vectors
+        _clearanceMin.set(
+          camera.position.x - playerRadius,
+          blockTopY,
+          camera.position.z - playerRadius
         );
+        _clearanceMax.set(
+          camera.position.x + playerRadius,
+          blockTopY + playerHeight,
+          camera.position.z + playerRadius
+        );
+        clearanceBoxRef.set(_clearanceMin, _clearanceMax);
         
         let hasClearance = true;
         for (const otherCollider of colliders) {

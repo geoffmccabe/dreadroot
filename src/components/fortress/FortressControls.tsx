@@ -66,6 +66,11 @@ export function FirstPersonControls({
   const rightVecRef = useRef(new THREE.Vector3());
   const deltaMovementRef = useRef(new THREE.Vector3());
   
+  // Additional reusable vectors for collision detection (avoid .clone() in hot loop)
+  const prevPositionRef = useRef(new THREE.Vector3());
+  const testPosRef = useRef(new THREE.Vector3());
+  const feetCheckPosRef = useRef(new THREE.Vector3());
+  
   // Reusable Box3 objects for step-up mechanic
   const stepUpPlayerBoxRef = useRef(new THREE.Box3());
   const stepUpClearanceBoxRef = useRef(new THREE.Box3());
@@ -525,45 +530,45 @@ export function FirstPersonControls({
     const crawlingHeight = 0.8;
     const playerHeight = isCrawling ? crawlingHeight : standingHeight;
 
-    // Store previous position
-    const prevPosition = camera.position.clone();
+    // Store previous position - REUSE pre-allocated vector (no clone!)
+    prevPositionRef.current.copy(camera.position);
     let xBlocked = false;
     let zBlocked = false;
 
-    // X-axis collision
+    // X-axis collision - REUSE pre-allocated testPos vector
     if (deltaMovement.x !== 0) {
-      const testPos = camera.position.clone();
-      testPos.x += deltaMovement.x;
+      testPosRef.current.copy(camera.position);
+      testPosRef.current.x += deltaMovement.x;
       
-      if (checkAxisCollision(testPos, colliders, playerRadius, playerHeight, true)) {
-        camera.position.x = prevPosition.x;
+      if (checkAxisCollision(testPosRef.current, colliders, playerRadius, playerHeight, true)) {
+        camera.position.x = prevPositionRef.current.x;
         velocity.current.x = 0;
         xBlocked = true;
       } else {
-        camera.position.x = testPos.x;
+        camera.position.x = testPosRef.current.x;
       }
     }
 
-    // Z-axis collision
+    // Z-axis collision - REUSE pre-allocated testPos vector
     if (deltaMovement.z !== 0) {
-      const testPos = camera.position.clone();
-      testPos.z += deltaMovement.z;
+      testPosRef.current.copy(camera.position);
+      testPosRef.current.z += deltaMovement.z;
       
-      if (checkAxisCollision(testPos, colliders, playerRadius, playerHeight, true)) {
-        camera.position.z = prevPosition.z;
+      if (checkAxisCollision(testPosRef.current, colliders, playerRadius, playerHeight, true)) {
+        camera.position.z = prevPositionRef.current.z;
         velocity.current.z = 0;
         zBlocked = true;
       } else {
-        camera.position.z = testPos.z;
+        camera.position.z = testPosRef.current.z;
       }
     }
 
-    // Y-axis collision
+    // Y-axis collision - REUSE pre-allocated testPos vector
     if (deltaMovement.y !== 0) {
-      const testPos = camera.position.clone();
-      testPos.y += deltaMovement.y;
+      testPosRef.current.copy(camera.position);
+      testPosRef.current.y += deltaMovement.y;
       
-      const collision = checkAxisCollision(testPos, colliders, playerRadius, playerHeight, false);
+      const collision = checkAxisCollision(testPosRef.current, colliders, playerRadius, playerHeight, false);
       if (collision) {
         if (velocity.current.y < 0) {
           camera.position.y = collision.max.y + playerHeight;
@@ -574,12 +579,12 @@ export function FirstPersonControls({
           velocity.current.y = 0;
         }
       } else {
-        if (testPos.y < playerHeight && velocity.current.y < 0) {
+        if (testPosRef.current.y < playerHeight && velocity.current.y < 0) {
           camera.position.y = playerHeight;
           velocity.current.y = 0;
           onGround.current = true;
         } else {
-          camera.position.y = testPos.y;
+          camera.position.y = testPosRef.current.y;
           onGround.current = false;
         }
       }
@@ -607,12 +612,12 @@ export function FirstPersonControls({
       }
     }
     
-    // Ground detection
+    // Ground detection - REUSE pre-allocated feetCheckPos vector
     const feetY = camera.position.y - playerHeight;
     const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
-    const feetCheckPos = camera.position.clone();
-    feetCheckPos.y = camera.position.y - playerHeight - 0.05;
-    const hasBlockBeneath = checkAxisCollision(feetCheckPos, colliders, playerRadius, playerHeight, false);
+    feetCheckPosRef.current.copy(camera.position);
+    feetCheckPosRef.current.y = camera.position.y - playerHeight - 0.05;
+    const hasBlockBeneath = checkAxisCollision(feetCheckPosRef.current, colliders, playerRadius, playerHeight, false);
     
     if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
       onGround.current = true;
