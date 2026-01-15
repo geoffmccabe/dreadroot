@@ -174,6 +174,9 @@ function CameraTrackedBlocks({
       }
     }
     
+    // Update diagnostics with visible block count
+    diagnostics.visibleBlocks = filtered.length;
+    
     return filtered;
   }, [renderTrigger, blocksByChunk, blocks.length]);
   
@@ -354,16 +357,20 @@ export function FortressScene({
     }
   }, []);
 
+  // Persistent raycaster for wisp hit detection - avoid GC pressure
+  const wispRaycaster = useRef(new THREE.Raycaster());
+  const wispRayDirection = useRef(new THREE.Vector3());
+  
   // Check for wisp hits
   const checkWispHit = useCallback(async () => {
     if (!wispMeshRef.current || !wispState) return false;
     
-    const raycaster = new THREE.Raycaster();
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(camera.quaternion);
-    raycaster.set(camera.position, direction);
+    diagnostics.e3++; // Track raycast call
+    wispRayDirection.current.set(0, 0, -1);
+    wispRayDirection.current.applyQuaternion(camera.quaternion);
+    wispRaycaster.current.set(camera.position, wispRayDirection.current);
     
-    const intersects = raycaster.intersectObject(wispMeshRef.current);
+    const intersects = wispRaycaster.current.intersectObject(wispMeshRef.current);
     if (intersects.length > 0 && intersects[0].distance < 100) {
       const collectedBlock = collectWisp();
       if (collectedBlock) {
