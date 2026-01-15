@@ -21,6 +21,7 @@ import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers'
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { FlyingCoin, GameSettings, WeatherSettings } from './FortressTypes';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // Main Fortress orchestrator component
 export function Fortress() {
@@ -478,6 +479,12 @@ export function Fortress() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // D-Flow diagnostics toggle (Shift+3 = #)
+      if (event.key === '#' || (event.shiftKey && event.code === 'Digit3')) {
+        diagnostics.toggle();
+        return;
+      }
+      
       if ((event.metaKey || event.ctrlKey) && event.key === 'p') {
         event.preventDefault();
         setShowPerfMonitor(prev => !prev);

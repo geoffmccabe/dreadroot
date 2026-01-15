@@ -29,6 +29,7 @@ import { Bullets } from './FortressBullets';
 import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // Wisp particles using InstancedMesh for performance (no React re-renders per particle)
 const MAX_WISP_PARTICLES = 50;
@@ -41,6 +42,7 @@ function WispParticlesMesh({ particles, renderTrigger }: { particles: WispPartic
   const meshRef = useRef<THREE.InstancedMesh>(null);
   
   useFrame(() => {
+    diagnostics.useFrameCallCount++;
     if (!meshRef.current || particles.length === 0) {
       if (meshRef.current) meshRef.current.count = 0;
       return;
@@ -135,6 +137,7 @@ function CameraTrackedBlocks({
   
   // Track camera movement - no state updates inside useFrame
   useFrame(() => {
+    diagnostics.useFrameCallCount++;
     const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
     const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
     const now = Date.now();
@@ -418,6 +421,17 @@ export function FortressScene({
   // Frame loop for bullets and particles - NO setState inside!
   // Uses in-place array filtering (swap-delete) to avoid GC pressure
   useFrame((state, delta) => {
+    diagnostics.useFrameCallCount++;
+    
+    // Update diagnostics metrics
+    diagnostics.cameraX = camera.position.x;
+    diagnostics.cameraY = camera.position.y;
+    diagnostics.cameraZ = camera.position.z;
+    diagnostics.particleCount = wispParticlesRef.current.length;
+    
+    // Tick the diagnostics system (writes sample every 100ms)
+    diagnostics.tick();
+    
     const now = Date.now();
     let needsBulletRender = false;
     let needsWispRender = false;

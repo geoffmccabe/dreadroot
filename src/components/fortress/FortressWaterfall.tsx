@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { WaterfallDrop } from './FortressTypes';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface WaterfallProps {
   flowSpeed?: number;
@@ -99,6 +100,8 @@ export function Waterfall({
   const quaternionRef = useRef(new THREE.Quaternion());
 
   useFrame((state, delta) => {
+    diagnostics.useFrameCallCount++;
+    
     // Check visibility with throttle
     const now = Date.now();
     if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {

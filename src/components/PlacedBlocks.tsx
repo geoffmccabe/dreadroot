@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // Re-export clearTextureCache for backward compatibility
 export const clearTextureCache = clearInstancedTextureCache;
@@ -87,6 +88,8 @@ export const PlacedBlocks: React.FC<{
   
   // Physics update for falling blocks (no React re-renders, just update state)
   useFrame((state, delta) => {
+    diagnostics.useFrameCallCount++;
+    
     if (fallingBlocksState.size === 0) return; // Early exit if nothing falling
     
     const gravity = 9.8;

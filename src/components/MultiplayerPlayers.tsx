@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlayerState } from '@/hooks/useMultiplayer';
 import { Text, useFBX } from '@react-three/drei';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
@@ -40,6 +41,8 @@ function PlayersController({
   
   // Single useFrame for ALL players
   useFrame((_, delta) => {
+    diagnostics.useFrameCallCount++;
+    
     playersRefs.current.forEach((playerData, userId) => {
       const { mesh, mixer, walkAction, targetPosition, targetRotation, lastPosition } = playerData;
       

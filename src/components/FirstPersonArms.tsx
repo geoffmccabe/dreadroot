@@ -9,6 +9,8 @@ const forwardVec = new THREE.Vector3();
 const rightVec = new THREE.Vector3();
 const upVec = new THREE.Vector3();
 
+import { diagnostics } from '@/lib/diagnosticsLogger';
+
 interface FirstPersonArmsProps {
   isGunEquipped: boolean;
   isAiming?: boolean;
@@ -67,6 +69,8 @@ export function FirstPersonArms({ isGunEquipped, isAiming = false }: FirstPerson
   }, [armsModel]);
   
   useFrame((_, delta) => {
+    diagnostics.useFrameCallCount++;
+    
     if (!groupRef.current) return;
     
     mixerRef.current?.update(delta);

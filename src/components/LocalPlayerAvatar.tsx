@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useFBX } from '@react-three/drei';
 import { useAvatar } from '@/contexts/AvatarContext';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -159,6 +160,8 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
 
   // Follow camera and update animations with smooth interpolation
   useFrame((_, delta) => {
+    diagnostics.useFrameCallCount++;
+    
     if (!groupRef.current) return;
     
     // Calculate camera velocity using reusable vector

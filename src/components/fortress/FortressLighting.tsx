@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CycleState } from './FortressTypes';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface DynamicLightingProps {
   cycleStateRef: React.MutableRefObject<CycleState>;
@@ -16,6 +17,8 @@ export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
   const prevLightingRef = useRef(0);
 
   useFrame(() => {
+    diagnostics.useFrameCallCount++;
+    
     // Only update if lighting changed significantly (>1% change)
     const currentLighting = cycleStateRef.current.lightingPercentage;
     if (Math.abs(currentLighting - prevLightingRef.current) < 1) {
@@ -40,6 +43,8 @@ export function DynamicLighting({ cycleStateRef }: DynamicLightingProps) {
   // Enable Layer 1 on shadow camera for avatar visibility
   const shadowLayerSet = useRef(false);
   useFrame(() => {
+    diagnostics.useFrameCallCount++;
+    
     if (!shadowLayerSet.current && directionalRef.current?.shadow?.camera) {
       directionalRef.current.shadow.camera.layers.enableAll();
       console.log('✅ Shadow camera layers enabled for avatar');

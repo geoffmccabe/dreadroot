@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // ============================================================
 // FORTRESS COLLISION UTILITIES
@@ -110,6 +111,8 @@ export function checkAxisCollision(
   playerHeight: number,
   isHorizontal: boolean = false
 ): THREE.Box3 | null {
+  diagnostics.e1++;
+  
   // Use pre-allocated player box (no allocations!)
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
   const spatialRadius = 2.0;
@@ -148,6 +151,8 @@ export function findStepUpTarget(
   playerBoxRef: THREE.Box3,
   clearanceBoxRef: THREE.Box3
 ): number | null {
+  diagnostics.e2++;
+  
   const currentFootY = camera.position.y - playerHeight;
   const spatialRadius = 2.0;
   let bestStepUpY: number | null = null;
