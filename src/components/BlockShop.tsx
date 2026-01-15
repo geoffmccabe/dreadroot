@@ -69,7 +69,14 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
   const { blocks, isLoading: blocksLoading } = useBlocksData();
   const { currentTheme } = useTokenTheme();
   const [activeClass, setActiveClass] = React.useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
+  const [isPurchasing, setIsPurchasing] = React.useState(false);
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
+  
+  // Track if we've loaded data at least once to avoid showing loading screen during purchases
+  const hasLoadedOnce = React.useRef(false);
+  if (!userLoading && !blocksLoading) {
+    hasLoadedOnce.current = true;
+  }
 
   // Filter and sort blocks by active class
   const filteredBlocks = React.useMemo(() => {
@@ -85,7 +92,10 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
   }, [blocks, activeClass]);
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
+    setIsPurchasing(true);
     const success = await buyBlock(itemKey, cost);
+    setIsPurchasing(false);
+    
     if (success) {
       // Play coin sound 3 times rapidly
       const audio = new Audio('/coin_hit_sound.mp3');
@@ -112,7 +122,8 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     return getInventoryQuantity(inventory, itemKey);
   };
 
-  if (userLoading || blocksLoading) {
+  // Only show loading on initial load, not during purchases
+  if ((userLoading || blocksLoading) && !hasLoadedOnce.current) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-md">

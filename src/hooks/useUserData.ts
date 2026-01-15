@@ -288,6 +288,7 @@ export const useUserData = () => {
       toast({
         title: "Purchase successful!",
         description: `You bought 1 ${itemType} for ${cost} coins`,
+        duration: 3000, // Auto-dismiss after 3 seconds
       });
       
       return true;
