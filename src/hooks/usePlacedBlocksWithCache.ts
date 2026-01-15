@@ -74,7 +74,22 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   // Track previous blocks to prevent unnecessary updates
   const prevBlocksRef = useRef<PlacedBlock[]>([]);
 
-  // Removed temp UUID - using real authentication now
+  // PHASE 1: Cache authenticated user to avoid repeated auth calls
+  const cachedUserRef = useRef<{ id: string; cachedAt: number } | null>(null);
+  const USER_CACHE_TTL = 60000; // 1 minute cache
+
+  const getCachedUserId = useCallback(async (): Promise<string | null> => {
+    const now = Date.now();
+    if (cachedUserRef.current && now - cachedUserRef.current.cachedAt < USER_CACHE_TTL) {
+      return cachedUserRef.current.id;
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      cachedUserRef.current = { id: user.id, cachedAt: now };
+      return user.id;
+    }
+    return null;
+  }, []);
 
   // Track if user is in block mode for periodic syncing
   const isBlockModeRef = useRef(false);
@@ -331,86 +346,79 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     return () => clearInterval(interval);
   }, [setBlocksIfChanged]);
 
-  // Optimized block placement with instant local feedback
-  const placeBlock = async (x: number, y: number, z: number, blockType: string, expiresAt?: string) => {
-    try {
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        console.error('User not authenticated');
-        toast({
-          title: "Authentication required",
-          description: "Please wait for authentication...",
-          variant: "destructive"
-        });
-        return null;
-      }
-
-      // Check for duplicate position FIRST before doing anything
-      const isDuplicate = blocks.some(block => 
-        block.position_x === x && 
-        block.position_y === y && 
-        block.position_z === z
-      );
-      
-      if (isDuplicate) return null;
-      
-      // Generate temporary ID for instant feedback
-      const tempId = `temp-${Date.now()}-${Math.random()}`;
-      
-      // Create optimistic block
-      const optimisticBlock: any = {
-        id: tempId,
-        user_id: user.id, // Use real user ID
-        position_x: x,
-        position_y: y,
-        position_z: z,
-        block_type: blockType,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      // Add expiration if provided
-      if (expiresAt) {
-        optimisticBlock.expires_at = expiresAt;
-      }
-
-      setBlocksIfChanged(prev => [...prev, optimisticBlock]);
-
-      // Add to IndexedDB (not synced yet)
-      const dbBlock: DBBlock = {
-        ...optimisticBlock,
-        synced: false,
-        local_id: tempId
-      };
-      await addBlock(dbBlock);
-
-      // If not in block mode, sync in background (non-blocking for instant placement)
-      if (!isBlockModeRef.current) {
-        syncBlockToSupabase(dbBlock).catch(() => {});
-      }
-
-      return optimisticBlock;
-    } catch (error) {
-      console.error('Error placing block:', error);
+  // PHASE 1: Optimized block placement with INSTANT local feedback (no await for auth)
+  const placeBlock = useCallback((x: number, y: number, z: number, blockType: string, expiresAt?: string) => {
+    // Use cached user ID for instant placement - no await!
+    const cachedUserId = cachedUserRef.current?.id || userId;
+    
+    if (!cachedUserId) {
+      console.error('User not authenticated');
       toast({
-        title: "Failed to place block",
-        description: "Could not place block at this location",
+        title: "Authentication required",
+        description: "Please wait for authentication...",
         variant: "destructive"
       });
       return null;
     }
-  };
 
-  // Sync a single block to Supabase
-  const syncBlockToSupabase = async (dbBlock: DBBlock) => {
+    // Check for duplicate position FIRST before doing anything
+    const isDuplicate = blocks.some(block => 
+      block.position_x === x && 
+      block.position_y === y && 
+      block.position_z === z
+    );
+    
+    if (isDuplicate) return null;
+    
+    // Generate temporary ID for instant feedback
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    
+    // Create optimistic block
+    const optimisticBlock: any = {
+      id: tempId,
+      user_id: cachedUserId,
+      position_x: x,
+      position_y: y,
+      position_z: z,
+      block_type: blockType,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    // Add expiration if provided
+    if (expiresAt) {
+      optimisticBlock.expires_at = expiresAt;
+    }
+
+    // INSTANT: Update UI immediately
+    setBlocksIfChanged(prev => [...prev, optimisticBlock]);
+
+    // Add to IndexedDB and sync in background (fire-and-forget)
+    const dbBlock: DBBlock = {
+      ...optimisticBlock,
+      synced: false,
+      local_id: tempId
+    };
+    
+    // Non-blocking: add to IndexedDB then sync
+    addBlock(dbBlock).then(() => {
+      if (!isBlockModeRef.current) {
+        syncBlockToSupabase(dbBlock).catch(() => {});
+      }
+    }).catch(() => {});
+
+    return optimisticBlock;
+  }, [blocks, userId, toast, setBlocksIfChanged, addBlock]);
+
+  // PHASE 1: Sync a single block to Supabase (uses cached user, fire-and-forget)
+  const syncBlockToSupabase = useCallback(async (dbBlock: DBBlock) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // Use cached user ID - only fetch if not cached
+      const cachedUserId = cachedUserRef.current?.id || await getCachedUserId();
+      if (!cachedUserId) return;
 
       const blockData: any = {
-        user_id: user.id,
+        user_id: cachedUserId,
         position_x: dbBlock.position_x,
         position_y: dbBlock.position_y,
         position_z: dbBlock.position_z,
@@ -448,8 +456,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
         synced: true
       });
 
-      // Update local state
-      setBlocksIfChanged(prev => prev.map(block => 
+      // PHASE 2: Direct state update to replace temp block with real block
+      setBlocks(prev => prev.map(block => 
         block.id === dbBlock.id ? data : block
       ));
 
@@ -458,7 +466,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       console.error('Error syncing block to Supabase:', error);
       throw error;
     }
-  };
+  }, [getCachedUserId, removeFromDB, updateBlock]);
 
   // Batch sync unsynced blocks
   const batchSyncBlocks = async () => {
@@ -549,13 +557,14 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     }
   };
 
+  // PHASE 4: Adjusted batch sync interval to 10 seconds
   const setBlockMode = useCallback((enabled: boolean) => {
     isBlockModeRef.current = enabled;
 
     if (enabled) {
       syncIntervalRef.current = setInterval(() => {
         batchSyncBlocks();
-      }, 5000);
+      }, 10000); // Changed from 5s to 10s to reduce lag
     } else {
       // Stop periodic sync and do final sync
       if (syncIntervalRef.current) {
