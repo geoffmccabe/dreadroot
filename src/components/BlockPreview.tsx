@@ -1,10 +1,10 @@
 import React, { useRef, useMemo, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
-import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 
 interface BlockPreviewProps {
   blockType: string;
@@ -38,64 +38,65 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     texture.repeat.set(1, 1);
   }, [texture]);
 
-  // Track mount state to avoid unnecessary work when not visible
-  const isMountedRef = useRef(true);
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
-  }, []);
+  // Store refs to props for use in frame callback
+  const visibleRef = useRef(visible);
+  const existingBlocksRef = useRef(existingBlocks);
+  useEffect(() => { visibleRef.current = visible; }, [visible]);
+  useEffect(() => { existingBlocksRef.current = existingBlocks; }, [existingBlocks]);
 
-  useFrame(() => {
-    diagnostics.useFrameCallCount++;
-    
-    // Early exit for invisible/unmounted - minimal overhead
-    if (!isMountedRef.current || !visible || !meshRef.current) return;
-    
-    frameCountRef.current++;
-    
-    // Check if camera moved significantly
-    const cameraMoved = camera.position.distanceToSquared(lastCameraPosRef.current) > 0.001;
-    const cameraRotated = Math.abs(camera.rotation.y - lastCameraRotRef.current) > 0.01;
-    
-    // Only recalculate every 5 frames OR if camera moved/rotated significantly
-    const shouldRecalculate = frameCountRef.current % 5 === 0 || cameraMoved || cameraRotated;
-    
-    if (shouldRecalculate || !cachedResultRef.current) {
-      const placementResult = calculateBlockPlacement({
-        camera,
-        existingBlocks: existingBlocks as any,
-        maxDistance: 5,
-      });
+  // Register with centralized frame loop instead of useFrame
+  useEffect(() => {
+    const unregister = frameLoop.register('block-preview', (delta, elapsed) => {
+      // Early exit for invisible - minimal overhead
+      if (!visibleRef.current || !meshRef.current) return;
       
-      cachedResultRef.current = {
-        renderPosition: placementResult.renderPosition || new THREE.Vector3(),
-        isValid: placementResult.isValid
-      };
+      frameCountRef.current++;
       
-      lastCameraPosRef.current.copy(camera.position);
-      lastCameraRotRef.current = camera.rotation.y;
-    }
+      // Check if camera moved significantly
+      const cameraMoved = camera.position.distanceToSquared(lastCameraPosRef.current) > 0.001;
+      const cameraRotated = Math.abs(camera.rotation.y - lastCameraRotRef.current) > 0.01;
+      
+      // Only recalculate every 5 frames OR if camera moved/rotated significantly
+      const shouldRecalculate = frameCountRef.current % 5 === 0 || cameraMoved || cameraRotated;
+      
+      if (shouldRecalculate || !cachedResultRef.current) {
+        const placementResult = calculateBlockPlacement({
+          camera,
+          existingBlocks: existingBlocksRef.current as any,
+          maxDistance: 5,
+        });
+        
+        cachedResultRef.current = {
+          renderPosition: placementResult.renderPosition || new THREE.Vector3(),
+          isValid: placementResult.isValid
+        };
+        
+        lastCameraPosRef.current.copy(camera.position);
+        lastCameraRotRef.current = camera.rotation.y;
+      }
+      
+      // Use cached result
+      const { renderPosition, isValid } = cachedResultRef.current;
+      meshRef.current.position.copy(renderPosition);
+      
+      // Change material based on valid placement
+      const material = meshRef.current.material as THREE.MeshBasicMaterial;
+      
+      // Pulsing opacity effect
+      const pulseOpacity = 0.5 + Math.sin(elapsed * Math.PI * 2) * 0.5;
+      
+      material.transparent = true;
+      material.opacity = pulseOpacity;
+      
+      if (isValid) {
+        material.color.set('#ffffff');
+      } else {
+        material.color.setRGB(1, 0.3, 0.3);
+      }
+    }, 70); // Lower priority
     
-    // Use cached result
-    const { renderPosition, isValid } = cachedResultRef.current;
-    meshRef.current.position.copy(renderPosition);
-    
-    // Change material based on valid placement
-    const material = meshRef.current.material as THREE.MeshBasicMaterial;
-    
-    // Pulsing opacity effect
-    const time = clock.getElapsedTime();
-    const pulseOpacity = 0.5 + Math.sin(time * Math.PI * 2) * 0.5;
-    
-    material.transparent = true;
-    material.opacity = pulseOpacity;
-    
-    if (isValid) {
-      material.color.set('#ffffff');
-    } else {
-      material.color.setRGB(1, 0.3, 0.3);
-    }
-  });
+    return unregister;
+  }, [camera]);
 
   if (!visible || !texture) return null;
 

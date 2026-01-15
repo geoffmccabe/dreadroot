@@ -1,9 +1,9 @@
 import React, { useRef, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useFBX } from '@react-three/drei';
 import { useAvatar } from '@/contexts/AvatarContext';
-import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -158,81 +158,89 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
     };
   }, [fbx, avatarConfig.animations]);
 
-  // Follow camera and update animations with smooth interpolation
-  useFrame((_, delta) => {
-    diagnostics.useFrameCallCount++;
-    
-    if (!groupRef.current) return;
-    
-    // Calculate camera velocity using reusable vector
-    tempVectorRef.current.copy(camera.position).sub(lastPositionRef.current);
-    const speed = tempVectorRef.current.length();
-    velocityRef.current.copy(tempVectorRef.current);
-    
-    // Get camera direction using reusable vector
-    camera.getWorldDirection(cameraDirectionRef.current);
-    
-    // Ground is at camera.position.y - 1.6 (standing height)
-    // Position avatar with feet on ground, offset backward by 0.2m
-    const groundY = camera.position.y - 1.6;
-    
-    // Offset avatar backward from camera (behind the player view)
-    const backwardOffset = 0.2;
-    const offsetX = camera.position.x - cameraDirectionRef.current.x * backwardOffset;
-    const offsetZ = camera.position.z - cameraDirectionRef.current.z * backwardOffset;
-    
-    groupRef.current.position.set(
-      offsetX,
-      groundY, // Feet on ground level
-      offsetZ
-    );
-    
-    // Rotate to face same direction as camera
-    // Gun mode: avatar faces FORWARD (same as camera) - add PI so we see the back/arms
-    // Normal mode: avatar faces FORWARD with camera
-    const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z);
-    groupRef.current.rotation.y = yaw;
+  // Store refs to props for frame callback
+  const isGunEquippedRef = useRef(isGunEquipped);
+  const currentAnimationRef = useRef(currentAnimation);
+  useEffect(() => { isGunEquippedRef.current = isGunEquipped; }, [isGunEquipped]);
+  useEffect(() => { currentAnimationRef.current = currentAnimation; }, [currentAnimation]);
 
-    // Update animations
-    if (mixerRef.current) {
-      mixerRef.current.update(delta);
-    }
-
-    // Detect movement based on velocity
-    const isMoving = speed > 0.01;
-    
-    // Determine which animation should play based on movement and gun state
-    let desiredAnimation = currentAnimation;
-    
-    // Gun equipped overrides normal movement/idle
-    if (isGunEquipped && gunAnimRef.current) {
-      desiredAnimation = gunAnimRef.current;
-    } else if (isMoving && movementAnimRef.current) {
-      desiredAnimation = movementAnimRef.current;
-    } else if (!isMoving && idleAnimRef.current) {
-      desiredAnimation = idleAnimRef.current;
-    }
-    
-    // Handle animation transitions
-    if (desiredAnimation !== currentActionRef.current) {
-      const currentAction = actionsRef.current.get(currentActionRef.current);
-      const newAction = actionsRef.current.get(desiredAnimation);
+  // Register with centralized frame loop instead of useFrame
+  useEffect(() => {
+    const unregister = frameLoop.register('local-player-avatar', (delta) => {
+      if (!groupRef.current) return;
       
-      if (newAction) {
-        const animConfig = animationConfigMapRef.current.get(desiredAnimation);
-        const fadeOutDuration = animConfig?.fadeOutDuration || 0.2;
-        const fadeInDuration = animConfig?.fadeInDuration || 0.2;
-        
-        if (currentAction) {
-          currentAction.fadeOut(fadeOutDuration);
-        }
-        newAction.reset().fadeIn(fadeInDuration).play();
-        currentActionRef.current = desiredAnimation;
-      }
-    }
+      // Calculate camera velocity using reusable vector
+      tempVectorRef.current.copy(camera.position).sub(lastPositionRef.current);
+      const speed = tempVectorRef.current.length();
+      velocityRef.current.copy(tempVectorRef.current);
+      
+      // Get camera direction using reusable vector
+      camera.getWorldDirection(cameraDirectionRef.current);
+      
+      // Ground is at camera.position.y - 1.6 (standing height)
+      // Position avatar with feet on ground, offset backward by 0.2m
+      const groundY = camera.position.y - 1.6;
+      
+      // Offset avatar backward from camera (behind the player view)
+      const backwardOffset = 0.2;
+      const offsetX = camera.position.x - cameraDirectionRef.current.x * backwardOffset;
+      const offsetZ = camera.position.z - cameraDirectionRef.current.z * backwardOffset;
+      
+      groupRef.current.position.set(
+        offsetX,
+        groundY, // Feet on ground level
+        offsetZ
+      );
+      
+      // Rotate to face same direction as camera
+      // Gun mode: avatar faces FORWARD (same as camera) - add PI so we see the back/arms
+      // Normal mode: avatar faces FORWARD with camera
+      const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z);
+      groupRef.current.rotation.y = yaw;
 
-    lastPositionRef.current.copy(camera.position);
-  });
+      // Update animations
+      if (mixerRef.current) {
+        mixerRef.current.update(delta);
+      }
+
+      // Detect movement based on velocity
+      const isMoving = speed > 0.01;
+      
+      // Determine which animation should play based on movement and gun state
+      let desiredAnimation = currentAnimationRef.current;
+      
+      // Gun equipped overrides normal movement/idle
+      if (isGunEquippedRef.current && gunAnimRef.current) {
+        desiredAnimation = gunAnimRef.current;
+      } else if (isMoving && movementAnimRef.current) {
+        desiredAnimation = movementAnimRef.current;
+      } else if (!isMoving && idleAnimRef.current) {
+        desiredAnimation = idleAnimRef.current;
+      }
+      
+      // Handle animation transitions
+      if (desiredAnimation !== currentActionRef.current) {
+        const currentAction = actionsRef.current.get(currentActionRef.current);
+        const newAction = actionsRef.current.get(desiredAnimation);
+        
+        if (newAction) {
+          const animConfig = animationConfigMapRef.current.get(desiredAnimation);
+          const fadeOutDuration = animConfig?.fadeOutDuration || 0.2;
+          const fadeInDuration = animConfig?.fadeInDuration || 0.2;
+          
+          if (currentAction) {
+            currentAction.fadeOut(fadeOutDuration);
+          }
+          newAction.reset().fadeIn(fadeInDuration).play();
+          currentActionRef.current = desiredAnimation;
+        }
+      }
+
+      lastPositionRef.current.copy(camera.position);
+    }, 40); // Medium priority
+    
+    return unregister;
+  }, [camera]);
 
   return (
     <group ref={groupRef}>

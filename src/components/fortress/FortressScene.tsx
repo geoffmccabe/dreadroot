@@ -30,6 +30,7 @@ import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 
 // Wisp particles using InstancedMesh for performance (no React re-renders per particle)
 const MAX_WISP_PARTICLES = 50;
@@ -491,6 +492,10 @@ export function FortressScene({
     bulletsComponentRef.current?.update();
     wispParticlesMeshRef.current?.update();
     fpsCounterRef.current?.update();
+    
+    // Tick the centralized frame loop registry (runs all registered callbacks)
+    frameLoop.tick(delta, state.clock.elapsedTime);
+    
     // Tick the diagnostics system (writes sample every 100ms)
     diagnostics.tick();
     
