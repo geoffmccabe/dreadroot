@@ -1,6 +1,7 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Perf } from 'r3f-perf';
+import { Environment } from '@react-three/drei';
 import * as THREE from 'three';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1984,6 +1985,13 @@ function DynamicLighting({ cycleStateRef }: {
     }
   });
   
+  // Enable Layer 1 on shadow camera so it can see the local player avatar
+  useEffect(() => {
+    if (directionalRef.current) {
+      directionalRef.current.shadow.camera.layers.enable(1);
+    }
+  }, []);
+  
   return (
     <>
       <hemisphereLight 
@@ -2550,6 +2558,9 @@ function Scene({
       
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting cycleStateRef={cycleStateRef} />
+      
+      {/* Environment map for reflections on Crystal blocks */}
+      <Environment preset="sunset" background={false} />
 
       {/* Dynamic Sky with day/night cycle and stars */}
       <DynamicSky weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
