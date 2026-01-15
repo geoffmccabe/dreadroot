@@ -1,7 +1,9 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Coin, ExplosionParticle } from './FortressTypes';
+import { useBlocks } from '@/contexts/BlocksContext';
+import { CHUNK_SIZE } from '@/lib/chunkManager';
 
 interface CoinsProps {
   coinRate?: number;
@@ -11,6 +13,13 @@ interface CoinsProps {
   coinImageUrl?: string;
 }
 
+// Reusable objects to avoid GC pressure
+const tempMatrix = new THREE.Matrix4();
+const tempPosition = new THREE.Vector3();
+const tempQuaternion = new THREE.Quaternion();
+const tempScale = new THREE.Vector3();
+const tempColor = new THREE.Color();
+
 export function Coins({
   coinRate = 60,
   coinSize = 1.2,
@@ -18,10 +27,20 @@ export function Coins({
   onGetCoins,
   coinImageUrl
 }: CoinsProps) {
-  const groupRef = useRef<THREE.Group>(null);
+  const coinMeshRef = useRef<THREE.InstancedMesh>(null);
+  const particleMeshRef = useRef<THREE.InstancedMesh>(null);
   const coinTimerRef = useRef(0);
   const maxCoins = 200;
   const maxExplosionParticles = 100;
+
+  // Distance culling
+  const { camera } = useThree();
+  const { visualDistance } = useBlocks();
+  const [isVisible, setIsVisible] = useState(true);
+  const lastVisibilityCheck = useRef(0);
+  const VISIBILITY_CHECK_THROTTLE = 200; // ms
+  
+  const coinCenter = { x: 0, z: -6 };
 
   // Load coin texture
   const [coinTexture, setCoinTexture] = useState<THREE.Texture | null>(null);
@@ -38,12 +57,6 @@ export function Coins({
         texture.premultiplyAlpha = false;
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.needsUpdate = true;
-
-        console.log('🪙 Coin texture loaded:', {
-          format: texture.format,
-          size: `${texture.image?.width}x${texture.image?.height}`
-        });
-
         coinTextureRef.current = texture;
         setCoinTexture(texture);
       },
@@ -61,7 +74,7 @@ export function Coins({
     };
   }, [coinImageUrl]);
 
-  // Initialize coins
+  // Initialize coins as plain data (no mesh references)
   const coins = useMemo<Coin[]>(() => {
     const coinsArray: Coin[] = [];
     for (let i = 0; i < maxCoins; i++) {
@@ -78,7 +91,7 @@ export function Coins({
     return coinsArray;
   }, []);
 
-  // Explosion particles
+  // Explosion particles as plain data
   const explosionParticles = useMemo<ExplosionParticle[]>(() => {
     const particles: ExplosionParticle[] = [];
     for (let i = 0; i < maxExplosionParticles; i++) {
@@ -101,7 +114,6 @@ export function Coins({
     const coinIndex = coins.findIndex(c => !c.visible);
     if (coinIndex !== -1) {
       const coin = coins[coinIndex];
-
       coin.visible = true;
       coin.position.set(
         (Math.random() - 0.5) * 4,
@@ -111,11 +123,6 @@ export function Coins({
       coin.velocity = 0;
       coin.rotation = Math.random() * Math.PI * 2;
       coin.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 2;
-
-      if (coin.mesh) {
-        coin.mesh.visible = true;
-        coin.mesh.position.copy(coin.position);
-      }
     }
   }, [coins]);
 
@@ -143,22 +150,29 @@ export function Coins({
         particle.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 4;
         particle.opacity = 1;
         particle.scale = coinSize * 0.4;
-
-        if (particle.mesh) {
-          particle.mesh.visible = true;
-          particle.mesh.position.copy(particle.position);
-          particle.mesh.scale.set(particle.scale, particle.scale, 1);
-          (particle.mesh.material as THREE.SpriteMaterial).opacity = particle.opacity;
-        }
-
         spawned++;
       }
     }
   }, [explosionParticles, coinSize]);
 
   useFrame((state, delta) => {
-    if (!groupRef.current) return;
-
+    // Check visibility with throttle
+    const now = Date.now();
+    if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
+      lastVisibilityCheck.current = now;
+      const distanceToCoins = Math.sqrt(
+        Math.pow(camera.position.x - coinCenter.x, 2) +
+        Math.pow(camera.position.z - coinCenter.z, 2)
+      );
+      const maxDistance = visualDistance * CHUNK_SIZE;
+      const shouldBeVisible = distanceToCoins <= maxDistance;
+      if (shouldBeVisible !== isVisible) {
+        setIsVisible(shouldBeVisible);
+      }
+    }
+    
+    if (!isVisible) return;
+    
     const interval = 1 / coinRate;
     coinTimerRef.current += delta;
 
@@ -169,42 +183,75 @@ export function Coins({
 
     const gravity = 9.8 * flowSpeed;
 
-    // Update coin physics
-    coins.forEach((coin) => {
-      if (!coin.mesh || !coin.visible) return;
+    // Update coin physics and instanced mesh
+    if (coinMeshRef.current) {
+      let visibleCount = 0;
+      
+      for (const coin of coins) {
+        if (!coin.visible) continue;
 
-      coin.velocity += gravity * delta;
-      coin.position.y -= coin.velocity * delta;
-      coin.rotation += coin.rotSpeed * delta;
+        coin.velocity += gravity * delta;
+        coin.position.y -= coin.velocity * delta;
+        coin.rotation += coin.rotSpeed * delta;
 
-      coin.mesh.position.copy(coin.position);
-      (coin.mesh.material as THREE.SpriteMaterial).rotation = coin.rotation;
+        if (coin.position.y <= 0.2) {
+          coin.visible = false;
+          continue;
+        }
 
-      if (coin.position.y <= 0.2) {
-        coin.visible = false;
-        coin.mesh.visible = false;
+        // Update instanced mesh matrix
+        const scale = coinSize * coin.scaleJitter;
+        tempPosition.copy(coin.position);
+        tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), coin.rotation);
+        tempScale.set(scale, scale, 1);
+        tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+        coinMeshRef.current.setMatrixAt(visibleCount, tempMatrix);
+        
+        visibleCount++;
       }
-    });
+      
+      coinMeshRef.current.count = visibleCount;
+      coinMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
 
     // Update explosion particles
-    explosionParticles.forEach((particle) => {
-      if (!particle.active || !particle.mesh) return;
+    if (particleMeshRef.current) {
+      let activeCount = 0;
+      
+      for (const particle of explosionParticles) {
+        if (!particle.active) continue;
 
-      particle.position.add(particle.velocity.clone().multiplyScalar(delta));
-      particle.velocityY += gravity * delta;
-      particle.position.y -= particle.velocityY * delta;
-      particle.rotation += particle.rotSpeed * delta;
-      particle.opacity -= delta * 1.5;
+        particle.position.add(particle.velocity.clone().multiplyScalar(delta));
+        particle.velocityY += gravity * delta;
+        particle.position.y -= particle.velocityY * delta;
+        particle.rotation += particle.rotSpeed * delta;
+        particle.opacity -= delta * 1.5;
 
-      particle.mesh.position.copy(particle.position);
-      (particle.mesh.material as THREE.SpriteMaterial).rotation = particle.rotation;
-      (particle.mesh.material as THREE.SpriteMaterial).opacity = Math.max(0, particle.opacity);
+        if (particle.opacity <= 0 || particle.position.y <= 0) {
+          particle.active = false;
+          continue;
+        }
 
-      if (particle.opacity <= 0 || particle.position.y <= 0) {
-        particle.active = false;
-        particle.mesh.visible = false;
+        // Update instanced mesh matrix
+        tempPosition.copy(particle.position);
+        tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), particle.rotation);
+        tempScale.set(particle.scale, particle.scale, 1);
+        tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+        particleMeshRef.current.setMatrixAt(activeCount, tempMatrix);
+        
+        // Set opacity via color alpha simulation (use white with varying opacity)
+        tempColor.setRGB(1, 1, 1);
+        particleMeshRef.current.setColorAt(activeCount, tempColor);
+        
+        activeCount++;
       }
-    });
+      
+      particleMeshRef.current.count = activeCount;
+      particleMeshRef.current.instanceMatrix.needsUpdate = true;
+      if (particleMeshRef.current.instanceColor) {
+        particleMeshRef.current.instanceColor.needsUpdate = true;
+      }
+    }
   });
 
   // Expose coins and explosion function for bullet collision
@@ -215,36 +262,40 @@ export function Coins({
     }
   }, [coins, onGetCoins, createExplosion]);
 
+  // Don't render if too far away
+  if (!isVisible) return null;
+
   return (
-    <group ref={groupRef}>
-      {coins.map((coin, index) => (
-        <sprite
-          key={index}
-          ref={(ref) => { coin.mesh = ref; }}
-          visible={false}
-          scale={[coinSize * coin.scaleJitter, coinSize * coin.scaleJitter, 1]}
-        >
-          <spriteMaterial
-            map={coinTexture}
-            transparent
-            alphaTest={0.5}
-          />
-        </sprite>
-      ))}
-      {explosionParticles.map((particle, index) => (
-        <sprite
-          key={`particle-${index}`}
-          ref={(ref) => { particle.mesh = ref; }}
-          visible={false}
-          scale={[0.5, 0.5, 1]}
-        >
-          <spriteMaterial
-            map={coinTexture}
-            transparent
-            alphaTest={0.5}
-          />
-        </sprite>
-      ))}
+    <group>
+      {/* Coins as instanced mesh */}
+      <instancedMesh
+        ref={coinMeshRef}
+        args={[undefined, undefined, maxCoins]}
+        frustumCulled={false}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          map={coinTexture}
+          transparent
+          alphaTest={0.5}
+          side={THREE.DoubleSide}
+        />
+      </instancedMesh>
+      
+      {/* Explosion particles as instanced mesh */}
+      <instancedMesh
+        ref={particleMeshRef}
+        args={[undefined, undefined, maxExplosionParticles]}
+        frustumCulled={false}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          map={coinTexture}
+          transparent
+          alphaTest={0.5}
+          side={THREE.DoubleSide}
+        />
+      </instancedMesh>
     </group>
   );
 }
