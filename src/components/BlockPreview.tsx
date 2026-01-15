@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface BlockPreviewProps {
   blockType: string;
@@ -38,6 +39,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   }, [texture]);
 
   useFrame(() => {
+    diagnostics.useFrameCallCount++;
+    
     if (!visible || !meshRef.current) return;
     
     frameCountRef.current++;

@@ -15,6 +15,7 @@ import {
   findStepUpTarget,
   createPlayerBox
 } from './FortressCollision';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 export function FirstPersonControls({ 
   onShoot, 
@@ -449,6 +450,8 @@ export function FirstPersonControls({
 
   // Movement and collision frame loop
   useFrame((state, delta) => {
+    diagnostics.useFrameCallCount++;
+    
     // Apply camera rotation if needed
     if (needsCameraUpdate.current) {
       eulerRef.current.set(pitch.current, yaw.current, 0);

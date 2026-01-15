@@ -1,6 +1,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRef } from 'react';
 import * as THREE from 'three';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 let globalFps = 0;
 let globalPlayerPos = { x: 0, y: 0, z: 0 };
@@ -17,6 +18,8 @@ export function FPSCounter({ isAdmin = false }: FPSCounterProps) {
   const viewDirRef = useRef(new THREE.Vector3());
 
   useFrame(() => {
+    diagnostics.useFrameCallCount++;
+    
     frameCountRef.current++;
     const currentTime = performance.now();
     const elapsed = currentTime - lastTimeRef.current;

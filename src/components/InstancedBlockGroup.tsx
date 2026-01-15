@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { fallingBlocksState } from './PlacedBlocks';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // Global texture cache - shared across all instanced groups
 const textureCache = new Map<string, { 
@@ -270,11 +271,19 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [blocks]);
   
   useFrame((_, delta) => {
+    diagnostics.useFrameCallCount++;
+    
     if (!meshRef.current) return;
+    
+    // Update visible blocks count for diagnostics
+    diagnostics.visibleBlocks = blocks.length;
     
     let needsUpdate = false;
     const matrix = matrixRef.current;
     const currentlyFalling = new Set<string>();
+    
+    // Track Set allocation for diagnostics
+    diagnostics.e4++;
     
     // Update positions for falling blocks - O(1) lookup per block
     fallingBlocksState.forEach((fallState, blockId) => {

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Coin, ExplosionParticle } from './FortressTypes';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface CoinsProps {
   coinRate?: number;
@@ -157,6 +158,11 @@ export function Coins({
   }, [explosionParticles, coinSize]);
 
   useFrame((state, delta) => {
+    diagnostics.useFrameCallCount++;
+    
+    // Update coin count for diagnostics
+    diagnostics.coinCount = coins.filter(c => c.visible).length;
+    
     // Check visibility with throttle
     const now = Date.now();
     if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {

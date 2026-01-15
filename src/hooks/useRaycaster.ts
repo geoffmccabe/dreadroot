@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 export interface RaycastMeshResult {
   object: THREE.Object3D;
@@ -43,6 +44,8 @@ export const useRaycaster = () => {
     meshes: THREE.Object3D[],
     maxDistance: number = 100
   ): RaycastMeshResult | null => {
+    diagnostics.e3++;
+    
     // Update direction from camera without creating new objects
     direction.current.set(0, 0, -1);
     direction.current.applyQuaternion(camera.quaternion);

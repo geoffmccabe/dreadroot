@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { WeatherSettings, CycleState } from './FortressTypes';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // Helper function to interpolate between colors
 export function interpolateColor(color1: number, color2: number, factor: number): number {
@@ -129,6 +130,8 @@ export function DynamicSky({ weatherSettings, cycleStateRef }: DynamicSkyProps) 
 
   // Consolidated weather + sky update loop - NO setState inside!
   useFrame(() => {
+    diagnostics.useFrameCallCount++;
+    
     // 1. Update weather cycle
     const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
     const currentTime = Date.now();
