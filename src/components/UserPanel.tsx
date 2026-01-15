@@ -176,22 +176,11 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const handleBuyBlock = async (itemKey: string, cost: number) => {
     const success = await buyBlock(itemKey, cost);
     if (success) {
-      // Play coin sound 3 times rapidly
+      // Play single coin sound (allows interruption on rapid clicks)
       const audio = new Audio('/coin_hit_sound.mp3');
       audio.volume = 0.3;
+      audio.currentTime = 0;
       audio.play();
-      
-      setTimeout(() => {
-        const audio2 = new Audio('/coin_hit_sound.mp3');
-        audio2.volume = 0.3;
-        audio2.play();
-      }, 100);
-      
-      setTimeout(() => {
-        const audio3 = new Audio('/coin_hit_sound.mp3');
-        audio3.volume = 0.3;
-        audio3.play();
-      }, 200);
       
       onBlockPurchased?.();
     }
