@@ -7,7 +7,7 @@ import { Eye } from 'lucide-react';
 import { BlockPreview } from '@/components/BlockPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
-import { FPSDisplay } from '@/components/FPSCounter';
+import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -572,6 +572,9 @@ export function Fortress() {
 
       {/* FPS Display */}
       <FPSDisplay isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
+      
+      {/* D-Flow Output Panel */}
+      <DFlowOutputPanel />
 
       {/* Top right controls */}
       <div className="fixed top-4 right-4 z-30 flex items-center gap-2">

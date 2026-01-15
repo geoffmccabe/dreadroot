@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber';
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import * as THREE from 'three';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 
@@ -72,6 +72,49 @@ export function FPSDisplay({ isAdmin = false }: FPSDisplayProps) {
       className="fixed top-2 left-2 z-50 text-white text-xs font-mono bg-black/70 px-2 py-1 rounded pointer-events-none"
     >
       {isAdmin ? 'FPS: -- | P:[0,0,0] V:[0,0,0]' : 'FPS: --'}
+    </div>
+  );
+}
+
+export function DFlowOutputPanel() {
+  const [visible, setVisible] = useState(false);
+  const [output, setOutput] = useState('');
+  
+  useEffect(() => {
+    const checkOutput = () => {
+      if (diagnostics.showOutput && diagnostics.lastOutput) {
+        setOutput(diagnostics.lastOutput);
+        setVisible(true);
+      }
+    };
+    
+    const interval = setInterval(checkOutput, 200);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const handleDismiss = () => {
+    diagnostics.dismissOutput();
+    setVisible(false);
+  };
+  
+  if (!visible) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+      <div className="bg-black/90 border border-white/30 rounded-lg p-4 max-w-4xl max-h-[80vh] overflow-auto">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-white font-mono text-sm">D-Flow Results</span>
+          <button 
+            onClick={handleDismiss}
+            className="text-white bg-red-600 px-3 py-1 rounded text-sm hover:bg-red-500"
+          >
+            Close
+          </button>
+        </div>
+        <pre className="text-green-400 font-mono text-xs whitespace-pre overflow-x-auto">
+          {output}
+        </pre>
+      </div>
     </div>
   );
 }
