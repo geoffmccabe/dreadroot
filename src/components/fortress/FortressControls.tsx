@@ -484,7 +484,8 @@ export function FirstPersonControls({
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
     const unregister = frameLoop.register('controls', (delta) => {
-      // Note: useFrameCallCount only tracked in master loop now
+      // Start timing for controls
+      diagnostics.startTiming();
       
       // Apply camera rotation if needed
       if (needsCameraUpdate.current) {
@@ -681,6 +682,9 @@ export function FirstPersonControls({
       if (broadcast) {
         broadcast(camera.position, yaw.current, pitch.current);
       }
+      
+      // Record timing for controls
+      diagnostics.recordTiming('controls');
     }, 20); // High priority - controls run early
 
     return unregister;

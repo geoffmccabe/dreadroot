@@ -136,10 +136,14 @@ export function Waterfall({
   // Register with centralized frame loop - STABLE dependencies only
   useEffect(() => {
     const unregister = frameLoop.register('waterfall', (delta) => {
-      // Note: useFrameCallCount only tracked in master loop now
+      // Start timing for waterfall
+      diagnostics.startTiming();
       
       const mesh = instancedMeshRef.current;
-      if (!mesh) return;
+      if (!mesh) {
+        diagnostics.recordTiming('waterfall');
+        return;
+      }
       
       // Check visibility with throttle (no state updates!)
       const now = Date.now();
@@ -154,6 +158,7 @@ export function Waterfall({
       
       if (!isVisibleRef.current) {
         mesh.count = 0;
+        diagnostics.recordTiming('waterfall');
         return;
       }
 
@@ -232,6 +237,9 @@ export function Waterfall({
       if (mesh.instanceColor) {
         mesh.instanceColor.needsUpdate = true;
       }
+      
+      // Record timing for waterfall
+      diagnostics.recordTiming('waterfall');
     }, 40);
 
     return unregister;
