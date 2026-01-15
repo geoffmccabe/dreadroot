@@ -3305,17 +3305,29 @@ export default function WaterfallFortress() {
 
   // Cycle through available blocks with mouse wheel
   const cycleSelectedBlock = useCallback((direction: 'next' | 'prev') => {
-    const availableBlocks = inventory.filter(item => item.quantity > 0);
+    // Group inventory by item_type and sum quantities (handles duplicate entries)
+    const blockQuantities = new Map<string, number>();
+    inventory.forEach(item => {
+      if (item.quantity > 0 && item.item_type) {
+        const current = blockQuantities.get(item.item_type) || 0;
+        blockQuantities.set(item.item_type, current + item.quantity);
+      }
+    });
+    
+    // Convert to array of unique block types with total quantities
+    const availableBlocks = Array.from(blockQuantities.entries())
+      .map(([blockType, quantity]) => ({ blockType, quantity }))
+      .filter(item => item.quantity > 0);
+    
     if (availableBlocks.length === 0) return;
     
     // If no block is selected, select the first one
     if (!selectedBlockType) {
       const firstBlock = availableBlocks[0];
-      const firstItemKey = firstBlock.item_id || firstBlock.item_type;
-      setSelectedBlockType(firstItemKey);
+      setSelectedBlockType(firstBlock.blockType);
       toast({
         title: "Block selected",
-        description: `Selected ${firstItemKey} (${firstBlock.quantity} available)`,
+        description: `Selected ${firstBlock.blockType} (${firstBlock.quantity} available)`,
         duration: 1000
       });
       return;
@@ -3323,17 +3335,14 @@ export default function WaterfallFortress() {
     
     if (availableBlocks.length <= 1) return;
     
-    const currentIndex = availableBlocks.findIndex(item => 
-      item.item_type === selectedBlockType || item.item_id === selectedBlockType
-    );
+    const currentIndex = availableBlocks.findIndex(item => item.blockType === selectedBlockType);
     if (currentIndex === -1) {
       // Current block not found, select the first available
       const firstBlock = availableBlocks[0];
-      const firstItemKey = firstBlock.item_id || firstBlock.item_type;
-      setSelectedBlockType(firstItemKey);
+      setSelectedBlockType(firstBlock.blockType);
       toast({
         title: "Block selected", 
-        description: `Selected ${firstItemKey} (${firstBlock.quantity} available)`,
+        description: `Selected ${firstBlock.blockType} (${firstBlock.quantity} available)`,
         duration: 1000
       });
       return;
@@ -3347,12 +3356,11 @@ export default function WaterfallFortress() {
     }
     
     const nextBlock = availableBlocks[nextIndex];
-    const nextItemKey = nextBlock.item_id || nextBlock.item_type;
-    setSelectedBlockType(nextItemKey);
+    setSelectedBlockType(nextBlock.blockType);
     
     toast({
       title: "Block selected",
-      description: `Selected ${nextItemKey} (${nextBlock.quantity} available)`,
+      description: `Selected ${nextBlock.blockType} (${nextBlock.quantity} available)`,
       duration: 1000
     });
   }, [selectedBlockType, inventory, toast]);
