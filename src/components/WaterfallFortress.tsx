@@ -3124,7 +3124,17 @@ export default function WaterfallFortress() {
     });
   }, [toast, handleBlockRainBatch]);
 
-  const handleBlockPlace = useCallback(async (position: THREE.Vector3) => {
+  // Use ref to always get fresh inventory value (PHASE 3: Fix stale closure)
+  const inventoryRef = useRef(inventory);
+  useEffect(() => {
+    inventoryRef.current = inventory;
+  }, [inventory]);
+
+  // Ref to hold handleModeChange to avoid circular dependency
+  const handleModeChangeRef = useRef<((mode: 'shooting' | 'building' | null) => void) | null>(null);
+
+  // PHASE 1: Reordered for INSTANT feedback - sound first, then optimistic updates
+  const handleBlockPlace = useCallback((position: THREE.Vector3) => {
     console.log('=== BLOCK PLACEMENT START ===');
     console.log('handleBlockPlace called with position:', {
       x: position.x,
@@ -3143,10 +3153,13 @@ export default function WaterfallFortress() {
       return;
     }
     
+    // Use ref to get fresh inventory (avoid stale closure)
+    const currentInventory = inventoryRef.current;
+    
     // Check if user has blocks in inventory (supports both item_type and item_id)
-    const hasBlocks = findInventoryItem(inventory, selectedBlockType) !== undefined && 
-                      getInventoryQuantity(inventory, selectedBlockType) > 0;
-    console.log('Has blocks in inventory:', hasBlocks, 'inventory:', inventory);
+    const hasBlocks = findInventoryItem(currentInventory, selectedBlockType) !== undefined && 
+                      getInventoryQuantity(currentInventory, selectedBlockType) > 0;
+    console.log('Has blocks in inventory:', hasBlocks);
     
     if (!hasBlocks) {
       console.log('No blocks in inventory');
@@ -3158,46 +3171,45 @@ export default function WaterfallFortress() {
       return;
     }
     
-    // Use block from inventory
-    const success = await useBlock(selectedBlockType);
-    if (!success) {
-      console.log('Failed to use block from inventory');
-      return;
+    // INSTANT: Play placement sound FIRST (before any async work)
+    try {
+      mainAudioRefs.current.woodenThud.currentTime = 0;
+      mainAudioRefs.current.woodenThud.play().catch(() => {});
+    } catch (audioError) {
+      console.log('Audio play failed:', audioError);
     }
     
-    // Place block in the world with rounded coordinates for grid alignment
-    try {
-      const roundedPos = {
-        x: Math.round(position.x),
-        y: Math.round(position.y), 
-        z: Math.round(position.z)
-      };
-      console.log('Placing block at rounded position:', roundedPos);
+    // Round coordinates for grid alignment
+    const roundedPos = {
+      x: Math.round(position.x),
+      y: Math.round(position.y), 
+      z: Math.round(position.z)
+    };
+    console.log('Placing block at rounded position:', roundedPos);
+    
+    // INSTANT: Optimistic inventory update (non-blocking)
+    useBlock(selectedBlockType);
+    
+    // INSTANT: Optimistic block placement (non-blocking - returns immediately)
+    const placedBlock = placeBlock(roundedPos.x, roundedPos.y, roundedPos.z, selectedBlockType);
+    
+    if (placedBlock) {
+      console.log('Block placed successfully:', placedBlock);
       
-      const placedBlock = await placeBlock(roundedPos.x, roundedPos.y, roundedPos.z, selectedBlockType);
-      if (placedBlock) {
-        console.log('Block placed successfully:', placedBlock);
-        console.log('Block should appear at:', `(${placedBlock.position_x}, ${placedBlock.position_y}, ${placedBlock.position_z})`);
-        
-        // Play placement sound
-        try {
-          mainAudioRefs.current.woodenThud.currentTime = 0;
-          await mainAudioRefs.current.woodenThud.play();
-        } catch (audioError) {
-          console.log('Audio play failed:', audioError);
-        }
-        
-        toast({
-          title: "✓ Block placed!",
-          description: `${selectedBlockType} placed at (${placedBlock.position_x}, ${placedBlock.position_y}, ${placedBlock.position_z})`,
-        });
-        
-        // Check if we still have blocks (inventory is already updated optimistically)
-        const stillHasBlocks = getInventoryQuantity(inventory, selectedBlockType) > 0;
+      toast({
+        title: "✓ Block placed!",
+        description: `${selectedBlockType} placed at (${roundedPos.x}, ${roundedPos.y}, ${roundedPos.z})`,
+      });
+      
+      // Check remaining blocks using fresh inventory ref after a microtask
+      // to allow optimistic update to propagate
+      setTimeout(() => {
+        const freshInventory = inventoryRef.current;
+        const stillHasBlocks = getInventoryQuantity(freshInventory, selectedBlockType) > 0;
         
         if (!stillHasBlocks) {
           // Find next available block type
-          const availableBlocks = inventory.filter(item => item.quantity > 0 && 
+          const availableBlocks = freshInventory.filter(item => item.quantity > 0 && 
             (item.item_type !== selectedBlockType && item.item_id !== selectedBlockType));
           console.log('No more blocks of type', selectedBlockType, 'available blocks:', availableBlocks);
           
@@ -3211,8 +3223,8 @@ export default function WaterfallFortress() {
               duration: 2000
             });
           } else {
-            // No blocks available, exit block mode
-            handleModeChange(null);
+            // No blocks available, exit block mode using ref
+            handleModeChangeRef.current?.(null);
             toast({
               title: "No more blocks",
               description: "All blocks used! Purchase more from the shop.",
@@ -3220,18 +3232,11 @@ export default function WaterfallFortress() {
             });
           }
         }
-      } else {
-        console.log('placeBlock returned null/undefined');
-      }
-    } catch (error) {
-      console.error('Failed to place block:', error);
-      toast({
-        title: "Block placement failed",
-        description: "There was an error placing the block",
-        variant: "destructive"
-      });
+      }, 50); // Small delay to allow optimistic update to propagate
+    } else {
+      console.log('placeBlock returned null/undefined');
     }
-  }, [selectedBlockType, inventory, useBlock, placeBlock, toast]);
+  }, [selectedBlockType, useBlock, placeBlock, toast]);
 
   const handleBlockPurchased = useCallback(async () => {
     // Refresh user data to update inventory and coin count
@@ -3302,6 +3307,11 @@ export default function WaterfallFortress() {
       }
     }
   }, [inventory, setBlockMode, toast]);
+
+  // Update ref so handleBlockPlace can use it without circular dependency
+  useEffect(() => {
+    handleModeChangeRef.current = handleModeChange;
+  }, [handleModeChange]);
 
   // Cycle through available blocks with mouse wheel
   const cycleSelectedBlock = useCallback((direction: 'next' | 'prev') => {
