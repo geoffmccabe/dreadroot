@@ -217,19 +217,14 @@ export const useAnimatedTexture = (url: string) => {
 
       // Create REUSABLE temp canvas for frame rendering (avoid allocation per frame!)
       const tempCanvas = document.createElement('canvas');
-      // Size to max frame dimensions (usually same as GIF size)
-      tempCanvas.width = frames[0].dims.width;
-      tempCanvas.height = frames[0].dims.height;
+      // Size to GIF full dimensions (frames may have smaller patches)
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
       tempCanvasRef.current = tempCanvas;
       tempCtxRef.current = tempCanvas.getContext('2d');
       
-      // Pre-allocate ImageData once (reuse for all frames)
-      if (tempCtxRef.current) {
-        imageDataRef.current = tempCtxRef.current.createImageData(
-          frames[0].dims.width,
-          frames[0].dims.height
-        );
-      }
+      // ImageData will be created on-demand in renderFrame when we know the actual frame size
+      imageDataRef.current = null;
 
       // Initialize with transparent background
       const ctx = canvas.getContext('2d');
@@ -315,46 +310,27 @@ export const useAnimatedTexture = (url: string) => {
     // REUSE temp canvas and ImageData instead of creating new ones per frame!
     const tempCanvas = tempCanvasRef.current;
     const tempCtx = tempCtxRef.current;
-    let imageData = imageDataRef.current;
     
     if (tempCtx && tempCanvas) {
       // Resize temp canvas only if frame dims are larger
       if (frame.dims.width > tempCanvas.width || frame.dims.height > tempCanvas.height) {
         tempCanvas.width = Math.max(tempCanvas.width, frame.dims.width);
         tempCanvas.height = Math.max(tempCanvas.height, frame.dims.height);
-        // Need new ImageData for new size
-        imageData = tempCtx.createImageData(tempCanvas.width, tempCanvas.height);
-        imageDataRef.current = imageData;
       }
       
       // Clear just the area we need
       tempCtx.clearRect(0, 0, frame.dims.width, frame.dims.height);
       
-      // Reuse ImageData - just copy the patch data
-      if (imageData && frame.dims.width <= imageData.width && frame.dims.height <= imageData.height) {
-        // Copy patch data into reusable ImageData
-        // Note: patch may be smaller than imageData, so we copy row by row
-        const patchData = frame.patch;
-        const imageDataData = imageData.data;
-        const srcRowLength = frame.dims.width * 4;
-        const dstRowLength = imageData.width * 4;
-        
-        for (let row = 0; row < frame.dims.height; row++) {
-          const srcOffset = row * srcRowLength;
-          const dstOffset = row * dstRowLength;
-          // Copy one row
-          for (let i = 0; i < srcRowLength; i++) {
-            imageDataData[dstOffset + i] = patchData[srcOffset + i];
-          }
-        }
-        
-        tempCtx.putImageData(imageData, 0, 0, 0, 0, frame.dims.width, frame.dims.height);
-      } else {
-        // Fallback: create ImageData just for this frame (rare case)
-        const fallbackImageData = tempCtx.createImageData(frame.dims.width, frame.dims.height);
-        fallbackImageData.data.set(frame.patch);
-        tempCtx.putImageData(fallbackImageData, 0, 0);
+      // Create or reuse ImageData - ensure it matches the exact frame dimensions
+      let imageData = imageDataRef.current;
+      if (!imageData || imageData.width !== frame.dims.width || imageData.height !== frame.dims.height) {
+        imageData = tempCtx.createImageData(frame.dims.width, frame.dims.height);
+        imageDataRef.current = imageData;
       }
+      
+      // Copy patch data directly - sizes now match exactly
+      imageData.data.set(frame.patch);
+      tempCtx.putImageData(imageData, 0, 0);
       
       // Draw temp canvas onto main canvas (respects alpha/transparency)
       ctx.drawImage(tempCanvas, 0, 0, frame.dims.width, frame.dims.height, left, top, frame.dims.width, frame.dims.height);
