@@ -165,16 +165,15 @@ export function Coins({
     for (const c of coins) { if (c.visible) visibleCoinCount++; }
     diagnostics.coinCount = visibleCoinCount;
     
-    // Check visibility with throttle
+    // Check visibility with throttle - use squared distance to avoid sqrt
     const now = Date.now();
     if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
       lastVisibilityCheck.current = now;
-      const distanceToCoins = Math.sqrt(
-        Math.pow(camera.position.x - coinCenter.x, 2) +
-        Math.pow(camera.position.z - coinCenter.z, 2)
-      );
+      const dx = camera.position.x - coinCenter.x;
+      const dz = camera.position.z - coinCenter.z;
+      const distSq = dx * dx + dz * dz;
       const maxDistance = visualDistance * CHUNK_SIZE;
-      const shouldBeVisible = distanceToCoins <= maxDistance;
+      const shouldBeVisible = distSq <= maxDistance * maxDistance;
       if (shouldBeVisible !== isVisible) {
         setIsVisible(shouldBeVisible);
       }

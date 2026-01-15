@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { collisionGrid } from '@/lib/spatialHashGrid';
 
 // ============================================================
 // FORTRESS COLLISION UTILITIES
@@ -24,11 +25,17 @@ const _stepUpMax = new THREE.Vector3();
 const _clearanceMin = new THREE.Vector3();
 const _clearanceMax = new THREE.Vector3();
 
+// Cached fortress colliders (never change)
+let _fortressColliders: THREE.Box3[] | null = null;
+
 /**
  * Creates collision boxes for the static fortress structure
+ * Cached after first call since fortress never changes
  */
 export function createFortressColliders(): THREE.Box3[] {
-  return [
+  if (_fortressColliders) return _fortressColliders;
+  
+  _fortressColliders = [
     // Left pillar
     new THREE.Box3(
       new THREE.Vector3(-cliffW/2, 0, frontZ - frontT/2),
@@ -54,20 +61,28 @@ export function createFortressColliders(): THREE.Box3[] {
       new THREE.Vector3(cliffW/2, cliffH, frontZ - courtyardDepth - frontT + 1)
     )
   ];
+  
+  return _fortressColliders;
 }
 
 /**
  * Creates and manages collision boxes for placed blocks with caching
+ * Also updates the spatial hash grid for O(1) nearby lookups
  */
 export function createBlockColliders(
   blocks: PlacedBlock[],
   cache: Map<string, THREE.Box3>
 ): THREE.Box3[] {
   const currentBlockIds = new Set(blocks.map(b => b.id));
+  let gridNeedsRebuild = false;
   
   // Remove collision boxes for deleted blocks
   for (const id of cache.keys()) {
     if (!currentBlockIds.has(id)) {
+      const box = cache.get(id);
+      if (box) {
+        collisionGrid.remove(box);
+      }
       cache.delete(id);
     }
   }
@@ -75,10 +90,22 @@ export function createBlockColliders(
   // Add collision boxes for new blocks only
   for (const block of blocks) {
     if (!cache.has(block.id)) {
-      cache.set(block.id, new THREE.Box3(
+      const box = new THREE.Box3(
         new THREE.Vector3(block.position_x, block.position_y, block.position_z),
         new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
-      ));
+      );
+      cache.set(block.id, box);
+      collisionGrid.insert(box);
+      gridNeedsRebuild = true;
+    }
+  }
+  
+  // Rebuild grid with fortress colliders if this is first build
+  if (gridNeedsRebuild && collisionGrid.size === cache.size) {
+    // Add fortress colliders to grid on first build
+    const fortressColliders = createFortressColliders();
+    for (const fc of fortressColliders) {
+      collisionGrid.insert(fc);
     }
   }
   
@@ -101,30 +128,25 @@ export function createPlayerBox(
 }
 
 /**
- * Checks for collision on a specific axis
+ * Checks for collision on a specific axis using spatial hash grid for O(1) lookup
  * @returns The collider that was hit, or null if no collision
  */
 export function checkAxisCollision(
   pos: THREE.Vector3,
-  colliders: THREE.Box3[],
+  colliders: THREE.Box3[], // kept for API compatibility but not used
   playerRadius: number,
   playerHeight: number,
   isHorizontal: boolean = false
 ): THREE.Box3 | null {
   diagnostics.e1++;
   
+  // Use spatial hash grid for O(1) nearby lookup instead of O(n) iteration
+  const nearbyColliders = collisionGrid.getNearby(pos.x, pos.z, 2);
+  
   // Use pre-allocated player box (no allocations!)
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
-  const spatialRadius = 2.0;
   
-  for (const collider of colliders) {
-    // Spatial filtering - skip blocks too far away
-    const colliderCenterX = (collider.max.x + collider.min.x) / 2;
-    const colliderCenterZ = (collider.max.z + collider.min.z) / 2;
-    const distX = Math.abs(colliderCenterX - pos.x);
-    const distZ = Math.abs(colliderCenterZ - pos.z);
-    if (Math.sqrt(distX * distX + distZ * distZ) > spatialRadius) continue;
-    
+  for (const collider of nearbyColliders) {
     // For horizontal movement, skip blocks the player is standing on
     if (isHorizontal) {
       const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.2) && (playerBox.min.y <= collider.max.y + 0.2);
@@ -140,11 +162,12 @@ export function checkAxisCollision(
 
 /**
  * Finds a valid step-up target when player is blocked horizontally
+ * Uses spatial hash grid for O(1) nearby lookup
  * @returns The Y coordinate to step up to, or null if no valid target
  */
 export function findStepUpTarget(
   camera: THREE.Camera,
-  colliders: THREE.Box3[],
+  colliders: THREE.Box3[], // kept for API compatibility but not used
   playerRadius: number,
   playerHeight: number,
   stepUpHeight: number = 0.6,
@@ -153,16 +176,13 @@ export function findStepUpTarget(
 ): number | null {
   diagnostics.e2++;
   
+  // Use spatial hash grid for O(1) lookup
+  const nearbyColliders = collisionGrid.getNearby(camera.position.x, camera.position.z, 2);
+  
   const currentFootY = camera.position.y - playerHeight;
-  const spatialRadius = 2.0;
   let bestStepUpY: number | null = null;
   
-  for (const collider of colliders) {
-    // Spatial filtering
-    const distX = Math.abs(collider.max.x + collider.min.x) / 2 - camera.position.x;
-    const distZ = Math.abs(collider.max.z + collider.min.z) / 2 - camera.position.z;
-    if (Math.sqrt(distX * distX + distZ * distZ) > spatialRadius) continue;
-    
+  for (const collider of nearbyColliders) {
     const blockTopY = collider.max.y;
     
     // Block top must be above our feet but within step-up range
@@ -202,14 +222,11 @@ export function findStepUpTarget(
         clearanceBoxRef.set(_clearanceMin, _clearanceMax);
         
         let hasClearance = true;
-        for (const otherCollider of colliders) {
+        // Only check nearby colliders for clearance (not all)
+        for (const otherCollider of nearbyColliders) {
           if (otherCollider === collider) continue;
           if (otherCollider.min.y > blockTopY + playerHeight) continue;
           if (otherCollider.max.y < blockTopY) continue;
-          
-          const otherDistX = Math.abs(otherCollider.max.x + otherCollider.min.x) / 2 - camera.position.x;
-          const otherDistZ = Math.abs(otherCollider.max.z + otherCollider.min.z) / 2 - camera.position.z;
-          if (Math.sqrt(otherDistX * otherDistX + otherDistZ * otherDistZ) > spatialRadius) continue;
           
           if (clearanceBoxRef.intersectsBox(otherCollider)) {
             hasClearance = false;

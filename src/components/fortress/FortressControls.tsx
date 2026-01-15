@@ -16,6 +16,7 @@ import {
   createPlayerBox
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { collisionGrid } from '@/lib/spatialHashGrid';
 
 export function FirstPersonControls({ 
   onShoot, 
@@ -92,6 +93,19 @@ export function FirstPersonControls({
   const lastBlockIds = useRef<string>('');
   const lastBlockCount = useRef<number>(0);
 
+  // Initialize collision grid with fortress colliders on mount
+  useEffect(() => {
+    const fortressColliders = createFortressColliders();
+    for (const fc of fortressColliders) {
+      collisionGrid.insert(fc);
+    }
+    console.log('✅ Collision grid initialized with fortress colliders');
+    
+    return () => {
+      // Don't clear on unmount - other components may still need it
+    };
+  }, []);
+
   // Collision boxes for fortress walls and placed blocks
   const colliders = useMemo(() => {
     const blockIds = existingBlocks.map(b => b.id).sort().join(',');
@@ -101,6 +115,10 @@ export function FirstPersonControls({
     
     if (needsFullRebuild && blockCollisionCache.current.size > 0) {
       if (DEBUG_LOGGING) console.log('[Colliders] Full cache rebuild');
+      // Clear collision grid block entries (keep fortress)
+      for (const box of blockCollisionCache.current.values()) {
+        collisionGrid.remove(box);
+      }
       blockCollisionCache.current.clear();
     }
     
