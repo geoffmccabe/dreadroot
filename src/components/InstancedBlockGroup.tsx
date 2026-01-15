@@ -1,10 +1,11 @@
 import React, { useRef, useMemo, useEffect, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 
 // Global texture cache - shared across all instanced groups
 const textureCache = new Map<string, { 
@@ -272,84 +273,115 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     return map;
   }, [blocks]);
   
-  useFrame((_, delta) => {
-    diagnostics.useFrameCallCount++;
-    
-    if (!meshRef.current) return;
-    
-    // Update visible blocks count for diagnostics
-    diagnostics.visibleBlocks = blocks.length;
-    
-    let needsUpdate = false;
-    const matrix = matrixRef.current;
-    
-    // Reuse Set instead of creating new one every frame
-    const currentlyFalling = currentlyFallingRef.current;
-    currentlyFalling.clear();
-    
-    // Update positions for falling blocks - O(1) lookup per block
-    fallingBlocksState.forEach((fallState, blockId) => {
-      const blockIndex = blockIndexMap.get(blockId);
-      if (blockIndex === undefined) return;
+  // Store refs for frameLoop callback
+  const blocksRef = useRef(blocks);
+  const blockIndexMapRef = useRef(blockIndexMap);
+  const showOwnershipOutlineRef = useRef(showOwnershipOutline);
+  const hoveredBlockIdRef = useRef(hoveredBlockId);
+  
+  useEffect(() => { blocksRef.current = blocks; }, [blocks]);
+  useEffect(() => { blockIndexMapRef.current = blockIndexMap; }, [blockIndexMap]);
+  useEffect(() => { showOwnershipOutlineRef.current = showOwnershipOutline; }, [showOwnershipOutline]);
+  useEffect(() => { hoveredBlockIdRef.current = hoveredBlockId; }, [hoveredBlockId]);
+  
+  // Generate unique ID for this block group to avoid collision with other instances
+  const frameLoopId = useMemo(() => `blocks-${blockDef?.key || 'unknown'}-${Math.random().toString(36).slice(2, 8)}`, [blockDef?.key]);
+  
+  // Register with centralized frame loop
+  useEffect(() => {
+    const unregister = frameLoop.register(frameLoopId, (delta) => {
+      diagnostics.startTiming();
       
-      currentlyFalling.add(blockId);
-      
-      const block = blocks[blockIndex];
-      const x = block.position_x + 0.5;
-      const y = fallState.currentY + 0.5;
-      const z = block.position_z + 0.5;
-      
-      matrix.setPosition(x, y, z);
-      meshRef.current!.setMatrixAt(blockIndex, matrix);
-      needsUpdate = true;
-    });
-    
-    // Reset blocks that were falling but have now landed to their database position
-    previouslyFallingRef.current.forEach(blockId => {
-      if (!currentlyFalling.has(blockId)) {
-        const blockIndex = blockIndexMap.get(blockId);
-        if (blockIndex !== undefined) {
-          const block = blocks[blockIndex];
-          const x = block.position_x + 0.5;
-          const y = block.position_y + 0.5; // Use database position
-          const z = block.position_z + 0.5;
-          
-          matrix.setPosition(x, y, z);
-          meshRef.current!.setMatrixAt(blockIndex, matrix);
-          needsUpdate = true;
-        }
+      const mesh = meshRef.current;
+      if (!mesh) {
+        diagnostics.recordTiming('blocks');
+        return;
       }
-    });
+      
+      // Update visible blocks count for diagnostics
+      diagnostics.visibleBlocks = blocksRef.current.length;
+      
+      let needsUpdate = false;
+      const matrix = matrixRef.current;
+      const currentBlocks = blocksRef.current;
+      const indexMap = blockIndexMapRef.current;
+      
+      // Reuse Set instead of creating new one every frame
+      const currentlyFalling = currentlyFallingRef.current;
+      currentlyFalling.clear();
+      
+      // Update positions for falling blocks - O(1) lookup per block
+      fallingBlocksState.forEach((fallState, blockId) => {
+        const blockIndex = indexMap.get(blockId);
+        if (blockIndex === undefined) return;
+        
+        currentlyFalling.add(blockId);
+        
+        const block = currentBlocks[blockIndex];
+        if (!block) return;
+        
+        const x = block.position_x + 0.5;
+        const y = fallState.currentY + 0.5;
+        const z = block.position_z + 0.5;
+        
+        matrix.setPosition(x, y, z);
+        mesh.setMatrixAt(blockIndex, matrix);
+        needsUpdate = true;
+      });
+      
+      // Reset blocks that were falling but have now landed to their database position
+      previouslyFallingRef.current.forEach(blockId => {
+        if (!currentlyFalling.has(blockId)) {
+          const blockIndex = indexMap.get(blockId);
+          if (blockIndex !== undefined) {
+            const block = currentBlocks[blockIndex];
+            if (block) {
+              const x = block.position_x + 0.5;
+              const y = block.position_y + 0.5; // Use database position
+              const z = block.position_z + 0.5;
+              
+              matrix.setPosition(x, y, z);
+              mesh.setMatrixAt(blockIndex, matrix);
+              needsUpdate = true;
+            }
+          }
+        }
+      });
+      
+      // Swap Sets instead of copying (no allocation)
+      const temp = previouslyFallingRef.current;
+      previouslyFallingRef.current = currentlyFallingRef.current;
+      currentlyFallingRef.current = temp;
+      
+      if (needsUpdate) {
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+      
+      // Animate outline color: red -> orange -> bright yellow -> back
+      if (showOwnershipOutlineRef.current && outlineMaterialRef.current) {
+        timeRef.current += delta;
+        // Cycle every 2 seconds (0 to 60 hue in HSL)
+        const cycle = (timeRef.current % 2) / 2; // 0 to 1
+        const hue = cycle * 60; // 0 (red) to 60 (yellow)
+        outlineMaterialRef.current.color.setHSL(hue / 360, 1, 0.5);
+      }
+      
+      // Animate hovered block opacity - double speed (0.5s cycle)
+      if (hoveredBlockIdRef.current && hoveredMaterialRef.current) {
+        hoverTimeRef.current += delta;
+        // Cycle every 0.5 seconds: from full opacity (1) to transparent (0)
+        const cycle = (hoverTimeRef.current % 0.5) / 0.5; // 0 to 1
+        const opacity = Math.abs(Math.sin(cycle * Math.PI)); // 0 to 1 to 0
+        (hoveredMaterialRef.current as THREE.MeshLambertMaterial).opacity = opacity;
+      } else {
+        hoverTimeRef.current = 0;
+      }
+      
+      diagnostics.recordTiming('blocks');
+    }, 60); // Medium-high priority
     
-    // Swap Sets instead of copying (no allocation)
-    const temp = previouslyFallingRef.current;
-    previouslyFallingRef.current = currentlyFallingRef.current;
-    currentlyFallingRef.current = temp;
-    
-    if (needsUpdate) {
-      meshRef.current.instanceMatrix.needsUpdate = true;
-    }
-    
-    // Animate outline color: red -> orange -> bright yellow -> back
-    if (showOwnershipOutline && outlineMaterialRef.current) {
-      timeRef.current += delta;
-      // Cycle every 2 seconds (0 to 60 hue in HSL)
-      const cycle = (timeRef.current % 2) / 2; // 0 to 1
-      const hue = cycle * 60; // 0 (red) to 60 (yellow)
-      outlineMaterialRef.current.color.setHSL(hue / 360, 1, 0.5);
-    }
-    
-    // Animate hovered block opacity - double speed (0.5s cycle)
-    if (hoveredBlock && hoveredMaterialRef.current) {
-      hoverTimeRef.current += delta;
-      // Cycle every 0.5 seconds: from full opacity (1) to transparent (0)
-      const cycle = (hoverTimeRef.current % 0.5) / 0.5; // 0 to 1
-      const opacity = Math.abs(Math.sin(cycle * Math.PI)); // 0 to 1 to 0
-      (hoveredMaterialRef.current as THREE.MeshLambertMaterial).opacity = opacity;
-    } else {
-      hoverTimeRef.current = 0;
-    }
-  });
+    return unregister;
+  }, [frameLoopId]);
   
   // Create collision boxes for all instances (only when blocks change, not on every frame)
   // Use a stable key to track when blocks actually change
