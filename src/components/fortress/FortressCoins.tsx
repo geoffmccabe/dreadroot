@@ -284,7 +284,7 @@ export function Coins({
       <instancedMesh
         ref={coinMeshRef}
         args={[undefined, undefined, MAX_COINS]}
-        frustumCulled={true}
+        frustumCulled={false}
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
@@ -299,7 +299,7 @@ export function Coins({
       <instancedMesh
         ref={particleMeshRef}
         args={[undefined, undefined, MAX_EXPLOSION_PARTICLES]}
-        frustumCulled={true}
+        frustumCulled={false}
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
