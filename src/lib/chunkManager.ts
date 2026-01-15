@@ -1,5 +1,8 @@
 import { PlacedBlock } from '@/types/blocks';
 
+// Debug flag for chunk organization logging - disable in production for FPS
+const DEBUG_CHUNK_LOGGING = false;
+
 // Minecraft-style chunk size: 16x16 blocks
 export const CHUNK_SIZE = 16;
 
@@ -39,15 +42,17 @@ export function organizeBlocksByChunk(blocks: PlacedBlock[]): Map<string, Placed
     chunkMap.set(chunkKey, existingBlocks);
   }
   
-  console.log(`📦 Organized ${blocks.length} blocks into ${chunkMap.size} chunks`);
-  
-  // Log chunk distribution
-  const distribution = Array.from(chunkMap.entries())
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 5)
-    .map(([key, blocks]) => `${key}: ${blocks.length} blocks`)
-    .join(', ');
-  console.log(`📊 Top chunks: ${distribution}`);
+  if (DEBUG_CHUNK_LOGGING) {
+    console.log(`📦 Organized ${blocks.length} blocks into ${chunkMap.size} chunks`);
+    
+    // Log chunk distribution
+    const distribution = Array.from(chunkMap.entries())
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 5)
+      .map(([key, blocks]) => `${key}: ${blocks.length} blocks`)
+      .join(', ');
+    console.log(`📊 Top chunks: ${distribution}`);
+  }
   
   return chunkMap;
 }
