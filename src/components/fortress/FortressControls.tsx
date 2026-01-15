@@ -82,6 +82,9 @@ export function FirstPersonControls({
   const shootDirectionRef = useRef(new THREE.Vector3());
   const shootOriginRef = useRef(new THREE.Vector3());
   
+  // Throttle ref for hover detection (avoid per-frame setState!)
+  const lastHoverCheckRef = useRef(0);
+  
   // Use blocks from props
   const existingBlocks = blocks;
   
@@ -481,7 +484,7 @@ export function FirstPersonControls({
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
     const unregister = frameLoop.register('controls', (delta) => {
-      diagnostics.useFrameCallCount++;
+      // Note: useFrameCallCount only tracked in master loop now
       
       // Apply camera rotation if needed
       if (needsCameraUpdate.current) {
@@ -490,31 +493,36 @@ export function FirstPersonControls({
         needsCameraUpdate.current = false;
       }
 
-      // Block hover detection for removal
+      // Block hover detection for removal - THROTTLED to avoid per-frame setState
+      // Only check every 100ms and only call setState when value actually changes
+      const now = performance.now();
       if (blockPlacementModeRef.current && showOwnershipOutlineRef.current && keys.current.rightMouse) {
-        const meshesArray = meshesArrayCache.current;
-        if (meshesArray.length > 0) {
-          const result = raycastMeshes(meshesArray, 5);
+        if (now - lastHoverCheckRef.current > 100) { // Throttle to 10fps
+          lastHoverCheckRef.current = now;
           
-          if (result && result.instanceId !== undefined) {
-            const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
-            if (blockType && currentUserIdRef.current) {
-              const userBlocks = blocksByTypeAndUser.current.get(`${blockType}_${currentUserIdRef.current}`);
-              if (userBlocks && result.instanceId < userBlocks.length) {
-                const block = userBlocks[result.instanceId];
-                if (block && block.user_id === currentUserIdRef.current) {
-                  setHoveredBlockId(block.id);
-                } else {
-                  setHoveredBlockId(null);
+          const meshesArray = meshesArrayCache.current;
+          let newHoveredId: string | null = null;
+          
+          if (meshesArray.length > 0) {
+            const result = raycastMeshes(meshesArray, 5);
+            
+            if (result && result.instanceId !== undefined) {
+              const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
+              if (blockType && currentUserIdRef.current) {
+                const userBlocks = blocksByTypeAndUser.current.get(`${blockType}_${currentUserIdRef.current}`);
+                if (userBlocks && result.instanceId < userBlocks.length) {
+                  const block = userBlocks[result.instanceId];
+                  if (block && block.user_id === currentUserIdRef.current) {
+                    newHoveredId = block.id;
+                  }
                 }
-              } else {
-                setHoveredBlockId(null);
               }
-            } else {
-              setHoveredBlockId(null);
             }
-          } else {
-            setHoveredBlockId(null);
+          }
+          
+          // Only call setState if value actually changed
+          if (newHoveredId !== hoveredBlockIdRef.current) {
+            setHoveredBlockId(newHoveredId);
           }
         }
       } else if (hoveredBlockIdRef.current) {

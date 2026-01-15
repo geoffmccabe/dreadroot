@@ -174,7 +174,7 @@ export function Coins({
   // Register with centralized frame loop
   useEffect(() => {
     const unregister = frameLoop.register('coins', (delta) => {
-      diagnostics.useFrameCallCount++;
+      // Note: useFrameCallCount only tracked in master loop now
       
       // Update coin count for diagnostics
       let visibleCoinCount = 0;

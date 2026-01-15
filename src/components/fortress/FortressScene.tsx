@@ -483,7 +483,7 @@ export function FortressScene({
   // Frame loop for bullets and particles - NO setState inside!
   // Uses in-place array filtering (swap-delete) to avoid GC pressure
   useFrame((state, delta) => {
-    diagnostics.useFrameCallCount++;
+    // Master frame loop - tick() increments masterFrameCount
     
     // Update diagnostics metrics
     diagnostics.cameraX = camera.position.x;
