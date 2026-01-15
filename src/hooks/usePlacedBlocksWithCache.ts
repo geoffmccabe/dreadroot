@@ -258,18 +258,36 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
 
   // Periodic check to filter expired blocks from state (every 5 seconds)
   // This ensures blocks disappear within 5-10 seconds of expiring without FPS impact
+  // OPTIMIZED: Uses early-exit pattern to avoid expensive work when no blocks are expiring
   useEffect(() => {
     const DEBUG_EXPIRATION_LOGGING = false; // Set to true for debugging block expiration
     
     const interval = setInterval(() => {
       setBlocksIfChanged(prev => {
-        const now = new Date();
-        const activeBlocks = prev.filter(block => 
-          !block.expires_at || new Date(block.expires_at) > now
+        // FAST EXIT: If no blocks have expires_at, nothing can expire - zero work
+        const hasExpiringBlocks = prev.some(b => b.expires_at);
+        if (!hasExpiringBlocks) {
+          return prev; // Same reference, no state update, no re-render
+        }
+        
+        // Only create timestamp once (not per-block)
+        const nowTimestamp = Date.now();
+        
+        // Check if any blocks are actually expired before filtering
+        const hasExpiredBlocks = prev.some(b => 
+          b.expires_at && new Date(b.expires_at).getTime() <= nowTimestamp
         );
         
-        // Only log if any blocks were filtered out and debug logging enabled
-        if (DEBUG_EXPIRATION_LOGGING && activeBlocks.length !== prev.length) {
+        if (!hasExpiredBlocks) {
+          return prev; // Same reference, minimal work done
+        }
+        
+        // Only filter when blocks are actually expired (rare case)
+        const activeBlocks = prev.filter(block => 
+          !block.expires_at || new Date(block.expires_at).getTime() > nowTimestamp
+        );
+        
+        if (DEBUG_EXPIRATION_LOGGING) {
           console.log(`[Expiration] Filtered out ${prev.length - activeBlocks.length} expired blocks`);
         }
         
