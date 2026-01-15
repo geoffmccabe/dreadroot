@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Html } from '@react-three/drei';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { AtlasMediaWall } from '@/components/AtlasMediaWall';
 import * as THREE from 'three';
@@ -160,46 +159,14 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
           <meshBasicMaterial color="#000000" side={THREE.DoubleSide} />
         </mesh>
         
-        {/* Live website iframe using Html from drei */}
-        {currentUrl?.url && (
-          <group position={[0, 1, 0.05]}>
-            <Html
-              transform
-              wrapperClass="monitor-iframe-wrapper"
-              prepend
-              center
-              style={{
-                width: '1280px',
-                height: '720px',
-                background: 'white',
-              }}
-              scale={17 / 1280}
-            >
-              <iframe
-                src={currentUrl.url}
-                style={{
-                  width: '1280px',
-                  height: '720px',
-                  border: 'none',
-                  background: 'white',
-                }}
-                title="Embedded Website"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              />
-            </Html>
-          </group>
-        )}
-        
-        {/* Fallback when no URL */}
-        {!currentUrl?.url && (
-          <mesh position={[0, 1, 0.02]}>
-            <planeGeometry args={[17, 10]} />
-            <meshBasicMaterial 
-              map={fallbackTexture}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-        )}
+        {/* Screen content - placeholder for future PDF/content */}
+        <mesh position={[0, 1, 0.02]}>
+          <planeGeometry args={[17, 10]} />
+          <meshBasicMaterial 
+            map={currentUrl?.url ? iframeTexture : fallbackTexture}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
         
         {/* URL buttons at bottom - visible from both sides */}
         <group position={[-6.75, -4.5, 0.03]}>
