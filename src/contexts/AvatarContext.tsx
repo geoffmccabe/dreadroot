@@ -39,23 +39,25 @@ export function AvatarProvider({ children }: { children: React.ReactNode }) {
   const [currentAnimation, setCurrentAnimation] = useState<string>('Idle');
 
   // Load default model from database
+  const yBotModel = getModelByKey('y-bot');
+  
   useEffect(() => {
-    if (!isLoading) {
-      const yBotModel = getModelByKey('y-bot');
-      if (yBotModel) {
-        setAvatarConfig({
-          model: yBotModel.model_url,
-          scale: yBotModel.default_scale,
-          scaleX: yBotModel.default_scale_x,
-          scaleY: yBotModel.default_scale_y,
-          scaleZ: yBotModel.default_scale_z,
-          color: yBotModel.default_color,
-          animations: yBotModel.animations,
-        });
-      }
+    if (!isLoading && yBotModel) {
+      console.log('📦 Loading y-bot model from DB:', {
+        scale: yBotModel.default_scale,
+        animations: yBotModel.animations?.map(a => a.name)
+      });
+      setAvatarConfig({
+        model: yBotModel.model_url,
+        scale: yBotModel.default_scale,
+        scaleX: yBotModel.default_scale_x,
+        scaleY: yBotModel.default_scale_y,
+        scaleZ: yBotModel.default_scale_z,
+        color: yBotModel.default_color,
+        animations: yBotModel.animations,
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading]);
+  }, [isLoading, yBotModel]);
 
   const updateAvatarConfig = useCallback((updates: Partial<AvatarConfig>) => {
     setAvatarConfig(prev => ({ ...prev, ...updates }));
