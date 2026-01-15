@@ -777,11 +777,34 @@ function FirstPersonControls({
         onBlockPlace(placementResult.position);
       } else {
         console.log('Invalid placement:', placementResult.reason);
-        // Show user feedback for invalid placement
+        // Play "not allowed" sound - lower pitch (0.25x) and longer duration via Web Audio API
+        try {
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          fetch('/wooden_thud_sound.mp3')
+            .then(response => response.arrayBuffer())
+            .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+            .then(audioBuffer => {
+              const source = audioContext.createBufferSource();
+              source.buffer = audioBuffer;
+              source.playbackRate.value = 0.25; // 1/4 frequency = lower pitch + 4x duration
+              const gainNode = audioContext.createGain();
+              gainNode.gain.value = 0.4;
+              source.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              source.start(0);
+              // Clean up after sound finishes (4x longer)
+              setTimeout(() => audioContext.close(), (audioBuffer.duration / 0.25) * 1000 + 100);
+            })
+            .catch(() => {});
+        } catch (e) {
+          console.log('Could not play invalid placement sound');
+        }
+        // Log specific reason
         if (placementResult.reason === 'fortress') console.log('Too close to fortress');
         if (placementResult.reason === 'waterfall') console.log('Blocking waterfall');
         if (placementResult.reason === 'overlap') console.log('Block overlap detected');
         if (placementResult.reason === 'no-surface') console.log('No surface found within range');
+        if (placementResult.reason === 'floating') console.log('Block must be on ground or adjacent to another block');
       }
     } else if (showCrosshairs && onShoot) {
       // Implement firing rate limiting to prevent performance issues
