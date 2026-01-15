@@ -213,7 +213,11 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     // Create stable key from block IDs to detect actual changes
     const blockIdsKey = blocks.map(b => b.id).sort().join(',');
     
-    // Skip GPU re-upload if blocks haven't actually changed
+    // IMPORTANT: Always update the mesh count to match blocks array
+    // This is needed because the instancedMesh may have been created with a different count
+    meshRef.current.count = blocks.length;
+    
+    // Skip matrix re-upload only if block IDs haven't changed
     if (prevBlockIdsRef.current === blockIdsKey && blocks.length > 0) {
       return;
     }
@@ -418,13 +422,15 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       .map(item => item.block);
   }, [blocks, shouldGlow, camera.position]);
   
-  if (!material) return null;
+  // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
+  // Use MAX of current blocks.length + 50 or 100 to handle growth
+  const bufferSize = Math.max(blocks.length + 50, 100);
 
   return (
     <>
       <instancedMesh
         ref={meshRef}
-        args={[geometry, material, blocks.length]}
+        args={[geometry, material, bufferSize]}
         castShadow
         receiveShadow
         frustumCulled={true}

@@ -177,7 +177,7 @@ export const PlacedBlocks: React.FC<{
         
         return (
           <InstancedBlockGroup
-            key={`${blockType}-${blocksOfType.length}`}
+            key={blockType}
             blocks={blocksOfType}
             blockDef={blockDef}
             geometry={geometry}

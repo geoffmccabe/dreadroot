@@ -777,7 +777,7 @@ function FirstPersonControls({
         onBlockPlace(placementResult.position);
       } else {
         console.log('Invalid placement:', placementResult.reason);
-        // Play "not allowed" sound - 4x faster, very low pitch (25%)
+        // Play "not allowed" sound - 16x faster (1/4 of current 4x), keep low pitch
         try {
           const rejectionData = (window as any).__rejectionSound;
           if (rejectionData?.buffer) {
@@ -790,8 +790,8 @@ function FirstPersonControls({
             
             const source = ctx.createBufferSource();
             source.buffer = rejectionData.buffer;
-            source.playbackRate.value = 4.0; // 4x faster (very quick)
-            source.detune.value = -2400; // 25% pitch (2 octaves down)
+            source.playbackRate.value = 16.0; // 16x faster (1/4 the length of 4x = very quick)
+            source.detune.value = -2400; // Keep low pitch (2 octaves down)
             const gainNode = ctx.createGain();
             gainNode.gain.value = 1.0; // Same volume
             source.connect(gainNode);
@@ -3503,8 +3503,8 @@ export default function WaterfallFortress() {
         toast={toast}
       />
       
-      {/* Block Preview */}
-      {selectedBlockType && (
+      {/* Block Preview - only show if user has blocks of that type */}
+      {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
         <BlockPreview 
           blockType={selectedBlockType}
           visible={true}
