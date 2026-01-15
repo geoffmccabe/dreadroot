@@ -1,10 +1,10 @@
 import React, { useRef, useMemo, useCallback, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 
 // Re-export clearTextureCache for backward compatibility
 export const clearTextureCache = clearInstancedTextureCache;
@@ -79,53 +79,56 @@ export const PlacedBlocks: React.FC<{
     });
   }, [blocks]);
   
-  // Create block ID to block map for O(1) lookups in useFrame
+  // Create block ID to block map for O(1) lookups in frame loop
   const blocksById = useMemo(() => {
     const map = new Map<string, PlacedBlock>();
     blocks.forEach(block => map.set(block.id, block));
     return map;
   }, [blocks]);
   
-  // Physics update for falling blocks (no React re-renders, just update state)
-  useFrame((state, delta) => {
-    diagnostics.useFrameCallCount++;
-    
-    if (fallingBlocksState.size === 0) return; // Early exit if nothing falling
-    
-    const gravity = 9.8;
-    const maxDelta = 0.1; // Cap delta to prevent physics explosions
-    const cappedDelta = Math.min(delta, maxDelta);
-    
-    // Apply gravity to falling blocks - O(1) lookup per block
-    fallingBlocksState.forEach((fallState, blockId) => {
-      const block = blocksById.get(blockId);
-      if (!block) return;
+  // Store blocksById in ref for frame loop access
+  const blocksByIdRef = useRef(blocksById);
+  useEffect(() => { blocksByIdRef.current = blocksById; }, [blocksById]);
+  
+  // Physics update for falling blocks - register with centralized frame loop
+  useEffect(() => {
+    const unregister = frameLoop.register('placed-blocks', (delta) => {
+      diagnostics.useFrameCallCount++;
       
-      // Apply gravity
-      fallState.velocity += gravity * cappedDelta;
-      fallState.currentY -= fallState.velocity * cappedDelta;
+      if (fallingBlocksState.size === 0) return; // Early exit if nothing falling
       
-      // Use ACTUAL database position (not targetY) to prevent flash on transition
-      const landingY = block.position_y;
+      const gravity = 9.8;
+      const maxDelta = 0.1;
+      const cappedDelta = Math.min(delta, maxDelta);
       
-      // Check if landed
-      if (fallState.currentY <= landingY) {
-        // Snap to EXACT database position to prevent flashing
-        fallState.currentY = block.position_y;
+      const currentBlocksById = blocksByIdRef.current;
+      
+      fallingBlocksState.forEach((fallState, blockId) => {
+        const block = currentBlocksById.get(blockId);
+        if (!block) return;
         
-        // Play thud sound (throttled)
-        const now = Date.now();
-        if (audioRef.current && now - lastThudTime.current > 50) {
-          audioRef.current.currentTime = 0;
-          audioRef.current.play().catch(() => {});
-          lastThudTime.current = now;
+        fallState.velocity += gravity * cappedDelta;
+        fallState.currentY -= fallState.velocity * cappedDelta;
+        
+        const landingY = block.position_y;
+        
+        if (fallState.currentY <= landingY) {
+          fallState.currentY = block.position_y;
+          
+          const now = Date.now();
+          if (audioRef.current && now - lastThudTime.current > 50) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch(() => {});
+            lastThudTime.current = now;
+          }
+          
+          fallingBlocksState.delete(blockId);
         }
-        
-        // Remove from falling state - block now uses database position
-        fallingBlocksState.delete(blockId);
-      }
-    });
-  });
+      });
+    }, 50); // Priority 50
+
+    return unregister;
+  }, []);
 
   const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
     collisionBoxes.current.set(blockId, box);

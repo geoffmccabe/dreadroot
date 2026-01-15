@@ -1,10 +1,11 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Coin, ExplosionParticle } from './FortressTypes';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 
 interface CoinsProps {
   coinRate?: number;
@@ -20,7 +21,13 @@ const tempPosition = new THREE.Vector3();
 const tempQuaternion = new THREE.Quaternion();
 const tempScale = new THREE.Vector3();
 const tempColor = new THREE.Color();
-const zAxis = new THREE.Vector3(0, 0, 1); // Pre-allocated for quaternion rotation
+const zAxis = new THREE.Vector3(0, 0, 1);
+
+// Constants outside component
+const COIN_CENTER = { x: 0, z: -6 };
+const VISIBILITY_CHECK_THROTTLE = 200;
+const MAX_COINS = 200;
+const MAX_EXPLOSION_PARTICLES = 100;
 
 export function Coins({
   coinRate = 60,
@@ -32,17 +39,22 @@ export function Coins({
   const coinMeshRef = useRef<THREE.InstancedMesh>(null);
   const particleMeshRef = useRef<THREE.InstancedMesh>(null);
   const coinTimerRef = useRef(0);
-  const maxCoins = 200;
-  const maxExplosionParticles = 100;
 
-  // Distance culling
+  // Use refs for frame loop access (no state updates!)
   const { camera } = useThree();
   const { visualDistance } = useBlocks();
-  const [isVisible, setIsVisible] = useState(true);
+  const visualDistanceRef = useRef(visualDistance);
+  const coinRateRef = useRef(coinRate);
+  const coinSizeRef = useRef(coinSize);
+  const flowSpeedRef = useRef(flowSpeed);
+  const isVisibleRef = useRef(true);
   const lastVisibilityCheck = useRef(0);
-  const VISIBILITY_CHECK_THROTTLE = 200; // ms
   
-  const coinCenter = { x: 0, z: -6 };
+  // Update refs when props change
+  useEffect(() => { visualDistanceRef.current = visualDistance; }, [visualDistance]);
+  useEffect(() => { coinRateRef.current = coinRate; }, [coinRate]);
+  useEffect(() => { coinSizeRef.current = coinSize; }, [coinSize]);
+  useEffect(() => { flowSpeedRef.current = flowSpeed; }, [flowSpeed]);
 
   // Load coin texture
   const [coinTexture, setCoinTexture] = useState<THREE.Texture | null>(null);
@@ -79,7 +91,7 @@ export function Coins({
   // Initialize coins as plain data (no mesh references)
   const coins = useMemo<Coin[]>(() => {
     const coinsArray: Coin[] = [];
-    for (let i = 0; i < maxCoins; i++) {
+    for (let i = 0; i < MAX_COINS; i++) {
       coinsArray.push({
         position: new THREE.Vector3(0, 20, -6),
         velocity: 0,
@@ -96,7 +108,7 @@ export function Coins({
   // Explosion particles as plain data
   const explosionParticles = useMemo<ExplosionParticle[]>(() => {
     const particles: ExplosionParticle[] = [];
-    for (let i = 0; i < maxExplosionParticles; i++) {
+    for (let i = 0; i < MAX_EXPLOSION_PARTICLES; i++) {
       particles.push({
         position: new THREE.Vector3(0, 0, 0),
         velocity: new THREE.Vector3(0, 0, 0),
@@ -128,10 +140,11 @@ export function Coins({
     }
   }, [coins]);
 
-  // Create explosion effect
+  // Create explosion effect - use ref for coinSize
   const createExplosion = useCallback((position: THREE.Vector3, fallingVelocity: number) => {
     const particleCount = 16;
     let spawned = 0;
+    const size = coinSizeRef.current;
 
     for (let i = 0; i < explosionParticles.length && spawned < particleCount; i++) {
       const particle = explosionParticles[i];
@@ -151,118 +164,127 @@ export function Coins({
         particle.rotation = Math.random() * Math.PI * 2;
         particle.rotSpeed = (Math.random() * 2 - 1) * Math.PI * 4;
         particle.opacity = 1;
-        particle.scale = coinSize * 0.4;
+        particle.scale = size * 0.4;
         spawned++;
       }
     }
-  }, [explosionParticles, coinSize]);
+  }, [explosionParticles]);
 
-  useFrame((state, delta) => {
-    diagnostics.useFrameCallCount++;
-    
-    // Update coin count for diagnostics - count without allocating array
-    let visibleCoinCount = 0;
-    for (const c of coins) { if (c.visible) visibleCoinCount++; }
-    diagnostics.coinCount = visibleCoinCount;
-    
-    // Check visibility with throttle - use squared distance to avoid sqrt
-    const now = Date.now();
-    if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
-      lastVisibilityCheck.current = now;
-      const dx = camera.position.x - coinCenter.x;
-      const dz = camera.position.z - coinCenter.z;
-      const distSq = dx * dx + dz * dz;
-      const maxDistance = visualDistance * CHUNK_SIZE;
-      const shouldBeVisible = distSq <= maxDistance * maxDistance;
-      if (shouldBeVisible !== isVisible) {
-        setIsVisible(shouldBeVisible);
-      }
-    }
-    
-    if (!isVisible) return;
-    
-    const interval = 1 / coinRate;
-    coinTimerRef.current += delta;
 
-    if (coinTimerRef.current >= interval) {
-      spawnCoin();
-      coinTimerRef.current = 0;
-    }
-
-    const gravity = 9.8 * flowSpeed;
-
-    // Update coin physics and instanced mesh
-    if (coinMeshRef.current) {
-      let visibleCount = 0;
+  // Register with centralized frame loop
+  useEffect(() => {
+    const unregister = frameLoop.register('coins', (delta) => {
+      diagnostics.useFrameCallCount++;
       
-      for (const coin of coins) {
-        if (!coin.visible) continue;
+      // Update coin count for diagnostics
+      let visibleCoinCount = 0;
+      for (const c of coins) { if (c.visible) visibleCoinCount++; }
+      diagnostics.coinCount = visibleCoinCount;
+      
+      // Check visibility with throttle (no state updates!)
+      const now = Date.now();
+      if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
+        lastVisibilityCheck.current = now;
+        const dx = camera.position.x - COIN_CENTER.x;
+        const dz = camera.position.z - COIN_CENTER.z;
+        const distSq = dx * dx + dz * dz;
+        const maxDistance = visualDistanceRef.current * CHUNK_SIZE;
+        isVisibleRef.current = distSq <= maxDistance * maxDistance;
+      }
+      
+      const coinMesh = coinMeshRef.current;
+      const particleMesh = particleMeshRef.current;
+      
+      if (!isVisibleRef.current) {
+        if (coinMesh) coinMesh.count = 0;
+        if (particleMesh) particleMesh.count = 0;
+        return;
+      }
+      
+      const rate = coinRateRef.current;
+      const size = coinSizeRef.current;
+      const speed = flowSpeedRef.current;
+      
+      const interval = 1 / rate;
+      coinTimerRef.current += delta;
 
-        coin.velocity += gravity * delta;
-        coin.position.y -= coin.velocity * delta;
-        coin.rotation += coin.rotSpeed * delta;
+      if (coinTimerRef.current >= interval) {
+        spawnCoin();
+        coinTimerRef.current = 0;
+      }
 
-        if (coin.position.y <= 0.2) {
-          coin.visible = false;
-          continue;
+      const gravity = 9.8 * speed;
+
+      // Update coin physics and instanced mesh
+      if (coinMesh) {
+        let visibleCount = 0;
+        
+        for (const coin of coins) {
+          if (!coin.visible) continue;
+
+          coin.velocity += gravity * delta;
+          coin.position.y -= coin.velocity * delta;
+          coin.rotation += coin.rotSpeed * delta;
+
+          if (coin.position.y <= 0.2) {
+            coin.visible = false;
+            continue;
+          }
+
+          const scale = size * coin.scaleJitter;
+          tempPosition.copy(coin.position);
+          tempQuaternion.setFromAxisAngle(zAxis, coin.rotation);
+          tempScale.set(scale, scale, 1);
+          tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+          coinMesh.setMatrixAt(visibleCount, tempMatrix);
+          
+          visibleCount++;
         }
-
-        // Update instanced mesh matrix - use pre-allocated zAxis
-        const scale = coinSize * coin.scaleJitter;
-        tempPosition.copy(coin.position);
-        tempQuaternion.setFromAxisAngle(zAxis, coin.rotation);
-        tempScale.set(scale, scale, 1);
-        tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
-        coinMeshRef.current.setMatrixAt(visibleCount, tempMatrix);
         
-        visibleCount++;
+        coinMesh.count = visibleCount;
+        coinMesh.instanceMatrix.needsUpdate = true;
       }
-      
-      coinMeshRef.current.count = visibleCount;
-      coinMeshRef.current.instanceMatrix.needsUpdate = true;
-    }
 
-    // Update explosion particles
-    if (particleMeshRef.current) {
-      let activeCount = 0;
-      
-      for (const particle of explosionParticles) {
-        if (!particle.active) continue;
+      // Update explosion particles
+      if (particleMesh) {
+        let activeCount = 0;
+        
+        for (const particle of explosionParticles) {
+          if (!particle.active) continue;
 
-        // Use addScaledVector to avoid clone() allocation
-        particle.position.addScaledVector(particle.velocity, delta);
-        particle.velocityY += gravity * delta;
-        particle.position.y -= particle.velocityY * delta;
-        particle.rotation += particle.rotSpeed * delta;
-        particle.opacity -= delta * 1.5;
+          particle.position.addScaledVector(particle.velocity, delta);
+          particle.velocityY += gravity * delta;
+          particle.position.y -= particle.velocityY * delta;
+          particle.rotation += particle.rotSpeed * delta;
+          particle.opacity -= delta * 1.5;
 
-        if (particle.opacity <= 0 || particle.position.y <= 0) {
-          particle.active = false;
-          continue;
+          if (particle.opacity <= 0 || particle.position.y <= 0) {
+            particle.active = false;
+            continue;
+          }
+
+          tempPosition.copy(particle.position);
+          tempQuaternion.setFromAxisAngle(zAxis, particle.rotation);
+          tempScale.set(particle.scale, particle.scale, 1);
+          tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
+          particleMesh.setMatrixAt(activeCount, tempMatrix);
+          
+          tempColor.setRGB(1, 1, 1);
+          particleMesh.setColorAt(activeCount, tempColor);
+          
+          activeCount++;
         }
+        
+        particleMesh.count = activeCount;
+        particleMesh.instanceMatrix.needsUpdate = true;
+        if (particleMesh.instanceColor) {
+          particleMesh.instanceColor.needsUpdate = true;
+        }
+      }
+    }, 45); // Priority 45
 
-        // Update instanced mesh matrix
-        // Use pre-allocated zAxis for quaternion rotation
-        tempPosition.copy(particle.position);
-        tempQuaternion.setFromAxisAngle(zAxis, particle.rotation);
-        tempScale.set(particle.scale, particle.scale, 1);
-        tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
-        particleMeshRef.current.setMatrixAt(activeCount, tempMatrix);
-        
-        // Set opacity via color alpha simulation (use white with varying opacity)
-        tempColor.setRGB(1, 1, 1);
-        particleMeshRef.current.setColorAt(activeCount, tempColor);
-        
-        activeCount++;
-      }
-      
-      particleMeshRef.current.count = activeCount;
-      particleMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (particleMeshRef.current.instanceColor) {
-        particleMeshRef.current.instanceColor.needsUpdate = true;
-      }
-    }
-  });
+    return unregister;
+  }, [camera, coins, explosionParticles, spawnCoin]);
 
   // Expose coins and explosion function for bullet collision
   useEffect(() => {
@@ -272,16 +294,13 @@ export function Coins({
     }
   }, [coins, onGetCoins, createExplosion]);
 
-  // Don't render if too far away
-  if (!isVisible) return null;
-
   return (
     <group>
       {/* Coins as instanced mesh */}
       <instancedMesh
         ref={coinMeshRef}
-        args={[undefined, undefined, maxCoins]}
-        frustumCulled={false}
+        args={[undefined, undefined, MAX_COINS]}
+        frustumCulled={true}
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
@@ -295,8 +314,8 @@ export function Coins({
       {/* Explosion particles as instanced mesh */}
       <instancedMesh
         ref={particleMeshRef}
-        args={[undefined, undefined, maxExplosionParticles]}
-        frustumCulled={false}
+        args={[undefined, undefined, MAX_EXPLOSION_PARTICLES]}
+        frustumCulled={true}
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
