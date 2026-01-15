@@ -1,5 +1,5 @@
-import { useFrame, useThree } from '@react-three/fiber';
-import { useRef, useState, useEffect } from 'react';
+import { useThree } from '@react-three/fiber';
+import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 
@@ -7,59 +7,66 @@ let globalFps = 0;
 let globalPlayerPos = { x: 0, y: 0, z: 0 };
 let globalViewDir = { x: 0, y: 0, z: 0 };
 
+export interface FPSCounterHandle {
+  update: () => void;
+}
+
 interface FPSCounterProps {
   isAdmin?: boolean;
 }
 
-export function FPSCounter({ isAdmin = false }: FPSCounterProps) {
+export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdmin = false }, ref) => {
   const frameCountRef = useRef(0);
   const lastTimeRef = useRef(performance.now());
   const { camera } = useThree();
   const viewDirRef = useRef(new THREE.Vector3());
 
-  useFrame(() => {
-    diagnostics.useFrameCallCount++;
-    
-    frameCountRef.current++;
-    const currentTime = performance.now();
-    const elapsed = currentTime - lastTimeRef.current;
+  // Expose update function instead of using useFrame
+  useImperativeHandle(ref, () => ({
+    update: () => {
+      frameCountRef.current++;
+      const currentTime = performance.now();
+      const elapsed = currentTime - lastTimeRef.current;
 
-    // Update FPS every 500ms
-    if (elapsed >= 500) {
-      globalFps = Math.round((frameCountRef.current / elapsed) * 1000);
-      frameCountRef.current = 0;
-      lastTimeRef.current = currentTime;
-      
-      // Update player position
-      globalPlayerPos = {
-        x: Math.round(camera.position.x),
-        y: Math.round(camera.position.y),
-        z: Math.round(camera.position.z)
-      };
-      
-      // Update view direction (where camera is looking)
-      camera.getWorldDirection(viewDirRef.current);
-      globalViewDir = {
-        x: Math.round(viewDirRef.current.x * 10) / 10,
-        y: Math.round(viewDirRef.current.y * 10) / 10,
-        z: Math.round(viewDirRef.current.z * 10) / 10
-      };
-      
-      // Update DOM directly for better performance
-      const fpsElement = document.getElementById('fps-display');
-      if (fpsElement) {
-        const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
-        if (isAdmin) {
-          fpsElement.textContent = `FPS: ${globalFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] V:[${globalViewDir.x},${globalViewDir.y},${globalViewDir.z}]`;
-        } else {
-          fpsElement.textContent = `FPS: ${globalFps}${dflowText}`;
+      // Update FPS every 500ms
+      if (elapsed >= 500) {
+        globalFps = Math.round((frameCountRef.current / elapsed) * 1000);
+        frameCountRef.current = 0;
+        lastTimeRef.current = currentTime;
+        
+        // Update player position
+        globalPlayerPos = {
+          x: Math.round(camera.position.x),
+          y: Math.round(camera.position.y),
+          z: Math.round(camera.position.z)
+        };
+        
+        // Update view direction (where camera is looking)
+        camera.getWorldDirection(viewDirRef.current);
+        globalViewDir = {
+          x: Math.round(viewDirRef.current.x * 10) / 10,
+          y: Math.round(viewDirRef.current.y * 10) / 10,
+          z: Math.round(viewDirRef.current.z * 10) / 10
+        };
+        
+        // Update DOM directly for better performance
+        const fpsElement = document.getElementById('fps-display');
+        if (fpsElement) {
+          const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
+          if (isAdmin) {
+            fpsElement.textContent = `FPS: ${globalFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] V:[${globalViewDir.x},${globalViewDir.y},${globalViewDir.z}]`;
+          } else {
+            fpsElement.textContent = `FPS: ${globalFps}${dflowText}`;
+          }
         }
       }
     }
-  });
+  }), [camera, isAdmin]);
 
   return null;
-}
+});
+
+FPSCounter.displayName = 'FPSCounter';
 
 interface FPSDisplayProps {
   isAdmin?: boolean;
