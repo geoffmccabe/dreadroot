@@ -192,7 +192,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, []);
   
   // Set up instance matrices and compute bounding box
-  const prevBlocksLengthRef = useRef<number>(0);
+  // Track block IDs to detect actual changes (not just count)
+  const prevBlockIdsRef = useRef<string>('');
   
   // Notify parent when mesh is ready for raycasting
   useEffect(() => {
@@ -209,22 +210,24 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   useEffect(() => {
     if (!meshRef.current) return;
     
-    // Skip GPU re-upload if block count hasn't changed (just a state update from falling block landing)
-    if (prevBlocksLengthRef.current === blocks.length && prevBlocksLengthRef.current > 0) {
+    // Create stable key from block IDs to detect actual changes
+    const blockIdsKey = blocks.map(b => b.id).sort().join(',');
+    
+    // Skip GPU re-upload if blocks haven't actually changed
+    if (prevBlockIdsRef.current === blockIdsKey && blocks.length > 0) {
       return;
     }
     
-    prevBlocksLengthRef.current = blocks.length;
+    prevBlockIdsRef.current = blockIdsKey;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
     
     blocks.forEach((block, i) => {
-      const fallState = fallingBlocksState.get(block.id);
-      // Add 0.5 offset because Three.js positions by center, database stores corner
+      // Always use database position for initial matrix setup
+      // Falling blocks will be updated in useFrame
       const x = block.position_x + 0.5;
-      // Use fallState currentY if falling, otherwise use database position
-      const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+      const y = block.position_y + 0.5;
       const z = block.position_z + 0.5;
       
       matrix.setPosition(x, y, z);
@@ -250,17 +253,22 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
+  // Also track which blocks were falling so we can reset them when they land
+  const previouslyFallingRef = useRef<Set<string>>(new Set());
+  
   useFrame((_, delta) => {
     if (!meshRef.current) return;
     
-    // Only update matrices for falling blocks - static blocks use matrices set in useEffect
     let needsUpdate = false;
     const matrix = matrixRef.current;
+    const currentlyFalling = new Set<string>();
     
+    // Update positions for falling blocks
     fallingBlocksState.forEach((fallState, blockId) => {
-      // Find the block and its index
       const blockIndex = blocks.findIndex(b => b.id === blockId);
       if (blockIndex === -1) return;
+      
+      currentlyFalling.add(blockId);
       
       const block = blocks[blockIndex];
       const x = block.position_x + 0.5;
@@ -271,6 +279,25 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       meshRef.current!.setMatrixAt(blockIndex, matrix);
       needsUpdate = true;
     });
+    
+    // Reset blocks that were falling but have now landed to their database position
+    previouslyFallingRef.current.forEach(blockId => {
+      if (!currentlyFalling.has(blockId)) {
+        const blockIndex = blocks.findIndex(b => b.id === blockId);
+        if (blockIndex !== -1) {
+          const block = blocks[blockIndex];
+          const x = block.position_x + 0.5;
+          const y = block.position_y + 0.5; // Use database position
+          const z = block.position_z + 0.5;
+          
+          matrix.setPosition(x, y, z);
+          meshRef.current!.setMatrixAt(blockIndex, matrix);
+          needsUpdate = true;
+        }
+      }
+    });
+    
+    previouslyFallingRef.current = currentlyFalling;
     
     if (needsUpdate) {
       meshRef.current.instanceMatrix.needsUpdate = true;
