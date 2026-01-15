@@ -50,13 +50,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     setPreviewPosition(newPosition);
     meshRef.current.position.copy(renderPosition);
     
-    // Change material based on valid placement and block properties
-    const material = meshRef.current.material as THREE.MeshLambertMaterial;
-    
-    // Base block properties from registry
-    const baseColor = blockDef?.properties?.color || '#ffffff';
-    const isEmissive = blockDef?.properties?.emissive || false;
-    const isTransparent = blockDef?.properties?.transparent || false;
+    // Change material based on valid placement - use MeshBasicMaterial (no lighting)
+    const material = meshRef.current.material as THREE.MeshBasicMaterial;
     
     // Pulsing opacity effect: cycle from fully visible (1.0) to fully transparent (0.0)
     // Full cycle takes 1 second (0.5s visible to transparent, 0.5s back)
@@ -64,39 +59,29 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     const pulseOpacity = 0.5 + Math.sin(time * Math.PI * 2) * 0.5; // Oscillates between 0.0 and 1.0
     
     material.transparent = true;
-    material.opacity = isTransparent ? pulseOpacity * 0.7 : pulseOpacity;
+    material.opacity = pulseOpacity;
     
     if (isValid) {
-      // Keep the original block color - don't darken it
-      material.color.set(baseColor);
-      if (isEmissive) {
-        material.emissive.set(baseColor);
-        const glowFactor = blockDef?.properties?.glowFactor || 3.0;
-        material.emissiveIntensity = glowFactor * 0.5;
-      } else {
-        // Set emissive to the base color at low intensity to prevent darkening
-        material.emissive.set(baseColor);
-        material.emissiveIntensity = 0.2; // Slight glow to maintain brightness
-      }
+      // Keep the block looking normal (white color lets texture show through)
+      material.color.set('#ffffff');
     } else {
-      material.color.setRGB(1, 0.2, 0.2); // Red tint for invalid placement
-      material.emissive.setRGB(0.3, 0.1, 0.1); // Add red glow
-      material.emissiveIntensity = 0.5;
+      // Red tint for invalid placement
+      material.color.setRGB(1, 0.3, 0.3);
     }
   });
 
   if (!visible || !texture) return null;
 
+  // Use MeshBasicMaterial to prevent lighting from darkening the preview
+  // This ensures the block looks exactly like placed blocks at full brightness
   return (
     <mesh ref={meshRef} position={[0, 0, 0]}>
       <boxGeometry args={[1, 1, 1]} />
-      <meshLambertMaterial 
+      <meshBasicMaterial 
         map={texture}
         transparent 
-        opacity={blockDef?.properties?.transparent ? 0.5 : 0.7}
-        color={blockDef?.properties?.color || '#ffffff'}
-        emissive={blockDef?.properties?.emissive ? (blockDef?.properties?.color || '#FFE135') : '#000000'}
-        emissiveIntensity={blockDef?.properties?.emissive ? (blockDef?.properties?.glowFactor || 3.0) * 0.5 : 0}
+        opacity={0.8}
+        color={'#ffffff'}
       />
     </mesh>
   );

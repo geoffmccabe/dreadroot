@@ -220,7 +220,91 @@ export const useUserData = () => {
     };
   }, [user?.id, currentTheme?.id]);
 
-  const buyBlock = async (itemType: string, cost: number) => {
+  // Purchase queue to handle rapid purchases sequentially
+  const purchaseQueueRef = useRef<Array<{ itemType: string; cost: number; resolve: (value: boolean) => void }>>([]);
+  const isProcessingPurchaseRef = useRef(false);
+  
+  const processPurchaseQueue = useCallback(async () => {
+    if (isProcessingPurchaseRef.current || purchaseQueueRef.current.length === 0) return;
+    
+    isProcessingPurchaseRef.current = true;
+    
+    while (purchaseQueueRef.current.length > 0) {
+      const purchase = purchaseQueueRef.current.shift()!;
+      const { itemType, cost, resolve } = purchase;
+      
+      try {
+        // Get FRESH state from refs
+        const currentBalance = tokenBalanceRef.current;
+        
+        if (!currentBalance || currentBalance.coins < cost) {
+          resolve(false);
+          continue;
+        }
+        
+        const newCoinAmount = currentBalance.coins - cost;
+        
+        // Optimistic update for THIS purchase
+        setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+        setInventory(prev => {
+          const existingItem = prev.find(item => item.item_type === itemType || item.item_id === itemType);
+          if (existingItem) {
+            return prev.map(item => 
+              item.id === existingItem.id 
+                ? { ...item, quantity: item.quantity + 1 }
+                : item
+            );
+          } else {
+            const tempId = `temp-${Date.now()}-${Math.random()}`;
+            return [...prev, {
+              id: tempId,
+              user_id: user!.id,
+              item_type: itemType,
+              item_id: null,
+              quantity: 1,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }];
+          }
+        });
+        
+        // Sync to database
+        await supabase
+          .from('user_token_balances')
+          .update({ coins: newCoinAmount })
+          .eq('user_id', user!.id)
+          .eq('token_theme_id', currentTheme!.id);
+        
+        // Get current inventory item (may have been created by previous purchase)
+        const { data: existingInvItem } = await supabase
+          .from('user_inventory')
+          .select('*')
+          .eq('user_id', user!.id)
+          .eq('item_type', itemType)
+          .maybeSingle();
+        
+        if (existingInvItem) {
+          await supabase
+            .from('user_inventory')
+            .update({ quantity: existingInvItem.quantity + 1 })
+            .eq('id', existingInvItem.id);
+        } else {
+          await supabase
+            .from('user_inventory')
+            .insert([{ user_id: user!.id, item_type: itemType, quantity: 1 }]);
+        }
+        
+        resolve(true);
+      } catch (error) {
+        console.error('Purchase error:', error);
+        resolve(false);
+      }
+    }
+    
+    isProcessingPurchaseRef.current = false;
+  }, [user?.id, currentTheme?.id]);
+  
+  const buyBlock = async (itemType: string, cost: number): Promise<boolean> => {
     if (!user?.id || !currentTheme?.id) {
       toast({
         title: "Authentication required",
@@ -230,10 +314,8 @@ export const useUserData = () => {
       return false;
     }
 
-    // Use refs for instant access to current state (handles rapid purchases)
+    // Check balance immediately using ref
     const currentBalance = tokenBalanceRef.current;
-    const currentInventory = inventoryRef.current;
-    
     if (!currentBalance || currentBalance.coins < cost) {
       toast({
         title: "Insufficient coins",
@@ -242,131 +324,46 @@ export const useUserData = () => {
       });
       return false;
     }
-
-    // OPTIMISTIC UPDATE FIRST - update local state immediately for responsive UI
-    const newCoinAmount = currentBalance.coins - cost;
-    const existingItem = findInventoryItem(currentInventory, itemType);
     
-    // Update state immediately (optimistic)
-    setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
-    
-    if (existingItem) {
-      // Use functional update to get latest state for proper incrementing
-      setInventory(prev => prev.map(item => 
-        item.id === existingItem.id 
-          ? { ...item, quantity: item.quantity + 1 }  // Use item.quantity from prev, not stale existingItem
-          : item
-      ));
-    } else {
-      // Create temporary item for optimistic display
-      const tempId = `temp-${Date.now()}-${Math.random()}`;
-      setInventory(prev => [...prev, {
-        id: tempId,
-        user_id: user.id,
-        item_type: itemType,
-        item_id: null,
-        quantity: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }]);
-    }
-
-    try {
-      // Verify block exists in blocks table (cache this check for rapid purchases)
-      const { data: blockData, error: blockError } = await supabase
-        .from('blocks')
-        .select('id')
-        .eq('key', itemType)
-        .maybeSingle();
-
-      if (blockError) throw blockError;
-      if (!blockData) {
-        // Revert optimistic update
-        setTokenBalance(prev => prev ? { ...prev, coins: currentBalance.coins } : null);
-        setInventory(currentInventory);
-        toast({
-          title: "Block not found",
-          description: "This block is not available in the shop",
-          variant: "destructive"
-        });
-        return false;
-      }
-
-      // Deduct coins from token balance
-      const { error: coinsError } = await supabase
-        .from('user_token_balances')
-        .update({ coins: newCoinAmount })
-        .eq('user_id', user.id)
-        .eq('token_theme_id', currentTheme.id);
-
-      if (coinsError) throw coinsError;
-
-      // Add to inventory in database
-      if (existingItem) {
-        // Use increment approach to handle concurrent updates
-        const { data: currentItem } = await supabase
-          .from('user_inventory')
-          .select('quantity')
-          .eq('id', existingItem.id)
-          .single();
-        
-        const dbQuantity = currentItem?.quantity || existingItem.quantity;
-        const { error: updateError } = await supabase
-          .from('user_inventory')
-          .update({ quantity: dbQuantity + 1 })
-          .eq('id', existingItem.id);
-
-        if (updateError) throw updateError;
-      } else {
-        // Create new inventory item
-        const { data: newItem, error: insertError } = await supabase
-          .from('user_inventory')
-          .insert([{
-            user_id: user.id,
-            item_type: itemType,
-            quantity: 1
-          }])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-        
-        // Replace temp item with real item (use functional update to find temp)
-        if (newItem) {
-          setInventory(prev => prev.map(item => 
-            item.id.startsWith('temp-') && item.item_type === itemType
-              ? { ...newItem } as UserInventoryItem
-              : item
-          ));
-        }
-      }
+    // Queue this purchase and process
+    return new Promise((resolve) => {
+      purchaseQueueRef.current.push({ itemType, cost, resolve });
+      processPurchaseQueue();
       
       toast({
         title: "Purchase successful!",
         description: `You bought 1 ${itemType} for ${cost} coins`,
-        duration: 3000,
+        duration: 2000,
       });
-      
-      return true;
-    } catch (error) {
-      console.error('Error buying block:', error);
-      // Revert optimistic update on error
-      setTokenBalance(prev => prev ? { ...prev, coins: currentBalance.coins } : null);
-      setInventory(currentInventory);
-      toast({
-        title: "Purchase failed",
-        description: "Failed to complete purchase",
-        variant: "destructive"
-      });
-      return false;
-    }
+    });
+
   };
 
   const useBlock = async (itemKey: string) => {
-    // Use ref for instant access to current inventory state
-    const currentInventory = inventoryRef.current;
-    const item = findInventoryItem(currentInventory, itemKey);
-    if (!item || item.quantity <= 0) {
+    // Use functional update to ensure we get latest state
+    let success = false;
+    let itemId: string | null = null;
+    let originalQuantity = 0;
+    
+    setInventory(prev => {
+      const item = prev.find(i => i.item_type === itemKey || i.item_id === itemKey);
+      if (!item || item.quantity <= 0) {
+        success = false;
+        return prev;
+      }
+      
+      success = true;
+      itemId = item.id;
+      originalQuantity = item.quantity;
+      
+      return prev.map(i => 
+        i.id === item.id 
+          ? { ...i, quantity: i.quantity - 1 }
+          : i
+      );
+    });
+    
+    if (!success) {
       toast({
         title: "No blocks available",
         description: `You don't have any ${itemKey} blocks in your inventory`,
@@ -375,38 +372,25 @@ export const useUserData = () => {
       return false;
     }
 
-    const newQuantity = item.quantity - 1;
-    
-    // Update local state IMMEDIATELY for instant feedback (optimistic update)
-    setInventory(prev => prev.map(i => 
-      i.id === item.id 
-        ? { ...i, quantity: newQuantity }
-        : i
-    ));
-
     // Sync to database in background (non-blocking)
-    supabase
-      .from('user_inventory')
-      .update({ quantity: newQuantity })
-      .eq('id', item.id)
-      .then(({ error }) => {
-        if (error) {
-          console.error('Error syncing inventory:', error);
-          // Revert optimistic update on error
-          setInventory(prev => prev.map(i => 
-            i.id === item.id 
-              ? { ...i, quantity: item.quantity }
-              : i
-          ));
-          toast({
-            title: "Sync Error",
-            description: "Failed to sync inventory. Block not placed.",
-            variant: "destructive"
-          });
-        }
-      });
+    if (itemId) {
+      supabase
+        .from('user_inventory')
+        .update({ quantity: originalQuantity - 1 })
+        .eq('id', itemId)
+        .then(({ error }) => {
+          if (error) {
+            console.error('Error syncing inventory:', error);
+            // Revert optimistic update on error
+            setInventory(prev => prev.map(i => 
+              i.id === itemId 
+                ? { ...i, quantity: originalQuantity }
+                : i
+            ));
+          }
+        });
+    }
     
-    // Return immediately - don't wait for database
     return true;
   };
 

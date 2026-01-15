@@ -777,25 +777,29 @@ function FirstPersonControls({
         onBlockPlace(placementResult.position);
       } else {
         console.log('Invalid placement:', placementResult.reason);
-        // Play "not allowed" sound INSTANTLY - lower pitch (0.25x) and longer duration
-        // Uses pre-loaded buffer from rejectionSoundRef for zero latency
+        // Play "not allowed" sound INSTANTLY - fast, loud, lower pitch
         try {
-          const { audioContext, buffer } = (window as any).__rejectionSound || {};
-          if (audioContext && buffer) {
-            const source = audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.playbackRate.value = 0.25; // 1/4 frequency = lower pitch + 4x duration
-            const gainNode = audioContext.createGain();
-            gainNode.gain.value = 1.0; // Full volume (same as normal placement)
+          const rejectionData = (window as any).__rejectionSound;
+          if (rejectionData?.buffer) {
+            let ctx = rejectionData.audioContext;
+            if (!ctx || ctx.state === 'closed') {
+              ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              (window as any).__rejectionSound.audioContext = ctx;
+            }
+            if (ctx.state === 'suspended') ctx.resume();
+            
+            const source = ctx.createBufferSource();
+            source.buffer = rejectionData.buffer;
+            source.playbackRate.value = 4.0; // 4x faster (compressed)
+            source.detune.value = -1200; // One octave lower pitch
+            const gainNode = ctx.createGain();
+            gainNode.gain.value = 2.0; // 2x louder
             source.connect(gainNode);
-            gainNode.connect(audioContext.destination);
+            gainNode.connect(ctx.destination);
             source.start(0);
-          } else {
-            // Fallback: play normal sound at lower pitch
-            console.log('Rejection sound not preloaded, using fallback');
           }
         } catch (e) {
-          console.log('Could not play invalid placement sound');
+          console.warn('Could not play rejection sound:', e);
         }
         // Log specific reason
         if (placementResult.reason === 'fortress') console.log('Too close to fortress');
