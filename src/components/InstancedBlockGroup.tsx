@@ -329,8 +329,17 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   });
   
   // Create collision boxes for all instances (only when blocks change, not on every frame)
+  // Use a stable key to track when blocks actually change
+  const blockIdsForCollision = useMemo(() => 
+    blocks.map(b => b.id).sort().join(','), 
+    [blocks]
+  );
+  
   useEffect(() => {
     if (!onCollision) return;
+    
+    // Clear stale collision data by passing null for removed blocks
+    // The parent component should handle cleanup based on current block ids
     
     blocks.forEach(block => {
       const fallState = fallingBlocksState.get(block.id);
@@ -351,7 +360,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       );
       onCollision(box, block.id);
     });
-  }, [blocks, onCollision]);
+  }, [blockIdsForCollision, onCollision]);
   
   // Filter blocks owned by current user for outline rendering (must be before early returns)
   const ownedBlocks = useMemo(() => {

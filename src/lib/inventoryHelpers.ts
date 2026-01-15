@@ -28,13 +28,16 @@ export function findInventoryItem(
 
 /**
  * Get quantity of an item in inventory
+ * Sums quantities across ALL matching entries (handles duplicate rows)
  */
 export function getInventoryQuantity(
   inventory: UserInventoryItem[],
   itemKey: string
 ): number {
-  const item = findInventoryItem(inventory, itemKey);
-  return item?.quantity || 0;
+  // Sum quantities from ALL matching entries (handles duplicates in DB)
+  return inventory
+    .filter(i => i.item_type === itemKey || i.item_id === itemKey)
+    .reduce((sum, item) => sum + (item.quantity || 0), 0);
 }
 
 /**

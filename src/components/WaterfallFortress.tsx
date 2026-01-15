@@ -791,9 +791,9 @@ function FirstPersonControls({
             const source = ctx.createBufferSource();
             source.buffer = rejectionData.buffer;
             source.playbackRate.value = 1.0; // Normal speed
-            source.detune.value = -1200; // 1 octave down (half pitch)
+            source.detune.value = -1712; // 70% of previous pitch (-1200 + log2(0.7)*1200 ≈ -1712)
             const gainNode = ctx.createGain();
-            gainNode.gain.value = 1.0; // Same volume
+            gainNode.gain.value = 1.5; // 50% louder
             source.connect(gainNode);
             gainNode.connect(ctx.destination);
             source.start(0);
@@ -1068,7 +1068,7 @@ function FirstPersonControls({
         if (Math.sqrt(distX * distX + distZ * distZ) > spatialRadius) continue;
         // For horizontal movement, skip blocks the player is standing on top of
         if (isHorizontal) {
-          const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.1) && (playerBox.min.y <= collider.max.y + 0.1);
+          const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.2) && (playerBox.min.y <= collider.max.y + 0.2);
           if (standingOnBlock) {
             // Debug occasionally
             if (DEBUG_LOGGING && Math.random() < 0.01) {
