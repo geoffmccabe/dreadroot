@@ -1,7 +1,8 @@
-import React, { useRef, useMemo, useCallback, useEffect } from 'react';
+import React, { useRef, useMemo, useCallback, useEffect, MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
+import { useBlocks } from '@/contexts/BlocksContext';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
@@ -29,6 +30,7 @@ export const PlacedBlocks: React.FC<{
   hoveredBlockId?: string | null;
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
 }> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId, hoveredBlockId = null, onMeshReady }) => {
+  const { visibleChunksRef } = useBlocks();
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -200,6 +202,7 @@ export const PlacedBlocks: React.FC<{
             showOwnershipOutline={showOwnershipOutline}
             currentUserId={currentUserId}
             hoveredBlockId={hoveredBlockId}
+            visibleChunksRef={visibleChunksRef}
             onMeshReady={onMeshReady ? (mesh) => onMeshReady(blockType, mesh) : undefined}
           />
         );

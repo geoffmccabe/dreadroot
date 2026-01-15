@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useEffect, useState, MutableRefObject } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
@@ -6,6 +6,7 @@ import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
+import { blockToChunkKey } from '@/lib/chunkManager';
 
 // Global texture cache - shared across all instanced groups
 const textureCache = new Map<string, { 
@@ -35,6 +36,8 @@ interface InstancedBlockGroupProps {
   showOwnershipOutline?: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
+  /** Ref to visible chunk keys - used for imperative visibility filtering */
+  visibleChunksRef: MutableRefObject<Set<string>>;
   onMeshReady?: (mesh: THREE.InstancedMesh | null) => void;
 }
 
@@ -46,6 +49,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   showOwnershipOutline = false,
   currentUserId,
   hoveredBlockId = null,
+  visibleChunksRef,
   onMeshReady
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -264,6 +268,14 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Reuse Set to avoid GC pressure - clear and refill instead of creating new
   const currentlyFallingRef = useRef<Set<string>>(new Set());
   
+  // Pre-compute chunk keys for each block (only recomputed when blocks change)
+  const blockChunkKeys = useMemo(() => {
+    return blocks.map(block => blockToChunkKey(block));
+  }, [blocks]);
+  
+  // Track per-block visibility state to minimize updates
+  const blockVisibilityRef = useRef<boolean[]>([]);
+  
   // Create block ID to index map for O(1) lookups instead of O(n) findIndex
   const blockIndexMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -275,19 +287,24 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   // Store refs for frameLoop callback
   const blocksRef = useRef(blocks);
+  const blockChunkKeysRef = useRef(blockChunkKeys);
   const blockIndexMapRef = useRef(blockIndexMap);
   const showOwnershipOutlineRef = useRef(showOwnershipOutline);
   const hoveredBlockIdRef = useRef(hoveredBlockId);
   
   useEffect(() => { blocksRef.current = blocks; }, [blocks]);
+  useEffect(() => { blockChunkKeysRef.current = blockChunkKeys; }, [blockChunkKeys]);
   useEffect(() => { blockIndexMapRef.current = blockIndexMap; }, [blockIndexMap]);
   useEffect(() => { showOwnershipOutlineRef.current = showOwnershipOutline; }, [showOwnershipOutline]);
   useEffect(() => { hoveredBlockIdRef.current = hoveredBlockId; }, [hoveredBlockId]);
   
+  // Track visible count for diagnostics
+  const visibleCountRef = useRef(0);
+  
   // Generate unique ID for this block group to avoid collision with other instances
   const frameLoopId = useMemo(() => `blocks-${blockDef?.key || 'unknown'}-${Math.random().toString(36).slice(2, 8)}`, [blockDef?.key]);
   
-  // Register with centralized frame loop
+  // Register with centralized frame loop - now includes IMPERATIVE chunk visibility filtering!
   useEffect(() => {
     const unregister = frameLoop.register(frameLoopId, (delta) => {
       diagnostics.startTiming('blocks');
@@ -298,57 +315,69 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         return;
       }
       
-      // Update visible blocks count for diagnostics
-      diagnostics.visibleBlocks = blocksRef.current.length;
-      
-      let needsUpdate = false;
       const matrix = matrixRef.current;
       const currentBlocks = blocksRef.current;
+      const chunkKeys = blockChunkKeysRef.current;
+      const visibleChunks = visibleChunksRef.current;
       const indexMap = blockIndexMapRef.current;
+      const blockVisibility = blockVisibilityRef.current;
+      
+      // Ensure visibility array matches blocks length
+      if (blockVisibility.length !== currentBlocks.length) {
+        blockVisibilityRef.current = new Array(currentBlocks.length).fill(false);
+      }
       
       // Reuse Set instead of creating new one every frame
       const currentlyFalling = currentlyFallingRef.current;
       currentlyFalling.clear();
       
-      // Update positions for falling blocks - O(1) lookup per block
-      fallingBlocksState.forEach((fallState, blockId) => {
-        const blockIndex = indexMap.get(blockId);
-        if (blockIndex === undefined) return;
-        
-        currentlyFalling.add(blockId);
-        
-        const block = currentBlocks[blockIndex];
-        if (!block) return;
-        
-        const x = block.position_x + 0.5;
-        const y = fallState.currentY + 0.5;
-        const z = block.position_z + 0.5;
-        
-        matrix.setPosition(x, y, z);
-        mesh.setMatrixAt(blockIndex, matrix);
-        needsUpdate = true;
-      });
+      let visibleCount = 0;
+      let needsUpdate = false;
       
-      // Reset blocks that were falling but have now landed to their database position
-      previouslyFallingRef.current.forEach(blockId => {
-        if (!currentlyFalling.has(blockId)) {
-          const blockIndex = indexMap.get(blockId);
-          if (blockIndex !== undefined) {
-            const block = currentBlocks[blockIndex];
-            if (block) {
-              const x = block.position_x + 0.5;
-              const y = block.position_y + 0.5; // Use database position
-              const z = block.position_z + 0.5;
-              
-              matrix.setPosition(x, y, z);
-              mesh.setMatrixAt(blockIndex, matrix);
-              needsUpdate = true;
-            }
-          }
+      // OPTIMIZED: Only update blocks whose visibility changed OR that are falling
+      for (let i = 0; i < currentBlocks.length; i++) {
+        const block = currentBlocks[i];
+        const chunkKey = chunkKeys[i];
+        const isVisible = visibleChunks.has(chunkKey);
+        const wasVisible = blockVisibility[i];
+        
+        // Check if this block is falling
+        const fallState = fallingBlocksState.get(block.id);
+        const isFalling = !!fallState;
+        if (isFalling) {
+          currentlyFalling.add(block.id);
         }
-      });
+        
+        // Only update if: visibility changed OR block is falling
+        const visibilityChanged = isVisible !== wasVisible;
+        if (visibilityChanged || isFalling) {
+          if (isVisible) {
+            // Use falling Y if applicable, otherwise database position
+            const x = block.position_x + 0.5;
+            const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
+            const z = block.position_z + 0.5;
+            
+            matrix.setPosition(x, y, z);
+          } else {
+            // Move non-visible blocks far away (effectively hides them)
+            matrix.setPosition(0, -10000, 0);
+          }
+          
+          mesh.setMatrixAt(i, matrix);
+          needsUpdate = true;
+          blockVisibility[i] = isVisible;
+        }
+        
+        if (isVisible) {
+          visibleCount++;
+        }
+      }
       
-      // Swap Sets instead of copying (no allocation)
+      // Track visible count for diagnostics
+      visibleCountRef.current = visibleCount;
+      diagnostics.visibleBlocks = visibleCount;
+      
+      // Swap Sets for falling block tracking (no allocation)
       const temp = previouslyFallingRef.current;
       previouslyFallingRef.current = currentlyFallingRef.current;
       currentlyFallingRef.current = temp;
@@ -381,7 +410,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }, 60); // Medium-high priority
     
     return unregister;
-  }, [frameLoopId]);
+  }, [frameLoopId, visibleChunksRef]);
   
   // Create collision boxes for all instances (only when blocks change, not on every frame)
   // Use a stable key to track when blocks actually change
