@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
@@ -411,8 +411,28 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const glowFactor = blockDef?.properties?.glowFactor || 0;
   const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
   
+  // Track camera position for glow updates - only update when camera moves significantly
+  const lastGlowCameraPos = useRef(new THREE.Vector3());
+  const [glowUpdateTrigger, setGlowUpdateTrigger] = useState(0);
+  
+  // Check camera movement in useFrame - only trigger glow recalc when moved 5+ units
+  useEffect(() => {
+    if (!shouldGlow) return;
+    
+    const checkInterval = setInterval(() => {
+      const distMoved = camera.position.distanceToSquared(lastGlowCameraPos.current);
+      if (distMoved > 25) { // 5 units squared
+        lastGlowCameraPos.current.copy(camera.position);
+        setGlowUpdateTrigger(prev => prev + 1);
+      }
+    }, 500); // Check every 500ms, not every frame
+    
+    return () => clearInterval(checkInterval);
+  }, [shouldGlow, camera]);
+  
   // Limit point lights to nearest 10 blocks for performance
   // With 100+ blocks, too many point lights destroy FPS
+  // FIXED: No longer depends on camera.position (Vector3 changes every frame!)
   const glowingBlocks = useMemo(() => {
     if (!shouldGlow) return [];
     const seenIds = new Set<string>();
@@ -422,23 +442,24 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       return true;
     });
     
+    // Get current camera position for distance calc
+    const camPos = lastGlowCameraPos.current;
+    
     // Calculate distance from camera to each block's center
     const blocksWithDistance = uniqueBlocks.map(block => {
-      const blockCenter = new THREE.Vector3(
-        block.position_x + 0.5,
-        block.position_y + 0.5,
-        block.position_z + 0.5
-      );
-      const distance = camera.position.distanceTo(blockCenter);
-      return { block, distance };
+      const dx = block.position_x + 0.5 - camPos.x;
+      const dy = block.position_y + 0.5 - camPos.y;
+      const dz = block.position_z + 0.5 - camPos.z;
+      const distanceSq = dx * dx + dy * dy + dz * dz;
+      return { block, distanceSq };
     });
     
     // Sort by distance (nearest first) and take the 10 closest
     return blocksWithDistance
-      .sort((a, b) => a.distance - b.distance)
+      .sort((a, b) => a.distanceSq - b.distanceSq)
       .slice(0, 10)
       .map(item => item.block);
-  }, [blocks, shouldGlow, camera.position]);
+  }, [blocks, shouldGlow, glowUpdateTrigger]);
   
   if (!material) return null;
   
