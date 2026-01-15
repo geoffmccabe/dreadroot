@@ -58,22 +58,25 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     const isEmissive = blockDef?.properties?.emissive || false;
     const isTransparent = blockDef?.properties?.transparent || false;
     
-    // Pulsing opacity effect (30% to 60% every second)
+    // Pulsing opacity effect: cycle from fully visible (1.0) to fully transparent (0.0)
+    // Full cycle takes 1 second (0.5s visible to transparent, 0.5s back)
     const time = clock.getElapsedTime();
-    const pulseOpacity = 0.45 + Math.sin(time * Math.PI * 2) * 0.15; // Oscillates between 0.3 and 0.6
+    const pulseOpacity = 0.5 + Math.sin(time * Math.PI * 2) * 0.5; // Oscillates between 0.0 and 1.0
     
     material.transparent = true;
     material.opacity = isTransparent ? pulseOpacity * 0.7 : pulseOpacity;
     
     if (isValid) {
+      // Keep the original block color - don't darken it
       material.color.set(baseColor);
       if (isEmissive) {
         material.emissive.set(baseColor);
         const glowFactor = blockDef?.properties?.glowFactor || 3.0;
         material.emissiveIntensity = glowFactor * 0.5;
       } else {
-        material.emissive.setRGB(0, 0, 0);
-        material.emissiveIntensity = 0;
+        // Set emissive to the base color at low intensity to prevent darkening
+        material.emissive.set(baseColor);
+        material.emissiveIntensity = 0.2; // Slight glow to maintain brightness
       }
     } else {
       material.color.setRGB(1, 0.2, 0.2); // Red tint for invalid placement

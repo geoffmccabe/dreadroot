@@ -46,6 +46,19 @@ export const useUserData = () => {
   const { user, isLoading: authLoading } = useAuth();
   const { currentTheme } = useTokenTheme();
   const loadingRef = useRef(false);
+  
+  // Refs for instant access to current state (avoids stale closures in rapid calls)
+  const tokenBalanceRef = useRef(tokenBalance);
+  const inventoryRef = useRef(inventory);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    tokenBalanceRef.current = tokenBalance;
+  }, [tokenBalance]);
+  
+  useEffect(() => {
+    inventoryRef.current = inventory;
+  }, [inventory]);
 
   const loadUserData = useCallback(async () => {
     if (loadingRef.current) return;
@@ -217,7 +230,11 @@ export const useUserData = () => {
       return false;
     }
 
-    if (!tokenBalance || tokenBalance.coins < cost) {
+    // Use refs for instant access to current state (handles rapid purchases)
+    const currentBalance = tokenBalanceRef.current;
+    const currentInventory = inventoryRef.current;
+    
+    if (!currentBalance || currentBalance.coins < cost) {
       toast({
         title: "Insufficient coins",
         description: `You need ${cost} coins to buy this block`,
@@ -226,8 +243,36 @@ export const useUserData = () => {
       return false;
     }
 
+    // OPTIMISTIC UPDATE FIRST - update local state immediately for responsive UI
+    const newCoinAmount = currentBalance.coins - cost;
+    const existingItem = findInventoryItem(currentInventory, itemType);
+    
+    // Update state immediately (optimistic)
+    setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+    
+    if (existingItem) {
+      // Use functional update to get latest state for proper incrementing
+      setInventory(prev => prev.map(item => 
+        item.id === existingItem.id 
+          ? { ...item, quantity: item.quantity + 1 }  // Use item.quantity from prev, not stale existingItem
+          : item
+      ));
+    } else {
+      // Create temporary item for optimistic display
+      const tempId = `temp-${Date.now()}-${Math.random()}`;
+      setInventory(prev => [...prev, {
+        id: tempId,
+        user_id: user.id,
+        item_type: itemType,
+        item_id: null,
+        quantity: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }]);
+    }
+
     try {
-      // Verify block exists in blocks table (not items table - blocks are separate from items)
+      // Verify block exists in blocks table (cache this check for rapid purchases)
       const { data: blockData, error: blockError } = await supabase
         .from('blocks')
         .select('id')
@@ -236,6 +281,9 @@ export const useUserData = () => {
 
       if (blockError) throw blockError;
       if (!blockData) {
+        // Revert optimistic update
+        setTokenBalance(prev => prev ? { ...prev, coins: currentBalance.coins } : null);
+        setInventory(currentInventory);
         toast({
           title: "Block not found",
           description: "This block is not available in the shop",
@@ -245,7 +293,6 @@ export const useUserData = () => {
       }
 
       // Deduct coins from token balance
-      const newCoinAmount = tokenBalance.coins - cost;
       const { error: coinsError } = await supabase
         .from('user_token_balances')
         .update({ coins: newCoinAmount })
@@ -254,58 +301,45 @@ export const useUserData = () => {
 
       if (coinsError) throw coinsError;
 
-      // Add to inventory
-      const existingItem = findInventoryItem(inventory, itemType);
-      
+      // Add to inventory in database
       if (existingItem) {
-        // Update existing inventory item
-        const newQuantity = existingItem.quantity + 1;
+        // Use increment approach to handle concurrent updates
+        const { data: currentItem } = await supabase
+          .from('user_inventory')
+          .select('quantity')
+          .eq('id', existingItem.id)
+          .single();
+        
+        const dbQuantity = currentItem?.quantity || existingItem.quantity;
         const { error: updateError } = await supabase
           .from('user_inventory')
-          .update({ quantity: newQuantity })
+          .update({ quantity: dbQuantity + 1 })
           .eq('id', existingItem.id);
 
         if (updateError) throw updateError;
       } else {
-        // Create new inventory item - blocks don't use item_id, only item_type
-        const { error: insertError } = await supabase
+        // Create new inventory item
+        const { data: newItem, error: insertError } = await supabase
           .from('user_inventory')
           .insert([{
             user_id: user.id,
             item_type: itemType,
             quantity: 1
-          }]);
+          }])
+          .select()
+          .single();
 
         if (insertError) throw insertError;
-      }
-
-      // Update local state IMMEDIATELY for smooth UX (optimistic update)
-      setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
-      
-      // Update inventory optimistically WITHOUT reloading from database
-      // This prevents the stale data issue where reload shows old quantity
-      if (existingItem) {
-        setInventory(prev => prev.map(item => 
-          item.id === existingItem.id 
-            ? { ...item, quantity: existingItem.quantity + 1 }
-            : item
-        ));
-      } else {
-        // For new items, we need to query to get the created item's ID
-        const { data: newItem } = await supabase
-          .from('user_inventory')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('item_type', itemType)
-          .is('item_id', null)
-          .single();
         
+        // Replace temp item with real item (use functional update to find temp)
         if (newItem) {
-          setInventory(prev => [...prev, newItem as UserInventoryItem]);
+          setInventory(prev => prev.map(item => 
+            item.id.startsWith('temp-') && item.item_type === itemType
+              ? { ...newItem } as UserInventoryItem
+              : item
+          ));
         }
       }
-      
-      // DO NOT call loadUserData() - it causes stale data race conditions
       
       toast({
         title: "Purchase successful!",
@@ -316,6 +350,9 @@ export const useUserData = () => {
       return true;
     } catch (error) {
       console.error('Error buying block:', error);
+      // Revert optimistic update on error
+      setTokenBalance(prev => prev ? { ...prev, coins: currentBalance.coins } : null);
+      setInventory(currentInventory);
       toast({
         title: "Purchase failed",
         description: "Failed to complete purchase",
@@ -326,7 +363,9 @@ export const useUserData = () => {
   };
 
   const useBlock = async (itemKey: string) => {
-    const item = findInventoryItem(inventory, itemKey);
+    // Use ref for instant access to current inventory state
+    const currentInventory = inventoryRef.current;
+    const item = findInventoryItem(currentInventory, itemKey);
     if (!item || item.quantity <= 0) {
       toast({
         title: "No blocks available",
