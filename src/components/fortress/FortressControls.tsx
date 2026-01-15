@@ -1,5 +1,6 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
+import { frameLoop } from '@/lib/frameLoop';
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { calculateBlockPlacement } from '@/lib/blockPlacement';
@@ -460,31 +461,52 @@ export function FirstPersonControls({
     };
   }, [handleKeyDown, handleKeyUp, gl.domElement, stableMouseMoveListener, stableWheelListener, stableClickListener, stableRightClickListener, stableMouseDownListener, stableMouseUpListener, stablePointerLockChangeListener]);
 
-  // Movement and collision frame loop
-  useFrame((state, delta) => {
-    diagnostics.useFrameCallCount++;
-    
-    // Apply camera rotation if needed
-    if (needsCameraUpdate.current) {
-      eulerRef.current.set(pitch.current, yaw.current, 0);
-      camera.quaternion.setFromEuler(eulerRef.current);
-      needsCameraUpdate.current = false;
-    }
+  // Store refs for values needed in frame loop to avoid stale closures
+  const collidersRef = useRef(colliders);
+  const userRolesRef = useRef(userRoles);
+  const blockPlacementModeRef = useRef(blockPlacementMode);
+  const showOwnershipOutlineRef = useRef(showOwnershipOutline);
+  const currentUserIdRef = useRef(currentUserId);
+  const hoveredBlockIdRef = useRef(hoveredBlockId);
+  const broadcastPositionRef = useRef(broadcastPosition);
+  
+  useEffect(() => { collidersRef.current = colliders; }, [colliders]);
+  useEffect(() => { userRolesRef.current = userRoles; }, [userRoles]);
+  useEffect(() => { blockPlacementModeRef.current = blockPlacementMode; }, [blockPlacementMode]);
+  useEffect(() => { showOwnershipOutlineRef.current = showOwnershipOutline; }, [showOwnershipOutline]);
+  useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
+  useEffect(() => { hoveredBlockIdRef.current = hoveredBlockId; }, [hoveredBlockId]);
+  useEffect(() => { broadcastPositionRef.current = broadcastPosition; }, [broadcastPosition]);
 
-    // Block hover detection for removal
-    if (blockPlacementMode && showOwnershipOutline && keys.current.rightMouse) {
-      const meshesArray = meshesArrayCache.current;
-      if (meshesArray.length > 0) {
-        const result = raycastMeshes(meshesArray, 5);
-        
-        if (result && result.instanceId !== undefined) {
-          const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
-          if (blockType && currentUserId) {
-            const userBlocks = blocksByTypeAndUser.current.get(`${blockType}_${currentUserId}`);
-            if (userBlocks && result.instanceId < userBlocks.length) {
-              const block = userBlocks[result.instanceId];
-              if (block && block.user_id === currentUserId) {
-                setHoveredBlockId(block.id);
+  // Movement and collision frame loop - register with centralized loop
+  useEffect(() => {
+    const unregister = frameLoop.register('controls', (delta) => {
+      diagnostics.useFrameCallCount++;
+      
+      // Apply camera rotation if needed
+      if (needsCameraUpdate.current) {
+        eulerRef.current.set(pitch.current, yaw.current, 0);
+        camera.quaternion.setFromEuler(eulerRef.current);
+        needsCameraUpdate.current = false;
+      }
+
+      // Block hover detection for removal
+      if (blockPlacementModeRef.current && showOwnershipOutlineRef.current && keys.current.rightMouse) {
+        const meshesArray = meshesArrayCache.current;
+        if (meshesArray.length > 0) {
+          const result = raycastMeshes(meshesArray, 5);
+          
+          if (result && result.instanceId !== undefined) {
+            const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
+            if (blockType && currentUserIdRef.current) {
+              const userBlocks = blocksByTypeAndUser.current.get(`${blockType}_${currentUserIdRef.current}`);
+              if (userBlocks && result.instanceId < userBlocks.length) {
+                const block = userBlocks[result.instanceId];
+                if (block && block.user_id === currentUserIdRef.current) {
+                  setHoveredBlockId(block.id);
+                } else {
+                  setHoveredBlockId(null);
+                }
               } else {
                 setHoveredBlockId(null);
               }
@@ -494,157 +516,161 @@ export function FirstPersonControls({
           } else {
             setHoveredBlockId(null);
           }
+        }
+      } else if (hoveredBlockIdRef.current) {
+        setHoveredBlockId(null);
+      }
+      
+      // Movement input
+      direction.current.set(0, 0, 0);
+      if (keys.current.w) direction.current.z += 1;
+      if (keys.current.s) direction.current.z -= 1;
+      if (keys.current.a) direction.current.x -= 1;
+      if (keys.current.d) direction.current.x += 1;
+      direction.current.normalize();
+
+      // Speed calculation
+      const baseSpeed = 4.0;
+      const crawlSpeed = baseSpeed * 0.6;
+      const runSpeed = keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed);
+      
+      // Apply movement
+      const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
+      const right = rightVecRef.current.set(Math.cos(yaw.current), 0, -Math.sin(yaw.current));
+      
+      const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
+      deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
+      deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
+
+      // Gravity and jumping
+      velocity.current.y -= 9.8 * delta;
+      
+      const canJump = onGround.current && !keys.current.ctrl;
+      const roles = userRolesRef.current;
+      
+      if (keys.current.space && canJump) {
+        let jumpHeight = 1.25;
+        if (roles.includes('admin') || roles.includes('superadmin')) {
+          jumpHeight = 2.5;
+        }
+        velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
+        onGround.current = false;
+      }
+      deltaMovement.y += velocity.current.y * delta;
+
+      // Player dimensions
+      const playerRadius = 0.3;
+      const isCrawling = keys.current.ctrl;
+      const standingHeight = 1.6;
+      const crawlingHeight = 0.8;
+      const playerHeight = isCrawling ? crawlingHeight : standingHeight;
+
+      // Store previous position
+      prevPositionRef.current.copy(camera.position);
+      let xBlocked = false;
+      let zBlocked = false;
+      
+      const currentColliders = collidersRef.current;
+
+      // X-axis collision
+      if (deltaMovement.x !== 0) {
+        testPosRef.current.copy(camera.position);
+        testPosRef.current.x += deltaMovement.x;
+        
+        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, true)) {
+          camera.position.x = prevPositionRef.current.x;
+          velocity.current.x = 0;
+          xBlocked = true;
         } else {
-          setHoveredBlockId(null);
+          camera.position.x = testPosRef.current.x;
         }
       }
-    } else if (hoveredBlockId) {
-      setHoveredBlockId(null);
-    }
-    
-    // Movement input
-    direction.current.set(0, 0, 0);
-    if (keys.current.w) direction.current.z += 1;
-    if (keys.current.s) direction.current.z -= 1;
-    if (keys.current.a) direction.current.x -= 1;
-    if (keys.current.d) direction.current.x += 1;
-    direction.current.normalize();
 
-    // Speed calculation
-    const baseSpeed = 4.0;
-    const crawlSpeed = baseSpeed * 0.6;
-    const runSpeed = keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed);
-    
-    // Apply movement
-    const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
-    const right = rightVecRef.current.set(Math.cos(yaw.current), 0, -Math.sin(yaw.current));
-    
-    const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
-    deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
-    deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
-
-    // Gravity and jumping
-    velocity.current.y -= 9.8 * delta;
-    
-    const canJump = onGround.current && !keys.current.ctrl;
-    
-    if (keys.current.space && canJump) {
-      let jumpHeight = 1.25;
-      if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
-        jumpHeight = 2.5;
+      // Z-axis collision
+      if (deltaMovement.z !== 0) {
+        testPosRef.current.copy(camera.position);
+        testPosRef.current.z += deltaMovement.z;
+        
+        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, true)) {
+          camera.position.z = prevPositionRef.current.z;
+          velocity.current.z = 0;
+          zBlocked = true;
+        } else {
+          camera.position.z = testPosRef.current.z;
+        }
       }
-      velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
-      onGround.current = false;
-    }
-    deltaMovement.y += velocity.current.y * delta;
 
-    // Player dimensions
-    const playerRadius = 0.3;
-    const isCrawling = keys.current.ctrl;
-    const standingHeight = 1.6;
-    const crawlingHeight = 0.8;
-    const playerHeight = isCrawling ? crawlingHeight : standingHeight;
-
-    // Store previous position - REUSE pre-allocated vector (no clone!)
-    prevPositionRef.current.copy(camera.position);
-    let xBlocked = false;
-    let zBlocked = false;
-
-    // X-axis collision - REUSE pre-allocated testPos vector
-    if (deltaMovement.x !== 0) {
-      testPosRef.current.copy(camera.position);
-      testPosRef.current.x += deltaMovement.x;
-      
-      if (checkAxisCollision(testPosRef.current, colliders, playerRadius, playerHeight, true)) {
-        camera.position.x = prevPositionRef.current.x;
-        velocity.current.x = 0;
-        xBlocked = true;
-      } else {
-        camera.position.x = testPosRef.current.x;
+      // Y-axis collision
+      if (deltaMovement.y !== 0) {
+        testPosRef.current.copy(camera.position);
+        testPosRef.current.y += deltaMovement.y;
+        
+        const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, false);
+        if (collision) {
+          if (velocity.current.y < 0) {
+            camera.position.y = collision.max.y + playerHeight;
+            velocity.current.y = 0;
+            onGround.current = true;
+          } else {
+            camera.position.y = collision.min.y - 0.01;
+            velocity.current.y = 0;
+          }
+        } else {
+          if (testPosRef.current.y < playerHeight && velocity.current.y < 0) {
+            camera.position.y = playerHeight;
+            velocity.current.y = 0;
+            onGround.current = true;
+          } else {
+            camera.position.y = testPosRef.current.y;
+            onGround.current = false;
+          }
+        }
       }
-    }
 
-    // Z-axis collision - REUSE pre-allocated testPos vector
-    if (deltaMovement.z !== 0) {
-      testPosRef.current.copy(camera.position);
-      testPosRef.current.z += deltaMovement.z;
+      // Step-up mechanic
+      const stepUpHeight = 0.6;
+      const isMovingHorizontally = Math.abs(deltaMovementRef.current.x) > 0.001 || Math.abs(deltaMovementRef.current.z) > 0.001;
       
-      if (checkAxisCollision(testPosRef.current, colliders, playerRadius, playerHeight, true)) {
-        camera.position.z = prevPositionRef.current.z;
-        velocity.current.z = 0;
-        zBlocked = true;
-      } else {
-        camera.position.z = testPosRef.current.z;
-      }
-    }
-
-    // Y-axis collision - REUSE pre-allocated testPos vector
-    if (deltaMovement.y !== 0) {
-      testPosRef.current.copy(camera.position);
-      testPosRef.current.y += deltaMovement.y;
-      
-      const collision = checkAxisCollision(testPosRef.current, colliders, playerRadius, playerHeight, false);
-      if (collision) {
-        if (velocity.current.y < 0) {
-          camera.position.y = collision.max.y + playerHeight;
+      if ((xBlocked || zBlocked) && onGround.current && isMovingHorizontally) {
+        const stepUpY = findStepUpTarget(
+          camera,
+          currentColliders,
+          playerRadius,
+          playerHeight,
+          stepUpHeight,
+          stepUpPlayerBoxRef.current,
+          stepUpClearanceBoxRef.current
+        );
+        
+        if (stepUpY !== null) {
+          camera.position.y = stepUpY + playerHeight;
           velocity.current.y = 0;
           onGround.current = true;
-        } else {
-          camera.position.y = collision.min.y - 0.01;
-          velocity.current.y = 0;
-        }
-      } else {
-        if (testPosRef.current.y < playerHeight && velocity.current.y < 0) {
-          camera.position.y = playerHeight;
-          velocity.current.y = 0;
-          onGround.current = true;
-        } else {
-          camera.position.y = testPosRef.current.y;
-          onGround.current = false;
         }
       }
-    }
-
-    // Step-up mechanic
-    const stepUpHeight = 0.6;
-    const isMovingHorizontally = Math.abs(deltaMovementRef.current.x) > 0.001 || Math.abs(deltaMovementRef.current.z) > 0.001;
-    
-    if ((xBlocked || zBlocked) && onGround.current && isMovingHorizontally) {
-      const stepUpY = findStepUpTarget(
-        camera,
-        colliders,
-        playerRadius,
-        playerHeight,
-        stepUpHeight,
-        stepUpPlayerBoxRef.current,
-        stepUpClearanceBoxRef.current
-      );
       
-      if (stepUpY !== null) {
-        camera.position.y = stepUpY + playerHeight;
-        velocity.current.y = 0;
+      // Ground detection
+      const feetY = camera.position.y - playerHeight;
+      const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
+      feetCheckPosRef.current.copy(camera.position);
+      feetCheckPosRef.current.y = camera.position.y - playerHeight - 0.05;
+      const hasBlockBeneath = checkAxisCollision(feetCheckPosRef.current, currentColliders, playerRadius, playerHeight, false);
+      
+      if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
         onGround.current = true;
+      } else {
+        onGround.current = false;
       }
-    }
-    
-    // Ground detection - REUSE pre-allocated feetCheckPos vector
-    const feetY = camera.position.y - playerHeight;
-    const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
-    feetCheckPosRef.current.copy(camera.position);
-    feetCheckPosRef.current.y = camera.position.y - playerHeight - 0.05;
-    const hasBlockBeneath = checkAxisCollision(feetCheckPosRef.current, colliders, playerRadius, playerHeight, false);
-    
-    if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
-      onGround.current = true;
-    } else {
-      onGround.current = false;
-    }
-    
-    // Broadcast position to multiplayer
-    if (broadcastPosition) {
-      broadcastPosition(camera.position, yaw.current, pitch.current);
-    }
-  });
+      
+      // Broadcast position to multiplayer
+      const broadcast = broadcastPositionRef.current;
+      if (broadcast) {
+        broadcast(camera.position, yaw.current, pitch.current);
+      }
+    }, 20); // High priority - controls run early
+
+    return unregister;
+  }, [camera, raycastMeshes, setHoveredBlockId]);
 
   return null;
 }
