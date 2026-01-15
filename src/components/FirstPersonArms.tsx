@@ -4,6 +4,11 @@ import * as THREE from 'three';
 import { useFBX } from '@react-three/drei';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
+// Pre-allocate reusable vectors OUTSIDE component to prevent GC
+const forwardVec = new THREE.Vector3();
+const rightVec = new THREE.Vector3();
+const upVec = new THREE.Vector3();
+
 interface FirstPersonArmsProps {
   isGunEquipped: boolean;
   isAiming?: boolean;
@@ -80,19 +85,19 @@ export function FirstPersonArms({ isGunEquipped, isAiming = false }: FirstPerson
       camera.updateProjectionMatrix();
     }
     
-    // Get camera vectors
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+    // Get camera vectors - REUSE pre-allocated vectors (no allocations!)
+    forwardVec.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    rightVec.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    upVec.set(0, 1, 0).applyQuaternion(camera.quaternion);
     
     // Position: start below screen, animate up when equipped
     const hideOffset = (1 - equipProgress.current) * 0.5;
     const aimCenterOffset = aimProgress.current * 0.12;
     
     groupRef.current.position.copy(camera.position);
-    groupRef.current.position.addScaledVector(forward, 0.4);
-    groupRef.current.position.addScaledVector(right, 0.18 - aimCenterOffset);
-    groupRef.current.position.addScaledVector(up, -0.25 - hideOffset);
+    groupRef.current.position.addScaledVector(forwardVec, 0.4);
+    groupRef.current.position.addScaledVector(rightVec, 0.18 - aimCenterOffset);
+    groupRef.current.position.addScaledVector(upVec, -0.25 - hideOffset);
     
     // Rotate to face camera direction
     groupRef.current.quaternion.copy(camera.quaternion);
