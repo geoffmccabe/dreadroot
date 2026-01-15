@@ -387,14 +387,13 @@ function FirstPersonControls({
     
     // Only rebuild if blocks actually changed
     if (blockIds === lastBlockIds.current && blockCollisionCache.current.size > 0) {
-      if (DEBUG_LOGGING) {
-        console.log('[Colliders] Using cached colliders');
-      }
       return Array.from(blockCollisionCache.current.values());
     }
     
     lastBlockIds.current = blockIds;
-    console.log('[Colliders] Building colliders with', existingBlocks.length, 'blocks');
+    if (DEBUG_LOGGING) {
+      console.log('[Colliders] Building colliders with', existingBlocks.length, 'blocks');
+    }
     const cliffW = 40, cliffH = 20, frontT = 2;
     const courtyardDepth = 30, frontZ = -8;
     const openingHalfW = 2;
@@ -1986,11 +1985,14 @@ function DynamicLighting({ cycleStateRef }: {
   });
   
   // Enable Layer 1 on shadow camera so it can see the local player avatar
-  useEffect(() => {
-    if (directionalRef.current) {
+  // Use useFrame to ensure it's set after the light is mounted
+  const shadowLayerSet = useRef(false);
+  useFrame(() => {
+    if (!shadowLayerSet.current && directionalRef.current?.shadow?.camera) {
       directionalRef.current.shadow.camera.layers.enable(1);
+      shadowLayerSet.current = true;
     }
-  }, []);
+  });
   
   return (
     <>
