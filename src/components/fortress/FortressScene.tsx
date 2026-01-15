@@ -30,6 +30,51 @@ import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
 
+// Wisp particles using InstancedMesh for performance (no React re-renders per particle)
+const MAX_WISP_PARTICLES = 50;
+const wispParticleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+const wispParticleMaterial = new THREE.MeshBasicMaterial({ transparent: true });
+const tempMatrix = new THREE.Matrix4();
+const tempColor = new THREE.Color();
+
+function WispParticlesMesh({ particles, renderTrigger }: { particles: WispParticle[]; renderTrigger: number }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  
+  useFrame(() => {
+    if (!meshRef.current || particles.length === 0) {
+      if (meshRef.current) meshRef.current.count = 0;
+      return;
+    }
+    
+    let count = 0;
+    for (const particle of particles) {
+      if (count >= MAX_WISP_PARTICLES) break;
+      
+      tempMatrix.setPosition(particle.position.x, particle.position.y, particle.position.z);
+      meshRef.current.setMatrixAt(count, tempMatrix);
+      
+      tempColor.set(particle.color);
+      meshRef.current.setColorAt(count, tempColor);
+      
+      count++;
+    }
+    
+    meshRef.current.count = count;
+    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (meshRef.current.instanceColor) {
+      meshRef.current.instanceColor.needsUpdate = true;
+    }
+  });
+  
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[wispParticleGeometry, wispParticleMaterial, MAX_WISP_PARTICLES]}
+      frustumCulled={false}
+    />
+  );
+}
+
 // Camera-tracked block renderer with chunk culling
 function CameraTrackedBlocks({ 
   blocks, 
@@ -517,12 +562,7 @@ export function FortressScene({
         />
       )}
       
-      {wispParticlesRef.current.map((particle, i) => (
-        <mesh key={i} position={particle.position.toArray()}>
-          <sphereGeometry args={[0.1, 8, 8]} />
-          <meshBasicMaterial color={particle.color} transparent opacity={particle.life} />
-        </mesh>
-      ))}
+      <WispParticlesMesh particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />
       
       <FPSCounter isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>

@@ -21,6 +21,9 @@ export function Waterfall({
   const timeAccumulatorRef = useRef(0);
   const maxDrops = 500;
   
+  // Track next available inactive drop index for O(1) spawning
+  const nextInactiveIndexRef = useRef(0);
+  
   // Distance culling
   const { camera } = useThree();
   const { visualDistance } = useBlocks();
@@ -114,22 +117,31 @@ export function Waterfall({
     const msInterval = msBetweeenDrops;
     timeAccumulatorRef.current += delta * 1000;
 
-    // Spawn new drops
+    // Spawn new drops - O(1) using tracked index instead of O(n) findIndex
     while (timeAccumulatorRef.current >= msInterval) {
       timeAccumulatorRef.current -= msInterval;
 
-      const inactiveDropIndex = activeDropsRef.current.findIndex(d => !d.active);
-      if (inactiveDropIndex !== -1) {
-        const drop = activeDropsRef.current[inactiveDropIndex];
-        drop.active = true;
-        drop.position.set(
-          fall.centerX + (Math.random() - 0.5) * fall.width,
-          fall.topY,
-          fall.z + (Math.random() - 0.5) * fall.depth
-        );
-        drop.velocity = 0;
-        drop.color = pickColor();
+      // Find next inactive drop starting from last known position
+      const drops = activeDropsRef.current;
+      let found = false;
+      for (let i = 0; i < drops.length; i++) {
+        const idx = (nextInactiveIndexRef.current + i) % drops.length;
+        if (!drops[idx].active) {
+          const drop = drops[idx];
+          drop.active = true;
+          drop.position.set(
+            fall.centerX + (Math.random() - 0.5) * fall.width,
+            fall.topY,
+            fall.z + (Math.random() - 0.5) * fall.depth
+          );
+          drop.velocity = 0;
+          drop.color = pickColor();
+          nextInactiveIndexRef.current = (idx + 1) % drops.length;
+          found = true;
+          break;
+        }
       }
+      if (!found) break; // All drops active, stop trying
     }
 
     let activeCount = 0;
