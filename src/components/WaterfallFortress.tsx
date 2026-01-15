@@ -777,7 +777,7 @@ function FirstPersonControls({
         onBlockPlace(placementResult.position);
       } else {
         console.log('Invalid placement:', placementResult.reason);
-        // Play "not allowed" sound INSTANTLY - same length/volume, 25% pitch
+        // Play "not allowed" sound - 4x faster, very low pitch (25%)
         try {
           const rejectionData = (window as any).__rejectionSound;
           if (rejectionData?.buffer) {
@@ -790,8 +790,8 @@ function FirstPersonControls({
             
             const source = ctx.createBufferSource();
             source.buffer = rejectionData.buffer;
-            source.playbackRate.value = 1.0; // Same length
-            source.detune.value = -2400; // -2400 cents = 25% pitch (2 octaves down)
+            source.playbackRate.value = 4.0; // 4x faster (very quick)
+            source.detune.value = -2400; // 25% pitch (2 octaves down)
             const gainNode = ctx.createGain();
             gainNode.gain.value = 1.0; // Same volume
             source.connect(gainNode);
@@ -3311,7 +3311,7 @@ export default function WaterfallFortress() {
     if (mode === 'building') {
       // Find first available block type from inventory
       const availableItem = availableItems[0];
-      if (availableItem) {
+      if (availableItem && availableItem.quantity > 0) {
         const itemKey = availableItem.item_id || availableItem.item_type;
         console.log('Setting block mode with available block:', itemKey, 'quantity:', availableItem.quantity);
         setSelectedBlockType(itemKey);
