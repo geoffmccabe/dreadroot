@@ -10,7 +10,7 @@ export interface PlacementResult {
   /** Grid position where block should be placed (integer coordinates) */
   position: THREE.Vector3 | null;
   /** Reason for invalid placement */
-  reason?: 'fortress' | 'waterfall' | 'overlap' | 'no-surface';
+  reason?: 'fortress' | 'waterfall' | 'overlap' | 'no-surface' | 'floating';
   /** Render position (grid position + 0.5 offset for centering) */
   renderPosition?: THREE.Vector3;
 }
@@ -152,6 +152,29 @@ function validatePlacement(
   
   if (hasOverlap) {
     return { isValid: false, reason: 'overlap' };
+  }
+  
+  // CRITICAL: Block must be on ground OR adjacent to an existing block (like Minecraft)
+  // Adjacent means touching on any face: same X/Z with Y+1 or Y-1, or same Y with X±1 or Z±1
+  const isOnGround = position.y === 0;
+  
+  if (!isOnGround) {
+    const isAdjacentToBlock = existingBlocks.some(block => {
+      const dx = Math.abs(block.position_x - position.x);
+      const dy = Math.abs(block.position_y - position.y);
+      const dz = Math.abs(block.position_z - position.z);
+      
+      // Adjacent means exactly 1 unit away on ONE axis, and 0 on the other two
+      const isAdjacentX = dx === 1 && dy < 0.5 && dz < 0.5;
+      const isAdjacentY = dy === 1 && dx < 0.5 && dz < 0.5;
+      const isAdjacentZ = dz === 1 && dx < 0.5 && dy < 0.5;
+      
+      return isAdjacentX || isAdjacentY || isAdjacentZ;
+    });
+    
+    if (!isAdjacentToBlock) {
+      return { isValid: false, reason: 'floating' };
+    }
   }
   
   return { isValid: true };

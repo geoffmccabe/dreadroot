@@ -279,16 +279,38 @@ export const useUserData = () => {
         if (insertError) throw insertError;
       }
 
-      // Update local state immediately for better UX
+      // Update local state IMMEDIATELY for smooth UX (optimistic update)
       setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
       
-      // Refresh data to ensure consistency
-      await loadUserData();
+      // Update inventory optimistically WITHOUT reloading from database
+      // This prevents the stale data issue where reload shows old quantity
+      if (existingItem) {
+        setInventory(prev => prev.map(item => 
+          item.id === existingItem.id 
+            ? { ...item, quantity: existingItem.quantity + 1 }
+            : item
+        ));
+      } else {
+        // For new items, we need to query to get the created item's ID
+        const { data: newItem } = await supabase
+          .from('user_inventory')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('item_type', itemType)
+          .is('item_id', null)
+          .single();
+        
+        if (newItem) {
+          setInventory(prev => [...prev, newItem as UserInventoryItem]);
+        }
+      }
+      
+      // DO NOT call loadUserData() - it causes stale data race conditions
       
       toast({
         title: "Purchase successful!",
         description: `You bought 1 ${itemType} for ${cost} coins`,
-        duration: 3000, // Auto-dismiss after 3 seconds
+        duration: 3000,
       });
       
       return true;
