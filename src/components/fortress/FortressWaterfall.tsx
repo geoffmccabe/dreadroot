@@ -63,19 +63,22 @@ export function Waterfall({
     return cdf;
   }, [dropPaletteColors]);
 
+  // Pre-allocated color for pickColor to reuse
+  const tempPickColor = useMemo(() => new THREE.Color(), []);
+
   const pickColor = useCallback(() => {
     const r = Math.random();
     for (let i = 0; i < dropCDF.length; i++) {
       if (r <= dropCDF[i]) {
-        const color = new THREE.Color(dropPaletteColors[i].hex);
-        color.multiplyScalar(0.4); // Darken for additive blending
-        return color;
+        tempPickColor.set(dropPaletteColors[i].hex);
+        tempPickColor.multiplyScalar(0.4); // Darken for additive blending
+        return tempPickColor.clone(); // Clone only when returning (needed for storage)
       }
     }
-    const color = new THREE.Color(dropPaletteColors[dropPaletteColors.length - 1].hex);
-    color.multiplyScalar(0.4);
-    return color;
-  }, [dropCDF, dropPaletteColors]);
+    tempPickColor.set(dropPaletteColors[dropPaletteColors.length - 1].hex);
+    tempPickColor.multiplyScalar(0.4);
+    return tempPickColor.clone();
+  }, [dropCDF, dropPaletteColors, tempPickColor]);
 
   // Initialize drops array
   useEffect(() => {

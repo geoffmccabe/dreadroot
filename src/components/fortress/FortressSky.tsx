@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { WeatherSettings, CycleState } from './FortressTypes';
@@ -112,11 +112,13 @@ interface DynamicSkyProps {
 }
 
 export function DynamicSky({ weatherSettings, cycleStateRef }: DynamicSkyProps) {
-  const [isNight, setIsNight] = useState(false);
   const skyRefs = useRef<{ 
     skyMeshRef: React.RefObject<THREE.Mesh>; 
     starMeshRef: React.RefObject<THREE.Mesh> 
   } | null>(null);
+  
+  // Track previous night state to avoid unnecessary setState calls
+  const prevIsNightRef = useRef(false);
 
   const handleRefsReady = useCallback((refs: { 
     skyMeshRef: React.RefObject<THREE.Mesh>; 
@@ -125,7 +127,7 @@ export function DynamicSky({ weatherSettings, cycleStateRef }: DynamicSkyProps) 
     skyRefs.current = refs;
   }, []);
 
-  // Consolidated weather + sky update loop
+  // Consolidated weather + sky update loop - NO setState inside!
   useFrame(() => {
     // 1. Update weather cycle
     const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
@@ -138,11 +140,9 @@ export function DynamicSky({ weatherSettings, cycleStateRef }: DynamicSkyProps) 
 
     const newIsNight = lightingPercentage < 50;
 
+    // Update ref directly - no React setState needed here
     cycleStateRef.current = { lightingPercentage, cyclePosition, isNight: newIsNight };
-
-    if (newIsNight !== isNight) {
-      setIsNight(newIsNight);
-    }
+    prevIsNightRef.current = newIsNight;
 
     // 2. Update sky transitions
     if (skyRefs.current) {
