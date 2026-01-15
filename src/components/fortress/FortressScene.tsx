@@ -146,40 +146,45 @@ function CameraTrackedBlocks({
     setRenderTrigger(prev => prev + 1);
   }, []);
   
-  // Track camera movement - no state updates inside useFrame
-  useFrame(() => {
-    diagnostics.useFrameCallCount++;
-    const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
-    const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
-    const now = Date.now();
+  // Register camera tracking with centralized frame loop (runs at lower priority)
+  useEffect(() => {
+    // Store visualDistance in closure
+    let lastVD = visualDistance;
     
-    // Only update when camera crosses chunk boundary AND throttle time has passed
-    if ((currentChunkX !== lastChunkRef.current.x || 
-         currentChunkZ !== lastChunkRef.current.z) &&
-        now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
+    const unregister = frameLoop.register('cameraChunks', () => {
+      const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+      const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+      const now = Date.now();
       
-      lastUpdateTime.current = now;
-      lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
-      
-      // Update ref directly (no React re-render yet)
-      // Reuse Set instead of creating new one
-      const visibleChunkKeys = getVisibleChunkKeys(
-        camera.position.x,
-        camera.position.z,
-        visualDistance
-      );
-      visibleChunksRef.current.clear();
-      for (const key of visibleChunkKeys) {
-        visibleChunksRef.current.add(key);
+      // Only update when camera crosses chunk boundary AND throttle time has passed
+      if ((currentChunkX !== lastChunkRef.current.x || 
+           currentChunkZ !== lastChunkRef.current.z) &&
+          now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
+        
+        lastUpdateTime.current = now;
+        lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
+        
+        // Update ref directly (no React re-render yet)
+        const visibleChunkKeys = getVisibleChunkKeys(
+          camera.position.x,
+          camera.position.z,
+          lastVD
+        );
+        visibleChunksRef.current.clear();
+        for (const key of visibleChunkKeys) {
+          visibleChunksRef.current.add(key);
+        }
+        diagnostics.e4++; // Track chunk update
+        
+        // Defer re-render to next frame to avoid stalling
+        setTimeout(() => {
+          setRenderTrigger(prev => prev + 1);
+        }, 0);
       }
-      diagnostics.e4++; // Track chunk update
-      
-      // Defer re-render outside the frame loop to avoid stalling
-      requestAnimationFrame(() => {
-        setRenderTrigger(prev => prev + 1);
-      });
-    }
-  });
+    }, 100); // Low priority - run after other systems
+    
+    return unregister;
+  }, [camera, visualDistance]);
   
   // Memoize visible blocks based on stable trigger
   const visibleBlocks = useMemo(() => {

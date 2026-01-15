@@ -3,7 +3,7 @@
 // Toggle with Shift+3 (#) key
 
 const BUFFER_SIZE = 600; // 60 seconds at 10 samples/sec
-const METRICS = 21; // Numbers per sample (expanded for 12 event types)
+const METRICS = 25; // Numbers per sample (21 + 4 timing metrics)
 
 class DiagnosticsLogger {
   enabled = false;
@@ -29,6 +29,13 @@ class DiagnosticsLogger {
   e11 = 0; // Network/broadcast calls
   e12 = 0; // Object3D matrix updates
   
+  // Frame timing (in ms, accumulated per sample)
+  frameStartTime = 0;
+  timeControls = 0;    // Controls/physics time
+  timeCoins = 0;       // Coins update time
+  timeWaterfall = 0;   // Waterfall update time
+  timeBlocks = 0;      // Block rendering time
+  
   // Metrics set by components (just number assignments, no allocations)
   cameraX = 0;
   cameraY = 0;
@@ -36,6 +43,22 @@ class DiagnosticsLogger {
   visibleBlocks = 0;
   particleCount = 0;
   coinCount = 0;
+  
+  startTiming() {
+    if (this.enabled) this.frameStartTime = performance.now();
+  }
+  
+  recordTiming(system: 'controls' | 'coins' | 'waterfall' | 'blocks') {
+    if (!this.enabled) return;
+    const elapsed = performance.now() - this.frameStartTime;
+    switch (system) {
+      case 'controls': this.timeControls += elapsed; break;
+      case 'coins': this.timeCoins += elapsed; break;
+      case 'waterfall': this.timeWaterfall += elapsed; break;
+      case 'blocks': this.timeBlocks += elapsed; break;
+    }
+    this.frameStartTime = performance.now();
+  }
   
   toggle() {
     this.enabled = !this.enabled;
@@ -56,6 +79,10 @@ class DiagnosticsLogger {
       this.e10 = 0;
       this.e11 = 0;
       this.e12 = 0;
+      this.timeControls = 0;
+      this.timeCoins = 0;
+      this.timeWaterfall = 0;
+      this.timeBlocks = 0;
       this.startTime = performance.now();
       this.lastSampleTime = this.startTime;
       this.elapsedSeconds = 0;
@@ -73,7 +100,7 @@ class DiagnosticsLogger {
       const i = (this.ticker % BUFFER_SIZE) * METRICS;
       const fps = (this.frameCount / (now - this.lastSampleTime)) * 1000;
       
-      // Data format: ticker fps useFrameCalls camX camY camZ blocks particles coins E1-E12
+      // Data format: ticker fps useFrameCalls camX camY camZ blocks particles coins E1-E12 T1-T4
       this.buffer[i] = this.ticker;
       this.buffer[i+1] = fps;
       this.buffer[i+2] = this.useFrameCallCount;
@@ -95,6 +122,11 @@ class DiagnosticsLogger {
       this.buffer[i+18] = this.e10;
       this.buffer[i+19] = this.e11;
       this.buffer[i+20] = this.e12;
+      // Timing metrics (ms per sample period)
+      this.buffer[i+21] = this.timeControls;
+      this.buffer[i+22] = this.timeCoins;
+      this.buffer[i+23] = this.timeWaterfall;
+      this.buffer[i+24] = this.timeBlocks;
       
       this.ticker++;
       this.frameCount = 0;
@@ -111,6 +143,10 @@ class DiagnosticsLogger {
       this.e10 = 0;
       this.e11 = 0;
       this.e12 = 0;
+      this.timeControls = 0;
+      this.timeCoins = 0;
+      this.timeWaterfall = 0;
+      this.timeBlocks = 0;
       this.lastSampleTime = now;
     }
   }
@@ -121,22 +157,20 @@ class DiagnosticsLogger {
   print() {
     const n = Math.min(this.ticker, BUFFER_SIZE);
     const lines: string[] = [];
-    lines.push('ticker fps useFrame camX camY camZ blocks particles coins e1 e2 e3 e4 e5 e6 e7 e8 e9 e10 e11 e12');
+    lines.push('ticker fps uF camX camY camZ blocks e1 e4 e5 tCtrl tCoin tWF tBlk');
     for (let s = 0; s < n; s++) {
       const i = s * METRICS;
       lines.push(
         `${this.buffer[i]} ${this.buffer[i+1].toFixed(0)} ${this.buffer[i+2]} ` +
         `${this.buffer[i+3].toFixed(0)} ${this.buffer[i+4].toFixed(0)} ${this.buffer[i+5].toFixed(0)} ` +
-        `${this.buffer[i+6]} ${this.buffer[i+7]} ${this.buffer[i+8]} ` +
-        `${this.buffer[i+9]} ${this.buffer[i+10]} ${this.buffer[i+11]} ${this.buffer[i+12]} ` +
-        `${this.buffer[i+13]} ${this.buffer[i+14]} ${this.buffer[i+15]} ${this.buffer[i+16]} ` +
-        `${this.buffer[i+17]} ${this.buffer[i+18]} ${this.buffer[i+19]} ${this.buffer[i+20]}`
+        `${this.buffer[i+6]} ${this.buffer[i+9]} ${this.buffer[i+12]} ${this.buffer[i+13]} ` +
+        `${this.buffer[i+21].toFixed(1)} ${this.buffer[i+22].toFixed(1)} ${this.buffer[i+23].toFixed(1)} ${this.buffer[i+24].toFixed(1)}`
       );
     }
     this.lastOutput = lines.join('\n');
     this.showOutput = true;
     console.log('DFLOW_READY: ' + n + ' samples');
-    console.log('Event Legend: e1=collision e2=stepUp e3=raycast e4=alloc e5=colliderIter e6=useMemo e7=render e8=audio e9=texture e10=animation e11=network e12=matrix');
+    console.log('Timing Legend: tCtrl=controls tCoin=coins tWF=waterfall tBlk=blocks (ms/100ms)');
   }
   
   dismissOutput() {
