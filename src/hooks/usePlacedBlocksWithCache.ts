@@ -91,6 +91,13 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     return null;
   }, []);
 
+  // Pre-warm the user cache when userId is available
+  useEffect(() => {
+    if (userId && !cachedUserRef.current) {
+      cachedUserRef.current = { id: userId, cachedAt: Date.now() };
+    }
+  }, [userId]);
+
   // Track if user is in block mode for periodic syncing
   const isBlockModeRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
