@@ -12,6 +12,8 @@ class DiagnosticsLogger {
   frameCount = 0;
   useFrameCallCount = 0;
   lastSampleTime = 0;
+  startTime = 0;
+  elapsedSeconds = 0;
   
   // Event counters (reset each sample)
   e1 = 0; // checkAxisCollision calls
@@ -38,10 +40,10 @@ class DiagnosticsLogger {
       this.e2 = 0;
       this.e3 = 0;
       this.e4 = 0;
-      this.lastSampleTime = performance.now();
-      console.log('DFLOW ON');
+      this.startTime = performance.now();
+      this.lastSampleTime = this.startTime;
+      this.elapsedSeconds = 0;
     } else {
-      console.log('DFLOW OFF');
       this.print();
     }
   }
@@ -50,6 +52,7 @@ class DiagnosticsLogger {
     if (!this.enabled) return;
     this.frameCount++;
     const now = performance.now();
+    this.elapsedSeconds = Math.floor((now - this.startTime) / 1000);
     if (now - this.lastSampleTime >= 100) {
       const i = (this.ticker % BUFFER_SIZE) * METRICS;
       const fps = (this.frameCount / (now - this.lastSampleTime)) * 1000;
