@@ -43,26 +43,48 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
         },
       });
 
-      // Track sync events
+      // Track sync events - compare before setting state to avoid unnecessary re-renders
       multiplayerChannel
         .on('presence', { event: 'sync' }, () => {
           const state = multiplayerChannel.presenceState();
-          const newPlayers = new Map<string, PlayerState>();
           
-          Object.entries(state).forEach(([userId, presences]: [string, any[]]) => {
-            if (userId !== user.id && presences.length > 0) {
-              const presence = presences[0];
-              newPlayers.set(userId, {
-                userId,
-                position: presence.position || { x: 0, y: 1.7, z: 0 },
-                rotation: presence.rotation || { yaw: 0, pitch: 0 },
-                username: presence.username,
-                color: presence.color,
-              });
+          setPlayers(prevPlayers => {
+            // Build new state
+            const newPlayers = new Map<string, PlayerState>();
+            let hasChanges = false;
+            
+            Object.entries(state).forEach(([userId, presences]: [string, any[]]) => {
+              if (userId !== user.id && presences.length > 0) {
+                const presence = presences[0];
+                const newState: PlayerState = {
+                  userId,
+                  position: presence.position || { x: 0, y: 1.7, z: 0 },
+                  rotation: presence.rotation || { yaw: 0, pitch: 0 },
+                  username: presence.username,
+                  color: presence.color,
+                };
+                newPlayers.set(userId, newState);
+                
+                // Check if this player changed
+                const prev = prevPlayers.get(userId);
+                if (!prev || 
+                    prev.position.x !== newState.position.x ||
+                    prev.position.y !== newState.position.y ||
+                    prev.position.z !== newState.position.z ||
+                    prev.rotation.yaw !== newState.rotation.yaw) {
+                  hasChanges = true;
+                }
+              }
+            });
+            
+            // Check if player count changed
+            if (newPlayers.size !== prevPlayers.size) {
+              hasChanges = true;
             }
+            
+            // Only return new Map if something actually changed
+            return hasChanges ? newPlayers : prevPlayers;
           });
-          
-          setPlayers(newPlayers);
         })
         .on('presence', { event: 'join' }, () => {})
         .on('presence', { event: 'leave' }, () => {});
