@@ -1985,11 +1985,13 @@ function DynamicLighting({ cycleStateRef }: {
   });
   
   // Enable Layer 1 on shadow camera so it can see the local player avatar
-  // Use useFrame to ensure it's set after the light is mounted
+  // The shadow camera needs to see BOTH layer 0 (scene) and layer 1 (avatar)
   const shadowLayerSet = useRef(false);
   useFrame(() => {
     if (!shadowLayerSet.current && directionalRef.current?.shadow?.camera) {
-      directionalRef.current.shadow.camera.layers.enable(1);
+      // Shadow camera sees all layers (0 and 1)
+      directionalRef.current.shadow.camera.layers.enableAll();
+      console.log('✅ Shadow camera layers enabled for avatar');
       shadowLayerSet.current = true;
     }
   });
