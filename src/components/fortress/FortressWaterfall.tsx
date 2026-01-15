@@ -141,21 +141,8 @@ export function Waterfall({
       const mesh = instancedMeshRef.current;
       if (!mesh) return;
       
-      // Check visibility with throttle (no state updates!)
-      const now = Date.now();
-      if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
-        lastVisibilityCheck.current = now;
-        const dx = camera.position.x - FALL_CONFIG.centerX;
-        const dz = camera.position.z - FALL_CONFIG.z;
-        const distSq = dx * dx + dz * dz;
-        const maxDistance = visualDistanceRef.current * CHUNK_SIZE;
-        isVisibleRef.current = distSq <= maxDistance * maxDistance;
-      }
-      
-      if (!isVisibleRef.current) {
-        mesh.count = 0;
-        return;
-      }
+      // Always visible - waterfall is a fixed location and key visual element
+      // (Frustum culling on the mesh handles GPU-side visibility)
 
       const mul = flowSpeedRef.current;
       const msInterval = msBetweeenDropsRef.current;

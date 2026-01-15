@@ -181,25 +181,9 @@ export function Coins({
       for (const c of coins) { if (c.visible) visibleCoinCount++; }
       diagnostics.coinCount = visibleCoinCount;
       
-      // Check visibility with throttle (no state updates!)
-      const now = Date.now();
-      if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
-        lastVisibilityCheck.current = now;
-        const dx = camera.position.x - COIN_CENTER.x;
-        const dz = camera.position.z - COIN_CENTER.z;
-        const distSq = dx * dx + dz * dz;
-        const maxDistance = visualDistanceRef.current * CHUNK_SIZE;
-        isVisibleRef.current = distSq <= maxDistance * maxDistance;
-      }
-      
+      // Always visible - waterfall is a fixed location and key visual element
       const coinMesh = coinMeshRef.current;
       const particleMesh = particleMeshRef.current;
-      
-      if (!isVisibleRef.current) {
-        if (coinMesh) coinMesh.count = 0;
-        if (particleMesh) particleMesh.count = 0;
-        return;
-      }
       
       const rate = coinRateRef.current;
       const size = coinSizeRef.current;
