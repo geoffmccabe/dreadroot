@@ -71,7 +71,7 @@ function CameraTrackedBlocks({
       visibleChunksRef.current = new Set(visibleChunkKeys);
       setRenderTrigger(prev => prev + 1);
     }
-  }, [visualDistance, camera]);
+  }, [visualDistance]); // camera ref is stable, no need in deps
   
   // Initialize visible chunks on mount
   useEffect(() => {

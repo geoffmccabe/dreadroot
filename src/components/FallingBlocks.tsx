@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
@@ -16,9 +16,15 @@ export const FallingBlocks: React.FC<{
   onLanded?: (blockId: string) => void;
 }> = ({ blocks, onLanded }) => {
   const { blocksMap } = useBlocksData();
-  const [fallingBlocks, setFallingBlocks] = useState<Map<string, FallingBlock>>(new Map());
+  
+  // Use ref for physics state to avoid re-renders during animation
+  const fallingBlocksRef = useRef<Map<string, FallingBlock>>(new Map());
+  const [renderTrigger, setRenderTrigger] = useState(0);
+  
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastThudTime = useRef(0);
+  const lastUpdateTime = useRef(0);
+  const RENDER_THROTTLE = 50; // ms between React re-renders
   
   // Initialize audio
   useEffect(() => {
@@ -34,13 +40,12 @@ export const FallingBlocks: React.FC<{
 
   // Track new blocks and initialize them as falling from Y=100
   useEffect(() => {
-    const newFallingBlocks = new Map(fallingBlocks);
     let hasChanges = false;
 
     blocks.forEach(block => {
-      if (!newFallingBlocks.has(block.id)) {
+      if (!fallingBlocksRef.current.has(block.id)) {
         // New block - start it at Y=100, falling
-        newFallingBlocks.set(block.id, {
+        fallingBlocksRef.current.set(block.id, {
           ...block,
           currentY: 100,
           velocity: 0,
@@ -51,33 +56,39 @@ export const FallingBlocks: React.FC<{
     });
 
     // Remove blocks that no longer exist
-    Array.from(newFallingBlocks.keys()).forEach(id => {
+    Array.from(fallingBlocksRef.current.keys()).forEach(id => {
       if (!blocks.find(b => b.id === id)) {
-        newFallingBlocks.delete(id);
+        fallingBlocksRef.current.delete(id);
         hasChanges = true;
       }
     });
 
     if (hasChanges) {
-      setFallingBlocks(newFallingBlocks);
+      setRenderTrigger(prev => prev + 1);
     }
   }, [blocks]);
 
-  // Physics update
+  // Physics update - uses refs to avoid state updates every frame
   useFrame((state, delta) => {
+    if (fallingBlocksRef.current.size === 0) return;
+    
     const gravity = 9.8;
-    let hasUpdates = false;
-    const newFallingBlocks = new Map(fallingBlocks);
+    let hasLanded = false;
+    const now = Date.now();
 
-    newFallingBlocks.forEach((block, id) => {
-      // Apply gravity
-      const newVelocity = block.velocity + gravity * delta;
-      const newY = block.currentY - newVelocity * delta;
+    fallingBlocksRef.current.forEach((block, id) => {
+      if (!block.falling) return;
+      
+      // Apply gravity - mutate ref directly
+      block.velocity += gravity * delta;
+      block.currentY -= block.velocity * delta;
 
       // Check if landed at target position
-      if (newY <= block.position_y) {
+      if (block.currentY <= block.position_y) {
+        block.currentY = block.position_y;
+        block.falling = false;
+        
         // Play thud sound (throttled)
-        const now = Date.now();
         if (audioRef.current && now - lastThudTime.current > 50) {
           audioRef.current.currentTime = 0;
           audioRef.current.play().catch(() => {});
@@ -88,24 +99,22 @@ export const FallingBlocks: React.FC<{
           onLanded(id);
         }
 
-        // Remove the block from falling blocks since it has landed
-        newFallingBlocks.delete(id);
-        hasUpdates = true;
-      } else {
-        block.currentY = newY;
-        block.velocity = newVelocity;
-        hasUpdates = true;
+        // Remove landed block from ref
+        fallingBlocksRef.current.delete(id);
+        hasLanded = true;
       }
     });
 
-    if (hasUpdates) {
-      setFallingBlocks(new Map(newFallingBlocks));
+    // Only trigger React re-render when blocks land or periodically for position updates
+    if (hasLanded || (fallingBlocksRef.current.size > 0 && now - lastUpdateTime.current > RENDER_THROTTLE)) {
+      lastUpdateTime.current = now;
+      setRenderTrigger(prev => prev + 1);
     }
   });
 
   return (
     <>
-      {Array.from(fallingBlocks.values()).map(block => {
+      {Array.from(fallingBlocksRef.current.values()).map((block: FallingBlock) => {
         const blockDef = blocksMap.get(block.block_type);
         if (!blockDef) return null;
 
