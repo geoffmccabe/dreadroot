@@ -29,6 +29,11 @@ const _clearanceMax = new THREE.Vector3();
 let _fortressColliders: THREE.Box3[] | null = null;
 let _fortressCollidersInGrid = false;
 
+// Collision throttling - run every 2nd frame
+let _collisionFrame = 0;
+let _lastCollisionResult: THREE.Box3 | null = null;
+let _lastStepUpResult: number | null = null;
+
 /**
  * Creates collision boxes for the static fortress structure
  * Cached after first call since fortress never changes
@@ -138,16 +143,23 @@ export function checkAxisCollision(
   colliders: THREE.Box3[], // kept for API compatibility, not used when grid is populated
   playerRadius: number,
   playerHeight: number,
-  isHorizontal: boolean = false
+  isHorizontal: boolean = false,
+  forceCheck: boolean = false // Force check even on throttled frames
 ): THREE.Box3 | null {
+  // Throttle collision to every 2nd frame (unless forced)
+  _collisionFrame++;
+  if (!forceCheck && (_collisionFrame & 1) === 0) {
+    return _lastCollisionResult;
+  }
+  
   diagnostics.e1++;
   
   // Use pre-allocated player box (no allocations!)
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
   
   // Use spatial hash grid for O(1) nearby lookup - ZERO allocations
-  // Use radius of 4 (CELL_SIZE) to ensure we check adjacent cells
-  const { result: nearbyColliders, count } = collisionGrid.getNearby(pos.x, pos.z, 4);
+  // Use smaller radius of 2 (player radius is 0.3, blocks are 1 unit)
+  const { result: nearbyColliders, count } = collisionGrid.getNearby(pos.x, pos.z, 2);
   
   // If grid is empty, fall back to array (should not happen in normal use)
   if (count === 0 && colliders.length > 0) {
@@ -158,7 +170,7 @@ export function checkAxisCollision(
       
       const dx = pos.x - (collider.min.x + collider.max.x) * 0.5;
       const dz = pos.z - (collider.min.z + collider.max.z) * 0.5;
-      if (dx * dx + dz * dz > 9) continue; // 3 unit radius squared
+      if (dx * dx + dz * dz > 4) continue; // 2 unit radius squared
       
       if (isHorizontal) {
         const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.2) && (playerBox.min.y <= collider.max.y + 0.2);
@@ -166,9 +178,11 @@ export function checkAxisCollision(
       }
       
       if (playerBox.intersectsBox(collider)) {
+        _lastCollisionResult = collider;
         return collider;
       }
     }
+    _lastCollisionResult = null;
     return null;
   }
   
@@ -184,9 +198,11 @@ export function checkAxisCollision(
     }
     
     if (playerBox.intersectsBox(collider)) {
+      _lastCollisionResult = collider;
       return collider;
     }
   }
+  _lastCollisionResult = null;
   return null;
 }
 
@@ -202,15 +218,21 @@ export function findStepUpTarget(
   playerHeight: number,
   stepUpHeight: number = 0.6,
   playerBoxRef: THREE.Box3,
-  clearanceBoxRef: THREE.Box3
+  clearanceBoxRef: THREE.Box3,
+  forceCheck: boolean = false
 ): number | null {
+  // Throttle step-up checks to every 2nd frame (unless forced)
+  if (!forceCheck && (_collisionFrame & 1) === 0) {
+    return _lastStepUpResult;
+  }
+  
   diagnostics.e2++;
   
   const currentFootY = camera.position.y - playerHeight;
   let bestStepUpY: number | null = null;
   
-  // Use spatial hash grid - ZERO allocations
-  const { result: nearbyColliders, count } = collisionGrid.getNearby(camera.position.x, camera.position.z, 4);
+  // Use spatial hash grid - ZERO allocations with smaller radius
+  const { result: nearbyColliders, count } = collisionGrid.getNearby(camera.position.x, camera.position.z, 2);
   
   for (let i = 0; i < count; i++) {
     const collider = nearbyColliders[i];
@@ -275,6 +297,7 @@ export function findStepUpTarget(
     }
   }
   
+  _lastStepUpResult = bestStepUpY;
   return bestStepUpY;
 }
 

@@ -571,8 +571,10 @@ export function FirstPersonControls({
       let zBlocked = false;
       
       const currentColliders = collidersRef.current;
+      
+      // Note: isMoving used implicitly - throttling happens inside checkAxisCollision
 
-      // X-axis collision
+      // X-axis collision - only check if moving horizontally
       if (deltaMovement.x !== 0) {
         testPosRef.current.copy(camera.position);
         testPosRef.current.x += deltaMovement.x;
@@ -586,7 +588,7 @@ export function FirstPersonControls({
         }
       }
 
-      // Z-axis collision
+      // Z-axis collision - only check if moving horizontally
       if (deltaMovement.z !== 0) {
         testPosRef.current.copy(camera.position);
         testPosRef.current.z += deltaMovement.z;
@@ -600,12 +602,13 @@ export function FirstPersonControls({
         }
       }
 
-      // Y-axis collision
+      // Y-axis collision - always check when there's vertical movement
       if (deltaMovement.y !== 0) {
         testPosRef.current.copy(camera.position);
         testPosRef.current.y += deltaMovement.y;
         
-        const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, false);
+        // Force check for Y-axis since it's critical for ground detection
+        const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, false, true);
         if (collision) {
           if (velocity.current.y < 0) {
             camera.position.y = collision.max.y + playerHeight;
@@ -649,17 +652,20 @@ export function FirstPersonControls({
         }
       }
       
-      // Ground detection
-      const feetY = camera.position.y - playerHeight;
-      const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
-      feetCheckPosRef.current.copy(camera.position);
-      feetCheckPosRef.current.y = camera.position.y - playerHeight - 0.05;
-      const hasBlockBeneath = checkAxisCollision(feetCheckPosRef.current, currentColliders, playerRadius, playerHeight, false);
-      
-      if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
-        onGround.current = true;
-      } else {
-        onGround.current = false;
+      // Ground detection - only check when potentially in air or landing
+      const needsGroundCheck = !onGround.current || velocity.current.y < -0.1;
+      if (needsGroundCheck) {
+        const feetY = camera.position.y - playerHeight;
+        const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
+        feetCheckPosRef.current.copy(camera.position);
+        feetCheckPosRef.current.y = camera.position.y - playerHeight - 0.05;
+        const hasBlockBeneath = checkAxisCollision(feetCheckPosRef.current, currentColliders, playerRadius, playerHeight, false, true);
+        
+        if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
+          onGround.current = true;
+        } else {
+          onGround.current = false;
+        }
       }
       
       // Broadcast position to multiplayer
