@@ -129,6 +129,25 @@ class BlockDB {
     });
   }
 
+  // Batch add blocks in a single transaction (much faster than individual adds)
+  async addBlocksBatch(blocks: DBBlock[]): Promise<void> {
+    if (!this.db) await this.init();
+    if (blocks.length === 0) return;
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      
+      // Add all blocks in single transaction
+      for (const block of blocks) {
+        store.put(block);
+      }
+    });
+  }
+
   async removeBlock(blockId: string): Promise<void> {
     if (!this.db) await this.init();
     
@@ -139,6 +158,25 @@ class BlockDB {
       
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve();
+    });
+  }
+
+  // Batch remove blocks in a single transaction
+  async removeBlocksBatch(blockIds: string[]): Promise<void> {
+    if (!this.db) await this.init();
+    if (blockIds.length === 0) return;
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      
+      // Delete all blocks in single transaction
+      for (const id of blockIds) {
+        store.delete(id);
+      }
     });
   }
 
@@ -338,7 +376,9 @@ export const useIndexedDB = () => {
   return React.useMemo(() => ({
     getAllBlocks: () => blockDB.getAllBlocks(),
     addBlock: (block: DBBlock) => blockDB.addBlock(block),
+    addBlocksBatch: (blocks: DBBlock[]) => blockDB.addBlocksBatch(blocks),
     removeBlock: (blockId: string) => blockDB.removeBlock(blockId),
+    removeBlocksBatch: (blockIds: string[]) => blockDB.removeBlocksBatch(blockIds),
     getUnsyncedBlocks: () => blockDB.getUnsyncedBlocks(),
     markAsSynced: (blockId: string) => blockDB.markAsSynced(blockId),
     clearAllBlocks: () => blockDB.clearAllBlocks(),

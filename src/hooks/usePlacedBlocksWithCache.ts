@@ -13,22 +13,42 @@ interface DBBlock extends PlacedBlock {
 // Removed temp UUID hack - now using real Supabase authentication
 
 // Helper to check if blocks arrays are shallowly equal
+// OPTIMIZED: Early exits to avoid expensive Map creation when possible
 const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
+  // FAST: Same reference = same array
+  if (a === b) return true;
+  
+  // FAST: Different lengths = different arrays
   if (a.length !== b.length) return false;
   
-  // Create maps for O(1) lookup
-  const mapA = new Map(a.map(block => [block.id, block]));
-  const mapB = new Map(b.map(block => [block.id, block]));
+  // FAST: Both empty = equal
+  if (a.length === 0) return true;
   
-  // Check if all IDs match and positions match
-  for (const [id, blockA] of mapA) {
-    const blockB = mapB.get(id);
-    if (!blockB) return false;
-    if (blockA.position_x !== blockB.position_x ||
-        blockA.position_y !== blockB.position_y ||
-        blockA.position_z !== blockB.position_z ||
-        blockA.block_type !== blockB.block_type) {
-      return false;
+  // Only create Map for larger arrays where O(1) lookup is worth it
+  if (a.length > 50) {
+    const mapB = new Map(b.map(block => [block.id, block]));
+    
+    for (const blockA of a) {
+      const blockB = mapB.get(blockA.id);
+      if (!blockB) return false;
+      if (blockA.position_x !== blockB.position_x ||
+          blockA.position_y !== blockB.position_y ||
+          blockA.position_z !== blockB.position_z ||
+          blockA.block_type !== blockB.block_type) {
+        return false;
+      }
+    }
+  } else {
+    // For small arrays, linear search is faster than Map creation
+    for (const blockA of a) {
+      const blockB = b.find(block => block.id === blockA.id);
+      if (!blockB) return false;
+      if (blockA.position_x !== blockB.position_x ||
+          blockA.position_y !== blockB.position_y ||
+          blockA.position_z !== blockB.position_z ||
+          blockA.block_type !== blockB.block_type) {
+        return false;
+      }
     }
   }
   
@@ -42,7 +62,9 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   const {
     getAllBlocks,
     addBlock,
+    addBlocksBatch,
     removeBlock: removeFromDB,
+    removeBlocksBatch,
     getUnsyncedBlocks,
     markAsSynced,
     updateBlock,
@@ -58,6 +80,10 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   const isBlockModeRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const syncingRef = useRef(false);
+  
+  // Debounce sync to prevent auth token refresh from causing freezes
+  const lastSyncTimeRef = useRef<number>(0);
+  const SYNC_DEBOUNCE_MS = 30000; // Only sync every 30 seconds max
 
   // Safe setBlocks that only updates if array actually changed
   const setBlocksIfChanged = useCallback((newBlocks: PlacedBlock[] | ((prev: PlacedBlock[]) => PlacedBlock[])) => {
@@ -74,11 +100,18 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     });
   }, []);
 
-  const syncWithSupabase = useCallback(async () => {
+  const syncWithSupabase = useCallback(async (force = false) => {
     if (syncingRef.current) return;
+    
+    // Debounce: Skip if synced recently (unless forced)
+    const now = Date.now();
+    if (!force && now - lastSyncTimeRef.current < SYNC_DEBOUNCE_MS) {
+      return;
+    }
     
     try {
       syncingRef.current = true;
+      lastSyncTimeRef.current = now;
       
       // Load blocks from IndexedDB first (instant)
       const cachedBlocks = await getAllBlocks();
@@ -108,25 +141,24 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
 
       if (error) throw error;
 
-      // Clear cache and rebuild with server data
-      await getAllBlocks().then(async (cachedBlocks) => {
-        // Remove blocks that no longer exist on server
-        const serverIds = new Set(supabaseBlocks?.map(b => b.id) || []);
-        
-        for (const cachedBlock of cachedBlocks) {
-          if (!serverIds.has(cachedBlock.id)) {
-            await removeFromDB(cachedBlock.id);
-          }
-        }
-      });
+      // BATCH: Remove blocks that no longer exist on server
+      const serverIds = new Set(supabaseBlocks?.map(b => b.id) || []);
+      const blocksToRemove = cachedBlocks
+        .filter(block => !serverIds.has(block.id))
+        .map(block => block.id);
+      
+      if (blocksToRemove.length > 0) {
+        await removeBlocksBatch(blocksToRemove);
+      }
 
-      // Add/update server blocks in cache
-      for (const serverBlock of supabaseBlocks || []) {
-        const dbBlock: DBBlock = {
-          ...serverBlock,
-          synced: true
-        };
-        await addBlock(dbBlock);
+      // BATCH: Add/update server blocks in cache
+      const blocksToAdd: DBBlock[] = (supabaseBlocks || []).map(serverBlock => ({
+        ...serverBlock,
+        synced: true
+      }));
+      
+      if (blocksToAdd.length > 0) {
+        await addBlocksBatch(blocksToAdd);
       }
 
       // Filter out expired blocks before setting state
@@ -159,7 +191,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       const initTime = new Date();
       const activeInitBlocks = cachedBlocks
         .filter(block => !block.expires_at || new Date(block.expires_at) > initTime)
-        .map(block => ({
+        .map((block: any) => ({
           id: block.id,
           user_id: block.user_id,
           position_x: block.position_x,
@@ -172,7 +204,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       
       setBlocksIfChanged(activeInitBlocks);
 
-      await syncWithSupabase();
+      // Force sync on initialization (bypass debounce)
+      await syncWithSupabase(true);
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {
@@ -548,7 +581,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     isLoading,
     placeBlock,
     removeBlock,
-    refreshBlocks: syncWithSupabase,
+    refreshBlocks: () => syncWithSupabase(true), // Force sync when manually refreshing
     setBlockMode // New function to enable/disable block mode
   };
 };
