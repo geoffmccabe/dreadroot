@@ -68,41 +68,59 @@ export function FirstPersonArms({ isGunEquipped }: FirstPersonArmsProps) {
   return (
     <group ref={groupRef}>
       <group ref={gunRef}>
-        {/* Simple arm representation */}
-        <mesh position={[0, -0.05, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.025, 0.03, 0.25, 8]} />
-          <meshStandardMaterial color="#d4a574" roughness={0.8} />
+        {/* Forearm - positioned back and less visible */}
+        <mesh position={[-0.02, -0.08, -0.1]} rotation={[Math.PI / 2.5, 0, 0.1]}>
+          <cylinderGeometry args={[0.02, 0.025, 0.2, 8]} />
+          <meshStandardMaterial color="#c4956a" roughness={0.8} />
         </mesh>
         
-        {/* Hand */}
-        <mesh position={[0, -0.02, 0.08]}>
-          <sphereGeometry args={[0.035, 8, 8]} />
-          <meshStandardMaterial color="#d4a574" roughness={0.8} />
+        {/* Hand gripping the gun */}
+        <mesh position={[0, -0.02, 0.02]}>
+          <boxGeometry args={[0.04, 0.035, 0.05]} />
+          <meshStandardMaterial color="#c4956a" roughness={0.8} />
         </mesh>
 
-        {/* Pistol body */}
-        <group position={[0, 0.02, 0.15]}>
-          {/* Main barrel */}
+        {/* Pistol - gunmetal grey */}
+        <group position={[0, 0.03, 0.12]}>
+          {/* Main barrel/slide */}
           <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <boxGeometry args={[0.03, 0.15, 0.04]} />
+            <boxGeometry args={[0.035, 0.18, 0.05]} />
+            <meshStandardMaterial color="#3d3d3d" metalness={0.9} roughness={0.25} />
+          </mesh>
+          
+          {/* Top slide detail */}
+          <mesh position={[0, 0.02, 0.02]} rotation={[Math.PI / 2, 0, 0]}>
+            <boxGeometry args={[0.032, 0.14, 0.02]} />
+            <meshStandardMaterial color="#4a4a4a" metalness={0.95} roughness={0.2} />
+          </mesh>
+          
+          {/* Front sight */}
+          <mesh position={[0, 0.025, 0.08]}>
+            <boxGeometry args={[0.008, 0.01, 0.01]} />
             <meshStandardMaterial color="#2a2a2a" metalness={0.8} roughness={0.3} />
           </mesh>
           
-          {/* Slide */}
-          <mesh position={[0, 0.015, 0.02]} rotation={[Math.PI / 2, 0, 0]}>
-            <boxGeometry args={[0.028, 0.12, 0.025]} />
-            <meshStandardMaterial color="#3a3a3a" metalness={0.9} roughness={0.2} />
+          {/* Rear sight */}
+          <mesh position={[0, 0.025, -0.04]}>
+            <boxGeometry args={[0.025, 0.012, 0.01]} />
+            <meshStandardMaterial color="#2a2a2a" metalness={0.8} roughness={0.3} />
           </mesh>
           
           {/* Grip */}
-          <mesh position={[0, -0.04, -0.04]} rotation={[0.3, 0, 0]}>
-            <boxGeometry args={[0.025, 0.08, 0.035]} />
-            <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
+          <mesh position={[0, -0.045, -0.05]} rotation={[0.25, 0, 0]}>
+            <boxGeometry args={[0.032, 0.09, 0.04]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.95} />
           </mesh>
           
           {/* Trigger guard */}
-          <mesh position={[0, -0.02, 0]}>
-            <torusGeometry args={[0.015, 0.003, 8, 16, Math.PI]} />
+          <mesh position={[0, -0.025, 0.01]} rotation={[0, 0, Math.PI]}>
+            <torusGeometry args={[0.018, 0.004, 8, 12, Math.PI]} />
+            <meshStandardMaterial color="#3d3d3d" metalness={0.85} roughness={0.3} />
+          </mesh>
+          
+          {/* Trigger */}
+          <mesh position={[0, -0.025, 0.01]}>
+            <boxGeometry args={[0.006, 0.02, 0.008]} />
             <meshStandardMaterial color="#2a2a2a" metalness={0.7} roughness={0.4} />
           </mesh>
         </group>
