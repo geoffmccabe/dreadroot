@@ -149,10 +149,15 @@ export function FirstPersonArms({ isGunEquipped, isAiming = false }: FirstPerson
     <group ref={groupRef}>
       <primitive 
         object={armsModel} 
-        scale={[0.008, 0.008, 0.008]}
+        scale={[0.015, 0.015, 0.015]}
         rotation={[0, Math.PI, 0]}
-        position={[0, -0.3, 0]}
+        position={[0, -0.5, 0]}
       />
+      {/* Debug sphere to confirm positioning */}
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshBasicMaterial color="red" />
+      </mesh>
     </group>
   );
 }
