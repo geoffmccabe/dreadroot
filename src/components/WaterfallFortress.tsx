@@ -2558,9 +2558,6 @@ function Scene({
       
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting cycleStateRef={cycleStateRef} />
-      
-      {/* Environment map for reflections on Crystal blocks */}
-      <Environment preset="sunset" background={false} />
 
       {/* Dynamic Sky with day/night cycle and stars */}
       <DynamicSky weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
