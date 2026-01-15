@@ -6,6 +6,8 @@ export { FortressStructure } from './FortressStructure';
 export { Coins } from './FortressCoins';
 export { Bullets } from './FortressBullets';
 export { ControlPanel } from './FortressControlPanel';
+export { FirstPersonControls } from './FortressControls';
+export { FortressScene } from './FortressScene';
 export * from './FortressTypes';
 export * from './FortressAudio';
 export * from './FortressCollision';

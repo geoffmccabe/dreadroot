@@ -1,0 +1,630 @@
+import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { useRaycaster } from '@/hooks/useRaycaster';
+import { calculateBlockPlacement } from '@/lib/blockPlacement';
+import { PlacedBlock } from '@/types/blocks';
+import { 
+  DEBUG_LOGGING, 
+  FirstPersonControlsProps 
+} from './FortressTypes';
+import {
+  createFortressColliders,
+  createBlockColliders,
+  checkAxisCollision,
+  findStepUpTarget,
+  createPlayerBox
+} from './FortressCollision';
+
+export function FirstPersonControls({ 
+  onShoot, 
+  showCrosshairs, 
+  audioRefs, 
+  playAudio,
+  blockPlacementMode,
+  onBlockPlace,
+  onOpenPanel,
+  onModeChange,
+  getBlockQuantity,
+  selectedBlockType,
+  panelOpen,
+  onCycleBlock,
+  blocks,
+  onBlockRain,
+  userRoles,
+  broadcastPosition,
+  onBlockRemove,
+  showOwnershipOutline,
+  currentUserId,
+  hoveredBlockId,
+  setHoveredBlockId,
+  instancedMeshesRef,
+  meshesArrayCache,
+  meshToBlockTypeCache,
+  blocksByTypeAndUser
+}: FirstPersonControlsProps) {
+  const { camera, gl } = useThree();
+  const { raycastMeshes } = useRaycaster();
+  const isLocked = useRef(false);
+  const velocity = useRef(new THREE.Vector3());
+  const direction = useRef(new THREE.Vector3());
+  const keys = useRef({
+    w: false, s: false, a: false, d: false,
+    shift: false, space: false, r: false, ctrl: false,
+    previouslyCtrl: false, rightMouse: false
+  });
+  const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
+  const onGround = useRef(true);
+  const yaw = useRef(0);
+  const pitch = useRef(0);
+  const lastGroundCheck = useRef(0);
+  const stuckTimer = useRef(0);
+  const lastPositionLog = useRef(0);
+  
+  // Reusable Vector3 objects to prevent garbage collection
+  const forwardVecRef = useRef(new THREE.Vector3());
+  const rightVecRef = useRef(new THREE.Vector3());
+  const deltaMovementRef = useRef(new THREE.Vector3());
+  
+  // Reusable Box3 objects for step-up mechanic
+  const stepUpPlayerBoxRef = useRef(new THREE.Box3());
+  const stepUpClearanceBoxRef = useRef(new THREE.Box3());
+  
+  // Use blocks from props
+  const existingBlocks = blocks;
+  
+  // Firing rate limiting
+  const lastFireTime = useRef(0);
+  const FIRE_RATE_LIMIT = 150;
+
+  // Cache for block collision boxes
+  const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
+  const lastBlockIds = useRef<string>('');
+  const lastBlockCount = useRef<number>(0);
+
+  // Collision boxes for fortress walls and placed blocks
+  const colliders = useMemo(() => {
+    const blockIds = existingBlocks.map(b => b.id).sort().join(',');
+    const blockCountDiff = Math.abs(existingBlocks.length - lastBlockCount.current);
+    const cacheSizeMismatch = blockCollisionCache.current.size !== existingBlocks.length;
+    const needsFullRebuild = blockCountDiff > Math.max(existingBlocks.length * 0.05, 1) || cacheSizeMismatch;
+    
+    if (needsFullRebuild && blockCollisionCache.current.size > 0) {
+      if (DEBUG_LOGGING) console.log('[Colliders] Full cache rebuild');
+      blockCollisionCache.current.clear();
+    }
+    
+    if (blockIds === lastBlockIds.current && blockCollisionCache.current.size > 0 && !needsFullRebuild) {
+      return [...createFortressColliders(), ...Array.from(blockCollisionCache.current.values())];
+    }
+    
+    lastBlockIds.current = blockIds;
+    lastBlockCount.current = existingBlocks.length;
+    
+    const blockColliders = createBlockColliders(existingBlocks, blockCollisionCache.current);
+    return [...createFortressColliders(), ...blockColliders];
+  }, [existingBlocks]);
+
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (panelOpen || 
+        document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA') {
+      return;
+    }
+    
+    switch (event.code) {
+      case 'KeyI':
+        event.preventDefault();
+        onOpenPanel('inventory');
+        break;
+      case 'KeyW':
+      case 'ArrowUp':
+        keys.current.w = true;
+        break;
+      case 'KeyS':
+      case 'ArrowDown':
+        keys.current.s = true;
+        break;
+      case 'KeyA':
+      case 'ArrowLeft':
+        keys.current.a = true;
+        break;
+      case 'KeyD':
+      case 'ArrowRight':
+        keys.current.d = true;
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        keys.current.shift = true;
+        break;
+      case 'Space':
+        keys.current.space = true;
+        event.preventDefault();
+        break;
+      case 'ControlLeft':
+        keys.current.ctrl = true;
+        break;
+      case 'KeyR':
+        if (event.shiftKey) {
+          event.preventDefault();
+          onBlockRain();
+        } else if (!blockPlacementMode) {
+          const newCrosshairsState = !showCrosshairs;
+          onModeChange(newCrosshairsState ? 'shooting' : null);
+          const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
+          playAudio(audio);
+        } else {
+          onModeChange('shooting');
+          playAudio(audioRefs.pistolCocking);
+        }
+        break;
+      case 'KeyB':
+        if (blockPlacementMode) {
+          onModeChange(null);
+        } else {
+          onModeChange('building');
+        }
+        break;
+      case 'KeyO':
+        event.preventDefault();
+        onOpenPanel('store');
+        break;
+      case 'BracketLeft':
+        if (blockPlacementMode) {
+          event.preventDefault();
+          onCycleBlock('prev');
+        }
+        break;
+      case 'BracketRight':
+        if (blockPlacementMode) {
+          event.preventDefault();
+          onCycleBlock('next');
+        }
+        break;
+      case 'Escape':
+        if (isLocked.current) {
+          document.exitPointerLock();
+        }
+        break;
+    }
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock]);
+
+  const handleKeyUp = useCallback((event: KeyboardEvent) => {
+    if (panelOpen || 
+        document.activeElement?.tagName === 'INPUT' || 
+        document.activeElement?.tagName === 'TEXTAREA') {
+      return;
+    }
+    
+    switch (event.code) {
+      case 'KeyW':
+      case 'ArrowUp':
+        keys.current.w = false;
+        break;
+      case 'KeyS':
+      case 'ArrowDown':
+        keys.current.s = false;
+        break;
+      case 'KeyA':
+      case 'ArrowLeft':
+        keys.current.a = false;
+        break;
+      case 'KeyD':
+      case 'ArrowRight':
+        keys.current.d = false;
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        keys.current.shift = false;
+        break;
+      case 'Space':
+        keys.current.space = false;
+        break;
+      case 'ControlLeft':
+        keys.current.ctrl = false;
+        break;
+    }
+  }, [panelOpen]);
+
+  // Euler for camera rotation
+  const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+  const needsCameraUpdate = useRef(false);
+  
+  // Handler refs to prevent event listener re-attachment
+  const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
+  const handleWheelRef = useRef<(event: WheelEvent) => void>();
+  const handleClickRef = useRef<() => void>();
+  const handleRightClickRef = useRef<(event: MouseEvent) => void>();
+  const handleMouseDownRef = useRef<(event: MouseEvent) => void>();
+  const handleMouseUpRef = useRef<(event: MouseEvent) => void>();
+  const handlePointerLockChangeRef = useRef<() => void>();
+
+  // Mouse tracking for debugging
+  const mouseDebugData = useRef({
+    totalEvents: 0,
+    nonZeroEvents: 0,
+    leftDriftEvents: 0,
+    rightDriftEvents: 0,
+    phantomEventsFiltered: 0,
+    recentMovements: [] as Array<{x: number, y: number, timestamp: number}>
+  });
+  const lastMovements = useRef<Array<{x: number, y: number}>>([]);
+
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+    if (!isLocked.current) return;
+    
+    mouseDebugData.current.totalEvents++;
+    if (event.movementX !== 0 || event.movementY !== 0) {
+      mouseDebugData.current.nonZeroEvents++;
+    }
+    if (event.movementX < 0) mouseDebugData.current.leftDriftEvents++;
+    if (event.movementX > 0) mouseDebugData.current.rightDriftEvents++;
+    
+    lastMovements.current.push({x: event.movementX, y: event.movementY});
+    if (lastMovements.current.length > 5) lastMovements.current.shift();
+    
+    // Phantom event detection
+    if (lastMovements.current.length >= 4) {
+      const last4 = lastMovements.current.slice(-4);
+      const allIdentical = last4.every(m => m.x === last4[0].x && m.y === last4[0].y);
+      const allTiny = last4.every(m => Math.abs(m.x) <= 1 && Math.abs(m.y) <= 1);
+      
+      if (allIdentical && allTiny && (Math.abs(event.movementX) > 0 || Math.abs(event.movementY) > 0)) {
+        mouseDebugData.current.phantomEventsFiltered++;
+        return;
+      }
+    }
+    
+    mouseDebugData.current.recentMovements.push({
+      x: event.movementX,
+      y: event.movementY,
+      timestamp: Date.now()
+    });
+    if (mouseDebugData.current.recentMovements.length > 100) {
+      mouseDebugData.current.recentMovements.shift();
+    }
+    
+    const sensitivity = 0.002;
+    yaw.current += -event.movementX * sensitivity;
+    pitch.current += -event.movementY * sensitivity;
+    
+    const maxPitch = Math.PI / 2 - 0.01;
+    pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
+    needsCameraUpdate.current = true;
+  }, []);
+  
+  handleMouseMoveRef.current = handleMouseMove;
+
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (!isLocked.current || !blockPlacementMode) return;
+    event.preventDefault();
+    onCycleBlock(event.deltaY > 0 ? 'next' : 'prev');
+  }, [blockPlacementMode, onCycleBlock]);
+  
+  handleWheelRef.current = handleWheel;
+
+  const handleClick = useCallback(() => {
+    if (!isLocked.current) {
+      gl.domElement.requestPointerLock();
+      return;
+    }
+    
+    if (blockPlacementMode && showOwnershipOutline && hoveredBlockId && onBlockRemove) {
+      onBlockRemove(hoveredBlockId);
+      setHoveredBlockId(null);
+      return;
+    }
+    
+    if (blockPlacementMode && onBlockPlace) {
+      const placementResult = calculateBlockPlacement({
+        camera,
+        existingBlocks: existingBlocks || [],
+        maxDistance: 5,
+      });
+      
+      if (placementResult.isValid && placementResult.position) {
+        onBlockPlace(placementResult.position);
+      } else {
+        // Play rejection sound
+        try {
+          const rejectionData = (window as any).__rejectionSound;
+          if (rejectionData?.buffer) {
+            let ctx = rejectionData.audioContext;
+            if (!ctx || ctx.state === 'closed') {
+              ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              (window as any).__rejectionSound.audioContext = ctx;
+            }
+            if (ctx.state === 'suspended') ctx.resume();
+            
+            const source = ctx.createBufferSource();
+            source.buffer = rejectionData.buffer;
+            source.playbackRate.value = 1.0;
+            source.detune.value = -1712;
+            const gainNode = ctx.createGain();
+            gainNode.gain.value = 1.5;
+            source.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            source.start(0);
+            source.stop(ctx.currentTime + rejectionData.buffer.duration / 2);
+          }
+        } catch (e) {
+          console.warn('Could not play rejection sound:', e);
+        }
+      }
+    } else if (showCrosshairs && onShoot) {
+      const now = Date.now();
+      if (now - lastFireTime.current < FIRE_RATE_LIMIT) return;
+      lastFireTime.current = now;
+      
+      const shootDirection = new THREE.Vector3(0, 0, -1);
+      shootDirection.applyQuaternion(camera.quaternion);
+      onShoot(camera.position.clone(), shootDirection);
+      playAudio(audioRefs.gunshot);
+    }
+  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId, audioRefs, playAudio]);
+  
+  handleClickRef.current = handleClick;
+
+  const handleRightClick = useCallback((event: MouseEvent) => {
+    if (!isLocked.current || !blockPlacementMode || !showOwnershipOutline) return;
+    event.preventDefault();
+  }, [blockPlacementMode, showOwnershipOutline]);
+  
+  handleRightClickRef.current = handleRightClick;
+
+  const handleMouseDown = useCallback((event: MouseEvent) => {
+    if (!isLocked.current) return;
+    if (event.button === 2) keys.current.rightMouse = true;
+  }, []);
+  
+  handleMouseDownRef.current = handleMouseDown;
+
+  const handleMouseUp = useCallback((event: MouseEvent) => {
+    if (event.button === 2) {
+      keys.current.rightMouse = false;
+      setHoveredBlockId(null);
+    }
+  }, [setHoveredBlockId]);
+  
+  handleMouseUpRef.current = handleMouseUp;
+
+  const handlePointerLockChange = useCallback(() => {
+    isLocked.current = document.pointerLockElement === gl.domElement;
+  }, [gl]);
+  
+  handlePointerLockChangeRef.current = handlePointerLockChange;
+
+  // Stable wrapper functions
+  const stableMouseMoveListener = useCallback((event: MouseEvent) => {
+    handleMouseMoveRef.current?.(event);
+  }, []);
+  const stableWheelListener = useCallback((event: WheelEvent) => {
+    handleWheelRef.current?.(event);
+  }, []);
+  const stableClickListener = useCallback(() => {
+    handleClickRef.current?.();
+  }, []);
+  const stableRightClickListener = useCallback((event: MouseEvent) => {
+    handleRightClickRef.current?.(event);
+  }, []);
+  const stableMouseDownListener = useCallback((event: MouseEvent) => {
+    handleMouseDownRef.current?.(event);
+  }, []);
+  const stableMouseUpListener = useCallback((event: MouseEvent) => {
+    handleMouseUpRef.current?.(event);
+  }, []);
+  const stablePointerLockChangeListener = useCallback(() => {
+    handlePointerLockChangeRef.current?.();
+  }, []);
+
+  // Attach event listeners ONCE
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('mousemove', stableMouseMoveListener);
+    document.addEventListener('wheel', stableWheelListener);
+    document.addEventListener('pointerlockchange', stablePointerLockChangeListener);
+    gl.domElement.addEventListener('click', stableClickListener);
+    gl.domElement.addEventListener('contextmenu', stableRightClickListener);
+    gl.domElement.addEventListener('mousedown', stableMouseDownListener);
+    gl.domElement.addEventListener('mouseup', stableMouseUpListener);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
+      document.removeEventListener('mousemove', stableMouseMoveListener);
+      document.removeEventListener('wheel', stableWheelListener);
+      document.removeEventListener('pointerlockchange', stablePointerLockChangeListener);
+      gl.domElement.removeEventListener('click', stableClickListener);
+      gl.domElement.removeEventListener('contextmenu', stableRightClickListener);
+      gl.domElement.removeEventListener('mousedown', stableMouseDownListener);
+      gl.domElement.removeEventListener('mouseup', stableMouseUpListener);
+    };
+  }, [handleKeyDown, handleKeyUp, gl.domElement, stableMouseMoveListener, stableWheelListener, stableClickListener, stableRightClickListener, stableMouseDownListener, stableMouseUpListener, stablePointerLockChangeListener]);
+
+  // Movement and collision frame loop
+  useFrame((state, delta) => {
+    // Apply camera rotation if needed
+    if (needsCameraUpdate.current) {
+      eulerRef.current.set(pitch.current, yaw.current, 0);
+      camera.quaternion.setFromEuler(eulerRef.current);
+      needsCameraUpdate.current = false;
+    }
+
+    // Block hover detection for removal
+    if (blockPlacementMode && showOwnershipOutline && keys.current.rightMouse) {
+      const meshesArray = meshesArrayCache.current;
+      if (meshesArray.length > 0) {
+        const result = raycastMeshes(meshesArray, 5);
+        
+        if (result && result.instanceId !== undefined) {
+          const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
+          if (blockType && currentUserId) {
+            const userBlocks = blocksByTypeAndUser.current.get(`${blockType}_${currentUserId}`);
+            if (userBlocks && result.instanceId < userBlocks.length) {
+              const block = userBlocks[result.instanceId];
+              if (block && block.user_id === currentUserId) {
+                setHoveredBlockId(block.id);
+              } else {
+                setHoveredBlockId(null);
+              }
+            } else {
+              setHoveredBlockId(null);
+            }
+          } else {
+            setHoveredBlockId(null);
+          }
+        } else {
+          setHoveredBlockId(null);
+        }
+      }
+    } else if (hoveredBlockId) {
+      setHoveredBlockId(null);
+    }
+    
+    // Movement input
+    direction.current.set(0, 0, 0);
+    if (keys.current.w) direction.current.z += 1;
+    if (keys.current.s) direction.current.z -= 1;
+    if (keys.current.a) direction.current.x -= 1;
+    if (keys.current.d) direction.current.x += 1;
+    direction.current.normalize();
+
+    // Speed calculation
+    const baseSpeed = 4.0;
+    const crawlSpeed = baseSpeed * 0.6;
+    const runSpeed = keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed);
+    
+    // Apply movement
+    const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
+    const right = rightVecRef.current.set(Math.cos(yaw.current), 0, -Math.sin(yaw.current));
+    
+    const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
+    deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
+    deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
+
+    // Gravity and jumping
+    velocity.current.y -= 9.8 * delta;
+    
+    const canJump = onGround.current && !keys.current.ctrl;
+    
+    if (keys.current.space && canJump) {
+      let jumpHeight = 1.25;
+      if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+        jumpHeight = 2.5;
+      }
+      velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
+      onGround.current = false;
+    }
+    deltaMovement.y += velocity.current.y * delta;
+
+    // Player dimensions
+    const playerRadius = 0.3;
+    const isCrawling = keys.current.ctrl;
+    const standingHeight = 1.6;
+    const crawlingHeight = 0.8;
+    const playerHeight = isCrawling ? crawlingHeight : standingHeight;
+
+    // Store previous position
+    const prevPosition = camera.position.clone();
+    let xBlocked = false;
+    let zBlocked = false;
+
+    // X-axis collision
+    if (deltaMovement.x !== 0) {
+      const testPos = camera.position.clone();
+      testPos.x += deltaMovement.x;
+      
+      if (checkAxisCollision(testPos, colliders, playerRadius, playerHeight, true)) {
+        camera.position.x = prevPosition.x;
+        velocity.current.x = 0;
+        xBlocked = true;
+      } else {
+        camera.position.x = testPos.x;
+      }
+    }
+
+    // Z-axis collision
+    if (deltaMovement.z !== 0) {
+      const testPos = camera.position.clone();
+      testPos.z += deltaMovement.z;
+      
+      if (checkAxisCollision(testPos, colliders, playerRadius, playerHeight, true)) {
+        camera.position.z = prevPosition.z;
+        velocity.current.z = 0;
+        zBlocked = true;
+      } else {
+        camera.position.z = testPos.z;
+      }
+    }
+
+    // Y-axis collision
+    if (deltaMovement.y !== 0) {
+      const testPos = camera.position.clone();
+      testPos.y += deltaMovement.y;
+      
+      const collision = checkAxisCollision(testPos, colliders, playerRadius, playerHeight, false);
+      if (collision) {
+        if (velocity.current.y < 0) {
+          camera.position.y = collision.max.y + playerHeight;
+          velocity.current.y = 0;
+          onGround.current = true;
+        } else {
+          camera.position.y = collision.min.y - 0.01;
+          velocity.current.y = 0;
+        }
+      } else {
+        if (testPos.y < playerHeight && velocity.current.y < 0) {
+          camera.position.y = playerHeight;
+          velocity.current.y = 0;
+          onGround.current = true;
+        } else {
+          camera.position.y = testPos.y;
+          onGround.current = false;
+        }
+      }
+    }
+
+    // Step-up mechanic
+    const stepUpHeight = 0.6;
+    const isMovingHorizontally = Math.abs(deltaMovementRef.current.x) > 0.001 || Math.abs(deltaMovementRef.current.z) > 0.001;
+    
+    if ((xBlocked || zBlocked) && onGround.current && isMovingHorizontally) {
+      const stepUpY = findStepUpTarget(
+        camera,
+        colliders,
+        playerRadius,
+        playerHeight,
+        stepUpHeight,
+        stepUpPlayerBoxRef.current,
+        stepUpClearanceBoxRef.current
+      );
+      
+      if (stepUpY !== null) {
+        camera.position.y = stepUpY + playerHeight;
+        velocity.current.y = 0;
+        onGround.current = true;
+      }
+    }
+    
+    // Ground detection
+    const feetY = camera.position.y - playerHeight;
+    const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
+    const feetCheckPos = camera.position.clone();
+    feetCheckPos.y = camera.position.y - playerHeight - 0.05;
+    const hasBlockBeneath = checkAxisCollision(feetCheckPos, colliders, playerRadius, playerHeight, false);
+    
+    if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
+      onGround.current = true;
+    } else {
+      onGround.current = false;
+    }
+    
+    // Broadcast position to multiplayer
+    if (broadcastPosition) {
+      broadcastPosition(camera.position, yaw.current, pitch.current);
+    }
+  });
+
+  return null;
+}
