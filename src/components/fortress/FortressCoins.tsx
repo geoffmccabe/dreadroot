@@ -174,8 +174,7 @@ export function Coins({
   // Register with centralized frame loop
   useEffect(() => {
     const unregister = frameLoop.register('coins', (delta) => {
-      // Start timing for coins
-      diagnostics.startTiming();
+      // Note: useFrameCallCount only tracked in master loop now
       
       // Update coin count for diagnostics
       let visibleCoinCount = 0;
@@ -282,9 +281,6 @@ export function Coins({
           particleMesh.instanceColor.needsUpdate = true;
         }
       }
-      
-      // Record timing for coins
-      diagnostics.recordTiming('coins');
     }, 45); // Priority 45
 
     return unregister;

@@ -83,13 +83,6 @@ export function createFortressColliders(): THREE.Box3[] {
  * Creates and manages collision boxes for placed blocks with caching
  * Also maintains spatial hash grid for O(1) lookups
  */
-// Pre-allocated Set to avoid creating new Set on every call
-const _blockIdSet = new Set<string>();
-
-// Cached array reference to avoid Array.from() allocation
-let _cachedBlockCollidersArray: THREE.Box3[] = [];
-let _cacheVersion = 0;
-
 export function createBlockColliders(
   blocks: PlacedBlock[],
   cache: Map<string, THREE.Box3>
@@ -97,23 +90,16 @@ export function createBlockColliders(
   // Track allocation for diagnostics
   diagnostics.e4++;
   
-  // Reuse Set instead of creating new one
-  _blockIdSet.clear();
-  for (const b of blocks) {
-    _blockIdSet.add(b.id);
-  }
-  
-  let hasChanges = false;
+  const currentBlockIds = new Set(blocks.map(b => b.id));
   
   // Remove collision boxes for deleted blocks
   for (const id of cache.keys()) {
-    if (!_blockIdSet.has(id)) {
+    if (!currentBlockIds.has(id)) {
       const box = cache.get(id);
       if (box) {
         collisionGrid.remove(box);
       }
       cache.delete(id);
-      hasChanges = true;
     }
   }
   
@@ -126,17 +112,10 @@ export function createBlockColliders(
       );
       cache.set(block.id, box);
       collisionGrid.insert(box);
-      hasChanges = true;
     }
   }
   
-  // Only rebuild array if cache changed (avoids Array.from allocation)
-  if (hasChanges || _cachedBlockCollidersArray.length !== cache.size) {
-    _cachedBlockCollidersArray = Array.from(cache.values());
-    _cacheVersion++;
-  }
-  
-  return _cachedBlockCollidersArray;
+  return Array.from(cache.values());
 }
 
 /**
@@ -165,11 +144,13 @@ export function checkAxisCollision(
   playerRadius: number,
   playerHeight: number,
   isHorizontal: boolean = false,
-  forceCheck: boolean = false // Force check even on throttled frames (kept for API compat)
+  forceCheck: boolean = false // Force check even on throttled frames
 ): THREE.Box3 | null {
-  // REMOVED THROTTLING: Throttling caused physics bugs and stale results.
-  // The spatial hash grid provides O(1) lookups, so throttling is unnecessary.
+  // Throttle collision to every 2nd frame (unless forced)
   _collisionFrame++;
+  if (!forceCheck && (_collisionFrame & 1) === 0) {
+    return _lastCollisionResult;
+  }
   
   diagnostics.e1++;
   
@@ -240,7 +221,11 @@ export function findStepUpTarget(
   clearanceBoxRef: THREE.Box3,
   forceCheck: boolean = false
 ): number | null {
-  // REMOVED THROTTLING: Spatial hash grid is fast enough, throttling caused glitches
+  // Throttle step-up checks to every 2nd frame (unless forced)
+  if (!forceCheck && (_collisionFrame & 1) === 0) {
+    return _lastStepUpResult;
+  }
+  
   diagnostics.e2++;
   
   const currentFootY = camera.position.y - playerHeight;
