@@ -2581,7 +2581,7 @@ function Scene({
       <MultiplayerPlayers players={players} />
       
       {/* Local player avatar - visible only in shadows and reflections */}
-      <LocalPlayerAvatar />
+      <LocalPlayerAvatar isGunEquipped={crosshairsEnabled} />
       
       {/* First-person arms and gun when equipped */}
       <FirstPersonArms isGunEquipped={crosshairsEnabled} isAiming={isAiming} />

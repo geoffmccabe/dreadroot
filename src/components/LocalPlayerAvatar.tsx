@@ -54,7 +54,11 @@ const loadAnimation = async (url: string): Promise<THREE.AnimationClip | null> =
   return null;
 };
 
-export function LocalPlayerAvatar() {
+interface LocalPlayerAvatarProps {
+  isGunEquipped?: boolean;
+}
+
+export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const actionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
@@ -69,6 +73,7 @@ export function LocalPlayerAvatar() {
   // Cache animation lookups
   const movementAnimRef = useRef<string | null>(null);
   const idleAnimRef = useRef<string | null>(null);
+  const gunAnimRef = useRef<string | null>(null);
   const animationConfigMapRef = useRef(new Map<string, any>());
   
   const { camera } = useThree();
@@ -135,8 +140,10 @@ export function LocalPlayerAvatar() {
     // Update animation lookup cache
     const movementAnim = avatarConfig.animations.find(a => a.trigger === 'movement');
     const idleAnim = avatarConfig.animations.find(a => a.trigger === 'idle');
+    const gunAnim = avatarConfig.animations.find(a => a.trigger === 'gun');
     movementAnimRef.current = movementAnim?.name || null;
     idleAnimRef.current = idleAnim?.name || null;
+    gunAnimRef.current = gunAnim?.name || null;
     
     // Build animation config map for fast lookup
     const configMap = new Map();
@@ -172,8 +179,8 @@ export function LocalPlayerAvatar() {
       camera.position.z
     );
     
-    // Rotate to face same direction as camera (add PI because model faces -Z by default)
-    const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z) + Math.PI;
+    // Rotate to face same direction as camera (no offset - model should face forward with camera)
+    const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z);
     groupRef.current.rotation.y = yaw;
 
     // Update animations
@@ -184,11 +191,13 @@ export function LocalPlayerAvatar() {
     // Detect movement based on velocity
     const isMoving = speed > 0.01;
     
-    // Determine which animation should play based on movement
+    // Determine which animation should play based on movement and gun state
     let desiredAnimation = currentAnimation;
     
-    // Override with movement/idle if using automatic triggers (use cached refs)
-    if (isMoving && movementAnimRef.current) {
+    // Gun equipped overrides normal movement/idle
+    if (isGunEquipped && gunAnimRef.current) {
+      desiredAnimation = gunAnimRef.current;
+    } else if (isMoving && movementAnimRef.current) {
       desiredAnimation = movementAnimRef.current;
     } else if (!isMoving && idleAnimRef.current) {
       desiredAnimation = idleAnimRef.current;
