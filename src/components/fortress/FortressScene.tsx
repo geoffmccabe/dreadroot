@@ -88,7 +88,7 @@ const WispParticlesMesh = React.forwardRef<WispParticlesMeshHandle, { particles:
 
 WispParticlesMesh.displayName = 'WispParticlesMesh';
 
-// Camera-tracked block renderer with chunk culling
+// Camera-tracked block renderer with IMPERATIVE chunk culling (no React re-renders!)
 function CameraTrackedBlocks({ 
   blocks, 
   showOwnershipOutline, 
@@ -103,33 +103,11 @@ function CameraTrackedBlocks({
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
 }) {
   const { camera } = useThree();
-  const { blocksByChunk, visualDistance } = useBlocks();
+  const { visibleChunksRef, visualDistance } = useBlocks();
   
-  // Use refs to avoid state updates inside useFrame
-  const visibleChunksRef = useRef<Set<string>>(new Set());
+  // Track last chunk position to detect boundary crossings
   const lastChunkRef = useRef({ x: 0, z: 0 });
-  const lastUpdateTime = useRef(0);
-  const lastVisualDistance = useRef(visualDistance);
-  
-  // Trigger for re-renders - only updated via throttled mechanism
-  const [renderTrigger, setRenderTrigger] = useState(0);
-  
-  const CHUNK_UPDATE_THROTTLE = 100; // ms
-  
-  // Recalculate visible chunks when visualDistance changes
-  useEffect(() => {
-    if (visualDistance !== lastVisualDistance.current) {
-      lastVisualDistance.current = visualDistance;
-      
-      const visibleChunkKeys = getVisibleChunkKeys(
-        camera.position.x,
-        camera.position.z,
-        visualDistance
-      );
-      visibleChunksRef.current = new Set(visibleChunkKeys);
-      setRenderTrigger(prev => prev + 1);
-    }
-  }, [visualDistance]); // camera ref is stable, no need in deps
+  const lastVisualDistanceRef = useRef(visualDistance);
   
   // Initialize visible chunks on mount
   useEffect(() => {
@@ -143,68 +121,57 @@ function CameraTrackedBlocks({
       x: Math.floor(camera.position.x / CHUNK_SIZE),
       z: Math.floor(camera.position.z / CHUNK_SIZE)
     };
-    setRenderTrigger(prev => prev + 1);
-  }, []);
+  }, [camera, visualDistance, visibleChunksRef]);
   
-  // Register camera tracking with centralized frame loop (runs at lower priority)
+  // Register camera tracking with centralized frame loop
+  // This ONLY updates the visibleChunksRef - NO React re-renders!
   useEffect(() => {
-    // Store visualDistance in closure
-    let lastVD = visualDistance;
-    
     const unregister = frameLoop.register('cameraChunks', () => {
       const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
       const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
-      const now = Date.now();
+      const currentVD = lastVisualDistanceRef.current;
       
-      // Only update when camera crosses chunk boundary AND throttle time has passed
-      if ((currentChunkX !== lastChunkRef.current.x || 
-           currentChunkZ !== lastChunkRef.current.z) &&
-          now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
+      // Only recalculate when camera crosses chunk boundary OR visualDistance changed
+      if (currentChunkX !== lastChunkRef.current.x || 
+          currentChunkZ !== lastChunkRef.current.z) {
         
-        lastUpdateTime.current = now;
         lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
         
-        // Update ref directly (no React re-render yet)
+        // Update ref directly - NO React setState!
         const visibleChunkKeys = getVisibleChunkKeys(
           camera.position.x,
           camera.position.z,
-          lastVD
+          currentVD
         );
         visibleChunksRef.current.clear();
         for (const key of visibleChunkKeys) {
           visibleChunksRef.current.add(key);
         }
         diagnostics.e4++; // Track chunk update
-        
-        // Defer re-render to next frame to avoid stalling
-        setTimeout(() => {
-          setRenderTrigger(prev => prev + 1);
-        }, 0);
       }
     }, 100); // Low priority - run after other systems
     
     return unregister;
-  }, [camera, visualDistance]);
+  }, [camera, visibleChunksRef]);
   
-  // Memoize visible blocks based on stable trigger
-  const visibleBlocks = useMemo(() => {
-    const filtered: PlacedBlock[] = [];
-    
-    for (const chunkKey of visibleChunksRef.current) {
-      const chunksBlocks = blocksByChunk.get(chunkKey);
-      if (chunksBlocks) {
-        filtered.push(...chunksBlocks);
-      }
+  // Update ref when visualDistance prop changes
+  useEffect(() => {
+    if (visualDistance !== lastVisualDistanceRef.current) {
+      lastVisualDistanceRef.current = visualDistance;
+      
+      // Recalculate visible chunks immediately
+      const visibleChunkKeys = getVisibleChunkKeys(
+        camera.position.x,
+        camera.position.z,
+        visualDistance
+      );
+      visibleChunksRef.current = new Set(visibleChunkKeys);
     }
-    
-    // Update diagnostics with visible block count
-    diagnostics.visibleBlocks = filtered.length;
-    
-    return filtered;
-  }, [renderTrigger, blocksByChunk, blocks.length]);
+  }, [visualDistance, camera, visibleChunksRef]);
   
+  // Pass ALL blocks to PlacedBlocks - chunk filtering happens imperatively in InstancedBlockGroup
   return <PlacedBlocks 
-    blocks={visibleBlocks} 
+    blocks={blocks} 
     showOwnershipOutline={showOwnershipOutline} 
     currentUserId={currentUserId} 
     hoveredBlockId={hoveredBlockId || null}

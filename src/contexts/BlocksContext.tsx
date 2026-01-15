@@ -1,13 +1,15 @@
-import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useRef, MutableRefObject } from 'react';
 import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 import { PlacedBlock } from '@/types/blocks';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserData } from '@/hooks/useUserData';
-import { organizeBlocksByChunk } from '@/lib/chunkManager';
+import { organizeBlocksByChunk, blockToChunkKey } from '@/lib/chunkManager';
 
 interface BlocksContextType {
   blocks: PlacedBlock[];
   blocksByChunk: Map<string, PlacedBlock[]>;
+  /** Ref to visible chunk keys - updated imperatively without React re-renders */
+  visibleChunksRef: MutableRefObject<Set<string>>;
   visualDistance: number;
   fogEnabled: boolean;
   isLoading: boolean;
@@ -24,6 +26,9 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const { profile } = useUserData();
   const blocksHook = usePlacedBlocksWithCache(user?.id || null);
   
+  // Visible chunks ref - updated imperatively by CameraTrackedBlocks, read by InstancedBlockGroup
+  const visibleChunksRef = useRef<Set<string>>(new Set());
+  
   // Organize blocks by chunks for efficient rendering
   const blocksByChunk = useMemo(() => {
     return organizeBlocksByChunk(blocksHook.blocks);
@@ -38,6 +43,7 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const contextValue = {
     ...blocksHook,
     blocksByChunk,
+    visibleChunksRef,
     visualDistance,
     fogEnabled
   };
