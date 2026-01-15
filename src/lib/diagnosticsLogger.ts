@@ -10,7 +10,7 @@ class DiagnosticsLogger {
   buffer = new Float32Array(BUFFER_SIZE * METRICS);
   ticker = 0;
   frameCount = 0;
-  useFrameCallCount = 0;
+  masterFrameCount = 0; // Count of actual master useFrame calls (not callbacks)
   lastSampleTime = 0;
   startTime = 0;
   elapsedSeconds = 0;
@@ -66,7 +66,7 @@ class DiagnosticsLogger {
       this.buffer.fill(0);
       this.ticker = 0;
       this.frameCount = 0;
-      this.useFrameCallCount = 0;
+      this.masterFrameCount = 0;
       this.e1 = 0;
       this.e2 = 0;
       this.e3 = 0;
@@ -93,17 +93,17 @@ class DiagnosticsLogger {
   
   tick() {
     if (!this.enabled) return;
-    this.frameCount++;
+    this.masterFrameCount++; // Track actual frames
     const now = performance.now();
     this.elapsedSeconds = Math.floor((now - this.startTime) / 1000);
     if (now - this.lastSampleTime >= 100) {
       const i = (this.ticker % BUFFER_SIZE) * METRICS;
-      const fps = (this.frameCount / (now - this.lastSampleTime)) * 1000;
+      const fps = (this.masterFrameCount / (now - this.lastSampleTime)) * 1000;
       
-      // Data format: ticker fps useFrameCalls camX camY camZ blocks particles coins E1-E12 T1-T4
+      // Data format: ticker fps masterFrames camX camY camZ blocks particles coins E1-E12 T1-T4
       this.buffer[i] = this.ticker;
       this.buffer[i+1] = fps;
-      this.buffer[i+2] = this.useFrameCallCount;
+      this.buffer[i+2] = this.masterFrameCount; // Now shows actual frames, not callback count
       this.buffer[i+3] = this.cameraX;
       this.buffer[i+4] = this.cameraY;
       this.buffer[i+5] = this.cameraZ;
@@ -129,10 +129,10 @@ class DiagnosticsLogger {
       this.buffer[i+24] = this.timeBlocks;
       
       this.ticker++;
-      this.frameCount = 0;
-      this.useFrameCallCount = 0;
+      this.masterFrameCount = 0;
       this.e1 = 0;
       this.e2 = 0;
+      this.e3 = 0;
       this.e3 = 0;
       this.e4 = 0;
       this.e5 = 0;
@@ -157,7 +157,7 @@ class DiagnosticsLogger {
   print() {
     const n = Math.min(this.ticker, BUFFER_SIZE);
     const lines: string[] = [];
-    lines.push('ticker fps uF camX camY camZ blocks e1 e4 e5 tCtrl tCoin tWF tBlk');
+    lines.push('ticker fps frames camX camY camZ blocks e1 e4 e5 tCtrl tCoin tWF tBlk');
     for (let s = 0; s < n; s++) {
       const i = s * METRICS;
       lines.push(

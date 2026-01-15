@@ -93,7 +93,7 @@ export const PlacedBlocks: React.FC<{
   // Physics update for falling blocks - register with centralized frame loop
   useEffect(() => {
     const unregister = frameLoop.register('placed-blocks', (delta) => {
-      diagnostics.useFrameCallCount++;
+      // Note: useFrameCallCount only tracked in master loop now
       
       if (fallingBlocksState.size === 0) return; // Early exit if nothing falling
       

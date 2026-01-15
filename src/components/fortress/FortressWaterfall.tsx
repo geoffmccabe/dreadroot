@@ -83,24 +83,38 @@ export function Waterfall({
     dropCDFRef.current = dropCDF;
   }, [dropPaletteColors, dropCDF]);
 
-  // Pre-allocated color for pickColor
-  const tempPickColor = useMemo(() => new THREE.Color(), []);
+  // Pre-allocated colors for pickColor - POOL to avoid clone() allocations
+  const colorPoolRef = useRef<THREE.Color[]>([]);
+  const colorPoolIndexRef = useRef(0);
+  const POOL_SIZE = 100;
+  
+  // Initialize color pool once
+  useEffect(() => {
+    colorPoolRef.current = Array.from({ length: POOL_SIZE }, () => new THREE.Color());
+  }, []);
 
   const pickColor = useCallback(() => {
+    // Get color from pool (circular reuse - no allocations!)
+    const pool = colorPoolRef.current;
+    if (pool.length === 0) return new THREE.Color('#ffffff'); // Fallback during init
+    
+    const color = pool[colorPoolIndexRef.current % POOL_SIZE];
+    colorPoolIndexRef.current++;
+    
     const r = Math.random();
     const cdf = dropCDFRef.current;
     const palette = dropPaletteRef.current;
     for (let i = 0; i < cdf.length; i++) {
       if (r <= cdf[i]) {
-        tempPickColor.set(palette[i].hex);
-        tempPickColor.multiplyScalar(0.4);
-        return tempPickColor.clone();
+        color.set(palette[i].hex);
+        color.multiplyScalar(0.4);
+        return color; // Return from pool - no clone!
       }
     }
-    tempPickColor.set(palette[palette.length - 1].hex);
-    tempPickColor.multiplyScalar(0.4);
-    return tempPickColor.clone();
-  }, [tempPickColor]);
+    color.set(palette[palette.length - 1].hex);
+    color.multiplyScalar(0.4);
+    return color; // Return from pool - no clone!
+  }, []);
 
   // Initialize drops array once
   useEffect(() => {
@@ -122,7 +136,7 @@ export function Waterfall({
   // Register with centralized frame loop - STABLE dependencies only
   useEffect(() => {
     const unregister = frameLoop.register('waterfall', (delta) => {
-      diagnostics.useFrameCallCount++;
+      // Note: useFrameCallCount only tracked in master loop now
       
       const mesh = instancedMeshRef.current;
       if (!mesh) return;
