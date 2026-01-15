@@ -237,10 +237,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
     
-    // CRITICAL FIX: Initialize ALL buffer instances to hidden position first
+    // CRITICAL FIX: Initialize ALL allocated instances to hidden position first
     // This prevents uninitialized instances from appearing at origin (0, 0, 0)
+    // Use the mesh's actual instance count from instanceMatrix to stay in bounds
+    const meshInstanceCount = meshRef.current.instanceMatrix.count;
     matrix.setPosition(0, -10000, 0);
-    for (let i = 0; i < bufferSize; i++) {
+    for (let i = 0; i < meshInstanceCount; i++) {
       meshRef.current!.setMatrixAt(i, matrix);
     }
     
@@ -272,7 +274,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     meshRef.current.boundingBox.copy(boundingBox);
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
-  }, [blocks, bufferSize]);
+  }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   // Also track which blocks were falling so we can reset them when they land
