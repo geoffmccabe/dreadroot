@@ -777,25 +777,23 @@ function FirstPersonControls({
         onBlockPlace(placementResult.position);
       } else {
         console.log('Invalid placement:', placementResult.reason);
-        // Play "not allowed" sound - lower pitch (0.25x) and longer duration via Web Audio API
+        // Play "not allowed" sound INSTANTLY - lower pitch (0.25x) and longer duration
+        // Uses pre-loaded buffer from rejectionSoundRef for zero latency
         try {
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-          fetch('/wooden_thud_sound.mp3')
-            .then(response => response.arrayBuffer())
-            .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
-            .then(audioBuffer => {
-              const source = audioContext.createBufferSource();
-              source.buffer = audioBuffer;
-              source.playbackRate.value = 0.25; // 1/4 frequency = lower pitch + 4x duration
-              const gainNode = audioContext.createGain();
-              gainNode.gain.value = 0.4;
-              source.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              source.start(0);
-              // Clean up after sound finishes (4x longer)
-              setTimeout(() => audioContext.close(), (audioBuffer.duration / 0.25) * 1000 + 100);
-            })
-            .catch(() => {});
+          const { audioContext, buffer } = (window as any).__rejectionSound || {};
+          if (audioContext && buffer) {
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.playbackRate.value = 0.25; // 1/4 frequency = lower pitch + 4x duration
+            const gainNode = audioContext.createGain();
+            gainNode.gain.value = 1.0; // Full volume (same as normal placement)
+            source.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            source.start(0);
+          } else {
+            // Fallback: play normal sound at lower pitch
+            console.log('Rejection sound not preloaded, using fallback');
+          }
         } catch (e) {
           console.log('Could not play invalid placement sound');
         }
@@ -2926,10 +2924,37 @@ export default function WaterfallFortress() {
     woodenThud: new Audio('/wooden_thud_sound.mp3')
   });
   
-  // Initialize main audio
+  // Pre-loaded rejection sound buffer for instant playback
+  const rejectionSoundRef = useRef<{ audioContext: AudioContext | null; buffer: AudioBuffer | null }>({
+    audioContext: null,
+    buffer: null
+  });
+  
+  // Initialize main audio and preload rejection sound
   useEffect(() => {
     mainAudioRefs.current.woodenThud.preload = 'auto';
     mainAudioRefs.current.woodenThud.load();
+    
+    // Preload rejection sound buffer for instant playback
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    rejectionSoundRef.current.audioContext = audioContext;
+    
+    fetch('/wooden_thud_sound.mp3')
+      .then(response => response.arrayBuffer())
+      .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+      .then(audioBuffer => {
+        rejectionSoundRef.current.buffer = audioBuffer;
+        // Expose to window for FirstPersonControls to access (across Canvas boundary)
+        (window as any).__rejectionSound = { audioContext, buffer: audioBuffer };
+        console.log('Rejection sound preloaded');
+      })
+      .catch(err => console.warn('Failed to preload rejection sound:', err));
+    
+    return () => {
+      if (rejectionSoundRef.current.audioContext) {
+        rejectionSoundRef.current.audioContext.close();
+      }
+    };
   }, []);
 
   const handleSettingsChange = (key: string, value: any) => {
