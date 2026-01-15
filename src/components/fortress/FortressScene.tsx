@@ -47,35 +47,79 @@ function CameraTrackedBlocks({
   const { camera } = useThree();
   const { blocksByChunk, visualDistance } = useBlocks();
   
-  const cameraPositionRef = useRef({ x: 0, z: 0 });
-  const [visibleChunks, setVisibleChunks] = useState<Set<string>>(new Set());
+  // Use refs to avoid state updates inside useFrame
+  const visibleChunksRef = useRef<Set<string>>(new Set());
   const lastChunkRef = useRef({ x: 0, z: 0 });
+  const lastUpdateTime = useRef(0);
+  const lastVisualDistance = useRef(visualDistance);
   
+  // Trigger for re-renders - only updated via throttled mechanism
+  const [renderTrigger, setRenderTrigger] = useState(0);
+  
+  const CHUNK_UPDATE_THROTTLE = 100; // ms
+  
+  // Recalculate visible chunks when visualDistance changes
+  useEffect(() => {
+    if (visualDistance !== lastVisualDistance.current) {
+      lastVisualDistance.current = visualDistance;
+      
+      const visibleChunkKeys = getVisibleChunkKeys(
+        camera.position.x,
+        camera.position.z,
+        visualDistance
+      );
+      visibleChunksRef.current = new Set(visibleChunkKeys);
+      setRenderTrigger(prev => prev + 1);
+    }
+  }, [visualDistance, camera]);
+  
+  // Initialize visible chunks on mount
+  useEffect(() => {
+    const visibleChunkKeys = getVisibleChunkKeys(
+      camera.position.x,
+      camera.position.z,
+      visualDistance
+    );
+    visibleChunksRef.current = new Set(visibleChunkKeys);
+    lastChunkRef.current = {
+      x: Math.floor(camera.position.x / CHUNK_SIZE),
+      z: Math.floor(camera.position.z / CHUNK_SIZE)
+    };
+    setRenderTrigger(prev => prev + 1);
+  }, []);
+  
+  // Track camera movement - no state updates inside useFrame
   useFrame(() => {
     const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
     const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+    const now = Date.now();
     
-    if (currentChunkX !== lastChunkRef.current.x || 
-        currentChunkZ !== lastChunkRef.current.z) {
-      cameraPositionRef.current = {
-        x: camera.position.x,
-        z: camera.position.z
-      };
+    // Only update when camera crosses chunk boundary AND throttle time has passed
+    if ((currentChunkX !== lastChunkRef.current.x || 
+         currentChunkZ !== lastChunkRef.current.z) &&
+        now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
+      
+      lastUpdateTime.current = now;
       lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
       
+      // Update ref directly (no React re-render yet)
       const visibleChunkKeys = getVisibleChunkKeys(
-        cameraPositionRef.current.x, 
-        cameraPositionRef.current.z, 
+        camera.position.x,
+        camera.position.z,
         visualDistance
       );
-      setVisibleChunks(new Set(visibleChunkKeys));
+      visibleChunksRef.current = new Set(visibleChunkKeys);
+      
+      // Trigger single re-render outside the frame loop
+      setRenderTrigger(prev => prev + 1);
     }
   });
   
+  // Memoize visible blocks based on stable trigger
   const visibleBlocks = useMemo(() => {
     const filtered: PlacedBlock[] = [];
     
-    for (const chunkKey of visibleChunks) {
+    for (const chunkKey of visibleChunksRef.current) {
       const chunksBlocks = blocksByChunk.get(chunkKey);
       if (chunksBlocks) {
         filtered.push(...chunksBlocks);
@@ -83,7 +127,7 @@ function CameraTrackedBlocks({
     }
     
     return filtered;
-  }, [visibleChunks, blocksByChunk, blocks.length, visualDistance]);
+  }, [renderTrigger, blocksByChunk, blocks.length]);
   
   return <PlacedBlocks 
     blocks={visibleBlocks} 
