@@ -48,10 +48,11 @@ export function FPSCounter({ isAdmin = false }: FPSCounterProps) {
       // Update DOM directly for better performance
       const fpsElement = document.getElementById('fps-display');
       if (fpsElement) {
+        const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
         if (isAdmin) {
-          fpsElement.textContent = `FPS: ${globalFps} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] V:[${globalViewDir.x},${globalViewDir.y},${globalViewDir.z}]`;
+          fpsElement.textContent = `FPS: ${globalFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] V:[${globalViewDir.x},${globalViewDir.y},${globalViewDir.z}]`;
         } else {
-          fpsElement.textContent = `FPS: ${globalFps}`;
+          fpsElement.textContent = `FPS: ${globalFps}${dflowText}`;
         }
       }
     }
