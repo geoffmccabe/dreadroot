@@ -777,7 +777,7 @@ function FirstPersonControls({
         onBlockPlace(placementResult.position);
       } else {
         console.log('Invalid placement:', placementResult.reason);
-        // Play "not allowed" sound - 16x faster (1/4 of current 4x), keep low pitch
+        // Play "not allowed" sound - very fast, very low pitch
         try {
           const rejectionData = (window as any).__rejectionSound;
           if (rejectionData?.buffer) {
@@ -790,8 +790,8 @@ function FirstPersonControls({
             
             const source = ctx.createBufferSource();
             source.buffer = rejectionData.buffer;
-            source.playbackRate.value = 16.0; // 16x faster (1/4 the length of 4x = very quick)
-            source.detune.value = -2400; // Keep low pitch (2 octaves down)
+            source.playbackRate.value = 16.0; // 16x faster (very quick)
+            source.detune.value = -4800; // 4 octaves down (25% of previous pitch, counters playbackRate pitch increase)
             const gainNode = ctx.createGain();
             gainNode.gain.value = 1.0; // Same volume
             source.connect(gainNode);

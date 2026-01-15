@@ -422,6 +422,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       .map(item => item.block);
   }, [blocks, shouldGlow, camera.position]);
   
+  if (!material) return null;
+  
   // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
   // Use MAX of current blocks.length + 50 or 100 to handle growth
   const bufferSize = Math.max(blocks.length + 50, 100);
