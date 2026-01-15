@@ -1,4 +1,5 @@
 // Fortress game module exports
+export { Fortress } from './Fortress';
 export { DynamicSky, SkyTexture } from './FortressSky';
 export { DynamicLighting } from './FortressLighting';
 export { Waterfall } from './FortressWaterfall';
