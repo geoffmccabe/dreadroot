@@ -83,6 +83,9 @@ class DiagnosticsLogger {
     }
   }
   
+  lastOutput = '';
+  showOutput = false;
+  
   print() {
     const n = Math.min(this.ticker, BUFFER_SIZE);
     const lines: string[] = [];
@@ -96,9 +99,13 @@ class DiagnosticsLogger {
         `${this.buffer[i+9]} ${this.buffer[i+10]} ${this.buffer[i+11]} ${this.buffer[i+12]}`
       );
     }
-    // Store as global for Lovable to read
-    (window as any).__dflow_output = lines.join('\n');
-    console.log('DFLOW_READY: ' + n + ' samples stored in window.__dflow_output');
+    this.lastOutput = lines.join('\n');
+    this.showOutput = true;
+    console.log('DFLOW_READY: ' + n + ' samples');
+  }
+  
+  dismissOutput() {
+    this.showOutput = false;
   }
 }
 
