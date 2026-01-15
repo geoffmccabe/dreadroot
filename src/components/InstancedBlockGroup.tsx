@@ -260,6 +260,15 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Also track which blocks were falling so we can reset them when they land
   const previouslyFallingRef = useRef<Set<string>>(new Set());
   
+  // Create block ID to index map for O(1) lookups instead of O(n) findIndex
+  const blockIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    blocks.forEach((block, index) => {
+      map.set(block.id, index);
+    });
+    return map;
+  }, [blocks]);
+  
   useFrame((_, delta) => {
     if (!meshRef.current) return;
     
@@ -267,10 +276,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     const matrix = matrixRef.current;
     const currentlyFalling = new Set<string>();
     
-    // Update positions for falling blocks
+    // Update positions for falling blocks - O(1) lookup per block
     fallingBlocksState.forEach((fallState, blockId) => {
-      const blockIndex = blocks.findIndex(b => b.id === blockId);
-      if (blockIndex === -1) return;
+      const blockIndex = blockIndexMap.get(blockId);
+      if (blockIndex === undefined) return;
       
       currentlyFalling.add(blockId);
       
@@ -287,8 +296,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     // Reset blocks that were falling but have now landed to their database position
     previouslyFallingRef.current.forEach(blockId => {
       if (!currentlyFalling.has(blockId)) {
-        const blockIndex = blocks.findIndex(b => b.id === blockId);
-        if (blockIndex !== -1) {
+        const blockIndex = blockIndexMap.get(blockId);
+        if (blockIndex !== undefined) {
           const block = blocks[blockIndex];
           const x = block.position_x + 0.5;
           const y = block.position_y + 0.5; // Use database position

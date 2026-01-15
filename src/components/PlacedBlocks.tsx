@@ -78,15 +78,24 @@ export const PlacedBlocks: React.FC<{
     });
   }, [blocks]);
   
+  // Create block ID to block map for O(1) lookups in useFrame
+  const blocksById = useMemo(() => {
+    const map = new Map<string, PlacedBlock>();
+    blocks.forEach(block => map.set(block.id, block));
+    return map;
+  }, [blocks]);
+  
   // Physics update for falling blocks (no React re-renders, just update state)
   useFrame((state, delta) => {
+    if (fallingBlocksState.size === 0) return; // Early exit if nothing falling
+    
     const gravity = 9.8;
     const maxDelta = 0.1; // Cap delta to prevent physics explosions
     const cappedDelta = Math.min(delta, maxDelta);
     
-    // Apply gravity to falling blocks
+    // Apply gravity to falling blocks - O(1) lookup per block
     fallingBlocksState.forEach((fallState, blockId) => {
-      const block = blocks.find(b => b.id === blockId);
+      const block = blocksById.get(blockId);
       if (!block) return;
       
       // Apply gravity
