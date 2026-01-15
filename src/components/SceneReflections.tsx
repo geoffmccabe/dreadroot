@@ -4,7 +4,7 @@ import * as THREE from 'three';
 
 /**
  * SceneReflections creates a CubeCamera for real-time reflections.
- * The avatar and scene will be reflected in crystal blocks.
+ * The avatar and scene will be reflected in crystal blocks ONLY.
  */
 export function SceneReflections() {
   const { gl, scene, camera } = useThree();
@@ -28,21 +28,7 @@ export function SceneReflections() {
     cubeCamera.current = cam;
     scene.add(cam);
     
-    // Make all reflective surfaces highly reflective for testing
-    scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        const mat = child.material as THREE.MeshStandardMaterial;
-        if (mat && mat.envMapIntensity !== undefined) {
-          // Boost reflection intensity significantly
-          mat.envMapIntensity = 2.0;
-          mat.metalness = Math.max(mat.metalness || 0, 0.5);
-          mat.roughness = Math.min(mat.roughness || 1, 0.3);
-          mat.needsUpdate = true;
-        }
-      }
-    });
-    
-    console.log('✅ CubeCamera initialized for reflections (high quality)');
+    console.log('✅ CubeCamera initialized for crystal block reflections');
     
     return () => {
       scene.remove(cam);
@@ -67,16 +53,18 @@ export function SceneReflections() {
     // Set as scene environment (affects all PBR materials)
     scene.environment = cubeRenderTarget.current.texture;
     
-    // First-time setup: apply env map to all materials
+    // First-time setup: apply env map ONLY to MeshPhysicalMaterial (crystal blocks)
     if (!initialized.current) {
       initialized.current = true;
       scene.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          if (mat && mat.isMeshStandardMaterial) {
+          const mat = child.material as THREE.MeshPhysicalMaterial;
+          // Only target MeshPhysicalMaterial (used for crystal/transparent blocks)
+          if (mat && mat.type === 'MeshPhysicalMaterial') {
             mat.envMap = cubeRenderTarget.current!.texture;
-            mat.envMapIntensity = 2.0;
+            mat.envMapIntensity = 3.0; // High intensity for crystal reflections
             mat.needsUpdate = true;
+            console.log('✅ Applied high-quality env map to crystal material');
           }
         }
       });

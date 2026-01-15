@@ -227,18 +227,18 @@ export const useUserData = () => {
     }
 
     try {
-      // Get item_id from items table
-      const { data: itemData, error: itemError } = await supabase
-        .from('items')
+      // Verify block exists in blocks table (not items table - blocks are separate from items)
+      const { data: blockData, error: blockError } = await supabase
+        .from('blocks')
         .select('id')
         .eq('key', itemType)
         .maybeSingle();
 
-      if (itemError) throw itemError;
-      if (!itemData) {
+      if (blockError) throw blockError;
+      if (!blockData) {
         toast({
-          title: "Item not found",
-          description: "This item is not available",
+          title: "Block not found",
+          description: "This block is not available in the shop",
           variant: "destructive"
         });
         return false;
@@ -267,13 +267,12 @@ export const useUserData = () => {
 
         if (updateError) throw updateError;
       } else {
-        // Create new inventory item with both item_type (legacy) and item_id (new)
+        // Create new inventory item - blocks don't use item_id, only item_type
         const { error: insertError } = await supabase
           .from('user_inventory')
           .insert([{
             user_id: user.id,
             item_type: itemType,
-            item_id: itemData.id,
             quantity: 1
           }]);
 
