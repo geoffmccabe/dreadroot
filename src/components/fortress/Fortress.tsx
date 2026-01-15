@@ -8,6 +8,7 @@ import { BlockPreview } from '@/components/BlockPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
 import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
+import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -687,6 +688,9 @@ export function Fortress() {
       
       {/* Toast notifications */}
       <Toaster />
+      
+      {/* Performance Overlay - Toggle with Shift+P */}
+      <PerformanceOverlay />
     </div>
   );
 }

@@ -290,7 +290,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Register with centralized frame loop
   useEffect(() => {
     const unregister = frameLoop.register(frameLoopId, (delta) => {
-      diagnostics.startTiming();
+      diagnostics.startTiming('blocks');
       
       const mesh = meshRef.current;
       if (!mesh) {
