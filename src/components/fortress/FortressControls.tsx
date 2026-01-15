@@ -16,6 +16,7 @@ import {
   createPlayerBox
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { collisionGrid } from '@/lib/spatialHashGrid';
 
 export function FirstPersonControls({ 
   onShoot, 
@@ -102,6 +103,10 @@ export function FirstPersonControls({
     
     if (needsFullRebuild && blockCollisionCache.current.size > 0) {
       if (DEBUG_LOGGING) console.log('[Colliders] Full cache rebuild');
+      // Remove old block colliders from grid
+      for (const box of blockCollisionCache.current.values()) {
+        collisionGrid.remove(box);
+      }
       blockCollisionCache.current.clear();
     }
     

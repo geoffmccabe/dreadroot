@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { collisionGrid } from '@/lib/spatialHashGrid';
 
 // ============================================================
 // FORTRESS COLLISION UTILITIES
@@ -26,6 +27,7 @@ const _clearanceMax = new THREE.Vector3();
 
 // Cached fortress colliders (never change)
 let _fortressColliders: THREE.Box3[] | null = null;
+let _fortressCollidersInGrid = false;
 
 /**
  * Creates collision boxes for the static fortress structure
@@ -61,12 +63,20 @@ export function createFortressColliders(): THREE.Box3[] {
     )
   ];
   
+  // Add fortress colliders to spatial grid once
+  if (!_fortressCollidersInGrid) {
+    for (const fc of _fortressColliders) {
+      collisionGrid.insert(fc);
+    }
+    _fortressCollidersInGrid = true;
+  }
+  
   return _fortressColliders;
 }
 
 /**
  * Creates and manages collision boxes for placed blocks with caching
- * Uses incremental updates to avoid full rebuilds
+ * Also maintains spatial hash grid for O(1) lookups
  */
 export function createBlockColliders(
   blocks: PlacedBlock[],
@@ -80,6 +90,10 @@ export function createBlockColliders(
   // Remove collision boxes for deleted blocks
   for (const id of cache.keys()) {
     if (!currentBlockIds.has(id)) {
+      const box = cache.get(id);
+      if (box) {
+        collisionGrid.remove(box);
+      }
       cache.delete(id);
     }
   }
@@ -92,6 +106,7 @@ export function createBlockColliders(
         new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
       );
       cache.set(block.id, box);
+      collisionGrid.insert(box);
     }
   }
   
@@ -114,12 +129,13 @@ export function createPlayerBox(
 }
 
 /**
- * Checks for collision on a specific axis with spatial filtering
+ * Checks for collision on a specific axis using spatial hash grid
+ * ZERO ALLOCATIONS in hot path
  * @returns The collider that was hit, or null if no collision
  */
 export function checkAxisCollision(
   pos: THREE.Vector3,
-  colliders: THREE.Box3[],
+  colliders: THREE.Box3[], // kept for API compatibility, not used when grid is populated
   playerRadius: number,
   playerHeight: number,
   isHorizontal: boolean = false
@@ -129,17 +145,36 @@ export function checkAxisCollision(
   // Use pre-allocated player box (no allocations!)
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
   
-  // Spatial filter: only check colliders within 2 units (avoids O(n) on distant blocks)
-  const checkRadius = 2.0;
+  // Use spatial hash grid for O(1) nearby lookup - ZERO allocations
+  const { result: nearbyColliders, count } = collisionGrid.getNearby(pos.x, pos.z, 2);
   
-  for (let i = 0; i < colliders.length; i++) {
-    const collider = colliders[i];
-    diagnostics.e5++; // Track inner loop iterations
-    
-    // Quick spatial reject - skip colliders too far away
-    const dx = pos.x - (collider.min.x + collider.max.x) * 0.5;
-    const dz = pos.z - (collider.min.z + collider.max.z) * 0.5;
-    if (dx * dx + dz * dz > checkRadius * checkRadius + 1) continue;
+  // If grid is empty, fall back to array (should not happen in normal use)
+  if (count === 0 && colliders.length > 0) {
+    // Fallback: check all colliders with spatial filter
+    for (let i = 0; i < colliders.length; i++) {
+      const collider = colliders[i];
+      diagnostics.e5++;
+      
+      const dx = pos.x - (collider.min.x + collider.max.x) * 0.5;
+      const dz = pos.z - (collider.min.z + collider.max.z) * 0.5;
+      if (dx * dx + dz * dz > 9) continue; // 3 unit radius squared
+      
+      if (isHorizontal) {
+        const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.2) && (playerBox.min.y <= collider.max.y + 0.2);
+        if (standingOnBlock) continue;
+      }
+      
+      if (playerBox.intersectsBox(collider)) {
+        return collider;
+      }
+    }
+    return null;
+  }
+  
+  // Use grid results - iterate only nearby colliders
+  for (let i = 0; i < count; i++) {
+    const collider = nearbyColliders[i];
+    diagnostics.e5++;
     
     // For horizontal movement, skip blocks the player is standing on
     if (isHorizontal) {
@@ -156,11 +191,12 @@ export function checkAxisCollision(
 
 /**
  * Finds a valid step-up target when player is blocked horizontally
+ * Uses spatial hash grid for O(1) nearby lookup - ZERO allocations
  * @returns The Y coordinate to step up to, or null if no valid target
  */
 export function findStepUpTarget(
   camera: THREE.Camera,
-  colliders: THREE.Box3[],
+  colliders: THREE.Box3[], // kept for API compatibility
   playerRadius: number,
   playerHeight: number,
   stepUpHeight: number = 0.6,
@@ -171,16 +207,12 @@ export function findStepUpTarget(
   
   const currentFootY = camera.position.y - playerHeight;
   let bestStepUpY: number | null = null;
-  const checkRadius = 2.0;
   
-  for (let i = 0; i < colliders.length; i++) {
-    const collider = colliders[i];
-    
-    // Quick spatial reject
-    const dx = camera.position.x - (collider.min.x + collider.max.x) * 0.5;
-    const dz = camera.position.z - (collider.min.z + collider.max.z) * 0.5;
-    if (dx * dx + dz * dz > checkRadius * checkRadius + 1) continue;
-    
+  // Use spatial hash grid - ZERO allocations
+  const { result: nearbyColliders, count } = collisionGrid.getNearby(camera.position.x, camera.position.z, 2);
+  
+  for (let i = 0; i < count; i++) {
+    const collider = nearbyColliders[i];
     const blockTopY = collider.max.y;
     
     // Block top must be above our feet but within step-up range
@@ -220,16 +252,10 @@ export function findStepUpTarget(
         clearanceBoxRef.set(_clearanceMin, _clearanceMax);
         
         let hasClearance = true;
-        // Check all colliders for clearance (with spatial filter)
-        for (let j = 0; j < colliders.length; j++) {
-          const otherCollider = colliders[j];
+        // Only check nearby colliders for clearance
+        for (let j = 0; j < count; j++) {
+          const otherCollider = nearbyColliders[j];
           if (otherCollider === collider) continue;
-          
-          // Spatial filter for clearance check too
-          const odx = camera.position.x - (otherCollider.min.x + otherCollider.max.x) * 0.5;
-          const odz = camera.position.z - (otherCollider.min.z + otherCollider.max.z) * 0.5;
-          if (odx * odx + odz * odz > checkRadius * checkRadius + 1) continue;
-          
           if (otherCollider.min.y > blockTopY + playerHeight) continue;
           if (otherCollider.max.y < blockTopY) continue;
           
