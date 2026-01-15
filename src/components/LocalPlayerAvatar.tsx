@@ -162,10 +162,15 @@ export function LocalPlayerAvatar() {
     // Get camera direction using reusable vector
     camera.getWorldDirection(cameraDirectionRef.current);
     
-    // Position avatar at camera position (will be offset by group's Y position for eye level)
+    // Calculate actual avatar height based on scale (Y-Bot is ~180 units tall in FBX)
+    // With scale 0.01, avatar is 1.8 units tall. Eye level is roughly 90% of height.
+    const avatarHeight = 180 * avatarConfig.scale * avatarConfig.scaleY; // ~1.8 at scale 0.01
+    const eyeOffset = avatarHeight * 0.9; // Eyes at 90% of height
+    
+    // Position avatar so its eye level matches camera position
     groupRef.current.position.set(
       camera.position.x,
-      camera.position.y - 1.6, // Offset down so avatar eye level matches camera
+      camera.position.y - eyeOffset, // Avatar feet below camera by eye height
       camera.position.z
     );
     
