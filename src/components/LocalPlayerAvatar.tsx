@@ -83,15 +83,13 @@ export function LocalPlayerAvatar() {
     // Ensure camera only renders layer 0 (default)
     camera.layers.set(0);
     
-    // Configure materials and shadows - visible to camera AND shadow camera
+    // Configure materials and shadows - INVISIBLE to local player, visible to shadow camera
     fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        // Keep on default layer 0 so camera can see it
-        child.layers.set(0);
-        // Also enable layer 1 for shadow camera (configured in DynamicLighting)
-        child.layers.enable(1);
+        // Set to layer 1 ONLY - invisible to main camera (layer 0) but visible to shadow camera (layer 1)
+        child.layers.set(1);
         child.castShadow = true;
-        child.receiveShadow = true;
+        child.receiveShadow = false; // Don't receive shadows on self
         
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
