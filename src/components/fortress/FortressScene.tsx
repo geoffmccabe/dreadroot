@@ -172,9 +172,14 @@ export function FortressScene({
     isNight: false
   });
   
-  // Bullet system
+  // Bullet system - use refs to avoid useFrame setState
   const MAX_BULLETS = 20;
-  const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
+  type Bullet = { position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number };
+  const bulletsRef = useRef<Bullet[]>([]);
+  const [bulletRenderTrigger, setBulletRenderTrigger] = useState(0);
+  const lastBulletRender = useRef(0);
+  const BULLET_RENDER_THROTTLE = 50; // ms
+  
   const [showCrosshairs, setShowCrosshairs] = useState(false);
   const [isAiming, setIsAiming] = useState(false);
   
@@ -227,7 +232,12 @@ export function FortressScene({
   );
   const { wispState, wispPositionRef, collectWisp } = useWispBlock(basicBlocks, blocks);
   const wispMeshRef = useRef<THREE.Mesh | null>(null);
-  const [wispParticles, setWispParticles] = useState<WispParticle[]>([]);
+  
+  // Wisp particles - use refs to avoid useFrame setState
+  const wispParticlesRef = useRef<WispParticle[]>([]);
+  const [wispRenderTrigger, setWispRenderTrigger] = useState(0);
+  const lastWispRender = useRef(0);
+  const WISP_RENDER_THROTTLE = 50; // ms
   
   const handleMeshReady = useCallback((blockType: string, mesh: THREE.InstancedMesh | null) => {
     if (mesh) {
@@ -324,7 +334,8 @@ export function FortressScene({
               color: '#' + Math.floor(Math.random() * 16777215).toString(16)
             });
           }
-          setWispParticles(prev => [...prev, ...newParticles]);
+          wispParticlesRef.current.push(...newParticles);
+          setWispRenderTrigger(prev => prev + 1);
           
           playAudio(audioRefs.current.wispBoom);
           setTimeout(() => playAudio(audioRefs.current.wispCheer), 200);
@@ -344,28 +355,33 @@ export function FortressScene({
 
   const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3) => {
     if (await checkWispHit()) return;
-    setBullets(prev => {
-      const newBullets = prev.slice(-MAX_BULLETS + 1);
-      newBullets.push({
-        position: new THREE.Vector3().copy(origin),
-        direction: new THREE.Vector3().copy(direction),
-        speed: 100,
-        life: 3.0
-      });
-      return newBullets;
+    
+    // Modify ref directly - no setState in hot path
+    if (bulletsRef.current.length >= MAX_BULLETS) {
+      bulletsRef.current.shift();
+    }
+    bulletsRef.current.push({
+      position: new THREE.Vector3().copy(origin),
+      direction: new THREE.Vector3().copy(direction),
+      speed: 100,
+      life: 3.0
     });
+    setBulletRenderTrigger(prev => prev + 1);
     setShowCrosshairs(true);
   }, [checkWispHit]);
 
-  // Frame loop for bullets and particles
+  // Frame loop for bullets and particles - NO setState inside!
   useFrame((state, delta) => {
-    setBullets(prev => {
-      if (prev.length === 0) return prev;
-      
-      const activeBullets = [];
+    const now = Date.now();
+    let needsBulletRender = false;
+    let needsWispRender = false;
+    
+    // Update bullets directly in ref
+    if (bulletsRef.current.length > 0) {
       const coins = (window as any).getCoins ? (window as any).getCoins() : [];
+      const activeBullets: Bullet[] = [];
       
-      for (const bullet of prev) {
+      for (const bullet of bulletsRef.current) {
         bullet.position.addScaledVector(bullet.direction, bullet.speed * delta);
         bullet.life -= delta;
         
@@ -384,6 +400,7 @@ export function FortressScene({
                 onCoinHit(coin.position);
                 playAudio(audioRefs.current.coinHit);
                 hit = true;
+                needsBulletRender = true;
                 break;
               }
             }
@@ -392,31 +409,43 @@ export function FortressScene({
           if (!hit) {
             activeBullets.push(bullet);
           }
+        } else {
+          needsBulletRender = true;
         }
       }
       
-      return activeBullets;
-    });
+      bulletsRef.current = activeBullets;
+    }
     
-    // Update wisp particles
-    setWispParticles(prev => {
-      if (prev.length === 0) return prev;
+    // Update wisp particles directly in ref
+    if (wispParticlesRef.current.length > 0) {
+      const activeParticles: WispParticle[] = [];
       
-      return prev
-        .map(particle => ({
-          ...particle,
-          position: particle.position.clone().add(
-            particle.velocity.clone().multiplyScalar(delta)
-          ),
-          velocity: new THREE.Vector3(
-            particle.velocity.x,
-            particle.velocity.y - 9.8 * delta,
-            particle.velocity.z
-          ),
-          life: particle.life - delta
-        }))
-        .filter(particle => particle.life > 0 && particle.position.y > 0);
-    });
+      for (const particle of wispParticlesRef.current) {
+        particle.position.add(particle.velocity.clone().multiplyScalar(delta));
+        particle.velocity.y -= 9.8 * delta;
+        particle.life -= delta;
+        
+        if (particle.life > 0 && particle.position.y > 0) {
+          activeParticles.push(particle);
+        } else {
+          needsWispRender = true;
+        }
+      }
+      
+      wispParticlesRef.current = activeParticles;
+    }
+    
+    // Throttled render triggers - only when something changed
+    if (needsBulletRender && now - lastBulletRender.current > BULLET_RENDER_THROTTLE) {
+      lastBulletRender.current = now;
+      setBulletRenderTrigger(prev => prev + 1);
+    }
+    
+    if (needsWispRender && now - lastWispRender.current > WISP_RENDER_THROTTLE) {
+      lastWispRender.current = now;
+      setWispRenderTrigger(prev => prev + 1);
+    }
   });
 
   return (
@@ -478,7 +507,7 @@ export function FortressScene({
         onGetCoins={() => []}
         coinImageUrl={coinImageUrl}
       />
-      <Bullets bullets={bullets} />
+      <Bullets bullets={bulletsRef.current} />
       
       {wispState && (
         <WispBlock 
@@ -488,7 +517,7 @@ export function FortressScene({
         />
       )}
       
-      {wispParticles.map((particle, i) => (
+      {wispParticlesRef.current.map((particle, i) => (
         <mesh key={i} position={particle.position.toArray()}>
           <sphereGeometry args={[0.1, 8, 8]} />
           <meshBasicMaterial color={particle.color} transparent opacity={particle.life} />

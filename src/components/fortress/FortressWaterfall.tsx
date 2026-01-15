@@ -1,7 +1,9 @@
-import React, { useRef, useEffect, useMemo, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import React, { useRef, useEffect, useMemo, useCallback, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { WaterfallDrop } from './FortressTypes';
+import { useBlocks } from '@/contexts/BlocksContext';
+import { CHUNK_SIZE } from '@/lib/chunkManager';
 
 interface WaterfallProps {
   flowSpeed?: number;
@@ -18,6 +20,13 @@ export function Waterfall({
   const activeDropsRef = useRef<WaterfallDrop[]>([]);
   const timeAccumulatorRef = useRef(0);
   const maxDrops = 500;
+  
+  // Distance culling
+  const { camera } = useThree();
+  const { visualDistance } = useBlocks();
+  const [isVisible, setIsVisible] = useState(true);
+  const lastVisibilityCheck = useRef(0);
+  const VISIBILITY_CHECK_THROTTLE = 200; // ms
 
   const fall = {
     width: 6,
@@ -84,7 +93,22 @@ export function Waterfall({
   const quaternionRef = useRef(new THREE.Quaternion());
 
   useFrame((state, delta) => {
-    if (!instancedMeshRef.current) return;
+    // Check visibility with throttle
+    const now = Date.now();
+    if (now - lastVisibilityCheck.current > VISIBILITY_CHECK_THROTTLE) {
+      lastVisibilityCheck.current = now;
+      const distanceToWaterfall = Math.sqrt(
+        Math.pow(camera.position.x - fall.centerX, 2) +
+        Math.pow(camera.position.z - fall.z, 2)
+      );
+      const maxDistance = visualDistance * CHUNK_SIZE;
+      const shouldBeVisible = distanceToWaterfall <= maxDistance;
+      if (shouldBeVisible !== isVisible) {
+        setIsVisible(shouldBeVisible);
+      }
+    }
+    
+    if (!instancedMeshRef.current || !isVisible) return;
 
     const mul = flowSpeed;
     const msInterval = msBetweeenDrops;
@@ -154,6 +178,9 @@ export function Waterfall({
     }
   });
 
+  // Don't render if too far away
+  if (!isVisible) return null;
+  
   return (
     <instancedMesh
       ref={instancedMeshRef}
