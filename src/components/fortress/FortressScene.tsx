@@ -163,8 +163,10 @@ function CameraTrackedBlocks({
       }
       diagnostics.e4++; // Track chunk update
       
-      // Trigger single re-render outside the frame loop
-      setRenderTrigger(prev => prev + 1);
+      // Defer re-render outside the frame loop to avoid stalling
+      requestAnimationFrame(() => {
+        setRenderTrigger(prev => prev + 1);
+      });
     }
   });
   

@@ -1,4 +1,5 @@
 import React, { useRef, useMemo, useEffect } from 'react';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 import { useFrame, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BlockType } from '@/types/blocks';
@@ -50,9 +51,17 @@ export const WispBlock: React.FC<WispBlockProps> = ({
     };
   }, [onMeshReady]);
 
+  // Track if component is mounted to avoid unnecessary work
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
   // Animate glow and smooth position interpolation
   useFrame((state, delta) => {
-    if (!meshRef.current) return;
+    // Early exit if unmounted or mesh not ready
+    if (!isMountedRef.current || !meshRef.current) return;
     
     // Read target position from ref (no re-renders)
     const targetPos = positionRef.current;
