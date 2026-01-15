@@ -2122,25 +2122,32 @@ function Scene({
   const [showCrosshairs, setShowCrosshairs] = useState(false);
   const [isAiming, setIsAiming] = useState(false);
   
-  // Track shift key for aiming
+  // Track right-click for aiming (standard FPS behavior) - only when gun is equipped
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 2 && crosshairsEnabled) { // Right mouse button + gun equipped
         setIsAiming(true);
       }
     };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) {
         setIsAiming(false);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [crosshairsEnabled]);
+  
+  // Reset aiming when gun is unequipped
+  useEffect(() => {
+    if (!crosshairsEnabled) {
+      setIsAiming(false);
+    }
+  }, [crosshairsEnabled]);
   
   // Audio throttling to prevent rapid-fire audio issues
   const lastAudioTime = useRef(0);
