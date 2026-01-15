@@ -73,10 +73,10 @@ export function FirstPersonArms({ isGunEquipped, isAiming = false }: FirstPerson
     const targetAim = isAiming ? 1 : 0;
     aimProgress.current += (targetAim - aimProgress.current) * 8 * delta;
     
-    // FOV zoom when aiming
+    // FOV zoom when aiming - use damp for smooth exponential easing
     if (camera instanceof THREE.PerspectiveCamera) {
       const targetFov = isAiming ? 50 : 75;
-      camera.fov += (targetFov - camera.fov) * 5 * delta;
+      camera.fov = THREE.MathUtils.damp(camera.fov, targetFov, 8, delta);
       camera.updateProjectionMatrix();
     }
     

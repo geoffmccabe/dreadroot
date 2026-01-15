@@ -381,18 +381,31 @@ function FirstPersonControls({
   
   // Track block IDs to only rebuild colliders when blocks actually change
   const lastBlockIds = useRef<string>('');
+  const lastBlockCount = useRef<number>(0);
 
   // Collision boxes for fortress walls and placed blocks
   const colliders = useMemo(() => {
     // Create stable key from block IDs to avoid rebuilding on every render
     const blockIds = existingBlocks.map(b => b.id).sort().join(',');
     
+    // Detect significant cache invalidation (more than 5% difference or cache mismatch)
+    const blockCountDiff = Math.abs(existingBlocks.length - lastBlockCount.current);
+    const cacheSizeMismatch = blockCollisionCache.current.size !== existingBlocks.length;
+    const needsFullRebuild = blockCountDiff > Math.max(existingBlocks.length * 0.05, 1) || cacheSizeMismatch;
+    
+    // Force clear cache if significant mismatch detected (ghost colliders)
+    if (needsFullRebuild && blockCollisionCache.current.size > 0) {
+      console.log('[Colliders] Full cache rebuild - count mismatch:', blockCollisionCache.current.size, 'vs', existingBlocks.length);
+      blockCollisionCache.current.clear();
+    }
+    
     // Only rebuild if blocks actually changed
-    if (blockIds === lastBlockIds.current && blockCollisionCache.current.size > 0) {
+    if (blockIds === lastBlockIds.current && blockCollisionCache.current.size > 0 && !needsFullRebuild) {
       return Array.from(blockCollisionCache.current.values());
     }
     
     lastBlockIds.current = blockIds;
+    lastBlockCount.current = existingBlocks.length;
     if (DEBUG_LOGGING) {
       console.log('[Colliders] Building colliders with', existingBlocks.length, 'blocks');
     }

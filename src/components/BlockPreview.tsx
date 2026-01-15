@@ -43,11 +43,11 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
     frameCountRef.current++;
     
     // Check if camera moved significantly
-    const cameraMoved = camera.position.distanceToSquared(lastCameraPosRef.current) > 0.0001;
-    const cameraRotated = Math.abs(camera.rotation.y - lastCameraRotRef.current) > 0.005;
+    const cameraMoved = camera.position.distanceToSquared(lastCameraPosRef.current) > 0.001;
+    const cameraRotated = Math.abs(camera.rotation.y - lastCameraRotRef.current) > 0.01;
     
-    // Only recalculate every 3 frames OR if camera moved/rotated significantly
-    const shouldRecalculate = frameCountRef.current % 3 === 0 || cameraMoved || cameraRotated;
+    // Only recalculate every 5 frames OR if camera moved/rotated significantly
+    const shouldRecalculate = frameCountRef.current % 5 === 0 || cameraMoved || cameraRotated;
     
     if (shouldRecalculate || !cachedResultRef.current) {
       const placementResult = calculateBlockPlacement({
