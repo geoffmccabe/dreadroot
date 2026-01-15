@@ -83,12 +83,13 @@ export function LocalPlayerAvatar() {
     // Ensure camera only renders layer 0 (default)
     camera.layers.set(0);
     
-    // Configure materials - layer 1 only (invisible to main camera, visible to shadow camera)
+    // Configure materials - VISIBLE to camera and shadow camera
     fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.layers.set(1); // Invisible to camera (layer 0), visible to shadow camera (layer 1)
+        child.layers.set(0); // Visible to main camera
+        child.layers.enable(1); // Also visible to shadow camera
         child.castShadow = true;
-        child.receiveShadow = false;
+        child.receiveShadow = true;
         
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
@@ -168,8 +169,8 @@ export function LocalPlayerAvatar() {
       camera.position.z
     );
     
-    // Rotate to face same direction as camera
-    const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z);
+    // Rotate to face same direction as camera (add PI because model faces -Z by default)
+    const yaw = Math.atan2(cameraDirectionRef.current.x, cameraDirectionRef.current.z) + Math.PI;
     groupRef.current.rotation.y = yaw;
 
     // Update animations
