@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { Html } from '@react-three/drei';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { AtlasMediaWall } from '@/components/AtlasMediaWall';
 import * as THREE from 'three';
@@ -153,20 +154,51 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
 
     return (
       <group position={[posX, posY, posZ]} rotation={[rotX, rotY + Math.PI, rotZ]}>
-        {/* Main screen plane - visible from both sides */}
+        {/* Main screen plane - black background */}
         <mesh position={[0, 0, 0.01]}>
           <planeGeometry args={[18, 12]} />
           <meshBasicMaterial color="#000000" side={THREE.DoubleSide} />
         </mesh>
         
-        {/* Screen content - Live website or fallback - visible from both sides */}
-        <mesh position={[0, 1, 0.02]}>
-          <planeGeometry args={[17, 10]} />
-          <meshBasicMaterial 
-            map={iframeTexture || fallbackTexture}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+        {/* Live website iframe using Html from drei */}
+        {currentUrl?.url && (
+          <Html
+            position={[0, 1, 0.02]}
+            transform
+            occlude
+            style={{
+              width: '1700px',
+              height: '1000px',
+              background: '#1e293b',
+              borderRadius: '8px',
+              overflow: 'hidden',
+            }}
+            distanceFactor={0.1}
+          >
+            <iframe
+              src={currentUrl.url}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                background: 'white',
+              }}
+              title="Embedded Website"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+            />
+          </Html>
+        )}
+        
+        {/* Fallback when no URL */}
+        {!currentUrl?.url && (
+          <mesh position={[0, 1, 0.02]}>
+            <planeGeometry args={[17, 10]} />
+            <meshBasicMaterial 
+              map={fallbackTexture}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        )}
         
         {/* URL buttons at bottom - visible from both sides */}
         <group position={[-6.75, -4.5, 0.03]}>
