@@ -29,11 +29,6 @@ const _clearanceMax = new THREE.Vector3();
 let _fortressColliders: THREE.Box3[] | null = null;
 let _fortressCollidersInGrid = false;
 
-// Collision throttling - run every 2nd frame
-let _collisionFrame = 0;
-let _lastCollisionResult: THREE.Box3 | null = null;
-let _lastStepUpResult: number | null = null;
-
 /**
  * Creates collision boxes for the static fortress structure
  * Cached after first call since fortress never changes
@@ -144,14 +139,9 @@ export function checkAxisCollision(
   playerRadius: number,
   playerHeight: number,
   isHorizontal: boolean = false,
-  forceCheck: boolean = false // Force check even on throttled frames
+  forceCheck: boolean = false // kept for API compatibility
 ): THREE.Box3 | null {
-  // Throttle collision to every 2nd frame (unless forced)
-  _collisionFrame++;
-  if (!forceCheck && (_collisionFrame & 1) === 0) {
-    return _lastCollisionResult;
-  }
-  
+  // NO THROTTLING - collision must be checked every frame for reliable physics
   diagnostics.e1++;
   
   // Use pre-allocated player box (no allocations!)
@@ -178,11 +168,9 @@ export function checkAxisCollision(
       }
       
       if (playerBox.intersectsBox(collider)) {
-        _lastCollisionResult = collider;
         return collider;
       }
     }
-    _lastCollisionResult = null;
     return null;
   }
   
@@ -198,11 +186,9 @@ export function checkAxisCollision(
     }
     
     if (playerBox.intersectsBox(collider)) {
-      _lastCollisionResult = collider;
       return collider;
     }
   }
-  _lastCollisionResult = null;
   return null;
 }
 
@@ -219,13 +205,9 @@ export function findStepUpTarget(
   stepUpHeight: number = 0.6,
   playerBoxRef: THREE.Box3,
   clearanceBoxRef: THREE.Box3,
-  forceCheck: boolean = false
+  forceCheck: boolean = false // kept for API compatibility
 ): number | null {
-  // Throttle step-up checks to every 2nd frame (unless forced)
-  if (!forceCheck && (_collisionFrame & 1) === 0) {
-    return _lastStepUpResult;
-  }
-  
+  // NO THROTTLING - step-up must be checked every frame for reliable physics
   diagnostics.e2++;
   
   const currentFootY = camera.position.y - playerHeight;
@@ -297,7 +279,6 @@ export function findStepUpTarget(
     }
   }
   
-  _lastStepUpResult = bestStepUpY;
   return bestStepUpY;
 }
 
