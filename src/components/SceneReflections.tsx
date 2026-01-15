@@ -42,12 +42,13 @@ export function SceneReflections() {
     
     frameCount.current++;
     
-    // Update only every 15 frames for performance (was every 3)
-    if (frameCount.current % 15 !== 0) return;
+    // Update only every 60 frames (once per second at 60fps) - CubeCamera.update() is VERY expensive
+    // It renders the entire scene 6 times (one for each cube face)
+    if (frameCount.current % 60 !== 0) return;
     
-    // Skip if camera hasn't moved significantly
+    // Skip if camera hasn't moved significantly (at least 5 units)
     const cameraMovedSq = camera.position.distanceToSquared(lastCameraPos.current);
-    if (cameraMovedSq < 1) return; // Less than 1 unit moved
+    if (cameraMovedSq < 25) return;
     
     lastCameraPos.current.copy(camera.position);
     
