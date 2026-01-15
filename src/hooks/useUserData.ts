@@ -220,89 +220,8 @@ export const useUserData = () => {
     };
   }, [user?.id, currentTheme?.id]);
 
-  // Purchase queue to handle rapid purchases sequentially
-  const purchaseQueueRef = useRef<Array<{ itemType: string; cost: number; resolve: (value: boolean) => void }>>([]);
-  const isProcessingPurchaseRef = useRef(false);
-  
-  const processPurchaseQueue = useCallback(async () => {
-    if (isProcessingPurchaseRef.current || purchaseQueueRef.current.length === 0) return;
-    
-    isProcessingPurchaseRef.current = true;
-    
-    while (purchaseQueueRef.current.length > 0) {
-      const purchase = purchaseQueueRef.current.shift()!;
-      const { itemType, cost, resolve } = purchase;
-      
-      try {
-        // Get FRESH state from refs
-        const currentBalance = tokenBalanceRef.current;
-        
-        if (!currentBalance || currentBalance.coins < cost) {
-          resolve(false);
-          continue;
-        }
-        
-        const newCoinAmount = currentBalance.coins - cost;
-        
-        // Optimistic update for THIS purchase
-        setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
-        setInventory(prev => {
-          const existingItem = prev.find(item => item.item_type === itemType || item.item_id === itemType);
-          if (existingItem) {
-            return prev.map(item => 
-              item.id === existingItem.id 
-                ? { ...item, quantity: item.quantity + 1 }
-                : item
-            );
-          } else {
-            const tempId = `temp-${Date.now()}-${Math.random()}`;
-            return [...prev, {
-              id: tempId,
-              user_id: user!.id,
-              item_type: itemType,
-              item_id: null,
-              quantity: 1,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            }];
-          }
-        });
-        
-        // Sync to database
-        await supabase
-          .from('user_token_balances')
-          .update({ coins: newCoinAmount })
-          .eq('user_id', user!.id)
-          .eq('token_theme_id', currentTheme!.id);
-        
-        // Get current inventory item (may have been created by previous purchase)
-        const { data: existingInvItem } = await supabase
-          .from('user_inventory')
-          .select('*')
-          .eq('user_id', user!.id)
-          .eq('item_type', itemType)
-          .maybeSingle();
-        
-        if (existingInvItem) {
-          await supabase
-            .from('user_inventory')
-            .update({ quantity: existingInvItem.quantity + 1 })
-            .eq('id', existingInvItem.id);
-        } else {
-          await supabase
-            .from('user_inventory')
-            .insert([{ user_id: user!.id, item_type: itemType, quantity: 1 }]);
-        }
-        
-        resolve(true);
-      } catch (error) {
-        console.error('Purchase error:', error);
-        resolve(false);
-      }
-    }
-    
-    isProcessingPurchaseRef.current = false;
-  }, [user?.id, currentTheme?.id]);
+  // Rapid purchase handling - use mutex to serialize but process quickly
+  const purchaseMutexRef = useRef(false);
   
   const buyBlock = async (itemType: string, cost: number): Promise<boolean> => {
     if (!user?.id || !currentTheme?.id) {
@@ -314,29 +233,111 @@ export const useUserData = () => {
       return false;
     }
 
-    // Check balance immediately using ref
-    const currentBalance = tokenBalanceRef.current;
-    if (!currentBalance || currentBalance.coins < cost) {
-      toast({
-        title: "Insufficient coins",
-        description: `You need ${cost} coins to buy this block`,
-        variant: "destructive"
-      });
-      return false;
+    // Wait for any pending purchase to complete (but don't block UI)
+    while (purchaseMutexRef.current) {
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
-    
-    // Queue this purchase and process
-    return new Promise((resolve) => {
-      purchaseQueueRef.current.push({ itemType, cost, resolve });
-      processPurchaseQueue();
+    purchaseMutexRef.current = true;
+
+    try {
+      // Get FRESH balance from ref
+      const currentBalance = tokenBalanceRef.current;
+      if (!currentBalance || currentBalance.coins < cost) {
+        toast({
+          title: "Insufficient coins",
+          description: `You need ${cost} coins to buy this block`,
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      const newCoinAmount = currentBalance.coins - cost;
       
+      // OPTIMISTIC UPDATE - update UI immediately
+      setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+      setInventory(prev => {
+        const existingItem = prev.find(item => item.item_type === itemType || item.item_id === itemType);
+        if (existingItem) {
+          return prev.map(item => 
+            item.id === existingItem.id 
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        } else {
+          const tempId = `temp-${Date.now()}-${Math.random()}`;
+          return [...prev, {
+            id: tempId,
+            user_id: user.id,
+            item_type: itemType,
+            item_id: null,
+            quantity: 1,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }];
+        }
+      });
+
+      // Sync to database
+      const { error: coinsError } = await supabase
+        .from('user_token_balances')
+        .update({ coins: newCoinAmount })
+        .eq('user_id', user.id)
+        .eq('token_theme_id', currentTheme.id);
+
+      if (coinsError) throw coinsError;
+
+      // Get current inventory from database
+      const { data: existingInvItem } = await supabase
+        .from('user_inventory')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('item_type', itemType)
+        .maybeSingle();
+
+      if (existingInvItem) {
+        const { error: updateError } = await supabase
+          .from('user_inventory')
+          .update({ quantity: existingInvItem.quantity + 1 })
+          .eq('id', existingInvItem.id);
+        if (updateError) throw updateError;
+      } else {
+        const { data: newItem, error: insertError } = await supabase
+          .from('user_inventory')
+          .insert([{ user_id: user.id, item_type: itemType, quantity: 1 }])
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        
+        // Replace temp item with real item
+        if (newItem) {
+          setInventory(prev => prev.map(item => 
+            item.id.startsWith('temp-') && item.item_type === itemType
+              ? { ...newItem } as UserInventoryItem
+              : item
+          ));
+        }
+      }
+
       toast({
         title: "Purchase successful!",
         description: `You bought 1 ${itemType} for ${cost} coins`,
         duration: 2000,
       });
-    });
-
+      
+      return true;
+    } catch (error) {
+      console.error('Error buying block:', error);
+      // Reload fresh data on error
+      await loadUserData();
+      toast({
+        title: "Purchase failed",
+        description: "Failed to complete purchase",
+        variant: "destructive"
+      });
+      return false;
+    } finally {
+      purchaseMutexRef.current = false;
+    }
   };
 
   const useBlock = async (itemKey: string) => {
