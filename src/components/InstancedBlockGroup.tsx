@@ -213,6 +213,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [onMeshReady]);
   
+  // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
+  // Use MAX of current blocks.length + 50 or 100 to handle growth
+  const bufferSize = Math.max(blocks.length + 50, 100);
+  
   useEffect(() => {
     if (!meshRef.current) return;
     
@@ -233,6 +237,14 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
     
+    // CRITICAL FIX: Initialize ALL buffer instances to hidden position first
+    // This prevents uninitialized instances from appearing at origin (0, 0, 0)
+    matrix.setPosition(0, -10000, 0);
+    for (let i = 0; i < bufferSize; i++) {
+      meshRef.current!.setMatrixAt(i, matrix);
+    }
+    
+    // Now position the actual blocks
     blocks.forEach((block, i) => {
       // Always use database position for initial matrix setup
       // Falling blocks will be updated in useFrame
@@ -260,7 +272,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     meshRef.current.boundingBox.copy(boundingBox);
     boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
-  }, [blocks]);
+  }, [blocks, bufferSize]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   // Also track which blocks were falling so we can reset them when they land
@@ -538,9 +550,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   if (!material) return null;
   
-  // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
-  // Use MAX of current blocks.length + 50 or 100 to handle growth
-  const bufferSize = Math.max(blocks.length + 50, 100);
 
   return (
     <>
