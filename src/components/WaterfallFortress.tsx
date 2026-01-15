@@ -2092,6 +2092,27 @@ function Scene({
   const MAX_BULLETS = 20; // Limit bullets to prevent memory issues
   const [bullets, setBullets] = useState<Array<{ position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number }>>([]);
   const [showCrosshairs, setShowCrosshairs] = useState(false);
+  const [isAiming, setIsAiming] = useState(false);
+  
+  // Track shift key for aiming
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        setIsAiming(true);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        setIsAiming(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
   
   // Audio throttling to prevent rapid-fire audio issues
   const lastAudioTime = useRef(0);
@@ -2563,7 +2584,7 @@ function Scene({
       <LocalPlayerAvatar />
       
       {/* First-person arms and gun when equipped */}
-      <FirstPersonArms isGunEquipped={crosshairsEnabled} />
+      <FirstPersonArms isGunEquipped={crosshairsEnabled} isAiming={isAiming} />
       
       {/* CubeCamera for real-time reflections (avatar in crystal blocks) */}
       <SceneReflections />
