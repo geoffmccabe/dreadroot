@@ -163,17 +163,16 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
         {/* Live website iframe using Html from drei */}
         {currentUrl?.url && (
           <Html
-            position={[0, 1, 0.02]}
+            position={[0, 1, 0.05]}
             transform
-            occlude
+            scale={0.02}
             style={{
-              width: '1700px',
-              height: '1000px',
+              width: '850px',
+              height: '500px',
               background: '#1e293b',
-              borderRadius: '8px',
+              borderRadius: '4px',
               overflow: 'hidden',
             }}
-            distanceFactor={0.1}
           >
             <iframe
               src={currentUrl.url}
@@ -184,7 +183,7 @@ const BillboardWalls: React.FC<BillboardWallsProps> = ({ wallPositions, isMoveMo
                 background: 'white',
               }}
               title="Embedded Website"
-              sandbox="allow-scripts allow-same-origin allow-forms"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             />
           </Html>
         )}
