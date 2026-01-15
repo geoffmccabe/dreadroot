@@ -85,18 +85,20 @@ class DiagnosticsLogger {
   
   print() {
     const n = Math.min(this.ticker, BUFFER_SIZE);
-    console.log('===DFLOW_START===');
-    console.log('ticker fps useFrame camX camY camZ blocks particles coins e1 e2 e3 e4');
+    const lines: string[] = [];
+    lines.push('ticker fps useFrame camX camY camZ blocks particles coins e1 e2 e3 e4');
     for (let s = 0; s < n; s++) {
       const i = s * METRICS;
-      console.log(
+      lines.push(
         `${this.buffer[i]} ${this.buffer[i+1].toFixed(0)} ${this.buffer[i+2]} ` +
         `${this.buffer[i+3].toFixed(0)} ${this.buffer[i+4].toFixed(0)} ${this.buffer[i+5].toFixed(0)} ` +
         `${this.buffer[i+6]} ${this.buffer[i+7]} ${this.buffer[i+8]} ` +
         `${this.buffer[i+9]} ${this.buffer[i+10]} ${this.buffer[i+11]} ${this.buffer[i+12]}`
       );
     }
-    console.log('===DFLOW_END===');
+    // Store as global for Lovable to read
+    (window as any).__dflow_output = lines.join('\n');
+    console.log('DFLOW_READY: ' + n + ' samples stored in window.__dflow_output');
   }
 }
 
