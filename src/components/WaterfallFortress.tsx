@@ -2563,8 +2563,7 @@ function Scene({
       {/* Dynamic Lighting with weather cycle */}
       <DynamicLighting cycleStateRef={cycleStateRef} />
       
-      {/* Environment for reflections on metallic/crystal blocks */}
-      <Environment preset="sunset" background={false} />
+      {/* Removed Environment preset - it showed fake reflections (yellow house/trees) */}
 
       {/* Dynamic Sky with day/night cycle and stars */}
       <DynamicSky weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
