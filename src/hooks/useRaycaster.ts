@@ -71,12 +71,14 @@ export const useRaycaster = () => {
     if (intersections.length === 0) return null;
     
     const first = intersections[0];
-    // Reuse result object instead of creating new one
-    resultRef.current.object = first.object;
-    resultRef.current.instanceId = first.instanceId;
-    resultRef.current.distance = first.distance;
-    resultRef.current.point.copy(first.point);
-    return resultRef.current;
+    // Return a new object since callers may store/compare the result
+    // This is acceptable for click-based raycasting (infrequent)
+    return {
+      object: first.object,
+      instanceId: first.instanceId,
+      distance: first.distance,
+      point: first.point.clone()
+    };
   };
 
   /**
