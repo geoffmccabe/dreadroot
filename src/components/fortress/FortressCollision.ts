@@ -29,6 +29,11 @@ const _clearanceMax = new THREE.Vector3();
 let _fortressColliders: THREE.Box3[] | null = null;
 let _fortressCollidersInGrid = false;
 
+// Function to reset grid state when grid is cleared externally
+export function resetFortressGridState(): void {
+  _fortressCollidersInGrid = false;
+}
+
 /**
  * Creates collision boxes for the static fortress structure
  * Cached after first call since fortress never changes
