@@ -377,8 +377,9 @@ export function Fortress() {
     if (mode === 'building') {
       const availableItem = availableItems[0];
       if (availableItem && availableItem.quantity > 0) {
-        const itemKey = availableItem.item_id || availableItem.item_type;
-        setSelectedBlockType(itemKey);
+        // IMPORTANT: Use item_type (block key like 'grass_block') NOT item_id (UUID)
+        // item_id is a database UUID, item_type is the block type key used for rendering
+        setSelectedBlockType(availableItem.item_type);
         setCrosshairsEnabled(false);
         setBlockPlacementMode(true);
         setBlockMode(true);
