@@ -33,11 +33,7 @@ export function Waterfall({
   colorPalette,
   enabled = true 
 }: WaterfallProps) {
-  // If disabled, render nothing (saves all processing)
-  if (!enabled) {
-    return null;
-  }
-
+  // All hooks MUST be called unconditionally at the top (React rules)
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const activeDropsRef = useRef<WaterfallDrop[]>([]);
   const timeAccumulatorRef = useRef(0);
@@ -49,11 +45,13 @@ export function Waterfall({
   const visualDistanceRef = useRef(visualDistance);
   const flowSpeedRef = useRef(flowSpeed);
   const msBetweeenDropsRef = useRef(msBetweeenDrops);
+  const enabledRef = useRef(enabled);
   
   // Update refs when props change
   useEffect(() => { visualDistanceRef.current = visualDistance; }, [visualDistance]);
   useEffect(() => { flowSpeedRef.current = flowSpeed; }, [flowSpeed]);
   useEffect(() => { msBetweeenDropsRef.current = msBetweeenDrops; }, [msBetweeenDrops]);
+  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
   
   // Visibility as ref (no state updates in frame loop!)
   const isVisibleRef = useRef(true);
@@ -143,7 +141,8 @@ export function Waterfall({
   // Register with centralized frame loop - STABLE dependencies only
   useEffect(() => {
     const unregister = frameLoop.register('waterfall', (delta) => {
-      // Note: useFrameCallCount only tracked in master loop now
+      // Skip all processing if disabled
+      if (!enabledRef.current) return;
       
       const mesh = instancedMeshRef.current;
       if (!mesh) return;
@@ -230,6 +229,11 @@ export function Waterfall({
 
     return unregister;
   }, [camera, pickColor]); // Only stable deps: camera object and pickColor (which only depends on tempPickColor)
+
+  // Render nothing if disabled, but hooks are still called above (React rules compliant)
+  if (!enabled) {
+    return null;
+  }
 
   return (
     <instancedMesh
