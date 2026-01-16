@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useTokenTheme } from '@/contexts/TokenThemeContext';
 import { Textarea } from '@/components/ui/textarea';
 import { AvatarPanel } from '@/components/AvatarPanel';
+import { WorldsList } from '@/components/WorldsList';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -2343,13 +2344,14 @@ export function AdminPanel({
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-6 flex-shrink-0">
+          <TabsList className="grid w-full grid-cols-7 flex-shrink-0">
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
             <TabsTrigger value="weather">Weather</TabsTrigger>
             <TabsTrigger value="models">Models</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
+            <TabsTrigger value="worlds">Worlds</TabsTrigger>
           </TabsList>
 
           <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
@@ -2399,6 +2401,12 @@ export function AdminPanel({
           <TabsContent value="blocks" className="mt-4 flex-1 overflow-hidden">
             <ScrollArea className="h-full pr-4">
               <BlocksList userRoles={userRoles} />
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="worlds" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-full pr-4">
+              <WorldsList />
             </ScrollArea>
           </TabsContent>
         </Tabs>

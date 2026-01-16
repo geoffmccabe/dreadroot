@@ -17,14 +17,21 @@ export interface MultiplayerState {
   isConnected: boolean;
 }
 
-export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerState {
+// worldId parameter scopes multiplayer by world - prevents cross-world visibility
+export function useMultiplayer(worldId: string | null): MultiplayerState {
   const [players, setPlayers] = useState<Map<string, PlayerState>>(new Map());
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const isSettingUpRef = useRef(false);
+  const currentWorldIdRef = useRef(worldId);
+
+  // Track world changes
+  useEffect(() => {
+    currentWorldIdRef.current = worldId;
+  }, [worldId]);
 
   useEffect(() => {
-    if (isSettingUpRef.current) return;
+    if (isSettingUpRef.current || !worldId) return;
     
     const setupMultiplayer = async () => {
       isSettingUpRef.current = true;
@@ -34,7 +41,8 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
         return;
       }
 
-      // Create channel for this room
+      // Create channel scoped by world ID - prevents cross-world player visibility
+      const roomId = `world:${worldId}`;
       const multiplayerChannel = supabase.channel(`room:${roomId}`, {
         config: {
           presence: {
@@ -117,7 +125,7 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
         supabase.removeChannel(channel);
       }
     };
-  }, []);
+  }, [worldId]); // Re-run when world changes
 
   // Pre-allocated objects for broadcastPosition to avoid GC
   const broadcastPayload = useRef({

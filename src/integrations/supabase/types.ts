@@ -288,6 +288,8 @@ export type Database = {
       placed_blocks: {
         Row: {
           block_type: string
+          chunk_x: number | null
+          chunk_z: number | null
           created_at: string
           expires_at: string | null
           id: string
@@ -296,9 +298,12 @@ export type Database = {
           position_z: number
           updated_at: string
           user_id: string
+          world_id: string
         }
         Insert: {
           block_type?: string
+          chunk_x?: number | null
+          chunk_z?: number | null
           created_at?: string
           expires_at?: string | null
           id?: string
@@ -307,9 +312,12 @@ export type Database = {
           position_z: number
           updated_at?: string
           user_id: string
+          world_id: string
         }
         Update: {
           block_type?: string
+          chunk_x?: number | null
+          chunk_z?: number | null
           created_at?: string
           expires_at?: string | null
           id?: string
@@ -318,8 +326,17 @@ export type Database = {
           position_z?: number
           updated_at?: string
           user_id?: string
+          world_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "placed_blocks_world_fk"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       screen_urls: {
         Row: {
@@ -571,6 +588,39 @@ export type Database = {
           token_theme_id?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      worlds: {
+        Row: {
+          created_at: string
+          fortress_texture_url: string | null
+          ground_texture_url: string | null
+          id: string
+          is_default: boolean
+          name: string
+          sky_texture_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fortress_texture_url?: string | null
+          ground_texture_url?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          sky_texture_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fortress_texture_url?: string | null
+          ground_texture_url?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          sky_texture_url?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

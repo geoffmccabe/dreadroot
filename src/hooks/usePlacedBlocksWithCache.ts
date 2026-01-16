@@ -55,7 +55,8 @@ const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
   return true;
 };
 
-export const usePlacedBlocksWithCache = (userId: string | null) => {
+// Now accepts worldId for multi-world support
+export const usePlacedBlocksWithCache = (userId: string | null, worldId: string | null) => {
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -68,8 +69,12 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     getUnsyncedBlocks,
     markAsSynced,
     updateBlock,
-    init: initDB
+    init: initDB,
+    clearAllBlocks
   } = useIndexedDB();
+  
+  // Track current world for cache scoping
+  const currentWorldIdRef = useRef<string | null>(worldId);
 
   // Track previous blocks to prevent unnecessary updates
   const prevBlocksRef = useRef<PlacedBlock[]>([]);
@@ -123,7 +128,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
   }, []);
 
   const syncWithSupabase = useCallback(async (force = false) => {
-    if (syncingRef.current) return;
+    if (syncingRef.current || !worldId) return;
     
     // Debounce: Skip if synced recently (unless forced)
     const now = Date.now();
@@ -138,9 +143,12 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       // Load blocks from IndexedDB first (instant)
       const cachedBlocks = await getAllBlocks();
       
+      // Filter cached blocks by world_id
+      const worldCachedBlocks = cachedBlocks.filter((b: any) => b.world_id === worldId);
+      
       // Filter out expired blocks from cache
       const nowTime = new Date();
-      const activeCachedBlocks = cachedBlocks
+      const activeCachedBlocks = worldCachedBlocks
         .filter(block => !block.expires_at || new Date(block.expires_at) > nowTime)
         .map(block => ({
           id: block.id,
@@ -156,10 +164,11 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       setBlocksIfChanged(activeCachedBlocks);
 
       
-      // Get all blocks from Supabase
+      // Get all blocks from Supabase filtered by world_id
       const { data: supabaseBlocks, error } = await supabase
         .from('placed_blocks')
-        .select('*');
+        .select('*')
+        .eq('world_id', worldId);
 
       if (error) throw error;
 
@@ -195,10 +204,10 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     } finally {
       syncingRef.current = false;
     }
-  }, []);
+  }, [worldId]);
 
   const initializeCache = useCallback(async () => {
-    if (!userId) {
+    if (!userId || !worldId) {
       setIsLoading(false);
       return;
     }
@@ -209,9 +218,12 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       
       const cachedBlocks = await getAllBlocks();
       
+      // Filter by world_id for multi-world support
+      const worldCachedBlocks = cachedBlocks.filter((b: any) => b.world_id === worldId);
+      
       // Filter out expired blocks from cache
       const initTime = new Date();
-      const activeInitBlocks = cachedBlocks
+      const activeInitBlocks = worldCachedBlocks
         .filter(block => !block.expires_at || new Date(block.expires_at) > initTime)
         .map((block: any) => ({
           id: block.id,
@@ -233,17 +245,21 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     } finally {
       setIsLoading(false);
     }
-  }, [userId, syncWithSupabase]);
+  }, [userId, worldId, syncWithSupabase]);
 
   const setupRealtimeSubscription = useCallback(() => {
+    if (!worldId) return () => {};
+    
+    // Scoped channel name by world_id to prevent cross-world updates
     const channel = supabase
-      .channel('placed_blocks_changes')
+      .channel(`placed_blocks_${worldId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'placed_blocks'
+          table: 'placed_blocks',
+          filter: `world_id=eq.${worldId}` // CRITICAL: Filter by world_id
         },
         async (payload) => {
           if (payload.eventType === 'INSERT') {
@@ -254,7 +270,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
               return;
             }
             
-            // Add to IndexedDB
+            // Add to IndexedDB with world_id
             const dbBlock: DBBlock = { ...newBlock, synced: true };
             await addBlock(dbBlock);
             
@@ -297,10 +313,19 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [worldId]);
+
+  // Clear blocks when world changes
+  useEffect(() => {
+    if (currentWorldIdRef.current !== worldId) {
+      // World changed - clear state immediately before loading new world
+      setBlocks([]);
+      currentWorldIdRef.current = worldId;
+    }
+  }, [worldId]);
 
   useEffect(() => {
-    if (userId) {
+    if (userId && worldId) {
       initializeCache();
     } else {
       setIsLoading(true);
@@ -309,7 +334,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     
     const cleanup = setupRealtimeSubscription();
     return cleanup;
-  }, [userId, initializeCache, setupRealtimeSubscription]);
+  }, [userId, worldId, initializeCache, setupRealtimeSubscription]);
 
   // Periodic check to filter expired blocks from state (every 5 seconds)
   // This ensures blocks disappear within 5-10 seconds of expiring without FPS impact
@@ -368,6 +393,11 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       return null;
     }
 
+    if (!worldId) {
+      console.error('No world selected');
+      return null;
+    }
+
     // Check for duplicate position FIRST before doing anything
     const isDuplicate = blocks.some(block => 
       block.position_x === x && 
@@ -380,10 +410,11 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     // Generate temporary ID for instant feedback
     const tempId = `temp-${Date.now()}-${Math.random()}`;
     
-    // Create optimistic block
+    // Create optimistic block with world_id
     const optimisticBlock: any = {
       id: tempId,
       user_id: cachedUserId,
+      world_id: worldId, // Include world_id
       position_x: x,
       position_y: y,
       position_z: z,
@@ -415,7 +446,7 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
     }).catch(() => {});
 
     return optimisticBlock;
-  }, [blocks, userId, toast, setBlocksIfChanged, addBlock]);
+  }, [blocks, userId, worldId, toast, setBlocksIfChanged, addBlock]);
 
   // PHASE 1: Sync a single block to Supabase (uses cached user, fire-and-forget)
   const syncBlockToSupabase = useCallback(async (dbBlock: DBBlock) => {
@@ -436,12 +467,17 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       if (dbBlock.expires_at) {
         blockData.expires_at = dbBlock.expires_at;
       }
+      
+      // Add world_id if present
+      if ((dbBlock as any).world_id) {
+        blockData.world_id = (dbBlock as any).world_id;
+      }
 
-      // Use upsert to handle conflicts gracefully
+      // Use upsert to handle conflicts gracefully - now world-scoped
       const { data, error } = await supabase
         .from('placed_blocks')
         .upsert(blockData, {
-          onConflict: 'position_x,position_y,position_z',
+          onConflict: 'world_id,position_x,position_y,position_z',
           ignoreDuplicates: false
         })
         .select()
