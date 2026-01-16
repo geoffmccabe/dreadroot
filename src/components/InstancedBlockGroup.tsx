@@ -234,10 +234,13 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         mesh.setMatrixAt(i, matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
-      mesh.count = 0; // Start with 0 visible instances
+      // Don't set count to 0 - let the useEffect handle count based on blocks.length
       
       meshInitializedRef.current = true;
       lastBufferSizeRef.current = bufferSize;
+      
+      // Force the blocks useEffect to re-run by clearing the prev key
+      prevBlockIdsRef.current = '';
     }
   }, [bufferSize]);
   
