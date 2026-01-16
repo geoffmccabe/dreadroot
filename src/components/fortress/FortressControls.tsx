@@ -85,6 +85,8 @@ export function FirstPersonControls({
   // Throttle ref for hover detection (avoid per-frame setState!)
   const lastHoverCheckRef = useRef(0);
   
+  // Stuck detection
+  const stuckFrameCountRef = useRef(0);
   // Use blocks from props
   const existingBlocks = blocks;
   
@@ -580,8 +582,31 @@ export function FirstPersonControls({
       
       const currentColliders = collidersRef.current;
       
-      // UNSTUCK CHECK: If player is currently INSIDE a block, push them up
-      // This handles cases where player spawns inside blocks or gets stuck
+      // UNSTUCK CHECK: Detect if player is stuck (position unchanged despite trying to move)
+      // This handles edge cases where collision detection fails or player clips into geometry
+      const isStuck = (
+        Math.abs(camera.position.x - prevPositionRef.current.x) < 0.001 &&
+        Math.abs(camera.position.z - prevPositionRef.current.z) < 0.001 &&
+        (direction.current.x !== 0 || direction.current.z !== 0) // Player is trying to move
+      );
+      
+      // Track stuck frames
+      if (!stuckFrameCountRef.current) stuckFrameCountRef.current = 0;
+      if (isStuck) {
+        stuckFrameCountRef.current++;
+      } else {
+        stuckFrameCountRef.current = 0;
+      }
+      
+      // If stuck for more than 30 frames (~0.5 seconds), try to escape
+      if (stuckFrameCountRef.current > 30) {
+        // Try pushing up first
+        camera.position.y += 0.5;
+        velocity.current.y = 2; // Give upward boost
+        stuckFrameCountRef.current = 0;
+      }
+      
+      // Also check if currently inside a block and push up immediately
       const currentPosCollision = checkAxisCollision(camera.position, currentColliders, playerRadius, playerHeight, false, true);
       if (currentPosCollision) {
         // Push player above the block they're stuck in
