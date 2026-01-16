@@ -3,6 +3,7 @@ import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 import { PlacedBlock } from '@/types/blocks';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserData } from '@/hooks/useUserData';
+import { useCurrentWorldId } from '@/hooks/useCurrentWorldId';
 import { organizeBlocksByChunk, blockToChunkKey } from '@/lib/chunkManager';
 
 interface BlocksContextType {
@@ -13,6 +14,7 @@ interface BlocksContextType {
   visualDistance: number;
   fogEnabled: boolean;
   isLoading: boolean;
+  currentWorldId: string | null;
   placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => PlacedBlock | null;
   removeBlock: (blockId: string) => Promise<boolean>;
   refreshBlocks: () => Promise<void>;
@@ -24,7 +26,8 @@ const BlocksContext = createContext<BlocksContextType | undefined>(undefined);
 export function BlocksProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { profile } = useUserData();
-  const blocksHook = usePlacedBlocksWithCache(user?.id || null);
+  const { currentWorldId } = useCurrentWorldId();
+  const blocksHook = usePlacedBlocksWithCache(user?.id || null, currentWorldId);
   
   // Visible chunks ref - updated imperatively by CameraTrackedBlocks, read by InstancedBlockGroup
   const visibleChunksRef = useRef<Set<string>>(new Set());
@@ -45,7 +48,8 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     blocksByChunk,
     visibleChunksRef,
     visualDistance,
-    fogEnabled
+    fogEnabled,
+    currentWorldId
   };
   
   return (
