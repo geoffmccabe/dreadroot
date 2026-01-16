@@ -420,29 +420,22 @@ export function FortressScene({
   const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3) => {
     if (await checkWispHit()) return;
     
-    // Use bullet from pool instead of allocating new objects
+    // Simple bullet pool: reuse from pool by index, cycling through
     const pool = bulletPoolRef.current;
-    let bullet: Bullet;
+    const bullet = pool[activeBulletCount.current % MAX_BULLETS];
+    activeBulletCount.current++;
     
-    if (bulletsRef.current.length >= MAX_BULLETS) {
-      // Reuse oldest bullet
-      bullet = bulletsRef.current.shift()!;
-    } else if (activeBulletCount.current < pool.length) {
-      // Get unused bullet from pool
-      bullet = pool[activeBulletCount.current];
-      activeBulletCount.current++;
-    } else {
-      // Pool exhausted, reuse oldest
-      bullet = bulletsRef.current.shift()!;
-    }
-    
-    // Reuse vectors instead of creating new ones
+    // Reset bullet properties
     bullet.position.copy(origin);
     bullet.direction.copy(direction);
     bullet.speed = 100;
     bullet.life = 3.0;
     
-    bulletsRef.current.push(bullet);
+    // Only add if not already in active list
+    if (!bulletsRef.current.includes(bullet)) {
+      bulletsRef.current.push(bullet);
+    }
+    
     setBulletRenderTrigger(prev => prev + 1);
     setShowCrosshairs(true);
   }, [checkWispHit]);
