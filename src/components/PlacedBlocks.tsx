@@ -29,7 +29,8 @@ export const PlacedBlocks: React.FC<{
   currentUserId?: string;
   hoveredBlockId?: string | null;
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
-}> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId, hoveredBlockId = null, onMeshReady }) => {
+  performanceMode?: boolean;
+}> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId, hoveredBlockId = null, onMeshReady, performanceMode = false }) => {
   const { visibleChunksRef } = useBlocks();
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
@@ -204,6 +205,7 @@ export const PlacedBlocks: React.FC<{
             hoveredBlockId={hoveredBlockId}
             visibleChunksRef={visibleChunksRef}
             onMeshReady={onMeshReady ? (mesh) => onMeshReady(blockType, mesh) : undefined}
+            performanceMode={performanceMode}
           />
         );
       })}

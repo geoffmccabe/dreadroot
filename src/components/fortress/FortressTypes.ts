@@ -70,6 +70,7 @@ export interface SceneProps {
   toast: any;
   waterfallEnabled?: boolean;
   onGodModeChange?: (enabled: boolean) => void;
+  performanceMode?: boolean;
 }
 
 // First person controls props

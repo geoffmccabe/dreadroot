@@ -91,6 +91,7 @@ export function Fortress() {
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [flyingCoins, setFlyingCoins] = useState<FlyingCoin[]>([]);
   const [godMode, setGodMode] = useState(false);
+  const [performanceMode, setPerformanceMode] = useState(false);
   
   // Waterfall disabled for performance testing (Phase 1)
   const waterfallEnabled = false;
@@ -515,11 +516,25 @@ export function Fortress() {
         event.preventDefault();
         setShowOwnershipOutline(prev => !prev);
       }
+      
+      // Performance mode toggle (0 key)
+      if (event.key === '0' && !event.repeat && !event.metaKey && !event.ctrlKey) {
+        setPerformanceMode(prev => {
+          const newValue = !prev;
+          toast({
+            title: newValue ? "Performance Mode ON" : "Performance Mode OFF",
+            description: newValue 
+              ? "Outlines, shadows, and glow disabled for testing"
+              : "Full visual quality restored",
+          });
+          return newValue;
+        });
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [blockPlacementMode]);
+  }, [blockPlacementMode, toast]);
 
   // Crosshair state sync
   useEffect(() => {
@@ -534,7 +549,7 @@ export function Fortress() {
     <div className="w-full h-screen relative overflow-hidden bg-background">
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
-        shadows
+        shadows={!performanceMode}
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         dpr={1}
       >
@@ -567,6 +582,7 @@ export function Fortress() {
           toast={toast}
           waterfallEnabled={waterfallEnabled}
           onGodModeChange={setGodMode}
+          performanceMode={performanceMode}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
@@ -712,6 +728,13 @@ export function Fortress() {
       {godMode && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-purple-600/90 text-white px-6 py-2 rounded-lg font-bold text-lg border border-purple-400/50 shadow-lg shadow-purple-500/30">
           GOD MODE (~)
+        </div>
+      )}
+      
+      {/* Performance Mode HUD Indicator */}
+      {performanceMode && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-green-600/90 text-white px-6 py-2 rounded-lg font-bold text-lg border border-green-400/50 shadow-lg shadow-green-500/30">
+          PERF MODE (0)
         </div>
       )}
       
