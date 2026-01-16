@@ -13,7 +13,7 @@ interface BlocksContextType {
   visualDistance: number;
   fogEnabled: boolean;
   isLoading: boolean;
-  placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => Promise<PlacedBlock>;
+  placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => PlacedBlock | null;
   removeBlock: (blockId: string) => Promise<boolean>;
   refreshBlocks: () => Promise<void>;
   setBlockMode: (enabled: boolean) => void;
