@@ -103,7 +103,6 @@ export function FirstPersonControls({
 
   // Cache for block collision boxes
   const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
-  const lastBlockCount = useRef<number>(0);
   const gridInitialized = useRef(false);
   
   // Clear collision grid on mount to remove stale entries from previous sessions
@@ -118,33 +117,9 @@ export function FirstPersonControls({
   // Use a stable reference to avoid allocations on every render
   const collidersArrayRef = useRef<THREE.Box3[]>([]);
   
-  // Update colliders when blocks change - avoid creating new arrays on every render
+  // Update colliders when blocks change - createBlockColliders handles caching internally
   useMemo(() => {
-    // Quick check using length first (O(1)) before doing expensive comparison
-    const blocksChanged = existingBlocks.length !== lastBlockCount.current;
-    
-    if (blocksChanged) {
-      // Clean up: remove colliders for blocks that no longer exist
-      // Use a simple loop instead of creating intermediate arrays/Sets
-      const currentIds = existingBlocks;
-      for (const [id, box] of blockCollisionCache.current.entries()) {
-        let found = false;
-        for (let i = 0; i < currentIds.length; i++) {
-          if (currentIds[i].id === id) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          collisionGrid.remove(box);
-          blockCollisionCache.current.delete(id);
-        }
-      }
-      
-      lastBlockCount.current = existingBlocks.length;
-    }
-    
-    // Call createBlockColliders - it handles caching internally and keeps grid in sync
+    // createBlockColliders now has fast-path when nothing changed
     const blockColliders = createBlockColliders(existingBlocks, blockCollisionCache.current);
     const fortressColliders = createFortressColliders();
     

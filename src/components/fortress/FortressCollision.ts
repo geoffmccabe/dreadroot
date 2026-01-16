@@ -79,31 +79,41 @@ export function createFortressColliders(): THREE.Box3[] {
   return _fortressColliders;
 }
 
+// Reusable array for createBlockColliders - avoids allocation on every call
+const _cachedCollidersArray: THREE.Box3[] = [];
+
 /**
  * Creates and manages collision boxes for placed blocks with caching
  * Also maintains spatial hash grid for O(1) lookups
+ * OPTIMIZED: Only allocates when blocks actually change
  */
 export function createBlockColliders(
   blocks: PlacedBlock[],
   cache: Map<string, THREE.Box3>
 ): THREE.Box3[] {
-  // Track allocation for diagnostics
-  diagnostics.e4++;
-  
-  const currentBlockIds = new Set(blocks.map(b => b.id));
-  
-  // Remove collision boxes for deleted blocks
-  for (const id of cache.keys()) {
-    if (!currentBlockIds.has(id)) {
-      const box = cache.get(id);
-      if (box) {
-        collisionGrid.remove(box);
+  // Quick check: if cache size matches blocks length and all blocks are cached, no work needed
+  if (cache.size === blocks.length) {
+    let allCached = true;
+    for (let i = 0; i < blocks.length; i++) {
+      if (!cache.has(blocks[i].id)) {
+        allCached = false;
+        break;
       }
-      cache.delete(id);
+    }
+    if (allCached) {
+      // No changes - return cached array without allocation
+      _cachedCollidersArray.length = 0;
+      for (const box of cache.values()) {
+        _cachedCollidersArray.push(box);
+      }
+      return _cachedCollidersArray;
     }
   }
   
-  // Add collision boxes for new blocks only
+  // Track allocation for diagnostics - only count when we actually do work
+  diagnostics.e4++;
+  
+  // STEP 1: Add new blocks to cache
   for (const block of blocks) {
     if (!cache.has(block.id)) {
       const box = new THREE.Box3(
@@ -115,7 +125,35 @@ export function createBlockColliders(
     }
   }
   
-  return Array.from(cache.values());
+  // STEP 2: Remove stale blocks - only if cache is larger than blocks array
+  if (cache.size > blocks.length) {
+    // Build lookup without Set - use simple O(n) search since this is rare
+    const keysToRemove: string[] = [];
+    for (const id of cache.keys()) {
+      let found = false;
+      for (let i = 0; i < blocks.length; i++) {
+        if (blocks[i].id === id) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        keysToRemove.push(id);
+      }
+    }
+    for (const id of keysToRemove) {
+      const box = cache.get(id);
+      if (box) collisionGrid.remove(box);
+      cache.delete(id);
+    }
+  }
+  
+  // Return reused array
+  _cachedCollidersArray.length = 0;
+  for (const box of cache.values()) {
+    _cachedCollidersArray.push(box);
+  }
+  return _cachedCollidersArray;
 }
 
 /**
