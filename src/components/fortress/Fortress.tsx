@@ -535,8 +535,8 @@ export function Fortress() {
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
         shadows
-        gl={{ antialias: true }}
-        dpr={[1, 2]}
+        gl={{ antialias: false, powerPreference: 'high-performance' }}
+        dpr={1}
       >
         {showPerfMonitor && <Perf position="top-left" minimal={true} />}
         <FortressScene
