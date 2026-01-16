@@ -332,8 +332,9 @@ export function FortressScene({
   }, []);
 
   // Fog configuration
-  const { visualDistance, fogEnabled } = useBlocks();
-  const { players, broadcastPosition, isConnected } = useMultiplayer('fortress-main');
+  const { visualDistance, fogEnabled, currentWorldId } = useBlocks();
+  // Scope multiplayer by world - prevents cross-world player visibility
+  const { players, broadcastPosition, isConnected } = useMultiplayer(currentWorldId);
   const { user } = useAuth();
   
   useEffect(() => {

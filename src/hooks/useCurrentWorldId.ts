@@ -1,12 +1,47 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useWorlds, World } from './useWorlds';
+import { supabase } from '@/integrations/supabase/client';
 
 const LOCAL_STORAGE_KEY = 'currentWorldId';
 
+export interface World {
+  id: string;
+  name: string;
+  fortress_texture_url: string | null;
+  ground_texture_url: string | null;
+  sky_texture_url: string | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Standalone hook that fetches worlds directly - avoids circular dependency with useWorlds
 export function useCurrentWorldId() {
-  const { worlds, isLoading, getDefaultWorld } = useWorlds();
+  const [worlds, setWorlds] = useState<World[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [currentWorldId, setCurrentWorldIdState] = useState<string | null>(null);
   const [currentWorld, setCurrentWorld] = useState<World | null>(null);
+
+  // Fetch worlds directly (no dependency on useWorlds hook)
+  useEffect(() => {
+    const fetchWorlds = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('worlds')
+          .select('*')
+          .order('is_default', { ascending: false })
+          .order('name');
+
+        if (error) throw error;
+        setWorlds((data as unknown as World[]) || []);
+      } catch (err) {
+        console.error('Error fetching worlds:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWorlds();
+  }, []);
 
   // Initialize world ID from localStorage or default
   useEffect(() => {
@@ -28,12 +63,12 @@ export function useCurrentWorldId() {
     }
 
     // Fall back to default world
-    const defaultWorld = getDefaultWorld();
+    const defaultWorld = worlds.find(w => w.is_default) || worlds[0] || null;
     if (defaultWorld) {
       setCurrentWorldIdState(defaultWorld.id);
       setCurrentWorld(defaultWorld);
     }
-  }, [worlds, isLoading, getDefaultWorld]);
+  }, [worlds, isLoading]);
 
   // Update current world when worlds list changes
   useEffect(() => {
@@ -59,12 +94,12 @@ export function useCurrentWorldId() {
   // Clear override and use default
   const clearWorldOverride = useCallback(() => {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
-    const defaultWorld = getDefaultWorld();
+    const defaultWorld = worlds.find(w => w.is_default) || worlds[0] || null;
     if (defaultWorld) {
       setCurrentWorldIdState(defaultWorld.id);
       setCurrentWorld(defaultWorld);
     }
-  }, [getDefaultWorld]);
+  }, [worlds]);
 
   return {
     currentWorldId,

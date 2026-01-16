@@ -4,17 +4,22 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useWorlds, World } from '@/hooks/useWorlds';
-import { useCurrentWorldId } from '@/hooks/useCurrentWorldId';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Plus, Trash2, Check, Globe, Upload, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
+const LOCAL_STORAGE_KEY = 'currentWorldId';
+
 export function WorldsList() {
-  const { worlds, isLoading, createWorld, updateWorld, setDefaultWorld, deleteWorld, fetchWorlds } = useWorlds();
-  const { currentWorldId, setCurrentWorldId } = useCurrentWorldId();
+  const { worlds, isLoading, createWorld, updateWorld, setDefaultWorld, deleteWorld } = useWorlds();
   const { toast } = useToast();
+  
+  // Track current world locally (read from localStorage)
+  const [currentWorldId, setCurrentWorldIdLocal] = React.useState<string | null>(() => {
+    return localStorage.getItem(LOCAL_STORAGE_KEY);
+  });
   
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -65,8 +70,9 @@ export function WorldsList() {
   };
 
   const handleUseLocally = (world: World) => {
-    setCurrentWorldId(world.id);
-    toast({ title: 'World selected', description: `Now using "${world.name}" locally` });
+    localStorage.setItem(LOCAL_STORAGE_KEY, world.id);
+    setCurrentWorldIdLocal(world.id);
+    toast({ title: 'World selected', description: `Now using "${world.name}" locally. Refresh to apply.` });
   };
 
   const handleDeleteClick = (world: World) => {
