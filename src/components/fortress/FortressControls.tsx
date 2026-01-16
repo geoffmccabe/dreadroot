@@ -45,8 +45,9 @@ export function FirstPersonControls({
   instancedMeshesRef,
   meshesArrayCache,
   meshToBlockTypeCache,
-  blocksByTypeAndUser
-}: FirstPersonControlsProps) {
+  blocksByTypeAndUser,
+  onGodModeChange
+}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
   const isLocked = useRef(false);
@@ -55,9 +56,14 @@ export function FirstPersonControls({
   const keys = useRef({
     w: false, s: false, a: false, d: false,
     shift: false, space: false, r: false, ctrl: false,
-    previouslyCtrl: false, rightMouse: false
+    previouslyCtrl: false, rightMouse: false,
+    q: false, z: false
   });
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
+  
+  // God Mode state (fly + noclip for admins/superadmins)
+  const godModeRef = useRef(false);
+  const [godModeEnabled, setGodModeEnabled] = useState(false);
   const onGround = useRef(true);
   const yaw = useRef(0);
   const pitch = useRef(0);
@@ -233,8 +239,21 @@ export function FirstPersonControls({
           document.exitPointerLock();
         }
         break;
+      case 'Backquote': // ~ key for God Mode
+        if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+          godModeRef.current = !godModeRef.current;
+          setGodModeEnabled(godModeRef.current);
+          onGodModeChange?.(godModeRef.current);
+        }
+        break;
+      case 'KeyQ':
+        keys.current.q = true;
+        break;
+      case 'KeyZ':
+        keys.current.z = true;
+        break;
     }
-  }, [crosshairsEnabled, onModeChange, onOpenPanel, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock]);
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     if (panelOpen || 
@@ -269,6 +288,12 @@ export function FirstPersonControls({
         break;
       case 'ControlLeft':
         keys.current.ctrl = false;
+        break;
+      case 'KeyQ':
+        keys.current.q = false;
+        break;
+      case 'KeyZ':
+        keys.current.z = false;
         break;
     }
   }, [panelOpen]);
@@ -564,10 +589,13 @@ export function FirstPersonControls({
       if (keys.current.d) direction.current.x += 1;
       direction.current.normalize();
 
-      // Speed calculation
+      // Speed calculation - god mode gets faster speed
       const baseSpeed = 4.0;
       const crawlSpeed = baseSpeed * 0.6;
-      const runSpeed = keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed);
+      const godSpeed = keys.current.shift ? 16.0 : 8.0; // Faster in god mode
+      const runSpeed = godModeRef.current 
+        ? godSpeed 
+        : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed));
       
       // Apply movement
       const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
@@ -577,6 +605,29 @@ export function FirstPersonControls({
       deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
       deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
 
+      // God Mode: Q = fly up, Z = fly down, no gravity
+      if (godModeRef.current) {
+        // Vertical movement with Q/Z
+        if (keys.current.q) {
+          deltaMovement.y += runSpeed * delta;
+        }
+        if (keys.current.z) {
+          deltaMovement.y -= runSpeed * delta;
+        }
+        // No gravity in god mode - just apply direct movement
+        velocity.current.set(0, 0, 0);
+        camera.position.add(deltaMovement);
+        onGround.current = false;
+        
+        // Broadcast position to multiplayer
+        const broadcast = broadcastPositionRef.current;
+        if (broadcast) {
+          broadcast(camera.position, yaw.current, pitch.current);
+        }
+        return; // Skip normal physics
+      }
+
+      // Normal physics below (only when NOT in god mode)
       // Gravity and jumping
       velocity.current.y -= 9.8 * delta;
 

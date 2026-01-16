@@ -90,6 +90,10 @@ export function Fortress() {
   const [wallPositions, setWallPositions] = useState<Record<number, {x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}>>({});
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [flyingCoins, setFlyingCoins] = useState<FlyingCoin[]>([]);
+  const [godMode, setGodMode] = useState(false);
+  
+  // Waterfall disabled for performance testing (Phase 1)
+  const waterfallEnabled = false;
   
   // Hooks
   const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock } = useUserData();
@@ -561,6 +565,8 @@ export function Fortress() {
           setHoveredBlockId={setHoveredBlockId}
           collectWispBlock={collectWispBlock}
           toast={toast}
+          waterfallEnabled={waterfallEnabled}
+          onGodModeChange={setGodMode}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
@@ -701,6 +707,13 @@ export function Fortress() {
         blockPlacementMode ? 'block-mode' : 
         crosshairsEnabled ? 'active' : ''
       }`} />
+      
+      {/* God Mode HUD Indicator */}
+      {godMode && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-purple-600/90 text-white px-6 py-2 rounded-lg font-bold text-lg border border-purple-400/50 shadow-lg shadow-purple-500/30">
+          GOD MODE (~)
+        </div>
+      )}
       
       {/* Toast notifications */}
       <Toaster />

@@ -11,6 +11,7 @@ interface WaterfallProps {
   flowSpeed?: number;
   msBetweeenDrops?: number;
   colorPalette: Array<{ hex: string; weight: number }>;
+  enabled?: boolean;
 }
 
 // Constants outside component to avoid recreation
@@ -29,8 +30,14 @@ const MAX_DROPS = 500;
 export function Waterfall({ 
   flowSpeed = 1.2, 
   msBetweeenDrops = 10, 
-  colorPalette 
+  colorPalette,
+  enabled = true 
 }: WaterfallProps) {
+  // If disabled, render nothing (saves all processing)
+  if (!enabled) {
+    return null;
+  }
+
   const instancedMeshRef = useRef<THREE.InstancedMesh>(null);
   const activeDropsRef = useRef<WaterfallDrop[]>([]);
   const timeAccumulatorRef = useRef(0);
