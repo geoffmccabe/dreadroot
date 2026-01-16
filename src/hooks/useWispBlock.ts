@@ -23,7 +23,8 @@ export const useWispBlock = (
   placedBlocks: PlacedBlock[]
 ) => {
   const [wispState, setWispState] = useState<WispState | null>(null);
-  const wispPositionRef = useRef<THREE.Vector3>(new THREE.Vector3());
+  // Initialize to hidden position (below world) to prevent rendering at origin before spawn
+  const wispPositionRef = useRef<THREE.Vector3>(new THREE.Vector3(0, -10000, 0));
   const moveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lifetimeCheckRef = useRef<NodeJS.Timeout | null>(null);
   const reusableVector = useRef(new THREE.Vector3());
