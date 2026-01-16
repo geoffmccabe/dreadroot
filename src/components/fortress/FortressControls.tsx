@@ -85,8 +85,29 @@ export function FirstPersonControls({
   // Throttle ref for hover detection (avoid per-frame setState!)
   const lastHoverCheckRef = useRef(0);
   
-  // Use blocks from props
-  const existingBlocks = blocks;
+  // Collision distance - only collide with blocks within this range
+  // This prevents "invisible wall" issues from distant unrendered blocks
+  const COLLISION_DISTANCE = 32; // blocks beyond this won't have collision
+  
+  // Track camera position for distance-based block filtering
+  const lastCameraPos = useRef({ x: 0, z: 0 });
+  const lastFilteredBlockIds = useRef<string>('');
+  
+  // Filter blocks by distance from camera for collision
+  // Only nearby blocks should have collision (matches visual rendering chunks)
+  const nearbyBlocks = useMemo(() => {
+    const camX = camera.position.x;
+    const camZ = camera.position.z;
+    
+    return blocks.filter(block => {
+      const dx = block.position_x - camX;
+      const dz = block.position_z - camZ;
+      return dx * dx + dz * dz < COLLISION_DISTANCE * COLLISION_DISTANCE;
+    });
+  }, [blocks, camera.position.x, camera.position.z]);
+  
+  // Use filtered blocks for collision
+  const existingBlocks = nearbyBlocks;
   
   // Firing rate limiting
   const lastFireTime = useRef(0);
