@@ -101,7 +101,7 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   if (!visible || !texture) return null;
 
   return (
-    <mesh ref={meshRef} position={[0, 0, 0]}>
+    <mesh ref={meshRef} position={[0, -10000, 0]}>
       <boxGeometry args={[1, 1, 1]} />
       <meshBasicMaterial 
         map={texture}
