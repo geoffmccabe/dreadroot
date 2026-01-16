@@ -96,31 +96,36 @@ export function FirstPersonControls({
   const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
   const lastBlockIds = useRef<string>('');
   const lastBlockCount = useRef<number>(0);
-
-
+  const gridInitialized = useRef(false);
+  
+  // Clear collision grid on mount to remove stale entries from previous sessions
+  useEffect(() => {
+    if (!gridInitialized.current) {
+      collisionGrid.clear();
+      gridInitialized.current = true;
+    }
+  }, []);
   // Collision boxes for fortress walls and placed blocks
+  // ALWAYS rebuild colliders when blocks change to ensure spatial grid stays in sync
   const colliders = useMemo(() => {
     const blockIds = existingBlocks.map(b => b.id).sort().join(',');
-    const blockCountDiff = Math.abs(existingBlocks.length - lastBlockCount.current);
-    const cacheSizeMismatch = blockCollisionCache.current.size !== existingBlocks.length;
-    const needsFullRebuild = blockCountDiff > Math.max(existingBlocks.length * 0.05, 1) || cacheSizeMismatch;
     
-    if (needsFullRebuild && blockCollisionCache.current.size > 0) {
-      if (DEBUG_LOGGING) console.log('[Colliders] Full cache rebuild');
-      // Remove old block colliders from grid
-      for (const box of blockCollisionCache.current.values()) {
-        collisionGrid.remove(box);
+    // Check if blocks actually changed
+    if (blockIds !== lastBlockIds.current || blockCollisionCache.current.size !== existingBlocks.length) {
+      // Clean up: remove colliders for blocks that no longer exist
+      const currentBlockIds = new Set(existingBlocks.map(b => b.id));
+      for (const [id, box] of blockCollisionCache.current.entries()) {
+        if (!currentBlockIds.has(id)) {
+          collisionGrid.remove(box);
+          blockCollisionCache.current.delete(id);
+        }
       }
-      blockCollisionCache.current.clear();
+      
+      lastBlockIds.current = blockIds;
+      lastBlockCount.current = existingBlocks.length;
     }
     
-    if (blockIds === lastBlockIds.current && blockCollisionCache.current.size > 0 && !needsFullRebuild) {
-      return [...createFortressColliders(), ...Array.from(blockCollisionCache.current.values())];
-    }
-    
-    lastBlockIds.current = blockIds;
-    lastBlockCount.current = existingBlocks.length;
-    
+    // Always call createBlockColliders - it handles caching internally and keeps grid in sync
     const blockColliders = createBlockColliders(existingBlocks, blockCollisionCache.current);
     return [...createFortressColliders(), ...blockColliders];
   }, [existingBlocks]);
