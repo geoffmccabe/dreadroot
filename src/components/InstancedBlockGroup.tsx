@@ -246,22 +246,27 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
   }, [bufferSize]);
   
+  // Fast change detection using length + first/last IDs (O(1) instead of O(n log n))
+  const fastBlockKey = useMemo(() => {
+    if (blocks.length === 0) return '';
+    const first = blocks[0]?.id || '';
+    const last = blocks[blocks.length - 1]?.id || '';
+    return `${blocks.length}:${first}:${last}`;
+  }, [blocks]);
+  
   useEffect(() => {
     if (!meshRef.current) return;
-    
-    // Create stable key from block IDs to detect actual changes
-    const blockIdsKey = blocks.map(b => b.id).sort().join(',');
     
     // IMPORTANT: Always update the mesh count to match blocks array
     // This is needed because the instancedMesh may have been created with a different count
     meshRef.current.count = blocks.length;
     
-    // Skip matrix re-upload only if block IDs haven't changed
-    if (prevBlockIdsRef.current === blockIdsKey && blocks.length > 0) {
+    // Skip matrix re-upload only if blocks haven't changed (using fast key)
+    if (prevBlockIdsRef.current === fastBlockKey && blocks.length > 0) {
       return;
     }
     
-    prevBlockIdsRef.current = blockIdsKey;
+    prevBlockIdsRef.current = fastBlockKey;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
@@ -455,12 +460,13 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     return unregister;
   }, [frameLoopId, visibleChunksRef]);
   
-  // Create collision boxes for all instances (only when blocks change, not on every frame)
-  // Use a stable key to track when blocks actually change
-  const blockIdsForCollision = useMemo(() => 
-    blocks.map(b => b.id).sort().join(','), 
-    [blocks]
-  );
+  // Fast collision key - O(1) instead of O(n log n)
+  const blockIdsForCollision = useMemo(() => {
+    if (blocks.length === 0) return '';
+    const first = blocks[0]?.id || '';
+    const last = blocks[blocks.length - 1]?.id || '';
+    return `${blocks.length}:${first}:${last}`;
+  }, [blocks]);
   
   useEffect(() => {
     if (!onCollision) return;
