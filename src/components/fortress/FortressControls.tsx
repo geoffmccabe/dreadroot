@@ -92,7 +92,9 @@ export function FirstPersonControls({
   // Throttle ref for hover detection (avoid per-frame setState!)
   const lastHoverCheckRef = useRef(0);
   
-  // Use blocks from props
+  // Throttle ref for position broadcast (every 50ms = 20Hz, not every frame)
+  const lastBroadcastRef = useRef(0);
+  const BROADCAST_INTERVAL = 50; // ms
   const existingBlocks = blocks;
   
   // Firing rate limiting
@@ -619,10 +621,13 @@ export function FirstPersonControls({
         camera.position.add(deltaMovement);
         onGround.current = false;
         
-        // Broadcast position to multiplayer
-        const broadcast = broadcastPositionRef.current;
-        if (broadcast) {
-          broadcast(camera.position, yaw.current, pitch.current);
+        // Broadcast position to multiplayer (throttled to 20Hz)
+        if (now - lastBroadcastRef.current >= BROADCAST_INTERVAL) {
+          lastBroadcastRef.current = now;
+          const broadcast = broadcastPositionRef.current;
+          if (broadcast) {
+            broadcast(camera.position, yaw.current, pitch.current);
+          }
         }
         return; // Skip normal physics
       }
@@ -764,10 +769,13 @@ export function FirstPersonControls({
         }
       }
       
-      // Broadcast position to multiplayer
-      const broadcast = broadcastPositionRef.current;
-      if (broadcast) {
-        broadcast(camera.position, yaw.current, pitch.current);
+      // Broadcast position to multiplayer (throttled to 20Hz)
+      if (now - lastBroadcastRef.current >= BROADCAST_INTERVAL) {
+        lastBroadcastRef.current = now;
+        const broadcast = broadcastPositionRef.current;
+        if (broadcast) {
+          broadcast(camera.position, yaw.current, pitch.current);
+        }
       }
     }, 20); // High priority - controls run early
 
