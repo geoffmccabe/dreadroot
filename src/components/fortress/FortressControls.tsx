@@ -552,19 +552,6 @@ export function FirstPersonControls({
 
       // Gravity and jumping
       velocity.current.y -= 9.8 * delta;
-      
-      const canJump = onGround.current && !keys.current.ctrl;
-      const roles = userRolesRef.current;
-      
-      if (keys.current.space && canJump) {
-        let jumpHeight = 1.25;
-        if (roles.includes('admin') || roles.includes('superadmin')) {
-          jumpHeight = 2.5;
-        }
-        velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
-        onGround.current = false;
-      }
-      deltaMovement.y += velocity.current.y * delta;
 
       // Player dimensions
       const playerRadius = 0.3;
@@ -579,6 +566,27 @@ export function FirstPersonControls({
       let zBlocked = false;
       
       const currentColliders = collidersRef.current;
+      
+      // Check if player is stuck inside a block (allows emergency jump to escape)
+      const stuckInBlock = checkAxisCollision(camera.position, currentColliders, playerRadius, standingHeight, false, true) !== null;
+      
+      // Allow jumping if on ground OR stuck inside a block (escape mechanism)
+      const canJump = (onGround.current || stuckInBlock) && !keys.current.ctrl;
+      const roles = userRolesRef.current;
+      
+      if (keys.current.space && canJump) {
+        let jumpHeight = 1.25;
+        if (roles.includes('admin') || roles.includes('superadmin')) {
+          jumpHeight = 2.5;
+        }
+        // Give extra boost if stuck to help escape
+        if (stuckInBlock && !onGround.current) {
+          jumpHeight *= 1.5;
+        }
+        velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
+        onGround.current = false;
+      }
+      deltaMovement.y += velocity.current.y * delta;
       
       // Note: isMoving used implicitly - throttling happens inside checkAxisCollision
 
