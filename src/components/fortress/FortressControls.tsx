@@ -95,7 +95,6 @@ export function FirstPersonControls({
 
   // Cache for block collision boxes
   const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
-  const lastBlockIds = useRef<string>('');
   const lastBlockCount = useRef<number>(0);
   const gridInitialized = useRef(false);
   
@@ -108,29 +107,50 @@ export function FirstPersonControls({
     }
   }, []);
   // Collision boxes for fortress walls and placed blocks
-  // ALWAYS rebuild colliders when blocks change to ensure spatial grid stays in sync
-  const colliders = useMemo(() => {
-    const blockIds = existingBlocks.map(b => b.id).sort().join(',');
+  // Use a stable reference to avoid allocations on every render
+  const collidersArrayRef = useRef<THREE.Box3[]>([]);
+  
+  // Update colliders when blocks change - avoid creating new arrays on every render
+  useMemo(() => {
+    // Quick check using length first (O(1)) before doing expensive comparison
+    const blocksChanged = existingBlocks.length !== lastBlockCount.current;
     
-    // Check if blocks actually changed
-    if (blockIds !== lastBlockIds.current || blockCollisionCache.current.size !== existingBlocks.length) {
+    if (blocksChanged) {
       // Clean up: remove colliders for blocks that no longer exist
-      const currentBlockIds = new Set(existingBlocks.map(b => b.id));
+      // Use a simple loop instead of creating intermediate arrays/Sets
+      const currentIds = existingBlocks;
       for (const [id, box] of blockCollisionCache.current.entries()) {
-        if (!currentBlockIds.has(id)) {
+        let found = false;
+        for (let i = 0; i < currentIds.length; i++) {
+          if (currentIds[i].id === id) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
           collisionGrid.remove(box);
           blockCollisionCache.current.delete(id);
         }
       }
       
-      lastBlockIds.current = blockIds;
       lastBlockCount.current = existingBlocks.length;
     }
     
-    // Always call createBlockColliders - it handles caching internally and keeps grid in sync
+    // Call createBlockColliders - it handles caching internally and keeps grid in sync
     const blockColliders = createBlockColliders(existingBlocks, blockCollisionCache.current);
-    return [...createFortressColliders(), ...blockColliders];
+    const fortressColliders = createFortressColliders();
+    
+    // Reuse the array reference instead of spreading
+    collidersArrayRef.current.length = 0;
+    for (let i = 0; i < fortressColliders.length; i++) {
+      collidersArrayRef.current.push(fortressColliders[i]);
+    }
+    for (let i = 0; i < blockColliders.length; i++) {
+      collidersArrayRef.current.push(blockColliders[i]);
+    }
   }, [existingBlocks]);
+  
+  const colliders = collidersArrayRef.current;
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (panelOpen || 
