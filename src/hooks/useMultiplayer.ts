@@ -119,28 +119,31 @@ export function useMultiplayer(roomId: string = 'fortress-main'): MultiplayerSta
     };
   }, []);
 
+  // Pre-allocated objects for broadcastPosition to avoid GC
+  const broadcastPayload = useRef({
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { yaw: 0, pitch: 0 },
+    online_at: ''
+  });
+  const lastBroadcastTime = useRef(0);
+
   const broadcastPosition = useCallback((position: THREE.Vector3, yaw: number, pitch: number) => {
     if (!channel || !isConnected) return;
     
     // Throttle updates - only send every 50ms
     const now = Date.now();
-    const lastUpdate = (channel as any)._lastPositionUpdate || 0;
-    
-    if (now - lastUpdate < 50) return;
-    (channel as any)._lastPositionUpdate = now;
+    if (now - lastBroadcastTime.current < 50) return;
+    lastBroadcastTime.current = now;
 
-    channel.track({
-      position: {
-        x: Math.round(position.x * 100) / 100, // Round to 2 decimals
-        y: Math.round(position.y * 100) / 100,
-        z: Math.round(position.z * 100) / 100,
-      },
-      rotation: {
-        yaw: Math.round(yaw * 100) / 100,
-        pitch: Math.round(pitch * 100) / 100,
-      },
-      online_at: new Date().toISOString(),
-    });
+    // Reuse payload object instead of creating new one
+    broadcastPayload.current.position.x = Math.round(position.x * 100) / 100;
+    broadcastPayload.current.position.y = Math.round(position.y * 100) / 100;
+    broadcastPayload.current.position.z = Math.round(position.z * 100) / 100;
+    broadcastPayload.current.rotation.yaw = Math.round(yaw * 100) / 100;
+    broadcastPayload.current.rotation.pitch = Math.round(pitch * 100) / 100;
+    broadcastPayload.current.online_at = new Date().toISOString();
+    
+    channel.track(broadcastPayload.current);
   }, [channel, isConnected]);
 
   return {

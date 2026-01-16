@@ -31,10 +31,20 @@ export const useRaycaster = () => {
   
   // Persistent direction vector - reused every call
   const direction = useRef(new THREE.Vector3());
+  
+  // Pre-allocated result object - reused to avoid GC
+  const resultRef = useRef<RaycastMeshResult>({
+    object: null as any,
+    instanceId: undefined,
+    distance: 0,
+    point: new THREE.Vector3()
+  });
 
   /**
    * Raycast against actual rendered meshes (optimized by Three.js)
    * Used for: hover detection, player interaction, instanced blocks
+   * 
+   * WARNING: Returns a shared object - do not store the result!
    * 
    * @param meshes Array of meshes to raycast against
    * @param maxDistance Maximum raycast distance
@@ -61,12 +71,12 @@ export const useRaycaster = () => {
     if (intersections.length === 0) return null;
     
     const first = intersections[0];
-    return {
-      object: first.object,
-      instanceId: first.instanceId,
-      distance: first.distance,
-      point: first.point.clone()
-    };
+    // Reuse result object instead of creating new one
+    resultRef.current.object = first.object;
+    resultRef.current.instanceId = first.instanceId;
+    resultRef.current.distance = first.distance;
+    resultRef.current.point.copy(first.point);
+    return resultRef.current;
   };
 
   /**
