@@ -282,10 +282,19 @@ export function Fortress() {
       console.error('Failed to load admin block rain settings:', error);
     }
     
-    const event = new CustomEvent('triggerBlockRain', {
-      detail: { blockTypes, batchHandler: handleBlockRainBatch, settings: rainSettings }
-    });
-    window.dispatchEvent(event);
+    // Generate random positions directly
+    const positions: Array<{ x: number; y: number; z: number; type: string }> = [];
+    const spreadRadius = rainSettings.spreadRadius || 5;
+    
+    for (let i = 0; i < rainSettings.totalBlocks; i++) {
+      const x = Math.floor((Math.random() - 0.5) * spreadRadius * 2);
+      const z = Math.floor((Math.random() - 0.5) * spreadRadius * 2);
+      const type = blockTypes[Math.floor(Math.random() * blockTypes.length)];
+      positions.push({ x, y: 0, z, type });
+    }
+    
+    // Call batch handler directly
+    handleBlockRainBatch(positions, rainSettings);
     
     toast({
       title: "Block Rain!",
