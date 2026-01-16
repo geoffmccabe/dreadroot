@@ -464,7 +464,8 @@ export const usePlacedBlocksWithCache = (userId: string | null) => {
       });
 
       // PHASE 2: Direct state update to replace temp block with real block
-      setBlocks(prev => prev.map(block => 
+      // Use setBlocksIfChanged to prevent unnecessary re-renders
+      setBlocksIfChanged(prev => prev.map(block => 
         block.id === dbBlock.id ? data : block
       ));
 
