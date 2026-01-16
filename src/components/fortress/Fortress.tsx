@@ -18,6 +18,7 @@ import { useTokenTheme } from '@/contexts/TokenThemeContext';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
+import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
 
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
@@ -207,8 +208,7 @@ export function Fortress() {
     const blocksPerSecond = rainSettings?.blocksPerSecond || 10;
     const msPerBlock = 1000 / blocksPerSecond;
     
-    // Get height map and falling state synchronously
-    const { heightMap, fallingBlocksState } = require('@/components/PlacedBlocks');
+    // Use imported heightMap and fallingBlocksState
     const localHeightMap = new Map<string, number>(heightMap);
     
     let placedCount = 0;
