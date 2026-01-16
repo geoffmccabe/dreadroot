@@ -186,7 +186,11 @@ export function Fortress() {
     positions: Array<{ x: number; y: number; z: number; type: string }>,
     rainSettings?: { blocksPerSecond?: number; blockLifeMinutes?: number; totalBlocks?: number; spreadRadius?: number }
   ) => {
-    if (!placeBlock) return;
+    console.log('handleBlockRainBatch called with', positions.length, 'positions, placeBlock:', !!placeBlock);
+    if (!placeBlock) {
+      console.error('placeBlock is not available - blocks context may not be ready');
+      return;
+    }
     
     const isInForbiddenZone = (x: number, z: number): boolean => {
       const position = new THREE.Vector3(x, 0, z);
@@ -294,7 +298,10 @@ export function Fortress() {
     }
     
     // Call batch handler directly
-    handleBlockRainBatch(positions, rainSettings);
+    console.log('Block rain: calling handleBlockRainBatch with', positions.length, 'positions');
+    handleBlockRainBatch(positions, rainSettings).catch(err => {
+      console.error('Block rain batch failed:', err);
+    });
     
     toast({
       title: "Block Rain!",
