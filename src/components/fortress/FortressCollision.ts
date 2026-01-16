@@ -154,7 +154,8 @@ export function checkAxisCollision(
   
   // Use spatial hash grid for O(1) nearby lookup - ZERO allocations
   // Use smaller radius of 2 (player radius is 0.3, blocks are 1 unit)
-  const { result: nearbyColliders, count } = collisionGrid.getNearby(pos.x, pos.z, 2);
+  const count = collisionGrid.getNearby(pos.x, pos.z, 2);
+  const nearbyColliders = collisionGrid.nearbyResult;
   
   // If grid is empty, fall back to array (should not happen in normal use)
   if (count === 0 && colliders.length > 0) {
@@ -219,7 +220,8 @@ export function findStepUpTarget(
   let bestStepUpY: number | null = null;
   
   // Use spatial hash grid - ZERO allocations with smaller radius
-  const { result: nearbyColliders, count } = collisionGrid.getNearby(camera.position.x, camera.position.z, 2);
+  const count = collisionGrid.getNearby(camera.position.x, camera.position.z, 2);
+  const nearbyColliders = collisionGrid.nearbyResult;
   
   for (let i = 0; i < count; i++) {
     const collider = nearbyColliders[i];

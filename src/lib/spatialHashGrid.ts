@@ -18,13 +18,12 @@ class SpatialHashGrid {
   private cells: THREE.Box3[][] = [];
   private colliderCellIndices: Map<THREE.Box3, number[]> = new Map();
   
-  // Pre-allocated result array - reused every call to avoid GC
-  private nearbyResult: THREE.Box3[] = new Array(MAX_NEARBY_RESULTS);
-  private nearbyCount = 0;
+  // Pre-allocated result array - PUBLIC so callers can access without allocation
+  public nearbyResult: THREE.Box3[] = new Array(MAX_NEARBY_RESULTS);
   
-  // Generation-based deduplication - O(1) instead of O(n²)
-  private currentGeneration = 0;
-  private colliderGeneration: Map<THREE.Box3, number> = new Map();
+  // Generation-based deduplication using property on Box3 (zero allocation)
+  // Uses __gen property directly on objects instead of Map lookup
+  private currentGeneration = 1;
   
   constructor() {
     // Pre-allocate grid cells
@@ -64,7 +63,8 @@ class SpatialHashGrid {
     }
     
     this.colliderCellIndices.set(collider, cellIndices);
-    this.colliderGeneration.set(collider, 0); // Initialize generation
+    // Initialize generation on the object itself (zero allocation)
+    (collider as any).__gen = 0;
   }
   
   /**
@@ -85,7 +85,7 @@ class SpatialHashGrid {
     }
     
     this.colliderCellIndices.delete(collider);
-    this.colliderGeneration.delete(collider);
+    // No need to clean up __gen - the object is being discarded
   }
   
   /**
@@ -96,19 +96,19 @@ class SpatialHashGrid {
       this.cells[i].length = 0; // Clear without reallocating
     }
     this.colliderCellIndices.clear();
-    this.colliderGeneration.clear();
+    // Bump generation to invalidate all __gen markers
+    this.currentGeneration++;
   }
   
   /**
    * Get all colliders near a position - ZERO ALLOCATIONS
-   * Uses generation counter for O(1) deduplication
-   * Returns count and fills pre-allocated array
-   * Caller must use: for (let i = 0; i < count; i++) { result[i] }
+   * Uses generation counter for O(1) deduplication via __gen property on objects
+   * Returns count only - caller accesses grid.nearbyResult directly
    */
-  getNearby(x: number, z: number, radius: number = 2): { result: THREE.Box3[], count: number } {
+  getNearby(x: number, z: number, radius: number = 2): number {
     // Increment generation for this query - any collider with this gen is already added
     this.currentGeneration++;
-    this.nearbyCount = 0;
+    let nearbyCount = 0;
     
     // Calculate cell range to check
     const minCX = Math.floor((x - radius) / CELL_SIZE) + GRID_OFFSET;
@@ -123,22 +123,22 @@ class SpatialHashGrid {
         for (let i = 0; i < cell.length; i++) {
           const collider = cell[i];
           
-          // O(1) deduplication using generation counter
-          if (this.colliderGeneration.get(collider) === this.currentGeneration) {
+          // O(1) deduplication using __gen property on object (no Map lookup!)
+          if ((collider as any).__gen === this.currentGeneration) {
             continue; // Already added in this query
           }
           
-          // Mark as added for this generation
-          this.colliderGeneration.set(collider, this.currentGeneration);
+          // Mark as added for this generation (no Map.set allocation!)
+          (collider as any).__gen = this.currentGeneration;
           
-          if (this.nearbyCount < MAX_NEARBY_RESULTS) {
-            this.nearbyResult[this.nearbyCount++] = collider;
+          if (nearbyCount < MAX_NEARBY_RESULTS) {
+            this.nearbyResult[nearbyCount++] = collider;
           }
         }
       }
     }
     
-    return { result: this.nearbyResult, count: this.nearbyCount };
+    return nearbyCount;
   }
   
   get size(): number {

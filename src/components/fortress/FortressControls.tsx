@@ -574,8 +574,10 @@ export function FirstPersonControls({
       
       const currentColliders = collidersRef.current;
       
-      // Check if player is stuck inside a block (allows emergency jump to escape)
-      const stuckInBlock = checkAxisCollision(camera.position, currentColliders, playerRadius, standingHeight, false, true) !== null;
+      // Only check stuck-in-block when trying to jump (saves a collision check per frame)
+      const stuckInBlock = keys.current.space && !onGround.current 
+        ? checkAxisCollision(camera.position, currentColliders, playerRadius, standingHeight, false, true) !== null
+        : false;
       
       // Allow jumping if on ground OR stuck inside a block (escape mechanism)
       const canJump = (onGround.current || stuckInBlock) && !keys.current.ctrl;
