@@ -53,6 +53,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   onMeshReady
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const meshInitializedRef = useRef(false);
+  const lastBufferSizeRef = useRef(0);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
   const { camera } = useThree();
@@ -216,6 +218,28 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
   // Use MAX of current blocks.length + 50 or 100 to handle growth
   const bufferSize = Math.max(blocks.length + 50, 100);
+  
+  // Callback ref to initialize mesh immediately when created
+  // This MUST run before any frame is rendered to prevent origin blocks
+  const meshRefCallback = React.useCallback((mesh: THREE.InstancedMesh | null) => {
+    (meshRef as React.MutableRefObject<THREE.InstancedMesh | null>).current = mesh;
+    
+    if (mesh && (!meshInitializedRef.current || lastBufferSizeRef.current !== bufferSize)) {
+      // CRITICAL: Initialize ALL instances to hidden position IMMEDIATELY
+      // This prevents the default identity matrix (position 0,0,0) from showing
+      const matrix = new THREE.Matrix4();
+      matrix.setPosition(0, -10000, 0);
+      
+      for (let i = 0; i < bufferSize; i++) {
+        mesh.setMatrixAt(i, matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.count = 0; // Start with 0 visible instances
+      
+      meshInitializedRef.current = true;
+      lastBufferSizeRef.current = bufferSize;
+    }
+  }, [bufferSize]);
   
   useEffect(() => {
     if (!meshRef.current) return;
@@ -556,7 +580,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   return (
     <>
       <instancedMesh
-        ref={meshRef}
+        ref={meshRefCallback}
         args={[geometry, material, bufferSize]}
         castShadow
         receiveShadow
