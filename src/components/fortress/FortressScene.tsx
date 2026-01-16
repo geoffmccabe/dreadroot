@@ -88,7 +88,7 @@ const WispParticlesMesh = React.forwardRef<WispParticlesMeshHandle, { particles:
 
 WispParticlesMesh.displayName = 'WispParticlesMesh';
 
-// Camera-tracked block renderer with IMPERATIVE chunk culling (no React re-renders!)
+// Camera-tracked block renderer with chunk culling
 function CameraTrackedBlocks({ 
   blocks, 
   showOwnershipOutline, 
@@ -105,12 +105,15 @@ function CameraTrackedBlocks({
   performanceMode?: boolean;
 }) {
   const { camera } = useThree();
-  const { visibleChunksRef, visualDistance } = useBlocks();
-  
-  // Track last chunk position to detect boundary crossings
+  const { blocksByChunk, visibleChunksRef, visualDistance } = useBlocks();
+
   const lastChunkRef = useRef({ x: 0, z: 0 });
-  const lastVisualDistanceRef = useRef(visualDistance);
-  
+  const lastUpdateTime = useRef(0);
+  const lastVisualDistance = useRef(visualDistance);
+
+  const [renderTrigger, setRenderTrigger] = useState(0);
+  const CHUNK_UPDATE_THROTTLE = 100; // ms
+
   // Initialize visible chunks on mount
   useEffect(() => {
     const visibleChunkKeys = getVisibleChunkKeys(
@@ -123,63 +126,76 @@ function CameraTrackedBlocks({
       x: Math.floor(camera.position.x / CHUNK_SIZE),
       z: Math.floor(camera.position.z / CHUNK_SIZE)
     };
+    setRenderTrigger(prev => prev + 1);
   }, [camera, visualDistance, visibleChunksRef]);
-  
-  // Register camera tracking with centralized frame loop
-  // This ONLY updates the visibleChunksRef - NO React re-renders!
+
+  // Recalculate visible chunks when visualDistance changes
   useEffect(() => {
-    const unregister = frameLoop.register('cameraChunks', () => {
-      const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
-      const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
-      const currentVD = lastVisualDistanceRef.current;
-      
-      // Only recalculate when camera crosses chunk boundary OR visualDistance changed
-      if (currentChunkX !== lastChunkRef.current.x || 
-          currentChunkZ !== lastChunkRef.current.z) {
-        
-        lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
-        
-        // Update ref directly - NO React setState!
-        const visibleChunkKeys = getVisibleChunkKeys(
-          camera.position.x,
-          camera.position.z,
-          currentVD
-        );
-        visibleChunksRef.current.clear();
-        for (const key of visibleChunkKeys) {
-          visibleChunksRef.current.add(key);
-        }
-        diagnostics.e4++; // Track chunk update
-      }
-    }, 100); // Low priority - run after other systems
-    
-    return unregister;
-  }, [camera, visibleChunksRef]);
-  
-  // Update ref when visualDistance prop changes
-  useEffect(() => {
-    if (visualDistance !== lastVisualDistanceRef.current) {
-      lastVisualDistanceRef.current = visualDistance;
-      
-      // Recalculate visible chunks immediately
+    if (visualDistance !== lastVisualDistance.current) {
+      lastVisualDistance.current = visualDistance;
       const visibleChunkKeys = getVisibleChunkKeys(
         camera.position.x,
         camera.position.z,
         visualDistance
       );
       visibleChunksRef.current = new Set(visibleChunkKeys);
+      setRenderTrigger(prev => prev + 1);
     }
   }, [visualDistance, camera, visibleChunksRef]);
-  
-  // Pass ALL blocks to PlacedBlocks - chunk filtering happens imperatively in InstancedBlockGroup
-  return <PlacedBlocks 
-    blocks={blocks} 
-    showOwnershipOutline={performanceMode ? false : showOwnershipOutline} 
-    currentUserId={currentUserId} 
-    hoveredBlockId={performanceMode ? null : hoveredBlockId}
-    onMeshReady={onMeshReady}
-    performanceMode={performanceMode}
-  />;
+
+  // Track camera movement via the centralized frame loop
+  useEffect(() => {
+    const unregister = frameLoop.register('cameraChunks', () => {
+      const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+      const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+      const now = Date.now();
+
+      if ((currentChunkX !== lastChunkRef.current.x || currentChunkZ !== lastChunkRef.current.z) &&
+          now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
+        lastUpdateTime.current = now;
+        lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
+
+        const visibleChunkKeys = getVisibleChunkKeys(
+          camera.position.x,
+          camera.position.z,
+          lastVisualDistance.current
+        );
+
+        // Reuse set instead of creating a new one
+        const setRef = visibleChunksRef.current;
+        setRef.clear();
+        for (const key of visibleChunkKeys) setRef.add(key);
+        diagnostics.e4++;
+
+        // Trigger a React render outside the frame tick
+        requestAnimationFrame(() => setRenderTrigger(prev => prev + 1));
+      }
+    }, 100);
+
+    return unregister;
+  }, [camera, visibleChunksRef]);
+
+  // Memoize visible blocks based on the stable trigger
+  const visibleBlocks = useMemo(() => {
+    const filtered: PlacedBlock[] = [];
+    for (const chunkKey of visibleChunksRef.current) {
+      const chunkBlocks = blocksByChunk.get(chunkKey);
+      if (chunkBlocks) filtered.push(...chunkBlocks);
+    }
+    diagnostics.visibleBlocks = filtered.length;
+    return filtered;
+  }, [renderTrigger, blocksByChunk, blocks.length, visibleChunksRef]);
+
+  return (
+    <PlacedBlocks
+      blocks={visibleBlocks}
+      showOwnershipOutline={performanceMode ? false : showOwnershipOutline}
+      currentUserId={currentUserId}
+      hoveredBlockId={performanceMode ? null : (hoveredBlockId || null)}
+      onMeshReady={onMeshReady}
+      performanceMode={performanceMode}
+    />
+  );
 }
 
 export function FortressScene({ 

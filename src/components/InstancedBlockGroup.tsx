@@ -1,12 +1,10 @@
-import React, { useRef, useMemo, useEffect, useState, MutableRefObject } from 'react';
-import { useThree } from '@react-three/fiber';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
-import { frameLoop } from '@/lib/frameLoop';
-import { blockToChunkKey } from '@/lib/chunkManager';
 
 // Global texture cache - shared across all instanced groups
 const textureCache = new Map<string, { 
@@ -36,8 +34,6 @@ interface InstancedBlockGroupProps {
   showOwnershipOutline?: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
-  /** Ref to visible chunk keys - used for imperative visibility filtering */
-  visibleChunksRef: MutableRefObject<Set<string>>;
   onMeshReady?: (mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
 }
@@ -50,13 +46,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   showOwnershipOutline = false,
   currentUserId,
   hoveredBlockId = null,
-  visibleChunksRef,
   onMeshReady,
   performanceMode = false
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const meshInitializedRef = useRef(false);
-  const lastBufferSizeRef = useRef(0);
   const materialRef = useRef<THREE.Material | null>(null);
   const hasIncrementedRef = useRef(false);
   const { camera } = useThree();
@@ -64,6 +57,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const hoveredMaterialRef = useRef<THREE.Material | null>(null);
   const timeRef = useRef(0);
   const hoverTimeRef = useRef(0);
+
+  const fxEnabled = !performanceMode;
+  const effectiveShowOwnershipOutline = fxEnabled && showOwnershipOutline;
+  const effectiveHoveredBlockId = fxEnabled ? hoveredBlockId : null;
   
   // Create outline material once
   if (!outlineMaterialRef.current) {
@@ -217,70 +214,26 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [onMeshReady]);
   
-  // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
-  // Use MAX of current blocks.length + 50 or 100 to handle growth
-  const bufferSize = Math.max(blocks.length + 50, 100);
-  
-  // Callback ref to initialize mesh immediately when created
-  // This MUST run before any frame is rendered to prevent origin blocks
-  const meshRefCallback = React.useCallback((mesh: THREE.InstancedMesh | null) => {
-    (meshRef as React.MutableRefObject<THREE.InstancedMesh | null>).current = mesh;
-    
-    if (mesh && (!meshInitializedRef.current || lastBufferSizeRef.current !== bufferSize)) {
-      // CRITICAL: Initialize ALL instances to hidden position IMMEDIATELY
-      // This prevents the default identity matrix (position 0,0,0) from showing
-      const matrix = new THREE.Matrix4();
-      matrix.setPosition(0, -10000, 0);
-      
-      for (let i = 0; i < bufferSize; i++) {
-        mesh.setMatrixAt(i, matrix);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-      // Don't set count to 0 - let the useEffect handle count based on blocks.length
-      
-      meshInitializedRef.current = true;
-      lastBufferSizeRef.current = bufferSize;
-      
-      // Force the blocks useEffect to re-run by clearing the prev key
-      prevBlockIdsRef.current = '';
-    }
-  }, [bufferSize]);
-  
-  // Fast change detection using length + first/last IDs (O(1) instead of O(n log n))
-  const fastBlockKey = useMemo(() => {
-    if (blocks.length === 0) return '';
-    const first = blocks[0]?.id || '';
-    const last = blocks[blocks.length - 1]?.id || '';
-    return `${blocks.length}:${first}:${last}`;
-  }, [blocks]);
-  
   useEffect(() => {
     if (!meshRef.current) return;
+    
+    // Create stable key from block IDs to detect actual changes
+    const blockIdsKey = blocks.map(b => b.id).sort().join(',');
     
     // IMPORTANT: Always update the mesh count to match blocks array
     // This is needed because the instancedMesh may have been created with a different count
     meshRef.current.count = blocks.length;
     
-    // Skip matrix re-upload only if blocks haven't changed (using fast key)
-    if (prevBlockIdsRef.current === fastBlockKey && blocks.length > 0) {
+    // Skip matrix re-upload only if block IDs haven't changed
+    if (prevBlockIdsRef.current === blockIdsKey && blocks.length > 0) {
       return;
     }
     
-    prevBlockIdsRef.current = fastBlockKey;
+    prevBlockIdsRef.current = blockIdsKey;
     
     const matrix = matrixRef.current;
     const boundingBox = new THREE.Box3();
     
-    // CRITICAL FIX: Initialize ALL allocated instances to hidden position first
-    // This prevents uninitialized instances from appearing at origin (0, 0, 0)
-    // Use the mesh's actual instance count from instanceMatrix to stay in bounds
-    const meshInstanceCount = meshRef.current.instanceMatrix.count;
-    matrix.setPosition(0, -10000, 0);
-    for (let i = 0; i < meshInstanceCount; i++) {
-      meshRef.current!.setMatrixAt(i, matrix);
-    }
-    
-    // Now position the actual blocks
     blocks.forEach((block, i) => {
       // Always use database position for initial matrix setup
       // Falling blocks will be updated in useFrame
@@ -316,14 +269,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Reuse Set to avoid GC pressure - clear and refill instead of creating new
   const currentlyFallingRef = useRef<Set<string>>(new Set());
   
-  // Pre-compute chunk keys for each block (only recomputed when blocks change)
-  const blockChunkKeys = useMemo(() => {
-    return blocks.map(block => blockToChunkKey(block));
-  }, [blocks]);
-  
-  // Track per-block visibility state to minimize updates
-  const blockVisibilityRef = useRef<boolean[]>([]);
-  
   // Create block ID to index map for O(1) lookups instead of O(n) findIndex
   const blockIndexMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -333,140 +278,90 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     return map;
   }, [blocks]);
   
-  // Store refs for frameLoop callback
-  const blocksRef = useRef(blocks);
-  const blockChunkKeysRef = useRef(blockChunkKeys);
-  const blockIndexMapRef = useRef(blockIndexMap);
-  const showOwnershipOutlineRef = useRef(showOwnershipOutline);
-  const hoveredBlockIdRef = useRef(hoveredBlockId);
-  
-  useEffect(() => { blocksRef.current = blocks; }, [blocks]);
-  useEffect(() => { blockChunkKeysRef.current = blockChunkKeys; }, [blockChunkKeys]);
-  useEffect(() => { blockIndexMapRef.current = blockIndexMap; }, [blockIndexMap]);
-  useEffect(() => { showOwnershipOutlineRef.current = showOwnershipOutline; }, [showOwnershipOutline]);
-  useEffect(() => { hoveredBlockIdRef.current = hoveredBlockId; }, [hoveredBlockId]);
-  
-  // Track visible count for diagnostics
-  const visibleCountRef = useRef(0);
-  
-  // Generate unique ID for this block group to avoid collision with other instances
-  const frameLoopId = useMemo(() => `blocks-${blockDef?.key || 'unknown'}-${Math.random().toString(36).slice(2, 8)}`, [blockDef?.key]);
-  
-  // Register with centralized frame loop - now includes IMPERATIVE chunk visibility filtering!
-  useEffect(() => {
-    const unregister = frameLoop.register(frameLoopId, (delta) => {
-      diagnostics.startTiming('blocks');
-      
-      const mesh = meshRef.current;
-      if (!mesh) {
-        diagnostics.recordTiming('blocks');
-        return;
-      }
-      
-      const matrix = matrixRef.current;
-      const currentBlocks = blocksRef.current;
-      const chunkKeys = blockChunkKeysRef.current;
-      const visibleChunks = visibleChunksRef.current;
-      const indexMap = blockIndexMapRef.current;
-      const blockVisibility = blockVisibilityRef.current;
-      
-      // Ensure visibility array matches blocks length
-      if (blockVisibility.length !== currentBlocks.length) {
-        blockVisibilityRef.current = new Array(currentBlocks.length).fill(false);
-      }
-      
-      // Reuse Set instead of creating new one every frame
-      const currentlyFalling = currentlyFallingRef.current;
-      currentlyFalling.clear();
-      
-      let visibleCount = 0;
-      let needsUpdate = false;
-      
-      // OPTIMIZED: Only update blocks whose visibility changed OR that are falling
-      for (let i = 0; i < currentBlocks.length; i++) {
-        const block = currentBlocks[i];
-        const chunkKey = chunkKeys[i];
-        const isVisible = visibleChunks.has(chunkKey);
-        const wasVisible = blockVisibility[i];
-        
-        // Check if this block is falling
-        const fallState = fallingBlocksState.get(block.id);
-        const isFalling = !!fallState;
-        if (isFalling) {
-          currentlyFalling.add(block.id);
-        }
-        
-        // Only update if: visibility changed OR block is falling
-        const visibilityChanged = isVisible !== wasVisible;
-        if (visibilityChanged || isFalling) {
-          if (isVisible) {
-            // Use falling Y if applicable, otherwise database position
-            const x = block.position_x + 0.5;
-            const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
-            const z = block.position_z + 0.5;
-            
-            matrix.setPosition(x, y, z);
-          } else {
-            // Move non-visible blocks far away (effectively hides them)
-            matrix.setPosition(0, -10000, 0);
-          }
-          
-          mesh.setMatrixAt(i, matrix);
-          needsUpdate = true;
-          blockVisibility[i] = isVisible;
-        }
-        
-        if (isVisible) {
-          visibleCount++;
-        }
-      }
-      
-      // Track visible count for diagnostics
-      visibleCountRef.current = visibleCount;
-      diagnostics.visibleBlocks = visibleCount;
-      
-      // Swap Sets for falling block tracking (no allocation)
-      const temp = previouslyFallingRef.current;
-      previouslyFallingRef.current = currentlyFallingRef.current;
-      currentlyFallingRef.current = temp;
-      
-      if (needsUpdate) {
-        mesh.instanceMatrix.needsUpdate = true;
-      }
-      
-      // Animate outline color: red -> orange -> bright yellow -> back
-      if (showOwnershipOutlineRef.current && outlineMaterialRef.current) {
-        timeRef.current += delta;
-        // Cycle every 2 seconds (0 to 60 hue in HSL)
-        const cycle = (timeRef.current % 2) / 2; // 0 to 1
-        const hue = cycle * 60; // 0 (red) to 60 (yellow)
-        outlineMaterialRef.current.color.setHSL(hue / 360, 1, 0.5);
-      }
-      
-      // Animate hovered block opacity - double speed (0.5s cycle)
-      if (hoveredBlockIdRef.current && hoveredMaterialRef.current) {
-        hoverTimeRef.current += delta;
-        // Cycle every 0.5 seconds: from full opacity (1) to transparent (0)
-        const cycle = (hoverTimeRef.current % 0.5) / 0.5; // 0 to 1
-        const opacity = Math.abs(Math.sin(cycle * Math.PI)); // 0 to 1 to 0
-        (hoveredMaterialRef.current as THREE.MeshLambertMaterial).opacity = opacity;
-      } else {
-        hoverTimeRef.current = 0;
-      }
-      
-      diagnostics.recordTiming('blocks');
-    }, 60); // Medium-high priority
+  useFrame((_, delta) => {
     
-    return unregister;
-  }, [frameLoopId, visibleChunksRef]);
+    if (!meshRef.current) return;
+    
+    // Update visible blocks count for diagnostics
+    diagnostics.visibleBlocks = blocks.length;
+    
+    let needsUpdate = false;
+    const matrix = matrixRef.current;
+    
+    // Reuse Set instead of creating new one every frame
+    const currentlyFalling = currentlyFallingRef.current;
+    currentlyFalling.clear();
+    
+    // Update positions for falling blocks - O(1) lookup per block
+    fallingBlocksState.forEach((fallState, blockId) => {
+      const blockIndex = blockIndexMap.get(blockId);
+      if (blockIndex === undefined) return;
+      
+      currentlyFalling.add(blockId);
+      
+      const block = blocks[blockIndex];
+      const x = block.position_x + 0.5;
+      const y = fallState.currentY + 0.5;
+      const z = block.position_z + 0.5;
+      
+      matrix.setPosition(x, y, z);
+      meshRef.current!.setMatrixAt(blockIndex, matrix);
+      needsUpdate = true;
+    });
+    
+    // Reset blocks that were falling but have now landed to their database position
+    previouslyFallingRef.current.forEach(blockId => {
+      if (!currentlyFalling.has(blockId)) {
+        const blockIndex = blockIndexMap.get(blockId);
+        if (blockIndex !== undefined) {
+          const block = blocks[blockIndex];
+          const x = block.position_x + 0.5;
+          const y = block.position_y + 0.5; // Use database position
+          const z = block.position_z + 0.5;
+          
+          matrix.setPosition(x, y, z);
+          meshRef.current!.setMatrixAt(blockIndex, matrix);
+          needsUpdate = true;
+        }
+      }
+    });
+    
+    // Swap Sets instead of copying (no allocation)
+    const temp = previouslyFallingRef.current;
+    previouslyFallingRef.current = currentlyFallingRef.current;
+    currentlyFallingRef.current = temp;
+    
+    if (needsUpdate) {
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    
+    // Animate outline color: red -> orange -> bright yellow -> back
+    if (effectiveShowOwnershipOutline && outlineMaterialRef.current) {
+      timeRef.current += delta;
+      // Cycle every 2 seconds (0 to 60 hue in HSL)
+      const cycle = (timeRef.current % 2) / 2; // 0 to 1
+      const hue = cycle * 60; // 0 (red) to 60 (yellow)
+      outlineMaterialRef.current.color.setHSL(hue / 360, 1, 0.5);
+    }
+    
+    // Animate hovered block opacity - double speed (0.5s cycle)
+    if (hoveredBlock && hoveredMaterialRef.current) {
+      hoverTimeRef.current += delta;
+      // Cycle every 0.5 seconds: from full opacity (1) to transparent (0)
+      const cycle = (hoverTimeRef.current % 0.5) / 0.5; // 0 to 1
+      const opacity = Math.abs(Math.sin(cycle * Math.PI)); // 0 to 1 to 0
+      (hoveredMaterialRef.current as THREE.MeshLambertMaterial).opacity = opacity;
+    } else {
+      hoverTimeRef.current = 0;
+    }
+  });
   
-  // Fast collision key - O(1) instead of O(n log n)
-  const blockIdsForCollision = useMemo(() => {
-    if (blocks.length === 0) return '';
-    const first = blocks[0]?.id || '';
-    const last = blocks[blocks.length - 1]?.id || '';
-    return `${blocks.length}:${first}:${last}`;
-  }, [blocks]);
+  // Create collision boxes for all instances (only when blocks change, not on every frame)
+  // Use a stable key to track when blocks actually change
+  const blockIdsForCollision = useMemo(() => 
+    blocks.map(b => b.id).sort().join(','), 
+    [blocks]
+  );
   
   useEffect(() => {
     if (!onCollision) return;
@@ -497,15 +392,15 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   // Filter blocks owned by current user for outline rendering (must be before early returns)
   const ownedBlocks = useMemo(() => {
-    if (!showOwnershipOutline || !currentUserId) return [];
+    if (!effectiveShowOwnershipOutline || !currentUserId) return [];
     return blocks.filter(block => block.user_id === currentUserId);
-  }, [blocks, showOwnershipOutline, currentUserId]);
+  }, [blocks, effectiveShowOwnershipOutline, currentUserId]);
   
   // Find the hovered block
   const hoveredBlock = useMemo(() => {
-    if (!hoveredBlockId) return null;
-    return blocks.find(block => block.id === hoveredBlockId);
-  }, [blocks, hoveredBlockId]);
+    if (!effectiveHoveredBlockId) return null;
+    return blocks.find(block => block.id === effectiveHoveredBlockId);
+  }, [blocks, effectiveHoveredBlockId]);
   
   // Create transparent material for hovered block
   useEffect(() => {
@@ -533,7 +428,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
 
   // Get glow properties
   const glowFactor = blockDef?.properties?.glowFactor || 0;
-  const shouldGlow = blockDef?.properties?.emissive && glowFactor > 0;
+  const shouldGlow = fxEnabled && blockDef?.properties?.emissive && glowFactor > 0;
   
   // Track camera position for glow updates - only update when camera moves significantly
   const lastGlowCameraPos = useRef(new THREE.Vector3());
@@ -587,18 +482,20 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   if (!material) return null;
   
+  // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
+  // Use MAX of current blocks.length + 50 or 100 to handle growth
+  const bufferSize = Math.max(blocks.length + 50, 100);
 
   return (
     <>
       <instancedMesh
-        ref={meshRefCallback}
+        ref={meshRef}
         args={[geometry, material, bufferSize]}
-        castShadow={!performanceMode}
-        receiveShadow={!performanceMode}
+        castShadow={fxEnabled}
+        receiveShadow={fxEnabled}
         frustumCulled={true}
       />
-      {/* Glow lights - DISABLED in performance mode */}
-      {!performanceMode && glowingBlocks.map((block) => (
+      {glowingBlocks.map((block) => (
         <pointLight
           key={block.id}
           position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
@@ -608,8 +505,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           decay={2}
         />
       ))}
-      {/* Hovered block overlay - DISABLED in performance mode */}
-      {!performanceMode && hoveredBlock && hoveredMaterialRef.current && (
+      {/* Render hovered block with animated opacity */}
+      {hoveredBlock && hoveredMaterialRef.current && (
         <mesh
           position={[
             hoveredBlock.position_x + 0.5,
@@ -618,12 +515,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           ]}
           geometry={geometry}
           material={hoveredMaterialRef.current}
-          castShadow={false}
-          receiveShadow={false}
+          castShadow
+          receiveShadow
         />
       )}
-      {/* Ownership outlines - DISABLED in performance mode */}
-      {!performanceMode && showOwnershipOutline && outlineMaterialRef.current && ownedBlocks.map((block) => {
+      {/* Render animated outlines for owned blocks */}
+      {effectiveShowOwnershipOutline && outlineMaterialRef.current && ownedBlocks.map((block) => {
         const fallState = fallingBlocksState.get(block.id);
         const x = block.position_x + 0.5;
         const y = (fallState ? fallState.currentY : block.position_y) + 0.5;
