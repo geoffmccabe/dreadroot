@@ -39,6 +39,7 @@ interface InstancedBlockGroupProps {
   /** Ref to visible chunk keys - used for imperative visibility filtering */
   visibleChunksRef: MutableRefObject<Set<string>>;
   onMeshReady?: (mesh: THREE.InstancedMesh | null) => void;
+  performanceMode?: boolean;
 }
 
 export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
@@ -50,7 +51,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   currentUserId,
   hoveredBlockId = null,
   visibleChunksRef,
-  onMeshReady
+  onMeshReady,
+  performanceMode = false
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const meshInitializedRef = useRef(false);
@@ -585,11 +587,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       <instancedMesh
         ref={meshRefCallback}
         args={[geometry, material, bufferSize]}
-        castShadow
-        receiveShadow
+        castShadow={!performanceMode}
+        receiveShadow={!performanceMode}
         frustumCulled={true}
       />
-      {glowingBlocks.map((block) => (
+      {/* Glow lights - DISABLED in performance mode */}
+      {!performanceMode && glowingBlocks.map((block) => (
         <pointLight
           key={block.id}
           position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
@@ -599,8 +602,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           decay={2}
         />
       ))}
-      {/* Render hovered block with animated opacity */}
-      {hoveredBlock && hoveredMaterialRef.current && (
+      {/* Hovered block overlay - DISABLED in performance mode */}
+      {!performanceMode && hoveredBlock && hoveredMaterialRef.current && (
         <mesh
           position={[
             hoveredBlock.position_x + 0.5,
@@ -609,12 +612,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           ]}
           geometry={geometry}
           material={hoveredMaterialRef.current}
-          castShadow
-          receiveShadow
+          castShadow={false}
+          receiveShadow={false}
         />
       )}
-      {/* Render animated outlines for owned blocks */}
-      {showOwnershipOutline && outlineMaterialRef.current && ownedBlocks.map((block) => {
+      {/* Ownership outlines - DISABLED in performance mode */}
+      {!performanceMode && showOwnershipOutline && outlineMaterialRef.current && ownedBlocks.map((block) => {
         const fallState = fallingBlocksState.get(block.id);
         const x = block.position_x + 0.5;
         const y = (fallState ? fallState.currentY : block.position_y) + 0.5;

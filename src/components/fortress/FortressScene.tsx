@@ -94,13 +94,15 @@ function CameraTrackedBlocks({
   showOwnershipOutline, 
   currentUserId, 
   hoveredBlockId, 
-  onMeshReady 
+  onMeshReady,
+  performanceMode = false
 }: { 
   blocks: PlacedBlock[];
   showOwnershipOutline: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
+  performanceMode?: boolean;
 }) {
   const { camera } = useThree();
   const { visibleChunksRef, visualDistance } = useBlocks();
@@ -172,10 +174,11 @@ function CameraTrackedBlocks({
   // Pass ALL blocks to PlacedBlocks - chunk filtering happens imperatively in InstancedBlockGroup
   return <PlacedBlocks 
     blocks={blocks} 
-    showOwnershipOutline={showOwnershipOutline} 
+    showOwnershipOutline={performanceMode ? false : showOwnershipOutline} 
     currentUserId={currentUserId} 
-    hoveredBlockId={hoveredBlockId || null}
+    hoveredBlockId={performanceMode ? null : hoveredBlockId}
     onMeshReady={onMeshReady}
+    performanceMode={performanceMode}
   />;
 }
 
@@ -206,7 +209,8 @@ export function FortressScene({
   collectWispBlock,
   toast,
   waterfallEnabled = true,
-  onGodModeChange
+  onGodModeChange,
+  performanceMode = false
 }: SceneProps) {
   // Shared cycle state ref for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -601,6 +605,7 @@ export function FortressScene({
         currentUserId={user?.id}
         hoveredBlockId={hoveredBlockId}
         onMeshReady={handleMeshReady}
+        performanceMode={performanceMode}
       />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
