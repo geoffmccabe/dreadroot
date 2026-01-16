@@ -14,7 +14,8 @@ import {
   createBlockColliders,
   checkAxisCollision,
   findStepUpTarget,
-  createPlayerBox
+  createPlayerBox,
+  resetFortressGridState
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { collisionGrid } from '@/lib/spatialHashGrid';
@@ -102,6 +103,7 @@ export function FirstPersonControls({
   useEffect(() => {
     if (!gridInitialized.current) {
       collisionGrid.clear();
+      resetFortressGridState(); // Reset flag so fortress colliders get re-added
       gridInitialized.current = true;
     }
   }, []);
