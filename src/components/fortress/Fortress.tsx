@@ -214,14 +214,17 @@ export function Fortress() {
     let placedCount = 0;
     let currentIndex = 0;
     const startTime = Date.now();
-    let lastPlaceTime = startTime;
+    let nextPlaceTime = startTime;
     
-    // Non-blocking placement loop using requestAnimationFrame
+    console.log('Block rain starting:', positions.length, 'positions, rate:', blocksPerSecond, '/sec');
+    
+    // Non-blocking placement loop using setTimeout for precise timing
     const placeNextBlock = () => {
       if (currentIndex >= positions.length) {
         // All blocks placed - show completion toast
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        const actualRate = (placedCount / parseFloat(duration)).toFixed(1);
+        const actualRate = placedCount > 0 ? (placedCount / parseFloat(duration)).toFixed(1) : '0';
+        console.log('Block rain complete:', placedCount, 'blocks in', duration, 's');
         toast({
           title: "Block Rain Complete!",
           description: `${placedCount} blocks placed in ${duration}s (${actualRate}/sec)`,
@@ -230,43 +233,33 @@ export function Fortress() {
         return;
       }
       
-      const now = Date.now();
-      const elapsed = now - lastPlaceTime;
+      const pos = positions[currentIndex];
+      const key = `${pos.x},${pos.z}`;
+      const targetY = localHeightMap.get(key) || 0;
+      const inForbiddenZone = isInForbiddenZone(pos.x, pos.z);
+      const expiresAt = inForbiddenZone 
+        ? new Date(Date.now()).toISOString()
+        : new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
       
-      // Place blocks at the configured rate
-      const blocksToPlace = Math.min(
-        Math.floor(elapsed / msPerBlock) || 1,
-        positions.length - currentIndex,
-        5 // Max 5 blocks per frame to prevent lag spikes
-      );
+      const placedBlock = placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
+      console.log('Placed block', currentIndex, ':', placedBlock?.id, 'at', pos.x, targetY, pos.z);
       
-      for (let i = 0; i < blocksToPlace && currentIndex < positions.length; i++) {
-        const pos = positions[currentIndex];
-        const key = `${pos.x},${pos.z}`;
-        const targetY = localHeightMap.get(key) || 0;
-        const inForbiddenZone = isInForbiddenZone(pos.x, pos.z);
-        const expiresAt = inForbiddenZone 
-          ? new Date(Date.now()).toISOString()
-          : new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
-        
-        const placedBlock = placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
-        if (placedBlock) {
-          // Set falling state - blocks will fall from sky
-          fallingBlocksState.set(placedBlock.id, { currentY: 50, velocity: 0, targetY });
-          placedCount++;
-        }
-        localHeightMap.set(key, targetY + 1);
-        currentIndex++;
+      if (placedBlock) {
+        // Set falling state - blocks will fall from sky
+        fallingBlocksState.set(placedBlock.id, { currentY: 50, velocity: 0, targetY });
+        placedCount++;
       }
+      localHeightMap.set(key, targetY + 1);
+      currentIndex++;
       
-      lastPlaceTime = now;
-      
-      // Continue on next frame
-      requestAnimationFrame(placeNextBlock);
+      // Schedule next block
+      nextPlaceTime += msPerBlock;
+      const delay = Math.max(0, nextPlaceTime - Date.now());
+      setTimeout(placeNextBlock, delay);
     };
     
     // Start the placement loop
-    requestAnimationFrame(placeNextBlock);
+    placeNextBlock();
   }, [toast, placeBlock]);
 
   // Block rain trigger
