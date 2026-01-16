@@ -214,7 +214,7 @@ export function Fortress() {
     
     const { heightMap, fallingBlocksState } = await import('@/components/PlacedBlocks');
     const localHeightMap = new Map<string, number>(heightMap);
-    const placementPromises: Promise<any>[] = [];
+    
     
     for (let i = 0; i < positions.length; i++) {
       const pos = positions[i];
@@ -227,16 +227,12 @@ export function Fortress() {
         ? new Date(Date.now()).toISOString()
         : new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
       
-      const placementPromise = placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt)
-        .then(placedBlock => {
-          if (placedBlock) {
-            fallingBlocksState.set(placedBlock.id, { currentY: 100, velocity: 0, targetY });
-            placedCount++;
-          }
-        })
-        .catch(error => console.error('Failed to place block:', error));
-      
-      placementPromises.push(placementPromise);
+      // placeBlock is synchronous and returns the block or null
+      const placedBlock = placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
+      if (placedBlock) {
+        fallingBlocksState.set(placedBlock.id, { currentY: 100, velocity: 0, targetY });
+        placedCount++;
+      }
       localHeightMap.set(key, targetY + 1);
       
       const now = Date.now();
@@ -248,7 +244,7 @@ export function Fortress() {
       }
     }
     
-    await Promise.all(placementPromises);
+    
     
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     const actualRate = (placedCount / parseFloat(duration)).toFixed(1);
