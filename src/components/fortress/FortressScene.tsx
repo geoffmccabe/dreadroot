@@ -204,7 +204,9 @@ export function FortressScene({
   hoveredBlockId,
   setHoveredBlockId,
   collectWispBlock,
-  toast
+  toast,
+  waterfallEnabled = true,
+  onGodModeChange
 }: SceneProps) {
   // Shared cycle state ref for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -580,6 +582,7 @@ export function FortressScene({
         meshesArrayCache={meshesArrayCache}
         meshToBlockTypeCache={meshToBlockTypeCache}
         blocksByTypeAndUser={blocksByTypeAndUser}
+        onGodModeChange={onGodModeChange}
       />
       
       <MultiplayerPlayers players={players} />
@@ -602,7 +605,8 @@ export function FortressScene({
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         msBetweeenDrops={settings.msBetweeenDrops} 
-        colorPalette={settings.colorPalette} 
+        colorPalette={settings.colorPalette}
+        enabled={waterfallEnabled}
       />
       <Coins 
         coinRate={settings.coinRate} 

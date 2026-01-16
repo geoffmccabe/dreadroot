@@ -68,6 +68,8 @@ export interface SceneProps {
   setHoveredBlockId: (id: string | null) => void;
   collectWispBlock: (blockKey: string) => Promise<boolean>;
   toast: any;
+  waterfallEnabled?: boolean;
+  onGodModeChange?: (enabled: boolean) => void;
 }
 
 // First person controls props
