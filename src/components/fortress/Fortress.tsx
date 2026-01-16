@@ -549,7 +549,7 @@ export function Fortress() {
     <div className="w-full h-screen relative overflow-hidden bg-background">
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
-        shadows={!performanceMode}
+        shadows={false}
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         dpr={1}
       >
