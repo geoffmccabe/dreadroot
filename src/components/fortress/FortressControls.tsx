@@ -580,7 +580,15 @@ export function FirstPersonControls({
       
       const currentColliders = collidersRef.current;
       
-      // Note: isMoving used implicitly - throttling happens inside checkAxisCollision
+      // UNSTUCK CHECK: If player is currently INSIDE a block, push them up
+      // This handles cases where player spawns inside blocks or gets stuck
+      const currentPosCollision = checkAxisCollision(camera.position, currentColliders, playerRadius, playerHeight, false, true);
+      if (currentPosCollision) {
+        // Push player above the block they're stuck in
+        camera.position.y = currentPosCollision.max.y + playerHeight + 0.1;
+        velocity.current.y = 0;
+        onGround.current = true;
+      }
 
       // X-axis collision - only check if moving horizontally
       if (deltaMovement.x !== 0) {
