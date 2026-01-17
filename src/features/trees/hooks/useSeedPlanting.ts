@@ -43,6 +43,11 @@ export function useSeedPlanting({
     if (!seedDef) {
       return { success: false, error: `Seed tier ${tier} not found` };
     }
+    
+    // Only allow planting seeds that have a name configured
+    if (!seedDef.name || seedDef.name.trim() === '') {
+      return { success: false, error: `Seed tier ${tier} is not configured yet` };
+    }
 
     setIsPlanting(true);
 
