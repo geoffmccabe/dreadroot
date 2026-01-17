@@ -17,6 +17,7 @@ interface TreeData {
 
 export function useTreeData(worldId: string | null): TreeData & {
   refetch: () => Promise<void>;
+  addTreeOptimistically: (tree: PlantedTree) => void;
 } {
   const [plantedTrees, setPlantedTrees] = useState<PlantedTree[]>([]);
   const [treeFruits, setTreeFruits] = useState<TreeFruit[]>([]);
@@ -133,6 +134,15 @@ export function useTreeData(worldId: string | null): TreeData & {
     };
   }, [worldId, fetchData]);
 
+  // Optimistically add a tree to the local state (for instant growth after planting)
+  const addTreeOptimistically = useCallback((tree: PlantedTree) => {
+    setPlantedTrees(prev => {
+      // Don't add if already exists
+      if (prev.some(t => t.id === tree.id)) return prev;
+      return [...prev, tree];
+    });
+  }, []);
+
   return {
     plantedTrees,
     treeFruits,
@@ -140,5 +150,6 @@ export function useTreeData(worldId: string | null): TreeData & {
     isLoading,
     error,
     refetch: fetchData,
+    addTreeOptimistically,
   };
 }

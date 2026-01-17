@@ -122,7 +122,7 @@ export function Fortress() {
   
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
   // Note: Tree blocks are now stored in placed_blocks and come through the regular chunk loading system
-  const { seedDefinitions, plantedTrees } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
+  const { seedDefinitions, plantedTrees, addTreeOptimistically } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
   
   const { plantSeed } = useSeedPlanting({
     worldId: currentWorldId,
@@ -570,10 +570,11 @@ export function Fortress() {
     } catch (e) { console.warn('Seed sound failed', e); }
     
     const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedSeedTier);
-    if (result.success) {
-      toast({ title: "🌱 Seed planted!", description: `Tree will grow at (${roundedPos.x}, ${roundedPos.y}, ${roundedPos.z})` });
+    if (result.success && result.tree) {
+      // Add tree optimistically so growth starts immediately
+      addTreeOptimistically(result.tree);
     }
-  }, [selectedSeedTier, plantSeed, toast]);
+  }, [selectedSeedTier, plantSeed, addTreeOptimistically]);
 
   const handleOpenPanel = useCallback((tab: 'user' | 'wallet' | 'inventory' | 'store') => {
     openPanel(tab);
