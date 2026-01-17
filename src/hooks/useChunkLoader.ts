@@ -230,6 +230,9 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   /**
    * Replace a temp block with the real server block (by position match)
    * Phase 3A: Update hasOptimisticBlocks when temp blocks are replaced
+   * 
+   * OPTIMIZATION: Only trigger onBlocksChanged if visual data changed.
+   * If only the ID changed (temp->real), skip the callback to prevent flashing.
    */
   const replaceBlockByPosition = useCallback((newBlock: PlacedBlock): void => {
     const chunkKey = getChunkKey(newBlock.position_x, newBlock.position_z);
@@ -243,13 +246,24 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       );
       
       if (index >= 0) {
+        const oldBlock = chunkData.blocks[index];
+        
+        // Check if visual data changed (block_type, texture_url)
+        // If only ID changed (temp->real), skip re-render to prevent flashing
+        const visualChanged = 
+          oldBlock.block_type !== newBlock.block_type ||
+          oldBlock.texture_url !== newBlock.texture_url;
+        
         chunkData.blocks[index] = newBlock;
         chunkData.lastAccessedAt = Date.now();
         
         // Phase 3A: Recompute hasOptimisticBlocks after replacement
         chunkData.hasOptimisticBlocks = chunkData.blocks.some(b => b.id.startsWith('temp-'));
         
-        onBlocksChanged(flattenLoadedBlocks());
+        // Only trigger React re-render if visual properties changed
+        if (visualChanged) {
+          onBlocksChanged(flattenLoadedBlocks());
+        }
       }
     }
   }, [onBlocksChanged, flattenLoadedBlocks]);

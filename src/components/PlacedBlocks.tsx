@@ -218,12 +218,15 @@ export const PlacedBlocks: React.FC<{
       {Array.from(groupedBlocks.entries()).map(([groupKey, { blocks: blocksOfType, textureOverride }]) => {
         // Extract block_type from groupKey (before the | if present)
         const blockType = groupKey.includes('|') ? groupKey.split('|')[0] : groupKey;
-        let blockDef = blocksMap.get(blockType);
         
-        // For tree blocks with textureOverride, use fallback if no definition exists
-        // This ensures tree blocks render even if blocks table cache is stale
-        if (!blockDef && textureOverride) {
+        // For blocks with textureOverride (like tree blocks), ALWAYS use fallback
+        // This prevents color tinting from the blocks table (e.g., brown "trunk" block)
+        // The fallback has white color so textures render at full brightness
+        let blockDef: BlockType | undefined;
+        if (textureOverride) {
           blockDef = TREE_BLOCK_FALLBACK;
+        } else {
+          blockDef = blocksMap.get(blockType);
         }
         
         if (!blockDef) {
