@@ -792,6 +792,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       }
 
       // Phase 3B: Use incremental stripe loading for movement
+      // FIX: Fire-and-forget to avoid blocking the render loop during movement
       if (hadPrevChunk) {
         // Calculate stripe chunks for the movement direction
         const stripeChunks = getStripeChunks(
@@ -801,10 +802,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         );
         
         if (stripeChunks.length > 0) {
-          await loadSpecificChunks(stripeChunks);
+          // Don't await - let chunks load asynchronously without blocking frames
+          loadSpecificChunks(stripeChunks).catch(err => {
+            console.warn('Stripe chunk load error:', err);
+          });
         }
       } else {
-        // No previous chunk - do full initial load
+        // No previous chunk - do full initial load (this one can block as it's startup)
         await loadChunksInRadius(newChunkX, newChunkZ, LOAD_RADIUS);
       }
 
