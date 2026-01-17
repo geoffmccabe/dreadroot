@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
+import { clearBlocksCache } from '@/hooks/useBlocksData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useTreeGrowth } from '@/features/trees/hooks/useTreeGrowth';
@@ -112,8 +113,22 @@ export function Fortress() {
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
   
+  // Clear block cache once on mount to ensure new block types (wood, fruit) are loaded
+  useEffect(() => {
+    if (TREE_CONFIG.ENABLED) {
+      clearBlocksCache();
+    }
+  }, []);
+  
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
   const { seedDefinitions, plantedTrees, treeBlocks } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
+  
+  // Debug: Log treeBlocks count
+  useEffect(() => {
+    if (TREE_CONFIG.ENABLED && treeBlocks.length > 0) {
+      console.log(`[Fortress] Tree blocks loaded: ${treeBlocks.length} (${treeBlocks.filter(b => b.block_type === 'trunk').length} trunk, ${treeBlocks.filter(b => b.block_type === 'fruit').length} fruit)`);
+    }
+  }, [treeBlocks]);
   const { plantSeed } = useSeedPlanting({
     worldId: currentWorldId,
     userId: user?.id ?? null,
