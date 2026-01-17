@@ -45,6 +45,8 @@ export interface TreeBlock {
   block_type: 'trunk' | 'fruit';
   growth_order: number;
   created_at: string;
+  // Joined texture data from seed_definitions via planted_trees
+  texture_url?: string | null;
 }
 
 export interface TreeFruit {
