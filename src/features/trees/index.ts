@@ -17,7 +17,7 @@ export type {
 } from './types';
 
 // Core algorithm
-export { generateTreeBlueprint, getNextGrowthBlock, estimateGrowthTime } from './lib/treeGrowth';
+export { generateTreeBlueprint, getNextGrowthBlock, estimateGrowthTime, getBlocksAtOrder, getMaxGrowthOrder } from './lib/treeGrowth';
 export { createSeededRandom } from './lib/seededRandom';
 export { fruitPhysics, FruitPhysicsSystem } from './lib/fruitPhysics';
 
@@ -31,6 +31,6 @@ export { SeedPreview } from './components/SeedPreview';
 
 // Hooks
 export { useTreeData } from './hooks/useTreeData';
-export { useTreeGrowth } from './hooks/useTreeGrowth';
+export { useLocalGrowth, deleteTree } from './hooks/useLocalGrowth';
 export { useSeedPlanting } from './hooks/useSeedPlanting';
 export { useFruitPickup } from './hooks/useFruitPickup';

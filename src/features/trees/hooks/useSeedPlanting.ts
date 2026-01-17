@@ -1,9 +1,10 @@
 // Hook for planting seeds
 // Handles inventory check, tree creation, seed consumption
+// Now uses local growth manager for ref-based growth
 
 import { useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SeedDefinition, PlantedTree, TreeGrowthOptions } from '../types';
+import { SeedDefinition, TreeGrowthOptions } from '../types';
 import { generateTreeBlueprint, getBlocksAtOrder } from '../lib/treeGrowth';
 import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
@@ -11,18 +12,33 @@ import { useToast } from '@/hooks/use-toast';
 // Type for the placeBlock function from useBlocks
 type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => any;
 
+// Type for the startGrowing function from useLocalGrowth
+type StartGrowingFn = (
+  treeId: string,
+  seedDef: SeedDefinition,
+  baseX: number,
+  baseY: number,
+  baseZ: number,
+  growthSeed: number,
+  startingOrder?: number
+) => void;
+
+// Type for the updateTreeId function from useLocalGrowth
+type UpdateTreeIdFn = (tempId: string, realId: string) => void;
+
 interface UseSeedPlantingOptions {
   worldId: string | null;
   userId: string | null;
   seedDefinitions: SeedDefinition[];
-  placeBlock: PlaceBlockFn | null; // Inject placeBlock for optimistic updates
+  placeBlock: PlaceBlockFn | null;
+  startGrowing: StartGrowingFn;
+  updateTreeId: UpdateTreeIdFn;
 }
 
 interface PlantSeedResult {
   success: boolean;
   error?: string;
   treeId?: string;
-  tree?: PlantedTree; // Return full tree for optimistic addition to plantedTrees
 }
 
 /**
@@ -48,6 +64,8 @@ export function useSeedPlanting({
   userId,
   seedDefinitions,
   placeBlock,
+  startGrowing,
+  updateTreeId,
 }: UseSeedPlantingOptions) {
   const [isPlanting, setIsPlanting] = useState(false);
   const [selectedSeedTier, setSelectedSeedTier] = useState<number | null>(null);
@@ -102,7 +120,7 @@ export function useSeedPlanting({
       // Generate random seed for this tree's growth pattern
       const growthSeed = Math.floor(Math.random() * 2147483647);
 
-      // Calculate target block count from blueprint with new options
+      // Generate blueprint for first block placement and total count
       const blueprint = generateTreeBlueprint(
         baseX, baseY, baseZ,
         seedDef.tier,
@@ -113,13 +131,16 @@ export function useSeedPlanting({
       );
 
       // Place the first block(s) IMMEDIATELY using optimistic update system
-      // This appears instantly in the UI before any DB operations complete
       const firstBlocks = getBlocksAtOrder(blueprint, 0);
       const textureUrl = seedDef.trunk_texture_url || undefined;
       
       for (const block of firstBlocks) {
         placeBlock(block.x, block.y, block.z, 'trunk', undefined, textureUrl);
       }
+
+      // Start local growth with temp ID (will update after DB insert)
+      const tempId = `temp_${Date.now()}`;
+      startGrowing(tempId, seedDef, baseX, baseY, baseZ, growthSeed, 1); // Start at order 1 since we placed order 0
 
       // Create the planted tree record (async, doesn't block visibility)
       const { data: newTree, error: insertError } = await supabase
@@ -133,7 +154,8 @@ export function useSeedPlanting({
           base_z: baseZ,
           growth_seed: growthSeed,
           target_block_count: blueprint.blocks.length,
-          current_block_count: firstBlocks.length, // Start with first order blocks placed
+          current_block_count: firstBlocks.length,
+          is_fully_grown: false,
         })
         .select()
         .single();
@@ -143,25 +165,22 @@ export function useSeedPlanting({
         return { success: false, error: 'Failed to plant seed' };
       }
 
+      // Update the temp ID to the real ID in the growth manager
+      updateTreeId(tempId, newTree.id);
+
       toast({
         title: `Planted ${seedDef.name}!`,
         description: `Growing ${blueprint.blocks.length} blocks`,
       });
 
-      // Return the full tree with seed_definition for optimistic addition to plantedTrees
-      const fullTree: PlantedTree = {
-        ...newTree,
-        seed_definition: seedDef,
-      };
-
-      return { success: true, treeId: newTree.id, tree: fullTree };
+      return { success: true, treeId: newTree.id };
     } catch (err) {
       console.error('[SeedPlanting] Error:', err);
       return { success: false, error: 'Unexpected error while planting' };
     } finally {
       setIsPlanting(false);
     }
-  }, [worldId, userId, seedDefinitions, placeBlock, toast]);
+  }, [worldId, userId, seedDefinitions, placeBlock, toast, startGrowing, updateTreeId]);
 
   const cancelPlanting = useCallback(() => {
     setSelectedSeedTier(null);

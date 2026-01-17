@@ -23,7 +23,7 @@ import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
 import { clearBlocksCache } from '@/hooks/useBlocksData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
-import { useTreeGrowth } from '@/features/trees/hooks/useTreeGrowth';
+import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
 
 import { TREE_CONFIG } from '@/features/trees/constants';
 
@@ -122,21 +122,25 @@ export function Fortress() {
   
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
   // Note: Tree blocks are now stored in placed_blocks and come through the regular chunk loading system
-  const { seedDefinitions, plantedTrees, addTreeOptimistically } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
+  const { seedDefinitions, plantedTrees } = useTreeData(
+    TREE_CONFIG.ENABLED ? currentWorldId : null,
+    user?.id ?? null
+  );
+  
+  // Local growth manager - stores growing trees in refs, not React state
+  const { startGrowing, updateTreeId } = useLocalGrowth({
+    worldId: currentWorldId,
+    userId: user?.id ?? null,
+    placeBlock,
+  });
   
   const { plantSeed } = useSeedPlanting({
     worldId: currentWorldId,
     userId: user?.id ?? null,
     seedDefinitions,
-    placeBlock, // Pass placeBlock for instant optimistic updates
-  });
-  
-  // Tree growth - runs the growth loop for user's trees
-  useTreeGrowth({
-    worldId: currentWorldId,
-    userId: user?.id ?? null,
-    plantedTrees,
-    placeBlock, // Pass placeBlock for instant optimistic updates
+    placeBlock,
+    startGrowing,
+    updateTreeId,
   });
   
   // Audio refs
@@ -569,12 +573,9 @@ export function Fortress() {
       source.start();
     } catch (e) { console.warn('Seed sound failed', e); }
     
-    const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedSeedTier);
-    if (result.success && result.tree) {
-      // Add tree optimistically so growth starts immediately
-      addTreeOptimistically(result.tree);
-    }
-  }, [selectedSeedTier, plantSeed, addTreeOptimistically]);
+    // Plant seed - growth starts locally via useLocalGrowth (ref-based, no flashing)
+    await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedSeedTier);
+  }, [selectedSeedTier, plantSeed]);
 
   const handleOpenPanel = useCallback((tab: 'user' | 'wallet' | 'inventory' | 'store') => {
     openPanel(tab);
