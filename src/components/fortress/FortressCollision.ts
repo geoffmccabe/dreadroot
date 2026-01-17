@@ -156,6 +156,83 @@ export function createBlockColliders(
   return _cachedCollidersArray;
 }
 
+// Cache for tree block colliders (separate from placed blocks)
+const _treeCollidersArray: THREE.Box3[] = [];
+let _treeColliderCache: Map<string, THREE.Box3> = new Map();
+
+/**
+ * Creates and manages collision boxes for tree blocks
+ * Uses PlacedBlock format since treeBlocks are converted when passed to FortressScene
+ * Also adds them to the spatial hash grid for O(1) lookups
+ */
+export function createTreeBlockColliders(
+  treeBlocks: PlacedBlock[],
+  cache: Map<string, THREE.Box3>
+): THREE.Box3[] {
+  // Quick check: if cache size matches blocks length and all blocks are cached, no work needed
+  if (cache.size === treeBlocks.length && treeBlocks.length > 0) {
+    let allCached = true;
+    for (let i = 0; i < treeBlocks.length; i++) {
+      if (!cache.has(treeBlocks[i].id)) {
+        allCached = false;
+        break;
+      }
+    }
+    if (allCached) {
+      // No changes - return cached array without allocation
+      _treeCollidersArray.length = 0;
+      for (const box of cache.values()) {
+        _treeCollidersArray.push(box);
+      }
+      return _treeCollidersArray;
+    }
+  }
+  
+  // Track allocation for diagnostics
+  diagnostics.e4++;
+  
+  // STEP 1: Add new tree blocks to cache
+  for (const block of treeBlocks) {
+    if (!cache.has(block.id)) {
+      const box = new THREE.Box3(
+        new THREE.Vector3(block.position_x, block.position_y, block.position_z),
+        new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
+      );
+      cache.set(block.id, box);
+      collisionGrid.insert(box);
+    }
+  }
+  
+  // STEP 2: Remove stale tree blocks - only if cache is larger than blocks array
+  if (cache.size > treeBlocks.length) {
+    const keysToRemove: string[] = [];
+    for (const id of cache.keys()) {
+      let found = false;
+      for (let i = 0; i < treeBlocks.length; i++) {
+        if (treeBlocks[i].id === id) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        keysToRemove.push(id);
+      }
+    }
+    for (const id of keysToRemove) {
+      const box = cache.get(id);
+      if (box) collisionGrid.remove(box);
+      cache.delete(id);
+    }
+  }
+  
+  // Return reused array
+  _treeCollidersArray.length = 0;
+  for (const box of cache.values()) {
+    _treeCollidersArray.push(box);
+  }
+  return _treeCollidersArray;
+}
+
 /**
  * Creates a player bounding box at a given position - REUSES pre-allocated box
  * WARNING: Returns a shared object - do not store the result!

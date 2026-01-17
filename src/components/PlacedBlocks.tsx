@@ -7,6 +7,7 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
+// Use white color so textures render at full brightness without tinting
 const TREE_BLOCK_FALLBACK: BlockType = {
   id: -1,
   key: 'tree_block',
@@ -18,7 +19,7 @@ const TREE_BLOCK_FALLBACK: BlockType = {
   class: 'basic',
   tier: 1,
   properties: {
-    color: '#8B4513',
+    color: '#ffffff', // White - lets texture show through without darkening
     emissive: false,
     transparent: false,
     glowFactor: 0
