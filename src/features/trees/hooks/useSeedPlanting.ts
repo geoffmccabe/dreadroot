@@ -3,8 +3,8 @@
 
 import { useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SeedDefinition, PlantedTree } from '../types';
-import { generateTreeBlueprint } from '../lib/treeGrowth';
+import { SeedDefinition, PlantedTree, TreeGrowthOptions } from '../types';
+import { generateTreeBlueprint, getBlocksAtOrder } from '../lib/treeGrowth';
 import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
 
@@ -23,6 +23,24 @@ interface PlantSeedResult {
   error?: string;
   treeId?: string;
   tree?: PlantedTree; // Return full tree for optimistic addition to plantedTrees
+}
+
+/**
+ * Build options object from seed definition for tree generation
+ */
+function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
+  return {
+    lowBranchHeight: seedDef.low_branch_height ?? 2,
+    spikeChance: seedDef.spike_chance ?? 0,
+    spikeLength: seedDef.spike_length ?? 3,
+    nobChance: seedDef.nob_chance ?? 0,
+    nobSize: seedDef.nob_size ?? 1,
+    crossChance: seedDef.cross_chance ?? 0,
+    crossLength: seedDef.cross_length ?? 3,
+    shroomChance: seedDef.shroom_chance ?? 0,
+    shroomLength: seedDef.shroom_length ?? 5,
+    shroomCapDiameter: seedDef.shroom_cap_diameter ?? 3,
+  };
 }
 
 export function useSeedPlanting({
@@ -84,21 +102,23 @@ export function useSeedPlanting({
       // Generate random seed for this tree's growth pattern
       const growthSeed = Math.floor(Math.random() * 2147483647);
 
-      // Calculate target block count from blueprint
+      // Calculate target block count from blueprint with new options
       const blueprint = generateTreeBlueprint(
         baseX, baseY, baseZ,
         seedDef.tier,
         seedDef.width_factor,
         seedDef.branching_factor,
-        growthSeed
+        growthSeed,
+        buildGrowthOptions(seedDef)
       );
 
-      // Place the first block IMMEDIATELY using optimistic update system
+      // Place the first block(s) IMMEDIATELY using optimistic update system
       // This appears instantly in the UI before any DB operations complete
-      const firstBlock = blueprint.blocks.find(b => b.growthOrder === 0);
-      if (firstBlock) {
-        // Use placeBlock from useBlocks - instant optimistic update with texture!
-        placeBlock(firstBlock.x, firstBlock.y, firstBlock.z, 'trunk', undefined, seedDef.trunk_texture_url || undefined);
+      const firstBlocks = getBlocksAtOrder(blueprint, 0);
+      const textureUrl = seedDef.trunk_texture_url || undefined;
+      
+      for (const block of firstBlocks) {
+        placeBlock(block.x, block.y, block.z, 'trunk', undefined, textureUrl);
       }
 
       // Create the planted tree record (async, doesn't block visibility)
@@ -113,7 +133,7 @@ export function useSeedPlanting({
           base_z: baseZ,
           growth_seed: growthSeed,
           target_block_count: blueprint.blocks.length,
-          current_block_count: 1, // Start with first block already placed
+          current_block_count: firstBlocks.length, // Start with first order blocks placed
         })
         .select()
         .single();

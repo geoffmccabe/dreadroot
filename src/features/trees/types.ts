@@ -15,6 +15,17 @@ export interface SeedDefinition {
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
   created_at: string;
   updated_at: string;
+  // Enhanced decoration factors
+  low_branch_height: number;
+  spike_chance: number;
+  spike_length: number;
+  nob_chance: number;
+  nob_size: number;
+  cross_chance: number;
+  cross_length: number;
+  shroom_chance: number;
+  shroom_length: number;
+  shroom_cap_diameter: number;
 }
 
 export interface PlantedTree {
@@ -63,12 +74,15 @@ export interface TreeFruit {
   created_at: string;
 }
 
+// Block types for decorations - allows future unique textures per type
+export type TreeBlockType = 'trunk' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fruit';
+
 // Blueprint types for generation algorithm
 export interface BlueprintBlock {
   x: number;
   y: number;
   z: number;
-  type: 'trunk' | 'fruit';
+  type: TreeBlockType;
   growthOrder: number;
 }
 
@@ -91,4 +105,18 @@ export interface TreeCollisionResult {
   collides: boolean;
   blockId?: string;
   blockType?: 'trunk' | 'fruit';
+}
+
+// Options for tree growth algorithm
+export interface TreeGrowthOptions {
+  lowBranchHeight?: number;
+  spikeChance?: number;
+  spikeLength?: number;
+  nobChance?: number;
+  nobSize?: number;
+  crossChance?: number;
+  crossLength?: number;
+  shroomChance?: number;
+  shroomLength?: number;
+  shroomCapDiameter?: number;
 }

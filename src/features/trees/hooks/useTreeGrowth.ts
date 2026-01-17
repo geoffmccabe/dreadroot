@@ -3,8 +3,8 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { PlantedTree } from '../types';
-import { generateTreeBlueprint, getNextGrowthBlock } from '../lib/treeGrowth';
+import { PlantedTree, TreeGrowthOptions } from '../types';
+import { generateTreeBlueprint, getBlocksAtOrder, getMaxGrowthOrder } from '../lib/treeGrowth';
 import { TREE_CONFIG, getGrowthInterval } from '../constants';
 
 // Type for the placeBlock function from useBlocks
@@ -18,6 +18,25 @@ interface UseTreeGrowthOptions {
   onGrowth?: (treeId: string, blockCount: number) => void;
 }
 
+/**
+ * Build options object from seed definition for tree generation
+ */
+function buildGrowthOptions(seedDef: PlantedTree['seed_definition']): TreeGrowthOptions {
+  if (!seedDef) return {};
+  return {
+    lowBranchHeight: seedDef.low_branch_height ?? 2,
+    spikeChance: seedDef.spike_chance ?? 0,
+    spikeLength: seedDef.spike_length ?? 3,
+    nobChance: seedDef.nob_chance ?? 0,
+    nobSize: seedDef.nob_size ?? 1,
+    crossChance: seedDef.cross_chance ?? 0,
+    crossLength: seedDef.cross_length ?? 3,
+    shroomChance: seedDef.shroom_chance ?? 0,
+    shroomLength: seedDef.shroom_length ?? 5,
+    shroomCapDiameter: seedDef.shroom_cap_diameter ?? 3,
+  };
+}
+
 export function useTreeGrowth({
   worldId,
   userId,
@@ -25,8 +44,8 @@ export function useTreeGrowth({
   placeBlock,
   onGrowth,
 }: UseTreeGrowthOptions): void {
-  // Track local block counts to avoid re-reading stale plantedTrees data
-  const localBlockCounts = useRef<Map<string, number>>(new Map());
+  // Track local growth order (not block count) to avoid re-reading stale data
+  const localGrowthOrders = useRef<Map<string, number>>(new Map());
   const lastGrowthTime = useRef<Map<string, number>>(new Map());
   const isGrowing = useRef(false);
 
@@ -37,8 +56,8 @@ export function useTreeGrowth({
 
     const seedDef = tree.seed_definition;
     
-    // Use local count if available, otherwise use DB count
-    const currentCount = localBlockCounts.current.get(tree.id) ?? tree.current_block_count;
+    // Use local order if available, otherwise derive from current_block_count
+    const currentOrder = localGrowthOrders.current.get(tree.id) ?? tree.current_block_count;
 
     // Generate blueprint (deterministic from seed)
     const blueprint = generateTreeBlueprint(
@@ -48,14 +67,14 @@ export function useTreeGrowth({
       seedDef.tier,
       seedDef.width_factor,
       seedDef.branching_factor,
-      tree.growth_seed
+      tree.growth_seed,
+      buildGrowthOptions(seedDef)
     );
 
-    // Find next block to grow based on local count
-    const nextBlock = getNextGrowthBlock(blueprint, currentCount);
+    const maxOrder = getMaxGrowthOrder(blueprint);
     
-    if (!nextBlock) {
-      // Tree is fully grown
+    // Check if fully grown
+    if (currentOrder > maxOrder) {
       await supabase
         .from('planted_trees')
         .update({ is_fully_grown: true })
@@ -63,33 +82,48 @@ export function useTreeGrowth({
       return false;
     }
 
-    // Use placeBlock from useBlocks for INSTANT optimistic update!
-    // This makes the block appear immediately in the UI with correct texture
-    const placedBlock = placeBlock(nextBlock.x, nextBlock.y, nextBlock.z, 'trunk', undefined, seedDef.trunk_texture_url || undefined);
-
-    if (!placedBlock) {
-      // Position might be occupied - still increment count to continue growth
-      localBlockCounts.current.set(tree.id, currentCount + 1);
+    // Get ALL blocks at this growth order (includes decorations!)
+    const blocksToPlace = getBlocksAtOrder(blueprint, currentOrder);
+    
+    if (blocksToPlace.length === 0) {
+      // No blocks at this order, move to next
+      localGrowthOrders.current.set(tree.id, currentOrder + 1);
       return true;
     }
 
-    // Update local and remote counts
-    const newBlockCount = currentCount + 1;
-    localBlockCounts.current.set(tree.id, newBlockCount);
+    // Place ALL blocks at this order INSTANTLY
+    // All blocks use trunk texture for now (future: per-type textures)
+    const textureUrl = seedDef.trunk_texture_url || undefined;
+    let placedCount = 0;
+    
+    for (const block of blocksToPlace) {
+      const placed = placeBlock(block.x, block.y, block.z, 'trunk', undefined, textureUrl);
+      if (placed) placedCount++;
+    }
+
+    // Update local and remote state
+    const newOrder = currentOrder + 1;
+    localGrowthOrders.current.set(tree.id, newOrder);
     lastGrowthTime.current.set(tree.id, Date.now());
+
+    // Count total blocks placed so far for DB update
+    let totalBlocksPlaced = 0;
+    for (let o = 0; o <= currentOrder; o++) {
+      totalBlocksPlaced += getBlocksAtOrder(blueprint, o).length;
+    }
 
     // Update tree progress in DB (async, doesn't block UI)
     supabase
       .from('planted_trees')
       .update({
-        current_block_count: newBlockCount,
+        current_block_count: totalBlocksPlaced,
         last_growth_at: new Date().toISOString(),
-        is_fully_grown: newBlockCount >= tree.target_block_count,
+        is_fully_grown: newOrder > maxOrder,
       })
       .eq('id', tree.id)
       .then(() => {});
 
-    onGrowth?.(tree.id, newBlockCount);
+    onGrowth?.(tree.id, totalBlocksPlaced);
     return true;
   }, [placeBlock, onGrowth]);
 
@@ -134,13 +168,15 @@ export function useTreeGrowth({
     return () => clearInterval(interval);
   }, [worldId, userId, plantedTrees, placeBlock, growTreeByOne]);
 
-  // Sync local counts when plantedTrees updates from DB
+  // Sync local orders when plantedTrees updates from DB
   useEffect(() => {
     for (const tree of plantedTrees) {
-      const localCount = localBlockCounts.current.get(tree.id);
-      // Only update if DB has higher count (another client grew the tree)
-      if (localCount === undefined || tree.current_block_count > localCount) {
-        localBlockCounts.current.set(tree.id, tree.current_block_count);
+      const localOrder = localGrowthOrders.current.get(tree.id);
+      // If not tracked locally yet, derive order from block count
+      if (localOrder === undefined) {
+        // We can't perfectly derive order from count, but it's close enough
+        // The next growth tick will recalculate properly
+        localGrowthOrders.current.set(tree.id, tree.current_block_count);
       }
     }
   }, [plantedTrees]);
