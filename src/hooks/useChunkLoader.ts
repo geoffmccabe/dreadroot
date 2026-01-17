@@ -17,6 +17,26 @@ const EVICTION_BATCH_SIZE = 10;
 // Phase 3D: Cache configuration
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// Phase 3E: Velocity-based prefetch configuration
+const PREFETCH_DISTANCE = 2;         // Chunks beyond LOAD_RADIUS to prefetch
+const PREFETCH_MIN_SPEED = 2.0;      // Blocks/sec threshold (ignore micro-jitter)
+const PREFETCH_BATCH_SIZE = 2;       // Max chunks per idle callback
+const PREFETCH_DEBOUNCE_MS = 300;    // Debounce rapid direction changes
+const POSITION_HISTORY_SIZE = 5;     // Ring buffer size for velocity calc
+const PREFETCH_HEADROOM = 20;        // Don't prefetch if within this many of MAX
+
+// Phase 3E: Types
+interface PositionSample {
+  x: number;
+  z: number;
+  t: number;
+}
+
+interface PrefetchHandle {
+  kind: 'idle' | 'timeout';
+  id: number;
+}
+
 interface ChunkData {
   blocks: PlacedBlock[];
   loadedAt: number;
@@ -59,6 +79,20 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   // Phase 3.0: Single emit per frame batching
   const emitScheduledRef = useRef(false);
+
+  // Phase 3E: Velocity tracking with ring buffer
+  const posHistRef = useRef({
+    samples: Array.from({ length: POSITION_HISTORY_SIZE }, () => ({ x: 0, z: 0, t: 0 } as PositionSample)),
+    head: 0,
+    count: 0
+  });
+
+  // Phase 3E: Prefetch queue and scheduling
+  const prefetchQueueRef = useRef<Array<{ x: number; z: number }>>([]);
+  const prefetchQueuedSetRef = useRef<Set<string>>(new Set());
+  const prefetchHandleRef = useRef<PrefetchHandle | null>(null);
+  const lastPrefetchEnqueueAtRef = useRef(0);
+  const lastDirRef = useRef<{ dx: number; dz: number } | null>(null);
 
   /**
    * Phase 3.0: Schedule a single emission per animation frame
@@ -566,6 +600,233 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     return stripeChunks;
   }, []);
 
+  // ============================================================================
+  // Phase 3E: Velocity-Based Prefetching
+  // ============================================================================
+
+  /**
+   * Phase 3E: Add a position sample to the ring buffer (zero allocation)
+   */
+  const addPositionSample = useCallback((x: number, z: number, t: number) => {
+    const h = posHistRef.current;
+    const s = h.samples[h.head];
+    s.x = x;
+    s.z = z;
+    s.t = t;
+    h.head = (h.head + 1) % POSITION_HISTORY_SIZE;
+    h.count = Math.min(h.count + 1, POSITION_HISTORY_SIZE);
+  }, []);
+
+  /**
+   * Phase 3E: Calculate velocity from position history
+   * Returns null if stationary or not enough samples
+   */
+  const calculateVelocity = useCallback((): { dirX: number; dirZ: number; speed: number } | null => {
+    const h = posHistRef.current;
+    if (h.count < 2) return null;
+
+    const newestIdx = (h.head - 1 + POSITION_HISTORY_SIZE) % POSITION_HISTORY_SIZE;
+    const oldestIdx = (h.head - h.count + POSITION_HISTORY_SIZE) % POSITION_HISTORY_SIZE;
+
+    const a = h.samples[oldestIdx];
+    const b = h.samples[newestIdx];
+
+    const dt = (b.t - a.t) / 1000;
+    if (dt <= 0.05) return null; // Too short, unreliable
+
+    const vx = (b.x - a.x) / dt;
+    const vz = (b.z - a.z) / dt;
+    const speed = Math.hypot(vx, vz);
+
+    if (speed < PREFETCH_MIN_SPEED) return null; // Stationary
+
+    return { dirX: vx / speed, dirZ: vz / speed, speed };
+  }, []);
+
+  /**
+   * Phase 3E: Get prefetch stripe chunks ahead of player movement
+   * Uses stripe-based approach matching existing loader patterns
+   */
+  const getPrefetchStripeChunks = useCallback((
+    playerChunkX: number,
+    playerChunkZ: number,
+    dirX: number,
+    dirZ: number
+  ): Array<{ x: number; z: number }> => {
+    const coords: Array<{ x: number; z: number }> = [];
+
+    // Determine movement direction (threshold to avoid diagonal noise)
+    const stepX = Math.abs(dirX) >= 0.3 ? Math.sign(dirX) : 0;
+    const stepZ = Math.abs(dirZ) >= 0.3 ? Math.sign(dirZ) : 0;
+
+    // No clear direction
+    if (stepX === 0 && stepZ === 0) return coords;
+
+    // Prefetch stripes at LOAD_RADIUS+1 up to LOAD_RADIUS+PREFETCH_DISTANCE
+    for (let d = 1; d <= PREFETCH_DISTANCE; d++) {
+      const r = LOAD_RADIUS + d;
+
+      if (stepX !== 0) {
+        const stripeX = playerChunkX + stepX * r;
+        for (let z = playerChunkZ - LOAD_RADIUS; z <= playerChunkZ + LOAD_RADIUS; z++) {
+          coords.push({ x: stripeX, z });
+        }
+      }
+
+      if (stepZ !== 0) {
+        const stripeZ = playerChunkZ + stepZ * r;
+        for (let x = playerChunkX - LOAD_RADIUS; x <= playerChunkX + LOAD_RADIUS; x++) {
+          // Avoid duplicating corner if also moving in X
+          if (stepX !== 0) {
+            const cornerX = playerChunkX + stepX * r;
+            if (x === cornerX) continue;
+          }
+          coords.push({ x, z: stripeZ });
+        }
+      }
+    }
+
+    return coords;
+  }, []);
+
+  /**
+   * Phase 3E: Cancel pending prefetch operations
+   * Properly handles both requestIdleCallback and setTimeout
+   */
+  const cancelPrefetch = useCallback(() => {
+    prefetchQueueRef.current = [];
+    prefetchQueuedSetRef.current.clear();
+
+    const h = prefetchHandleRef.current;
+    if (!h) return;
+
+    if (h.kind === 'idle' && typeof (globalThis as any).cancelIdleCallback === 'function') {
+      (globalThis as any).cancelIdleCallback(h.id);
+    } else if (h.kind === 'timeout') {
+      clearTimeout(h.id);
+    }
+    prefetchHandleRef.current = null;
+  }, []);
+
+  /**
+   * Phase 3E: Process prefetch queue in small batches during idle time
+   */
+  const processPrefetchQueue = useCallback(() => {
+    prefetchHandleRef.current = null;
+
+    if (!worldId) return;
+
+    // Pull a small batch
+    const batch: Array<{ x: number; z: number }> = [];
+    while (batch.length < PREFETCH_BATCH_SIZE && prefetchQueueRef.current.length > 0) {
+      const item = prefetchQueueRef.current.shift()!;
+      const key = `chunk_${item.x}_${item.z}`;
+      prefetchQueuedSetRef.current.delete(key);
+
+      // Skip if already loaded
+      if (!loadedChunksRef.current.has(key)) {
+        batch.push({ x: item.x, z: item.z });
+      }
+    }
+
+    if (batch.length > 0) {
+      // Fire and forget - don't block
+      loadSpecificChunks(batch).catch(err => {
+        console.warn('Prefetch load failed:', err);
+      });
+    }
+
+    // Schedule next batch if more to process
+    if (prefetchQueueRef.current.length > 0) {
+      schedulePrefetchWork();
+    }
+  }, [worldId, loadSpecificChunks]);
+
+  /**
+   * Phase 3E: Schedule prefetch work using requestIdleCallback or setTimeout fallback
+   */
+  const schedulePrefetchWork = useCallback(() => {
+    // Already scheduled
+    if (prefetchHandleRef.current) return;
+
+    if (typeof (globalThis as any).requestIdleCallback === 'function') {
+      const id = (globalThis as any).requestIdleCallback(processPrefetchQueue, { timeout: 1000 });
+      prefetchHandleRef.current = { kind: 'idle', id };
+    } else {
+      // Safari fallback
+      const id = window.setTimeout(processPrefetchQueue, 50);
+      prefetchHandleRef.current = { kind: 'timeout', id };
+    }
+  }, [processPrefetchQueue]);
+
+  /**
+   * Phase 3E: Enqueue prefetch chunks based on velocity
+   * Called on every position update, not just chunk changes
+   */
+  const enqueuePrefetch = useCallback((
+    worldX: number,
+    worldZ: number,
+    now: number
+  ) => {
+    // Guard: Don't prefetch if near memory limit
+    if (loadedChunksRef.current.size > MAX_LOADED_CHUNKS - PREFETCH_HEADROOM) {
+      return;
+    }
+
+    // Debounce
+    if (now - lastPrefetchEnqueueAtRef.current < PREFETCH_DEBOUNCE_MS) {
+      return;
+    }
+
+    const velocity = calculateVelocity();
+    if (!velocity) return;
+
+    const newDir = { dx: velocity.dirX, dz: velocity.dirZ };
+    const lastDir = lastDirRef.current;
+
+    // Check for significant direction change (dot product < 0.7 = ~45°)
+    const dot = lastDir ? (lastDir.dx * newDir.dx + lastDir.dz * newDir.dz) : 1;
+    if (!lastDir || dot < 0.7) {
+      // Direction changed significantly - cancel old prefetches
+      cancelPrefetch();
+    }
+    lastDirRef.current = newDir;
+
+    // Get player chunk
+    const playerChunkX = Math.floor(worldX / CHUNK_SIZE);
+    const playerChunkZ = Math.floor(worldZ / CHUNK_SIZE);
+
+    // Get candidate chunks
+    const candidates = getPrefetchStripeChunks(playerChunkX, playerChunkZ, velocity.dirX, velocity.dirZ);
+
+    // Enqueue candidates (deduplicated)
+    for (const c of candidates) {
+      const key = `chunk_${c.x}_${c.z}`;
+      if (loadedChunksRef.current.has(key)) continue;
+      if (prefetchQueuedSetRef.current.has(key)) continue;
+
+      prefetchQueuedSetRef.current.add(key);
+      prefetchQueueRef.current.push({ x: c.x, z: c.z });
+    }
+
+    // Start processing if we have items
+    if (prefetchQueueRef.current.length > 0) {
+      schedulePrefetchWork();
+      lastPrefetchEnqueueAtRef.current = now;
+    }
+  }, [calculateVelocity, cancelPrefetch, getPrefetchStripeChunks, schedulePrefetchWork]);
+
+  /**
+   * Phase 3E: Reset prefetch state (called on world change)
+   */
+  const resetPrefetchState = useCallback(() => {
+    cancelPrefetch();
+    posHistRef.current.head = 0;
+    posHistRef.current.count = 0;
+    lastDirRef.current = null;
+    lastPrefetchEnqueueAtRef.current = 0;
+  }, [cancelPrefetch]);
+
   /**
    * Phase 3C: Get chunks for a specific ring around the center
    * Ring 0 = center chunk only
@@ -756,6 +1017,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Update player position - called by game controller
    * Phase 3B: Uses incremental stripe loading instead of full square reload
    * Phase 3A: Updates lastAccessedAt for pinned chunks and runs LRU eviction
+   * Phase 3E: Runs velocity sampling + prefetch on EVERY throttled call
    */
   const updatePlayerPosition = useCallback(async (worldX: number, worldZ: number) => {
     if (!worldId) return;
@@ -765,6 +1027,12 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       return;
     }
     lastPositionUpdateRef.current = now;
+
+    // Phase 3E: ALWAYS sample position for velocity calculation (even within same chunk)
+    addPositionSample(worldX, worldZ, now);
+
+    // Phase 3E: ALWAYS try to enqueue prefetch (runs even when still in same chunk)
+    enqueuePrefetch(worldX, worldZ, now);
 
     const newChunkX = Math.floor(worldX / CHUNK_SIZE);
     const newChunkZ = Math.floor(worldZ / CHUNK_SIZE);
@@ -818,7 +1086,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       // Phase 3A: Run LRU eviction as safety cap
       evictLRUChunks();
     }
-  }, [worldId, loadChunksInRadius, loadSpecificChunks, getStripeChunks, unloadDistantChunks, evictLRUChunks]);
+  }, [worldId, loadChunksInRadius, loadSpecificChunks, getStripeChunks, unloadDistantChunks, evictLRUChunks, addPositionSample, enqueuePrefetch]);
 
   /**
    * Force initial load when world changes
@@ -858,14 +1126,19 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   /**
    * Clear all chunks (on world change)
    * Phase 3.0: Directly calls onBlocksChanged (not batched) for immediate clear
+   * Phase 3E: Also resets prefetch state
    */
   const clearAllChunks = useCallback(() => {
     loadedChunksRef.current.clear();
     playerChunkRef.current = null;
     initialLoadDone.current = false;
     emitScheduledRef.current = false; // Cancel any pending emit
+    
+    // Phase 3E: Reset prefetch state
+    resetPrefetchState();
+    
     onBlocksChanged([]);
-  }, [onBlocksChanged]);
+  }, [onBlocksChanged, resetPrefetchState]);
 
   // Handle world changes
   useEffect(() => {
