@@ -35,7 +35,7 @@ export function generateTreeBlueprint(
   const maxBranchLength = Math.max(1, Math.floor(maxHeight * widthFactor));
   
   // Helper to check/add position
-  const addBlock = (x: number, y: number, z: number, type: 'trunk' | 'branch'): boolean => {
+  const addBlock = (x: number, y: number, z: number, type: 'trunk' | 'leaf'): boolean => {
     const key = `${x},${y},${z}`;
     if (occupied.has(key)) return false;
     occupied.add(key);
@@ -137,7 +137,7 @@ function growBranch(
     if (occupied.has(key)) continue;
     
     occupied.add(key);
-    blocks.push({ x, y, z, type: 'branch', growthOrder: 0 });
+    blocks.push({ x, y, z, type: 'leaf', growthOrder: 0 });
     
     // Chance to spawn sub-branch (decreases with depth)
     const subBranchChance = branchingFactor * 0.2 * (1 - depth * 0.3);
@@ -164,25 +164,25 @@ function growBranch(
 
 /**
  * Assign growth order to blocks for interesting growth animation
- * Trunk grows first (bottom to top), then branches spread out
+ * Trunk grows first (bottom to top), then leaves spread out
  */
 function assignGrowthOrder(blocks: BlueprintBlock[], rng: () => number): void {
-  // Separate trunk and branch blocks
+  // Separate trunk and leaf blocks
   const trunk = blocks.filter(b => b.type === 'trunk');
-  const branches = blocks.filter(b => b.type === 'branch');
+  const leaves = blocks.filter(b => b.type === 'leaf');
   
   // Sort trunk by Y (bottom first)
   trunk.sort((a, b) => a.y - b.y);
   
-  // Shuffle branches for random growth
-  const shuffledBranches = seededShuffle(branches, rng);
+  // Shuffle leaves for random growth
+  const shuffledLeaves = seededShuffle(leaves, rng);
   
-  // Assign orders: trunk first, then branches
+  // Assign orders: trunk first, then leaves
   let order = 0;
   for (const block of trunk) {
     block.growthOrder = order++;
   }
-  for (const block of shuffledBranches) {
+  for (const block of shuffledLeaves) {
     block.growthOrder = order++;
   }
 }

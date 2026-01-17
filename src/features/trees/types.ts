@@ -42,7 +42,7 @@ export interface TreeBlock {
   position_x: number;
   position_y: number;
   position_z: number;
-  block_type: 'trunk' | 'branch';
+  block_type: 'trunk' | 'leaf';
   growth_order: number;
   created_at: string;
 }
@@ -66,7 +66,7 @@ export interface BlueprintBlock {
   x: number;
   y: number;
   z: number;
-  type: 'trunk' | 'branch';
+  type: 'trunk' | 'leaf';
   growthOrder: number;
 }
 
@@ -88,5 +88,5 @@ export interface FallingFruitState {
 export interface TreeCollisionResult {
   collides: boolean;
   blockId?: string;
-  blockType?: 'trunk' | 'branch' | 'fruit';
+  blockType?: 'trunk' | 'leaf' | 'fruit';
 }

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Button } from '@/components/ui/button';
 import { Eye } from 'lucide-react';
 import { BlockPreview } from '@/components/BlockPreview';
+import { SeedPreview } from '@/features/trees/components/SeedPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
 import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
@@ -19,6 +20,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
+import { useTreeData } from '@/features/trees/hooks/useTreeData';
+import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
+import { TREE_CONFIG } from '@/features/trees/constants';
 
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
@@ -83,7 +87,9 @@ export function Fortress() {
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
+  const [selectedSeedTier, setSelectedSeedTier] = useState<number | null>(null);
   const [blockPlacementMode, setBlockPlacementMode] = useState(false);
+  const [treePlacementMode, setTreePlacementMode] = useState(false);
   const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
   const [showPerfMonitor, setShowPerfMonitor] = useState(false);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
@@ -98,11 +104,19 @@ export function Fortress() {
   
   // Hooks
   const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock } = useUserData();
-  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex } = useBlocks();
+  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
+  
+  // Tree system hooks (only active if TREE_CONFIG.ENABLED)
+  const { seedDefinitions } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
+  const { plantSeed } = useSeedPlanting({
+    worldId: currentWorldId,
+    userId: user?.id ?? null,
+    seedDefinitions,
+  });
   
   // Audio refs
   const mainAudioRefs = useRef(createMainAudioRefs());
@@ -118,7 +132,7 @@ export function Fortress() {
   }, [inventory]);
   
   // Mode change ref to avoid circular dependency
-  const handleModeChangeRef = useRef<((mode: 'shooting' | 'building' | null) => void) | null>(null);
+  const handleModeChangeRef = useRef<((mode: 'shooting' | 'building' | 'planting' | null) => void) | null>(null);
 
   // Initialize audio
   useEffect(() => {
@@ -391,54 +405,55 @@ export function Fortress() {
   };
 
   // Mode change handler
-  const handleModeChange = useCallback((mode: 'shooting' | 'building' | null) => {
+  const handleModeChange = useCallback((mode: 'shooting' | 'building' | 'planting' | null) => {
     const availableItems = inventory.filter(item => item.quantity > 0);
     
     if (mode === 'building') {
+      setTreePlacementMode(false);
+      setSelectedSeedTier(null);
       const availableItem = availableItems[0];
       if (availableItem && availableItem.quantity > 0) {
-        // IMPORTANT: Use item_type (block key like 'grass_block') NOT item_id (UUID)
-        // item_id is a database UUID, item_type is the block type key used for rendering
         setSelectedBlockType(availableItem.item_type);
         setCrosshairsEnabled(false);
         setBlockPlacementMode(true);
         setBlockMode(true);
-        
-        toast({
-          title: "Block mode enabled",
-          description: `Press left click to place ${availableItem.item_type}. Press B to exit.`,
-          duration: 3000
-        });
+        toast({ title: "Block mode enabled", description: `Press left click to place. Press B to exit.`, duration: 3000 });
       } else {
         setSelectedBlockType(null);
         setCrosshairsEnabled(false);
         setBlockPlacementMode(true);
         setBlockMode(true);
-        
-        toast({
-          title: "You don't have any blocks to place",
-          description: "Press letter O to Open the Shop and purchase blocks",
-          duration: 4000
-        });
+        toast({ title: "No blocks available", description: "Press O to open shop", duration: 4000 });
+      }
+    } else if (mode === 'planting') {
+      setBlockPlacementMode(false);
+      setSelectedBlockType(null);
+      setTreePlacementMode(true);
+      setCrosshairsEnabled(false);
+      setBlockMode(false);
+      if (seedDefinitions.length > 0) {
+        setSelectedSeedTier(seedDefinitions[0].tier);
+        toast({ title: "Tree planting mode", description: `Press [ ] to cycle seeds. Click to plant.`, duration: 3000 });
+      } else {
+        toast({ title: "No seeds available", description: "Seeds not configured yet", duration: 3000 });
       }
     } else if (mode === 'shooting') {
       setSelectedBlockType(null);
       setBlockPlacementMode(false);
+      setTreePlacementMode(false);
+      setSelectedSeedTier(null);
       setCrosshairsEnabled(true);
       setBlockMode(false);
     } else {
       setSelectedBlockType(null);
       setBlockPlacementMode(false);
+      setTreePlacementMode(false);
+      setSelectedSeedTier(null);
       setCrosshairsEnabled(false);
       setBlockMode(false);
-      
-      toast({
-        title: "Block mode disabled",
-        description: "Press B to re-enter block placement mode",
-        duration: 2000
-      });
+      toast({ title: "Mode disabled", description: "Press B for blocks, T for trees", duration: 2000 });
     }
-  }, [inventory, setBlockMode, toast]);
+  }, [inventory, setBlockMode, toast, seedDefinitions]);
 
   useEffect(() => {
     handleModeChangeRef.current = handleModeChange;
@@ -493,6 +508,45 @@ export function Fortress() {
       duration: 1000
     });
   }, [selectedBlockType, inventory, toast]);
+
+  // Cycle through available seeds
+  const cycleSelectedSeed = useCallback((direction: 'next' | 'prev') => {
+    if (seedDefinitions.length === 0) return;
+    if (!selectedSeedTier) {
+      setSelectedSeedTier(seedDefinitions[0].tier);
+      return;
+    }
+    const currentIndex = seedDefinitions.findIndex(s => s.tier === selectedSeedTier);
+    const nextIndex = direction === 'next'
+      ? (currentIndex + 1) % seedDefinitions.length
+      : (currentIndex - 1 + seedDefinitions.length) % seedDefinitions.length;
+    setSelectedSeedTier(seedDefinitions[nextIndex].tier);
+    toast({ title: `Tier ${seedDefinitions[nextIndex].tier} seed`, description: seedDefinitions[nextIndex].name, duration: 1000 });
+  }, [selectedSeedTier, seedDefinitions, toast]);
+
+  // Tree placement handler with pitched-up sound
+  const handleTreePlace = useCallback(async (position: THREE.Vector3) => {
+    if (!selectedSeedTier) return;
+    const roundedPos = { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z) };
+    
+    // Play placement sound with 2x pitch
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const response = await fetch('/wooden_thud_sound.mp3');
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.playbackRate.value = 2.0; // 2x pitch
+      source.connect(audioCtx.destination);
+      source.start();
+    } catch (e) { console.warn('Seed sound failed', e); }
+    
+    const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedSeedTier);
+    if (result.success) {
+      toast({ title: "🌱 Seed planted!", description: `Tree will grow at (${roundedPos.x}, ${roundedPos.y}, ${roundedPos.z})` });
+    }
+  }, [selectedSeedTier, plantSeed, toast]);
 
   const handleOpenPanel = useCallback((tab: 'user' | 'wallet' | 'inventory' | 'store') => {
     openPanel(tab);
@@ -585,15 +639,19 @@ export function Fortress() {
           onCoinHit={handleCoinHit}
           wallPositions={wallPositions}
           blockPlacementMode={blockPlacementMode}
+          treePlacementMode={treePlacementMode}
           onBlockPlace={handleBlockPlace}
+          onTreePlace={handleTreePlace}
           onModeChange={handleModeChange}
           onOpenPanel={handleOpenPanel}
           crosshairsEnabled={crosshairsEnabled}
           getBlockQuantity={getBlockQuantity}
           coinImageUrl={currentTheme?.coin_image_url}
           selectedBlockType={selectedBlockType}
+          selectedSeedTier={selectedSeedTier}
           panelOpen={panelOpen}
           onCycleBlock={cycleSelectedBlock}
+          onCycleSeed={cycleSelectedSeed}
           blocks={blocks}
           weatherSettings={weatherSettings}
           onBlockRain={handleBlockRain}
@@ -612,6 +670,7 @@ export function Fortress() {
           fortressTextureUrl={currentWorld?.fortress_texture_url}
           groundTextureUrl={currentWorld?.ground_texture_url}
           skyTextureUrl={currentWorld?.sky_texture_url}
+          seedDefinitions={seedDefinitions}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (

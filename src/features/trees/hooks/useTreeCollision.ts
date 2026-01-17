@@ -59,7 +59,7 @@ export function useTreeCollision({ treeBlocks, treeFruits }: UseTreeCollisionOpt
       return {
         collides: true,
         blockId: block.id,
-        blockType: block.block_type as 'trunk' | 'branch',
+        blockType: block.block_type as 'trunk' | 'leaf',
       };
     }
 
