@@ -187,11 +187,37 @@ export function useTreeGrowth({
   useEffect(() => {
     for (const tree of plantedTrees) {
       const localOrder = localGrowthOrders.current.get(tree.id);
-      // If not tracked locally yet, derive order from block count
-      if (localOrder === undefined) {
-        // We can't perfectly derive order from count, but it's close enough
-        // The next growth tick will recalculate properly
-        localGrowthOrders.current.set(tree.id, tree.current_block_count);
+      // If not tracked locally yet, calculate order from block count
+      if (localOrder === undefined && tree.seed_definition) {
+        // For new trees, we need to calculate what order we're at based on block count
+        // Generate blueprint to determine order
+        const seedDef = tree.seed_definition;
+        const blueprint = generateTreeBlueprint(
+          tree.base_x,
+          tree.base_y,
+          tree.base_z,
+          seedDef.tier,
+          seedDef.width_factor,
+          seedDef.branching_factor,
+          tree.growth_seed,
+          buildGrowthOptions(seedDef)
+        );
+        
+        // Find which order we're at based on block count
+        let blocksPlaced = 0;
+        let currentOrder = 0;
+        const maxOrder = getMaxGrowthOrder(blueprint);
+        
+        while (currentOrder <= maxOrder && blocksPlaced < tree.current_block_count) {
+          blocksPlaced += getBlocksAtOrder(blueprint, currentOrder).length;
+          if (blocksPlaced <= tree.current_block_count) {
+            currentOrder++;
+          }
+        }
+        
+        localGrowthOrders.current.set(tree.id, currentOrder);
+        // Set initial growth time to now so growth starts immediately
+        lastGrowthTime.current.set(tree.id, Date.now());
       }
     }
   }, [plantedTrees]);
