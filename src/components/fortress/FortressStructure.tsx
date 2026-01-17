@@ -52,7 +52,7 @@ export function FortressStructure({
 
     loader.load(grassUrl, (texture) => {
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(40, 40);
+      texture.repeat.set(260, 260); // 1 texture unit per 1 meter (ground is 260x260m)
       grassTextureRef.current = texture;
       setGrassTexture(texture);
     });
