@@ -48,14 +48,18 @@ export interface SceneProps {
   coinImageUrl?: string;
   wallPositions: Record<number, { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number }>;
   blockPlacementMode: boolean;
+  treePlacementMode: boolean;
   onBlockPlace: (position: THREE.Vector3) => void;
-  onModeChange: (mode: 'shooting' | 'building' | null) => void;
+  onTreePlace: (position: THREE.Vector3) => void;
+  onModeChange: (mode: 'shooting' | 'building' | 'planting' | null) => void;
   onOpenPanel: (tab: 'user' | 'wallet' | 'inventory' | 'store') => void;
   crosshairsEnabled: boolean;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
+  selectedSeedTier: number | null;
   panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
+  onCycleSeed: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
   weatherSettings: WeatherSettings;
   onBlockRain: () => void;
@@ -75,6 +79,8 @@ export interface SceneProps {
   fortressTextureUrl?: string | null;
   groundTextureUrl?: string | null;
   skyTextureUrl?: string | null;
+  // Seed definitions for tree planting
+  seedDefinitions?: Array<{ id: string; tier: number; trunk_texture_url: string | null }>;
 }
 
 // First person controls props
@@ -84,13 +90,17 @@ export interface FirstPersonControlsProps {
   audioRefs: Omit<AudioRefs, 'woodenThud' | 'wispBoom' | 'wispCheer'>;
   playAudio: (audio: HTMLAudioElement) => Promise<void>;
   blockPlacementMode: boolean;
+  treePlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
+  onTreePlace?: (position: THREE.Vector3) => void;
   onOpenPanel: (tab: 'user' | 'wallet' | 'inventory' | 'store') => void;
-  onModeChange: (mode: 'shooting' | 'building' | null) => void;
+  onModeChange: (mode: 'shooting' | 'building' | 'planting' | null) => void;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
+  selectedSeedTier: number | null;
   panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
+  onCycleSeed: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
   onBlockRain: () => void;
   userRoles: string[];

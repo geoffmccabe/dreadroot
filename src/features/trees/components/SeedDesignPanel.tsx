@@ -281,6 +281,12 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
                     <Input
                       value={currentSeed.name}
                       onChange={(e) => updateSeed('name', e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && hasChanges) {
+                          e.preventDefault();
+                          saveSeed();
+                        }
+                      }}
                       placeholder="Seed name"
                     />
                   </div>
@@ -355,7 +361,7 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
                       </Button>
                     </div>
 
-                    {/* Branch Texture */}
+                    {/* Leaf Texture */}
                     <div className="flex items-center gap-2">
                       <div 
                         className="w-10 h-10 rounded border bg-muted flex items-center justify-center overflow-hidden"
@@ -380,7 +386,7 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
                         onClick={() => branchInputRef.current?.click()}
                       >
                         <Upload className="h-3 w-3 mr-2" />
-                        Branch
+                        Leaf
                       </Button>
                     </div>
 
