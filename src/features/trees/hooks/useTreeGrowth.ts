@@ -7,10 +7,14 @@ import { PlantedTree } from '../types';
 import { generateTreeBlueprint, getNextGrowthBlock } from '../lib/treeGrowth';
 import { TREE_CONFIG, getGrowthInterval } from '../constants';
 
+// Type for the placeBlock function from useBlocks
+type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => any;
+
 interface UseTreeGrowthOptions {
   worldId: string | null;
   userId: string | null;
   plantedTrees: PlantedTree[];
+  placeBlock: PlaceBlockFn | null; // Inject placeBlock for optimistic updates
   onGrowth?: (treeId: string, blockCount: number) => void;
 }
 
@@ -18,6 +22,7 @@ export function useTreeGrowth({
   worldId,
   userId,
   plantedTrees,
+  placeBlock,
   onGrowth,
 }: UseTreeGrowthOptions): void {
   // Track local block counts to avoid re-reading stale plantedTrees data
@@ -26,7 +31,7 @@ export function useTreeGrowth({
   const isGrowing = useRef(false);
 
   const growTreeByOne = useCallback(async (tree: PlantedTree): Promise<boolean> => {
-    if (!tree.seed_definition) {
+    if (!tree.seed_definition || !placeBlock) {
       return false;
     }
 
@@ -58,30 +63,14 @@ export function useTreeGrowth({
       return false;
     }
 
-    // Insert the new block into placed_blocks (unified block system)
-    // Tree blocks are just normal blocks with a texture_url override
-    const { error: blockError } = await supabase
-      .from('placed_blocks')
-      .insert({
-        user_id: tree.planted_by,
-        world_id: tree.world_id,
-        position_x: nextBlock.x,
-        position_y: nextBlock.y,
-        position_z: nextBlock.z,
-        block_type: 'trunk',
-        texture_url: seedDef.trunk_texture_url,
-      });
+    // Use placeBlock from useBlocks for INSTANT optimistic update!
+    // This makes the block appear immediately in the UI
+    const placedBlock = placeBlock(nextBlock.x, nextBlock.y, nextBlock.z, 'trunk');
 
-    if (blockError) {
-      // Duplicate key means block already exists - sync our count
-      if (blockError.code === '23505') {
-        // Query actual count from placed_blocks for this tree's positions
-        // Since we don't track tree_id in placed_blocks, just increment and continue
-        localBlockCounts.current.set(tree.id, currentCount + 1);
-        return true;
-      }
-      console.error('[TreeGrowth] Failed to insert block:', blockError);
-      return false;
+    if (!placedBlock) {
+      // Position might be occupied - still increment count to continue growth
+      localBlockCounts.current.set(tree.id, currentCount + 1);
+      return true;
     }
 
     // Update local and remote counts
@@ -89,23 +78,24 @@ export function useTreeGrowth({
     localBlockCounts.current.set(tree.id, newBlockCount);
     lastGrowthTime.current.set(tree.id, Date.now());
 
-    // Update tree progress in DB
-    await supabase
+    // Update tree progress in DB (async, doesn't block UI)
+    supabase
       .from('planted_trees')
       .update({
         current_block_count: newBlockCount,
         last_growth_at: new Date().toISOString(),
         is_fully_grown: newBlockCount >= tree.target_block_count,
       })
-      .eq('id', tree.id);
+      .eq('id', tree.id)
+      .then(() => {});
 
     onGrowth?.(tree.id, newBlockCount);
     return true;
-  }, [onGrowth]);
+  }, [placeBlock, onGrowth]);
 
   // Main growth loop - processes one tree at a time
   useEffect(() => {
-    if (!worldId || !userId || !TREE_CONFIG.ENABLED) return;
+    if (!worldId || !userId || !TREE_CONFIG.ENABLED || !placeBlock) return;
 
     const checkGrowth = async () => {
       // Prevent concurrent growth operations
@@ -142,7 +132,7 @@ export function useTreeGrowth({
     setTimeout(checkGrowth, 50);
 
     return () => clearInterval(interval);
-  }, [worldId, userId, plantedTrees, growTreeByOne]);
+  }, [worldId, userId, plantedTrees, placeBlock, growTreeByOne]);
 
   // Sync local counts when plantedTrees updates from DB
   useEffect(() => {
