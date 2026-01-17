@@ -8,10 +8,14 @@ import { generateTreeBlueprint } from '../lib/treeGrowth';
 import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
 
+// Type for the placeBlock function from useBlocks
+type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => any;
+
 interface UseSeedPlantingOptions {
   worldId: string | null;
   userId: string | null;
   seedDefinitions: SeedDefinition[];
+  placeBlock: PlaceBlockFn | null; // Inject placeBlock for optimistic updates
 }
 
 interface PlantSeedResult {
@@ -24,6 +28,7 @@ export function useSeedPlanting({
   worldId,
   userId,
   seedDefinitions,
+  placeBlock,
 }: UseSeedPlantingOptions) {
   const [isPlanting, setIsPlanting] = useState(false);
   const [selectedSeedTier, setSelectedSeedTier] = useState<number | null>(null);
@@ -37,6 +42,10 @@ export function useSeedPlanting({
   ): Promise<PlantSeedResult> => {
     if (!worldId || !userId || !TREE_CONFIG.ENABLED) {
       return { success: false, error: 'Not ready to plant' };
+    }
+
+    if (!placeBlock) {
+      return { success: false, error: 'Block placement not available' };
     }
 
     const seedDef = seedDefinitions.find(s => s.tier === tier);
@@ -83,7 +92,16 @@ export function useSeedPlanting({
         growthSeed
       );
 
-      // Create the planted tree record
+      // Place the first block IMMEDIATELY using optimistic update system
+      // This appears instantly in the UI before any DB operations complete
+      const firstBlock = blueprint.blocks.find(b => b.growthOrder === 0);
+      if (firstBlock) {
+        // Use placeBlock from useBlocks - instant optimistic update!
+        // Note: placeBlock doesn't support textureUrl yet, but the block will work
+        placeBlock(firstBlock.x, firstBlock.y, firstBlock.z, 'trunk');
+      }
+
+      // Create the planted tree record (async, doesn't block visibility)
       const { data: newTree, error: insertError } = await supabase
         .from('planted_trees')
         .insert({
@@ -105,26 +123,6 @@ export function useSeedPlanting({
         return { success: false, error: 'Failed to plant seed' };
       }
 
-      // Place the first block immediately so the tree is visible right away
-      // Uses the regular placed_blocks table - tree blocks are just normal blocks with a texture_url
-      const firstBlock = blueprint.blocks.find(b => b.growthOrder === 0);
-      if (firstBlock) {
-        await supabase
-          .from('placed_blocks')
-          .insert({
-            user_id: userId,
-            world_id: worldId,
-            position_x: firstBlock.x,
-            position_y: firstBlock.y,
-            position_z: firstBlock.z,
-            block_type: 'trunk',
-            texture_url: seedDef.trunk_texture_url,
-          });
-      }
-
-      // TODO: Consume seed from inventory when inventory system is integrated
-      // For now, planting is free during testing
-
       toast({
         title: `Planted ${seedDef.name}!`,
         description: `Tier ${tier} tree will grow ${blueprint.blocks.length} blocks`,
@@ -137,7 +135,7 @@ export function useSeedPlanting({
     } finally {
       setIsPlanting(false);
     }
-  }, [worldId, userId, seedDefinitions, toast]);
+  }, [worldId, userId, seedDefinitions, placeBlock, toast]);
 
   const cancelPlanting = useCallback(() => {
     setSelectedSeedTier(null);

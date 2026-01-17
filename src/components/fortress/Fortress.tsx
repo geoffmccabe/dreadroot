@@ -128,6 +128,7 @@ export function Fortress() {
     worldId: currentWorldId,
     userId: user?.id ?? null,
     seedDefinitions,
+    placeBlock, // Pass placeBlock for instant optimistic updates
   });
   
   // Tree growth - runs the growth loop for user's trees
@@ -135,6 +136,7 @@ export function Fortress() {
     worldId: currentWorldId,
     userId: user?.id ?? null,
     plantedTrees,
+    placeBlock, // Pass placeBlock for instant optimistic updates
   });
   
   // Audio refs
