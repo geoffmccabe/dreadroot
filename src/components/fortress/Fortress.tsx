@@ -98,7 +98,7 @@ export function Fortress() {
   
   // Hooks
   const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock } = useUserData();
-  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld } = useBlocks();
+  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
@@ -501,9 +501,35 @@ export function Fortress() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Skip if in input fields
+      if (document.activeElement?.tagName === 'INPUT' || 
+          document.activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
+      
       // D-Flow diagnostics toggle (Shift+3 = #)
       if (event.key === '#' || (event.shiftKey && event.code === 'Digit3')) {
         diagnostics.toggle();
+        return;
+      }
+      
+      // World switching with < and > (Shift+comma / Shift+period)
+      if (event.key === '<') {
+        event.preventDefault();
+        navigateWorld('prev');
+        toast({
+          title: `World ${worldIndex.current > 1 ? worldIndex.current - 1 : worldIndex.total}/${worldIndex.total}`,
+          description: "Switching world...",
+        });
+        return;
+      }
+      if (event.key === '>') {
+        event.preventDefault();
+        navigateWorld('next');
+        toast({
+          title: `World ${worldIndex.current < worldIndex.total ? worldIndex.current + 1 : 1}/${worldIndex.total}`,
+          description: "Switching world...",
+        });
         return;
       }
       
@@ -534,7 +560,7 @@ export function Fortress() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [blockPlacementMode, toast]);
+  }, [blockPlacementMode, toast, navigateWorld, worldIndex]);
 
   // Crosshair state sync
   useEffect(() => {

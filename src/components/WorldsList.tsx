@@ -9,17 +9,19 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Plus, Trash2, Check, Globe, Upload, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { DEFAULT_TEXTURES } from '@/hooks/useCurrentWorldId';
+import { cn } from '@/lib/utils';
 
 const LOCAL_STORAGE_KEY = 'currentWorldId';
 
-export function WorldsList() {
+interface WorldsListProps {
+  currentWorldId: string | null;
+  onWorldChange: (worldId: string) => void;
+}
+
+export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
   const { worlds, isLoading, createWorld, updateWorld, setDefaultWorld, deleteWorld } = useWorlds();
   const { toast } = useToast();
-  
-  // Track current world locally (read from localStorage)
-  const [currentWorldId, setCurrentWorldIdLocal] = React.useState<string | null>(() => {
-    return localStorage.getItem(LOCAL_STORAGE_KEY);
-  });
   
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -28,10 +30,7 @@ export function WorldsList() {
   const [uploadingFor, setUploadingFor] = useState<{ worldId: string; type: 'fortress' | 'ground' | 'sky' } | null>(null);
   
   const [newWorld, setNewWorld] = useState({
-    name: '',
-    fortress_texture_url: '',
-    ground_texture_url: '',
-    sky_texture_url: ''
+    name: ''
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,15 +43,16 @@ export function WorldsList() {
 
     setIsCreating(true);
     try {
+      // New worlds start with null textures (will use defaults)
       await createWorld({
         name: newWorld.name.trim(),
-        fortress_texture_url: newWorld.fortress_texture_url || null,
-        ground_texture_url: newWorld.ground_texture_url || null,
-        sky_texture_url: newWorld.sky_texture_url || null
+        fortress_texture_url: null,
+        ground_texture_url: null,
+        sky_texture_url: null
       });
-      toast({ title: 'World created', description: `"${newWorld.name}" has been created` });
+      toast({ title: 'World created', description: `"${newWorld.name}" has been created with default textures` });
       setShowCreateDialog(false);
-      setNewWorld({ name: '', fortress_texture_url: '', ground_texture_url: '', sky_texture_url: '' });
+      setNewWorld({ name: '' });
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to create world', variant: 'destructive' });
     } finally {
@@ -69,10 +69,9 @@ export function WorldsList() {
     }
   };
 
-  const handleUseLocally = (world: World) => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, world.id);
-    setCurrentWorldIdLocal(world.id);
-    toast({ title: 'World selected', description: `Now using "${world.name}" locally. Refresh to apply.` });
+  const handleUseWorld = (world: World) => {
+    onWorldChange(world.id);
+    toast({ title: 'World changed', description: `Now using "${world.name}"` });
   };
 
   const handleDeleteClick = (world: World) => {
@@ -145,6 +144,12 @@ export function WorldsList() {
     fileInputRef.current?.click();
   };
 
+  // Helper to get display texture (actual or default)
+  const getDisplayTexture = (url: string | null, type: 'fortress' | 'ground' | 'sky') => {
+    if (url) return { url, isDefault: false };
+    return { url: DEFAULT_TEXTURES[type], isDefault: true };
+  };
+
   if (isLoading) {
     return <div className="p-4 text-muted-foreground">Loading worlds...</div>;
   }
@@ -158,6 +163,10 @@ export function WorldsList() {
         </Button>
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        Use <kbd className="px-1 py-0.5 bg-muted rounded text-xs">&lt;</kbd> and <kbd className="px-1 py-0.5 bg-muted rounded text-xs">&gt;</kbd> keys (Shift+comma/period) to switch worlds in-game.
+      </p>
+
       <input
         ref={fileInputRef}
         type="file"
@@ -167,101 +176,147 @@ export function WorldsList() {
       />
 
       <div className="grid gap-4">
-        {worlds.map(world => (
-          <Card key={world.id} className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Globe className="h-5 w-5 text-muted-foreground" />
-                <span className="font-medium">{world.name}</span>
-                {world.is_default && (
-                  <Badge variant="secondary" className="text-xs">
-                    <Star className="h-3 w-3 mr-1" /> Default
-                  </Badge>
-                )}
-                {currentWorldId === world.id && !world.is_default && (
-                  <Badge variant="outline" className="text-xs">Active</Badge>
-                )}
-              </div>
-              <div className="flex gap-2">
-                {!world.is_default && (
-                  <Button variant="outline" size="sm" onClick={() => handleSetDefault(world)}>
-                    Set Default
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={() => handleUseLocally(world)}>
-                  <Check className="h-4 w-4 mr-1" /> Use
-                </Button>
-                {!world.is_default && (
-                  <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(world)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
+        {worlds.map(world => {
+          const isInUse = currentWorldId === world.id;
+          const fortressTex = getDisplayTexture(world.fortress_texture_url, 'fortress');
+          const groundTex = getDisplayTexture(world.ground_texture_url, 'ground');
+          const skyTex = getDisplayTexture(world.sky_texture_url, 'sky');
 
-            <div className="grid grid-cols-3 gap-3 mt-3">
-              {/* Fortress Texture */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Fortress</Label>
+          return (
+            <Card 
+              key={world.id} 
+              className={cn(
+                "p-4 transition-all",
+                isInUse && "bg-muted/50 ring-2 ring-blue-400/60"
+              )}
+            >
+              <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  {world.fortress_texture_url ? (
-                    <img src={world.fortress_texture_url} className="w-12 h-12 object-cover rounded border" alt="Fortress" />
-                  ) : (
-                    <div className="w-12 h-12 bg-muted rounded border flex items-center justify-center text-xs text-muted-foreground">None</div>
+                  <Globe className="h-5 w-5 text-muted-foreground" />
+                  <span className="font-medium">{world.name}</span>
+                  {world.is_default && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Star className="h-3 w-3 mr-1" /> Default
+                    </Badge>
                   )}
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'fortress'}
-                    onClick={() => triggerUpload(world.id, 'fortress')}
-                  >
-                    <Upload className="h-3 w-3" />
-                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  {!world.is_default && (
+                    <Button variant="outline" size="sm" onClick={() => handleSetDefault(world)}>
+                      Set Default
+                    </Button>
+                  )}
+                  {isInUse ? (
+                    <Button variant="default" size="sm" disabled className="bg-blue-600 hover:bg-blue-600">
+                      <Check className="h-4 w-4 mr-1" /> IN USE
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => handleUseWorld(world)}>
+                      Use
+                    </Button>
+                  )}
+                  {!world.is_default && (
+                    <Button variant="destructive" size="sm" onClick={() => handleDeleteClick(world)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
 
-              {/* Ground Texture */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Ground</Label>
-                <div className="flex items-center gap-2">
-                  {world.ground_texture_url ? (
-                    <img src={world.ground_texture_url} className="w-12 h-12 object-cover rounded border" alt="Ground" />
-                  ) : (
-                    <div className="w-12 h-12 bg-muted rounded border flex items-center justify-center text-xs text-muted-foreground">None</div>
-                  )}
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'ground'}
-                    onClick={() => triggerUpload(world.id, 'ground')}
-                  >
-                    <Upload className="h-3 w-3" />
-                  </Button>
+              <div className="grid grid-cols-3 gap-3 mt-3">
+                {/* Fortress Texture */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Fortress</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <img 
+                        src={fortressTex.url} 
+                        className={cn(
+                          "w-12 h-12 object-cover rounded border",
+                          fortressTex.isDefault && "opacity-60"
+                        )} 
+                        alt="Fortress" 
+                      />
+                      {fortressTex.isDefault && (
+                        <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white rounded-b">
+                          default
+                        </span>
+                      )}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'fortress'}
+                      onClick={() => triggerUpload(world.id, 'fortress')}
+                    >
+                      <Upload className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Sky Texture */}
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Sky</Label>
-                <div className="flex items-center gap-2">
-                  {world.sky_texture_url ? (
-                    <img src={world.sky_texture_url} className="w-12 h-12 object-cover rounded border" alt="Sky" />
-                  ) : (
-                    <div className="w-12 h-12 bg-muted rounded border flex items-center justify-center text-xs text-muted-foreground">None</div>
-                  )}
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'sky'}
-                    onClick={() => triggerUpload(world.id, 'sky')}
-                  >
-                    <Upload className="h-3 w-3" />
-                  </Button>
+                {/* Ground Texture */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Ground</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <img 
+                        src={groundTex.url} 
+                        className={cn(
+                          "w-12 h-12 object-cover rounded border",
+                          groundTex.isDefault && "opacity-60"
+                        )} 
+                        alt="Ground" 
+                      />
+                      {groundTex.isDefault && (
+                        <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white rounded-b">
+                          default
+                        </span>
+                      )}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'ground'}
+                      onClick={() => triggerUpload(world.id, 'ground')}
+                    >
+                      <Upload className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Sky Texture */}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Sky</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <img 
+                        src={skyTex.url} 
+                        className={cn(
+                          "w-12 h-12 object-cover rounded border",
+                          skyTex.isDefault && "opacity-60"
+                        )} 
+                        alt="Sky" 
+                      />
+                      {skyTex.isDefault && (
+                        <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white rounded-b">
+                          default
+                        </span>
+                      )}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'sky'}
+                      onClick={() => triggerUpload(world.id, 'sky')}
+                    >
+                      <Upload className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
 
         {worlds.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
@@ -287,7 +342,7 @@ export function WorldsList() {
               />
             </div>
             <p className="text-sm text-muted-foreground">
-              Textures can be uploaded after creation.
+              New worlds use default textures. Upload custom textures after creation.
             </p>
           </div>
           <DialogFooter>
