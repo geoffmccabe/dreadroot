@@ -191,14 +191,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
           filter: `world_id=eq.${worldId}`
         },
         async (payload) => {
-          console.log('[Phase2C] chunk_versions realtime event:', payload);
+          // Removed console spam - was causing main thread contention
           
           const chunkX = (payload.new as any)?.chunk_x;
           const chunkZ = (payload.new as any)?.chunk_z;
-          const version = (payload.new as any)?.version;
           
           if (chunkX === undefined || chunkZ === undefined) {
-            console.log('[Phase2C] Ignoring event - missing chunk coordinates');
             return;
           }
           
@@ -206,7 +204,6 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
           
           // Only process if this chunk is currently loaded
           if (!chunkLoader.isChunkLoaded(chunkX, chunkZ)) {
-            console.log(`[Phase2C] Ignoring chunk ${chunkKey} - not loaded`);
             return; // Ignore changes to chunks we haven't loaded
           }
           
@@ -214,11 +211,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
           // We already have optimistic data, no need to refetch our own changes
           const localModTime = recentlyModifiedChunks.current.get(chunkKey);
           if (localModTime && (Date.now() - localModTime) < LOCAL_MODIFICATION_GRACE_PERIOD) {
-            console.log(`[Phase2C] Skipping chunk ${chunkKey} - recently modified locally`);
             return;
           }
-          
-          console.log(`[Phase2C] Processing chunk ${chunkKey} version ${version} (from other user)`);
           
           // Debounce: If we already have a pending refetch for this chunk, clear it
           const existingTimer = chunkDebounceTimers.current.get(chunkKey);

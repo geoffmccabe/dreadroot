@@ -198,10 +198,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, []);
   
-  // Set up instance matrices and compute bounding box
-  // Track block IDs to detect actual changes (not just count)
-  const prevBlockIdsRef = useRef<string>('');
-  
   // Notify parent when mesh is ready for raycasting
   useEffect(() => {
     if (meshRef.current && onMeshReady) {
@@ -215,52 +211,51 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [onMeshReady]);
   
   useEffect(() => {
-    if (!meshRef.current) return;
-    
-    // Create stable key from block IDs to detect actual changes
-    const blockIdsKey = blocks.map(b => b.id).sort().join(',');
+    const mesh = meshRef.current;
+    if (!mesh) return;
     
     // IMPORTANT: Always update the mesh count to match blocks array
-    // This is needed because the instancedMesh may have been created with a different count
-    meshRef.current.count = blocks.length;
+    mesh.count = blocks.length;
     
-    // Skip matrix re-upload only if block IDs haven't changed
-    if (prevBlockIdsRef.current === blockIdsKey && blocks.length > 0) {
-      return;
-    }
-    
-    prevBlockIdsRef.current = blockIdsKey;
+    // REMOVED: O(n log n) sort + join for ID key - was expensive and unnecessary
+    // The effect already runs when blocks array reference changes
     
     const matrix = matrixRef.current;
-    const boundingBox = new THREE.Box3();
     
-    blocks.forEach((block, i) => {
-      // Always use database position for initial matrix setup
-      // Falling blocks will be updated in useFrame
-      const x = block.position_x + 0.5;
-      const y = block.position_y + 0.5;
-      const z = block.position_z + 0.5;
+    // Compute bounding box with numeric min/max - NO allocations per block
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      const x = block.position_x;
+      const y = block.position_y;
+      const z = block.position_z;
       
-      matrix.setPosition(x, y, z);
-      meshRef.current!.setMatrixAt(i, matrix);
+      // Instance matrix (centered)
+      matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
+      mesh.setMatrixAt(i, matrix);
       
-      // Expand bounding box to include this block (1x1x1 cube)
-      boundingBox.expandByPoint(new THREE.Vector3(x - 0.5, y - 0.5, z - 0.5));
-      boundingBox.expandByPoint(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
-    });
-    
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    
-    // Set bounding box/sphere on the MESH (not geometry) for proper frustum culling
-    // This tells Three.js the bounds of ALL instances combined
-    if (!meshRef.current.boundingBox) {
-      meshRef.current.boundingBox = new THREE.Box3();
+      // Bounds tracking (no Vector3 allocations)
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (z < minZ) minZ = z;
+      if (x + 1 > maxX) maxX = x + 1;
+      if (y + 1 > maxY) maxY = y + 1;
+      if (z + 1 > maxZ) maxZ = z + 1;
     }
-    if (!meshRef.current.boundingSphere) {
-      meshRef.current.boundingSphere = new THREE.Sphere();
+    
+    mesh.instanceMatrix.needsUpdate = true;
+    
+    // Set bounding box/sphere on the MESH for proper frustum culling
+    if (blocks.length > 0) {
+      mesh.boundingBox ??= new THREE.Box3();
+      mesh.boundingSphere ??= new THREE.Sphere();
+      
+      mesh.boundingBox.min.set(minX, minY, minZ);
+      mesh.boundingBox.max.set(maxX, maxY, maxZ);
+      mesh.boundingBox.getBoundingSphere(mesh.boundingSphere);
     }
-    meshRef.current.boundingBox.copy(boundingBox);
-    boundingBox.getBoundingSphere(meshRef.current.boundingSphere);
   }, [blocks]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
@@ -357,9 +352,9 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   });
   
   // Create collision boxes for all instances (only when blocks change, not on every frame)
-  // Use a stable key to track when blocks actually change
+  // REMOVED: O(n log n) sort + join - use blocks array reference instead
   const blockIdsForCollision = useMemo(() => 
-    blocks.map(b => b.id).sort().join(','), 
+    blocks.map(b => b.id).join(','), // Simple join without sort - O(n)
     [blocks]
   );
   

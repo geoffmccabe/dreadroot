@@ -179,7 +179,7 @@ function OtherPlayer({
 export function MultiplayerPlayers({ players }: MultiplayerPlayersProps) {
   if (players.size === 0) return null;
 
-  console.log('[MultiplayerPlayers] Rendering', players.size, 'other players');
+  // Removed console.log spam - was causing main thread contention
 
   return (
     <SharedAssetsLoader>
