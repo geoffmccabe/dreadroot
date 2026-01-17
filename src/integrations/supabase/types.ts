@@ -484,7 +484,7 @@ export type Database = {
           growth_factor: number
           id: string
           low_branch_height: number | null
-          name: string
+          name: string | null
           nob_chance: number | null
           nob_size: number | null
           rarity: string
@@ -510,7 +510,7 @@ export type Database = {
           growth_factor?: number
           id?: string
           low_branch_height?: number | null
-          name: string
+          name?: string | null
           nob_chance?: number | null
           nob_size?: number | null
           rarity?: string
@@ -536,7 +536,7 @@ export type Database = {
           growth_factor?: number
           id?: string
           low_branch_height?: number | null
-          name?: string
+          name?: string | null
           nob_chance?: number | null
           nob_size?: number | null
           rarity?: string
