@@ -33,5 +33,4 @@ export { SeedPreview } from './components/SeedPreview';
 export { useTreeData } from './hooks/useTreeData';
 export { useTreeGrowth } from './hooks/useTreeGrowth';
 export { useSeedPlanting } from './hooks/useSeedPlanting';
-export { useTreeCollision } from './hooks/useTreeCollision';
 export { useFruitPickup } from './hooks/useFruitPickup';
