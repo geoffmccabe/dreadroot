@@ -679,9 +679,26 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       hasOptimisticBlocks: optimisticBlocks.length > 0
     });
 
+    // Phase 3D: Update cache with server data (only if no optimistic blocks)
+    // We skip caching if there are optimistic blocks to avoid caching temp data
+    if (optimisticBlocks.length === 0) {
+      fetchChunkVersions([{ x: chunkX, z: chunkZ }]).then(versions => {
+        const version = versions.get(chunkKey) ?? 0;
+        blockDB.saveCachedChunk({
+          key: `${worldId}:${chunkX}:${chunkZ}`,
+          worldId,
+          chunkX,
+          chunkZ,
+          version,
+          blocks: activeServerBlocks,
+          cachedAt: loadedAt
+        }).catch(err => console.warn('Failed to update chunk cache:', err));
+      });
+    }
+
     // Phase 3.0: Use batched emit instead of synchronous callback
     scheduleEmit();
-  }, [worldId, scheduleEmit]);
+  }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
    * Unload chunks that are beyond UNLOAD_RADIUS from player
