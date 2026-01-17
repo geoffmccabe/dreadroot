@@ -119,21 +119,10 @@ export function useTreeData(worldId: string | null): TreeData & {
           filter: `world_id=eq.${worldId}`,
         },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newBlock = payload.new as TreeBlock;
-            // Enrich with texture URL from plantedTrees
-            setTreeBlocks(prev => {
-              // Find the tree to get its seed definition texture
-              const parentTree = plantedTrees.find(t => t.id === newBlock.tree_id);
-              const seedDef = parentTree?.seed_definition;
-              const textureUrl = newBlock.block_type === 'trunk' 
-                ? seedDef?.trunk_texture_url 
-                : seedDef?.fruit_texture_url;
-              
-              return [...prev, { ...newBlock, texture_url: textureUrl || null }];
-            });
-          } else if (payload.eventType === 'DELETE') {
-            setTreeBlocks(prev => prev.filter(b => b.id !== payload.old.id));
+          if (payload.eventType === 'INSERT' || payload.eventType === 'DELETE') {
+            // Refetch to get properly enriched data with texture URLs
+            // This is simpler and more reliable than trying to enrich in real-time
+            fetchData();
           }
         }
       )
@@ -191,7 +180,7 @@ export function useTreeData(worldId: string | null): TreeData & {
       supabase.removeChannel(fruitsChannel);
       supabase.removeChannel(treesChannel);
     };
-  }, [worldId, fetchData, plantedTrees]);
+  }, [worldId, fetchData]);
 
   return {
     plantedTrees,
