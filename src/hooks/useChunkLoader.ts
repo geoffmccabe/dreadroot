@@ -373,9 +373,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const now = new Date();
 
     // Phase 3D: Try to get chunks from cache
-    // TEMPORARILY DISABLED for debugging - skip cache read
     let cachedChunks: Map<string, CachedChunk> = new Map();
-    const USE_CHUNK_CACHE = false; // Toggle for debugging
+    const USE_CHUNK_CACHE = true; // Re-enabled with fix
     if (USE_CHUNK_CACHE) {
       try {
         cachedChunks = await blockDB.getCachedChunksBatch(worldId, toLoad);
@@ -412,12 +411,12 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         const hasServerVersion = serverVersions.has(chunkKey);
         const serverVersion = serverVersions.get(chunkKey) ?? 0;
 
-        // Only use cache if:
+        // Cache is fresh if:
         // 1. Server has a version entry AND cache version >= server version, OR
-        // 2. Server has no version entry AND cache has blocks (empty chunks don't need refetch)
+        // 2. Server has NO version entry (chunk never modified since versioning started)
         const cacheIsFresh = hasServerVersion 
           ? cached.version >= serverVersion 
-          : cached.blocks.length === 0; // Empty cached chunk with no server version = still empty
+          : true; // No server version = no changes tracked, cache is valid
 
         if (cacheIsFresh) {
           // Cache is fresh - use it
@@ -427,13 +426,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           );
           chunksFromCache.push({ x, z, blocks: activeBlocks });
         } else {
-          // Cache is stale or unverified - need to fetch from server
+          // Cache is stale - need to fetch from server
           chunksToFetchFromServer.push({ x, z });
         }
       }
     }
 
-    // Load chunks from cache immediately
+    // Load chunks from cache into memory (NO emit yet - wait for server data)
     for (const { x, z, blocks } of chunksFromCache) {
       const chunkKey = `chunk_${x}_${z}`;
       loadedChunksRef.current.set(chunkKey, {
@@ -442,11 +441,6 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         lastAccessedAt: loadedAt,
         hasOptimisticBlocks: blocks.some(b => b.id.startsWith('temp-'))
       });
-    }
-
-    // Emit early if we got some from cache
-    if (chunksFromCache.length > 0) {
-      scheduleEmit();
     }
 
     // Fetch remaining chunks from server
@@ -469,6 +463,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
       if (error) {
         console.error('Error loading chunks from server:', error);
+        // Still emit what we have from cache
+        if (chunksFromCache.length > 0) {
+          scheduleEmit();
+        }
         return;
       }
 
@@ -522,9 +520,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           console.warn('Failed to cache chunks:', err);
         });
       }
-
-      scheduleEmit();
     }
+
+    // FIX: Single consolidated emit after ALL data (cache + server) is loaded
+    scheduleEmit();
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
