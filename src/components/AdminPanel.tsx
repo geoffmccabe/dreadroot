@@ -23,6 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useBlocks } from '@/contexts/BlocksContext';
+import { SeedDesignPanel } from '@/features/trees';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -2346,13 +2347,14 @@ export function AdminPanel({
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-7 flex-shrink-0">
+          <TabsList className="grid w-full grid-cols-8 flex-shrink-0">
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
             <TabsTrigger value="weather">Weather</TabsTrigger>
             <TabsTrigger value="models">Models</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
+            <TabsTrigger value="seeds">Seeds</TabsTrigger>
             <TabsTrigger value="worlds">Worlds</TabsTrigger>
           </TabsList>
 
@@ -2403,6 +2405,12 @@ export function AdminPanel({
           <TabsContent value="blocks" className="mt-4 flex-1 overflow-hidden">
             <ScrollArea className="h-full pr-4">
               <BlocksList userRoles={userRoles} />
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="seeds" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-[calc(90vh-180px)] pr-4">
+              <SeedDesignPanel />
             </ScrollArea>
           </TabsContent>
 

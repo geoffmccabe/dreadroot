@@ -24,9 +24,9 @@ export { fruitPhysics, FruitPhysicsSystem } from './lib/fruitPhysics';
 // Constants
 export { RARITY_COLORS, DEFAULT_TIER_NAMES, getGrowthInterval, getFruitSpawnInterval } from './constants';
 
-// Components (will be added as we build them)
+// Components
+export { SeedDesignPanel } from './components/SeedDesignPanel';
 // export { TreeSystem } from './components/TreeSystem';
-// export { SeedDesignPanel } from './components/SeedDesignPanel';
 // export { SeedInventory } from './components/SeedInventory';
 
 // Hooks (will be added as we build them)
