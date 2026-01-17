@@ -8,9 +8,17 @@ const LOAD_RADIUS = 4;    // Chunks to load around player (9x9 = 81 chunks max)
 const UNLOAD_RADIUS = 6;  // Hysteresis: don't unload until this far away
 const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 
+// Phase 3A: Eviction configuration
+// MAX must be >= (2*UNLOAD_RADIUS+1)^2 = 169, plus buffer
+const MAX_LOADED_CHUNKS = 220;
+const EVICTION_BATCH_SIZE = 10;
+
 interface ChunkData {
   blocks: PlacedBlock[];
   loadedAt: number;
+  // Phase 3A: Track for LRU and pinning
+  lastAccessedAt: number;
+  hasOptimisticBlocks: boolean;
 }
 
 interface UseChunkLoaderProps {
@@ -24,6 +32,9 @@ interface UseChunkLoaderProps {
  * refetches for realtime updates.
  * 
  * This is the SINGLE SOURCE OF TRUTH for loaded blocks.
+ * 
+ * Phase 3.0: Single emit per frame batching
+ * Phase 3A: Distance-aware eviction with LRU safety cap
  */
 export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps) {
   // Loaded chunks: Map<chunkKey, ChunkData>
@@ -42,8 +53,30 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   // Track current world to clear on change
   const currentWorldRef = useRef<string | null>(null);
 
+  // Phase 3.0: Single emit per frame batching
+  const emitScheduledRef = useRef(false);
+
+  /**
+   * Phase 3.0: Schedule a single emission per animation frame
+   * This prevents multiple React updates from rapid chunk operations
+   */
+  const scheduleEmit = useCallback(() => {
+    if (emitScheduledRef.current) return;
+    emitScheduledRef.current = true;
+
+    requestAnimationFrame(() => {
+      emitScheduledRef.current = false;
+      const allBlocks: PlacedBlock[] = [];
+      for (const chunkData of loadedChunksRef.current.values()) {
+        allBlocks.push(...chunkData.blocks);
+      }
+      onBlocksChanged(allBlocks);
+    });
+  }, [onBlocksChanged]);
+
   /**
    * Flatten all loaded chunks into a single blocks array
+   * NOTE: This is still used for synchronous operations like optimistic updates
    */
   const flattenLoadedBlocks = useCallback((): PlacedBlock[] => {
     const allBlocks: PlacedBlock[] = [];
@@ -54,14 +87,77 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   }, []);
 
   /**
+   * Phase 3A: Check if a chunk is "pinned" (should not be evicted)
+   * Pinned if: within UNLOAD_RADIUS of player OR has optimistic blocks
+   */
+  const isChunkPinned = useCallback((chunkKey: string): boolean => {
+    const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
+    if (!match) return true; // Don't evict malformed keys
+    
+    const chunkX = parseInt(match[1], 10);
+    const chunkZ = parseInt(match[2], 10);
+    const playerChunk = playerChunkRef.current;
+    
+    // If no player position, don't evict anything
+    if (!playerChunk) return true;
+    
+    // Check distance to player
+    const dx = Math.abs(chunkX - playerChunk.x);
+    const dz = Math.abs(chunkZ - playerChunk.z);
+    const distance = Math.max(dx, dz);
+    
+    if (distance <= UNLOAD_RADIUS) return true;
+    
+    // Check for optimistic blocks
+    const chunkData = loadedChunksRef.current.get(chunkKey);
+    if (chunkData?.hasOptimisticBlocks) return true;
+    
+    return false;
+  }, []);
+
+  /**
+   * Phase 3A: Evict LRU chunks as a safety cap
+   * Only evicts non-pinned chunks when we exceed MAX_LOADED_CHUNKS
+   */
+  const evictLRUChunks = useCallback(() => {
+    const chunkCount = loadedChunksRef.current.size;
+    if (chunkCount <= MAX_LOADED_CHUNKS) return;
+
+    // Find non-pinned chunks sorted by lastAccessedAt (oldest first)
+    const evictionCandidates: Array<{ key: string; lastAccessedAt: number }> = [];
+    
+    for (const [key, data] of loadedChunksRef.current.entries()) {
+      if (!isChunkPinned(key)) {
+        evictionCandidates.push({ key, lastAccessedAt: data.lastAccessedAt });
+      }
+    }
+
+    // Sort by lastAccessedAt ascending (oldest first)
+    evictionCandidates.sort((a, b) => a.lastAccessedAt - b.lastAccessedAt);
+
+    // Evict up to EVICTION_BATCH_SIZE chunks
+    const toEvict = evictionCandidates.slice(0, EVICTION_BATCH_SIZE);
+    
+    if (toEvict.length > 0) {
+      for (const { key } of toEvict) {
+        loadedChunksRef.current.delete(key);
+      }
+      // Use batched emit
+      scheduleEmit();
+    }
+  }, [isChunkPinned, scheduleEmit]);
+
+  /**
    * Add a block optimistically to the chunk loader's internal Map.
    * This ensures immediate UI feedback while awaiting server confirmation.
    * 
    * PERFORMANCE: We call onBlocksChanged synchronously for INSTANT feedback.
+   * Phase 3A: Mark chunk as having optimistic blocks
    */
   const addBlockOptimistically = useCallback((block: PlacedBlock): void => {
     const chunkKey = getChunkKey(block.position_x, block.position_z);
     const chunkData = loadedChunksRef.current.get(chunkKey);
+    const now = Date.now();
     
     if (chunkData) {
       // Check for duplicates at the same position
@@ -73,6 +169,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       
       if (!existsAtPosition) {
         chunkData.blocks.push(block);
+        // Phase 3A: Mark as having optimistic blocks (temp-*)
+        if (block.id.startsWith('temp-')) {
+          chunkData.hasOptimisticBlocks = true;
+        }
+        chunkData.lastAccessedAt = now;
         // INSTANT: Synchronous callback - no batching, no delays
         onBlocksChanged(flattenLoadedBlocks());
       }
@@ -80,7 +181,9 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       // Chunk not loaded - create it with just this block for immediate visibility
       loadedChunksRef.current.set(chunkKey, {
         blocks: [block],
-        loadedAt: Date.now()
+        loadedAt: now,
+        lastAccessedAt: now,
+        hasOptimisticBlocks: block.id.startsWith('temp-')
       });
       onBlocksChanged(flattenLoadedBlocks());
     }
@@ -88,6 +191,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Replace a temp block with the real server block (by position match)
+   * Phase 3A: Update hasOptimisticBlocks when temp blocks are replaced
    */
   const replaceBlockByPosition = useCallback((newBlock: PlacedBlock): void => {
     const chunkKey = getChunkKey(newBlock.position_x, newBlock.position_z);
@@ -102,6 +206,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       
       if (index >= 0) {
         chunkData.blocks[index] = newBlock;
+        chunkData.lastAccessedAt = Date.now();
+        
+        // Phase 3A: Recompute hasOptimisticBlocks after replacement
+        chunkData.hasOptimisticBlocks = chunkData.blocks.some(b => b.id.startsWith('temp-'));
+        
         onBlocksChanged(flattenLoadedBlocks());
       }
     }
@@ -109,12 +218,18 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Remove a block by ID from the chunk loader
+   * Phase 3A: Update hasOptimisticBlocks when blocks are removed
    */
   const removeBlockById = useCallback((blockId: string): void => {
     for (const chunkData of loadedChunksRef.current.values()) {
       const index = chunkData.blocks.findIndex(b => b.id === blockId);
       if (index >= 0) {
         chunkData.blocks.splice(index, 1);
+        chunkData.lastAccessedAt = Date.now();
+        
+        // Phase 3A: Recompute hasOptimisticBlocks after removal
+        chunkData.hasOptimisticBlocks = chunkData.blocks.some(b => b.id.startsWith('temp-'));
+        
         onBlocksChanged(flattenLoadedBlocks());
         return;
       }
@@ -123,6 +238,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Load chunks in a bounding box around the player using a single query
+   * Phase 3.0: Uses scheduleEmit for batched emission
+   * Phase 3A: Initializes lastAccessedAt and hasOptimisticBlocks
    */
   const loadChunksInRadius = useCallback(async (
     centerChunkX: number,
@@ -153,6 +270,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     // Filter out expired blocks
     const now = new Date();
+    const loadedAt = Date.now();
     const activeBlocks = (blocks || []).filter(block => 
       !block.expires_at || new Date(block.expires_at) > now
     );
@@ -167,28 +285,34 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
 
     // Generate all chunk keys that should be loaded
-    const loadedAt = Date.now();
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dz = -radius; dz <= radius; dz++) {
         const chunkX = centerChunkX + dx;
         const chunkZ = centerChunkZ + dz;
         const chunkKey = `chunk_${chunkX}_${chunkZ}`;
         
+        const chunkBlocks = chunkGroups.get(chunkKey) || [];
+        
         // Store chunk data (even if empty - means we loaded it)
+        // Phase 3A: Initialize with lastAccessedAt and hasOptimisticBlocks
         loadedChunksRef.current.set(chunkKey, {
-          blocks: chunkGroups.get(chunkKey) || [],
-          loadedAt
+          blocks: chunkBlocks,
+          loadedAt,
+          lastAccessedAt: loadedAt,
+          hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-'))
         });
       }
     }
 
-    // Notify of blocks change
-    onBlocksChanged(flattenLoadedBlocks());
-  }, [worldId, onBlocksChanged, flattenLoadedBlocks]);
+    // Phase 3.0: Use batched emit instead of synchronous callback
+    scheduleEmit();
+  }, [worldId, scheduleEmit]);
 
   /**
    * Refetch a single chunk (used for realtime updates)
    * Preserves optimistic blocks (temp-*) that haven't been confirmed yet
+   * Phase 3.0: Uses scheduleEmit for batched emission
+   * Phase 3A: Updates lastAccessedAt and hasOptimisticBlocks
    */
   const refetchSingleChunk = useCallback(async (
     chunkX: number,
@@ -218,6 +342,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     // Filter out expired blocks
     const now = new Date();
+    const loadedAt = Date.now();
     const activeServerBlocks = (serverBlocks || []).filter(block => 
       !block.expires_at || new Date(block.expires_at) > now
     );
@@ -243,18 +368,22 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Merge: server blocks + unconfirmed optimistic blocks
     const mergedBlocks = [...activeServerBlocks, ...optimisticBlocks];
 
-    // Update chunk data
+    // Update chunk data with Phase 3A fields
     loadedChunksRef.current.set(chunkKey, {
       blocks: mergedBlocks,
-      loadedAt: Date.now()
+      loadedAt,
+      lastAccessedAt: loadedAt,
+      hasOptimisticBlocks: optimisticBlocks.length > 0
     });
 
-    // Notify of blocks change
-    onBlocksChanged(flattenLoadedBlocks());
-  }, [worldId, onBlocksChanged, flattenLoadedBlocks]);
+    // Phase 3.0: Use batched emit instead of synchronous callback
+    scheduleEmit();
+  }, [worldId, scheduleEmit]);
 
   /**
    * Unload chunks that are beyond UNLOAD_RADIUS from player
+   * Phase 3.0: Uses scheduleEmit for batched emission
+   * Phase 3A: Respects pinned chunks (those with optimistic blocks)
    */
   const unloadDistantChunks = useCallback((centerChunkX: number, centerChunkZ: number) => {
     const chunksToUnload: string[] = [];
@@ -272,6 +401,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       const distance = Math.max(dx, dz);
       
       if (distance > UNLOAD_RADIUS) {
+        // Phase 3A: Don't unload chunks with optimistic blocks
+        const chunkData = loadedChunksRef.current.get(chunkKey);
+        if (chunkData?.hasOptimisticBlocks) {
+          continue; // Skip - has pending optimistic blocks
+        }
         chunksToUnload.push(chunkKey);
       }
     }
@@ -280,13 +414,15 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       for (const key of chunksToUnload) {
         loadedChunksRef.current.delete(key);
       }
-      onBlocksChanged(flattenLoadedBlocks());
+      // Phase 3.0: Use batched emit
+      scheduleEmit();
     }
-  }, [onBlocksChanged, flattenLoadedBlocks]);
+  }, [scheduleEmit]);
 
   /**
    * Update player position - called by game controller
    * Loads new chunks if player moved to a new chunk
+   * Phase 3A: Updates lastAccessedAt for pinned chunks and runs LRU eviction
    */
   const updatePlayerPosition = useCallback(async (worldX: number, worldZ: number) => {
     if (!worldId) return;
@@ -305,6 +441,18 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Check if player moved to a different chunk
     if (!prevChunk || prevChunk.x !== newChunkX || prevChunk.z !== newChunkZ) {
       playerChunkRef.current = { x: newChunkX, z: newChunkZ };
+
+      // Phase 3A: Update lastAccessedAt for all pinned (nearby) chunks
+      const accessTime = Date.now();
+      for (let dx = -UNLOAD_RADIUS; dx <= UNLOAD_RADIUS; dx++) {
+        for (let dz = -UNLOAD_RADIUS; dz <= UNLOAD_RADIUS; dz++) {
+          const chunkKey = `chunk_${newChunkX + dx}_${newChunkZ + dz}`;
+          const chunkData = loadedChunksRef.current.get(chunkKey);
+          if (chunkData) {
+            chunkData.lastAccessedAt = accessTime;
+          }
+        }
+      }
 
       // Find chunks that need to be loaded (not already in loadedChunks)
       const chunksToLoad: Array<{ x: number; z: number }> = [];
@@ -328,8 +476,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
       // Unload distant chunks
       unloadDistantChunks(newChunkX, newChunkZ);
+      
+      // Phase 3A: Run LRU eviction as safety cap
+      evictLRUChunks();
     }
-  }, [worldId, loadChunksInRadius, unloadDistantChunks]);
+  }, [worldId, loadChunksInRadius, unloadDistantChunks, evictLRUChunks]);
 
   /**
    * Force initial load when world changes
@@ -356,11 +507,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Clear all chunks (on world change)
+   * Phase 3.0: Directly calls onBlocksChanged (not batched) for immediate clear
    */
   const clearAllChunks = useCallback(() => {
     loadedChunksRef.current.clear();
     playerChunkRef.current = null;
     initialLoadDone.current = false;
+    emitScheduledRef.current = false; // Cancel any pending emit
     onBlocksChanged([]);
   }, [onBlocksChanged]);
 
