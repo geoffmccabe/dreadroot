@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
@@ -387,7 +387,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     return loadedChunksRef.current.has(chunkKey);
   }, []);
 
-  return {
+  // Return stable object using useMemo to prevent dependency cascades
+  return useMemo(() => ({
     isLoading,
     updatePlayerPosition,
     initializeForWorld,
@@ -402,5 +403,16 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     removeBlockById,
     LOAD_RADIUS,
     UNLOAD_RADIUS
-  };
+  }), [
+    isLoading,
+    updatePlayerPosition,
+    initializeForWorld,
+    refetchSingleChunk,
+    clearAllChunks,
+    getLoadedChunkKeys,
+    isChunkLoaded,
+    addBlockOptimistically,
+    replaceBlockByPosition,
+    removeBlockById
+  ]);
 }
