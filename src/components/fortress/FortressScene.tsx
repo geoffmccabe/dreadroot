@@ -637,8 +637,7 @@ export function FortressScene({
         panelOpen={panelOpen}
         onCycleBlock={onCycleBlock}
         onCycleSeed={onCycleSeed}
-        blocks={blocks}
-        treeBlocks={treeBlocks}
+        blocks={[...blocks, ...treeBlocks]}
         onBlockRain={onBlockRain}
         userRoles={userRoles}
         broadcastPosition={broadcastPosition}

@@ -12,7 +12,6 @@ import {
 import {
   createFortressColliders,
   createBlockColliders,
-  createTreeBlockColliders,
   checkAxisCollision,
   findStepUpTarget,
   createPlayerBox,
@@ -39,7 +38,6 @@ export function FirstPersonControls({
   onCycleBlock,
   onCycleSeed,
   blocks,
-  treeBlocks,
   onBlockRain,
   userRoles,
   broadcastPosition,
@@ -110,7 +108,6 @@ export function FirstPersonControls({
 
   // Cache for block collision boxes
   const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
-  const treeCollisionCache = useRef(new Map<string, THREE.Box3>());
   const gridInitialized = useRef(false);
   
   // Clear collision grid on mount to remove stale entries from previous sessions
@@ -125,12 +122,12 @@ export function FirstPersonControls({
   // Use a stable reference to avoid allocations on every render
   const collidersArrayRef = useRef<THREE.Box3[]>([]);
   
-  // Update colliders when blocks or tree blocks change - handles caching internally
+  // Update colliders when blocks change - handles caching internally
+  // blocks now includes both regular placed blocks AND tree blocks (merged in FortressScene)
   useMemo(() => {
     // createBlockColliders now has fast-path when nothing changed
     const blockColliders = createBlockColliders(existingBlocks, blockCollisionCache.current);
     const fortressColliders = createFortressColliders();
-    const treeColliders = treeBlocks ? createTreeBlockColliders(treeBlocks, treeCollisionCache.current) : [];
     
     // Reuse the array reference instead of spreading
     collidersArrayRef.current.length = 0;
@@ -140,10 +137,7 @@ export function FirstPersonControls({
     for (let i = 0; i < blockColliders.length; i++) {
       collidersArrayRef.current.push(blockColliders[i]);
     }
-    for (let i = 0; i < treeColliders.length; i++) {
-      collidersArrayRef.current.push(treeColliders[i]);
-    }
-  }, [existingBlocks, treeBlocks]);
+  }, [existingBlocks]);
   
   const colliders = collidersArrayRef.current;
 
