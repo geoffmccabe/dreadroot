@@ -511,7 +511,7 @@ export function Fortress() {
     });
   }, [selectedBlockType, inventory, toast]);
 
-  // Cycle through available seeds (only named ones)
+  // Cycle through available seeds (only named ones) - no toast
   const cycleSelectedSeed = useCallback((direction: 'next' | 'prev') => {
     const namedSeeds = seedDefinitions.filter(s => s.name && s.name.trim() !== '');
     if (namedSeeds.length === 0) return;
@@ -528,8 +528,7 @@ export function Fortress() {
       ? (currentIndex + 1) % namedSeeds.length
       : (currentIndex - 1 + namedSeeds.length) % namedSeeds.length;
     setSelectedSeedTier(namedSeeds[nextIndex].tier);
-    toast({ title: `Tier ${namedSeeds[nextIndex].tier} seed`, description: namedSeeds[nextIndex].name, duration: 1000 });
-  }, [selectedSeedTier, seedDefinitions, toast]);
+  }, [selectedSeedTier, seedDefinitions]);
 
   // Tree placement handler with pitched-up sound
   const handleTreePlace = useCallback(async (position: THREE.Vector3) => {

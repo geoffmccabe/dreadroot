@@ -46,6 +46,8 @@ export function SeedPreview({ tier, visible, existingBlocks = [], trunkTextureUr
 
   // Register frame loop callback for preview updates
   useEffect(() => {
+    if (!visible) return;
+    
     const unregister = frameLoop.register('seed-preview', (delta, elapsed) => {
       if (!visibleRef.current || !meshRef.current) return;
       
@@ -56,12 +58,15 @@ export function SeedPreview({ tier, visible, existingBlocks = [], trunkTextureUr
         5
       );
       
-      // Update position
+      // Update position (center of block)
       meshRef.current.position.set(
         placementResult.x + 0.5,
         placementResult.y + 0.5,
         placementResult.z + 0.5
       );
+      
+      // Make mesh visible
+      meshRef.current.visible = true;
       
       const material = meshRef.current.material as THREE.MeshBasicMaterial;
       
@@ -79,12 +84,12 @@ export function SeedPreview({ tier, visible, existingBlocks = [], trunkTextureUr
     }, 70);
 
     return unregister;
-  }, [camera]);
+  }, [camera, visible]);
 
   if (!visible) return null;
 
   return (
-    <mesh ref={meshRef} position={[0, -10000, 0]}>
+    <mesh ref={meshRef} position={[0, 0, 0]} visible={true}>
       <boxGeometry args={[1, 1, 1]} />
       {texture ? (
         <meshBasicMaterial map={texture} transparent opacity={0.7} />
