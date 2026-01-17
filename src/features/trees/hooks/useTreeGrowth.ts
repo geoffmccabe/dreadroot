@@ -108,40 +108,45 @@ export function useTreeGrowth({
     return true;
   }, [onGrowth]);
 
-  // Main growth loop
+  // Main growth loop - batch grows multiple blocks per check to reduce DB queries
   useEffect(() => {
     if (!worldId || !userId || !TREE_CONFIG.ENABLED) return;
 
     const checkGrowth = async () => {
       const now = Date.now();
 
-      // Filter to trees that need growth
-      const treesToGrow = plantedTrees.filter(tree => {
-        if (tree.is_fully_grown) return false;
-        if (tree.planted_by !== userId) return false;
-        if (!tree.seed_definition) return false;
+      // Filter to trees owned by this user that need growth
+      const myTrees = plantedTrees.filter(tree => 
+        !tree.is_fully_grown && 
+        tree.planted_by === userId && 
+        tree.seed_definition
+      );
 
+      // Process one tree at a time to avoid overwhelming the DB
+      for (const tree of myTrees) {
         const lastCheck = lastGrowthCheck.current.get(tree.id) || 0;
-        const interval = getGrowthInterval(tree.seed_definition.growth_factor);
+        const interval = getGrowthInterval(tree.seed_definition!.growth_factor);
         const lastGrowthTime = new Date(tree.last_growth_at).getTime();
         
         // Check if enough time has passed since last growth
-        return (now - lastGrowthTime >= interval) && (now - lastCheck >= interval);
-      });
-
-      // Grow each tree by one block
-      for (const tree of treesToGrow) {
-        lastGrowthCheck.current.set(tree.id, now);
-        await growTreeByOne(tree);
+        if (now - lastGrowthTime >= interval && now - lastCheck >= interval * 0.9) {
+          lastGrowthCheck.current.set(tree.id, now);
+          await growTreeByOne(tree);
+          // Only grow one block per tree per loop iteration to spread out DB calls
+          break;
+        }
       }
     };
 
-    // Check every second
-    const interval = setInterval(checkGrowth, 1000);
+    // Check less frequently - 500ms is plenty for 100ms growth intervals
+    const loopInterval = setInterval(checkGrowth, 500);
     
-    // Initial check
-    checkGrowth();
+    // Initial check after a short delay
+    const initialTimeout = setTimeout(checkGrowth, 100);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(loopInterval);
+      clearTimeout(initialTimeout);
+    };
   }, [worldId, userId, plantedTrees, growTreeByOne]);
 }

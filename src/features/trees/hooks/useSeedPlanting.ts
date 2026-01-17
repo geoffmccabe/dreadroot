@@ -95,6 +95,7 @@ export function useSeedPlanting({
           base_z: baseZ,
           growth_seed: growthSeed,
           target_block_count: blueprint.blocks.length,
+          current_block_count: 1, // Start with first block already placed
         })
         .select()
         .single();
@@ -102,6 +103,22 @@ export function useSeedPlanting({
       if (insertError) {
         console.error('[SeedPlanting] Insert error:', insertError);
         return { success: false, error: 'Failed to plant seed' };
+      }
+
+      // Place the first block immediately so the tree is visible right away
+      const firstBlock = blueprint.blocks.find(b => b.growthOrder === 0);
+      if (firstBlock) {
+        await supabase
+          .from('tree_blocks')
+          .insert({
+            tree_id: newTree.id,
+            world_id: worldId,
+            position_x: firstBlock.x,
+            position_y: firstBlock.y,
+            position_z: firstBlock.z,
+            block_type: firstBlock.type,
+            growth_order: 0,
+          });
       }
 
       // TODO: Consume seed from inventory when inventory system is integrated
