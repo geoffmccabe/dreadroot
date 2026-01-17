@@ -61,6 +61,7 @@ export interface SceneProps {
   onCycleBlock: (direction: 'next' | 'prev') => void;
   onCycleSeed: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
+  treeBlocks: PlacedBlock[];
   weatherSettings: WeatherSettings;
   onBlockRain: () => void;
   userRoles: string[];

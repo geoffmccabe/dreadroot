@@ -216,6 +216,7 @@ export function FortressScene({
   onCycleBlock,
   onCycleSeed,
   blocks,
+  treeBlocks,
   weatherSettings,
   onBlockRain,
   coinImageUrl,
@@ -633,7 +634,7 @@ export function FortressScene({
       <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
       <CameraTrackedBlocks 
-        blocks={blocks} 
+        blocks={[...blocks, ...treeBlocks]} 
         showOwnershipOutline={showOwnershipOutline && blockPlacementMode} 
         currentUserId={user?.id}
         hoveredBlockId={hoveredBlockId}

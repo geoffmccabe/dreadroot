@@ -27,7 +27,7 @@ export { RARITY_COLORS, DEFAULT_TIER_NAMES, getGrowthInterval, getFruitSpawnInte
 // Components
 export { SeedDesignPanel } from './components/SeedDesignPanel';
 export { SeedPreview } from './components/SeedPreview';
-export { TreeRenderer } from './components/TreeRenderer';
+
 
 // Hooks
 export { useTreeData } from './hooks/useTreeData';
