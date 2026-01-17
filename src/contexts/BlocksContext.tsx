@@ -20,6 +20,14 @@ interface BlocksContextType {
   removeBlock: (blockId: string) => Promise<boolean>;
   refreshBlocks: () => Promise<void>;
   setBlockMode: (enabled: boolean) => void;
+  // Phase 2B: Chunk loading functions
+  updatePlayerPosition: (worldX: number, worldZ: number) => Promise<void>;
+  initializeForWorld: (startX: number, startZ: number) => Promise<void>;
+  getLoadedChunkKeys: () => Set<string>;
+  isChunkLoaded: (chunkX: number, chunkZ: number) => boolean;
+  refetchSingleChunk: (chunkX: number, chunkZ: number) => Promise<void>;
+  LOAD_RADIUS: number;
+  UNLOAD_RADIUS: number;
 }
 
 const BlocksContext = createContext<BlocksContextType | undefined>(undefined);
@@ -44,14 +52,27 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   // Get fog enabled from user profile, default to true
   const fogEnabled = profile?.fog_enabled ?? true;
   
-  const contextValue = {
-    ...blocksHook,
+  const contextValue: BlocksContextType = {
+    blocks: blocksHook.blocks,
     blocksByChunk,
     visibleChunksRef,
     visualDistance,
     fogEnabled,
+    isLoading: blocksHook.isLoading,
     currentWorldId,
-    currentWorld
+    currentWorld,
+    placeBlock: blocksHook.placeBlock,
+    removeBlock: blocksHook.removeBlock,
+    refreshBlocks: blocksHook.refreshBlocks,
+    setBlockMode: blocksHook.setBlockMode,
+    // Phase 2B: Chunk loading functions
+    updatePlayerPosition: blocksHook.updatePlayerPosition,
+    initializeForWorld: blocksHook.initializeForWorld,
+    getLoadedChunkKeys: blocksHook.getLoadedChunkKeys,
+    isChunkLoaded: blocksHook.isChunkLoaded,
+    refetchSingleChunk: blocksHook.refetchSingleChunk,
+    LOAD_RADIUS: blocksHook.LOAD_RADIUS,
+    UNLOAD_RADIUS: blocksHook.UNLOAD_RADIUS
   };
   
   return (

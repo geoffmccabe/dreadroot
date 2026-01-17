@@ -105,7 +105,7 @@ function CameraTrackedBlocks({
   performanceMode?: boolean;
 }) {
   const { camera } = useThree();
-  const { blocksByChunk, visibleChunksRef, visualDistance } = useBlocks();
+  const { blocksByChunk, visibleChunksRef, visualDistance, updatePlayerPosition } = useBlocks();
 
   const lastChunkRef = useRef({ x: 0, z: 0 });
   const lastUpdateTime = useRef(0);
@@ -231,6 +231,9 @@ export function FortressScene({
   groundTextureUrl,
   skyTextureUrl
 }: SceneProps) {
+  // Phase 2B: Get updatePlayerPosition from context for chunk loading
+  const { updatePlayerPosition } = useBlocks();
+  
   // Shared cycle state ref for weather/sky/lighting
   const cycleStateRef = useRef({
     lightingPercentage: weatherSettings.lightingRange[0],
@@ -607,6 +610,7 @@ export function FortressScene({
         meshToBlockTypeCache={meshToBlockTypeCache}
         blocksByTypeAndUser={blocksByTypeAndUser}
         onGodModeChange={onGodModeChange}
+        updatePlayerPosition={updatePlayerPosition}
       />
       
       <MultiplayerPlayers players={players} />
