@@ -680,6 +680,15 @@ export function Fortress() {
             existingBlocks={blocks || []}
           />
         )}
+        
+        {treePlacementMode && selectedSeedTier && (
+          <SeedPreview
+            tier={selectedSeedTier}
+            visible={true}
+            existingBlocks={blocks || []}
+            trunkTextureUrl={seedDefinitions.find(s => s.tier === selectedSeedTier)?.trunk_texture_url}
+          />
+        )}
       </Canvas>
 
       {/* Flying coin animations */}
