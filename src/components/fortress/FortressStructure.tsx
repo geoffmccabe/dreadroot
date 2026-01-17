@@ -2,9 +2,21 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { FORTRESS_DIMENSIONS } from './FortressCollision';
 
-export function FortressStructure() {
+interface FortressStructureProps {
+  fortressTextureUrl?: string | null;
+  groundTextureUrl?: string | null;
+}
+
+export function FortressStructure({ 
+  fortressTextureUrl, 
+  groundTextureUrl 
+}: FortressStructureProps) {
   const { cliffW, cliffH, frontT, courtyardDepth, frontZ, openingHalfW } = FORTRESS_DIMENSIONS;
   const openingH = 5;
+
+  // Use props with fallbacks to defaults
+  const cliffUrl = fortressTextureUrl || '/cliff_texture_seamless.webp';
+  const grassUrl = groundTextureUrl || '/grass_texture_seamless.webp';
 
   // Track textures for disposal
   const [cliffTexture, setCliffTexture] = useState<THREE.Texture | null>(null);
@@ -13,16 +25,32 @@ export function FortressStructure() {
   const grassTextureRef = useRef<THREE.Texture | null>(null);
   const clonedTexturesRef = useRef<THREE.Texture[]>([]);
 
-  // Load base textures
+  // Load base textures - re-run when URLs change
   useEffect(() => {
+    // Dispose old textures before loading new ones
+    if (cliffTextureRef.current) {
+      cliffTextureRef.current.dispose();
+      cliffTextureRef.current = null;
+    }
+    if (grassTextureRef.current) {
+      grassTextureRef.current.dispose();
+      grassTextureRef.current = null;
+    }
+    clonedTexturesRef.current.forEach(tex => tex.dispose());
+    clonedTexturesRef.current = [];
+    
+    // Reset state to trigger re-render with null (shows nothing while loading)
+    setCliffTexture(null);
+    setGrassTexture(null);
+
     const loader = new THREE.TextureLoader();
 
-    loader.load('/cliff_texture_seamless.webp', (texture) => {
+    loader.load(cliffUrl, (texture) => {
       cliffTextureRef.current = texture;
       setCliffTexture(texture);
     });
 
-    loader.load('/grass_texture_seamless.webp', (texture) => {
+    loader.load(grassUrl, (texture) => {
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
       texture.repeat.set(40, 40);
       grassTextureRef.current = texture;
@@ -41,7 +69,7 @@ export function FortressStructure() {
       clonedTexturesRef.current.forEach(tex => tex.dispose());
       clonedTexturesRef.current = [];
     };
-  }, []);
+  }, [cliffUrl, grassUrl]);
 
   // Create individual textures for each wall with proper scaling
   const frontTexture = useMemo(() => {

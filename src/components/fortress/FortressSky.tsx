@@ -29,15 +29,37 @@ interface SkyTextureProps {
     skyMeshRef: React.RefObject<THREE.Mesh>; 
     starMeshRef: React.RefObject<THREE.Mesh> 
   }) => void;
+  skyTextureUrl?: string | null;
 }
 
-export function SkyTexture({ cycleStateRef, weatherSettings, onRefsReady }: SkyTextureProps) {
+export function SkyTexture({ cycleStateRef, weatherSettings, onRefsReady, skyTextureUrl }: SkyTextureProps) {
   const { scene } = useThree();
   const starMeshRef = useRef<THREE.Mesh | null>(null);
   const skyMeshRef = useRef<THREE.Mesh | null>(null);
   const textureRef = useRef<THREE.Texture | null>(null);
 
+  // Use prop with fallback to default
+  const skyUrl = skyTextureUrl || '/space_night_sky.webp';
+
   useEffect(() => {
+    // Dispose old textures and meshes when URL changes
+    if (starMeshRef.current) {
+      scene.remove(starMeshRef.current);
+      starMeshRef.current.geometry.dispose();
+      (starMeshRef.current.material as THREE.Material).dispose();
+      starMeshRef.current = null;
+    }
+    if (skyMeshRef.current) {
+      scene.remove(skyMeshRef.current);
+      skyMeshRef.current.geometry.dispose();
+      (skyMeshRef.current.material as THREE.Material).dispose();
+      skyMeshRef.current = null;
+    }
+    if (textureRef.current) {
+      textureRef.current.dispose();
+      textureRef.current = null;
+    }
+
     const textureLoader = new THREE.TextureLoader();
     const skyGeo = new THREE.SphereGeometry(320, 64, 32);
 
@@ -54,7 +76,7 @@ export function SkyTexture({ cycleStateRef, weatherSettings, onRefsReady }: SkyT
     scene.add(skyColorMesh);
 
     // Layer 2: Star texture sphere
-    textureLoader.load('/space_night_sky.webp', (loadedTexture) => {
+    textureLoader.load(skyUrl, (loadedTexture) => {
       loadedTexture.wrapS = THREE.ClampToEdgeWrapping;
       loadedTexture.wrapT = THREE.ClampToEdgeWrapping;
 
@@ -101,7 +123,7 @@ export function SkyTexture({ cycleStateRef, weatherSettings, onRefsReady }: SkyT
       }
       textureRef.current?.dispose();
     };
-  }, [scene, onRefsReady]);
+  }, [scene, onRefsReady, skyUrl]);
 
   return null;
 }
@@ -113,9 +135,10 @@ export interface SkyHandle {
 interface DynamicSkyProps {
   weatherSettings: WeatherSettings;
   cycleStateRef: React.MutableRefObject<CycleState>;
+  skyTextureUrl?: string | null;
 }
 
-export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSettings, cycleStateRef }, ref) => {
+export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSettings, cycleStateRef, skyTextureUrl }, ref) => {
   const skyRefs = useRef<{ 
     skyMeshRef: React.RefObject<THREE.Mesh>; 
     starMeshRef: React.RefObject<THREE.Mesh> 
@@ -177,7 +200,8 @@ export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSetti
     <SkyTexture 
       cycleStateRef={cycleStateRef} 
       weatherSettings={weatherSettings} 
-      onRefsReady={handleRefsReady} 
+      onRefsReady={handleRefsReady}
+      skyTextureUrl={skyTextureUrl}
     />
   );
 });

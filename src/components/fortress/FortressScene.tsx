@@ -226,7 +226,10 @@ export function FortressScene({
   toast,
   waterfallEnabled = true,
   onGodModeChange,
-  performanceMode = false
+  performanceMode = false,
+  fortressTextureUrl,
+  groundTextureUrl,
+  skyTextureUrl
 }: SceneProps) {
   // Shared cycle state ref for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -612,9 +615,9 @@ export function FortressScene({
       <SceneReflections />
       
       <DynamicLighting ref={lightingRef} cycleStateRef={cycleStateRef} />
-      <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} />
+      <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} />
 
-      <FortressStructure />
+      <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
       <CameraTrackedBlocks 
         blocks={blocks} 
