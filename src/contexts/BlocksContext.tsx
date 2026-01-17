@@ -20,7 +20,7 @@ interface BlocksContextType {
   setCurrentWorldId: (worldId: string) => void;
   navigateWorld: (direction: 'next' | 'prev') => void;
   worldIndex: { current: number; total: number };
-  placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => PlacedBlock | null;
+  placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => PlacedBlock | null;
   removeBlock: (blockId: string) => Promise<boolean>;
   refreshBlocks: () => Promise<void>;
   setBlockMode: (enabled: boolean) => void;
