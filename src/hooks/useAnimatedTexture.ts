@@ -39,10 +39,17 @@ export const useAnimatedTexture = (url: string) => {
     return () => {
       isMountedRef.current = false;
       
-      // Clear background refresh timer
+      // Clear background refresh timer and remove from module-level map
+      // FIX: Properly clean up refreshTimers map entry to prevent memory leak
       if (backgroundRefreshTimerRef.current) {
-        clearTimeout(backgroundRefreshTimerRef.current);
+        const timerId = backgroundRefreshTimerRef.current;
+        clearTimeout(timerId);
         backgroundRefreshTimerRef.current = null;
+        
+        // Only delete if we own the map entry (prevents removing another component's timer)
+        if (refreshTimers.get(url) === timerId) {
+          refreshTimers.delete(url);
+        }
       }
       
       // Clear animation timer

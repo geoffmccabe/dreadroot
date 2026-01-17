@@ -50,6 +50,10 @@ export const PlacedBlocks: React.FC<{
   // Ensure block definitions are loaded before rendering any blocks
   const { isLoading: blockDefsLoading, blocksMap } = useBlocksData();
   
+  // Height map rebuilding: GATED - only enabled when block-rain tooling is active
+  // This was O(n) work on every blocks update but heightMap appears unused in production
+  const ENABLE_HEIGHTMAP = false; // Set to true when block-rain debug tooling is needed
+  
   // Initialize falling state for new blocks with expires_at and update height map
   useEffect(() => {
     // Clean up removed blocks from falling state
@@ -64,20 +68,18 @@ export const PlacedBlocks: React.FC<{
     // Falling state is tracked in-memory only and does not persist across refreshes
     // expires_at is ONLY for database cleanup via delete_expired_blocks()
     
-    // Rebuild height map from scratch for accurate stacking
-    heightMap.clear();
-    blocks.forEach(block => {
-      const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
-      const currentMax = heightMap.get(key) || 0;
-      
-      // Always use actual database position for heightMap
-      // Falling state is visual only, doesn't affect stacking logic
-      const blockY = block.position_y;
-      
-      // Store the Y position where the NEXT block should land (top of this block)
-      const blockTop = Math.round(blockY) + 1;
-      heightMap.set(key, Math.max(currentMax, blockTop));
-    });
+    // GATED: Only rebuild height map if debug tooling is enabled
+    if (ENABLE_HEIGHTMAP) {
+      heightMap.clear();
+      for (const block of blocks) {
+        const key = `${Math.round(block.position_x)},${Math.round(block.position_z)}`;
+        const currentMax = heightMap.get(key) || 0;
+        const blockTop = Math.round(block.position_y) + 1;
+        if (blockTop > currentMax) {
+          heightMap.set(key, blockTop);
+        }
+      }
+    }
   }, [blocks]);
   
   // Create block ID to block map for O(1) lookups in frame loop

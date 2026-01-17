@@ -710,35 +710,46 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Phase 3E: Process prefetch queue in small batches during idle time
+   * FIX: Added in-flight guard to prevent overlapping prefetch batches
    */
-  const processPrefetchQueue = useCallback(() => {
+  const prefetchLoadingRef = useRef(false);
+  
+  const processPrefetchQueue = useCallback(async () => {
     prefetchHandleRef.current = null;
 
+    // Guard: Only one prefetch batch at a time to prevent CPU/network spikes
+    if (prefetchLoadingRef.current) return;
     if (!worldId) return;
 
-    // Pull a small batch
-    const batch: Array<{ x: number; z: number }> = [];
-    while (batch.length < PREFETCH_BATCH_SIZE && prefetchQueueRef.current.length > 0) {
-      const item = prefetchQueueRef.current.shift()!;
-      const key = `chunk_${item.x}_${item.z}`;
-      prefetchQueuedSetRef.current.delete(key);
+    prefetchLoadingRef.current = true;
+    
+    try {
+      // Pull a small batch
+      const batch: Array<{ x: number; z: number }> = [];
+      while (batch.length < PREFETCH_BATCH_SIZE && prefetchQueueRef.current.length > 0) {
+        const item = prefetchQueueRef.current.shift()!;
+        const key = `chunk_${item.x}_${item.z}`;
+        prefetchQueuedSetRef.current.delete(key);
 
-      // Skip if already loaded
-      if (!loadedChunksRef.current.has(key)) {
-        batch.push({ x: item.x, z: item.z });
+        // Skip if already loaded
+        if (!loadedChunksRef.current.has(key)) {
+          batch.push({ x: item.x, z: item.z });
+        }
       }
-    }
 
-    if (batch.length > 0) {
-      // Fire and forget - don't block
-      loadSpecificChunks(batch).catch(err => {
-        console.warn('Prefetch load failed:', err);
-      });
-    }
-
-    // Schedule next batch if more to process
-    if (prefetchQueueRef.current.length > 0) {
-      schedulePrefetchWork();
+      if (batch.length > 0) {
+        // Await to ensure sequential prefetch batches
+        await loadSpecificChunks(batch);
+      }
+    } catch (err) {
+      console.warn('Prefetch load failed:', err);
+    } finally {
+      prefetchLoadingRef.current = false;
+      
+      // Schedule next batch if more to process
+      if (prefetchQueueRef.current.length > 0) {
+        schedulePrefetchWork();
+      }
     }
   }, [worldId, loadSpecificChunks]);
 
