@@ -425,6 +425,64 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   }, []);
 
   /**
+   * Phase 3C: Get chunks for a specific ring around the center
+   * Ring 0 = center chunk only
+   * Ring 1 = 8 chunks surrounding center (3x3 minus center)
+   * Ring N = chunks at distance N from center
+   */
+  const getRingChunks = useCallback((
+    centerX: number,
+    centerZ: number,
+    ring: number
+  ): Array<{ x: number; z: number }> => {
+    const chunks: Array<{ x: number; z: number }> = [];
+    
+    if (ring === 0) {
+      // Center chunk only
+      chunks.push({ x: centerX, z: centerZ });
+    } else {
+      // Ring N: all chunks at Chebyshev distance exactly N
+      for (let dx = -ring; dx <= ring; dx++) {
+        for (let dz = -ring; dz <= ring; dz++) {
+          // Only include if on the edge (max distance equals ring)
+          if (Math.max(Math.abs(dx), Math.abs(dz)) === ring) {
+            chunks.push({ x: centerX + dx, z: centerZ + dz });
+          }
+        }
+      }
+    }
+    
+    return chunks;
+  }, []);
+
+  /**
+   * Phase 3C: Load chunks progressively in rings (near-first)
+   * This provides smooth initial loading with immediate visibility
+   */
+  const loadProgressiveRings = useCallback(async (
+    centerX: number,
+    centerZ: number,
+    maxRadius: number
+  ): Promise<void> => {
+    if (!worldId) return;
+
+    // Load ring 0 (center) first for immediate visibility
+    const ring0 = getRingChunks(centerX, centerZ, 0);
+    await loadSpecificChunks(ring0);
+
+    // Load remaining rings progressively
+    for (let ring = 1; ring <= maxRadius; ring++) {
+      const ringChunks = getRingChunks(centerX, centerZ, ring);
+      await loadSpecificChunks(ringChunks);
+      
+      // Small delay between rings to prevent frame drops (except for close rings)
+      if (ring >= 2) {
+        await new Promise(resolve => setTimeout(resolve, 16)); // ~1 frame
+      }
+    }
+  }, [worldId, getRingChunks, loadSpecificChunks]);
+
+  /**
    * Refetch a single chunk (used for realtime updates)
    * Preserves optimistic blocks (temp-*) that haven't been confirmed yet
    * Phase 3.0: Uses scheduleEmit for batched emission
@@ -601,6 +659,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Force initial load when world changes
+   * Phase 3C: Uses progressive ring loading for smooth initial load
    */
   const initializeForWorld = useCallback(async (startX: number, startZ: number) => {
     if (!worldId) {
@@ -616,11 +675,12 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const startChunkZ = Math.floor(startZ / CHUNK_SIZE);
     playerChunkRef.current = { x: startChunkX, z: startChunkZ };
 
-    await loadChunksInRadius(startChunkX, startChunkZ, LOAD_RADIUS);
+    // Phase 3C: Use progressive ring loading for smoother initial experience
+    await loadProgressiveRings(startChunkX, startChunkZ, LOAD_RADIUS);
     
     initialLoadDone.current = true;
     setIsLoading(false);
-  }, [worldId, loadChunksInRadius]);
+  }, [worldId, loadProgressiveRings]);
 
   /**
    * Clear all chunks (on world change)
