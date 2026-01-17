@@ -179,6 +179,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Refetch a single chunk (used for realtime updates)
+   * Preserves optimistic blocks (temp-*) that haven't been confirmed yet
    */
   const refetchSingleChunk = useCallback(async (
     chunkX: number,
@@ -189,11 +190,12 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const chunkKey = `chunk_${chunkX}_${chunkZ}`;
     
     // Only refetch if chunk is currently loaded
-    if (!loadedChunksRef.current.has(chunkKey)) {
+    const existingChunkData = loadedChunksRef.current.get(chunkKey);
+    if (!existingChunkData) {
       return;
     }
 
-    const { data: blocks, error } = await supabase
+    const { data: serverBlocks, error } = await supabase
       .from('placed_blocks')
       .select('*')
       .eq('world_id', worldId)
@@ -207,13 +209,34 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     // Filter out expired blocks
     const now = new Date();
-    const activeBlocks = (blocks || []).filter(block => 
+    const activeServerBlocks = (serverBlocks || []).filter(block => 
       !block.expires_at || new Date(block.expires_at) > now
     );
 
+    // Keep optimistic blocks (temp-*) that don't have a server counterpart yet
+    // This prevents flickering when we place a block and the refetch happens
+    // before the block sync completes
+    const optimisticBlocks = existingChunkData.blocks.filter(block => {
+      // Only keep temp blocks
+      if (!block.id.startsWith('temp-')) return false;
+      
+      // Check if server has a block at this position
+      const hasServerBlock = activeServerBlocks.some(sb => 
+        sb.position_x === block.position_x &&
+        sb.position_y === block.position_y &&
+        sb.position_z === block.position_z
+      );
+      
+      // Keep optimistic block only if no server block exists at that position
+      return !hasServerBlock;
+    });
+
+    // Merge: server blocks + unconfirmed optimistic blocks
+    const mergedBlocks = [...activeServerBlocks, ...optimisticBlocks];
+
     // Update chunk data
     loadedChunksRef.current.set(chunkKey, {
-      blocks: activeBlocks,
+      blocks: mergedBlocks,
       loadedAt: Date.now()
     });
 

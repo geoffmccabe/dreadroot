@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useIndexedDB } from './useIndexedDB';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
-// getChunkKey removed - no longer needed after Phase 2C (chunk_versions handles notifications)
+import { getChunkKey } from '@/lib/chunkManager';
 
 interface DBBlock extends PlacedBlock {
   synced: boolean;
@@ -164,7 +164,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   // Phase 2C: chunk_versions realtime subscription
   // Per-chunk debounce timers to coalesce rapid updates
   const chunkDebounceTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const CHUNK_REFETCH_DEBOUNCE_MS = 300; // Debounce multiple updates to same chunk
+  const CHUNK_REFETCH_DEBOUNCE_MS = 100; // Reduced from 300ms for faster multiplayer sync
+  
+  // Track chunks we recently modified locally to skip redundant refetch
+  const recentlyModifiedChunks = useRef<Map<string, number>>(new Map());
+  const LOCAL_MODIFICATION_GRACE_PERIOD = 2000; // 2 seconds
 
   const setupRealtimeSubscription = useCallback(() => {
     if (!worldId) return () => {};
@@ -201,26 +205,31 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
             return; // Ignore changes to chunks we haven't loaded
           }
           
-          console.log(`[Phase2C] Processing chunk ${chunkKey} version ${version}`);
+          // Skip refetch for chunks we recently modified locally
+          // We already have optimistic data, no need to refetch our own changes
+          const localModTime = recentlyModifiedChunks.current.get(chunkKey);
+          if (localModTime && (Date.now() - localModTime) < LOCAL_MODIFICATION_GRACE_PERIOD) {
+            console.log(`[Phase2C] Skipping chunk ${chunkKey} - recently modified locally`);
+            return;
+          }
+          
+          console.log(`[Phase2C] Processing chunk ${chunkKey} version ${version} (from other user)`);
           
           // Debounce: If we already have a pending refetch for this chunk, clear it
           const existingTimer = chunkDebounceTimers.current.get(chunkKey);
           if (existingTimer) {
             clearTimeout(existingTimer);
-            console.log(`[Phase2C] Debouncing - cleared existing timer for ${chunkKey}`);
           }
           
           // Schedule a debounced refetch for this chunk
           const timer = setTimeout(async () => {
             chunkDebounceTimers.current.delete(chunkKey);
             
-            console.log(`[Phase2C] Refetching chunk ${chunkKey}`);
             // Refetch the single chunk
             await chunkLoader.refetchSingleChunk(chunkX, chunkZ);
             
             // Also sync IndexedDB for this chunk
             await syncChunkToIndexedDB(chunkX, chunkZ);
-            console.log(`[Phase2C] Chunk ${chunkKey} refetch complete`);
           }, CHUNK_REFETCH_DEBOUNCE_MS);
           
           chunkDebounceTimers.current.set(chunkKey, timer);
@@ -381,6 +390,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
     // INSTANT: Add to chunk loader (single source of truth) for immediate UI
     chunkLoader.addBlockOptimistically(optimisticBlock);
+    
+    // Mark this chunk as recently modified locally to skip redundant realtime refetch
+    const chunkKey = getChunkKey(x, z);
+    recentlyModifiedChunks.current.set(chunkKey, Date.now());
 
     // Add to IndexedDB and sync in background (fire-and-forget)
     const dbBlock: DBBlock = {
@@ -514,6 +527,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       // Optimistically remove from UI via chunk loader (single source of truth)
       chunkLoader.removeBlockById(blockId);
+      
+      // Mark this chunk as recently modified locally to skip redundant realtime refetch
+      const chunkKey = getChunkKey(blockToRemove.position_x, blockToRemove.position_z);
+      recentlyModifiedChunks.current.set(chunkKey, Date.now());
       
       // Remove from Supabase (RLS will enforce ownership)
       const { error } = await supabase
