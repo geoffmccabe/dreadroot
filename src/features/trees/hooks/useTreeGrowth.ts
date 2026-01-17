@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { PlantedTree, SeedDefinition } from '../types';
+import { PlantedTree } from '../types';
 import { generateTreeBlueprint, getNextGrowthBlock } from '../lib/treeGrowth';
 import { TREE_CONFIG, getGrowthInterval } from '../constants';
 
@@ -20,17 +20,22 @@ export function useTreeGrowth({
   plantedTrees,
   onGrowth,
 }: UseTreeGrowthOptions): void {
-  const lastGrowthCheck = useRef<Map<string, number>>(new Map());
+  // Track local block counts to avoid re-reading stale plantedTrees data
+  const localBlockCounts = useRef<Map<string, number>>(new Map());
+  const lastGrowthTime = useRef<Map<string, number>>(new Map());
+  const isGrowing = useRef(false);
 
   const growTreeByOne = useCallback(async (tree: PlantedTree): Promise<boolean> => {
     if (!tree.seed_definition) {
-      console.warn('[TreeGrowth] No seed definition for tree:', tree.id);
       return false;
     }
 
     const seedDef = tree.seed_definition;
+    
+    // Use local count if available, otherwise use DB count
+    const currentCount = localBlockCounts.current.get(tree.id) ?? tree.current_block_count;
 
-    // Generate blueprint (recalculated each time - deterministic from seed)
+    // Generate blueprint (deterministic from seed)
     const blueprint = generateTreeBlueprint(
       tree.base_x,
       tree.base_y,
@@ -41,36 +46,19 @@ export function useTreeGrowth({
       tree.growth_seed
     );
 
-    // Find next block to grow
-    const nextBlock = getNextGrowthBlock(blueprint, tree.current_block_count);
+    // Find next block to grow based on local count
+    const nextBlock = getNextGrowthBlock(blueprint, currentCount);
     
     if (!nextBlock) {
       // Tree is fully grown
-      const { error } = await supabase
+      await supabase
         .from('planted_trees')
         .update({ is_fully_grown: true })
         .eq('id', tree.id);
-      
-      if (error) {
-        console.error('[TreeGrowth] Failed to mark tree as fully grown:', error);
-      }
       return false;
     }
 
-    // Check if block already exists at this position (prevents 409 spam)
-    const { data: existing } = await supabase
-      .from('tree_blocks')
-      .select('id')
-      .eq('tree_id', tree.id)
-      .eq('growth_order', nextBlock.growthOrder)
-      .maybeSingle();
-
-    if (existing) {
-      // Block already placed, just update count
-      return true;
-    }
-
-    // Insert the new block
+    // Insert the new block (use upsert pattern)
     const { error: blockError } = await supabase
       .from('tree_blocks')
       .insert({
@@ -84,13 +72,30 @@ export function useTreeGrowth({
       });
 
     if (blockError) {
+      // Duplicate key means block already exists - sync our count
+      if (blockError.code === '23505') {
+        // Query actual count from DB to resync
+        const { count } = await supabase
+          .from('tree_blocks')
+          .select('*', { count: 'exact', head: true })
+          .eq('tree_id', tree.id);
+        
+        if (count !== null) {
+          localBlockCounts.current.set(tree.id, count);
+        }
+        return true;
+      }
       console.error('[TreeGrowth] Failed to insert block:', blockError);
       return false;
     }
 
-    // Update tree progress
-    const newBlockCount = tree.current_block_count + 1;
-    const { error: updateError } = await supabase
+    // Update local and remote counts
+    const newBlockCount = currentCount + 1;
+    localBlockCounts.current.set(tree.id, newBlockCount);
+    lastGrowthTime.current.set(tree.id, Date.now());
+
+    // Update tree progress in DB
+    await supabase
       .from('planted_trees')
       .update({
         current_block_count: newBlockCount,
@@ -99,54 +104,59 @@ export function useTreeGrowth({
       })
       .eq('id', tree.id);
 
-    if (updateError) {
-      console.error('[TreeGrowth] Failed to update tree progress:', updateError);
-      return false;
-    }
-
     onGrowth?.(tree.id, newBlockCount);
     return true;
   }, [onGrowth]);
 
-  // Main growth loop - batch grows multiple blocks per check to reduce DB queries
+  // Main growth loop - processes one tree at a time
   useEffect(() => {
     if (!worldId || !userId || !TREE_CONFIG.ENABLED) return;
 
     const checkGrowth = async () => {
-      const now = Date.now();
+      // Prevent concurrent growth operations
+      if (isGrowing.current) return;
+      isGrowing.current = true;
 
-      // Filter to trees owned by this user that need growth
-      const myTrees = plantedTrees.filter(tree => 
-        !tree.is_fully_grown && 
-        tree.planted_by === userId && 
-        tree.seed_definition
-      );
+      try {
+        const now = Date.now();
 
-      // Process one tree at a time to avoid overwhelming the DB
-      for (const tree of myTrees) {
-        const lastCheck = lastGrowthCheck.current.get(tree.id) || 0;
-        const interval = getGrowthInterval(tree.seed_definition!.growth_factor);
-        const lastGrowthTime = new Date(tree.last_growth_at).getTime();
-        
-        // Check if enough time has passed since last growth
-        if (now - lastGrowthTime >= interval && now - lastCheck >= interval * 0.9) {
-          lastGrowthCheck.current.set(tree.id, now);
-          await growTreeByOne(tree);
-          // Only grow one block per tree per loop iteration to spread out DB calls
-          break;
+        // Find a tree that needs growth
+        for (const tree of plantedTrees) {
+          if (tree.is_fully_grown) continue;
+          if (tree.planted_by !== userId) continue;
+          if (!tree.seed_definition) continue;
+
+          const interval = getGrowthInterval(tree.seed_definition.growth_factor);
+          const lastGrowth = lastGrowthTime.current.get(tree.id) || new Date(tree.last_growth_at).getTime();
+          
+          // Check if enough time has passed
+          if (now - lastGrowth >= interval) {
+            await growTreeByOne(tree);
+            break; // Only grow one tree per tick to spread load
+          }
         }
+      } finally {
+        isGrowing.current = false;
       }
     };
 
-    // Check less frequently - 500ms is plenty for 100ms growth intervals
-    const loopInterval = setInterval(checkGrowth, 500);
+    // Growth check interval - 200ms is responsive enough for 100ms growth intervals
+    const interval = setInterval(checkGrowth, 200);
     
-    // Initial check after a short delay
-    const initialTimeout = setTimeout(checkGrowth, 100);
+    // Initial check
+    setTimeout(checkGrowth, 50);
 
-    return () => {
-      clearInterval(loopInterval);
-      clearTimeout(initialTimeout);
-    };
+    return () => clearInterval(interval);
   }, [worldId, userId, plantedTrees, growTreeByOne]);
+
+  // Sync local counts when plantedTrees updates from DB
+  useEffect(() => {
+    for (const tree of plantedTrees) {
+      const localCount = localBlockCounts.current.get(tree.id);
+      // Only update if DB has higher count (another client grew the tree)
+      if (localCount === undefined || tree.current_block_count > localCount) {
+        localBlockCounts.current.set(tree.id, tree.current_block_count);
+      }
+    }
+  }, [plantedTrees]);
 }
