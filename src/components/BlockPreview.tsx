@@ -2,7 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useBlocksData } from '@/hooks/useBlocksData';
-import { calculateBlockPlacement } from '@/lib/blockPlacement';
+import { calculatePlacementFast } from '@/lib/voxelRaycast';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { frameLoop } from '@/lib/frameLoop';
 
@@ -60,14 +60,19 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
       const shouldRecalculate = frameCountRef.current % 5 === 0 || cameraMoved || cameraRotated;
       
       if (shouldRecalculate || !cachedResultRef.current) {
-        const placementResult = calculateBlockPlacement({
+        // Use fast voxel raycast - ZERO allocations
+        const placementResult = calculatePlacementFast(
           camera,
-          existingBlocks: existingBlocksRef.current as any,
-          maxDistance: 5,
-        });
+          existingBlocksRef.current as any,
+          5
+        );
         
         cachedResultRef.current = {
-          renderPosition: placementResult.renderPosition || new THREE.Vector3(),
+          renderPosition: new THREE.Vector3(
+            placementResult.x + 0.5,
+            placementResult.y + 0.5,
+            placementResult.z + 0.5
+          ),
           isValid: placementResult.isValid
         };
         

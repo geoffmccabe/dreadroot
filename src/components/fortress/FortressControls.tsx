@@ -3,7 +3,7 @@ import { useThree } from '@react-three/fiber';
 import { frameLoop } from '@/lib/frameLoop';
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
-import { calculateBlockPlacement } from '@/lib/blockPlacement';
+import { calculatePlacementFast } from '@/lib/voxelRaycast';
 import { PlacedBlock } from '@/types/blocks';
 import { 
   DEBUG_LOGGING, 
@@ -366,14 +366,21 @@ export function FirstPersonControls({
     }
     
     if (blockPlacementMode && onBlockPlace) {
-      const placementResult = calculateBlockPlacement({
+      // Use fast voxel raycast - ZERO allocations, O(ray length)
+      const placementResult = calculatePlacementFast(
         camera,
-        existingBlocks: existingBlocks || [],
-        maxDistance: 5,
-      });
+        existingBlocks || [],
+        5
+      );
       
-      if (placementResult.isValid && placementResult.position) {
-        onBlockPlace(placementResult.position);
+      if (placementResult.isValid) {
+        // Create Vector3 for callback (only allocation on successful placement)
+        const position = new THREE.Vector3(
+          placementResult.x,
+          placementResult.y,
+          placementResult.z
+        );
+        onBlockPlace(position);
       } else {
         // Play rejection sound
         try {
