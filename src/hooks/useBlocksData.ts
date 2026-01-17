@@ -6,6 +6,13 @@ let cachedBlocks: BlockType[] | null = null;
 let cachedBlocksMap: Map<string, BlockType> | null = null;
 let fetchPromise: Promise<void> | null = null;
 
+// Force clear cache - call this when new block types are added
+export const clearBlocksCache = () => {
+  cachedBlocks = null;
+  cachedBlocksMap = null;
+  fetchPromise = null;
+};
+
 export const useBlocksData = () => {
   const [blocks, setBlocks] = useState<BlockType[]>([]);
   const [blocksMap, setBlocksMap] = useState<Map<string, BlockType>>(new Map());
