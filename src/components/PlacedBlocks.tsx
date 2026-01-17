@@ -1,10 +1,29 @@
 import React, { useRef, useMemo, useCallback, useEffect, MutableRefObject } from 'react';
 import * as THREE from 'three';
-import { PlacedBlock } from '@/types/blocks';
+import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
+
+// Fallback block definition for tree blocks that might not have entries in the blocks table
+const TREE_BLOCK_FALLBACK: BlockType = {
+  id: -1,
+  key: 'tree_block',
+  name: 'Tree Block',
+  description: 'A tree block',
+  cost: 0,
+  category: 'building',
+  rarity: 'common',
+  class: 'basic',
+  tier: 1,
+  properties: {
+    color: '#8B4513',
+    emissive: false,
+    transparent: false,
+    glowFactor: 0
+  }
+};
 
 // Re-export clearTextureCache for backward compatibility
 export const clearTextureCache = clearInstancedTextureCache;
@@ -198,9 +217,16 @@ export const PlacedBlocks: React.FC<{
       {Array.from(groupedBlocks.entries()).map(([groupKey, { blocks: blocksOfType, textureOverride }]) => {
         // Extract block_type from groupKey (before the | if present)
         const blockType = groupKey.includes('|') ? groupKey.split('|')[0] : groupKey;
-        const blockDef = blocksMap.get(blockType);
+        let blockDef = blocksMap.get(blockType);
+        
+        // For tree blocks with textureOverride, use fallback if no definition exists
+        // This ensures tree blocks render even if blocks table cache is stale
+        if (!blockDef && textureOverride) {
+          blockDef = TREE_BLOCK_FALLBACK;
+        }
+        
         if (!blockDef) {
-          // Log missing block definitions to help debug
+          // Log missing block definitions to help debug (non-tree blocks only)
           console.warn(`[PlacedBlocks] No block definition for type: "${blockType}", skipping ${blocksOfType.length} blocks`);
           return null;
         }
