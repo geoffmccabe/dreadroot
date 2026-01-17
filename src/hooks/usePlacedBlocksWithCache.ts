@@ -138,10 +138,15 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     worldId,
     onBlocksChanged: handleChunkBlocksChanged
   });
+  
+  // Store chunkLoader in a ref to use in callbacks without causing dependency changes
+  const chunkLoaderRef = useRef(chunkLoader);
+  chunkLoaderRef.current = chunkLoader;
 
   // REMOVED: syncWithSupabase is orphaned - chunk loader now handles all loading
 
   // Phase 2B: Initialize with chunk loading instead of full world load
+  // Use ref to avoid chunkLoader dependency causing re-initialization
   const initializeCache = useCallback(async () => {
     if (!userId || !worldId) {
       setIsLoading(false);
@@ -153,13 +158,13 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       await initDB();
       
       // Phase 2B: Use chunk loader for initial load from camera starting position
-      await chunkLoader.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
+      await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, worldId, initDB, chunkLoader]);
+  }, [userId, worldId, initDB]);
 
   // Phase 2C: chunk_versions realtime subscription
   // Per-chunk debounce timers to coalesce rapid updates
