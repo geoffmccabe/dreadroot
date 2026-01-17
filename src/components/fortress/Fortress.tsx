@@ -674,7 +674,7 @@ export function Fortress() {
             position_x: tb.position_x,
             position_y: tb.position_y,
             position_z: tb.position_z,
-            block_type: tb.block_type === 'trunk' ? 'wood' : 'leaf',
+            block_type: tb.block_type === 'trunk' ? 'wood' : 'fruit',
             created_at: tb.created_at,
             updated_at: tb.created_at,
           }))}
