@@ -23,7 +23,7 @@ import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useTreeGrowth } from '@/features/trees/hooks/useTreeGrowth';
-import { TreeRenderer } from '@/features/trees/components/TreeRenderer';
+
 import { TREE_CONFIG } from '@/features/trees/constants';
 
 import { FortressScene } from './FortressScene';
@@ -668,6 +668,16 @@ export function Fortress() {
           onCycleBlock={cycleSelectedBlock}
           onCycleSeed={cycleSelectedSeed}
           blocks={blocks}
+          treeBlocks={treeBlocks.map(tb => ({
+            id: tb.id,
+            user_id: null,
+            position_x: tb.position_x,
+            position_y: tb.position_y,
+            position_z: tb.position_z,
+            block_type: tb.block_type === 'trunk' ? 'wood' : 'leaf',
+            created_at: tb.created_at,
+            updated_at: tb.created_at,
+          }))}
           weatherSettings={weatherSettings}
           onBlockRain={handleBlockRain}
           userRoles={userRoles}
@@ -705,10 +715,6 @@ export function Fortress() {
           />
         )}
         
-        {/* Render planted tree blocks */}
-        {TREE_CONFIG.ENABLED && treeBlocks.length > 0 && (
-          <TreeRenderer treeBlocks={treeBlocks} />
-        )}
       </Canvas>
 
       {/* Flying coin animations */}
