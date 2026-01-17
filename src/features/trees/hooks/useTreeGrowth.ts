@@ -57,6 +57,19 @@ export function useTreeGrowth({
       return false;
     }
 
+    // Check if block already exists at this position (prevents 409 spam)
+    const { data: existing } = await supabase
+      .from('tree_blocks')
+      .select('id')
+      .eq('tree_id', tree.id)
+      .eq('growth_order', nextBlock.growthOrder)
+      .maybeSingle();
+
+    if (existing) {
+      // Block already placed, just update count
+      return true;
+    }
+
     // Insert the new block
     const { error: blockError } = await supabase
       .from('tree_blocks')
@@ -71,13 +84,8 @@ export function useTreeGrowth({
       });
 
     if (blockError) {
-      // Might be duplicate position - skip
-      if (blockError.code === '23505') {
-        console.warn('[TreeGrowth] Block position already exists, skipping');
-      } else {
-        console.error('[TreeGrowth] Failed to insert block:', blockError);
-        return false;
-      }
+      console.error('[TreeGrowth] Failed to insert block:', blockError);
+      return false;
     }
 
     // Update tree progress
