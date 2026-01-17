@@ -57,6 +57,10 @@ const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
   return true;
 };
 
+// Camera starting position from Fortress.tsx: [-8, 1.8, 22]
+const CAMERA_START_X = -8;
+const CAMERA_START_Z = 22;
+
 // Now accepts worldId for multi-world support
 // Phase 2B: Uses useChunkLoader for player-radius-based loading
 export const usePlacedBlocksWithCache = (userId: string | null, worldId: string | null) => {
@@ -140,87 +144,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     onBlocksChanged: handleChunkBlocksChanged
   });
 
-  const syncWithSupabase = useCallback(async (force = false) => {
-    if (syncingRef.current || !worldId) return;
-    
-    // Debounce: Skip if synced recently (unless forced)
-    const now = Date.now();
-    if (!force && now - lastSyncTimeRef.current < SYNC_DEBOUNCE_MS) {
-      return;
-    }
-    
-    try {
-      syncingRef.current = true;
-      lastSyncTimeRef.current = now;
-      
-      // Load blocks from IndexedDB first (instant)
-      const cachedBlocks = await getAllBlocks();
-      
-      // Filter cached blocks by world_id
-      const worldCachedBlocks = cachedBlocks.filter((b: any) => b.world_id === worldId);
-      
-      // Filter out expired blocks from cache
-      const nowTime = new Date();
-      const activeCachedBlocks = worldCachedBlocks
-        .filter(block => !block.expires_at || new Date(block.expires_at) > nowTime)
-        .map(block => ({
-          id: block.id,
-          user_id: block.user_id,
-          position_x: block.position_x,
-          position_y: block.position_y,
-          position_z: block.position_z,
-          block_type: block.block_type,
-          created_at: block.created_at,
-          updated_at: block.updated_at
-        }));
-      
-      setBlocksIfChanged(activeCachedBlocks);
-
-      
-      // Get all blocks from Supabase filtered by world_id
-      const { data: supabaseBlocks, error } = await supabase
-        .from('placed_blocks')
-        .select('*')
-        .eq('world_id', worldId);
-
-      if (error) throw error;
-
-      // BATCH: Remove blocks that no longer exist on server
-      const serverIds = new Set(supabaseBlocks?.map(b => b.id) || []);
-      const blocksToRemove = cachedBlocks
-        .filter(block => !serverIds.has(block.id))
-        .map(block => block.id);
-      
-      if (blocksToRemove.length > 0) {
-        await removeBlocksBatch(blocksToRemove);
-      }
-
-      // BATCH: Add/update server blocks in cache
-      const blocksToAdd: DBBlock[] = (supabaseBlocks || []).map(serverBlock => ({
-        ...serverBlock,
-        synced: true
-      }));
-      
-      if (blocksToAdd.length > 0) {
-        await addBlocksBatch(blocksToAdd);
-      }
-
-      // Filter out expired blocks before setting state
-      const currentTime = new Date();
-      const activeServerBlocks = (supabaseBlocks || []).filter(block => 
-        !block.expires_at || new Date(block.expires_at) > currentTime
-      );
-      
-      setBlocksIfChanged(activeServerBlocks);
-    } catch (error) {
-      console.error('Error syncing:', error);
-    } finally {
-      syncingRef.current = false;
-    }
-  }, [worldId]);
+  // REMOVED: syncWithSupabase is orphaned - chunk loader now handles all loading
 
   // Phase 2B: Initialize with chunk loading instead of full world load
-  const initializeCache = useCallback(async (startX: number = 0, startZ: number = 0) => {
+  const initializeCache = useCallback(async () => {
     if (!userId || !worldId) {
       setIsLoading(false);
       return;
@@ -230,8 +157,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       setIsLoading(true);
       await initDB();
       
-      // Phase 2B: Use chunk loader for initial load
-      await chunkLoader.initializeForWorld(startX, startZ);
+      // Phase 2B: Use chunk loader for initial load from camera starting position
+      await chunkLoader.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {
@@ -239,7 +166,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
   }, [userId, worldId, initDB, chunkLoader]);
 
-  // Phase 2B: Realtime subscription - still needed for optimistic updates within loaded chunks
+  // Phase 2B: Realtime subscription - uses chunk loader as single source of truth
   // Will be replaced with chunk_versions in Phase 2C
   const setupRealtimeSubscription = useCallback(() => {
     if (!worldId) return () => {};
@@ -274,29 +201,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
             const dbBlock: DBBlock = { ...newBlock, synced: true };
             await addBlock(dbBlock);
             
-            // Update local state - replace temp block or add new block
-            setBlocksIfChanged(prev => {
-              // Check if this is replacing a temp block at the same position
-              const tempBlockIndex = prev.findIndex(block => 
-                block.id.startsWith('temp-') &&
-                block.position_x === newBlock.position_x &&
-                block.position_y === newBlock.position_y &&
-                block.position_z === newBlock.position_z
-              );
-              
-              if (tempBlockIndex >= 0) {
-                // Replace temp block with real block
-                const updated = [...prev];
-                updated[tempBlockIndex] = newBlock;
-                return updated;
-              }
-              
-              // Check if block already exists (prevent duplicates)
-              const exists = prev.some(block => block.id === newBlock.id);
-              if (exists) return prev;
-              
-              return [...prev, newBlock];
-            });
+            // Use chunk loader's method - single source of truth
+            // This replaces temp blocks by position match
+            chunkLoader.replaceBlockByPosition(newBlock);
           } else if (payload.eventType === 'DELETE') {
             const deletedId = payload.old.id;
             const oldBlock = payload.old as PlacedBlock;
@@ -310,8 +217,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
             // Remove from IndexedDB
             await removeFromDB(deletedId);
             
-            // Update local state
-            setBlocksIfChanged(prev => prev.filter(block => block.id !== deletedId));
+            // Use chunk loader's method - single source of truth
+            chunkLoader.removeBlockById(deletedId);
           }
         }
       )
@@ -320,7 +227,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [worldId, chunkLoader, addBlock, removeFromDB, setBlocksIfChanged]);
+  }, [worldId, chunkLoader, addBlock, removeFromDB]);
 
   // Clear blocks when world changes
   useEffect(() => {
@@ -435,8 +342,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       optimisticBlock.expires_at = expiresAt;
     }
 
-    // INSTANT: Update UI immediately
-    setBlocksIfChanged(prev => [...prev, optimisticBlock]);
+    // INSTANT: Add to chunk loader (single source of truth) for immediate UI
+    chunkLoader.addBlockOptimistically(optimisticBlock);
 
     // Add to IndexedDB and sync in background (fire-and-forget)
     const dbBlock: DBBlock = {
@@ -585,8 +492,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
           description: "Could not remove this block",
           variant: "destructive"
         });
-        // Revert optimistic update
-        await syncWithSupabase();
+        // Revert optimistic update by refetching the chunk
+        const blockChunkX = Math.floor(blockToRemove.position_x / 16);
+        const blockChunkZ = Math.floor(blockToRemove.position_z / 16);
+        await chunkLoader.refetchSingleChunk(blockChunkX, blockChunkZ);
         return false;
       }
       
@@ -641,7 +550,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     isLoading: isLoading || chunkLoader.isLoading,
     placeBlock,
     removeBlock,
-    refreshBlocks: () => chunkLoader.initializeForWorld(0, 0), // Re-initialize chunks
+    refreshBlocks: () => chunkLoader.initializeForWorld(CAMERA_START_X, CAMERA_START_Z),
     setBlockMode, // New function to enable/disable block mode
     // Phase 2B: Expose chunk loader functions
     updatePlayerPosition: chunkLoader.updatePlayerPosition,

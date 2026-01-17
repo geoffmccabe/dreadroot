@@ -22,6 +22,8 @@ interface UseChunkLoaderProps {
  * Hook to manage chunk-based loading of blocks based on player position.
  * Uses a single bounding query for initial/movement loads, and per-chunk
  * refetches for realtime updates.
+ * 
+ * This is the SINGLE SOURCE OF TRUTH for loaded blocks.
  */
 export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps) {
   // Loaded chunks: Map<chunkKey, ChunkData>
@@ -50,6 +52,65 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
     return allBlocks;
   }, []);
+
+  /**
+   * Add a block optimistically to the chunk loader's internal Map.
+   * This ensures immediate UI feedback while awaiting server confirmation.
+   */
+  const addBlockOptimistically = useCallback((block: PlacedBlock): void => {
+    const chunkKey = getChunkKey(block.position_x, block.position_z);
+    const chunkData = loadedChunksRef.current.get(chunkKey);
+    
+    if (chunkData) {
+      // Check for duplicates at the same position
+      const existsAtPosition = chunkData.blocks.some(b => 
+        b.position_x === block.position_x &&
+        b.position_y === block.position_y &&
+        b.position_z === block.position_z
+      );
+      
+      if (!existsAtPosition) {
+        chunkData.blocks.push(block);
+        onBlocksChanged(flattenLoadedBlocks());
+      }
+    }
+    // If chunk not loaded, block will appear when chunk loads
+  }, [onBlocksChanged, flattenLoadedBlocks]);
+
+  /**
+   * Replace a temp block with the real server block (by position match)
+   */
+  const replaceBlockByPosition = useCallback((newBlock: PlacedBlock): void => {
+    const chunkKey = getChunkKey(newBlock.position_x, newBlock.position_z);
+    const chunkData = loadedChunksRef.current.get(chunkKey);
+    
+    if (chunkData) {
+      const index = chunkData.blocks.findIndex(b => 
+        b.position_x === newBlock.position_x &&
+        b.position_y === newBlock.position_y &&
+        b.position_z === newBlock.position_z
+      );
+      
+      if (index >= 0) {
+        chunkData.blocks[index] = newBlock;
+        onBlocksChanged(flattenLoadedBlocks());
+      }
+    }
+  }, [onBlocksChanged, flattenLoadedBlocks]);
+
+  /**
+   * Remove a block by ID from the chunk loader
+   */
+  const removeBlockById = useCallback((blockId: string): void => {
+    for (const chunkData of loadedChunksRef.current.values()) {
+      const index = chunkData.blocks.findIndex(b => b.id === blockId);
+      if (index >= 0) {
+        chunkData.blocks.splice(index, 1);
+        onBlocksChanged(flattenLoadedBlocks());
+        return;
+      }
+    }
+  }, [onBlocksChanged, flattenLoadedBlocks]);
 
   /**
    * Load chunks in a bounding box around the player using a single query
@@ -303,6 +364,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     getLoadedChunkKeys,
     isChunkLoaded,
     loadedChunksRef,
+    // New methods for optimistic updates
+    addBlockOptimistically,
+    replaceBlockByPosition,
+    removeBlockById,
     LOAD_RADIUS,
     UNLOAD_RADIUS
   };
