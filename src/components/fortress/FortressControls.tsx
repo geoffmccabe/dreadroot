@@ -46,7 +46,8 @@ export function FirstPersonControls({
   meshesArrayCache,
   meshToBlockTypeCache,
   blocksByTypeAndUser,
-  onGodModeChange
+  onGodModeChange,
+  updatePlayerPosition
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -501,6 +502,11 @@ export function FirstPersonControls({
   const currentUserIdRef = useRef(currentUserId);
   const hoveredBlockIdRef = useRef(hoveredBlockId);
   const broadcastPositionRef = useRef(broadcastPosition);
+  const updatePlayerPositionRef = useRef(updatePlayerPosition);
+  
+  // Phase 2B: Throttle for chunk loading updates (separate from broadcast)
+  const lastChunkUpdateRef = useRef(0);
+  const CHUNK_UPDATE_INTERVAL = 500; // ms - less frequent than broadcast
   
   useEffect(() => { collidersRef.current = colliders; }, [colliders]);
   useEffect(() => { userRolesRef.current = userRoles; }, [userRoles]);
@@ -509,6 +515,7 @@ export function FirstPersonControls({
   useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
   useEffect(() => { hoveredBlockIdRef.current = hoveredBlockId; }, [hoveredBlockId]);
   useEffect(() => { broadcastPositionRef.current = broadcastPosition; }, [broadcastPosition]);
+  useEffect(() => { updatePlayerPositionRef.current = updatePlayerPosition; }, [updatePlayerPosition]);
 
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
@@ -750,6 +757,15 @@ export function FirstPersonControls({
         const broadcast = broadcastPositionRef.current;
         if (broadcast) {
           broadcast(camera.position, yaw.current, pitch.current);
+        }
+      }
+      
+      // Phase 2B: Update player position for chunk loading (throttled to 2Hz)
+      if (now - lastChunkUpdateRef.current >= CHUNK_UPDATE_INTERVAL) {
+        lastChunkUpdateRef.current = now;
+        const chunkUpdate = updatePlayerPositionRef.current;
+        if (chunkUpdate) {
+          chunkUpdate(camera.position.x, camera.position.z);
         }
       }
     }, 20); // High priority - controls run early

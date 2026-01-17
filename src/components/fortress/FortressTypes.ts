@@ -104,6 +104,8 @@ export interface FirstPersonControlsProps {
   meshesArrayCache: React.MutableRefObject<THREE.InstancedMesh[]>;
   meshToBlockTypeCache: React.MutableRefObject<Map<THREE.InstancedMesh, string>>;
   blocksByTypeAndUser: React.MutableRefObject<Map<string, PlacedBlock[]>>;
+  // Phase 2B: Chunk loading callback
+  updatePlayerPosition?: (worldX: number, worldZ: number) => void;
 }
 
 // Bullet interface

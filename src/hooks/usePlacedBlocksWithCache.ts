@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useIndexedDB } from './useIndexedDB';
 import { PlacedBlock } from '../types/blocks';
+import { useChunkLoader } from './useChunkLoader';
+import { getChunkKey } from '@/lib/chunkManager';
 
 interface DBBlock extends PlacedBlock {
   synced: boolean;
@@ -56,6 +58,7 @@ const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
 };
 
 // Now accepts worldId for multi-world support
+// Phase 2B: Uses useChunkLoader for player-radius-based loading
 export const usePlacedBlocksWithCache = (userId: string | null, worldId: string | null) => {
   const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -126,6 +129,16 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       return nextBlocks;
     });
   }, []);
+
+  // Phase 2B: Chunk loader integration
+  const handleChunkBlocksChanged = useCallback((newBlocks: PlacedBlock[]) => {
+    setBlocksIfChanged(newBlocks);
+  }, [setBlocksIfChanged]);
+
+  const chunkLoader = useChunkLoader({
+    worldId,
+    onBlocksChanged: handleChunkBlocksChanged
+  });
 
   const syncWithSupabase = useCallback(async (force = false) => {
     if (syncingRef.current || !worldId) return;
@@ -206,7 +219,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
   }, [worldId]);
 
-  const initializeCache = useCallback(async () => {
+  // Phase 2B: Initialize with chunk loading instead of full world load
+  const initializeCache = useCallback(async (startX: number = 0, startZ: number = 0) => {
     if (!userId || !worldId) {
       setIsLoading(false);
       return;
@@ -216,37 +230,17 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       setIsLoading(true);
       await initDB();
       
-      const cachedBlocks = await getAllBlocks();
-      
-      // Filter by world_id for multi-world support
-      const worldCachedBlocks = cachedBlocks.filter((b: any) => b.world_id === worldId);
-      
-      // Filter out expired blocks from cache
-      const initTime = new Date();
-      const activeInitBlocks = worldCachedBlocks
-        .filter(block => !block.expires_at || new Date(block.expires_at) > initTime)
-        .map((block: any) => ({
-          id: block.id,
-          user_id: block.user_id,
-          position_x: block.position_x,
-          position_y: block.position_y,
-          position_z: block.position_z,
-          block_type: block.block_type,
-          created_at: block.created_at,
-          updated_at: block.updated_at
-        }));
-      
-      setBlocksIfChanged(activeInitBlocks);
-
-      // Force sync on initialization (bypass debounce)
-      await syncWithSupabase(true);
+      // Phase 2B: Use chunk loader for initial load
+      await chunkLoader.initializeForWorld(startX, startZ);
     } catch (error) {
       console.error('Error initializing:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId, worldId, syncWithSupabase]);
+  }, [userId, worldId, initDB, chunkLoader]);
 
+  // Phase 2B: Realtime subscription - still needed for optimistic updates within loaded chunks
+  // Will be replaced with chunk_versions in Phase 2C
   const setupRealtimeSubscription = useCallback(() => {
     if (!worldId) return () => {};
     
@@ -268,6 +262,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
             // Skip if block is already expired
             if (newBlock.expires_at && new Date(newBlock.expires_at) <= new Date()) {
               return;
+            }
+            
+            // Phase 2B: Only process if the block's chunk is loaded
+            const blockChunkKey = getChunkKey(newBlock.position_x, newBlock.position_z);
+            if (!chunkLoader.getLoadedChunkKeys().has(blockChunkKey)) {
+              return; // Ignore blocks in chunks we haven't loaded
             }
             
             // Add to IndexedDB with world_id
@@ -299,6 +299,13 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
             });
           } else if (payload.eventType === 'DELETE') {
             const deletedId = payload.old.id;
+            const oldBlock = payload.old as PlacedBlock;
+            
+            // Phase 2B: Only process if the block's chunk is loaded
+            const blockChunkKey = getChunkKey(oldBlock.position_x, oldBlock.position_z);
+            if (!chunkLoader.getLoadedChunkKeys().has(blockChunkKey)) {
+              return; // Ignore blocks in chunks we haven't loaded
+            }
             
             // Remove from IndexedDB
             await removeFromDB(deletedId);
@@ -313,7 +320,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [worldId]);
+  }, [worldId, chunkLoader, addBlock, removeFromDB, setBlocksIfChanged]);
 
   // Clear blocks when world changes
   useEffect(() => {
@@ -631,10 +638,18 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
   return {
     blocks,
-    isLoading,
+    isLoading: isLoading || chunkLoader.isLoading,
     placeBlock,
     removeBlock,
-    refreshBlocks: () => syncWithSupabase(true), // Force sync when manually refreshing
-    setBlockMode // New function to enable/disable block mode
+    refreshBlocks: () => chunkLoader.initializeForWorld(0, 0), // Re-initialize chunks
+    setBlockMode, // New function to enable/disable block mode
+    // Phase 2B: Expose chunk loader functions
+    updatePlayerPosition: chunkLoader.updatePlayerPosition,
+    initializeForWorld: chunkLoader.initializeForWorld,
+    getLoadedChunkKeys: chunkLoader.getLoadedChunkKeys,
+    isChunkLoaded: chunkLoader.isChunkLoaded,
+    refetchSingleChunk: chunkLoader.refetchSingleChunk,
+    LOAD_RADIUS: chunkLoader.LOAD_RADIUS,
+    UNLOAD_RADIUS: chunkLoader.UNLOAD_RADIUS
   };
 };
