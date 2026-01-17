@@ -118,9 +118,22 @@ export function useTreeData(worldId: string | null): TreeData & {
           filter: `world_id=eq.${worldId}`,
         },
         (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            // Refetch to get joined seed_definition
+          if (payload.eventType === 'INSERT') {
+            // Refetch to get joined seed_definition for new trees
             fetchData();
+          } else if (payload.eventType === 'UPDATE') {
+            // Optimistically merge update - don't refetch (prevents flashing feedback loop)
+            setPlantedTrees(prev => prev.map(tree => {
+              if (tree.id === (payload.new as any).id) {
+                // Merge updated fields but keep existing seed_definition
+                return {
+                  ...tree,
+                  ...(payload.new as any),
+                  seed_definition: tree.seed_definition,
+                };
+              }
+              return tree;
+            }));
           } else if (payload.eventType === 'DELETE') {
             setPlantedTrees(prev => prev.filter(t => t.id !== payload.old.id));
           }

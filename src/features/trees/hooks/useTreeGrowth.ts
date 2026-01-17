@@ -47,7 +47,11 @@ export function useTreeGrowth({
   // Track local growth order (not block count) to avoid re-reading stale data
   const localGrowthOrders = useRef<Map<string, number>>(new Map());
   const lastGrowthTime = useRef<Map<string, number>>(new Map());
+  const lastPersistedTime = useRef<Map<string, number>>(new Map());
   const isGrowing = useRef(false);
+  
+  // Checkpoint interval - only persist to DB every 30 seconds max during growth
+  const PERSIST_INTERVAL_MS = 30000;
 
   const growTreeByOne = useCallback(async (tree: PlantedTree): Promise<boolean> => {
     if (!tree.seed_definition || !placeBlock) {
@@ -101,29 +105,40 @@ export function useTreeGrowth({
       if (placed) placedCount++;
     }
 
-    // Update local and remote state
+    // Update local state only - blocks are fire-and-forget
     const newOrder = currentOrder + 1;
+    const now = Date.now();
     localGrowthOrders.current.set(tree.id, newOrder);
-    lastGrowthTime.current.set(tree.id, Date.now());
+    lastGrowthTime.current.set(tree.id, now);
 
-    // Count total blocks placed so far for DB update
-    let totalBlocksPlaced = 0;
-    for (let o = 0; o <= currentOrder; o++) {
-      totalBlocksPlaced += getBlocksAtOrder(blueprint, o).length;
+    const isFullyGrown = newOrder > maxOrder;
+    const lastPersisted = lastPersistedTime.current.get(tree.id) || 0;
+    const shouldPersist = isFullyGrown || (now - lastPersisted >= PERSIST_INTERVAL_MS);
+
+    // Only update DB on completion or periodic checkpoint (reduces feedback loop)
+    if (shouldPersist) {
+      lastPersistedTime.current.set(tree.id, now);
+      
+      // Count total blocks placed so far for DB update
+      let totalBlocksPlaced = 0;
+      for (let o = 0; o <= currentOrder; o++) {
+        totalBlocksPlaced += getBlocksAtOrder(blueprint, o).length;
+      }
+
+      // Update tree progress in DB (async, doesn't block UI)
+      supabase
+        .from('planted_trees')
+        .update({
+          current_block_count: totalBlocksPlaced,
+          last_growth_at: new Date().toISOString(),
+          is_fully_grown: isFullyGrown,
+        })
+        .eq('id', tree.id)
+        .then(() => {});
+
+      onGrowth?.(tree.id, totalBlocksPlaced);
     }
-
-    // Update tree progress in DB (async, doesn't block UI)
-    supabase
-      .from('planted_trees')
-      .update({
-        current_block_count: totalBlocksPlaced,
-        last_growth_at: new Date().toISOString(),
-        is_fully_grown: newOrder > maxOrder,
-      })
-      .eq('id', tree.id)
-      .then(() => {});
-
-    onGrowth?.(tree.id, totalBlocksPlaced);
+    
     return true;
   }, [placeBlock, onGrowth]);
 
