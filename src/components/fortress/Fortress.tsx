@@ -689,7 +689,7 @@ export function Fortress() {
             position_x: tb.position_x,
             position_y: tb.position_y,
             position_z: tb.position_z,
-            block_type: tb.block_type === 'trunk' ? 'wood' : 'fruit',
+            block_type: tb.block_type, // 'trunk' or 'fruit' - use directly, no remapping
             created_at: tb.created_at,
             updated_at: tb.created_at,
             // Pass through the texture URL from the seed definition
