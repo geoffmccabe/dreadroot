@@ -98,7 +98,7 @@ export function Fortress() {
   
   // Hooks
   const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock } = useUserData();
-  const { blocks, placeBlock, removeBlock, setBlockMode } = useBlocks();
+  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
@@ -583,6 +583,9 @@ export function Fortress() {
           waterfallEnabled={waterfallEnabled}
           onGodModeChange={setGodMode}
           performanceMode={performanceMode}
+          fortressTextureUrl={currentWorld?.fortress_texture_url}
+          groundTextureUrl={currentWorld?.ground_texture_url}
+          skyTextureUrl={currentWorld?.sky_texture_url}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (

@@ -71,6 +71,10 @@ export interface SceneProps {
   waterfallEnabled?: boolean;
   onGodModeChange?: (enabled: boolean) => void;
   performanceMode?: boolean;
+  // World texture URLs
+  fortressTextureUrl?: string | null;
+  groundTextureUrl?: string | null;
+  skyTextureUrl?: string | null;
 }
 
 // First person controls props
