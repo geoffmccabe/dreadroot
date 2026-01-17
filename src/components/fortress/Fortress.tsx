@@ -22,6 +22,8 @@ import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers'
 import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
+import { useTreeGrowth } from '@/features/trees/hooks/useTreeGrowth';
+import { TreeRenderer } from '@/features/trees/components/TreeRenderer';
 import { TREE_CONFIG } from '@/features/trees/constants';
 
 import { FortressScene } from './FortressScene';
@@ -111,11 +113,18 @@ export function Fortress() {
   const { openPanel: openAdminPanel } = useAdminPanel();
   
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
-  const { seedDefinitions } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
+  const { seedDefinitions, plantedTrees, treeBlocks } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
   const { plantSeed } = useSeedPlanting({
     worldId: currentWorldId,
     userId: user?.id ?? null,
     seedDefinitions,
+  });
+  
+  // Tree growth - runs the growth loop for user's trees
+  useTreeGrowth({
+    worldId: currentWorldId,
+    userId: user?.id ?? null,
+    plantedTrees,
   });
   
   // Audio refs
@@ -694,6 +703,11 @@ export function Fortress() {
             existingBlocks={blocks || []}
             trunkTextureUrl={seedDefinitions.find(s => s.tier === selectedSeedTier)?.trunk_texture_url}
           />
+        )}
+        
+        {/* Render planted tree blocks */}
+        {TREE_CONFIG.ENABLED && treeBlocks.length > 0 && (
+          <TreeRenderer treeBlocks={treeBlocks} />
         )}
       </Canvas>
 
