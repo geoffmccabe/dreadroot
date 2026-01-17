@@ -1,6 +1,7 @@
 // Hook for fetching and subscribing to tree data
-// Tree blocks are now stored in placed_blocks table (unified system)
-// This hook only manages planted_trees (growth progress) and seed_definitions (planting UI)
+// Tree blocks are stored in placed_blocks table (unified system)
+// This hook manages planted_trees (growth progress) and seed_definitions (planting UI)
+// IMPORTANT: Only fetches FULLY GROWN trees to prevent flashing during local growth
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,9 +16,11 @@ interface TreeData {
   error: string | null;
 }
 
-export function useTreeData(worldId: string | null): TreeData & {
+export function useTreeData(
+  worldId: string | null,
+  userId: string | null = null
+): TreeData & {
   refetch: () => Promise<void>;
-  addTreeOptimistically: (tree: PlantedTree) => void;
 } {
   const [plantedTrees, setPlantedTrees] = useState<PlantedTree[]>([]);
   const [treeFruits, setTreeFruits] = useState<TreeFruit[]>([]);
@@ -35,12 +38,26 @@ export function useTreeData(worldId: string | null): TreeData & {
       setIsLoading(true);
       setError(null);
 
-      // Fetch planted trees and seed definitions (tree blocks now come from placed_blocks via chunk loader)
+      // Build query for planted trees
+      // Only fetch trees that are:
+      // 1. Fully grown (is_fully_grown = true), OR
+      // 2. Planted by other users (planted_by != userId)
+      // This prevents local user's growing trees from entering React state
+      let treesQuery = supabase
+        .from('planted_trees')
+        .select('*, seed_definitions(*)')
+        .eq('world_id', worldId);
+
+      // If we have a userId, filter to avoid local user's growing trees
+      if (userId) {
+        treesQuery = treesQuery.or(`is_fully_grown.eq.true,planted_by.neq.${userId}`);
+      } else {
+        // No user logged in, just get fully grown trees
+        treesQuery = treesQuery.eq('is_fully_grown', true);
+      }
+
       const [treesRes, fruitsRes, seedsRes] = await Promise.all([
-        supabase
-          .from('planted_trees')
-          .select('*, seed_definitions(*)')
-          .eq('world_id', worldId),
+        treesQuery,
         supabase
           .from('tree_fruits')
           .select('*')
@@ -70,7 +87,7 @@ export function useTreeData(worldId: string | null): TreeData & {
     } finally {
       setIsLoading(false);
     }
-  }, [worldId]);
+  }, [worldId, userId]);
 
   // Initial fetch
   useEffect(() => {
@@ -107,6 +124,7 @@ export function useTreeData(worldId: string | null): TreeData & {
       .subscribe();
 
     // Subscribe to planted_trees changes
+    // Only care about trees becoming fully grown or being deleted
     const treesChannel = supabase
       .channel(`planted_trees_${worldId}`)
       .on(
@@ -119,21 +137,29 @@ export function useTreeData(worldId: string | null): TreeData & {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Refetch to get joined seed_definition for new trees
-            fetchData();
+            // Only add if it's a fully grown tree or from another user
+            const newTree = payload.new as any;
+            if (newTree.is_fully_grown || (userId && newTree.planted_by !== userId)) {
+              fetchData(); // Refetch to get joined seed_definition
+            }
           } else if (payload.eventType === 'UPDATE') {
-            // Optimistically merge update - don't refetch (prevents flashing feedback loop)
-            setPlantedTrees(prev => prev.map(tree => {
-              if (tree.id === (payload.new as any).id) {
-                // Merge updated fields but keep existing seed_definition
-                return {
-                  ...tree,
-                  ...(payload.new as any),
-                  seed_definition: tree.seed_definition,
-                };
-              }
-              return tree;
-            }));
+            const updatedTree = payload.new as any;
+            // If a tree just became fully grown, add it to state
+            if (updatedTree.is_fully_grown) {
+              fetchData(); // Refetch to include newly grown tree
+            } else {
+              // Otherwise just merge updates for trees already in state
+              setPlantedTrees(prev => prev.map(tree => {
+                if (tree.id === updatedTree.id) {
+                  return {
+                    ...tree,
+                    ...updatedTree,
+                    seed_definition: tree.seed_definition,
+                  };
+                }
+                return tree;
+              }));
+            }
           } else if (payload.eventType === 'DELETE') {
             setPlantedTrees(prev => prev.filter(t => t.id !== payload.old.id));
           }
@@ -145,16 +171,7 @@ export function useTreeData(worldId: string | null): TreeData & {
       supabase.removeChannel(fruitsChannel);
       supabase.removeChannel(treesChannel);
     };
-  }, [worldId, fetchData]);
-
-  // Optimistically add a tree to the local state (for instant growth after planting)
-  const addTreeOptimistically = useCallback((tree: PlantedTree) => {
-    setPlantedTrees(prev => {
-      // Don't add if already exists
-      if (prev.some(t => t.id === tree.id)) return prev;
-      return [...prev, tree];
-    });
-  }, []);
+  }, [worldId, userId, fetchData]);
 
   return {
     plantedTrees,
@@ -163,6 +180,5 @@ export function useTreeData(worldId: string | null): TreeData & {
     isLoading,
     error,
     refetch: fetchData,
-    addTreeOptimistically,
   };
 }
