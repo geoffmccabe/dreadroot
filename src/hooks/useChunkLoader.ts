@@ -373,11 +373,15 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const now = new Date();
 
     // Phase 3D: Try to get chunks from cache
+    // TEMPORARILY DISABLED for debugging - skip cache read
     let cachedChunks: Map<string, CachedChunk> = new Map();
-    try {
-      cachedChunks = await blockDB.getCachedChunksBatch(worldId, toLoad);
-    } catch (err) {
-      console.warn('Cache read failed, fetching from server:', err);
+    const USE_CHUNK_CACHE = false; // Toggle for debugging
+    if (USE_CHUNK_CACHE) {
+      try {
+        cachedChunks = await blockDB.getCachedChunksBatch(worldId, toLoad);
+      } catch (err) {
+        console.warn('Cache read failed, fetching from server:', err);
+      }
     }
 
     // Split into cached vs uncached
@@ -403,9 +407,19 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
       for (const { x, z, cached } of chunksWithCache) {
         const chunkKey = `chunk_${x}_${z}`;
+        
+        // Check if server has a version entry for this chunk
+        const hasServerVersion = serverVersions.has(chunkKey);
         const serverVersion = serverVersions.get(chunkKey) ?? 0;
 
-        if (cached.version >= serverVersion) {
+        // Only use cache if:
+        // 1. Server has a version entry AND cache version >= server version, OR
+        // 2. Server has no version entry AND cache has blocks (empty chunks don't need refetch)
+        const cacheIsFresh = hasServerVersion 
+          ? cached.version >= serverVersion 
+          : cached.blocks.length === 0; // Empty cached chunk with no server version = still empty
+
+        if (cacheIsFresh) {
           // Cache is fresh - use it
           // Filter expired blocks from cache
           const activeBlocks = cached.blocks.filter(block => 
@@ -413,7 +427,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           );
           chunksFromCache.push({ x, z, blocks: activeBlocks });
         } else {
-          // Cache is stale - need to fetch from server
+          // Cache is stale or unverified - need to fetch from server
           chunksToFetchFromServer.push({ x, z });
         }
       }
