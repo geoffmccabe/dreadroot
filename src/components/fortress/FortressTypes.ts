@@ -103,6 +103,7 @@ export interface FirstPersonControlsProps {
   onCycleBlock: (direction: 'next' | 'prev') => void;
   onCycleSeed: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
+  treeBlocks?: PlacedBlock[];
   onBlockRain: () => void;
   userRoles: string[];
   broadcastPosition?: (position: THREE.Vector3, yaw: number, pitch: number) => void;

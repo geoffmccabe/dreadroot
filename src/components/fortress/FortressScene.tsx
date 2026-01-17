@@ -638,6 +638,7 @@ export function FortressScene({
         onCycleBlock={onCycleBlock}
         onCycleSeed={onCycleSeed}
         blocks={blocks}
+        treeBlocks={treeBlocks}
         onBlockRain={onBlockRain}
         userRoles={userRoles}
         broadcastPosition={broadcastPosition}

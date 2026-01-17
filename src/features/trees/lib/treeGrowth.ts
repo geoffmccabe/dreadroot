@@ -137,7 +137,8 @@ function growBranch(
     if (occupied.has(key)) continue;
     
     occupied.add(key);
-    blocks.push({ x, y, z, type: 'fruit', growthOrder: 0 });
+    // Branches are trunk blocks, not fruit - fruit appears separately over time on grown trees
+    blocks.push({ x, y, z, type: 'trunk', growthOrder: 0 });
     
     // Chance to spawn sub-branch (decreases with depth)
     const subBranchChance = branchingFactor * 0.2 * (1 - depth * 0.3);
@@ -167,22 +168,15 @@ function growBranch(
  * Trunk grows first (bottom to top), then leaves spread out
  */
 function assignGrowthOrder(blocks: BlueprintBlock[], rng: () => number): void {
-  // Separate trunk and fruit blocks
-  const trunk = blocks.filter(b => b.type === 'trunk');
-  const fruits = blocks.filter(b => b.type === 'fruit');
+  // All blocks are trunk during growth - sort by distance from base, trunk bottom first
+  const trunkBlocks = blocks.filter(b => b.type === 'trunk');
   
-  // Sort trunk by Y (bottom first)
-  trunk.sort((a, b) => a.y - b.y);
+  // Sort trunk by Y (bottom first), then shuffle within each Y level
+  trunkBlocks.sort((a, b) => a.y - b.y);
   
-  // Shuffle fruits for random growth
-  const shuffledFruits = seededShuffle(fruits, rng);
-  
-  // Assign orders: trunk first, then fruits
+  // Assign orders
   let order = 0;
-  for (const block of trunk) {
-    block.growthOrder = order++;
-  }
-  for (const block of shuffledFruits) {
+  for (const block of trunkBlocks) {
     block.growthOrder = order++;
   }
 }
