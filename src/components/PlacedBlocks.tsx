@@ -191,7 +191,11 @@ export const PlacedBlocks: React.FC<{
     <>
       {Array.from(groupedBlocks.entries()).map(([blockType, blocksOfType]) => {
         const blockDef = blocksMap.get(blockType);
-        if (!blockDef) return null;
+        if (!blockDef) {
+          // Log missing block definitions to help debug
+          console.warn(`[PlacedBlocks] No block definition for type: "${blockType}", skipping ${blocksOfType.length} blocks`);
+          return null;
+        }
         
         return (
           <InstancedBlockGroup
