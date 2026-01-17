@@ -26,13 +26,17 @@ export function FirstPersonControls({
   audioRefs, 
   playAudio,
   blockPlacementMode,
+  treePlacementMode,
   onBlockPlace,
+  onTreePlace,
   onOpenPanel,
   onModeChange,
   getBlockQuantity,
   selectedBlockType,
+  selectedSeedTier,
   panelOpen,
   onCycleBlock,
+  onCycleSeed,
   blocks,
   onBlockRain,
   userRoles,
@@ -196,6 +200,13 @@ export function FirstPersonControls({
           onModeChange('building');
         }
         break;
+      case 'KeyT':
+        if (treePlacementMode) {
+          onModeChange(null);
+        } else {
+          onModeChange('planting');
+        }
+        break;
       case 'KeyO':
         event.preventDefault();
         onOpenPanel('store');
@@ -204,12 +215,18 @@ export function FirstPersonControls({
         if (blockPlacementMode) {
           event.preventDefault();
           onCycleBlock('prev');
+        } else if (treePlacementMode) {
+          event.preventDefault();
+          onCycleSeed('prev');
         }
         break;
       case 'BracketRight':
         if (blockPlacementMode) {
           event.preventDefault();
           onCycleBlock('next');
+        } else if (treePlacementMode) {
+          event.preventDefault();
+          onCycleSeed('next');
         }
         break;
       case 'Escape':
@@ -346,10 +363,15 @@ export function FirstPersonControls({
   handleMouseMoveRef.current = handleMouseMove;
 
   const handleWheel = useCallback((event: WheelEvent) => {
-    if (!isLocked.current || !blockPlacementMode) return;
-    event.preventDefault();
-    onCycleBlock(event.deltaY > 0 ? 'next' : 'prev');
-  }, [blockPlacementMode, onCycleBlock]);
+    if (!isLocked.current) return;
+    if (blockPlacementMode) {
+      event.preventDefault();
+      onCycleBlock(event.deltaY > 0 ? 'next' : 'prev');
+    } else if (treePlacementMode) {
+      event.preventDefault();
+      onCycleSeed(event.deltaY > 0 ? 'next' : 'prev');
+    }
+  }, [blockPlacementMode, treePlacementMode, onCycleBlock, onCycleSeed]);
   
   handleWheelRef.current = handleWheel;
 
@@ -408,6 +430,22 @@ export function FirstPersonControls({
           console.warn('Could not play rejection sound:', e);
         }
       }
+    } else if (treePlacementMode && onTreePlace) {
+      // Use same voxel raycast for tree placement
+      const placementResult = calculatePlacementFast(
+        camera,
+        existingBlocks || [],
+        5
+      );
+      
+      if (placementResult.isValid) {
+        const position = new THREE.Vector3(
+          placementResult.x,
+          placementResult.y,
+          placementResult.z
+        );
+        onTreePlace(position);
+      }
     } else if (showCrosshairs && onShoot) {
       const now = Date.now();
       if (now - lastFireTime.current < FIRE_RATE_LIMIT) return;
@@ -420,7 +458,7 @@ export function FirstPersonControls({
       onShoot(shootOriginRef.current, shootDirectionRef.current);
       playAudio(audioRefs.gunshot);
     }
-  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, onBlockPlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId, audioRefs, playAudio]);
+  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, onBlockPlace, onTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId, audioRefs, playAudio]);
   
   handleClickRef.current = handleClick;
 

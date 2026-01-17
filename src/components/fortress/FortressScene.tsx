@@ -202,15 +202,19 @@ export function FortressScene({
   settings, 
   onCoinHit, 
   wallPositions, 
-  blockPlacementMode, 
+  blockPlacementMode,
+  treePlacementMode,
   onBlockPlace,
+  onTreePlace,
   onModeChange,
   onOpenPanel,
   crosshairsEnabled,
   getBlockQuantity,
   selectedBlockType,
+  selectedSeedTier,
   panelOpen,
   onCycleBlock,
+  onCycleSeed,
   blocks,
   weatherSettings,
   onBlockRain,
@@ -229,7 +233,8 @@ export function FortressScene({
   performanceMode = false,
   fortressTextureUrl,
   groundTextureUrl,
-  skyTextureUrl
+  skyTextureUrl,
+  seedDefinitions
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
@@ -589,13 +594,17 @@ export function FortressScene({
         audioRefs={audioRefs.current}
         playAudio={playAudio}
         blockPlacementMode={blockPlacementMode}
+        treePlacementMode={treePlacementMode}
         onBlockPlace={onBlockPlace}
+        onTreePlace={onTreePlace}
         onOpenPanel={onOpenPanel}
         onModeChange={onModeChange}
         getBlockQuantity={getBlockQuantity}
         selectedBlockType={selectedBlockType}
+        selectedSeedTier={selectedSeedTier}
         panelOpen={panelOpen}
         onCycleBlock={onCycleBlock}
+        onCycleSeed={onCycleSeed}
         blocks={blocks}
         onBlockRain={onBlockRain}
         userRoles={userRoles}
