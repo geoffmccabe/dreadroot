@@ -182,33 +182,45 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
           filter: `world_id=eq.${worldId}`
         },
         async (payload) => {
+          console.log('[Phase2C] chunk_versions realtime event:', payload);
+          
           const chunkX = (payload.new as any)?.chunk_x;
           const chunkZ = (payload.new as any)?.chunk_z;
+          const version = (payload.new as any)?.version;
           
-          if (chunkX === undefined || chunkZ === undefined) return;
+          if (chunkX === undefined || chunkZ === undefined) {
+            console.log('[Phase2C] Ignoring event - missing chunk coordinates');
+            return;
+          }
           
           const chunkKey = `chunk_${chunkX}_${chunkZ}`;
           
           // Only process if this chunk is currently loaded
           if (!chunkLoader.isChunkLoaded(chunkX, chunkZ)) {
+            console.log(`[Phase2C] Ignoring chunk ${chunkKey} - not loaded`);
             return; // Ignore changes to chunks we haven't loaded
           }
+          
+          console.log(`[Phase2C] Processing chunk ${chunkKey} version ${version}`);
           
           // Debounce: If we already have a pending refetch for this chunk, clear it
           const existingTimer = chunkDebounceTimers.current.get(chunkKey);
           if (existingTimer) {
             clearTimeout(existingTimer);
+            console.log(`[Phase2C] Debouncing - cleared existing timer for ${chunkKey}`);
           }
           
           // Schedule a debounced refetch for this chunk
           const timer = setTimeout(async () => {
             chunkDebounceTimers.current.delete(chunkKey);
             
+            console.log(`[Phase2C] Refetching chunk ${chunkKey}`);
             // Refetch the single chunk
             await chunkLoader.refetchSingleChunk(chunkX, chunkZ);
             
             // Also sync IndexedDB for this chunk
             await syncChunkToIndexedDB(chunkX, chunkZ);
+            console.log(`[Phase2C] Chunk ${chunkKey} refetch complete`);
           }, CHUNK_REFETCH_DEBOUNCE_MS);
           
           chunkDebounceTimers.current.set(chunkKey, timer);
