@@ -370,6 +370,69 @@ export type Database = {
           },
         ]
       }
+      planted_trees: {
+        Row: {
+          base_x: number
+          base_y: number
+          base_z: number
+          current_block_count: number
+          growth_seed: number
+          id: string
+          is_fully_grown: boolean
+          last_growth_at: string
+          planted_at: string
+          planted_by: string
+          seed_definition_id: string
+          target_block_count: number
+          world_id: string
+        }
+        Insert: {
+          base_x: number
+          base_y: number
+          base_z: number
+          current_block_count?: number
+          growth_seed: number
+          id?: string
+          is_fully_grown?: boolean
+          last_growth_at?: string
+          planted_at?: string
+          planted_by: string
+          seed_definition_id: string
+          target_block_count: number
+          world_id: string
+        }
+        Update: {
+          base_x?: number
+          base_y?: number
+          base_z?: number
+          current_block_count?: number
+          growth_seed?: number
+          id?: string
+          is_fully_grown?: boolean
+          last_growth_at?: string
+          planted_at?: string
+          planted_by?: string
+          seed_definition_id?: string
+          target_block_count?: number
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planted_trees_seed_definition_id_fkey"
+            columns: ["seed_definition_id"]
+            isOneToOne: false
+            referencedRelation: "seed_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planted_trees_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       screen_urls: {
         Row: {
           created_at: string
@@ -404,6 +467,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      seed_definitions: {
+        Row: {
+          branch_texture_url: string | null
+          branching_factor: number
+          cost: number
+          created_at: string
+          fruit_texture_url: string | null
+          fruiting_factor: number
+          growth_factor: number
+          id: string
+          name: string
+          rarity: string
+          tier: number
+          trunk_texture_url: string | null
+          updated_at: string
+          width_factor: number
+        }
+        Insert: {
+          branch_texture_url?: string | null
+          branching_factor?: number
+          cost?: number
+          created_at?: string
+          fruit_texture_url?: string | null
+          fruiting_factor?: number
+          growth_factor?: number
+          id?: string
+          name: string
+          rarity?: string
+          tier: number
+          trunk_texture_url?: string | null
+          updated_at?: string
+          width_factor?: number
+        }
+        Update: {
+          branch_texture_url?: string | null
+          branching_factor?: number
+          cost?: number
+          created_at?: string
+          fruit_texture_url?: string | null
+          fruiting_factor?: number
+          growth_factor?: number
+          id?: string
+          name?: string
+          rarity?: string
+          tier?: number
+          trunk_texture_url?: string | null
+          updated_at?: string
+          width_factor?: number
+        }
+        Relationships: []
       }
       token_themes: {
         Row: {
@@ -476,6 +590,114 @@ export type Database = {
           website_url?: string | null
         }
         Relationships: []
+      }
+      tree_blocks: {
+        Row: {
+          block_type: string
+          created_at: string
+          growth_order: number
+          id: string
+          position_x: number
+          position_y: number
+          position_z: number
+          tree_id: string
+          world_id: string
+        }
+        Insert: {
+          block_type: string
+          created_at?: string
+          growth_order: number
+          id?: string
+          position_x: number
+          position_y: number
+          position_z: number
+          tree_id: string
+          world_id: string
+        }
+        Update: {
+          block_type?: string
+          created_at?: string
+          growth_order?: number
+          id?: string
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          tree_id?: string
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tree_blocks_tree_id_fkey"
+            columns: ["tree_id"]
+            isOneToOne: false
+            referencedRelation: "planted_trees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tree_blocks_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tree_fruits: {
+        Row: {
+          created_at: string
+          id: string
+          is_collectible: boolean
+          is_falling: boolean
+          position_x: number
+          position_y: number
+          position_z: number
+          tier: number
+          tree_id: string
+          velocity_y: number
+          world_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_collectible?: boolean
+          is_falling?: boolean
+          position_x: number
+          position_y: number
+          position_z: number
+          tier: number
+          tree_id: string
+          velocity_y?: number
+          world_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_collectible?: boolean
+          is_falling?: boolean
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          tier?: number
+          tree_id?: string
+          velocity_y?: number
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tree_fruits_tree_id_fkey"
+            columns: ["tree_id"]
+            isOneToOne: false
+            referencedRelation: "planted_trees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tree_fruits_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_equipped_items: {
         Row: {
