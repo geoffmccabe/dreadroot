@@ -176,12 +176,11 @@ function CameraTrackedBlocks({
   }, [camera, visibleChunksRef]);
 
   // Memoize visible blocks based on the stable trigger
-  // Includes both chunk-organized blocks AND tree blocks passed via props
   const visibleBlocks = useMemo(() => {
     const filtered: PlacedBlock[] = [];
     const seenIds = new Set<string>();
     
-    // Add blocks from visible chunks (regular placed blocks)
+    // Add blocks from visible chunks (includes tree blocks now - unified system)
     for (const chunkKey of visibleChunksRef.current) {
       const chunkBlocks = blocksByChunk.get(chunkKey);
       if (chunkBlocks) {
@@ -194,28 +193,9 @@ function CameraTrackedBlocks({
       }
     }
     
-    // Add tree blocks (passed via blocks prop, have texture_url property)
-    // These aren't in blocksByChunk, so include all that are within visual range
-    const cameraX = camera.position.x;
-    const cameraZ = camera.position.z;
-    const maxDistSq = (visualDistance * CHUNK_SIZE) ** 2;
-    
-    for (const block of blocks) {
-      if (seenIds.has(block.id)) continue;
-      // Check if block has texture_url (indicates it's a tree block)
-      if (block.texture_url !== undefined) {
-        const dx = block.position_x - cameraX;
-        const dz = block.position_z - cameraZ;
-        if (dx * dx + dz * dz <= maxDistSq) {
-          seenIds.add(block.id);
-          filtered.push(block);
-        }
-      }
-    }
-    
     diagnostics.visibleBlocks = filtered.length;
     return filtered;
-  }, [renderTrigger, blocksByChunk, blocks, visibleChunksRef, camera, visualDistance]);
+  }, [renderTrigger, blocksByChunk, visibleChunksRef]);
 
   return (
     <PlacedBlocks
@@ -247,7 +227,6 @@ export function FortressScene({
   onCycleBlock,
   onCycleSeed,
   blocks,
-  treeBlocks,
   weatherSettings,
   onBlockRain,
   coinImageUrl,
@@ -637,7 +616,7 @@ export function FortressScene({
         panelOpen={panelOpen}
         onCycleBlock={onCycleBlock}
         onCycleSeed={onCycleSeed}
-        blocks={[...blocks, ...treeBlocks]}
+        blocks={blocks}
         onBlockRain={onBlockRain}
         userRoles={userRoles}
         broadcastPosition={broadcastPosition}
@@ -665,7 +644,7 @@ export function FortressScene({
       <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
       <CameraTrackedBlocks 
-        blocks={[...blocks, ...treeBlocks]} 
+        blocks={blocks} 
         showOwnershipOutline={showOwnershipOutline && blockPlacementMode} 
         currentUserId={user?.id}
         hoveredBlockId={hoveredBlockId}

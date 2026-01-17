@@ -121,14 +121,9 @@ export function Fortress() {
   }, []);
   
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
-  const { seedDefinitions, plantedTrees, treeBlocks } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
+  // Note: Tree blocks are now stored in placed_blocks and come through the regular chunk loading system
+  const { seedDefinitions, plantedTrees } = useTreeData(TREE_CONFIG.ENABLED ? currentWorldId : null);
   
-  // Debug: Log treeBlocks count
-  useEffect(() => {
-    if (TREE_CONFIG.ENABLED && treeBlocks.length > 0) {
-      console.log(`[Fortress] Tree blocks loaded: ${treeBlocks.length} (${treeBlocks.filter(b => b.block_type === 'trunk').length} trunk, ${treeBlocks.filter(b => b.block_type === 'fruit').length} fruit)`);
-    }
-  }, [treeBlocks]);
   const { plantSeed } = useSeedPlanting({
     worldId: currentWorldId,
     userId: user?.id ?? null,
@@ -683,18 +678,6 @@ export function Fortress() {
           onCycleBlock={cycleSelectedBlock}
           onCycleSeed={cycleSelectedSeed}
           blocks={blocks}
-          treeBlocks={treeBlocks.map(tb => ({
-            id: tb.id,
-            user_id: null,
-            position_x: tb.position_x,
-            position_y: tb.position_y,
-            position_z: tb.position_z,
-            block_type: tb.block_type, // 'trunk' or 'fruit' - use directly, no remapping
-            created_at: tb.created_at,
-            updated_at: tb.created_at,
-            // Pass through the texture URL from the seed definition
-            texture_url: tb.texture_url,
-          }))}
           weatherSettings={weatherSettings}
           onBlockRain={handleBlockRain}
           userRoles={userRoles}

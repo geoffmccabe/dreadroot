@@ -1,14 +1,14 @@
 // Hook for fetching and subscribing to tree data
-// Isolated from main codebase - uses its own tables
+// Tree blocks are now stored in placed_blocks table (unified system)
+// This hook only manages planted_trees (growth progress) and seed_definitions (planting UI)
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { PlantedTree, TreeBlock, TreeFruit, SeedDefinition } from '../types';
+import { PlantedTree, TreeFruit, SeedDefinition } from '../types';
 import { TREE_CONFIG } from '../constants';
 
 interface TreeData {
   plantedTrees: PlantedTree[];
-  treeBlocks: TreeBlock[];
   treeFruits: TreeFruit[];
   seedDefinitions: SeedDefinition[];
   isLoading: boolean;
@@ -19,7 +19,6 @@ export function useTreeData(worldId: string | null): TreeData & {
   refetch: () => Promise<void>;
 } {
   const [plantedTrees, setPlantedTrees] = useState<PlantedTree[]>([]);
-  const [treeBlocks, setTreeBlocks] = useState<TreeBlock[]>([]);
   const [treeFruits, setTreeFruits] = useState<TreeFruit[]>([]);
   const [seedDefinitions, setSeedDefinitions] = useState<SeedDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,15 +34,11 @@ export function useTreeData(worldId: string | null): TreeData & {
       setIsLoading(true);
       setError(null);
 
-      // Fetch all data in parallel
-      const [treesRes, blocksRes, fruitsRes, seedsRes] = await Promise.all([
+      // Fetch planted trees and seed definitions (tree blocks now come from placed_blocks via chunk loader)
+      const [treesRes, fruitsRes, seedsRes] = await Promise.all([
         supabase
           .from('planted_trees')
           .select('*, seed_definitions(*)')
-          .eq('world_id', worldId),
-        supabase
-          .from('tree_blocks')
-          .select('*')
           .eq('world_id', worldId),
         supabase
           .from('tree_fruits')
@@ -56,7 +51,6 @@ export function useTreeData(worldId: string | null): TreeData & {
       ]);
 
       if (treesRes.error) throw treesRes.error;
-      if (blocksRes.error) throw blocksRes.error;
       if (fruitsRes.error) throw fruitsRes.error;
       if (seedsRes.error) throw seedsRes.error;
 
@@ -66,28 +60,7 @@ export function useTreeData(worldId: string | null): TreeData & {
         seed_definition: tree.seed_definitions as unknown as SeedDefinition,
       })) as PlantedTree[];
 
-      // Create a lookup map from tree_id to seed_definition for texture URLs
-      const treeToSeedMap = new Map<string, SeedDefinition>();
-      mappedTrees.forEach(tree => {
-        if (tree.seed_definition) {
-          treeToSeedMap.set(tree.id, tree.seed_definition);
-        }
-      });
-
-      // Enrich tree blocks with texture URLs from their parent tree's seed definition
-      const enrichedBlocks = (blocksRes.data || []).map(block => {
-        const seedDef = treeToSeedMap.get(block.tree_id);
-        const textureUrl = block.block_type === 'trunk' 
-          ? seedDef?.trunk_texture_url 
-          : seedDef?.fruit_texture_url;
-        return {
-          ...block,
-          texture_url: textureUrl || null,
-        } as TreeBlock;
-      });
-
       setPlantedTrees(mappedTrees);
-      setTreeBlocks(enrichedBlocks);
       setTreeFruits((fruitsRes.data || []) as TreeFruit[]);
       setSeedDefinitions((seedsRes.data || []) as SeedDefinition[]);
     } catch (err) {
@@ -106,27 +79,6 @@ export function useTreeData(worldId: string | null): TreeData & {
   // Real-time subscriptions
   useEffect(() => {
     if (!worldId || !TREE_CONFIG.ENABLED) return;
-
-    // Subscribe to tree_blocks changes
-    const blocksChannel = supabase
-      .channel(`tree_blocks_${worldId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tree_blocks',
-          filter: `world_id=eq.${worldId}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'DELETE') {
-            // Refetch to get properly enriched data with texture URLs
-            // This is simpler and more reliable than trying to enrich in real-time
-            fetchData();
-          }
-        }
-      )
-      .subscribe();
 
     // Subscribe to tree_fruits changes
     const fruitsChannel = supabase
@@ -176,7 +128,6 @@ export function useTreeData(worldId: string | null): TreeData & {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(blocksChannel);
       supabase.removeChannel(fruitsChannel);
       supabase.removeChannel(treesChannel);
     };
@@ -184,7 +135,6 @@ export function useTreeData(worldId: string | null): TreeData & {
 
   return {
     plantedTrees,
-    treeBlocks,
     treeFruits,
     seedDefinitions,
     isLoading,
