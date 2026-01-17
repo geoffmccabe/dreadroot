@@ -96,9 +96,8 @@ export function useSeedPlanting({
       // This appears instantly in the UI before any DB operations complete
       const firstBlock = blueprint.blocks.find(b => b.growthOrder === 0);
       if (firstBlock) {
-        // Use placeBlock from useBlocks - instant optimistic update!
-        // Note: placeBlock doesn't support textureUrl yet, but the block will work
-        placeBlock(firstBlock.x, firstBlock.y, firstBlock.z, 'trunk');
+        // Use placeBlock from useBlocks - instant optimistic update with texture!
+        placeBlock(firstBlock.x, firstBlock.y, firstBlock.z, 'trunk', undefined, seedDef.trunk_texture_url || undefined);
       }
 
       // Create the planted tree record (async, doesn't block visibility)

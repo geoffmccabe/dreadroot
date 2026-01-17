@@ -338,7 +338,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   }, [setBlocksIfChanged]);
 
   // PHASE 1: Optimized block placement with INSTANT local feedback (no await for auth)
-  const placeBlock = useCallback((x: number, y: number, z: number, blockType: string, expiresAt?: string) => {
+  const placeBlock = useCallback((x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => {
     // Use cached user ID for instant placement - no await!
     const cachedUserId = cachedUserRef.current?.id || userId;
     
@@ -379,7 +379,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       position_z: z,
       block_type: blockType,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      texture_url: textureUrl || null, // Include texture_url for stable rendering
     };
     
     // Add expiration if provided
@@ -434,6 +435,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // Add world_id if present
       if ((dbBlock as any).world_id) {
         blockData.world_id = (dbBlock as any).world_id;
+      }
+      
+      // Add texture_url if present
+      if ((dbBlock as any).texture_url) {
+        blockData.texture_url = (dbBlock as any).texture_url;
       }
 
       // Use upsert to handle conflicts gracefully - now world-scoped

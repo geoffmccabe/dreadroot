@@ -64,8 +64,8 @@ export function useTreeGrowth({
     }
 
     // Use placeBlock from useBlocks for INSTANT optimistic update!
-    // This makes the block appear immediately in the UI
-    const placedBlock = placeBlock(nextBlock.x, nextBlock.y, nextBlock.z, 'trunk');
+    // This makes the block appear immediately in the UI with correct texture
+    const placedBlock = placeBlock(nextBlock.x, nextBlock.y, nextBlock.z, 'trunk', undefined, seedDef.trunk_texture_url || undefined);
 
     if (!placedBlock) {
       // Position might be occupied - still increment count to continue growth
