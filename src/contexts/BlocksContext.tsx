@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useMemo, useRef, MutableRefObject } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useRef, MutableRefObject, useEffect } from 'react';
 import { usePlacedBlocksWithCache } from '@/hooks/usePlacedBlocksWithCache';
 import { PlacedBlock } from '@/types/blocks';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +16,10 @@ interface BlocksContextType {
   isLoading: boolean;
   currentWorldId: string | null;
   currentWorld: World | null;
+  worlds: World[];
+  setCurrentWorldId: (worldId: string) => void;
+  navigateWorld: (direction: 'next' | 'prev') => void;
+  worldIndex: { current: number; total: number };
   placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string) => PlacedBlock | null;
   removeBlock: (blockId: string) => Promise<boolean>;
   refreshBlocks: () => Promise<void>;
@@ -35,11 +39,22 @@ const BlocksContext = createContext<BlocksContextType | undefined>(undefined);
 export function BlocksProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { profile } = useUserData();
-  const { currentWorldId, currentWorld } = useCurrentWorldId();
+  const { currentWorldId, currentWorld, worlds, setCurrentWorldId, navigateWorld, worldIndex } = useCurrentWorldId();
   const blocksHook = usePlacedBlocksWithCache(user?.id || null, currentWorldId);
   
   // Visible chunks ref - updated imperatively by CameraTrackedBlocks, read by InstancedBlockGroup
   const visibleChunksRef = useRef<Set<string>>(new Set());
+  
+  // Re-initialize when world changes
+  const prevWorldIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (currentWorldId && currentWorldId !== prevWorldIdRef.current) {
+      console.log(`[BlocksContext] World changed to ${currentWorldId}, will re-initialize on next player position update`);
+      prevWorldIdRef.current = currentWorldId;
+      // Clear visible chunks when world changes
+      visibleChunksRef.current.clear();
+    }
+  }, [currentWorldId]);
   
   // Organize blocks by chunks for efficient rendering
   const blocksByChunk = useMemo(() => {
@@ -61,6 +76,10 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     isLoading: blocksHook.isLoading,
     currentWorldId,
     currentWorld,
+    worlds,
+    setCurrentWorldId,
+    navigateWorld,
+    worldIndex,
     placeBlock: blocksHook.placeBlock,
     removeBlock: blocksHook.removeBlock,
     refreshBlocks: blocksHook.refreshBlocks,

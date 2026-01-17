@@ -22,6 +22,7 @@ import { WorldsList } from '@/components/WorldsList';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useBlocks } from '@/contexts/BlocksContext';
 
 interface WaterfallControlsProps {
   settings: any;
@@ -2336,6 +2337,7 @@ export function AdminPanel({
 }: AdminPanelProps) {
   const { isOpen, activeTab, closePanel, setActiveTab } = useAdminPanel();
   const { userRoles } = useUserData();
+  const { currentWorldId, setCurrentWorldId } = useBlocks();
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closePanel()}>
@@ -2406,7 +2408,10 @@ export function AdminPanel({
 
           <TabsContent value="worlds" className="mt-4 flex-1 overflow-hidden">
             <ScrollArea className="h-full pr-4">
-              <WorldsList />
+              <WorldsList 
+                currentWorldId={currentWorldId} 
+                onWorldChange={setCurrentWorldId}
+              />
             </ScrollArea>
           </TabsContent>
         </Tabs>
