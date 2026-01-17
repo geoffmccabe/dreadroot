@@ -3,7 +3,7 @@
 
 import { useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SeedDefinition } from '../types';
+import { SeedDefinition, PlantedTree } from '../types';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
 import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +22,7 @@ interface PlantSeedResult {
   success: boolean;
   error?: string;
   treeId?: string;
+  tree?: PlantedTree; // Return full tree for optimistic addition to plantedTrees
 }
 
 export function useSeedPlanting({
@@ -124,10 +125,16 @@ export function useSeedPlanting({
 
       toast({
         title: `Planted ${seedDef.name}!`,
-        description: `Tier ${tier} tree will grow ${blueprint.blocks.length} blocks`,
+        description: `Growing ${blueprint.blocks.length} blocks`,
       });
 
-      return { success: true, treeId: newTree.id };
+      // Return the full tree with seed_definition for optimistic addition to plantedTrees
+      const fullTree: PlantedTree = {
+        ...newTree,
+        seed_definition: seedDef,
+      };
+
+      return { success: true, treeId: newTree.id, tree: fullTree };
     } catch (err) {
       console.error('[SeedPlanting] Error:', err);
       return { success: false, error: 'Unexpected error while planting' };
