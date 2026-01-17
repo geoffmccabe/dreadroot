@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
+import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 
 // Configuration for chunk loading
 const LOAD_RADIUS = 4;    // Chunks to load around player (9x9 = 81 chunks max)
@@ -12,6 +13,9 @@ const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 // MAX must be >= (2*UNLOAD_RADIUS+1)^2 = 169, plus buffer
 const MAX_LOADED_CHUNKS = 220;
 const EVICTION_BATCH_SIZE = 10;
+
+// Phase 3D: Cache configuration
+const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 interface ChunkData {
   blocks: PlacedBlock[];
@@ -310,8 +314,48 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   }, [worldId, scheduleEmit]);
 
   /**
-   * Phase 3B: Load only specific chunks (used for stripe/edge loading)
-   * Much more efficient than loadChunksInRadius for incremental movement
+   * Phase 3D: Fetch chunk versions from server for a set of chunks
+   * Returns Map<chunkKey, version>
+   */
+  const fetchChunkVersions = useCallback(async (
+    chunkCoords: Array<{ x: number; z: number }>
+  ): Promise<Map<string, number>> => {
+    if (!worldId || chunkCoords.length === 0) return new Map();
+
+    // Compute bounding box for version query
+    const minX = Math.min(...chunkCoords.map(c => c.x));
+    const maxX = Math.max(...chunkCoords.map(c => c.x));
+    const minZ = Math.min(...chunkCoords.map(c => c.z));
+    const maxZ = Math.max(...chunkCoords.map(c => c.z));
+
+    const { data, error } = await supabase
+      .from('chunk_versions')
+      .select('chunk_x, chunk_z, version')
+      .eq('world_id', worldId)
+      .gte('chunk_x', minX)
+      .lte('chunk_x', maxX)
+      .gte('chunk_z', minZ)
+      .lte('chunk_z', maxZ);
+
+    if (error) {
+      console.error('Error fetching chunk versions:', error);
+      return new Map();
+    }
+
+    const versionMap = new Map<string, number>();
+    for (const row of data || []) {
+      const key = `chunk_${row.chunk_x}_${row.chunk_z}`;
+      versionMap.set(key, row.version);
+    }
+    return versionMap;
+  }, [worldId]);
+
+  /**
+   * Phase 3B+3D: Load specific chunks with cache support
+   * 1. Check IndexedDB cache for each chunk
+   * 2. Fetch server versions for cached chunks
+   * 3. Use cache if version matches, fetch from server otherwise
+   * 4. Save newly fetched chunks to cache
    */
   const loadSpecificChunks = useCallback(async (
     chunkCoords: Array<{ x: number; z: number }>
@@ -325,64 +369,149 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     
     if (toLoad.length === 0) return;
 
-    // Compute tight bounding box for the chunks we need
-    const minChunkX = Math.min(...toLoad.map(c => c.x));
-    const maxChunkX = Math.max(...toLoad.map(c => c.x));
-    const minChunkZ = Math.min(...toLoad.map(c => c.z));
-    const maxChunkZ = Math.max(...toLoad.map(c => c.z));
-
-    // Create a Set of chunk keys we actually want
-    const wantedChunkKeys = new Set(toLoad.map(c => `chunk_${c.x}_${c.z}`));
-
-    // Query the bounding box
-    const { data: blocks, error } = await supabase
-      .from('placed_blocks')
-      .select('*')
-      .eq('world_id', worldId)
-      .gte('chunk_x', minChunkX)
-      .lte('chunk_x', maxChunkX)
-      .gte('chunk_z', minChunkZ)
-      .lte('chunk_z', maxChunkZ);
-
-    if (error) {
-      console.error('Error loading stripe chunks:', error);
-      return;
-    }
-
-    // Filter out expired blocks
-    const now = new Date();
     const loadedAt = Date.now();
-    const activeBlocks = (blocks || []).filter(block => 
-      !block.expires_at || new Date(block.expires_at) > now
-    );
+    const now = new Date();
 
-    // Group blocks by chunk, but only for chunks we want
-    const chunkGroups = new Map<string, PlacedBlock[]>();
-    for (const block of activeBlocks) {
-      const chunkKey = getChunkKey(block.position_x, block.position_z);
-      if (!wantedChunkKeys.has(chunkKey)) continue; // Skip blocks from unwanted chunks
-      
-      const existing = chunkGroups.get(chunkKey) || [];
-      existing.push(block);
-      chunkGroups.set(chunkKey, existing);
+    // Phase 3D: Try to get chunks from cache
+    let cachedChunks: Map<string, CachedChunk> = new Map();
+    try {
+      cachedChunks = await blockDB.getCachedChunksBatch(worldId, toLoad);
+    } catch (err) {
+      console.warn('Cache read failed, fetching from server:', err);
     }
 
-    // Store only the chunks we wanted
-    for (const { x, z } of toLoad) {
+    // Split into cached vs uncached
+    const chunksWithCache: Array<{ x: number; z: number; cached: CachedChunk }> = [];
+    const chunksWithoutCache: Array<{ x: number; z: number }> = [];
+
+    for (const coord of toLoad) {
+      const chunkKey = `chunk_${coord.x}_${coord.z}`;
+      const cached = cachedChunks.get(chunkKey);
+      if (cached) {
+        chunksWithCache.push({ ...coord, cached });
+      } else {
+        chunksWithoutCache.push(coord);
+      }
+    }
+
+    // Fetch server versions for cached chunks to check staleness
+    const chunksToFetchFromServer: Array<{ x: number; z: number }> = [...chunksWithoutCache];
+    const chunksFromCache: Array<{ x: number; z: number; blocks: PlacedBlock[] }> = [];
+
+    if (chunksWithCache.length > 0) {
+      const serverVersions = await fetchChunkVersions(chunksWithCache.map(c => ({ x: c.x, z: c.z })));
+
+      for (const { x, z, cached } of chunksWithCache) {
+        const chunkKey = `chunk_${x}_${z}`;
+        const serverVersion = serverVersions.get(chunkKey) ?? 0;
+
+        if (cached.version >= serverVersion) {
+          // Cache is fresh - use it
+          // Filter expired blocks from cache
+          const activeBlocks = cached.blocks.filter(block => 
+            !block.expires_at || new Date(block.expires_at) > now
+          );
+          chunksFromCache.push({ x, z, blocks: activeBlocks });
+        } else {
+          // Cache is stale - need to fetch from server
+          chunksToFetchFromServer.push({ x, z });
+        }
+      }
+    }
+
+    // Load chunks from cache immediately
+    for (const { x, z, blocks } of chunksFromCache) {
       const chunkKey = `chunk_${x}_${z}`;
-      const chunkBlocks = chunkGroups.get(chunkKey) || [];
-      
       loadedChunksRef.current.set(chunkKey, {
-        blocks: chunkBlocks,
+        blocks,
         loadedAt,
         lastAccessedAt: loadedAt,
-        hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-'))
+        hasOptimisticBlocks: blocks.some(b => b.id.startsWith('temp-'))
       });
     }
 
-    // Phase 3.0: Use batched emit
-    scheduleEmit();
-  }, [worldId, scheduleEmit]);
+    // Emit early if we got some from cache
+    if (chunksFromCache.length > 0) {
+      scheduleEmit();
+    }
+
+    // Fetch remaining chunks from server
+    if (chunksToFetchFromServer.length > 0) {
+      const minChunkX = Math.min(...chunksToFetchFromServer.map(c => c.x));
+      const maxChunkX = Math.max(...chunksToFetchFromServer.map(c => c.x));
+      const minChunkZ = Math.min(...chunksToFetchFromServer.map(c => c.z));
+      const maxChunkZ = Math.max(...chunksToFetchFromServer.map(c => c.z));
+
+      const wantedChunkKeys = new Set(chunksToFetchFromServer.map(c => `chunk_${c.x}_${c.z}`));
+
+      const { data: blocks, error } = await supabase
+        .from('placed_blocks')
+        .select('*')
+        .eq('world_id', worldId)
+        .gte('chunk_x', minChunkX)
+        .lte('chunk_x', maxChunkX)
+        .gte('chunk_z', minChunkZ)
+        .lte('chunk_z', maxChunkZ);
+
+      if (error) {
+        console.error('Error loading chunks from server:', error);
+        return;
+      }
+
+      // Get current versions for caching
+      const currentVersions = await fetchChunkVersions(chunksToFetchFromServer);
+
+      // Filter expired and group by chunk
+      const activeBlocks = (blocks || []).filter(block => 
+        !block.expires_at || new Date(block.expires_at) > now
+      );
+
+      const chunkGroups = new Map<string, PlacedBlock[]>();
+      for (const block of activeBlocks) {
+        const chunkKey = getChunkKey(block.position_x, block.position_z);
+        if (!wantedChunkKeys.has(chunkKey)) continue;
+        
+        const existing = chunkGroups.get(chunkKey) || [];
+        existing.push(block);
+        chunkGroups.set(chunkKey, existing);
+      }
+
+      // Store chunks and prepare cache entries
+      const chunksToCache: CachedChunk[] = [];
+
+      for (const { x, z } of chunksToFetchFromServer) {
+        const chunkKey = `chunk_${x}_${z}`;
+        const chunkBlocks = chunkGroups.get(chunkKey) || [];
+        
+        loadedChunksRef.current.set(chunkKey, {
+          blocks: chunkBlocks,
+          loadedAt,
+          lastAccessedAt: loadedAt,
+          hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-'))
+        });
+
+        // Prepare cache entry
+        chunksToCache.push({
+          key: `${worldId}:${x}:${z}`,
+          worldId,
+          chunkX: x,
+          chunkZ: z,
+          version: currentVersions.get(chunkKey) ?? 0,
+          blocks: chunkBlocks,
+          cachedAt: loadedAt
+        });
+      }
+
+      // Batch save to cache (fire and forget)
+      if (chunksToCache.length > 0) {
+        blockDB.saveCachedChunksBatch(chunksToCache).catch(err => {
+          console.warn('Failed to cache chunks:', err);
+        });
+      }
+
+      scheduleEmit();
+    }
+  }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
    * Phase 3B: Get the edge stripe chunks when moving from one chunk to another
@@ -660,6 +789,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   /**
    * Force initial load when world changes
    * Phase 3C: Uses progressive ring loading for smooth initial load
+   * Phase 3D: Cleans up old cache entries periodically
    */
   const initializeForWorld = useCallback(async (startX: number, startZ: number) => {
     if (!worldId) {
@@ -674,6 +804,15 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
     const startChunkZ = Math.floor(startZ / CHUNK_SIZE);
     playerChunkRef.current = { x: startChunkX, z: startChunkZ };
+
+    // Phase 3D: Clean up old cache entries (fire and forget)
+    blockDB.clearOldCachedChunks(CACHE_MAX_AGE_MS).then(count => {
+      if (count > 0) {
+        console.log(`Phase 3D: Cleared ${count} old cached chunks`);
+      }
+    }).catch(err => {
+      console.warn('Failed to clear old cache:', err);
+    });
 
     // Phase 3C: Use progressive ring loading for smoother initial experience
     await loadProgressiveRings(startChunkX, startChunkZ, LOAD_RADIUS);
