@@ -8,6 +8,8 @@ export interface PlacedBlock {
   created_at: string;
   updated_at: string;
   expires_at?: string;
+  // Optional texture override - used for tree blocks with per-seed textures
+  texture_url?: string | null;
 }
 
 export interface BlockType {

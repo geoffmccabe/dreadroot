@@ -162,9 +162,10 @@ export const PlacedBlocks: React.FC<{
   }, [blockIds]);
 
   // Group blocks by block_type for instanced rendering (stable grouping)
-  // Use block IDs to ensure uniqueness and prevent duplicate renders
+  // Group blocks by block_type AND texture_url to handle per-seed tree textures
+  // Key format: "blockType" or "blockType|textureUrl" if texture override present
   const groupedBlocks = useMemo(() => {
-    const groups = new Map<string, PlacedBlock[]>();
+    const groups = new Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>();
     const seenIds = new Set<string>();
     
     blocks.forEach(block => {
@@ -175,9 +176,14 @@ export const PlacedBlocks: React.FC<{
       }
       seenIds.add(block.id);
       
-      const existing = groups.get(block.block_type) || [];
-      existing.push(block);
-      groups.set(block.block_type, existing);
+      // Create group key based on block_type and optional texture_url
+      const groupKey = block.texture_url 
+        ? `${block.block_type}|${block.texture_url}` 
+        : block.block_type;
+      
+      const existing = groups.get(groupKey) || { blocks: [], textureOverride: block.texture_url || undefined };
+      existing.blocks.push(block);
+      groups.set(groupKey, existing);
     });
     return groups;
   }, [blocks]);
@@ -189,7 +195,9 @@ export const PlacedBlocks: React.FC<{
 
   return (
     <>
-      {Array.from(groupedBlocks.entries()).map(([blockType, blocksOfType]) => {
+      {Array.from(groupedBlocks.entries()).map(([groupKey, { blocks: blocksOfType, textureOverride }]) => {
+        // Extract block_type from groupKey (before the | if present)
+        const blockType = groupKey.includes('|') ? groupKey.split('|')[0] : groupKey;
         const blockDef = blocksMap.get(blockType);
         if (!blockDef) {
           // Log missing block definitions to help debug
@@ -199,7 +207,7 @@ export const PlacedBlocks: React.FC<{
         
         return (
           <InstancedBlockGroup
-            key={blockType}
+            key={groupKey}
             blocks={blocksOfType}
             blockDef={blockDef}
             geometry={geometry}
@@ -207,8 +215,9 @@ export const PlacedBlocks: React.FC<{
             showOwnershipOutline={showOwnershipOutline}
             currentUserId={currentUserId}
             hoveredBlockId={hoveredBlockId}
-onMeshReady={onMeshReady ? (mesh) => onMeshReady(blockType, mesh) : undefined}
+            onMeshReady={onMeshReady ? (mesh) => onMeshReady(blockType, mesh) : undefined}
             performanceMode={performanceMode}
+            textureOverride={textureOverride}
           />
         );
       })}

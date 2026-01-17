@@ -692,6 +692,8 @@ export function Fortress() {
             block_type: tb.block_type === 'trunk' ? 'wood' : 'fruit',
             created_at: tb.created_at,
             updated_at: tb.created_at,
+            // Pass through the texture URL from the seed definition
+            texture_url: tb.texture_url,
           }))}
           weatherSettings={weatherSettings}
           onBlockRain={handleBlockRain}

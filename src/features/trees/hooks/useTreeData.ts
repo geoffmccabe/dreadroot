@@ -66,8 +66,28 @@ export function useTreeData(worldId: string | null): TreeData & {
         seed_definition: tree.seed_definitions as unknown as SeedDefinition,
       })) as PlantedTree[];
 
+      // Create a lookup map from tree_id to seed_definition for texture URLs
+      const treeToSeedMap = new Map<string, SeedDefinition>();
+      mappedTrees.forEach(tree => {
+        if (tree.seed_definition) {
+          treeToSeedMap.set(tree.id, tree.seed_definition);
+        }
+      });
+
+      // Enrich tree blocks with texture URLs from their parent tree's seed definition
+      const enrichedBlocks = (blocksRes.data || []).map(block => {
+        const seedDef = treeToSeedMap.get(block.tree_id);
+        const textureUrl = block.block_type === 'trunk' 
+          ? seedDef?.trunk_texture_url 
+          : seedDef?.fruit_texture_url;
+        return {
+          ...block,
+          texture_url: textureUrl || null,
+        } as TreeBlock;
+      });
+
       setPlantedTrees(mappedTrees);
-      setTreeBlocks((blocksRes.data || []) as TreeBlock[]);
+      setTreeBlocks(enrichedBlocks);
       setTreeFruits((fruitsRes.data || []) as TreeFruit[]);
       setSeedDefinitions((seedsRes.data || []) as SeedDefinition[]);
     } catch (err) {
@@ -100,7 +120,18 @@ export function useTreeData(worldId: string | null): TreeData & {
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            setTreeBlocks(prev => [...prev, payload.new as TreeBlock]);
+            const newBlock = payload.new as TreeBlock;
+            // Enrich with texture URL from plantedTrees
+            setTreeBlocks(prev => {
+              // Find the tree to get its seed definition texture
+              const parentTree = plantedTrees.find(t => t.id === newBlock.tree_id);
+              const seedDef = parentTree?.seed_definition;
+              const textureUrl = newBlock.block_type === 'trunk' 
+                ? seedDef?.trunk_texture_url 
+                : seedDef?.fruit_texture_url;
+              
+              return [...prev, { ...newBlock, texture_url: textureUrl || null }];
+            });
           } else if (payload.eventType === 'DELETE') {
             setTreeBlocks(prev => prev.filter(b => b.id !== payload.old.id));
           }
@@ -160,7 +191,7 @@ export function useTreeData(worldId: string | null): TreeData & {
       supabase.removeChannel(fruitsChannel);
       supabase.removeChannel(treesChannel);
     };
-  }, [worldId, fetchData]);
+  }, [worldId, fetchData, plantedTrees]);
 
   return {
     plantedTrees,

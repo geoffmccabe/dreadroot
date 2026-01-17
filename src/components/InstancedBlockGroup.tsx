@@ -36,6 +36,8 @@ interface InstancedBlockGroupProps {
   hoveredBlockId?: string | null;
   onMeshReady?: (mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
+  // Optional texture URL override - used for tree blocks with per-seed textures
+  textureOverride?: string;
 }
 
 export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
@@ -47,7 +49,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   currentUserId,
   hoveredBlockId = null,
   onMeshReady,
-  performanceMode = false
+  performanceMode = false,
+  textureOverride
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
@@ -73,7 +76,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Reuse matrix to avoid garbage collection
   const matrixRef = useRef(new THREE.Matrix4());
   
-  const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  // Use textureOverride if provided (for tree blocks), otherwise use blockDef texture
+  const textureUrl = textureOverride || blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
   // Get or cache the texture
