@@ -13,7 +13,7 @@ import { Upload, Save, TreeDeciduous, Leaf } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { SeedDefinition } from '../types';
-import { RARITY_COLORS, DEFAULT_TIER_NAMES, TREE_CONFIG } from '../constants';
+import { RARITY_COLORS, TREE_CONFIG } from '../constants';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
 
 interface SeedDesignPanelProps {
@@ -59,7 +59,7 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
           allSeeds.push({
             id: `temp-${tier}`,
             tier,
-            name: DEFAULT_TIER_NAMES[tier - 1] || `Tier ${tier} Seed`,
+            name: '', // Empty name - seed must be explicitly named to be plantable
             trunk_texture_url: null,
             branch_texture_url: null,
             fruit_texture_url: null,
