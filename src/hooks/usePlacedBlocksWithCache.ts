@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useIndexedDB } from './useIndexedDB';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
-import { getChunkKey } from '@/lib/chunkManager';
+// getChunkKey removed - no longer needed after Phase 2C (chunk_versions handles notifications)
 
 interface DBBlock extends PlacedBlock {
   synced: boolean;
@@ -166,68 +166,98 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
   }, [userId, worldId, initDB, chunkLoader]);
 
-  // Phase 2B: Realtime subscription - uses chunk loader as single source of truth
-  // Will be replaced with chunk_versions in Phase 2C
+  // Phase 2C: chunk_versions realtime subscription
+  // Per-chunk debounce timers to coalesce rapid updates
+  const chunkDebounceTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const CHUNK_REFETCH_DEBOUNCE_MS = 300; // Debounce multiple updates to same chunk
+
   const setupRealtimeSubscription = useCallback(() => {
     if (!worldId) return () => {};
     
-    // Scoped channel name by world_id to prevent cross-world updates
+    // Phase 2C: Subscribe to chunk_versions instead of placed_blocks
+    // This is more efficient as we only get notified per-chunk, not per-block
     const channel = supabase
-      .channel(`placed_blocks_${worldId}`)
+      .channel(`chunk_versions_${worldId}`)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: '*', // INSERT or UPDATE (new chunk or version bump)
           schema: 'public',
-          table: 'placed_blocks',
-          filter: `world_id=eq.${worldId}` // CRITICAL: Filter by world_id
+          table: 'chunk_versions',
+          filter: `world_id=eq.${worldId}`
         },
         async (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newBlock = payload.new as PlacedBlock;
-            
-            // Skip if block is already expired
-            if (newBlock.expires_at && new Date(newBlock.expires_at) <= new Date()) {
-              return;
-            }
-            
-            // Phase 2B: Only process if the block's chunk is loaded
-            const blockChunkKey = getChunkKey(newBlock.position_x, newBlock.position_z);
-            if (!chunkLoader.getLoadedChunkKeys().has(blockChunkKey)) {
-              return; // Ignore blocks in chunks we haven't loaded
-            }
-            
-            // Add to IndexedDB with world_id
-            const dbBlock: DBBlock = { ...newBlock, synced: true };
-            await addBlock(dbBlock);
-            
-            // Use chunk loader's method - single source of truth
-            // This replaces temp blocks by position match
-            chunkLoader.replaceBlockByPosition(newBlock);
-          } else if (payload.eventType === 'DELETE') {
-            const deletedId = payload.old.id;
-            const oldBlock = payload.old as PlacedBlock;
-            
-            // Phase 2B: Only process if the block's chunk is loaded
-            const blockChunkKey = getChunkKey(oldBlock.position_x, oldBlock.position_z);
-            if (!chunkLoader.getLoadedChunkKeys().has(blockChunkKey)) {
-              return; // Ignore blocks in chunks we haven't loaded
-            }
-            
-            // Remove from IndexedDB
-            await removeFromDB(deletedId);
-            
-            // Use chunk loader's method - single source of truth
-            chunkLoader.removeBlockById(deletedId);
+          const chunkX = (payload.new as any)?.chunk_x;
+          const chunkZ = (payload.new as any)?.chunk_z;
+          
+          if (chunkX === undefined || chunkZ === undefined) return;
+          
+          const chunkKey = `chunk_${chunkX}_${chunkZ}`;
+          
+          // Only process if this chunk is currently loaded
+          if (!chunkLoader.isChunkLoaded(chunkX, chunkZ)) {
+            return; // Ignore changes to chunks we haven't loaded
           }
+          
+          // Debounce: If we already have a pending refetch for this chunk, clear it
+          const existingTimer = chunkDebounceTimers.current.get(chunkKey);
+          if (existingTimer) {
+            clearTimeout(existingTimer);
+          }
+          
+          // Schedule a debounced refetch for this chunk
+          const timer = setTimeout(async () => {
+            chunkDebounceTimers.current.delete(chunkKey);
+            
+            // Refetch the single chunk
+            await chunkLoader.refetchSingleChunk(chunkX, chunkZ);
+            
+            // Also sync IndexedDB for this chunk
+            await syncChunkToIndexedDB(chunkX, chunkZ);
+          }, CHUNK_REFETCH_DEBOUNCE_MS);
+          
+          chunkDebounceTimers.current.set(chunkKey, timer);
         }
       )
       .subscribe();
 
     return () => {
+      // Clear all pending debounce timers on cleanup
+      for (const timer of chunkDebounceTimers.current.values()) {
+        clearTimeout(timer);
+      }
+      chunkDebounceTimers.current.clear();
       supabase.removeChannel(channel);
     };
-  }, [worldId, chunkLoader, addBlock, removeFromDB]);
+  }, [worldId, chunkLoader]);
+  
+  // Helper to sync a single chunk's blocks to IndexedDB
+  const syncChunkToIndexedDB = useCallback(async (chunkX: number, chunkZ: number) => {
+    if (!worldId) return;
+    
+    try {
+      // Fetch current blocks for this chunk
+      const { data: blocks, error } = await supabase
+        .from('placed_blocks')
+        .select('*')
+        .eq('world_id', worldId)
+        .eq('chunk_x', chunkX)
+        .eq('chunk_z', chunkZ);
+      
+      if (error) {
+        console.error('Error syncing chunk to IndexedDB:', error);
+        return;
+      }
+      
+      // Add/update blocks in IndexedDB (batch would be more efficient)
+      for (const block of blocks || []) {
+        const dbBlock: DBBlock = { ...block, synced: true };
+        await addBlock(dbBlock);
+      }
+    } catch (err) {
+      console.error('Error syncing chunk to IndexedDB:', err);
+    }
+  }, [worldId, addBlock]);
 
   // Clear blocks when world changes
   useEffect(() => {
