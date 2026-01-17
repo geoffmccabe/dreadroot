@@ -17,12 +17,6 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   const { camera, clock } = useThree();
   const { getBlockByKey, blocksMap } = useBlocksData();
   
-  // Performance optimization: throttle calculations
-  const frameCountRef = useRef(0);
-  const lastCameraPosRef = useRef(new THREE.Vector3());
-  const lastCameraRotRef = useRef(0);
-  const cachedResultRef = useRef<{ renderPosition: THREE.Vector3; isValid: boolean } | null>(null);
-  
   // Get block definition from database - depend on blocksMap.size to re-run when blocks load
   const blockDef = useMemo(() => getBlockByKey(blockType), [blockType, blocksMap.size]);
   
@@ -50,50 +44,30 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
       // Early exit for invisible - minimal overhead
       if (!visibleRef.current || !meshRef.current) return;
       
-      frameCountRef.current++;
+      // Calculate EVERY FRAME - voxel raycast is now O(1), no throttling needed
+      const placementResult = calculatePlacementFast(
+        camera,
+        existingBlocksRef.current as any,
+        5
+      );
       
-      // Check if camera moved significantly
-      const cameraMoved = camera.position.distanceToSquared(lastCameraPosRef.current) > 0.001;
-      const cameraRotated = Math.abs(camera.rotation.y - lastCameraRotRef.current) > 0.01;
-      
-      // Only recalculate every 5 frames OR if camera moved/rotated significantly
-      const shouldRecalculate = frameCountRef.current % 5 === 0 || cameraMoved || cameraRotated;
-      
-      if (shouldRecalculate || !cachedResultRef.current) {
-        // Use fast voxel raycast - ZERO allocations
-        const placementResult = calculatePlacementFast(
-          camera,
-          existingBlocksRef.current as any,
-          5
-        );
-        
-        cachedResultRef.current = {
-          renderPosition: new THREE.Vector3(
-            placementResult.x + 0.5,
-            placementResult.y + 0.5,
-            placementResult.z + 0.5
-          ),
-          isValid: placementResult.isValid
-        };
-        
-        lastCameraPosRef.current.copy(camera.position);
-        lastCameraRotRef.current = camera.rotation.y;
-      }
-      
-      // Use cached result
-      const { renderPosition, isValid } = cachedResultRef.current;
-      meshRef.current.position.copy(renderPosition);
+      // Update position directly
+      meshRef.current.position.set(
+        placementResult.x + 0.5,
+        placementResult.y + 0.5,
+        placementResult.z + 0.5
+      );
       
       // Change material based on valid placement
       const material = meshRef.current.material as THREE.MeshBasicMaterial;
       
       // Pulsing opacity effect
-      const pulseOpacity = 0.5 + Math.sin(elapsed * Math.PI * 2) * 0.5;
+      const pulseOpacity = 0.5 + Math.sin(elapsed * Math.PI * 2) * 0.3;
       
       material.transparent = true;
-      material.opacity = pulseOpacity;
+      material.opacity = 0.5 + pulseOpacity;
       
-      if (isValid) {
+      if (placementResult.isValid) {
         material.color.set('#ffffff');
       } else {
         material.color.setRGB(1, 0.3, 0.3);

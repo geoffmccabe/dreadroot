@@ -132,120 +132,149 @@ export function voxelRaycast(
   _rayOrigin.copy(origin);
   _rayDir.copy(direction);
   
-  // Current voxel position (floor to get grid cell)
-  let x = Math.floor(_rayOrigin.x);
-  let y = Math.floor(_rayOrigin.y);
-  let z = Math.floor(_rayOrigin.z);
-  
-  // Step direction (+1 or -1)
-  const stepX = _rayDir.x >= 0 ? 1 : -1;
-  const stepY = _rayDir.y >= 0 ? 1 : -1;
-  const stepZ = _rayDir.z >= 0 ? 1 : -1;
-  
-  // Distance to next voxel boundary on each axis
-  // tMaxX = distance along ray to first X boundary
-  const nextBoundaryX = stepX > 0 ? x + 1 : x;
-  const nextBoundaryY = stepY > 0 ? y + 1 : y;
-  const nextBoundaryZ = stepZ > 0 ? z + 1 : z;
-  
-  // Handle division by zero for rays parallel to axes
-  const tMaxX = _rayDir.x !== 0 ? (nextBoundaryX - _rayOrigin.x) / _rayDir.x : Infinity;
-  const tMaxY = _rayDir.y !== 0 ? (nextBoundaryY - _rayOrigin.y) / _rayDir.y : Infinity;
-  const tMaxZ = _rayDir.z !== 0 ? (nextBoundaryZ - _rayOrigin.z) / _rayDir.z : Infinity;
-  
-  // Distance along ray to move one voxel on each axis
-  const tDeltaX = _rayDir.x !== 0 ? Math.abs(1 / _rayDir.x) : Infinity;
-  const tDeltaY = _rayDir.y !== 0 ? Math.abs(1 / _rayDir.y) : Infinity;
-  const tDeltaZ = _rayDir.z !== 0 ? Math.abs(1 / _rayDir.z) : Infinity;
-  
-  // Current t values for each axis
-  let tX = tMaxX;
-  let tY = tMaxY;
-  let tZ = tMaxZ;
-  
-  // Track which axis we crossed last (for normal calculation)
-  let lastAxis: 'x' | 'y' | 'z' = 'y';
-  
-  // Total distance traveled
-  let t = 0;
-  
-  // Traverse voxels using Amanatides-Woo algorithm
-  while (t < maxDistance) {
-    // Check for ground hit (y = 0 plane, coming from above)
-    if (y < 0 && lastAxis === 'y' && stepY < 0) {
-      // Hit ground from above
-      const groundT = -_rayOrigin.y / _rayDir.y;
-      if (groundT > 0 && groundT < maxDistance) {
-        _hitPoint.set(
-          _rayOrigin.x + _rayDir.x * groundT,
-          0,
-          _rayOrigin.z + _rayDir.z * groundT
-        );
+  // Check for ground intersection FIRST if looking down
+  if (_rayDir.y < -0.001) {
+    const groundT = -_rayOrigin.y / _rayDir.y;
+    if (groundT > 0 && groundT <= maxDistance) {
+      const groundX = _rayOrigin.x + _rayDir.x * groundT;
+      const groundZ = _rayOrigin.z + _rayDir.z * groundT;
+      
+      // Check if any block is hit before ground
+      let hitBlockBeforeGround = false;
+      
+      // Quick check: iterate through trajectory to ground
+      let x = Math.floor(_rayOrigin.x);
+      let y = Math.floor(_rayOrigin.y);
+      let z = Math.floor(_rayOrigin.z);
+      
+      const stepX = _rayDir.x >= 0 ? 1 : -1;
+      const stepY = _rayDir.y >= 0 ? 1 : -1;
+      const stepZ = _rayDir.z >= 0 ? 1 : -1;
+      
+      const nextBoundaryX = stepX > 0 ? x + 1 : x;
+      const nextBoundaryY = stepY > 0 ? y + 1 : y;
+      const nextBoundaryZ = stepZ > 0 ? z + 1 : z;
+      
+      let tX = _rayDir.x !== 0 ? (nextBoundaryX - _rayOrigin.x) / _rayDir.x : Infinity;
+      let tY = _rayDir.y !== 0 ? (nextBoundaryY - _rayOrigin.y) / _rayDir.y : Infinity;
+      let tZ = _rayDir.z !== 0 ? (nextBoundaryZ - _rayOrigin.z) / _rayDir.z : Infinity;
+      
+      const tDeltaX = _rayDir.x !== 0 ? Math.abs(1 / _rayDir.x) : Infinity;
+      const tDeltaY = _rayDir.y !== 0 ? Math.abs(1 / _rayDir.y) : Infinity;
+      const tDeltaZ = _rayDir.z !== 0 ? Math.abs(1 / _rayDir.z) : Infinity;
+      
+      let t = 0;
+      let lastAxis: 'x' | 'y' | 'z' = 'y';
+      
+      while (t < groundT && t < maxDistance && y >= 0) {
+        // Check current voxel for block
+        if (y >= 0 && hasBlock(x, y, z, blockLookup)) {
+          _hitPoint.set(
+            _rayOrigin.x + _rayDir.x * t,
+            _rayOrigin.y + _rayDir.y * t,
+            _rayOrigin.z + _rayDir.z * t
+          );
+          
+          _hitNormal.set(0, 0, 0);
+          if (lastAxis === 'x') _hitNormal.x = -stepX;
+          else if (lastAxis === 'y') _hitNormal.y = -stepY;
+          else _hitNormal.z = -stepZ;
+          
+          _hitResult.point = _hitPoint;
+          _hitResult.normal = _hitNormal;
+          _hitResult.voxelX = x;
+          _hitResult.voxelY = y;
+          _hitResult.voxelZ = z;
+          _hitResult.distance = t;
+          _hitResult.hitType = 'block';
+          hitBlockBeforeGround = true;
+          return _hitResult;
+        }
+        
+        // Step to next voxel
+        if (tX < tY && tX < tZ) {
+          t = tX;
+          tX += tDeltaX;
+          x += stepX;
+          lastAxis = 'x';
+        } else if (tY < tZ) {
+          t = tY;
+          tY += tDeltaY;
+          y += stepY;
+          lastAxis = 'y';
+        } else {
+          t = tZ;
+          tZ += tDeltaZ;
+          z += stepZ;
+          lastAxis = 'z';
+        }
+      }
+      
+      // No block hit, return ground hit
+      if (!hitBlockBeforeGround) {
+        _hitPoint.set(groundX, 0, groundZ);
         _hitNormal.set(0, 1, 0);
         _hitResult.point = _hitPoint;
         _hitResult.normal = _hitNormal;
-        _hitResult.voxelX = Math.floor(_hitPoint.x);
+        _hitResult.voxelX = Math.floor(groundX);
         _hitResult.voxelY = 0;
-        _hitResult.voxelZ = Math.floor(_hitPoint.z);
+        _hitResult.voxelZ = Math.floor(groundZ);
         _hitResult.distance = groundT;
         _hitResult.hitType = 'ground';
         return _hitResult;
       }
-      return null; // Below ground, nothing to hit
     }
-    
-    // Check current voxel for collision (only if y >= 0)
-    if (y >= 0) {
-      // Check for block
-      if (hasBlock(x, y, z, blockLookup)) {
-        // Hit a block - calculate hit point and normal
-        _hitPoint.set(
-          _rayOrigin.x + _rayDir.x * t,
-          _rayOrigin.y + _rayDir.y * t,
-          _rayOrigin.z + _rayDir.z * t
-        );
-        
-        // Normal is opposite of last step direction
-        _hitNormal.set(0, 0, 0);
-        if (lastAxis === 'x') _hitNormal.x = -stepX;
-        else if (lastAxis === 'y') _hitNormal.y = -stepY;
-        else _hitNormal.z = -stepZ;
-        
-        _hitResult.point = _hitPoint;
-        _hitResult.normal = _hitNormal;
-        _hitResult.voxelX = x;
-        _hitResult.voxelY = y;
-        _hitResult.voxelZ = z;
-        _hitResult.distance = t;
-        _hitResult.hitType = 'block';
-        return _hitResult;
-      }
+  }
+  
+  // Looking up or horizontal - traverse voxels for blocks only
+  let x = Math.floor(_rayOrigin.x);
+  let y = Math.floor(_rayOrigin.y);
+  let z = Math.floor(_rayOrigin.z);
+  
+  const stepX = _rayDir.x >= 0 ? 1 : -1;
+  const stepY = _rayDir.y >= 0 ? 1 : -1;
+  const stepZ = _rayDir.z >= 0 ? 1 : -1;
+  
+  const nextBoundaryX = stepX > 0 ? x + 1 : x;
+  const nextBoundaryY = stepY > 0 ? y + 1 : y;
+  const nextBoundaryZ = stepZ > 0 ? z + 1 : z;
+  
+  let tX = _rayDir.x !== 0 ? (nextBoundaryX - _rayOrigin.x) / _rayDir.x : Infinity;
+  let tY = _rayDir.y !== 0 ? (nextBoundaryY - _rayOrigin.y) / _rayDir.y : Infinity;
+  let tZ = _rayDir.z !== 0 ? (nextBoundaryZ - _rayOrigin.z) / _rayDir.z : Infinity;
+  
+  const tDeltaX = _rayDir.x !== 0 ? Math.abs(1 / _rayDir.x) : Infinity;
+  const tDeltaY = _rayDir.y !== 0 ? Math.abs(1 / _rayDir.y) : Infinity;
+  const tDeltaZ = _rayDir.z !== 0 ? Math.abs(1 / _rayDir.z) : Infinity;
+  
+  let t = 0;
+  let lastAxis: 'x' | 'y' | 'z' = 'y';
+  
+  while (t < maxDistance) {
+    // Check current voxel for block
+    if (y >= 0 && hasBlock(x, y, z, blockLookup)) {
+      _hitPoint.set(
+        _rayOrigin.x + _rayDir.x * t,
+        _rayOrigin.y + _rayDir.y * t,
+        _rayOrigin.z + _rayDir.z * t
+      );
       
-      // Check for fortress wall
-      if (isInsideFortress(x, y, z)) {
-        _hitPoint.set(
-          _rayOrigin.x + _rayDir.x * t,
-          _rayOrigin.y + _rayDir.y * t,
-          _rayOrigin.z + _rayDir.z * t
-        );
-        
-        _hitNormal.set(0, 0, 0);
-        if (lastAxis === 'x') _hitNormal.x = -stepX;
-        else if (lastAxis === 'y') _hitNormal.y = -stepY;
-        else _hitNormal.z = -stepZ;
-        
-        _hitResult.point = _hitPoint;
-        _hitResult.normal = _hitNormal;
-        _hitResult.voxelX = x;
-        _hitResult.voxelY = y;
-        _hitResult.voxelZ = z;
-        _hitResult.distance = t;
-        _hitResult.hitType = 'fortress';
-        return _hitResult;
-      }
+      _hitNormal.set(0, 0, 0);
+      if (lastAxis === 'x') _hitNormal.x = -stepX;
+      else if (lastAxis === 'y') _hitNormal.y = -stepY;
+      else _hitNormal.z = -stepZ;
+      
+      _hitResult.point = _hitPoint;
+      _hitResult.normal = _hitNormal;
+      _hitResult.voxelX = x;
+      _hitResult.voxelY = y;
+      _hitResult.voxelZ = z;
+      _hitResult.distance = t;
+      _hitResult.hitType = 'block';
+      return _hitResult;
     }
     
-    // Step to next voxel - choose axis with smallest t
+    // Step to next voxel
     if (tX < tY && tX < tZ) {
       t = tX;
       tX += tDeltaX;
@@ -262,6 +291,9 @@ export function voxelRaycast(
       z += stepZ;
       lastAxis = 'z';
     }
+    
+    // Early exit if going below ground
+    if (y < 0) break;
   }
   
   return null; // Nothing hit within maxDistance
@@ -376,26 +408,26 @@ function validatePlacementFast(
 ): ValidationResult {
   const blockLookup = ensureBlockLookup(blocks);
   
-  // Check fortress proximity (center at 0, 0, -20, radius 30)
+  // Check fortress proximity - SMALLER radius, only blocks the fortress itself
+  const { cliffW, courtyardDepth, frontZ, frontT } = FORTRESS_DIMENSIONS;
   const fortressCenterX = 0;
-  const fortressCenterZ = -20;
-  const fortressMinDistance = 30;
+  const fortressCenterZ = frontZ - courtyardDepth / 2;
+  const fortressRadiusX = cliffW / 2 + 2;
+  const fortressRadiusZ = courtyardDepth / 2 + frontT + 2;
   
-  const dx = x - fortressCenterX;
-  const dz = z - fortressCenterZ;
-  const distSq = dx * dx + dz * dz;
-  
-  if (distSq < fortressMinDistance * fortressMinDistance) {
+  // Check if inside fortress bounding box
+  if (Math.abs(x - fortressCenterX) < fortressRadiusX && 
+      Math.abs(z - fortressCenterZ) < fortressRadiusZ) {
     _validationResult.isValid = false;
     _validationResult.reason = 'fortress';
     return _validationResult;
   }
   
-  // Check waterfall blocking (x near 0, z > -6)
+  // Check waterfall blocking - narrow column at center
   const waterfallZ = -6;
-  const waterfallBlockingWidth = 4;
+  const waterfallBlockingWidth = 2;
   
-  if (Math.abs(x) < waterfallBlockingWidth / 2 && z > waterfallZ) {
+  if (Math.abs(x) < waterfallBlockingWidth && z > waterfallZ && z < frontZ) {
     _validationResult.isValid = false;
     _validationResult.reason = 'waterfall';
     return _validationResult;
