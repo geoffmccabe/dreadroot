@@ -26,12 +26,12 @@ export { RARITY_COLORS, DEFAULT_TIER_NAMES, getGrowthInterval, getFruitSpawnInte
 
 // Components
 export { SeedDesignPanel } from './components/SeedDesignPanel';
-// export { TreeSystem } from './components/TreeSystem';
-// export { SeedInventory } from './components/SeedInventory';
+export { SeedPreview } from './components/SeedPreview';
+export { TreeRenderer } from './components/TreeRenderer';
 
-// Hooks (will be added as we build them)
-// export { useTreeData } from './hooks/useTreeData';
-// export { useTreeGrowth } from './hooks/useTreeGrowth';
-// export { useSeedPlanting } from './hooks/useSeedPlanting';
-// export { useTreeCollision } from './hooks/useTreeCollision';
-// export { useFruitPickup } from './hooks/useFruitPickup';
+// Hooks
+export { useTreeData } from './hooks/useTreeData';
+export { useTreeGrowth } from './hooks/useTreeGrowth';
+export { useSeedPlanting } from './hooks/useSeedPlanting';
+export { useTreeCollision } from './hooks/useTreeCollision';
+export { useFruitPickup } from './hooks/useFruitPickup';
