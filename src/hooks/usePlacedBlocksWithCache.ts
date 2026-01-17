@@ -68,16 +68,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const {
-    getAllBlocks,
     addBlock,
-    addBlocksBatch,
     removeBlock: removeFromDB,
-    removeBlocksBatch,
     getUnsyncedBlocks,
-    markAsSynced,
     updateBlock,
     init: initDB,
-    clearAllBlocks
   } = useIndexedDB();
   
   // Track current world for cache scoping
@@ -443,11 +438,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         synced: true
       });
 
-      // PHASE 2: Direct state update to replace temp block with real block
-      // Use setBlocksIfChanged to prevent unnecessary re-renders
-      setBlocksIfChanged(prev => prev.map(block => 
-        block.id === dbBlock.id ? data : block
-      ));
+      // PHASE 2B: Use chunk loader to replace temp block with real block
+      // This keeps the chunk map in sync with rendered state
+      chunkLoader.replaceBlockByPosition(data);
 
       return data;
     } catch (error) {
@@ -507,8 +500,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         return false;
       }
 
-      // Optimistically remove from UI
-      setBlocksIfChanged(prev => prev.filter(block => block.id !== blockId));
+      // Optimistically remove from UI via chunk loader (single source of truth)
+      chunkLoader.removeBlockById(blockId);
       
       // Remove from Supabase (RLS will enforce ownership)
       const { error } = await supabase
