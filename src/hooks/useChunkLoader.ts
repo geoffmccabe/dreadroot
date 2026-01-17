@@ -56,6 +56,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   /**
    * Add a block optimistically to the chunk loader's internal Map.
    * This ensures immediate UI feedback while awaiting server confirmation.
+   * 
+   * PERFORMANCE: We call onBlocksChanged synchronously for INSTANT feedback.
    */
   const addBlockOptimistically = useCallback((block: PlacedBlock): void => {
     const chunkKey = getChunkKey(block.position_x, block.position_z);
@@ -71,10 +73,17 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       
       if (!existsAtPosition) {
         chunkData.blocks.push(block);
+        // INSTANT: Synchronous callback - no batching, no delays
         onBlocksChanged(flattenLoadedBlocks());
       }
+    } else {
+      // Chunk not loaded - create it with just this block for immediate visibility
+      loadedChunksRef.current.set(chunkKey, {
+        blocks: [block],
+        loadedAt: Date.now()
+      });
+      onBlocksChanged(flattenLoadedBlocks());
     }
-    // If chunk not loaded, block will appear when chunk loads
   }, [onBlocksChanged, flattenLoadedBlocks]);
 
   /**

@@ -15,7 +15,7 @@ interface BlockPreviewProps {
 export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, existingBlocks = [] }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const { camera, clock } = useThree();
-  const { getBlockByKey } = useBlocksData();
+  const { getBlockByKey, blocksMap } = useBlocksData();
   
   // Performance optimization: throttle calculations
   const frameCountRef = useRef(0);
@@ -23,11 +23,11 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   const lastCameraRotRef = useRef(0);
   const cachedResultRef = useRef<{ renderPosition: THREE.Vector3; isValid: boolean } | null>(null);
   
-  // Get block definition from database
-  const blockDef = useMemo(() => getBlockByKey(blockType), [blockType, getBlockByKey]);
+  // Get block definition from database - depend on blocksMap.size to re-run when blocks load
+  const blockDef = useMemo(() => getBlockByKey(blockType), [blockType, blocksMap.size]);
   
-  // Load texture with animated GIF support
-  const textureUrl = blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+  // Load texture with animated GIF support - use block's texture or default grass texture
+  const textureUrl = blockDef?.texture?.diffuse || '/grass_texture_seamless.webp';
   const { texture } = useAnimatedTexture(textureUrl);
   
   // Set up texture properties
