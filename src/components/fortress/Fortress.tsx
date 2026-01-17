@@ -431,11 +431,13 @@ export function Fortress() {
       setTreePlacementMode(true);
       setCrosshairsEnabled(false);
       setBlockMode(false);
-      if (seedDefinitions.length > 0) {
-        setSelectedSeedTier(seedDefinitions[0].tier);
+      // Only show seeds that have a name configured
+      const namedSeeds = seedDefinitions.filter(s => s.name && s.name.trim() !== '');
+      if (namedSeeds.length > 0) {
+        setSelectedSeedTier(namedSeeds[0].tier);
         toast({ title: "Tree planting mode", description: `Press [ ] to cycle seeds. Click to plant.`, duration: 3000 });
       } else {
-        toast({ title: "No seeds available", description: "Seeds not configured yet", duration: 3000 });
+        toast({ title: "No seeds available", description: "Configure seed names in Admin Panel > Seeds", duration: 3000 });
       }
     } else if (mode === 'shooting') {
       setSelectedBlockType(null);
@@ -509,19 +511,24 @@ export function Fortress() {
     });
   }, [selectedBlockType, inventory, toast]);
 
-  // Cycle through available seeds
+  // Cycle through available seeds (only named ones)
   const cycleSelectedSeed = useCallback((direction: 'next' | 'prev') => {
-    if (seedDefinitions.length === 0) return;
+    const namedSeeds = seedDefinitions.filter(s => s.name && s.name.trim() !== '');
+    if (namedSeeds.length === 0) return;
     if (!selectedSeedTier) {
-      setSelectedSeedTier(seedDefinitions[0].tier);
+      setSelectedSeedTier(namedSeeds[0].tier);
       return;
     }
-    const currentIndex = seedDefinitions.findIndex(s => s.tier === selectedSeedTier);
+    const currentIndex = namedSeeds.findIndex(s => s.tier === selectedSeedTier);
+    if (currentIndex === -1) {
+      setSelectedSeedTier(namedSeeds[0].tier);
+      return;
+    }
     const nextIndex = direction === 'next'
-      ? (currentIndex + 1) % seedDefinitions.length
-      : (currentIndex - 1 + seedDefinitions.length) % seedDefinitions.length;
-    setSelectedSeedTier(seedDefinitions[nextIndex].tier);
-    toast({ title: `Tier ${seedDefinitions[nextIndex].tier} seed`, description: seedDefinitions[nextIndex].name, duration: 1000 });
+      ? (currentIndex + 1) % namedSeeds.length
+      : (currentIndex - 1 + namedSeeds.length) % namedSeeds.length;
+    setSelectedSeedTier(namedSeeds[nextIndex].tier);
+    toast({ title: `Tier ${namedSeeds[nextIndex].tier} seed`, description: namedSeeds[nextIndex].name, duration: 1000 });
   }, [selectedSeedTier, seedDefinitions, toast]);
 
   // Tree placement handler with pitched-up sound
