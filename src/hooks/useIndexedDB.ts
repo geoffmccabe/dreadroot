@@ -20,13 +20,25 @@ interface TextureBlob {
   cached_at: string; // ISO timestamp
 }
 
+// Phase 3D: Cached chunk data with version tracking
+export interface CachedChunk {
+  key: string; // "worldId:chunkX:chunkZ"
+  worldId: string;
+  chunkX: number;
+  chunkZ: number;
+  version: number; // Server version at time of cache
+  blocks: PlacedBlock[];
+  cachedAt: number; // Date.now() timestamp
+}
+
 class BlockDB {
   private db: IDBDatabase | null = null;
   private dbName = 'waterfall-blocks-db';
-  private dbVersion = 6; // Ensure all stores use delete+recreate pattern
+  private dbVersion = 7; // Bump for chunk_cache store
   private storeName = 'blocks';
   private sessionStoreName = 'user_session';
   private textureStoreName = 'texture_blobs';
+  private chunkCacheStoreName = 'chunk_cache'; // Phase 3D
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -85,6 +97,14 @@ class BlockDB {
             db.deleteObjectStore(this.textureStoreName);
           }
           db.createObjectStore(this.textureStoreName, { keyPath: 'url' });
+          
+          // Phase 3D: Create chunk_cache store
+          if (db.objectStoreNames.contains(this.chunkCacheStoreName)) {
+            db.deleteObjectStore(this.chunkCacheStoreName);
+          }
+          const chunkStore = db.createObjectStore(this.chunkCacheStoreName, { keyPath: 'key' });
+          chunkStore.createIndex('worldId', 'worldId', { unique: false });
+          chunkStore.createIndex('cachedAt', 'cachedAt', { unique: false });
           
           console.log('IndexedDB stores ready');
         };
@@ -366,6 +386,156 @@ class BlockDB {
       request.onsuccess = () => resolve();
     });
   }
+
+  // Phase 3D: Chunk cache methods
+  
+  /**
+   * Get a cached chunk by world, chunkX, chunkZ
+   */
+  async getCachedChunk(worldId: string, chunkX: number, chunkZ: number): Promise<CachedChunk | null> {
+    if (!this.db) await this.init();
+    
+    const key = `${worldId}:${chunkX}:${chunkZ}`;
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readonly');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      const request = store.get(key);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  }
+
+  /**
+   * Batch get multiple cached chunks in a single transaction
+   * Returns a Map of chunkKey -> CachedChunk (only for chunks that exist in cache)
+   */
+  async getCachedChunksBatch(
+    worldId: string, 
+    chunkCoords: Array<{ x: number; z: number }>
+  ): Promise<Map<string, CachedChunk>> {
+    if (!this.db) await this.init();
+    if (chunkCoords.length === 0) return new Map();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readonly');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      const results = new Map<string, CachedChunk>();
+      let pending = chunkCoords.length;
+      
+      transaction.onerror = () => reject(transaction.error);
+      
+      for (const { x, z } of chunkCoords) {
+        const key = `${worldId}:${x}:${z}`;
+        const chunkKey = `chunk_${x}_${z}`;
+        const request = store.get(key);
+        
+        request.onsuccess = () => {
+          if (request.result) {
+            results.set(chunkKey, request.result);
+          }
+          pending--;
+          if (pending === 0) resolve(results);
+        };
+        
+        request.onerror = () => {
+          pending--;
+          if (pending === 0) resolve(results);
+        };
+      }
+    });
+  }
+
+  /**
+   * Save a chunk to the cache
+   */
+  async saveCachedChunk(chunk: CachedChunk): Promise<void> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      const request = store.put(chunk);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  /**
+   * Batch save multiple chunks in a single transaction (much faster)
+   */
+  async saveCachedChunksBatch(chunks: CachedChunk[]): Promise<void> {
+    if (!this.db) await this.init();
+    if (chunks.length === 0) return;
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      
+      for (const chunk of chunks) {
+        store.put(chunk);
+      }
+    });
+  }
+
+  /**
+   * Clear all cached chunks for a specific world
+   */
+  async clearCachedChunksForWorld(worldId: string): Promise<void> {
+    if (!this.db) await this.init();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      const index = store.index('worldId');
+      const request = index.openCursor(IDBKeyRange.only(worldId));
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+    });
+  }
+
+  /**
+   * Clear old cached chunks (older than maxAge ms) to prevent unbounded growth
+   */
+  async clearOldCachedChunks(maxAgeMs: number = 24 * 60 * 60 * 1000): Promise<number> {
+    if (!this.db) await this.init();
+    
+    const cutoff = Date.now() - maxAgeMs;
+    let deletedCount = 0;
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      const index = store.index('cachedAt');
+      const request = index.openCursor(IDBKeyRange.upperBound(cutoff));
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          cursor.delete();
+          deletedCount++;
+          cursor.continue();
+        } else {
+          resolve(deletedCount);
+        }
+      };
+    });
+  }
 }
 
 export const blockDB = new BlockDB();
@@ -388,6 +558,15 @@ export const useIndexedDB = () => {
     getUserSession: () => blockDB.getUserSession(),
     clearUserSession: () => blockDB.clearUserSession(),
     getTextureBlob: (url: string) => blockDB.getTextureBlob(url),
-    saveTextureBlob: (url: string, blob: Blob) => blockDB.saveTextureBlob(url, blob)
+    saveTextureBlob: (url: string, blob: Blob) => blockDB.saveTextureBlob(url, blob),
+    // Phase 3D: Chunk cache methods
+    getCachedChunk: (worldId: string, chunkX: number, chunkZ: number) => 
+      blockDB.getCachedChunk(worldId, chunkX, chunkZ),
+    getCachedChunksBatch: (worldId: string, chunkCoords: Array<{ x: number; z: number }>) => 
+      blockDB.getCachedChunksBatch(worldId, chunkCoords),
+    saveCachedChunk: (chunk: CachedChunk) => blockDB.saveCachedChunk(chunk),
+    saveCachedChunksBatch: (chunks: CachedChunk[]) => blockDB.saveCachedChunksBatch(chunks),
+    clearCachedChunksForWorld: (worldId: string) => blockDB.clearCachedChunksForWorld(worldId),
+    clearOldCachedChunks: (maxAgeMs?: number) => blockDB.clearOldCachedChunks(maxAgeMs)
   }), []); // Empty deps since blockDB is stable
 };
