@@ -133,6 +133,38 @@ export type Database = {
         }
         Relationships: []
       }
+      chunk_versions: {
+        Row: {
+          chunk_x: number
+          chunk_z: number
+          updated_at: string
+          version: number
+          world_id: string
+        }
+        Insert: {
+          chunk_x: number
+          chunk_z: number
+          updated_at?: string
+          version?: number
+          world_id: string
+        }
+        Update: {
+          chunk_x?: number
+          chunk_z?: number
+          updated_at?: string
+          version?: number
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chunk_versions_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           class: string
@@ -629,6 +661,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bump_chunk_version: {
+        Args: { p_cx: number; p_cz: number; p_world: string }
+        Returns: undefined
+      }
       delete_expired_blocks: { Args: never; Returns: number }
       has_role: {
         Args: {
