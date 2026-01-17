@@ -71,6 +71,17 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
             rarity: tier <= 10 ? 'common' : tier <= 18 ? 'uncommon' : tier <= 24 ? 'rare' : tier <= 28 ? 'epic' : 'legendary',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            // Enhanced decoration factors - defaults
+            low_branch_height: 2,
+            spike_chance: 0,
+            spike_length: 3,
+            nob_chance: 0,
+            nob_size: 1,
+            cross_chance: 0,
+            cross_length: 3,
+            shroom_chance: 0,
+            shroom_length: 5,
+            shroom_cap_diameter: 3,
           });
         }
       }
@@ -117,6 +128,17 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
         growth_factor: currentSeed.growth_factor,
         cost: currentSeed.cost,
         rarity: currentSeed.rarity,
+        // Enhanced decoration factors
+        low_branch_height: currentSeed.low_branch_height,
+        spike_chance: currentSeed.spike_chance,
+        spike_length: currentSeed.spike_length,
+        nob_chance: currentSeed.nob_chance,
+        nob_size: currentSeed.nob_size,
+        cross_chance: currentSeed.cross_chance,
+        cross_length: currentSeed.cross_length,
+        shroom_chance: currentSeed.shroom_chance,
+        shroom_length: currentSeed.shroom_length,
+        shroom_cap_diameter: currentSeed.shroom_cap_diameter,
       };
 
       if (isNew) {
@@ -197,7 +219,25 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
     maxBranchLength: Math.floor(currentSeed.tier * TREE_CONFIG.BLOCKS_PER_TIER_HEIGHT * currentSeed.width_factor),
     growthTime: Math.round((TREE_CONFIG.BASE_GROWTH_INTERVAL / currentSeed.growth_factor) / 1000),
     estimatedBlocks: (() => {
-      const blueprint = generateTreeBlueprint(0, 0, 0, currentSeed.tier, currentSeed.width_factor, currentSeed.branching_factor, 12345);
+      const blueprint = generateTreeBlueprint(
+        0, 0, 0, 
+        currentSeed.tier, 
+        currentSeed.width_factor, 
+        currentSeed.branching_factor, 
+        12345,
+        {
+          lowBranchHeight: currentSeed.low_branch_height ?? 2,
+          spikeChance: currentSeed.spike_chance ?? 0,
+          spikeLength: currentSeed.spike_length ?? 3,
+          nobChance: currentSeed.nob_chance ?? 0,
+          nobSize: currentSeed.nob_size ?? 1,
+          crossChance: currentSeed.cross_chance ?? 0,
+          crossLength: currentSeed.cross_length ?? 3,
+          shroomChance: currentSeed.shroom_chance ?? 0,
+          shroomLength: currentSeed.shroom_length ?? 5,
+          shroomCapDiameter: currentSeed.shroom_cap_diameter ?? 3,
+        }
+      );
       return blueprint.blocks.length;
     })(),
   } : null;
@@ -493,6 +533,90 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
                     <p className="text-xs text-muted-foreground">
                       Controls growth speed (higher = faster)
                     </p>
+                  </div>
+
+                  {/* === DECORATION FACTORS === */}
+                  <div className="pt-4 border-t space-y-4">
+                    <h4 className="font-semibold text-xs">Decoration Factors</h4>
+                    
+                    {/* Low Branch Height */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <Label className="text-xs">Low Branch Height</Label>
+                        <span className="text-xs text-muted-foreground">{currentSeed.low_branch_height ?? 2} blocks</span>
+                      </div>
+                      <Slider
+                        value={[currentSeed.low_branch_height ?? 2]}
+                        onValueChange={([v]) => updateSeed('low_branch_height', v)}
+                        min={1}
+                        max={Math.max(2, Math.floor(currentSeed.tier * 3 * 0.8))}
+                        step={1}
+                      />
+                    </div>
+
+                    {/* Spikes */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium">Spikes</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="text-xs text-muted-foreground">Chance: {((currentSeed.spike_chance ?? 0) * 100).toFixed(0)}%</span>
+                          <Slider value={[currentSeed.spike_chance ?? 0]} onValueChange={([v]) => updateSeed('spike_chance', v)} min={0} max={0.30} step={0.01} />
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground">Length: {currentSeed.spike_length ?? 3}</span>
+                          <Slider value={[currentSeed.spike_length ?? 3]} onValueChange={([v]) => updateSeed('spike_length', v)} min={1} max={10} step={1} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Nobs */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium">Nobs</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="text-xs text-muted-foreground">Chance: {((currentSeed.nob_chance ?? 0) * 100).toFixed(1)}%</span>
+                          <Slider value={[currentSeed.nob_chance ?? 0]} onValueChange={([v]) => updateSeed('nob_chance', v)} min={0} max={0.05} step={0.001} />
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground">Size: {currentSeed.nob_size ?? 1}x{currentSeed.nob_size ?? 1}</span>
+                          <Slider value={[currentSeed.nob_size ?? 1]} onValueChange={([v]) => updateSeed('nob_size', v)} min={1} max={4} step={1} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Crosses */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium">Crosses</Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="text-xs text-muted-foreground">Chance: {((currentSeed.cross_chance ?? 0) * 100).toFixed(0)}%</span>
+                          <Slider value={[currentSeed.cross_chance ?? 0]} onValueChange={([v]) => updateSeed('cross_chance', v)} min={0} max={0.10} step={0.01} />
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground">Length: {currentSeed.cross_length ?? 3}</span>
+                          <Slider value={[currentSeed.cross_length ?? 3]} onValueChange={([v]) => updateSeed('cross_length', v)} min={1} max={10} step={1} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Shrooms */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium">Shrooms</Label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <span className="text-xs text-muted-foreground">Chance: {((currentSeed.shroom_chance ?? 0) * 100).toFixed(1)}%</span>
+                          <Slider value={[currentSeed.shroom_chance ?? 0]} onValueChange={([v]) => updateSeed('shroom_chance', v)} min={0} max={0.10} step={0.001} />
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground">Length: {currentSeed.shroom_length ?? 5}</span>
+                          <Slider value={[currentSeed.shroom_length ?? 5]} onValueChange={([v]) => updateSeed('shroom_length', v)} min={3} max={20} step={1} />
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground">Cap: {currentSeed.shroom_cap_diameter ?? 3}</span>
+                          <Slider value={[currentSeed.shroom_cap_diameter ?? 3]} onValueChange={([v]) => updateSeed('shroom_cap_diameter', v)} min={3} max={10} step={1} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Preview Stats */}

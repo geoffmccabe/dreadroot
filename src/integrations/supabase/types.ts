@@ -477,12 +477,22 @@ export type Database = {
           branching_factor: number
           cost: number
           created_at: string
+          cross_chance: number | null
+          cross_length: number | null
           fruit_texture_url: string | null
           fruiting_factor: number
           growth_factor: number
           id: string
+          low_branch_height: number | null
           name: string
+          nob_chance: number | null
+          nob_size: number | null
           rarity: string
+          shroom_cap_diameter: number | null
+          shroom_chance: number | null
+          shroom_length: number | null
+          spike_chance: number | null
+          spike_length: number | null
           tier: number
           trunk_texture_url: string | null
           updated_at: string
@@ -493,12 +503,22 @@ export type Database = {
           branching_factor?: number
           cost?: number
           created_at?: string
+          cross_chance?: number | null
+          cross_length?: number | null
           fruit_texture_url?: string | null
           fruiting_factor?: number
           growth_factor?: number
           id?: string
+          low_branch_height?: number | null
           name: string
+          nob_chance?: number | null
+          nob_size?: number | null
           rarity?: string
+          shroom_cap_diameter?: number | null
+          shroom_chance?: number | null
+          shroom_length?: number | null
+          spike_chance?: number | null
+          spike_length?: number | null
           tier: number
           trunk_texture_url?: string | null
           updated_at?: string
@@ -509,12 +529,22 @@ export type Database = {
           branching_factor?: number
           cost?: number
           created_at?: string
+          cross_chance?: number | null
+          cross_length?: number | null
           fruit_texture_url?: string | null
           fruiting_factor?: number
           growth_factor?: number
           id?: string
+          low_branch_height?: number | null
           name?: string
+          nob_chance?: number | null
+          nob_size?: number | null
           rarity?: string
+          shroom_cap_diameter?: number | null
+          shroom_chance?: number | null
+          shroom_length?: number | null
+          spike_chance?: number | null
+          spike_length?: number | null
           tier?: number
           trunk_texture_url?: string | null
           updated_at?: string
