@@ -106,18 +106,19 @@ export function useSeedPlanting({
       }
 
       // Place the first block immediately so the tree is visible right away
+      // Uses the regular placed_blocks table - tree blocks are just normal blocks with a texture_url
       const firstBlock = blueprint.blocks.find(b => b.growthOrder === 0);
       if (firstBlock) {
         await supabase
-          .from('tree_blocks')
+          .from('placed_blocks')
           .insert({
-            tree_id: newTree.id,
+            user_id: userId,
             world_id: worldId,
             position_x: firstBlock.x,
             position_y: firstBlock.y,
             position_z: firstBlock.z,
-            block_type: firstBlock.type,
-            growth_order: 0,
+            block_type: 'trunk',
+            texture_url: seedDef.trunk_texture_url,
           });
       }
 

@@ -328,6 +328,7 @@ export type Database = {
           position_x: number
           position_y: number
           position_z: number
+          texture_url: string | null
           updated_at: string
           user_id: string
           world_id: string
@@ -342,6 +343,7 @@ export type Database = {
           position_x: number
           position_y: number
           position_z: number
+          texture_url?: string | null
           updated_at?: string
           user_id: string
           world_id: string
@@ -356,6 +358,7 @@ export type Database = {
           position_x?: number
           position_y?: number
           position_z?: number
+          texture_url?: string | null
           updated_at?: string
           user_id?: string
           world_id?: string

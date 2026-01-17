@@ -58,31 +58,26 @@ export function useTreeGrowth({
       return false;
     }
 
-    // Insert the new block (use upsert pattern)
+    // Insert the new block into placed_blocks (unified block system)
+    // Tree blocks are just normal blocks with a texture_url override
     const { error: blockError } = await supabase
-      .from('tree_blocks')
+      .from('placed_blocks')
       .insert({
-        tree_id: tree.id,
+        user_id: tree.planted_by,
         world_id: tree.world_id,
         position_x: nextBlock.x,
         position_y: nextBlock.y,
         position_z: nextBlock.z,
-        block_type: nextBlock.type,
-        growth_order: nextBlock.growthOrder,
+        block_type: 'trunk',
+        texture_url: seedDef.trunk_texture_url,
       });
 
     if (blockError) {
       // Duplicate key means block already exists - sync our count
       if (blockError.code === '23505') {
-        // Query actual count from DB to resync
-        const { count } = await supabase
-          .from('tree_blocks')
-          .select('*', { count: 'exact', head: true })
-          .eq('tree_id', tree.id);
-        
-        if (count !== null) {
-          localBlockCounts.current.set(tree.id, count);
-        }
+        // Query actual count from placed_blocks for this tree's positions
+        // Since we don't track tree_id in placed_blocks, just increment and continue
+        localBlockCounts.current.set(tree.id, currentCount + 1);
         return true;
       }
       console.error('[TreeGrowth] Failed to insert block:', blockError);
