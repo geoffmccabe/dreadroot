@@ -23,8 +23,6 @@ export function getSkyColor(lightingPercentage: number): number {
 }
 
 interface SkyTextureProps {
-  cycleStateRef: React.MutableRefObject<CycleState>;
-  weatherSettings: WeatherSettings;
   onRefsReady: (refs: { 
     skyMeshRef: React.RefObject<THREE.Mesh>; 
     starMeshRef: React.RefObject<THREE.Mesh> 
@@ -32,7 +30,7 @@ interface SkyTextureProps {
   skyTextureUrl?: string | null;
 }
 
-export function SkyTexture({ cycleStateRef, weatherSettings, onRefsReady, skyTextureUrl }: SkyTextureProps) {
+export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
   const { scene } = useThree();
   const starMeshRef = useRef<THREE.Mesh | null>(null);
   const skyMeshRef = useRef<THREE.Mesh | null>(null);
@@ -198,8 +196,6 @@ export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSetti
 
   return (
     <SkyTexture 
-      cycleStateRef={cycleStateRef} 
-      weatherSettings={weatherSettings} 
       onRefsReady={handleRefsReady}
       skyTextureUrl={skyTextureUrl}
     />

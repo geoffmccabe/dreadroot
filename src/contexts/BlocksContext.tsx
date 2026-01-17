@@ -4,7 +4,7 @@ import { PlacedBlock } from '@/types/blocks';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserData } from '@/hooks/useUserData';
 import { useCurrentWorldId, World } from '@/hooks/useCurrentWorldId';
-import { organizeBlocksByChunk, blockToChunkKey } from '@/lib/chunkManager';
+import { organizeBlocksByChunk } from '@/lib/chunkManager';
 
 interface BlocksContextType {
   blocks: PlacedBlock[];
