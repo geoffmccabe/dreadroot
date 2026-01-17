@@ -240,6 +240,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Load chunks in a bounding box around the player using a single query
    * Phase 3.0: Uses scheduleEmit for batched emission
    * Phase 3A: Initializes lastAccessedAt and hasOptimisticBlocks
+   * NOTE: Used for initial load only. Movement uses loadStripeChunks.
    */
   const loadChunksInRadius = useCallback(async (
     centerChunkX: number,
@@ -307,6 +308,121 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Phase 3.0: Use batched emit instead of synchronous callback
     scheduleEmit();
   }, [worldId, scheduleEmit]);
+
+  /**
+   * Phase 3B: Load only specific chunks (used for stripe/edge loading)
+   * Much more efficient than loadChunksInRadius for incremental movement
+   */
+  const loadSpecificChunks = useCallback(async (
+    chunkCoords: Array<{ x: number; z: number }>
+  ): Promise<void> => {
+    if (!worldId || chunkCoords.length === 0) return;
+
+    // Filter out already loaded chunks
+    const toLoad = chunkCoords.filter(
+      ({ x, z }) => !loadedChunksRef.current.has(`chunk_${x}_${z}`)
+    );
+    
+    if (toLoad.length === 0) return;
+
+    // Compute tight bounding box for the chunks we need
+    const minChunkX = Math.min(...toLoad.map(c => c.x));
+    const maxChunkX = Math.max(...toLoad.map(c => c.x));
+    const minChunkZ = Math.min(...toLoad.map(c => c.z));
+    const maxChunkZ = Math.max(...toLoad.map(c => c.z));
+
+    // Create a Set of chunk keys we actually want
+    const wantedChunkKeys = new Set(toLoad.map(c => `chunk_${c.x}_${c.z}`));
+
+    // Query the bounding box
+    const { data: blocks, error } = await supabase
+      .from('placed_blocks')
+      .select('*')
+      .eq('world_id', worldId)
+      .gte('chunk_x', minChunkX)
+      .lte('chunk_x', maxChunkX)
+      .gte('chunk_z', minChunkZ)
+      .lte('chunk_z', maxChunkZ);
+
+    if (error) {
+      console.error('Error loading stripe chunks:', error);
+      return;
+    }
+
+    // Filter out expired blocks
+    const now = new Date();
+    const loadedAt = Date.now();
+    const activeBlocks = (blocks || []).filter(block => 
+      !block.expires_at || new Date(block.expires_at) > now
+    );
+
+    // Group blocks by chunk, but only for chunks we want
+    const chunkGroups = new Map<string, PlacedBlock[]>();
+    for (const block of activeBlocks) {
+      const chunkKey = getChunkKey(block.position_x, block.position_z);
+      if (!wantedChunkKeys.has(chunkKey)) continue; // Skip blocks from unwanted chunks
+      
+      const existing = chunkGroups.get(chunkKey) || [];
+      existing.push(block);
+      chunkGroups.set(chunkKey, existing);
+    }
+
+    // Store only the chunks we wanted
+    for (const { x, z } of toLoad) {
+      const chunkKey = `chunk_${x}_${z}`;
+      const chunkBlocks = chunkGroups.get(chunkKey) || [];
+      
+      loadedChunksRef.current.set(chunkKey, {
+        blocks: chunkBlocks,
+        loadedAt,
+        lastAccessedAt: loadedAt,
+        hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-'))
+      });
+    }
+
+    // Phase 3.0: Use batched emit
+    scheduleEmit();
+  }, [worldId, scheduleEmit]);
+
+  /**
+   * Phase 3B: Get the edge stripe chunks when moving from one chunk to another
+   * Returns only the new chunks that need to be loaded on the leading edge
+   */
+  const getStripeChunks = useCallback((
+    prevChunkX: number,
+    prevChunkZ: number,
+    newChunkX: number,
+    newChunkZ: number,
+    radius: number
+  ): Array<{ x: number; z: number }> => {
+    const stripeChunks: Array<{ x: number; z: number }> = [];
+    
+    const deltaX = newChunkX - prevChunkX;
+    const deltaZ = newChunkZ - prevChunkZ;
+
+    // Handle X movement - load a vertical stripe
+    if (deltaX !== 0) {
+      const stripeX = deltaX > 0 ? newChunkX + radius : newChunkX - radius;
+      for (let z = newChunkZ - radius; z <= newChunkZ + radius; z++) {
+        stripeChunks.push({ x: stripeX, z });
+      }
+    }
+
+    // Handle Z movement - load a horizontal stripe
+    if (deltaZ !== 0) {
+      const stripeZ = deltaZ > 0 ? newChunkZ + radius : newChunkZ - radius;
+      for (let x = newChunkX - radius; x <= newChunkX + radius; x++) {
+        // Avoid duplicating corner chunk if we also moved in X
+        if (deltaX !== 0) {
+          const cornerX = deltaX > 0 ? newChunkX + radius : newChunkX - radius;
+          if (x === cornerX) continue;
+        }
+        stripeChunks.push({ x, z: stripeZ });
+      }
+    }
+
+    return stripeChunks;
+  }, []);
 
   /**
    * Refetch a single chunk (used for realtime updates)
@@ -421,7 +537,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Update player position - called by game controller
-   * Loads new chunks if player moved to a new chunk
+   * Phase 3B: Uses incremental stripe loading instead of full square reload
    * Phase 3A: Updates lastAccessedAt for pinned chunks and runs LRU eviction
    */
   const updatePlayerPosition = useCallback(async (worldX: number, worldZ: number) => {
@@ -440,6 +556,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     // Check if player moved to a different chunk
     if (!prevChunk || prevChunk.x !== newChunkX || prevChunk.z !== newChunkZ) {
+      const hadPrevChunk = prevChunk !== null;
+      const oldChunkX = prevChunk?.x ?? newChunkX;
+      const oldChunkZ = prevChunk?.z ?? newChunkZ;
+      
       playerChunkRef.current = { x: newChunkX, z: newChunkZ };
 
       // Phase 3A: Update lastAccessedAt for all pinned (nearby) chunks
@@ -454,23 +574,20 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         }
       }
 
-      // Find chunks that need to be loaded (not already in loadedChunks)
-      const chunksToLoad: Array<{ x: number; z: number }> = [];
-      
-      for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
-        for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
-          const chunkX = newChunkX + dx;
-          const chunkZ = newChunkZ + dz;
-          const chunkKey = `chunk_${chunkX}_${chunkZ}`;
-          
-          if (!loadedChunksRef.current.has(chunkKey)) {
-            chunksToLoad.push({ x: chunkX, z: chunkZ });
-          }
+      // Phase 3B: Use incremental stripe loading for movement
+      if (hadPrevChunk) {
+        // Calculate stripe chunks for the movement direction
+        const stripeChunks = getStripeChunks(
+          oldChunkX, oldChunkZ,
+          newChunkX, newChunkZ,
+          LOAD_RADIUS
+        );
+        
+        if (stripeChunks.length > 0) {
+          await loadSpecificChunks(stripeChunks);
         }
-      }
-
-      // If there are chunks to load, do a bounding query
-      if (chunksToLoad.length > 0) {
+      } else {
+        // No previous chunk - do full initial load
         await loadChunksInRadius(newChunkX, newChunkZ, LOAD_RADIUS);
       }
 
@@ -480,7 +597,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       // Phase 3A: Run LRU eviction as safety cap
       evictLRUChunks();
     }
-  }, [worldId, loadChunksInRadius, unloadDistantChunks, evictLRUChunks]);
+  }, [worldId, loadChunksInRadius, loadSpecificChunks, getStripeChunks, unloadDistantChunks, evictLRUChunks]);
 
   /**
    * Force initial load when world changes
