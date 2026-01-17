@@ -340,39 +340,29 @@ export function calculatePlacementFast(
   const hit = voxelRaycast(camera.position, _rayDir, maxDistance, blocks);
   
   if (!hit) {
-    // No hit - try ground at max distance
-    if (_rayDir.y < 0) {
-      const groundT = -camera.position.y / _rayDir.y;
-      if (groundT > 0 && groundT <= maxDistance) {
-        const x = Math.floor(camera.position.x + _rayDir.x * groundT);
-        const z = Math.floor(camera.position.z + _rayDir.z * groundT);
-        
-        // Validate
-        const validation = validatePlacementFast(x, 0, z, blocks);
-        _placementResult.x = x;
-        _placementResult.y = 0;
-        _placementResult.z = z;
-        _placementResult.isValid = validation.isValid;
-        _placementResult.reason = validation.reason;
-        return _placementResult;
-      }
-    }
-    
+    // No hit within range - invalid placement
+    _placementResult.x = 0;
+    _placementResult.y = -1000;
+    _placementResult.z = 0;
     _placementResult.isValid = false;
     _placementResult.reason = 'no-surface';
     return _placementResult;
   }
   
-  // Calculate placement position (adjacent to hit surface)
-  let placeX = hit.voxelX + Math.round(hit.normal.x);
-  let placeY = hit.voxelY + Math.round(hit.normal.y);
-  let placeZ = hit.voxelZ + Math.round(hit.normal.z);
+  let placeX: number;
+  let placeY: number;
+  let placeZ: number;
   
-  // Special case: hitting ground means place on top of it
   if (hit.hitType === 'ground') {
+    // Ground hit - place block at y=0 on the ground position
     placeX = hit.voxelX;
     placeY = 0;
     placeZ = hit.voxelZ;
+  } else {
+    // Block hit - place adjacent to the hit face
+    placeX = hit.voxelX + Math.round(hit.normal.x);
+    placeY = hit.voxelY + Math.round(hit.normal.y);
+    placeZ = hit.voxelZ + Math.round(hit.normal.z);
   }
   
   // Ensure Y >= 0
@@ -408,26 +398,26 @@ function validatePlacementFast(
 ): ValidationResult {
   const blockLookup = ensureBlockLookup(blocks);
   
-  // Check fortress proximity - SMALLER radius, only blocks the fortress itself
-  const { cliffW, courtyardDepth, frontZ, frontT } = FORTRESS_DIMENSIONS;
+  // Check fortress proximity (center at 0, 0, -20, radius 30)
   const fortressCenterX = 0;
-  const fortressCenterZ = frontZ - courtyardDepth / 2;
-  const fortressRadiusX = cliffW / 2 + 2;
-  const fortressRadiusZ = courtyardDepth / 2 + frontT + 2;
+  const fortressCenterZ = -20;
+  const fortressMinDistance = 30;
   
-  // Check if inside fortress bounding box
-  if (Math.abs(x - fortressCenterX) < fortressRadiusX && 
-      Math.abs(z - fortressCenterZ) < fortressRadiusZ) {
+  const dx = x - fortressCenterX;
+  const dz = z - fortressCenterZ;
+  const distSq = dx * dx + dz * dz;
+  
+  if (distSq < fortressMinDistance * fortressMinDistance) {
     _validationResult.isValid = false;
     _validationResult.reason = 'fortress';
     return _validationResult;
   }
   
-  // Check waterfall blocking - narrow column at center
+  // Check waterfall blocking (x near 0, z > -6)
   const waterfallZ = -6;
-  const waterfallBlockingWidth = 2;
+  const waterfallBlockingWidth = 4;
   
-  if (Math.abs(x) < waterfallBlockingWidth && z > waterfallZ && z < frontZ) {
+  if (Math.abs(x) < waterfallBlockingWidth / 2 && z > waterfallZ) {
     _validationResult.isValid = false;
     _validationResult.reason = 'waterfall';
     return _validationResult;
@@ -440,7 +430,7 @@ function validatePlacementFast(
     return _validationResult;
   }
   
-  // Check support (on ground OR adjacent to existing block)
+  // y=0 is always valid (on ground)
   if (y === 0) {
     _validationResult.isValid = true;
     _validationResult.reason = undefined;
