@@ -197,7 +197,8 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
             tmpPosition.copy(block.position);
 
             // Set scale based on health (in 10% increments)
-            const visualScale = block.scale * SHWARM_BLOCK_SIZE;
+            // Geometry is already SHWARM_BLOCK_SIZE, so block.scale (0.2 to 1.0) gives us the visual size
+            const visualScale = block.scale;
             tmpScale.set(visualScale, visualScale, visualScale);
 
             // Compose matrix
