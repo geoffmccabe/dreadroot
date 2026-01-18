@@ -233,9 +233,13 @@ export function checkAxisCollision(
   const count = collisionGrid.getNearby(pos.x, pos.z, 3);
   const nearbyColliders = collisionGrid.nearbyResult;
   
-  // If grid is empty, fall back to array (should not happen in normal use)
-  if (count === 0 && colliders.length > 0) {
+  // IMPORTANT: Only use fallback if the grid is TRULY empty (no colliders anywhere).
+  // If grid.size > 0 but count === 0, it means there are simply no colliders near
+  // the player's position - this is NORMAL and should NOT trigger expensive O(N) fallback.
+  // The fallback is only for the case where the grid was never populated at all.
+  if (count === 0 && colliders.length > 0 && collisionGrid.size === 0) {
     // Fallback: check all colliders with spatial filter
+    // This should only happen during initialization before fortress colliders are added
     for (let i = 0; i < colliders.length; i++) {
       const collider = colliders[i];
       diagnostics.e5++;
