@@ -72,10 +72,21 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
         console.error('[GhostTreeCleanup] Version bump error:', bumpError);
       }
       
+      // 4. CRITICAL: Clear collision grid to remove ghost colliders
+      // Import and clear the spatial hash grid
+      const { collisionGrid } = await import('@/lib/spatialHashGrid');
+      collisionGrid.clear();
+      console.log('[GhostTreeCleanup] Cleared collision grid');
+      
       toast({
         title: 'Ghost trees cleared',
-        description: `Deleted ${dbCount || 0} tree blocks from database. REFRESH PAGE NOW to clear colliders.`
+        description: `Deleted ${dbCount || 0} tree blocks. Cache + colliders cleared. Page will reload...`
       });
+      
+      // 5. Force page reload to get fresh state
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (err) {
       console.error('[GhostTreeCleanup] Error:', err);
       toast({
