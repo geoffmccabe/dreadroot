@@ -622,6 +622,97 @@ export const useUserData = () => {
     }
   };
 
+  // Return a seed to inventory (after chopping a tree)
+  const returnSeed = async (seedDefId: string): Promise<boolean> => {
+    if (!user?.id) {
+      toast({
+        title: "Authentication required",
+        description: "Please wait for authentication to complete",
+        variant: "destructive"
+      });
+      return false;
+    }
+
+    try {
+      // Get the seed definition to find the item_type key
+      const { data: seedDef, error: seedError } = await supabase
+        .from('seed_definitions')
+        .select('id, name, tier')
+        .eq('id', seedDefId)
+        .maybeSingle();
+
+      if (seedError) throw seedError;
+      if (!seedDef) {
+        console.warn('Seed definition not found for id:', seedDefId);
+        return false;
+      }
+
+      // Use seed_definition_id as the item_id for seeds
+      const itemType = `seed_tier_${seedDef.tier}`;
+      const itemId = seedDefId;
+
+      // Query database directly to avoid race conditions
+      const { data: existingItems, error: queryError } = await supabase
+        .from('user_inventory')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('item_id', itemId);
+
+      if (queryError) throw queryError;
+
+      if (existingItems && existingItems.length > 0) {
+        // Update existing inventory item
+        const existingItem = existingItems[0];
+        const newQuantity = existingItem.quantity + 1;
+        const { error: updateError } = await supabase
+          .from('user_inventory')
+          .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
+          .eq('id', existingItem.id);
+
+        if (updateError) throw updateError;
+
+        // Update local state
+        setInventory(prev =>
+          prev.map(i =>
+            i.id === existingItem.id
+              ? { ...i, quantity: newQuantity, updated_at: new Date().toISOString() }
+              : i
+          )
+        );
+      } else {
+        // Create new inventory item for seed
+        const { data: newItem, error: insertError } = await supabase
+          .from('user_inventory')
+          .insert([{
+            user_id: user.id,
+            item_type: itemType,
+            item_id: itemId,
+            quantity: 1
+          }])
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        // Update local state
+        if (newItem) {
+          setInventory(prev => [...prev, newItem]);
+        }
+      }
+
+      console.log(`🌱 Seed returned: +1 ${seedDef.name || `Tier ${seedDef.tier}`} seed`);
+      return true;
+    } catch (error) {
+      console.error('Error returning seed to inventory:', error);
+      toast({
+        title: "Return failed",
+        description: "Failed to return seed to inventory",
+        variant: "destructive"
+      });
+      return false;
+    }
+  };
+
   return {
     profile,
     tokenBalance,
@@ -635,6 +726,7 @@ export const useUserData = () => {
     updateVisualDistance,
     updateFogEnabled,
     refreshData,
-    collectWispBlock
+    collectWispBlock,
+    returnSeed
   };
 };

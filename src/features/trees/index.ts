@@ -34,3 +34,4 @@ export { useTreeData } from './hooks/useTreeData';
 export { useLocalGrowth, deleteTree } from './hooks/useLocalGrowth';
 export { useSeedPlanting } from './hooks/useSeedPlanting';
 export { useFruitPickup } from './hooks/useFruitPickup';
+export { useTreeChopping } from './hooks/useTreeChopping';

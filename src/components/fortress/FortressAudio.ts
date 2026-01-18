@@ -32,7 +32,9 @@ export function createAudioRefs() {
     // Shwarm sounds
     shwarmHit: new Audio('/brick_drop_sound.mp3'),
     playerHit: new Audio('/wooden_thud_sound.mp3'),
-    shwarmGroupKilled: new Audio('/yay_sound.mp3')
+    shwarmGroupKilled: new Audio('/yay_sound.mp3'),
+    // Tree sounds
+    axeChop: new Audio('/axe_chop.mp3')
   };
 }
 
