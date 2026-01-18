@@ -861,6 +861,9 @@ export function Fortress() {
             <span className="font-bold">x{inventory.filter(item => item.quantity > 0).reduce((total, item) => total + item.quantity, 0)}</span>
           </div>
           
+          {/* Health Bar - inline with block counter */}
+          <HealthBar currentHealth={currentHealth} maxHealth={maxHealth} />
+          
           {blockPlacementMode && selectedBlockType && (
             <div className="bg-blue-500/70 text-white px-2 py-1 rounded text-xs">
               BLOCK MODE: {selectedBlockType}
@@ -886,10 +889,6 @@ export function Fortress() {
         crosshairsEnabled ? 'active' : ''
       }`} />
       
-      {/* Health Bar - Top Left */}
-      <div className="fixed top-4 left-4 z-40">
-        <HealthBar currentHealth={currentHealth} maxHealth={maxHealth} />
-      </div>
       
       {/* Death Overlay */}
       <DeathOverlay 
