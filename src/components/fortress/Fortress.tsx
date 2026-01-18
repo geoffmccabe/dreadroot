@@ -129,6 +129,7 @@ export function Fortress() {
   
   // Death/respawn state
   const [respawnTimer, setRespawnTimer] = useState(0);
+  const [respawnPosition, setRespawnPosition] = useState<THREE.Vector3 | null>(null);
   
   // Clear block cache once on mount to ensure new block types (wood, fruit) are loaded
   useEffect(() => {
@@ -209,7 +210,8 @@ export function Fortress() {
       return () => clearTimeout(timer);
     } else if (respawnTimer === 0 && isDead) {
       // Auto-respawn after timer
-      respawn();
+      const spawnPos = respawn();
+      setRespawnPosition(spawnPos);
     }
   }, [respawnTimer, isDead, respawn]);
 
@@ -739,6 +741,8 @@ export function Fortress() {
           healthRef={healthRef}
           takeDamage={takeDamage}
           shwarmDefinitions={shwarmDefinitions}
+          respawnPosition={respawnPosition}
+          onRespawnComplete={() => setRespawnPosition(null)}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
@@ -900,7 +904,7 @@ export function Fortress() {
         respawnTimer={respawnTimer} 
         onRespawn={() => {
           const spawnPos = respawn();
-          // Position will be reset via camera in FirstPersonControls
+          setRespawnPosition(spawnPos);
           setRespawnTimer(0);
         }} 
       />

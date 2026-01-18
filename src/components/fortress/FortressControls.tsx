@@ -51,7 +51,9 @@ export function FirstPersonControls({
   blocksByTypeAndUser,
   onGodModeChange,
   updatePlayerPosition,
-  applyKnockback: externalApplyKnockback
+  applyKnockback: externalApplyKnockback,
+  respawnPosition,
+  onRespawnComplete
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -141,6 +143,16 @@ export function FirstPersonControls({
       gridInitialized.current = true;
     }
   }, []);
+
+  // Handle respawn position - teleport player when respawnPosition changes
+  useEffect(() => {
+    if (respawnPosition) {
+      camera.position.copy(respawnPosition);
+      velocity.current.set(0, 0, 0);
+      knockbackVelRef.current.set(0, 0, 0);
+      onRespawnComplete?.();
+    }
+  }, [respawnPosition, camera, onRespawnComplete]);
   
   // Collision boxes for fortress walls only (block colliders are now managed by useChunkLoader)
   const collidersArrayRef = useRef<THREE.Box3[]>([]);

@@ -262,7 +262,9 @@ export function FortressScene({
   healthRef,
   takeDamage,
   shwarmDefinitions,
-  onShwarmDamage
+  onShwarmDamage,
+  respawnPosition,
+  onRespawnComplete
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
@@ -614,7 +616,7 @@ export function FortressScene({
           
           // Check shwarm collisions (if not already hit something)
           if (!hit) {
-            const SHWARM_HIT_RADIUS = 0.35; // hitbox for 0.5 size blocks
+            const SHWARM_HIT_RADIUS = 0.25; // half of 0.5m hitbox (constant regardless of visual scale)
             const BULLET_DAMAGE = 25;
             
             for (const shwarm of activeShwarms) {
@@ -735,6 +737,8 @@ export function FortressScene({
         onGodModeChange={onGodModeChange}
         updatePlayerPosition={updatePlayerPosition}
         applyKnockback={undefined}
+        respawnPosition={respawnPosition}
+        onRespawnComplete={onRespawnComplete}
       />
       
       <MultiplayerPlayers players={players} />

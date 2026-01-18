@@ -33,7 +33,7 @@ export const MOVE_TOWARDS_PLAYER = 1.5; // Always move 1.5 units towards player
 
 // Movement
 export const MOVEMENT_PHASE_MS = 1000; // 1-second movement phases
-export const MIN_SHWARM_SPACING = 1.0; // Minimum distance between shwarm block centers
+export const MIN_SHWARM_SPACING = 0.5; // Minimum distance between shwarm block centers
 export const GRAVITY_FALL = 1.0; // Fall 1 unit per phase if above ground
 export const GROUND_LEVEL = 0.25; // Half of 0.5 block size
 export const SNAPSHOT_BROADCAST_INTERVAL_MS = 100; // 10Hz broadcast to other players

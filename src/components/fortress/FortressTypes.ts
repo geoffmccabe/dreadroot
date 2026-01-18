@@ -93,6 +93,9 @@ export interface SceneProps {
   // Shwarm system
   shwarmDefinitions?: ShwarmDefinition[];
   onShwarmDamage?: (shwarmId: string, blockId: string, damage: number) => boolean;
+  // Respawn position for teleporting player
+  respawnPosition?: THREE.Vector3 | null;
+  onRespawnComplete?: () => void;
 }
 
 // First person controls props
@@ -130,6 +133,9 @@ export interface FirstPersonControlsProps {
   updatePlayerPosition?: (worldX: number, worldZ: number) => void;
   // Knockback function for shwarm damage
   applyKnockback?: (direction: THREE.Vector3, distance: number) => void;
+  // Respawn position - when set, teleport player to this position
+  respawnPosition?: THREE.Vector3 | null;
+  onRespawnComplete?: () => void;
 }
 
 // Bullet interface
