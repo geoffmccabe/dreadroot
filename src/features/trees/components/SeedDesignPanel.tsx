@@ -575,7 +575,7 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <span className="text-xs text-muted-foreground">Chance: {((currentSeed.nob_chance ?? 0) * 100).toFixed(1)}%</span>
-                          <Slider value={[currentSeed.nob_chance ?? 0]} onValueChange={([v]) => updateSeed('nob_chance', v)} min={0} max={0.05} step={0.001} />
+                          <Slider value={[currentSeed.nob_chance ?? 0]} onValueChange={([v]) => updateSeed('nob_chance', v)} min={0} max={0.30} step={0.001} />
                         </div>
                         <div>
                           <span className="text-xs text-muted-foreground">Size: {currentSeed.nob_size ?? 1}x{currentSeed.nob_size ?? 1}</span>

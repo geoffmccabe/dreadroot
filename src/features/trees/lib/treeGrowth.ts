@@ -245,7 +245,8 @@ function addSpike(
 }
 
 /**
- * Add a nob (1x1 to 4x4 cube) in a random position adjacent to point
+ * Add a nob (1x1 to 4x4 cube) in a random direction from the anchor point
+ * The nob is placed adjacent to the branch, not overlapping it
  */
 function addNob(
   blocks: BlueprintBlock[],
@@ -257,24 +258,37 @@ function addNob(
   anchorIndex: number,
   rng: () => number
 ): void {
-  // Pick random offset direction (up, down, left, right, front, back)
-  const offsets: [number, number, number][] = [
-    [0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]
+  // Pick random direction: up, down, +X, -X, +Z, -Z
+  const directions: [number, number, number][] = [
+    [0, 1, 0],   // up
+    [0, -1, 0],  // down
+    [1, 0, 0],   // +X
+    [-1, 0, 0],  // -X
+    [0, 0, 1],   // +Z
+    [0, 0, -1],  // -Z
   ];
-  const offsetIdx = Math.floor(rng() * offsets.length);
-  const offset = offsets[offsetIdx];
+  const dirIdx = Math.floor(rng() * directions.length);
+  const dir = directions[dirIdx];
   
-  const baseX = centerX + offset[0] * Math.ceil(size / 2);
-  const baseY = centerY + offset[1] * Math.ceil(size / 2);
-  const baseZ = centerZ + offset[2] * Math.ceil(size / 2);
+  // Calculate the center of the nob cube
+  // Place it adjacent to the anchor (1 block away, then offset by half the size)
+  const nobCenterX = centerX + dir[0] * (1 + Math.floor(size / 2));
+  const nobCenterY = centerY + dir[1] * (1 + Math.floor(size / 2));
+  const nobCenterZ = centerZ + dir[2] * (1 + Math.floor(size / 2));
+  
+  // Calculate the starting corner of the cube (centered around nobCenter)
+  const halfSize = Math.floor(size / 2);
+  const startX = nobCenterX - halfSize;
+  const startY = nobCenterY - halfSize;
+  const startZ = nobCenterZ - halfSize;
   
   // Generate cube of blocks
   for (let dx = 0; dx < size; dx++) {
     for (let dy = 0; dy < size; dy++) {
       for (let dz = 0; dz < size; dz++) {
-        const x = baseX + dx;
-        const y = baseY + dy;
-        const z = baseZ + dz;
+        const x = startX + dx;
+        const y = startY + dy;
+        const z = startZ + dz;
         const key = `${x},${y},${z}`;
         if (!occupied.has(key)) {
           occupied.add(key);
