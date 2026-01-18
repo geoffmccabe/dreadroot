@@ -303,8 +303,12 @@ export function FirstPersonControls({
           event.preventDefault();
           console.log('[Debug] EMERGENCY: Clearing entire collision grid!');
           collisionGrid.clear();
-          resetFortressGridState(); // Allow fortress colliders to be re-added
-          console.log('[Debug] Grid cleared. Colliders will rebuild on next frame.');
+
+          // Immediately reinsert fortress colliders (block colliders are reinserted by the chunk loader listener).
+          resetFortressGridState();
+          createFortressColliders();
+
+          console.log('[Debug] Grid cleared. Fortress rebuilt, blocks will rebuild via collisionGridCleared event.');
         }
         break;
       case 'KeyQ':

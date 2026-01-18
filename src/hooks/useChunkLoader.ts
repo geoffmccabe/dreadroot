@@ -55,21 +55,28 @@ interface UseChunkLoaderProps {
 /**
  * Create a collider for a block and insert it into the collision grid.
  * The collider is attached to the block as __collider for later removal.
+ * 
+ * IMPORTANT: If the collider already exists but is not in the grid (e.g., after
+ * grid clear, hot reload, world reset), we re-insert it.
  */
 const ensureBlockCollider = (block: PlacedBlock): void => {
-  if ((block as any).__collider) return; // Already has collider
-  
+  // If collider already exists, ensure it is present in the grid.
+  // The grid can be cleared independently (debug key, hot reload, world reset).
+  const existing = (block as any).__collider as THREE.Box3 | null | undefined;
+  if (existing) {
+    if (!collisionGrid.has(existing)) {
+      collisionGrid.insert(existing);
+    }
+    return;
+  }
+
   const collider = new THREE.Box3(
     new THREE.Vector3(block.position_x, block.position_y, block.position_z),
     new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
   );
+
   collisionGrid.insert(collider);
   (block as any).__collider = collider;
-  
-  // Debug: Log every 100th collider added
-  if (collisionGrid.size % 100 === 0) {
-    console.log(`[Collider] Grid now has ${collisionGrid.size} colliders`);
-  }
 };
 
 /**
@@ -1304,6 +1311,28 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   // World change handling is now done via initializeForWorld which clears chunks internally
   // Removed separate effect to prevent race conditions with initialization
+
+  // If the collision grid is cleared (debug key, hot reload, etc.), reinsert colliders
+  // for all currently loaded blocks so collisions don't "turn off".
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const onGridCleared = () => {
+      console.log('[ChunkLoader] Grid cleared event received, reinserting colliders...');
+      let reinsertedCount = 0;
+      // Reinsert colliders for all loaded blocks (O(n) but only on rare clear events)
+      for (const chunkData of loadedChunksRef.current.values()) {
+        for (const block of chunkData.blocks) {
+          ensureBlockCollider(block);
+          reinsertedCount++;
+        }
+      }
+      console.log(`[ChunkLoader] Reinserted ${reinsertedCount} block colliders`);
+    };
+
+    window.addEventListener('collisionGridCleared', onGridCleared);
+    return () => window.removeEventListener('collisionGridCleared', onGridCleared);
+  }, []);
 
   /**
    * Get the set of currently loaded chunk keys
