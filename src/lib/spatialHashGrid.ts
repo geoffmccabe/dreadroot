@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const CELL_SIZE = 4;
-const MAX_NEARBY_RESULTS = 64;
+const MAX_NEARBY_RESULTS = 256;
 
 /**
  * Sparse, unbounded spatial hash grid.
