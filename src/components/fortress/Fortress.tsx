@@ -180,9 +180,11 @@ export function Fortress() {
   
   // Tree chop modal handlers
   const handleTreeChopComplete = useCallback(async (x: number, y: number, z: number) => {
+    console.log('[Fortress] handleTreeChopComplete called!', x, y, z);
     // Show confirmation modal
     setPendingChopPosition({ x, y, z });
     setTreeChopModalOpen(true);
+    console.log('[Fortress] setTreeChopModalOpen(true) called');
     // Exit pointer lock so user can click modal
     document.exitPointerLock();
   }, []);
