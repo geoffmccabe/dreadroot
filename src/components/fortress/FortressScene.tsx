@@ -264,7 +264,10 @@ export function FortressScene({
   shwarmDefinitions,
   onShwarmDamage,
   respawnPosition,
-  onRespawnComplete
+  onRespawnComplete,
+  isOwnedTreeAtPosition,
+  onTreeChopComplete,
+  onTreeChopProgress
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
@@ -819,6 +822,9 @@ export function FortressScene({
         applyKnockback={undefined}
         respawnPosition={respawnPosition}
         onRespawnComplete={onRespawnComplete}
+        isOwnedTreeAtPosition={isOwnedTreeAtPosition}
+        onTreeChopComplete={onTreeChopComplete}
+        onTreeChopProgress={onTreeChopProgress}
       />
       
       <MultiplayerPlayers players={players} />
