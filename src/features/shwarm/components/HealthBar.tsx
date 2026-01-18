@@ -38,9 +38,9 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
   return (
     <div 
       className={cn(
-        "flex items-center gap-0.5 p-2 rounded-lg bg-black/50 backdrop-blur-sm border border-white/10",
+        "flex items-center gap-0.5 p-1.5 rounded bg-black/50 backdrop-blur-sm border border-white/10",
         shake && "animate-shake",
-        isLowHealth && "border-red-500/50",
+        isLowHealth && "border-destructive/50",
         className
       )}
     >
@@ -49,7 +49,7 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
         <Heart
           key={`full-${i}`}
           className={cn(
-            "w-5 h-5 fill-destructive text-destructive drop-shadow-[0_0_4px_hsl(var(--destructive)/0.5)]",
+            "w-3 h-3 fill-destructive text-destructive drop-shadow-[0_0_2px_hsl(var(--destructive)/0.5)]",
             isCritical && "animate-pulse"
           )}
         />
@@ -57,9 +57,9 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
       
       {/* Partial heart (if any) */}
       {partialHeart > 0 && (
-        <div className="relative w-5 h-5">
+        <div className="relative w-3 h-3">
           {/* Empty background */}
-          <Heart className="absolute w-5 h-5 text-muted-foreground fill-muted" />
+          <Heart className="absolute w-3 h-3 text-muted-foreground fill-muted" />
           {/* Partial fill using clip-path */}
           <div 
             className="absolute inset-0 overflow-hidden"
@@ -67,7 +67,7 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
           >
             <Heart 
               className={cn(
-                "w-5 h-5 fill-destructive text-destructive",
+                "w-3 h-3 fill-destructive text-destructive",
                 isCritical && "animate-pulse"
               )} 
             />
@@ -79,14 +79,14 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
       {Array.from({ length: emptyHearts }).map((_, i) => (
         <HeartCrack
           key={`empty-${i}`}
-          className="w-5 h-5 text-muted-foreground fill-muted/50"
+          className="w-3 h-3 text-muted-foreground fill-muted/50"
         />
       ))}
       
       {/* Numeric display */}
       <span className={cn(
-        "ml-2 text-sm font-bold tabular-nums",
-        isCritical ? "text-red-400" : isLowHealth ? "text-orange-400" : "text-white"
+        "ml-1.5 text-[10px] font-bold tabular-nums",
+        isCritical ? "text-destructive" : isLowHealth ? "text-orange-400" : "text-white"
       )}>
         {currentHealth}/{maxHealth}
       </span>
