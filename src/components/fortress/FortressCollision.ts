@@ -31,7 +31,18 @@ let _fortressCollidersInGrid = false;
 
 // Function to reset grid state when grid is cleared externally
 export function resetFortressGridState(): void {
+  // Mark as not in grid, then immediately re-insert if we already have the cached colliders.
+  // This is important because the collider list is cached across HMR/runtime, but the grid may be cleared.
   _fortressCollidersInGrid = false;
+
+  if (_fortressColliders) {
+    for (const fc of _fortressColliders) {
+      if (!collisionGrid.has(fc)) {
+        collisionGrid.insert(fc);
+      }
+    }
+    _fortressCollidersInGrid = true;
+  }
 }
 
 /**
@@ -39,7 +50,19 @@ export function resetFortressGridState(): void {
  * Cached after first call since fortress never changes
  */
 export function createFortressColliders(): THREE.Box3[] {
-  if (_fortressColliders) return _fortressColliders;
+  // If colliders are cached, we still must ensure they are present in the grid.
+  // The grid can be cleared independently (debug key, hot reload, world reset).
+  if (_fortressColliders) {
+    if (!_fortressCollidersInGrid) {
+      for (const fc of _fortressColliders) {
+        if (!collisionGrid.has(fc)) {
+          collisionGrid.insert(fc);
+        }
+      }
+      _fortressCollidersInGrid = true;
+    }
+    return _fortressColliders;
+  }
   
   _fortressColliders = [
     // Left pillar

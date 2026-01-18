@@ -120,6 +120,16 @@ class SpatialHashGrid {
     this.cells.clear();
     this.colliderCells.clear();
     this.generation++;
+
+    // Notify listeners (e.g., chunk loader) to reinsert cached colliders.
+    // This prevents "no collision" states after an emergency clear or hot reload.
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new Event('collisionGridCleared'));
+      } catch {
+        // ignore
+      }
+    }
   }
   
   /**
