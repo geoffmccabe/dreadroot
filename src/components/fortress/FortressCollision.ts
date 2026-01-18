@@ -277,6 +277,132 @@ const intersectsForAxis = (playerBox: THREE.Box3, collider: THREE.Box3, axis: Co
   }
 };
 
+// Step-up height constant for candidate-based step-up
+const PLAYER_STEP_HEIGHT = 0.6;
+
+/**
+ * Check if player is in a state where step-up is allowed
+ */
+const canStepUp = (velocityY: number, onGround: boolean): boolean => {
+  return onGround && velocityY <= 0.1;
+};
+
+/**
+ * Collision check using a precomputed candidate list.
+ * Use this in hot paths to avoid repeated SpatialHashGrid queries in the same frame.
+ */
+export function checkAxisCollisionFromCandidates(
+  pos: THREE.Vector3,
+  candidates: THREE.Box3[],
+  candidateCount: number,
+  playerRadius: number,
+  playerHeight: number,
+  axis: CollisionAxis,
+  yDirection?: 1 | -1,
+  onGround: boolean = false,
+  velocityY: number = 0,
+  allowStepUp: boolean = true,
+  disableYSnap: boolean = false,
+  countOverlaps: boolean = false
+): THREE.Box3 | null {
+  const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
+
+  // Fast overlap check: return first intersecting collider.
+  if (axis === 'overlap') {
+    for (let i = 0; i < candidateCount; i++) {
+      diagnostics.e5++;
+      const collider = candidates[i];
+      if (collider && intersectsForAxis(playerBox, collider, 'overlap')) {
+        diagnostics.e4++;
+        return collider;
+      }
+    }
+    return null;
+  }
+
+  if (axis === 'x' || axis === 'z') {
+    for (let i = 0; i < candidateCount; i++) {
+      diagnostics.e5++;
+      const collider = candidates[i];
+      if (collider && intersectsForAxis(playerBox, collider, axis)) {
+        diagnostics.e4++;
+        return collider;
+      }
+    }
+    return null;
+  }
+
+  // Y axis: optional step up before treating it as a hard collision.
+  if (axis === 'y') {
+    if (yDirection === -1 && allowStepUp && canStepUp(velocityY, onGround)) {
+      const stepUpY = findStepUpTargetFromCandidates(pos, candidates, candidateCount, playerRadius, playerHeight);
+      if (stepUpY !== null) {
+        diagnostics.e6++;
+        return null;
+      }
+    }
+
+    for (let i = 0; i < candidateCount; i++) {
+      diagnostics.e5++;
+      const collider = candidates[i];
+      if (collider && intersectsForAxis(playerBox, collider, axis)) {
+        if (countOverlaps) diagnostics.e4++;
+        return collider;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Step up test using a precomputed candidate list.
+ */
+export function findStepUpTargetFromCandidates(
+  position: THREE.Vector3,
+  candidates: THREE.Box3[],
+  candidateCount: number,
+  playerRadius: number,
+  playerHeight: number
+): number | null {
+  const stepHeight = PLAYER_STEP_HEIGHT;
+  const startY = position.y - playerHeight;
+
+  for (let i = 0; i < candidateCount; i++) {
+    const collider = candidates[i];
+    if (!collider) continue;
+
+    const stepUpY = collider.max.y;
+    const stepUpAmount = stepUpY - startY;
+
+    if (stepUpAmount > 0 && stepUpAmount <= stepHeight) {
+      const originalY = position.y;
+      position.y = stepUpY + playerHeight;
+
+      const testBox = createPlayerBox(position, playerRadius, playerHeight);
+      let blocked = false;
+
+      for (let j = 0; j < candidateCount; j++) {
+        const other = candidates[j];
+        if (!other || other === collider) continue;
+        if (intersectsForAxis(testBox, other, 'overlap')) {
+          blocked = true;
+          break;
+        }
+      }
+
+      position.y = originalY;
+
+      if (!blocked) {
+        diagnostics.e6++;
+        return stepUpY;
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Checks for collision on a specific axis using spatial hash grid
  * ZERO ALLOCATIONS in hot path

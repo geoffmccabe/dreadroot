@@ -222,9 +222,18 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     requestAnimationFrame(() => {
       emitScheduledRef.current = false;
-      const allBlocks: PlacedBlock[] = [];
+      // Avoid `push(...arr)` which is slow and can create large argument lists.
+      let total = 0;
       for (const chunkData of loadedChunksRef.current.values()) {
-        allBlocks.push(...chunkData.blocks);
+        total += chunkData.blocks.length;
+      }
+      const allBlocks: PlacedBlock[] = new Array(total);
+      let idx = 0;
+      for (const chunkData of loadedChunksRef.current.values()) {
+        const blocks = chunkData.blocks;
+        for (let i = 0; i < blocks.length; i++) {
+          allBlocks[idx++] = blocks[i];
+        }
       }
       onBlocksChanged(allBlocks);
     });
@@ -235,9 +244,18 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * NOTE: This is still used for synchronous operations like optimistic updates
    */
   const flattenLoadedBlocks = useCallback((): PlacedBlock[] => {
-    const allBlocks: PlacedBlock[] = [];
+    // Same strategy as scheduleEmit, preallocate and copy.
+    let total = 0;
     for (const chunkData of loadedChunksRef.current.values()) {
-      allBlocks.push(...chunkData.blocks);
+      total += chunkData.blocks.length;
+    }
+    const allBlocks: PlacedBlock[] = new Array(total);
+    let idx = 0;
+    for (const chunkData of loadedChunksRef.current.values()) {
+      const blocks = chunkData.blocks;
+      for (let i = 0; i < blocks.length; i++) {
+        allBlocks[idx++] = blocks[i];
+      }
     }
     return allBlocks;
   }, []);

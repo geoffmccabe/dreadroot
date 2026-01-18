@@ -12,7 +12,9 @@ import {
 import {
   createFortressColliders,
   checkAxisCollision,
+  checkAxisCollisionFromCandidates,
   findStepUpTarget,
+  findStepUpTargetFromCandidates,
   createPlayerBox,
   resetFortressGridState,
   findPushOutDirection
@@ -870,10 +872,6 @@ export function FirstPersonControls({
       const dt = Math.min(delta, MAX_PHYSICS_DELTA);
       const SURFACE_EPS = 0.002;
       
-      // CRITICAL: Invalidate collision grid cache at start of physics frame
-      // This allows multiple collision checks at same position to reuse cached results
-      collisionGrid.invalidateCache();
-      
       // Gravity and jumping
       velocity.current.y -= 9.8 * dt;
 
@@ -884,7 +882,29 @@ export function FirstPersonControls({
       const crawlingHeight = 0.8;
       const playerHeight = isCrawling ? crawlingHeight : standingHeight;
 
+      // Step up height is used both for movement and for collision candidate Y range.
+      const stepUpHeight = 0.6;
+
+      // Build collision candidates once for this frame.
+      // We include a vertical pad for jump arcs and step up checks.
+      const candidateMinY = camera.position.y - playerHeight - 2.0;
+      const candidateMaxY = camera.position.y + stepUpHeight + 2.0;
+
+      diagnostics.e1++;
+      const candidateCount = collisionGrid.getNearbyFiltered(
+        camera.position.x,
+        camera.position.z,
+        2.0,
+        candidateMinY,
+        candidateMaxY
+      );
+
       const currentColliders = collidersRef.current;
+      currentColliders.length = candidateCount;
+      const nearby = collisionGrid.nearbyResult;
+      for (let i = 0; i < candidateCount; i++) {
+        currentColliders[i] = nearby[i];
+      }
 
       /**
        * CONTINUOUS OVERLAP RESOLUTION
@@ -893,12 +913,20 @@ export function FirstPersonControls({
        * This is the key fix for wall-jump flashing.
        */
       for (let i = 0; i < 2; i++) {
-        const overlap = checkAxisCollision(
+        // Stage 2: Use shrunk player volume to prevent overlap trigger when just touching
+        const overlap = checkAxisCollisionFromCandidates(
           camera.position,
           currentColliders,
-          playerRadius,
-          playerHeight,
-          'overlap' // Pure overlap check for push-out
+          candidateCount,
+          playerRadius * 0.8,
+          playerHeight * 0.9,
+          'overlap',
+          undefined,
+          onGround.current,
+          velocity.current.y,
+          false,
+          true,
+          true
         );
 
         if (!overlap) break;
@@ -956,7 +984,7 @@ export function FirstPersonControls({
         testPosRef.current.copy(camera.position);
         testPosRef.current.x += deltaMovement.x;
         
-        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, 'x')) {
+        if (checkAxisCollisionFromCandidates(testPosRef.current, currentColliders, candidateCount, playerRadius, playerHeight, 'x', undefined, onGround.current, velocity.current.y)) {
           camera.position.x = prevPositionRef.current.x;
           velocity.current.x = 0;
           xBlocked = true;
@@ -970,7 +998,7 @@ export function FirstPersonControls({
         testPosRef.current.copy(camera.position);
         testPosRef.current.z += deltaMovement.z;
         
-        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, 'z')) {
+        if (checkAxisCollisionFromCandidates(testPosRef.current, currentColliders, candidateCount, playerRadius, playerHeight, 'z', undefined, onGround.current, velocity.current.y)) {
           camera.position.z = prevPositionRef.current.z;
           velocity.current.z = 0;
           zBlocked = true;
@@ -986,7 +1014,7 @@ export function FirstPersonControls({
         
         // Pass direction: 1 = moving up (find ceiling), -1 = moving down (find floor)
         const yDirection: 1 | -1 = deltaMovement.y > 0 ? 1 : -1;
-        const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, 'y', yDirection);
+        const collision = checkAxisCollisionFromCandidates(testPosRef.current, currentColliders, candidateCount, playerRadius, playerHeight, 'y', yDirection, onGround.current, velocity.current.y);
         
         if (collision) {
           if (yDirection < 0) {
@@ -1011,19 +1039,17 @@ export function FirstPersonControls({
         }
       }
 
-      // Step-up mechanic
-      const stepUpHeight = 0.6;
+      // Step-up mechanic (stepUpHeight already declared above)
       const isMovingHorizontally = Math.abs(deltaMovementRef.current.x) > 0.001 || Math.abs(deltaMovementRef.current.z) > 0.001;
       
       if ((xBlocked || zBlocked) && onGround.current && isMovingHorizontally) {
-        const stepUpY = findStepUpTarget(
-          camera,
+        // Use candidate-based step up with camera.position (not camera)
+        const stepUpY = findStepUpTargetFromCandidates(
+          camera.position,
           currentColliders,
+          candidateCount,
           playerRadius,
-          playerHeight,
-          stepUpHeight,
-          stepUpPlayerBoxRef.current,
-          stepUpClearanceBoxRef.current
+          playerHeight
         );
         
         if (stepUpY !== null) {
@@ -1041,13 +1067,16 @@ export function FirstPersonControls({
         feetCheckPosRef.current.copy(camera.position);
         feetCheckPosRef.current.y = camera.position.y - GROUND_SNAP_DIST;
 
-        const groundHit = checkAxisCollision(
+        const groundHit = checkAxisCollisionFromCandidates(
           feetCheckPosRef.current,
           currentColliders,
+          candidateCount,
           playerRadius,
           playerHeight,
-          'y',  // Y-axis check
-          -1    // Direction: looking for floor (moving down)
+          'y',
+          -1,
+          onGround.current,
+          velocity.current.y
         );
 
         const feetY = camera.position.y - playerHeight;
