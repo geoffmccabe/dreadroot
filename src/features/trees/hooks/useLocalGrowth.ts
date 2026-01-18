@@ -81,13 +81,12 @@ export function useLocalGrowth({
   const growingTreesRef = useRef<Map<string, GrowingTree>>(new Map());
   const placeBlockRef = useRef(placeBlock);
   const isGrowingRef = useRef(false);
-  
-  // Set the global reference for external clearing
-  growingTreesRefGlobal = growingTreesRef;
 
-  // Keep placeBlock ref in sync
+  // Keep placeBlock ref in sync AND set global reference (once)
   useEffect(() => {
     placeBlockRef.current = placeBlock;
+    // Set the global reference for external clearing
+    growingTreesRefGlobal = growingTreesRef;
   }, [placeBlock]);
 
   /**
