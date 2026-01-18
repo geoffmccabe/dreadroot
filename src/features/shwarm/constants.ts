@@ -1,0 +1,39 @@
+/**
+ * Shwarm system constants
+ */
+
+// Spawn bounds (reuse from useWispBlock MAP_BOUNDS)
+export const SHWARM_SPAWN_BOUNDS = {
+  minX: -130,
+  maxX: 130,
+  minZ: -130,
+  maxZ: 130,
+  minY: 1,  // spawn just above ground
+  maxY: 5,  // don't spawn too high
+};
+
+// Rendering
+export const MAX_SHWARM_BLOCKS = 100;
+export const SHWARM_BLOCK_SIZE = 0.5; // half normal block size
+export const SHWARM_HITBOX_SIZE = 0.5; // constant hitbox regardless of visual scale
+
+// Visual scaling based on health
+export const MIN_VISUAL_SCALE = 0.2;
+export const MAX_VISUAL_SCALE = 1.0;
+
+// Movement
+export const MOVEMENT_UPDATE_PRIORITY = 60; // frameLoop priority (after controls at 20)
+export const SNAPSHOT_BROADCAST_INTERVAL_MS = 100; // 10Hz broadcast to other players
+
+// Collision
+export const PLAYER_HIT_RADIUS = 1.2; // player radius + half-block
+export const PLAYER_HIT_DEBOUNCE_MS = 100; // prevent multi-hit in same overlap
+
+// Bullet damage (fixed for now, later can be weapon-based)
+export const BULLET_DAMAGE = 25;
+
+// Network
+export const SHWARM_CHANNEL_PREFIX = 'shwarm:';
+
+// Colors
+export const DEFAULT_SHWARM_COLOR = 0xff4444; // Red tint for default shwarm blocks
