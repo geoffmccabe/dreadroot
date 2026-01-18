@@ -107,12 +107,14 @@ export function FirstPersonControls({
 
   const gridInitialized = useRef(false);
   
-  // Clear collision grid on mount to remove stale entries from previous sessions
-  // Then add fortress colliders (walls, pillars) - these are static
+  // Initialize fortress colliders on mount
+  // NOTE: We no longer clear the grid here because block colliders from useChunkLoader
+  // may already be present and clearing them causes collision bugs
   useEffect(() => {
     if (!gridInitialized.current) {
-      collisionGrid.clear();
-      resetFortressGridState(); // Reset flag so fortress colliders get re-added
+      // Just reset fortress state to ensure fortress colliders get added
+      // Don't clear the whole grid - block colliders are already there!
+      resetFortressGridState();
       gridInitialized.current = true;
     }
   }, []);
