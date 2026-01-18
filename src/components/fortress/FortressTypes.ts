@@ -81,6 +81,12 @@ export interface SceneProps {
   skyTextureUrl?: string | null;
   // Seed definitions for tree planting
   seedDefinitions?: Array<{ id: string; tier: number; trunk_texture_url: string | null }>;
+  // Knockback function for shwarm damage
+  applyKnockback?: (direction: THREE.Vector3, distance: number) => void;
+  // Player health ref for combat
+  healthRef?: React.MutableRefObject<{ currentHealth: number; maxHealth: number; isDead: boolean }>;
+  // Take damage callback
+  takeDamage?: (amount: number, knockbackDir?: THREE.Vector3, knockbackDistance?: number) => { died: boolean };
 }
 
 // First person controls props
@@ -116,6 +122,8 @@ export interface FirstPersonControlsProps {
   blocksByTypeAndUser: React.MutableRefObject<Map<string, PlacedBlock[]>>;
   // Phase 2B: Chunk loading callback
   updatePlayerPosition?: (worldX: number, worldZ: number) => void;
+  // Knockback function for shwarm damage
+  applyKnockback?: (direction: THREE.Vector3, distance: number) => void;
 }
 
 // Bullet interface

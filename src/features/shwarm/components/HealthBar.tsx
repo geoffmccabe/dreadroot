@@ -1,0 +1,126 @@
+// Player Health Bar UI Component
+// Minecraft-style hearts display with damage/heal animations
+
+import React, { useEffect, useState } from 'react';
+import { Heart, HeartCrack } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface HealthBarProps {
+  currentHealth: number;
+  maxHealth: number;
+  className?: string;
+}
+
+export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProps) {
+  const [shake, setShake] = useState(false);
+  const [prevHealth, setPrevHealth] = useState(currentHealth);
+  
+  // Calculate heart display (10 hearts = 100 HP by default)
+  const hpPerHeart = maxHealth / 10;
+  const fullHearts = Math.floor(currentHealth / hpPerHeart);
+  const partialHeart = (currentHealth % hpPerHeart) / hpPerHeart;
+  const emptyHearts = 10 - Math.ceil(currentHealth / hpPerHeart);
+  
+  // Shake animation on damage
+  useEffect(() => {
+    if (currentHealth < prevHealth) {
+      setShake(true);
+      const timer = setTimeout(() => setShake(false), 300);
+      return () => clearTimeout(timer);
+    }
+    setPrevHealth(currentHealth);
+  }, [currentHealth, prevHealth]);
+  
+  // Low health warning state
+  const isLowHealth = currentHealth <= maxHealth * 0.3;
+  const isCritical = currentHealth <= maxHealth * 0.1;
+
+  return (
+    <div 
+      className={cn(
+        "flex items-center gap-0.5 p-2 rounded-lg bg-black/50 backdrop-blur-sm border border-white/10",
+        shake && "animate-shake",
+        isLowHealth && "border-red-500/50",
+        className
+      )}
+    >
+      {/* Full hearts */}
+      {Array.from({ length: fullHearts }).map((_, i) => (
+        <Heart
+          key={`full-${i}`}
+          className={cn(
+            "w-5 h-5 fill-red-500 text-red-600 drop-shadow-[0_0_4px_rgba(239,68,68,0.5)]",
+            isCritical && "animate-pulse"
+          )}
+        />
+      ))}
+      
+      {/* Partial heart (if any) */}
+      {partialHeart > 0 && (
+        <div className="relative w-5 h-5">
+          {/* Empty background */}
+          <Heart className="absolute w-5 h-5 text-gray-600 fill-gray-800" />
+          {/* Partial fill using clip-path */}
+          <div 
+            className="absolute inset-0 overflow-hidden"
+            style={{ clipPath: `inset(0 ${(1 - partialHeart) * 100}% 0 0)` }}
+          >
+            <Heart 
+              className={cn(
+                "w-5 h-5 fill-red-500 text-red-600",
+                isCritical && "animate-pulse"
+              )} 
+            />
+          </div>
+        </div>
+      )}
+      
+      {/* Empty hearts */}
+      {Array.from({ length: emptyHearts }).map((_, i) => (
+        <HeartCrack
+          key={`empty-${i}`}
+          className="w-5 h-5 text-gray-600 fill-gray-800/50"
+        />
+      ))}
+      
+      {/* Numeric display */}
+      <span className={cn(
+        "ml-2 text-sm font-bold tabular-nums",
+        isCritical ? "text-red-400" : isLowHealth ? "text-orange-400" : "text-white"
+      )}>
+        {currentHealth}/{maxHealth}
+      </span>
+    </div>
+  );
+}
+
+// Death overlay component
+interface DeathOverlayProps {
+  isDead: boolean;
+  respawnTimer: number;
+  onRespawn: () => void;
+}
+
+export function DeathOverlay({ isDead, respawnTimer, onRespawn }: DeathOverlayProps) {
+  if (!isDead) return null;
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-900/80 backdrop-blur-sm">
+      <div className="text-center space-y-4">
+        <h1 className="text-6xl font-bold text-white drop-shadow-lg">YOU DIED</h1>
+        {respawnTimer > 0 ? (
+          <p className="text-2xl text-white/80">
+            Respawning in {respawnTimer}...
+          </p>
+        ) : (
+          <button
+            onClick={onRespawn}
+            className="px-6 py-3 text-xl font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+          >
+            Respawn
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

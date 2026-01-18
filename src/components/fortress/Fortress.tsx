@@ -26,6 +26,7 @@ import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
 
 import { TREE_CONFIG } from '@/features/trees/constants';
+import { usePlayerHealth, HealthBar, DeathOverlay } from '@/features/shwarm';
 
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
@@ -113,6 +114,19 @@ export function Fortress() {
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
   
+  // Player health system
+  const { 
+    currentHealth, 
+    maxHealth, 
+    isDead, 
+    takeDamage, 
+    respawn,
+    healthRef 
+  } = usePlayerHealth();
+  
+  // Death/respawn state
+  const [respawnTimer, setRespawnTimer] = useState(0);
+  
   // Clear block cache once on mount to ensure new block types (wood, fruit) are loaded
   useEffect(() => {
     if (TREE_CONFIG.ENABLED) {
@@ -176,6 +190,25 @@ export function Fortress() {
       }
     };
   }, []);
+
+  // Death respawn timer
+  useEffect(() => {
+    if (isDead && respawnTimer === 0) {
+      setRespawnTimer(3);
+    }
+  }, [isDead]);
+  
+  useEffect(() => {
+    if (respawnTimer > 0) {
+      const timer = setTimeout(() => {
+        setRespawnTimer(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (respawnTimer === 0 && isDead) {
+      // Auto-respawn after timer
+      respawn();
+    }
+  }, [respawnTimer, isDead, respawn]);
 
   // Block removal handler
   const handleBlockRemove = useCallback(async (blockId: string) => {
@@ -700,6 +733,8 @@ export function Fortress() {
           groundTextureUrl={currentWorld?.ground_texture_url}
           skyTextureUrl={currentWorld?.sky_texture_url}
           seedDefinitions={seedDefinitions}
+          healthRef={healthRef}
+          takeDamage={takeDamage}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
@@ -850,6 +885,22 @@ export function Fortress() {
         blockPlacementMode ? 'block-mode' : 
         crosshairsEnabled ? 'active' : ''
       }`} />
+      
+      {/* Health Bar - Top Left */}
+      <div className="fixed top-4 left-4 z-40">
+        <HealthBar currentHealth={currentHealth} maxHealth={maxHealth} />
+      </div>
+      
+      {/* Death Overlay */}
+      <DeathOverlay 
+        isDead={isDead} 
+        respawnTimer={respawnTimer} 
+        onRespawn={() => {
+          const spawnPos = respawn();
+          // Position will be reset via camera in FirstPersonControls
+          setRespawnTimer(0);
+        }} 
+      />
       
       {/* God Mode HUD Indicator */}
       {godMode && (

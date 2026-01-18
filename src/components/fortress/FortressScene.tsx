@@ -255,7 +255,9 @@ export function FortressScene({
   fortressTextureUrl,
   groundTextureUrl,
   skyTextureUrl,
-  seedDefinitions
+  seedDefinitions,
+  healthRef,
+  takeDamage
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
