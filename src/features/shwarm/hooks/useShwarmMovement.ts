@@ -43,9 +43,11 @@ function seededRandom(seed: number): () => number {
 
 /**
  * Extended block with target position for interpolation
+ * Plus visual offset for randomness within the buffer zone
  */
 interface BlockTargetData {
   targetPosition: THREE.Vector3;
+  visualOffset: THREE.Vector3; // Random offset within buffer for visual variety
 }
 
 interface UseShwarmMovementOptions {
@@ -82,8 +84,15 @@ export function useShwarmMovement({
   // Get or create target data for a block
   const getBlockTarget = useCallback((block: ShwarmBlock): BlockTargetData => {
     if (!blockTargetsRef.current.has(block.id)) {
+      // Initialize with random visual offset within buffer
+      const offset = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.3, // +/- 0.15m
+        0,
+        (Math.random() - 0.5) * 0.3
+      );
       blockTargetsRef.current.set(block.id, {
         targetPosition: block.position.clone(),
+        visualOffset: offset,
       });
     }
     return blockTargetsRef.current.get(block.id)!;
@@ -156,8 +165,11 @@ export function useShwarmMovement({
 
           const target = getBlockTarget(block);
           
-          // Smooth interpolation: lerp visual position toward target
-          block.position.lerp(target.targetPosition, lerpFactor);
+          // Calculate visual position: target + visual offset for variety within buffer
+          const visualTarget = _newPos.copy(target.targetPosition).add(target.visualOffset);
+          
+          // Smooth interpolation: lerp visual position toward target + offset
+          block.position.lerp(visualTarget, lerpFactor);
 
           // Continuous player collision check (not just during phases)
           const distToPlayer = block.position.distanceTo(playerPos);
@@ -284,18 +296,45 @@ export function useShwarmMovement({
           if (!collidesWorld && !tooClose) {
             // Valid move - update target position
             target.targetPosition.copy(_newPos);
-          } else if (!collidesWorld) {
-            // Try just horizontal movement if spacing is the issue
-            _newPos.y = currentTargetPos.y;
-            if (!isTooCloseToOthers(_newPos, block, allBlocks)) {
+            // Randomize visual offset each movement for bubbling effect
+            target.visualOffset.set(
+              (rng() - 0.5) * 0.3,
+              0,
+              (rng() - 0.5) * 0.3
+            );
+          } else if (tooClose && !collidesWorld) {
+            // Blocked by another shwarm - try stacking on top (0.5m up)
+            _newPos.y = currentTargetPos.y + 0.5;
+            if (!isTooCloseToOthers(_newPos, block, allBlocks) && !checkWorldCollision(_newPos)) {
               target.targetPosition.copy(_newPos);
+              target.visualOffset.set(
+                (rng() - 0.5) * 0.3,
+                0,
+                (rng() - 0.5) * 0.3
+              );
+            } else {
+              // Try stacking even higher (1m up)
+              _newPos.y = currentTargetPos.y + 1.0;
+              if (!isTooCloseToOthers(_newPos, block, allBlocks) && !checkWorldCollision(_newPos)) {
+                target.targetPosition.copy(_newPos);
+                target.visualOffset.set(
+                  (rng() - 0.5) * 0.3,
+                  0,
+                  (rng() - 0.5) * 0.3
+                );
+              }
+              // Else: stay in place this phase
             }
-            // Else: stay in place this phase
-          } else {
-            // Try step-up over obstacle
+          } else if (collidesWorld) {
+            // Try step-up over world obstacle
             _newPos.y = currentTargetPos.y + 1;
             if (!checkWorldCollision(_newPos) && !isTooCloseToOthers(_newPos, block, allBlocks)) {
               target.targetPosition.copy(_newPos);
+              target.visualOffset.set(
+                (rng() - 0.5) * 0.3,
+                0,
+                (rng() - 0.5) * 0.3
+              );
             }
             // Else: stay in place, blocked
           }
