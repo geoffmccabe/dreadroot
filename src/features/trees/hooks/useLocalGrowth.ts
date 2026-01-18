@@ -3,11 +3,12 @@
 // Growth check runs once per second max
 
 import { useEffect, useRef, useCallback } from 'react';
+import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 import { SeedDefinition, PlantedTree, TreeBlueprint, TreeGrowthOptions } from '../types';
 import { generateTreeBlueprint, getBlocksAtOrder, getMaxGrowthOrder } from '../lib/treeGrowth';
 import { TREE_CONFIG, getGrowthInterval } from '../constants';
-
+import { collisionGrid } from '@/lib/spatialHashGrid';
 // Check interval - 1 second max for FPS optimization
 const GROWTH_CHECK_INTERVAL = 1000;
 
@@ -171,9 +172,19 @@ export function useLocalGrowth({
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
 
-          // Place blocks
+          // Place blocks and add colliders immediately
           for (const block of blocksToPlace) {
-            placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl);
+            const placedBlock = placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl);
+            
+            // Add collider immediately for tree blocks
+            if (placedBlock && !(placedBlock as any).__collider) {
+              const collider = new THREE.Box3(
+                new THREE.Vector3(block.x, block.y, block.z),
+                new THREE.Vector3(block.x + 1, block.y + 1, block.z + 1)
+              );
+              collisionGrid.insert(collider);
+              (placedBlock as any).__collider = collider;
+            }
           }
 
           // Update ref state (no React re-render)
