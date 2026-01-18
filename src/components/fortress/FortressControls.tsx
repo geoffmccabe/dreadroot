@@ -986,12 +986,24 @@ export function FirstPersonControls({
         const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, false, true);
         if (collision) {
           if (velocity.current.y < 0) {
+            // Falling DOWN - land on top of block
             camera.position.y = collision.max.y + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
             onGround.current = true;
           } else {
-            camera.position.y = collision.min.y - SURFACE_EPS;
-            velocity.current.y = 0;
+            // Jumping UP - only stop if head actually hits bottom of block
+            // Player head is at camera.position.y, block bottom is collision.min.y
+            const headY = testPosRef.current.y; // Where head would be after move
+            const blockBottomY = collision.min.y;
+            
+            // Only apply ceiling collision if head is actually entering the block from below
+            if (headY > blockBottomY) {
+              camera.position.y = blockBottomY - SURFACE_EPS;
+              velocity.current.y = 0;
+            } else {
+              // Head isn't hitting - allow the move (we're jumping past it or it's beside us)
+              camera.position.y = testPosRef.current.y;
+            }
           }
         } else {
           if (testPosRef.current.y < playerHeight && velocity.current.y < 0) {
