@@ -278,17 +278,18 @@ export function useShwarmSystem({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isEnabled, getDefinitionByTier, spawnShwarm]);
 
-  // Cleanup dead shwarms
+  // Cleanup dead shwarms - no delay, remove immediately
   useEffect(() => {
     const interval = setInterval(() => {
       setShwarms(prev => {
+        const dead = prev.filter(s => !s.isActive);
         const active = prev.filter(s => s.isActive);
-        if (active.length !== prev.length) {
-          console.log(`[Shwarm] Cleaned up ${prev.length - active.length} dead shwarms`);
+        if (dead.length > 0) {
+          console.log(`[Shwarm] Cleaned up ${dead.length} dead shwarms`);
         }
         return active;
       });
-    }, 2000);
+    }, 500); // Faster cleanup - 500ms instead of 2s
 
     return () => clearInterval(interval);
   }, []);
