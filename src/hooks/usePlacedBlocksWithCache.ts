@@ -398,6 +398,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     );
     (optimisticBlock as any).__collider = collider; // Store reference for cache reuse
     collisionGrid.insert(collider);
+    
+    // Debug: Log collider insertion for blocks outside fortress
+    if (x > 20) {
+      console.log(`[placeBlock] Inserted collider at (${x}, ${y}, ${z}), grid size: ${collisionGrid.size}`);
+    }
 
     // INSTANT: Add to chunk loader (single source of truth) for immediate UI
     chunkLoader.addBlockOptimistically(optimisticBlock);
