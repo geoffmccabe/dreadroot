@@ -113,6 +113,19 @@ class SpatialHashGrid {
     const minCZ = this.cellCoord(z - radius);
     const maxCZ = this.cellCoord(z + radius);
     
+    // Debug: Log what cells we're checking and what cells exist
+    if (Math.random() < 0.002) {
+      const existingCells: string[] = [];
+      for (const [cx, zMap] of this.cells.entries()) {
+        for (const cz of zMap.keys()) {
+          existingCells.push(`(${cx},${cz})`);
+          if (existingCells.length > 10) break;
+        }
+        if (existingCells.length > 10) break;
+      }
+      console.log(`[Grid] Query cells: x[${minCX}-${maxCX}] z[${minCZ}-${maxCZ}], some existing: ${existingCells.join(',')}`);
+    }
+    
     for (let cx = minCX; cx <= maxCX; cx++) {
       const zMap = this.cells.get(cx);
       if (!zMap) continue;
