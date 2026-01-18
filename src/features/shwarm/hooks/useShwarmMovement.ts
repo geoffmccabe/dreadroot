@@ -23,6 +23,8 @@ const LERP_SPEED = 8;
 
 // Pre-allocated vectors for zero-allocation movement
 const _toPlayer = new THREE.Vector3();
+const _toCenter = new THREE.Vector3();
+const _centerOfMass = new THREE.Vector3();
 const _newPos = new THREE.Vector3();
 const _testBox = new THREE.Box3();
 const _testMin = new THREE.Vector3();
@@ -214,6 +216,20 @@ export function useShwarmMovement({
         // x_factor for random range: Tier 1 = 3, scales with tier
         const randomRange = 2 + tier;
 
+        // Calculate center of mass for this shwarm's alive blocks
+        _centerOfMass.set(0, 0, 0);
+        let aliveCount = 0;
+        for (const block of blocks) {
+          if (!block.isAlive) continue;
+          const target = blockTargetsRef.current.get(block.id);
+          const pos = target?.targetPosition ?? block.position;
+          _centerOfMass.add(pos);
+          aliveCount++;
+        }
+        if (aliveCount > 0) {
+          _centerOfMass.divideScalar(aliveCount);
+        }
+
         for (const block of blocks) {
           if (!block.isAlive) continue;
 
@@ -230,15 +246,25 @@ export function useShwarmMovement({
           
           _toPlayer.normalize();
 
+          // Calculate direction toward center of mass (horizontal)
+          _toCenter.subVectors(_centerOfMass, currentTargetPos);
+          _toCenter.y = 0;
+          const distToCenter = _toCenter.length();
+          if (distToCenter > 0.1) {
+            _toCenter.normalize();
+          } else {
+            _toCenter.set(0, 0, 0);
+          }
+
           // Random offset: +/- randomRange in each axis (integer steps for blocky feel)
           const randX = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
           const randY = Math.floor(rng() * 2); // 0 or 1 up (step-up)
           const randZ = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
 
-          // Calculate new position: 1.5 steps toward player + random offset
+          // Calculate new position: 1.5 toward player + 1 toward center + random offset
           _newPos.copy(currentTargetPos);
-          _newPos.x += _toPlayer.x * MOVE_TOWARDS_PLAYER + randX;
-          _newPos.z += _toPlayer.z * MOVE_TOWARDS_PLAYER + randZ;
+          _newPos.x += _toPlayer.x * MOVE_TOWARDS_PLAYER + _toCenter.x * 1.0 + randX;
+          _newPos.z += _toPlayer.z * MOVE_TOWARDS_PLAYER + _toCenter.z * 1.0 + randZ;
           _newPos.y += randY; // Can step up
 
           // Apply gravity: if above ground, fall 1 unit
