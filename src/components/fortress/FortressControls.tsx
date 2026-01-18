@@ -880,18 +880,16 @@ export function FirstPersonControls({
       const crawlingHeight = 0.8;
       const playerHeight = isCrawling ? crawlingHeight : standingHeight;
 
-      // Store previous position
-      prevPositionRef.current.copy(camera.position);
-      let xBlocked = false;
-      let zBlocked = false;
-      
       const currentColliders = collidersRef.current;
-      
-      // Continuous overlap resolution (stuck detection every frame, max 2 iterations)
-      let stuckCollision: THREE.Box3 | null = null;
 
+      /**
+       * CONTINUOUS OVERLAP RESOLUTION
+       * IMPORTANT: Must run BEFORE prevPosition snapshot, otherwise later collision resolution
+       * will revert us back into the overlap and cause jitter/flashing.
+       * This is the key fix for wall-jump flashing.
+       */
       for (let i = 0; i < 2; i++) {
-        const stuck = checkAxisCollision(
+        const overlap = checkAxisCollision(
           camera.position,
           currentColliders,
           playerRadius,
@@ -900,48 +898,49 @@ export function FirstPersonControls({
           true
         );
 
-        if (!stuck) break;
-        stuckCollision = stuck;
+        if (!overlap) break;
 
-        const push = findPushOutDirection(camera.position, playerRadius, playerHeight, stuck);
+        diagnostics.e6++;
+
+        const push = findPushOutDirection(camera.position, playerRadius, playerHeight, overlap);
         if (!push) break;
 
-        if (push.axis === 'y' && push.direction === 1) {
-          // Push UP: set to top of block
-          camera.position.y = stuck.max.y + playerHeight + SURFACE_EPS;
-          velocity.current.y = 0;
-          onGround.current = true;
-        } else if (push.axis === 'y' && push.direction === -1) {
-          // Push DOWN: set to bottom of block (rare)
-          camera.position.y = stuck.min.y - SURFACE_EPS;
-          velocity.current.y = Math.min(0, velocity.current.y);
-        } else if (push.axis === 'x') {
-          // Push X: set to block face
-          camera.position.x = push.direction === 1 
-            ? stuck.max.x + playerRadius + SURFACE_EPS 
-            : stuck.min.x - playerRadius - SURFACE_EPS;
+        if (push.axis === 'x') {
+          camera.position.x = push.direction === -1
+            ? overlap.min.x - playerRadius - SURFACE_EPS
+            : overlap.max.x + playerRadius + SURFACE_EPS;
+          velocity.current.x = 0;
         } else if (push.axis === 'z') {
-          // Push Z: set to block face
-          camera.position.z = push.direction === 1 
-            ? stuck.max.z + playerRadius + SURFACE_EPS 
-            : stuck.min.z - playerRadius - SURFACE_EPS;
+          camera.position.z = push.direction === -1
+            ? overlap.min.z - playerRadius - SURFACE_EPS
+            : overlap.max.z + playerRadius + SURFACE_EPS;
+          velocity.current.z = 0;
+        } else {
+          if (push.direction === 1) {
+            camera.position.y = overlap.max.y + playerHeight + SURFACE_EPS;
+            velocity.current.y = 0;
+            onGround.current = true;
+          } else {
+            camera.position.y = overlap.min.y - SURFACE_EPS;
+            velocity.current.y = 0;
+          }
         }
       }
 
-      const stuckInBlock = stuckCollision !== null;
+      // NOW snapshot previous position for axis-by-axis collision resolution
+      // This MUST be after push-out to prevent reverting into blocks
+      prevPositionRef.current.copy(camera.position);
+      let xBlocked = false;
+      let zBlocked = false;
       
-      // Allow jumping if on ground OR stuck inside a block (escape mechanism)
-      const canJump = (onGround.current || stuckInBlock) && !keys.current.ctrl;
+      // Minecraft-like: jump only when grounded (continuous push-out handles overlap escape)
+      const canJump = onGround.current && !keys.current.ctrl;
       const roles = userRolesRef.current;
       
       if (keys.current.space && canJump) {
         let jumpHeight = 1.25;
         if (roles.includes('admin') || roles.includes('superadmin')) {
           jumpHeight = 2.5;
-        }
-        // Give extra boost if stuck to help escape
-        if (stuckInBlock && !onGround.current) {
-          jumpHeight *= 1.5;
         }
         velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
         onGround.current = false;
