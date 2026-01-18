@@ -185,6 +185,20 @@ export function useLocalGrowth({
             continue;
           }
 
+          // CRITICAL: Verify parent tree still exists before placing ANY blocks
+          // This prevents orphan blocks when trees are deleted during growth
+          const { data: parentExists, error: existsError } = await supabase
+            .from('planted_trees')
+            .select('id')
+            .eq('id', tree.id)
+            .maybeSingle();
+
+          if (existsError || !parentExists) {
+            console.log(`[LocalGrowth] Parent tree ${tree.id} no longer exists, stopping growth`);
+            growingTreesRef.current.delete(id);
+            continue;
+          }
+
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
 
