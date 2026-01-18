@@ -735,6 +735,8 @@ export function FirstPersonControls({
                     choppingPositionRef.current.y !== blockY ||
                     choppingPositionRef.current.z !== blockZ;
                 
+                console.log('[TreeChop] Ownership passed. isNewBlock=', isNewBlock, 'choppingPos=', choppingPositionRef.current, 'current block=', blockX, blockY, blockZ);
+                
                 if (isNewBlock) {
                   // Started chopping a new block - reset progress
                   choppingPositionRef.current = { x: blockX, y: blockY, z: blockZ };
@@ -745,11 +747,7 @@ export function FirstPersonControls({
                 }
                 
                 const timeSinceLastChop = now - lastChopSoundTimeRef.current;
-                
-                // Debug: Log time every ~500ms to avoid spam
-                if (Math.random() < 0.05) {
-                  console.log('[TreeChop] Timer check:', timeSinceLastChop, 'ms, need', CHOP_INTERVAL_MS, 'isNewBlock was', isNewBlock, 'chopCount=', chopCountRef.current);
-                }
+                console.log('[TreeChop] Timer:', timeSinceLastChop, 'ms / needed:', CHOP_INTERVAL_MS, 'chopCount=', chopCountRef.current);
                 
                 // Check if enough time passed for next chop
                 if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
