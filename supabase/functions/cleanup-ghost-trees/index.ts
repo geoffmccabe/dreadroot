@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'invisiblock']
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -68,72 +70,127 @@ Deno.serve(async (req) => {
       })
     }
 
-    console.log('Admin verified, starting ghost tree cleanup...')
+    console.log('Admin verified, starting SMART ghost tree cleanup...')
 
-    const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'invisiblock']
+    // STEP 1: Get all valid tree IDs from planted_trees (source of truth)
+    const { data: validTrees, error: validTreesError } = await supabaseAdmin
+      .from('planted_trees')
+      .select('id')
 
-    // Delete ALL tree blocks from placed_blocks (bypasses RLS)
-    const { count: blocksCount, error: blocksError } = await supabaseAdmin
-      .from('placed_blocks')
-      .delete({ count: 'exact' })
-      .in('block_type', TREE_BLOCK_TYPES)
-
-    if (blocksError) {
-      console.error('Error deleting placed_blocks:', blocksError)
-    } else {
-      console.log(`Deleted ${blocksCount} tree blocks from placed_blocks`)
+    if (validTreesError) {
+      console.error('Error fetching planted_trees:', validTreesError)
+      throw validTreesError
     }
 
-    // Delete ALL tree_blocks records
-    const { count: treeBlocksCount, error: treeBlocksError } = await supabaseAdmin
+    const validTreeIds = new Set((validTrees || []).map(t => t.id))
+    console.log(`Found ${validTreeIds.size} legitimate trees in planted_trees`)
+
+    // STEP 2: Delete orphan tree_blocks (those referencing non-existent trees)
+    const { data: allTreeBlocks, error: treeBlocksError } = await supabaseAdmin
       .from('tree_blocks')
-      .delete({ count: 'exact' })
-      .neq('id', '')
+      .select('id, tree_id')
 
     if (treeBlocksError) {
-      console.error('Error deleting tree_blocks:', treeBlocksError)
-    } else {
-      console.log(`Deleted ${treeBlocksCount} records from tree_blocks`)
+      console.error('Error fetching tree_blocks:', treeBlocksError)
+      throw treeBlocksError
     }
 
-    // Delete ALL planted_trees records
-    const { count: plantedCount, error: plantedError } = await supabaseAdmin
-      .from('planted_trees')
-      .delete({ count: 'exact' })
-      .neq('id', '')
+    const orphanTreeBlockIds = (allTreeBlocks || [])
+      .filter(tb => !validTreeIds.has(tb.tree_id))
+      .map(tb => tb.id)
 
-    if (plantedError) {
-      console.error('Error deleting planted_trees:', plantedError)
-    } else {
-      console.log(`Deleted ${plantedCount} records from planted_trees`)
+    let deletedTreeBlocks = 0
+    if (orphanTreeBlockIds.length > 0) {
+      // Delete in batches
+      for (let i = 0; i < orphanTreeBlockIds.length; i += 500) {
+        const batch = orphanTreeBlockIds.slice(i, i + 500)
+        const { error } = await supabaseAdmin
+          .from('tree_blocks')
+          .delete()
+          .in('id', batch)
+        if (error) {
+          console.error('Error deleting orphan tree_blocks batch:', error)
+        } else {
+          deletedTreeBlocks += batch.length
+        }
+      }
+      console.log(`Deleted ${deletedTreeBlocks} orphan tree_blocks`)
     }
 
-    // Bump chunk versions to force all clients to refetch
-    const { error: bumpError } = await supabaseAdmin
-      .from('chunk_versions')
-      .update({ 
-        version: 999999,
-        updated_at: new Date().toISOString() 
-      })
-      .gte('chunk_x', -1000)
+    // STEP 3: Get all valid block positions from remaining tree_blocks
+    const { data: validBlocks, error: validBlocksError } = await supabaseAdmin
+      .from('tree_blocks')
+      .select('position_x, position_y, position_z, world_id')
 
-    if (bumpError) {
-      console.error('Error bumping chunk versions:', bumpError)
+    if (validBlocksError) {
+      console.error('Error fetching valid tree_blocks:', validBlocksError)
+      throw validBlocksError
     }
 
-    console.log('Ghost tree cleanup complete')
+    const validBlockKeys = new Set(
+      (validBlocks || []).map(b => `${b.world_id}:${b.position_x},${b.position_y},${b.position_z}`)
+    )
+    console.log(`Found ${validBlockKeys.size} valid tree block positions`)
+
+    // STEP 4: Find orphan placed_blocks (tree types with no tree_blocks record)
+    const { data: treePlacedBlocks, error: placedBlocksError } = await supabaseAdmin
+      .from('placed_blocks')
+      .select('id, world_id, position_x, position_y, position_z')
+      .in('block_type', TREE_BLOCK_TYPES)
+
+    if (placedBlocksError) {
+      console.error('Error fetching placed_blocks:', placedBlocksError)
+      throw placedBlocksError
+    }
+
+    const orphanPlacedBlockIds = (treePlacedBlocks || [])
+      .filter(pb => !validBlockKeys.has(`${pb.world_id}:${pb.position_x},${pb.position_y},${pb.position_z}`))
+      .map(pb => pb.id)
+
+    let deletedPlacedBlocks = 0
+    if (orphanPlacedBlockIds.length > 0) {
+      // Delete in batches of 500 to avoid query limits
+      for (let i = 0; i < orphanPlacedBlockIds.length; i += 500) {
+        const batch = orphanPlacedBlockIds.slice(i, i + 500)
+        const { error } = await supabaseAdmin
+          .from('placed_blocks')
+          .delete()
+          .in('id', batch)
+        if (error) {
+          console.error('Error deleting orphan placed_blocks batch:', error)
+        } else {
+          deletedPlacedBlocks += batch.length
+        }
+      }
+      console.log(`Deleted ${deletedPlacedBlocks} orphan placed_blocks`)
+    }
+
+    // Bump chunk versions to force clients to refetch if we deleted anything
+    if (deletedPlacedBlocks > 0) {
+      const { error: bumpError } = await supabaseAdmin
+        .from('chunk_versions')
+        .update({ 
+          version: 999999,
+          updated_at: new Date().toISOString() 
+        })
+        .gte('chunk_x', -1000)
+
+      if (bumpError) {
+        console.error('Error bumping chunk versions:', bumpError)
+      }
+    }
+
+    console.log('Smart ghost tree cleanup complete')
 
     return new Response(JSON.stringify({
       success: true,
-      deleted: {
-        placed_blocks: blocksCount || 0,
-        tree_blocks: treeBlocksCount || 0,
-        planted_trees: plantedCount || 0
+      stats: {
+        legitimate_trees_preserved: validTreeIds.size,
+        valid_tree_blocks: validBlockKeys.size,
       },
-      errors: {
-        blocks: blocksError?.message,
-        treeBlocks: treeBlocksError?.message,
-        planted: plantedError?.message
+      deleted: {
+        orphan_tree_blocks: deletedTreeBlocks,
+        orphan_placed_blocks: deletedPlacedBlocks,
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
