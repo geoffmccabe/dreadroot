@@ -66,9 +66,9 @@ const ensureBlockCollider = (block: PlacedBlock): void => {
   collisionGrid.insert(collider);
   (block as any).__collider = collider;
   
-  // Debug: Log collider creation for blocks outside fortress area
-  if (block.position_x > 20 && Math.random() < 0.05) {
-    console.log(`[ensureBlockCollider] Created collider at (${block.position_x}, ${block.position_y}, ${block.position_z})`);
+  // Debug: Log collider creation for blocks outside fortress area (server-loaded blocks)
+  if (block.position_x > 20 && Math.random() < 0.02) {
+    console.log(`[ensureBlockCollider] Server block at (${block.position_x}, ${block.position_y}, ${block.position_z}), grid: ${collisionGrid.size}`);
   }
 };
 
