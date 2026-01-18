@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
+import { collisionGrid } from '@/lib/spatialHashGrid';
+import * as THREE from 'three';
 
 // Configuration for chunk loading
 const LOAD_RADIUS = 4;    // Chunks to load around player (9x9 = 81 chunks max)
@@ -49,6 +51,32 @@ interface UseChunkLoaderProps {
   worldId: string | null;
   onBlocksChanged: (blocks: PlacedBlock[]) => void;
 }
+
+/**
+ * Create a collider for a block and insert it into the collision grid.
+ * The collider is attached to the block as __collider for later removal.
+ */
+const ensureBlockCollider = (block: PlacedBlock): void => {
+  if ((block as any).__collider) return; // Already has collider
+  
+  const collider = new THREE.Box3(
+    new THREE.Vector3(block.position_x, block.position_y, block.position_z),
+    new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
+  );
+  collisionGrid.insert(collider);
+  (block as any).__collider = collider;
+};
+
+/**
+ * Remove a block's collider from the collision grid.
+ */
+const removeBlockCollider = (block: PlacedBlock): void => {
+  const collider = (block as any).__collider;
+  if (collider) {
+    collisionGrid.remove(collider);
+    (block as any).__collider = null;
+  }
+};
 
 /**
  * Check if two block arrays are equivalent (same blocks at same positions with same properties)
@@ -206,6 +234,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     
     if (toEvict.length > 0) {
       for (const { key } of toEvict) {
+        // Remove colliders for all blocks in this chunk before deleting
+        const chunkData = loadedChunksRef.current.get(key);
+        if (chunkData) {
+          for (const block of chunkData.blocks) {
+            removeBlockCollider(block);
+          }
+        }
         loadedChunksRef.current.delete(key);
       }
       // Use batched emit
@@ -234,6 +269,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       );
       
       if (!existsAtPosition) {
+        // Create collider for new block
+        ensureBlockCollider(block);
         chunkData.blocks.push(block);
         // Phase 3A: Mark as having optimistic blocks (temp-*)
         if (block.id.startsWith('temp-')) {
@@ -245,6 +282,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       }
     } else {
       // Chunk not loaded - create it with just this block for immediate visibility
+      // Create collider for new block
+      ensureBlockCollider(block);
       loadedChunksRef.current.set(chunkKey, {
         blocks: [block],
         loadedAt: now,
@@ -304,6 +343,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     for (const chunkData of loadedChunksRef.current.values()) {
       const index = chunkData.blocks.findIndex(b => b.id === blockId);
       if (index >= 0) {
+        // Remove collider before removing block
+        const block = chunkData.blocks[index];
+        removeBlockCollider(block);
+        
         chunkData.blocks.splice(index, 1);
         chunkData.lastAccessedAt = Date.now();
         
@@ -373,6 +416,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         const chunkKey = `chunk_${chunkX}_${chunkZ}`;
         
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
+        
+        // Create colliders for all blocks in this chunk
+        for (const block of chunkBlocks) {
+          ensureBlockCollider(block);
+        }
         
         // Store chunk data (even if empty - means we loaded it)
         // Phase 3A: Initialize with lastAccessedAt and hasOptimisticBlocks
@@ -511,6 +559,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Load chunks from cache into memory (NO emit yet - wait for server data)
     for (const { x, z, blocks } of chunksFromCache) {
       const chunkKey = `chunk_${x}_${z}`;
+      // Create colliders for all blocks from cache
+      for (const block of blocks) {
+        ensureBlockCollider(block);
+      }
       loadedChunksRef.current.set(chunkKey, {
         blocks,
         loadedAt,
@@ -570,6 +622,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       for (const { x, z } of chunksToFetchFromServer) {
         const chunkKey = `chunk_${x}_${z}`;
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
+        
+        // Create colliders for all blocks from server
+        for (const block of chunkBlocks) {
+          ensureBlockCollider(block);
+        }
         
         loadedChunksRef.current.set(chunkKey, {
           blocks: chunkBlocks,
@@ -1070,6 +1127,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     if (chunksToUnload.length > 0) {
       for (const key of chunksToUnload) {
+        // Remove colliders for all blocks in this chunk before deleting
+        const chunkData = loadedChunksRef.current.get(key);
+        if (chunkData) {
+          for (const block of chunkData.blocks) {
+            removeBlockCollider(block);
+          }
+        }
         loadedChunksRef.current.delete(key);
       }
       // Phase 3.0: Use batched emit
