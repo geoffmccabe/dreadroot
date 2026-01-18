@@ -181,7 +181,15 @@ export function useShwarmMovement({
         const damagePerHit = definition.damage_per_hit;
 
         for (const block of blocks) {
-          if (!block.isAlive) continue;
+          // Immediately remove colliders for dead blocks
+          if (!block.isAlive) {
+            const target = blockTargetsRef.current.get(block.id);
+            if (target?.collider) {
+              collisionGrid.remove(target.collider);
+              target.collider = null;
+            }
+            continue;
+          }
 
           const target = getBlockTarget(block);
           
@@ -435,7 +443,7 @@ export function useShwarmMovement({
           blockTargetsRef.current.delete(id);
         }
       }
-    }, 5000);
+    }, 1000); // Faster cleanup interval as safety net
 
     return () => clearInterval(cleanup);
   }, [shwarmsRef]);
