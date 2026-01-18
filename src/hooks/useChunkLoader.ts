@@ -62,7 +62,10 @@ const colliderByBlockId = new Map<string, THREE.Box3>();
 // CRITICAL: Clear the collider cache when the collision grid is cleared.
 // This MUST be a module-level listener so it runs synchronously before any
 // chunk loading attempts to reuse stale collider references.
-if (typeof window !== 'undefined') {
+// Use a flag to prevent duplicate listeners on hot reloads.
+const GRID_CLEAR_LISTENER_KEY = '__chunkLoaderGridClearListener';
+if (typeof window !== 'undefined' && !(window as any)[GRID_CLEAR_LISTENER_KEY]) {
+  (window as any)[GRID_CLEAR_LISTENER_KEY] = true;
   window.addEventListener('collisionGridCleared', () => {
     console.log('[ChunkLoader] Module-level: Clearing colliderByBlockId cache');
     colliderByBlockId.clear();
@@ -91,14 +94,20 @@ const ensureBlockCollider = (block: PlacedBlock): void => {
 
   if (!collider) {
     // No cached collider for this block ID
-    if (existing) {
+    // CRITICAL: Only adopt existing collider if it's a valid THREE.Box3
+    // After grid clear, existing colliders may be corrupted/invalid
+    if (existing && typeof existing.min?.set === 'function') {
       // Adopt the block's existing collider into the cache
       collider = existing;
       colliderByBlockId.set(block.id, collider);
     } else {
-      // Create a new collider
+      // Create a new collider (existing is null, undefined, or corrupted)
       collider = new THREE.Box3();
       colliderByBlockId.set(block.id, collider);
+      // Clear the invalid reference from the block
+      if (existing) {
+        (block as any).__collider = null;
+      }
     }
   } else if (existing && existing !== collider) {
     // Block has a different collider than cached - remove the orphan
