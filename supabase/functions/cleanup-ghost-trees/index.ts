@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
 
     console.log('Admin verified, starting ghost tree cleanup...')
 
-    const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom']
+    const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'invisiblock']
 
     // Delete ALL tree blocks from placed_blocks (bypasses RLS)
     const { count: blocksCount, error: blocksError } = await supabaseAdmin

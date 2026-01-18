@@ -41,7 +41,7 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
   const handleClearGhostTrees = async () => {
     setIsCleaningGhostTrees(true);
     try {
-      const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom'];
+      const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'invisiblock'];
       
       // STEP 0: CRITICAL - Clear in-memory growing trees FIRST to stop new blocks
       const { clearGrowingTrees } = await import('@/features/trees/hooks/useLocalGrowth');

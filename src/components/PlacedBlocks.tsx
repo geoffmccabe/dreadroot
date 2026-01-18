@@ -5,6 +5,7 @@ import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
+import { collisionGrid } from '@/lib/spatialHashGrid';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
 // Use white color so textures render at full brightness without tinting
@@ -181,23 +182,26 @@ export const PlacedBlocks: React.FC<{
     }
   }, [blockIds]);
 
-  // Group blocks by block_type for instanced rendering (stable grouping)
-  // Group blocks by block_type AND texture_url to handle per-seed tree textures
-  // Key format: "blockType" or "blockType|textureUrl" if texture override present
-  const groupedBlocks = useMemo(() => {
+  // Separate invisiblocks from visible blocks
+  // Invisiblocks need collision registration but no visual rendering
+  const { groupedBlocks, invisiblocks } = useMemo(() => {
     const groups = new Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>();
+    const invisibleBlocks: PlacedBlock[] = [];
     const seenIds = new Set<string>();
     
     blocks.forEach(block => {
-      // Skip invisiblocks - they have colliders but no visual rendering
-      if (block.block_type === 'invisiblock') return;
-      
       // Skip duplicate IDs (happens during temp->real block transitions)
       if (seenIds.has(block.id)) {
         console.warn('Duplicate block ID detected:', block.id);
         return;
       }
       seenIds.add(block.id);
+      
+      // Invisiblocks go to separate array for collision-only handling
+      if (block.block_type === 'invisiblock') {
+        invisibleBlocks.push(block);
+        return;
+      }
       
       // Create group key based on block_type and optional texture_url
       const groupKey = block.texture_url 
@@ -208,8 +212,30 @@ export const PlacedBlocks: React.FC<{
       existing.blocks.push(block);
       groups.set(groupKey, existing);
     });
-    return groups;
+    return { groupedBlocks: groups, invisiblocks: invisibleBlocks };
   }, [blocks]);
+  
+  // Register invisiblock colliders directly (no visual mesh needed)
+  useEffect(() => {
+    // Create collision boxes for invisiblocks and add to collision grid
+    const invisiColliders: THREE.Box3[] = [];
+    
+    for (const block of invisiblocks) {
+      const box = new THREE.Box3(
+        new THREE.Vector3(block.position_x, block.position_y, block.position_z),
+        new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
+      );
+      collisionGrid.insert(box);
+      invisiColliders.push(box);
+    }
+    
+    // Cleanup: remove invisiblock colliders when blocks change
+    return () => {
+      for (const box of invisiColliders) {
+        collisionGrid.remove(box);
+      }
+    };
+  }, [invisiblocks]);
 
   // Don't render blocks until block definitions are loaded
   if (blockDefsLoading || blocks.length === 0) {
