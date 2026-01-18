@@ -185,12 +185,9 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         metalness: 0.1,
       });
     } else {
-      // For tree blocks with textureOverride, enable vertex colors for branch depth lightening
-      const needsVertexColors = !!textureOverride;
-      newMaterial = new THREE.MeshLambertMaterial({
-        ...materialProps,
-        vertexColors: needsVertexColors,
-      });
+      // Don't use vertexColors - it causes issues with instanced meshes
+      // Branch depth lightening is applied via instanceColor in useEffect
+      newMaterial = new THREE.MeshLambertMaterial(materialProps);
     }
     
     materialRef.current = newMaterial;
@@ -235,32 +232,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     
-    // Check if we need to apply branch depth lightening (tree blocks with textureOverride)
-    const applyBranchLightening = !!textureOverride;
-    
-    // Set up instance colors for branch depth lightening
-    if (applyBranchLightening && blocks.length > 0) {
-      const colorArray = new Float32Array(blocks.length * 3);
-      const tempColor = new THREE.Color();
-      
-      for (let i = 0; i < blocks.length; i++) {
-        const block = blocks[i];
-        const depth = (block as any).branch_depth ?? -1;
-        
-        // Calculate lightening factor: trunk(-1)=1.0, depth0=1.1, depth1=1.2, etc.
-        // This creates a gradient from dark trunk to lighter branches
-        const lightenFactor = 1.0 + Math.max(0, depth + 1) * 0.12;
-        
-        // Clamp to avoid overbrightening (max 50% lighter at depth 3)
-        const factor = Math.min(lightenFactor, 1.5);
-        tempColor.setRGB(factor, factor, factor);
-        tempColor.toArray(colorArray, i * 3);
-      }
-      
-      mesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
-      mesh.instanceColor.needsUpdate = true;
-    }
-    
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
       const x = block.position_x;
@@ -281,6 +252,30 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     }
     
     mesh.instanceMatrix.needsUpdate = true;
+    
+    // Apply branch depth lightening for tree blocks via instance colors
+    // This works WITHOUT vertexColors on material - Three.js applies instanceColor as tint
+    if (textureOverride && blocks.length > 0) {
+      const colorArray = new Float32Array(blocks.length * 3);
+      const tempColor = new THREE.Color();
+      
+      for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i];
+        const depth = (block as any).branch_depth ?? -1;
+        
+        // Calculate lightening factor: trunk(-1)=1.0, depth0=1.1, depth1=1.2, etc.
+        // This creates a gradient from dark trunk to lighter branches
+        const lightenFactor = 1.0 + Math.max(0, depth + 1) * 0.12;
+        
+        // Clamp to avoid overbrightening (max 50% lighter at depth 3)
+        const factor = Math.min(lightenFactor, 1.5);
+        tempColor.setRGB(factor, factor, factor);
+        tempColor.toArray(colorArray, i * 3);
+      }
+      
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
+      mesh.instanceColor.needsUpdate = true;
+    }
     
     // Set bounding box/sphere on the MESH for proper frustum culling
     if (blocks.length > 0) {
