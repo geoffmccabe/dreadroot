@@ -53,41 +53,72 @@ interface UseChunkLoaderProps {
 }
 
 /**
+ * CANONICAL collider cache keyed by block.id.
+ * This prevents collider duplication when blocks are refetched/replaced,
+ * which was causing the collisionGrid to inflate with stale colliders.
+ */
+const colliderByBlockId = new Map<string, THREE.Box3>();
+
+/**
+ * Update collider bounds to match block position
+ */
+const updateBlockColliderBounds = (block: PlacedBlock, collider: THREE.Box3): void => {
+  collider.min.set(block.position_x, block.position_y, block.position_z);
+  collider.max.set(block.position_x + 1, block.position_y + 1, block.position_z + 1);
+};
+
+/**
  * Create a collider for a block and insert it into the collision grid.
- * The collider is attached to the block as __collider for later removal.
+ * Uses canonical cache to prevent collider duplication/leaks.
  * 
- * IMPORTANT: If the collider already exists but is not in the grid (e.g., after
- * grid clear, hot reload, world reset), we re-insert it.
+ * CRITICAL FIX: Previously, when blocks were refetched and the object identity
+ * changed, a new Box3 was created, but the old one stayed in collisionGrid
+ * (orphaned). This caused e5 to spike even with few blocks.
  */
 const ensureBlockCollider = (block: PlacedBlock): void => {
-  // If collider already exists, ensure it is present in the grid.
-  // The grid can be cleared independently (debug key, hot reload, world reset).
   const existing = (block as any).__collider as THREE.Box3 | null | undefined;
-  if (existing) {
-    if (!collisionGrid.has(existing)) {
-      collisionGrid.insert(existing);
+  let collider = colliderByBlockId.get(block.id);
+
+  if (!collider) {
+    // No cached collider for this block ID
+    if (existing) {
+      // Adopt the block's existing collider into the cache
+      collider = existing;
+      colliderByBlockId.set(block.id, collider);
+    } else {
+      // Create a new collider
+      collider = new THREE.Box3();
+      colliderByBlockId.set(block.id, collider);
     }
-    return;
+  } else if (existing && existing !== collider) {
+    // Block has a different collider than cached - remove the orphan
+    collisionGrid.remove(existing);
   }
 
-  const collider = new THREE.Box3(
-    new THREE.Vector3(block.position_x, block.position_y, block.position_z),
-    new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
-  );
+  // Update bounds (in case position changed, though blocks don't move)
+  updateBlockColliderBounds(block, collider);
 
-  collisionGrid.insert(collider);
+  // Ensure collider is in the grid (may have been cleared by hot reload/world switch)
+  if (!collisionGrid.has(collider)) {
+    collisionGrid.insert(collider);
+  }
+
   (block as any).__collider = collider;
 };
 
 /**
- * Remove a block's collider from the collision grid.
+ * Remove a block's collider from the collision grid and cache.
  */
 const removeBlockCollider = (block: PlacedBlock): void => {
-  const collider = (block as any).__collider;
+  const cached = colliderByBlockId.get(block.id);
+  const collider = cached ?? ((block as any).__collider as THREE.Box3 | null | undefined);
+
   if (collider) {
     collisionGrid.remove(collider);
-    (block as any).__collider = null;
   }
+
+  colliderByBlockId.delete(block.id);
+  (block as any).__collider = null;
 };
 
 /**
@@ -342,8 +373,22 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         
         // Transfer the collider reference from old block to new block
         // The collider is already in the grid, we just need to maintain the reference
-        if ((oldBlock as any).__collider) {
-          (preservedBlock as any).__collider = (oldBlock as any).__collider;
+        const oldCollider = (oldBlock as any).__collider as THREE.Box3 | undefined;
+        if (oldCollider) {
+          (preservedBlock as any).__collider = oldCollider;
+          
+          // CRITICAL FIX: Re-key the collider cache when block ID changes (temp -> real)
+          // This prevents orphan colliders when temp-* IDs are replaced with server IDs
+          if (oldBlock.id !== preservedBlock.id) {
+            const cached = colliderByBlockId.get(oldBlock.id);
+            if (cached === oldCollider) {
+              colliderByBlockId.delete(oldBlock.id);
+            }
+            colliderByBlockId.set(preservedBlock.id, oldCollider);
+          }
+          
+          // Clear old block's reference to prevent double-removal
+          (oldBlock as any).__collider = null;
         }
         
         chunkData.blocks[index] = preservedBlock;
@@ -1310,6 +1355,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         removeBlockCollider(block);
       }
     }
+    
+    // CRITICAL FIX: Clear the canonical collider cache to prevent memory leaks
+    // This ensures old colliders don't accumulate across world switches
+    colliderByBlockId.clear();
     
     loadedChunksRef.current.clear();
     playerChunkRef.current = null;

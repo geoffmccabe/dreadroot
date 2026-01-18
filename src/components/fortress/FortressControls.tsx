@@ -894,8 +894,7 @@ export function FirstPersonControls({
           currentColliders,
           playerRadius,
           playerHeight,
-          false,
-          true
+          'overlap' // Pure overlap check for push-out
         );
 
         if (!overlap) break;
@@ -945,16 +944,15 @@ export function FirstPersonControls({
         velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
         onGround.current = false;
       }
-      deltaMovement.y += velocity.current.y * dt;
-      
-      // Note: isMoving used implicitly - throttling happens inside checkAxisCollision
+      // Use moveDt for vertical integration (consistent timestep)
+      deltaMovement.y += velocity.current.y * moveDt;
 
-      // X-axis collision - only check if moving horizontally
+      // X-axis collision - use axis-aware intersection
       if (deltaMovement.x !== 0) {
         testPosRef.current.copy(camera.position);
         testPosRef.current.x += deltaMovement.x;
         
-        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, true)) {
+        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, 'x')) {
           camera.position.x = prevPositionRef.current.x;
           velocity.current.x = 0;
           xBlocked = true;
@@ -963,12 +961,12 @@ export function FirstPersonControls({
         }
       }
 
-      // Z-axis collision - only check if moving horizontally
+      // Z-axis collision - use axis-aware intersection
       if (deltaMovement.z !== 0) {
         testPosRef.current.copy(camera.position);
         testPosRef.current.z += deltaMovement.z;
         
-        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, true)) {
+        if (checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, 'z')) {
           camera.position.z = prevPositionRef.current.z;
           velocity.current.z = 0;
           zBlocked = true;
@@ -977,33 +975,25 @@ export function FirstPersonControls({
         }
       }
 
-      // Y-axis collision - always check when there's vertical movement
+      // Y-axis collision - use directional collision detection
       if (deltaMovement.y !== 0) {
         testPosRef.current.copy(camera.position);
         testPosRef.current.y += deltaMovement.y;
         
-        // Force check for Y-axis since it's critical for ground detection
-        const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, false, true);
+        // Pass direction: 1 = moving up (find ceiling), -1 = moving down (find floor)
+        const yDirection: 1 | -1 = deltaMovement.y > 0 ? 1 : -1;
+        const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, 'y', yDirection);
+        
         if (collision) {
-          if (velocity.current.y < 0) {
-            // Falling DOWN - land on top of block
+          if (yDirection < 0) {
+            // Falling DOWN - land on top of block (use collision.max.y = floor surface)
             camera.position.y = collision.max.y + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
             onGround.current = true;
           } else {
-            // Jumping UP - only stop if head actually hits bottom of block
-            // Player head is at camera.position.y, block bottom is collision.min.y
-            const headY = testPosRef.current.y; // Where head would be after move
-            const blockBottomY = collision.min.y;
-            
-            // Only apply ceiling collision if head is actually entering the block from below
-            if (headY > blockBottomY) {
-              camera.position.y = blockBottomY - SURFACE_EPS;
-              velocity.current.y = 0;
-            } else {
-              // Head isn't hitting - allow the move (we're jumping past it or it's beside us)
-              camera.position.y = testPosRef.current.y;
-            }
+            // Jumping UP - hit ceiling (use collision.min.y = ceiling surface)
+            camera.position.y = collision.min.y - SURFACE_EPS;
+            velocity.current.y = 0;
           }
         } else {
           if (testPosRef.current.y < playerHeight && velocity.current.y < 0) {
@@ -1052,8 +1042,8 @@ export function FirstPersonControls({
           currentColliders,
           playerRadius,
           playerHeight,
-          false,
-          true
+          'y',  // Y-axis check
+          -1    // Direction: looking for floor (moving down)
         );
 
         const feetY = camera.position.y - playerHeight;

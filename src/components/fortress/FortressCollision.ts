@@ -211,9 +211,79 @@ export function createPlayerBox(
 }
 
 /**
+ * Collision axis type for Minecraft-style AABB resolution
+ * - 'overlap': check for pure strict overlap (no axis preference)
+ * - 'x', 'y', 'z': check collision along that movement axis
+ */
+export type CollisionAxis = 'x' | 'y' | 'z' | 'overlap';
+
+// Epsilon values for collision tests
+const ORTHO_EPS = 1e-6;  // Orthogonal axes: strict overlap (touching does NOT count)
+const AXIS_EPS = 1e-6;   // Movement axis: inclusive overlap (touching counts)
+
+/**
+ * Strict overlap: returns true only if ranges genuinely overlap (not just touching)
+ * Used for axes orthogonal to movement direction
+ */
+const overlapsStrict = (aMin: number, aMax: number, bMin: number, bMax: number, eps = ORTHO_EPS): boolean =>
+  aMax > bMin + eps && aMin < bMax - eps;
+
+/**
+ * Inclusive overlap: returns true if ranges overlap OR just touch
+ * Used for the movement axis to prevent tunneling
+ */
+const overlapsInclusive = (aMin: number, aMax: number, bMin: number, bMax: number, eps = AXIS_EPS): boolean =>
+  aMax >= bMin - eps && aMin <= bMax + eps;
+
+/**
+ * Axis-aware intersection test for Minecraft-style AABB collision
+ * 
+ * KEY FIX: Previously used Box3.intersectsBox() which returns true for touching faces.
+ * This caused standing on a block to trigger horizontal collision, and side blocks
+ * to be detected as ceiling/floor during Y movement.
+ * 
+ * Correct behavior:
+ * - Movement axis: inclusive overlap (touching counts as collision)
+ * - Orthogonal axes: strict overlap (touching does NOT count)
+ */
+const intersectsForAxis = (playerBox: THREE.Box3, collider: THREE.Box3, axis: CollisionAxis): boolean => {
+  const p = playerBox;
+  const c = collider;
+
+  switch (axis) {
+    case 'overlap':
+      // Pure overlap check - all axes strict
+      return overlapsStrict(p.min.x, p.max.x, c.min.x, c.max.x) &&
+             overlapsStrict(p.min.y, p.max.y, c.min.y, c.max.y) &&
+             overlapsStrict(p.min.z, p.max.z, c.min.z, c.max.z);
+
+    case 'x':
+      // X-axis movement: X inclusive, Y/Z strict
+      return overlapsInclusive(p.min.x, p.max.x, c.min.x, c.max.x) &&
+             overlapsStrict(p.min.y, p.max.y, c.min.y, c.max.y) &&
+             overlapsStrict(p.min.z, p.max.z, c.min.z, c.max.z);
+
+    case 'y':
+      // Y-axis movement: Y inclusive, X/Z strict
+      return overlapsStrict(p.min.x, p.max.x, c.min.x, c.max.x) &&
+             overlapsInclusive(p.min.y, p.max.y, c.min.y, c.max.y) &&
+             overlapsStrict(p.min.z, p.max.z, c.min.z, c.max.z);
+
+    case 'z':
+      // Z-axis movement: Z inclusive, X/Y strict
+      return overlapsStrict(p.min.x, p.max.x, c.min.x, c.max.x) &&
+             overlapsStrict(p.min.y, p.max.y, c.min.y, c.max.y) &&
+             overlapsInclusive(p.min.z, p.max.z, c.min.z, c.max.z);
+  }
+};
+
+/**
  * Checks for collision on a specific axis using spatial hash grid
  * ZERO ALLOCATIONS in hot path
- * Uses Y-filtered query for Minecraft-style collision (avoids vertical stack overhead)
+ * Uses Y-filtered query for Minecraft-style collision
+ * 
+ * @param axis - Which axis to check collision for ('x', 'y', 'z', 'overlap')
+ * @param direction - For Y-axis: 1 = moving up (find ceiling), -1 = moving down (find floor)
  * @returns The collider that was hit, or null if no collision
  */
 export function checkAxisCollision(
@@ -221,27 +291,22 @@ export function checkAxisCollision(
   colliders: THREE.Box3[], // kept for API compatibility, not used when grid is populated
   playerRadius: number,
   playerHeight: number,
-  isHorizontal: boolean = false,
-  forceCheck: boolean = false // kept for API compatibility
+  axis: CollisionAxis = 'overlap',
+  direction: 1 | -1 = -1 // only used for Y-axis
 ): THREE.Box3 | null {
-  // NO THROTTLING - collision must be checked every frame for reliable physics
   diagnostics.e1++;
   
-  // Use pre-allocated player box (no allocations!)
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
   
   // Query only colliders near the player's vertical span (+ margin)
-  // This is the key Minecraft-style optimization: filter by Y to avoid scanning tall columns
   const minY = playerBox.min.y - 0.5;
   const maxY = playerBox.max.y + 0.5;
   
-  // Use Y-filtered spatial hash grid query - radius 1.5 is sufficient for player collision
   const count = collisionGrid.getNearbyFiltered(pos.x, pos.z, 1.5, minY, maxY);
   const nearbyColliders = collisionGrid.nearbyResult;
   
-  // IMPORTANT: Only use fallback if the grid is TRULY empty (no colliders anywhere).
+  // Fallback: if grid is empty but we have colliders passed in
   if (count === 0 && colliders.length > 0 && collisionGrid.size === 0) {
-    // Fallback: check all colliders with spatial filter
     for (let i = 0; i < colliders.length; i++) {
       const collider = colliders[i];
       diagnostics.e5++;
@@ -250,42 +315,45 @@ export function checkAxisCollision(
       const dz = pos.z - (collider.min.z + collider.max.z) * 0.5;
       if (dx * dx + dz * dz > 4) continue;
       
-      if (isHorizontal) {
-        // For horizontal collision, skip blocks player is standing ON (feet at block top)
-        // But don't skip blocks at waist/head height - those should block!
-        const feetY = playerBox.min.y;
-        const blockTopY = collider.max.y;
-        const standingOnBlock = feetY >= blockTopY - 0.1 && feetY <= blockTopY + 0.15;
-        if (standingOnBlock) continue;
-      }
-      
-      if (playerBox.intersectsBox(collider)) {
+      if (intersectsForAxis(playerBox, collider, axis)) {
         return collider;
       }
     }
     return null;
   }
   
-  // Use grid results - iterate only nearby colliders
+  // For Y-axis, we need to find the correct ceiling/floor based on direction
+  let bestCollider: THREE.Box3 | null = null;
+  let bestY = direction > 0 ? Infinity : -Infinity; // ceiling = lowest min.y, floor = highest max.y
+  
   for (let i = 0; i < count; i++) {
     const collider = nearbyColliders[i];
     diagnostics.e5++;
     
-    // For horizontal movement, skip blocks the player is standing on
-    if (isHorizontal) {
-      const feetY = playerBox.min.y;
-      const blockTopY = collider.max.y;
-      // Standing on block = feet are at block top level (within tolerance)
-      // This allows walking ON blocks while still blocking walking INTO blocks
-      const standingOnBlock = feetY >= blockTopY - 0.1 && feetY <= blockTopY + 0.15;
-      if (standingOnBlock) continue;
-    }
-    
-    if (playerBox.intersectsBox(collider)) {
-      return collider;
+    if (intersectsForAxis(playerBox, collider, axis)) {
+      if (axis === 'y') {
+        // Directional Y selection: find correct ceiling or floor
+        if (direction > 0) {
+          // Moving up - find lowest ceiling (smallest min.y that's above player head)
+          if (collider.min.y < bestY) {
+            bestY = collider.min.y;
+            bestCollider = collider;
+          }
+        } else {
+          // Moving down - find highest floor (largest max.y that's below player feet)
+          if (collider.max.y > bestY) {
+            bestY = collider.max.y;
+            bestCollider = collider;
+          }
+        }
+      } else {
+        // For X/Z/overlap, return first hit
+        return collider;
+      }
     }
   }
-  return null;
+  
+  return bestCollider;
 }
 
 /**
