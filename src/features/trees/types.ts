@@ -1,5 +1,8 @@
 // Tree System Types - Fully isolated from main codebase
 
+// Symmetry modes for tree generation
+export type SymmetryMode = 'none' | '2xs' | '4r' | '4x2';
+
 export interface SeedDefinition {
   id: string;
   tier: number;
@@ -26,6 +29,8 @@ export interface SeedDefinition {
   shroom_chance: number;
   shroom_length: number;
   shroom_cap_diameter: number;
+  // Symmetry mode
+  symmetry: SymmetryMode;
 }
 
 export interface PlantedTree {
@@ -119,4 +124,5 @@ export interface TreeGrowthOptions {
   shroomChance?: number;
   shroomLength?: number;
   shroomCapDiameter?: number;
+  symmetry?: SymmetryMode;
 }
