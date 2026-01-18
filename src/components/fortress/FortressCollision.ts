@@ -342,6 +342,55 @@ export function findStepUpTarget(
   return bestStepUpY;
 }
 
+/**
+ * Find the best direction to push the player out of a block
+ * Returns the axis and direction to push, biased toward pushing UP
+ */
+export function findPushOutDirection(
+  playerPos: THREE.Vector3,
+  playerRadius: number,
+  playerHeight: number,
+  block: THREE.Box3
+): { axis: 'x' | 'y' | 'z'; direction: 1 | -1; distance: number } | null {
+  // Player AABB (playerPos.y is top of player in this codebase)
+  const pMinX = playerPos.x - playerRadius;
+  const pMaxX = playerPos.x + playerRadius;
+  const pMinY = playerPos.y - playerHeight;
+  const pMaxY = playerPos.y;
+  const pMinZ = playerPos.z - playerRadius;
+  const pMaxZ = playerPos.z + playerRadius;
+
+  // Penetration distances to escape in each direction
+  const pushNegX = pMaxX - block.min.x;
+  const pushPosX = block.max.x - pMinX;
+  const pushNegY = pMaxY - block.min.y;
+  const pushPosY = block.max.y - pMinY;
+  const pushNegZ = pMaxZ - block.min.z;
+  const pushPosZ = block.max.z - pMinZ;
+
+  type Candidate = { axis: 'x' | 'y' | 'z'; direction: 1 | -1; distance: number; score: number };
+  const candidates: Candidate[] = [];
+
+  // Only consider positive penetrations
+  if (pushNegX > 0) candidates.push({ axis: 'x', direction: -1, distance: pushNegX, score: pushNegX });
+  if (pushPosX > 0) candidates.push({ axis: 'x', direction:  1, distance: pushPosX, score: pushPosX });
+  if (pushNegZ > 0) candidates.push({ axis: 'z', direction: -1, distance: pushNegZ, score: pushNegZ });
+  if (pushPosZ > 0) candidates.push({ axis: 'z', direction:  1, distance: pushPosZ, score: pushPosZ });
+
+  // Bias: prefer pushing UP (0.95 multiplier) over DOWN (1.50 penalty)
+  if (pushPosY > 0) candidates.push({ axis: 'y', direction:  1, distance: pushPosY, score: pushPosY * 0.95 });
+  if (pushNegY > 0) candidates.push({ axis: 'y', direction: -1, distance: pushNegY, score: pushNegY * 1.50 });
+
+  if (candidates.length === 0) return null;
+
+  let best = candidates[0];
+  for (let i = 1; i < candidates.length; i++) {
+    if (candidates[i].score < best.score) best = candidates[i];
+  }
+
+  return { axis: best.axis, direction: best.direction, distance: best.distance };
+}
+
 // Export dimensions as an object for convenience
 export const FORTRESS_DIMENSIONS = {
   cliffW,
