@@ -56,6 +56,7 @@ function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
     shroomChance: seedDef.shroom_chance ?? 0,
     shroomLength: seedDef.shroom_length ?? 5,
     shroomCapDiameter: seedDef.shroom_cap_diameter ?? 3,
+    symmetry: seedDef.symmetry ?? 'none',
   };
 }
 
