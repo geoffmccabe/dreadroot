@@ -54,6 +54,24 @@ function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
   };
 }
 
+// Module-level reference for clearing growing trees from outside the hook
+let growingTreesRefGlobal: React.MutableRefObject<Map<string, GrowingTree>> | null = null;
+
+// Set of tree IDs that have been deleted - prevents race conditions
+const deletedTreeIds = new Set<string>();
+
+/**
+ * Clear all growing trees from memory (used for ghost tree cleanup)
+ */
+export function clearGrowingTrees() {
+  if (growingTreesRefGlobal?.current) {
+    const count = growingTreesRefGlobal.current.size;
+    growingTreesRefGlobal.current.clear();
+    console.log(`[LocalGrowth] Cleared ${count} growing trees from memory`);
+  }
+  deletedTreeIds.clear();
+}
+
 export function useLocalGrowth({
   worldId,
   userId,
@@ -63,6 +81,9 @@ export function useLocalGrowth({
   const growingTreesRef = useRef<Map<string, GrowingTree>>(new Map());
   const placeBlockRef = useRef(placeBlock);
   const isGrowingRef = useRef(false);
+  
+  // Set the global reference for external clearing
+  growingTreesRefGlobal = growingTreesRef;
 
   // Keep placeBlock ref in sync
   useEffect(() => {
@@ -136,6 +157,8 @@ export function useLocalGrowth({
    * Stop growing a specific tree (used when tree is deleted)
    */
   const stopGrowing = useCallback((treeId: string) => {
+    // Add to deleted set IMMEDIATELY to prevent race conditions
+    deletedTreeIds.add(treeId);
     if (growingTreesRef.current.has(treeId)) {
       console.log(`[LocalGrowth] Stopping growth for tree ${treeId}`);
       growingTreesRef.current.delete(treeId);
@@ -155,6 +178,13 @@ export function useLocalGrowth({
 
       try {
         for (const [id, tree] of growingTreesRef.current) {
+          // CRITICAL: Check deleted set FIRST (sync, no race condition)
+          if (deletedTreeIds.has(id)) {
+            console.log(`[LocalGrowth] Tree ${id} was deleted, removing from growth`);
+            growingTreesRef.current.delete(id);
+            continue;
+          }
+          
           // Skip temp trees that haven't been saved to DB yet
           if (id.startsWith('temp_')) {
             continue;
