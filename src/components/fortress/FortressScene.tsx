@@ -643,6 +643,7 @@ export function FortressScene({
         blocksByTypeAndUser={blocksByTypeAndUser}
         onGodModeChange={onGodModeChange}
         updatePlayerPosition={updatePlayerPosition}
+        applyKnockback={undefined}
       />
       
       <MultiplayerPlayers players={players} />

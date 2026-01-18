@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import * as THREE from 'three';
+import { PLAYER_SPAWN_POINT } from '../constants';
 
 export interface PlayerHealthState {
   currentHealth: number;
@@ -13,8 +14,12 @@ export interface PlayerHealthState {
   isDead: boolean;
 }
 
-// Spawn point for respawn
-const SPAWN_POINT = new THREE.Vector3(-8, 1.8, 22);
+// Spawn point for respawn (from constants for single source of truth)
+const SPAWN_POINT = new THREE.Vector3(
+  PLAYER_SPAWN_POINT.x,
+  PLAYER_SPAWN_POINT.y,
+  PLAYER_SPAWN_POINT.z
+);
 
 export function usePlayerHealth() {
   const { user } = useAuth();

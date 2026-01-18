@@ -49,7 +49,7 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
         <Heart
           key={`full-${i}`}
           className={cn(
-            "w-5 h-5 fill-red-500 text-red-600 drop-shadow-[0_0_4px_rgba(239,68,68,0.5)]",
+            "w-5 h-5 fill-destructive text-destructive drop-shadow-[0_0_4px_hsl(var(--destructive)/0.5)]",
             isCritical && "animate-pulse"
           )}
         />
@@ -59,7 +59,7 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
       {partialHeart > 0 && (
         <div className="relative w-5 h-5">
           {/* Empty background */}
-          <Heart className="absolute w-5 h-5 text-gray-600 fill-gray-800" />
+          <Heart className="absolute w-5 h-5 text-muted-foreground fill-muted" />
           {/* Partial fill using clip-path */}
           <div 
             className="absolute inset-0 overflow-hidden"
@@ -67,7 +67,7 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
           >
             <Heart 
               className={cn(
-                "w-5 h-5 fill-red-500 text-red-600",
+                "w-5 h-5 fill-destructive text-destructive",
                 isCritical && "animate-pulse"
               )} 
             />
@@ -79,7 +79,7 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
       {Array.from({ length: emptyHearts }).map((_, i) => (
         <HeartCrack
           key={`empty-${i}`}
-          className="w-5 h-5 text-gray-600 fill-gray-800/50"
+          className="w-5 h-5 text-muted-foreground fill-muted/50"
         />
       ))}
       
@@ -105,17 +105,17 @@ export function DeathOverlay({ isDead, respawnTimer, onRespawn }: DeathOverlayPr
   if (!isDead) return null;
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-900/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-destructive/80 backdrop-blur-sm">
       <div className="text-center space-y-4">
-        <h1 className="text-6xl font-bold text-white drop-shadow-lg">YOU DIED</h1>
+        <h1 className="text-6xl font-bold text-destructive-foreground drop-shadow-lg">YOU DIED</h1>
         {respawnTimer > 0 ? (
-          <p className="text-2xl text-white/80">
+          <p className="text-2xl text-destructive-foreground/80">
             Respawning in {respawnTimer}...
           </p>
         ) : (
           <button
             onClick={onRespawn}
-            className="px-6 py-3 text-xl font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors"
+            className="px-6 py-3 text-xl font-bold text-destructive-foreground bg-destructive hover:opacity-90 rounded-lg transition-opacity"
           >
             Respawn
           </button>
