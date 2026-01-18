@@ -11,7 +11,6 @@ import {
 } from './FortressTypes';
 import {
   createFortressColliders,
-  createBlockColliders,
   checkAxisCollision,
   findStepUpTarget,
   createPlayerBox,
@@ -106,11 +105,10 @@ export function FirstPersonControls({
   const lastFireTime = useRef(0);
   const FIRE_RATE_LIMIT = 150;
 
-  // Cache for block collision boxes
-  const blockCollisionCache = useRef(new Map<string, THREE.Box3>());
   const gridInitialized = useRef(false);
   
   // Clear collision grid on mount to remove stale entries from previous sessions
+  // Then add fortress colliders (walls, pillars) - these are static
   useEffect(() => {
     if (!gridInitialized.current) {
       collisionGrid.clear();
@@ -118,26 +116,19 @@ export function FirstPersonControls({
       gridInitialized.current = true;
     }
   }, []);
-  // Collision boxes for fortress walls and placed blocks
-  // Use a stable reference to avoid allocations on every render
+  
+  // Collision boxes for fortress walls only (block colliders are now managed by useChunkLoader)
   const collidersArrayRef = useRef<THREE.Box3[]>([]);
   
-  // Update colliders when blocks change - handles caching internally
-  // blocks now includes both regular placed blocks AND tree blocks (merged in FortressScene)
+  // Get fortress colliders once - they're static
   useMemo(() => {
-    // createBlockColliders now has fast-path when nothing changed
-    const blockColliders = createBlockColliders(existingBlocks, blockCollisionCache.current);
     const fortressColliders = createFortressColliders();
     
-    // Reuse the array reference instead of spreading
     collidersArrayRef.current.length = 0;
     for (let i = 0; i < fortressColliders.length; i++) {
       collidersArrayRef.current.push(fortressColliders[i]);
     }
-    for (let i = 0; i < blockColliders.length; i++) {
-      collidersArrayRef.current.push(blockColliders[i]);
-    }
-  }, [existingBlocks]);
+  }, []);
   
   const colliders = collidersArrayRef.current;
 
