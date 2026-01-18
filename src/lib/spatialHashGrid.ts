@@ -51,6 +51,11 @@ class SpatialHashGrid {
     const minCellZ = this.cellCoord(collider.min.z);
     const maxCellZ = this.cellCoord(collider.max.z);
     
+    // Debug: Log a sample of inserts
+    if (Math.random() < 0.001) {
+      console.log(`[Grid Insert] pos: (${collider.min.x.toFixed(1)}, ${collider.min.z.toFixed(1)}) -> cells: x[${minCellX}-${maxCellX}] z[${minCellZ}-${maxCellZ}]`);
+    }
+    
     const indices: number[] = [];
     
     for (let cx = minCellX; cx <= maxCellX; cx++) {
