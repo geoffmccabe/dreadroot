@@ -43,16 +43,15 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
     try {
       const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom'];
       
-      // 1. Clear tree blocks from IndexedDB chunk cache
-      const removedFromCache = await blockDB.clearTreeBlocksFromCache();
-      console.log(`[GhostTreeCleanup] Removed ${removedFromCache} blocks from IndexedDB`);
+      // 1. NUCLEAR: Clear entire IndexedDB chunk cache
+      await blockDB.clearAllChunkCache();
+      console.log('[GhostTreeCleanup] Cleared entire IndexedDB chunk cache');
       
-      // 2. Delete ghost tree blocks from Supabase (null texture)
+      // 2. Delete ALL tree blocks from Supabase (not just null texture)
       const { error: deleteError, count: dbCount } = await supabase
         .from('placed_blocks')
         .delete({ count: 'exact' })
-        .in('block_type', TREE_BLOCK_TYPES)
-        .is('texture_url', null);
+        .in('block_type', TREE_BLOCK_TYPES);
       
       if (deleteError) {
         console.error('[GhostTreeCleanup] DB delete error:', deleteError);
@@ -64,7 +63,7 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       const { error: bumpError } = await supabase
         .from('chunk_versions')
         .update({ 
-          version: 99999, // High version to force all clients to refetch
+          version: 999999, // High version to force all clients to refetch
           updated_at: new Date().toISOString() 
         })
         .gte('chunk_x', -1000); // Match all chunks
@@ -75,7 +74,7 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       
       toast({
         title: 'Ghost trees cleared',
-        description: `Removed ${removedFromCache} from cache, ${dbCount || 0} from database. Refresh page to see changes.`
+        description: `Deleted ${dbCount || 0} tree blocks from database. REFRESH PAGE NOW to clear colliders.`
       });
     } catch (err) {
       console.error('[GhostTreeCleanup] Error:', err);
