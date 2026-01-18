@@ -189,6 +189,9 @@ export const PlacedBlocks: React.FC<{
     const seenIds = new Set<string>();
     
     blocks.forEach(block => {
+      // Skip invisiblocks - they have colliders but no visual rendering
+      if (block.block_type === 'invisiblock') return;
+      
       // Skip duplicate IDs (happens during temp->real block transitions)
       if (seenIds.has(block.id)) {
         console.warn('Duplicate block ID detected:', block.id);

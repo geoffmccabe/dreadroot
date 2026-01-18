@@ -80,7 +80,8 @@ export interface TreeFruit {
 }
 
 // Block types for decorations - allows future unique textures per type
-export type TreeBlockType = 'trunk' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fruit';
+// 'invisiblock' = invisible collision block for walkways around decorations
+export type TreeBlockType = 'trunk' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fruit' | 'invisiblock';
 
 // Blueprint types for generation algorithm
 export interface BlueprintBlock {
