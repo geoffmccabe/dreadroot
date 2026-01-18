@@ -616,8 +616,8 @@ export function FortressScene({
           
           // Check shwarm collisions (if not already hit something)
           if (!hit) {
-            // Hitbox radius: half of 0.5m cube size = 0.25, but add some tolerance for bullet width
-            const SHWARM_HIT_RADIUS = 0.4;
+            // Use proper AABB collision for 0.5x0.5m hitbox (constant regardless of visual scale)
+            const SHWARM_HALF_SIZE = 0.25; // Half of 0.5m cube
             const BULLET_DAMAGE = 25;
             
             for (const shwarm of activeShwarms) {
@@ -626,8 +626,19 @@ export function FortressScene({
               for (const block of shwarm.blocks) {
                 if (!block.isAlive) continue;
                 
-                const distance = bullet.position.distanceTo(block.position);
-                if (distance < SHWARM_HIT_RADIUS) {
+                // AABB collision: check if bullet is within the 0.5x0.5x0.5 cube
+                const bx = block.position.x;
+                const by = block.position.y;
+                const bz = block.position.z;
+                const px = bullet.position.x;
+                const py = bullet.position.y;
+                const pz = bullet.position.z;
+                
+                if (
+                  px >= bx - SHWARM_HALF_SIZE && px <= bx + SHWARM_HALF_SIZE &&
+                  py >= by - SHWARM_HALF_SIZE && py <= by + SHWARM_HALF_SIZE &&
+                  pz >= bz - SHWARM_HALF_SIZE && pz <= bz + SHWARM_HALF_SIZE
+                ) {
                   // Hit shwarm block!
                   hit = true;
                   needsBulletRender = true;
