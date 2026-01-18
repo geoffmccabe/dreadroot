@@ -84,6 +84,10 @@ export function ProceduralGround({
   );
 }
 
+// Colors for chunk boundary highlighting
+const NORMAL_COLOR = new THREE.Color(1, 1, 1); // No tint
+const EDGE_COLOR = new THREE.Color(1.1, 1.1, 1.1); // 10% lighter at edges
+
 function GroundChunk({
   chunkX,
   chunkZ,
@@ -119,12 +123,28 @@ function GroundChunk({
         // Position block at center of voxel cell
         temp.position.set(dx + 0.5, SURFACE_Y + 0.5, dz + 0.5);
         temp.updateMatrix();
-        mesh.setMatrixAt(i++, temp.matrix);
+        mesh.setMatrixAt(i, temp.matrix);
+        
+        // Check if this block is at a chunk boundary (first or last position in chunk)
+        const isEdgeX = dx === 0 || dx === CHUNK_SIZE - 1;
+        const isEdgeZ = dz === 0 || dz === CHUNK_SIZE - 1;
+        
+        // Apply lighter color at chunk boundaries
+        if (isEdgeX || isEdgeZ) {
+          mesh.setColorAt(i, EDGE_COLOR);
+        } else {
+          mesh.setColorAt(i, NORMAL_COLOR);
+        }
+        
+        i++;
       }
     }
     
     mesh.count = i;
     mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) {
+      mesh.instanceColor.needsUpdate = true;
+    }
   }, [chunkX, chunkZ, temp]);
   
   return (
