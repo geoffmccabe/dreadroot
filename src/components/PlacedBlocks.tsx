@@ -233,8 +233,7 @@ export const PlacedBlocks: React.FC<{
         }
         
         if (!blockDef) {
-          // Log missing block definitions to help debug (non-tree blocks only)
-          console.warn(`[PlacedBlocks] No block definition for type: "${blockType}", skipping ${blocksOfType.length} blocks`);
+          // Skip blocks with missing definitions silently (common for deprecated/removed block types)
           return null;
         }
         
