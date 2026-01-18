@@ -4,6 +4,7 @@ export { DynamicSky, SkyTexture } from './FortressSky';
 export { DynamicLighting } from './FortressLighting';
 export { Waterfall } from './FortressWaterfall';
 export { FortressStructure } from './FortressStructure';
+export { ProceduralGround } from './ProceduralGround';
 export { Coins } from './FortressCoins';
 export { Bullets } from './FortressBullets';
 export { ControlPanel } from './FortressControlPanel';

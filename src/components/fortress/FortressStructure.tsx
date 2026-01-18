@@ -124,11 +124,7 @@ export function FortressStructure({
 
   return (
     <group>
-      {/* Ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[260, 260]} />
-        <meshStandardMaterial map={grassTexture} metalness={0} roughness={1} />
-      </mesh>
+      {/* Ground is now rendered by ProceduralGround component */}
 
       {/* Front wall - Left pillar */}
       <mesh position={[-(cliffW / 2 + openingHalfW) / 2, cliffH / 2, frontZ]} castShadow receiveShadow>

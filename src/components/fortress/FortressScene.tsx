@@ -12,6 +12,7 @@ import { useWispBlock } from '@/hooks/useWispBlock';
 
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
+import { ProceduralGround } from './ProceduralGround';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { FirstPersonArms } from '@/components/FirstPersonArms';
@@ -95,7 +96,8 @@ function CameraTrackedBlocks({
   currentUserId, 
   hoveredBlockId, 
   onMeshReady,
-  performanceMode = false
+  performanceMode = false,
+  groundTextureUrl
 }: { 
   blocks: PlacedBlock[];
   showOwnershipOutline: boolean;
@@ -103,6 +105,7 @@ function CameraTrackedBlocks({
   hoveredBlockId?: string | null;
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
+  groundTextureUrl?: string | null;
 }) {
   const { camera } = useThree();
   const { blocksByChunk, visibleChunksRef, visualDistance, updatePlayerPosition } = useBlocks();
@@ -198,14 +201,21 @@ function CameraTrackedBlocks({
   }, [renderTrigger, blocksByChunk, visibleChunksRef]);
 
   return (
-    <PlacedBlocks
-      blocks={visibleBlocks}
-      showOwnershipOutline={performanceMode ? false : showOwnershipOutline}
-      currentUserId={currentUserId}
-      hoveredBlockId={performanceMode ? null : (hoveredBlockId || null)}
-      onMeshReady={onMeshReady}
-      performanceMode={performanceMode}
-    />
+    <>
+      <ProceduralGround
+        visibleChunksRef={visibleChunksRef}
+        renderTrigger={renderTrigger}
+        textureUrl={groundTextureUrl || '/grass_texture_seamless.webp'}
+      />
+      <PlacedBlocks
+        blocks={visibleBlocks}
+        showOwnershipOutline={performanceMode ? false : showOwnershipOutline}
+        currentUserId={currentUserId}
+        hoveredBlockId={performanceMode ? null : (hoveredBlockId || null)}
+        onMeshReady={onMeshReady}
+        performanceMode={performanceMode}
+      />
+    </>
   );
 }
 
@@ -650,6 +660,7 @@ export function FortressScene({
         hoveredBlockId={hoveredBlockId}
         onMeshReady={handleMeshReady}
         performanceMode={performanceMode}
+        groundTextureUrl={groundTextureUrl}
       />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
