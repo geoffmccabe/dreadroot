@@ -51,11 +51,6 @@ class SpatialHashGrid {
     const minCellZ = this.cellCoord(collider.min.z);
     const maxCellZ = this.cellCoord(collider.max.z);
     
-    // Debug: Log a sample of inserts
-    if (Math.random() < 0.001) {
-      console.log(`[Grid Insert] pos: (${collider.min.x.toFixed(1)}, ${collider.min.z.toFixed(1)}) -> cells: x[${minCellX}-${maxCellX}] z[${minCellZ}-${maxCellZ}]`);
-    }
-    
     const indices: number[] = [];
     
     for (let cx = minCellX; cx <= maxCellX; cx++) {
@@ -117,19 +112,6 @@ class SpatialHashGrid {
     const maxCX = this.cellCoord(x + radius);
     const minCZ = this.cellCoord(z - radius);
     const maxCZ = this.cellCoord(z + radius);
-    
-    // Debug: Log what cells we're checking and what cells exist
-    if (Math.random() < 0.002) {
-      const existingCells: string[] = [];
-      for (const [cx, zMap] of this.cells.entries()) {
-        for (const cz of zMap.keys()) {
-          existingCells.push(`(${cx},${cz})`);
-          if (existingCells.length > 10) break;
-        }
-        if (existingCells.length > 10) break;
-      }
-      console.log(`[Grid] Query cells: x[${minCX}-${maxCX}] z[${minCZ}-${maxCZ}], some existing: ${existingCells.join(',')}`);
-    }
     
     for (let cx = minCX; cx <= maxCX; cx++) {
       const zMap = this.cells.get(cx);
