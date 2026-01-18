@@ -167,9 +167,39 @@ export function useTreeData(
       )
       .subscribe();
 
+    // Subscribe to seed_definitions changes (global, not filtered by world)
+    const seedsChannel = supabase
+      .channel('seed_definitions_global')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'seed_definitions',
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setSeedDefinitions(prev => {
+              const newSeed = payload.new as SeedDefinition;
+              // Insert in tier order
+              const updated = [...prev, newSeed].sort((a, b) => a.tier - b.tier);
+              return updated;
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setSeedDefinitions(prev => 
+              prev.map(s => s.id === payload.new.id ? payload.new as SeedDefinition : s)
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setSeedDefinitions(prev => prev.filter(s => s.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(fruitsChannel);
       supabase.removeChannel(treesChannel);
+      supabase.removeChannel(seedsChannel);
     };
   }, [worldId, userId, fetchData]);
 
