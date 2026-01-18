@@ -240,7 +240,7 @@ export function useLocalGrowth({
               position_x: block.x,
               position_y: block.y,
               position_z: block.z,
-              block_type: block.branchDepth && block.branchDepth > 0 ? 'branch' : 'trunk',
+              block_type: block.type, // Use actual block type (trunk, branch, spike, invisiblock, etc.)
               growth_order: tree.currentOrder,
             }));
             
@@ -257,7 +257,7 @@ export function useLocalGrowth({
 
           // Only place blocks AFTER tree_blocks insert succeeded
           for (const block of blocksToPlace) {
-            placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
+            placeBlockFn(block.x, block.y, block.z, block.type, undefined, tree.textureUrl, block.branchDepth);
           }
 
           // Update ref state (no React re-render)
