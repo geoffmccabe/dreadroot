@@ -65,6 +65,11 @@ const ensureBlockCollider = (block: PlacedBlock): void => {
   );
   collisionGrid.insert(collider);
   (block as any).__collider = collider;
+  
+  // Debug: Log every 100th collider added
+  if (collisionGrid.size % 100 === 0) {
+    console.log(`[Collider] Grid now has ${collisionGrid.size} colliders`);
+  }
 };
 
 /**
@@ -1238,6 +1243,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     setIsLoading(true);
     initialLoadDone.current = false;
     
+    console.log(`[ChunkLoader] initializeForWorld called, grid size before clear: ${collisionGrid.size}`);
+    
     // CRITICAL: Remove all block colliders before clearing chunks
     for (const [, chunkData] of loadedChunksRef.current) {
       for (const block of chunkData.blocks) {
@@ -1245,6 +1252,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       }
     }
     loadedChunksRef.current.clear();
+    
+    console.log(`[ChunkLoader] Grid size after clear: ${collisionGrid.size}`);
     
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
     const startChunkZ = Math.floor(startZ / CHUNK_SIZE);
@@ -1261,6 +1270,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     // Phase 3C: Use progressive ring loading for smoother initial experience
     await loadProgressiveRings(startChunkX, startChunkZ, LOAD_RADIUS);
+    
+    console.log(`[ChunkLoader] initializeForWorld complete, grid size: ${collisionGrid.size}`);
     
     initialLoadDone.current = true;
     setIsLoading(false);
@@ -1291,17 +1302,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     onBlocksChanged([]);
   }, [resetPrefetchState, onBlocksChanged]);
 
-  // Handle world changes - clear and re-initialize
-  useEffect(() => {
-    const prevWorld = currentWorldRef.current;
-    if (prevWorld !== worldId) {
-      currentWorldRef.current = worldId;
-      // Only clear if there was a previous world (not initial mount)
-      if (prevWorld !== null) {
-        clearAllChunks();
-      }
-    }
-  }, [worldId, clearAllChunks]);
+  // World change handling is now done via initializeForWorld which clears chunks internally
+  // Removed separate effect to prevent race conditions with initialization
 
   /**
    * Get the set of currently loaded chunk keys
