@@ -12,9 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Upload, Save, TreeDeciduous, Leaf } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { SeedDefinition } from '../types';
+import { SeedDefinition, SymmetryMode } from '../types';
 import { RARITY_COLORS, TREE_CONFIG } from '../constants';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
+
+const SYMMETRY_OPTIONS: { value: SymmetryMode; label: string; description: string }[] = [
+  { value: 'none', label: 'None', description: 'Organic, random growth' },
+  { value: '2xs', label: '2XS', description: '2-axis mirror (4 blocks)' },
+  { value: '4r', label: '4R', description: '4-way radial (4 blocks)' },
+  { value: '4x2', label: '4X2', description: '4-way × mirror (8 blocks)' },
+];
 
 interface SeedDesignPanelProps {
   className?: string;
@@ -82,6 +89,8 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
             shroom_chance: 0,
             shroom_length: 5,
             shroom_cap_diameter: 3,
+            // Symmetry mode
+            symmetry: 'none',
           });
         }
       }
@@ -139,6 +148,8 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
         shroom_chance: currentSeed.shroom_chance,
         shroom_length: currentSeed.shroom_length,
         shroom_cap_diameter: currentSeed.shroom_cap_diameter,
+        // Symmetry
+        symmetry: currentSeed.symmetry || 'none',
       };
 
       if (isNew) {
@@ -219,25 +230,26 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
     maxBranchLength: Math.floor(currentSeed.tier * TREE_CONFIG.BLOCKS_PER_TIER_HEIGHT * currentSeed.width_factor),
     growthTime: Math.round((TREE_CONFIG.BASE_GROWTH_INTERVAL / currentSeed.growth_factor) / 1000),
     estimatedBlocks: (() => {
-      const blueprint = generateTreeBlueprint(
-        0, 0, 0, 
-        currentSeed.tier, 
-        currentSeed.width_factor, 
-        currentSeed.branching_factor, 
-        12345,
-        {
-          lowBranchHeight: currentSeed.low_branch_height ?? 2,
-          spikeChance: currentSeed.spike_chance ?? 0,
-          spikeLength: currentSeed.spike_length ?? 3,
-          nobChance: currentSeed.nob_chance ?? 0,
-          nobSize: currentSeed.nob_size ?? 1,
-          crossChance: currentSeed.cross_chance ?? 0,
-          crossLength: currentSeed.cross_length ?? 3,
-          shroomChance: currentSeed.shroom_chance ?? 0,
-          shroomLength: currentSeed.shroom_length ?? 5,
-          shroomCapDiameter: currentSeed.shroom_cap_diameter ?? 3,
-        }
-      );
+        const blueprint = generateTreeBlueprint(
+          0, 0, 0, 
+          currentSeed.tier, 
+          currentSeed.width_factor, 
+          currentSeed.branching_factor, 
+          12345,
+          {
+            lowBranchHeight: currentSeed.low_branch_height ?? 2,
+            spikeChance: currentSeed.spike_chance ?? 0,
+            spikeLength: currentSeed.spike_length ?? 3,
+            nobChance: currentSeed.nob_chance ?? 0,
+            nobSize: currentSeed.nob_size ?? 1,
+            crossChance: currentSeed.cross_chance ?? 0,
+            crossLength: currentSeed.cross_length ?? 3,
+            shroomChance: currentSeed.shroom_chance ?? 0,
+            shroomLength: currentSeed.shroom_length ?? 5,
+            shroomCapDiameter: currentSeed.shroom_cap_diameter ?? 3,
+            symmetry: currentSeed.symmetry ?? 'none',
+          }
+        );
       return blueprint.blocks.length;
     })(),
   } : null;
@@ -350,6 +362,29 @@ export function SeedDesignPanel({ className }: SeedDesignPanelProps) {
                                 style={{ backgroundColor: color }}
                               />
                               {rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Symmetry */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Symmetry</Label>
+                    <Select 
+                      value={currentSeed.symmetry || 'none'} 
+                      onValueChange={(v) => updateSeed('symmetry', v as SymmetryMode)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SYMMETRY_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            <span className="flex items-center gap-2">
+                              <span className="font-medium">{opt.label}</span>
+                              <span className="text-muted-foreground text-xs">- {opt.description}</span>
                             </span>
                           </SelectItem>
                         ))}

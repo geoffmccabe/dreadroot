@@ -493,6 +493,7 @@ export type Database = {
           shroom_length: number | null
           spike_chance: number | null
           spike_length: number | null
+          symmetry: string
           tier: number
           trunk_texture_url: string | null
           updated_at: string
@@ -519,6 +520,7 @@ export type Database = {
           shroom_length?: number | null
           spike_chance?: number | null
           spike_length?: number | null
+          symmetry?: string
           tier: number
           trunk_texture_url?: string | null
           updated_at?: string
@@ -545,6 +547,7 @@ export type Database = {
           shroom_length?: number | null
           spike_chance?: number | null
           spike_length?: number | null
+          symmetry?: string
           tier?: number
           trunk_texture_url?: string | null
           updated_at?: string
