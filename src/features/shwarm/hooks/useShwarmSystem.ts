@@ -21,6 +21,7 @@ interface UseShwarmSystemOptions {
   cameraRef: React.RefObject<THREE.Camera>;
   blocksRef: React.RefObject<{ position_x: number; position_y: number; position_z: number }[]>;
   isEnabled: boolean;
+  onGroupKilled?: () => void; // Called when all blocks in a shwarm group are killed
 }
 
 // Pre-allocated vectors for spawning calculations
@@ -36,6 +37,7 @@ export function useShwarmSystem({
   cameraRef,
   blocksRef,
   isEnabled,
+  onGroupKilled,
 }: UseShwarmSystemOptions) {
   const [shwarms, setShwarms] = useState<ShwarmInstance[]>([]);
   const shwarmsRef = useRef<ShwarmInstance[]>([]);
@@ -179,6 +181,12 @@ export function useShwarmSystem({
       // Check if all blocks dead
       const allDead = updatedBlocks.every(b => !b.isAlive);
       
+      // If this shwarm just became fully dead, trigger callback
+      if (allDead && shwarm.isActive) {
+        // Use setTimeout to avoid calling during state update
+        setTimeout(() => onGroupKilled?.(), 0);
+      }
+      
       return {
         ...shwarm,
         blocks: updatedBlocks,
@@ -187,7 +195,7 @@ export function useShwarmSystem({
     }));
 
     return wasKilled;
-  }, []);
+  }, [onGroupKilled]);
 
   /**
    * Get definition by tier (0 = tier 10)

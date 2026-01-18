@@ -276,11 +276,20 @@ export function FortressScene({
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
   
+  // Callback when entire shwarm group is killed - play yay sound
+  const handleShwarmGroupKilled = useCallback(() => {
+    if (audioRefs.current.shwarmGroupKilled) {
+      audioRefs.current.shwarmGroupKilled.currentTime = 0;
+      audioRefs.current.shwarmGroupKilled.play().catch(() => {});
+    }
+  }, []);
+  
   const { shwarms, shwarmsRef, damageBlock } = useShwarmSystem({
     definitions: shwarmDefinitions,
     cameraRef,
     blocksRef,
     isEnabled: true,
+    onGroupKilled: handleShwarmGroupKilled,
   });
   
   // Player hit callback for shwarm collisions - use ref to avoid stale closure
