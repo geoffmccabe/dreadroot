@@ -127,8 +127,15 @@ export function createBlockColliders(
           new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
         );
         collisionGrid.insert(box);
+        // Store collider reference on block for future cache hits
+        (block as any).__collider = box;
+      } else {
+        // Verify the pre-registered collider is actually in the grid
+        // If not (e.g. grid was cleared), re-insert it
+        if (!collisionGrid.has(box)) {
+          collisionGrid.insert(box);
+        }
       }
-      // else: collider already in grid from optimistic placement - reuse it
       
       cache.set(block.id, box);
     }
@@ -204,8 +211,13 @@ export function checkAxisCollision(
   const nearbyColliders = collisionGrid.nearbyResult;
   
   // Debug: Log collision grid state periodically
-  if (Math.random() < 0.01) {
-    console.log(`[Collision] Grid size: ${collisionGrid.size}, nearby count: ${count}, pos: (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
+  if (Math.random() < 0.005) {
+    // Check if any nearby colliders are tree blocks (typically at y > 1)
+    let treeBlockCount = 0;
+    for (let i = 0; i < count; i++) {
+      if (nearbyColliders[i].min.y > 1) treeBlockCount++;
+    }
+    console.log(`[Collision] Grid: ${collisionGrid.size}, nearby: ${count}, treeBlocks: ${treeBlockCount}, pos: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`);
   }
   
   // If grid is empty, fall back to array (should not happen in normal use)

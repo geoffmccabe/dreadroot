@@ -139,6 +139,10 @@ class SpatialHashGrid {
   get size(): number {
     return this.colliderCells.size;
   }
+  
+  has(collider: THREE.Box3): boolean {
+    return this.colliderCells.has(collider);
+  }
 }
 
 export const collisionGrid = new SpatialHashGrid();
