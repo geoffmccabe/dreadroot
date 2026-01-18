@@ -697,22 +697,14 @@ export function FirstPersonControls({
       }
       
       // Tree chopping detection - hold left mouse on owned tree blocks (not in shooting mode)
-      // Debug: Log every 60 frames to avoid spam
-      if (leftMouseDownRef.current && Math.random() < 0.02) {
-        console.log('[TreeChop] leftMouseDown=true, showCrosshairs=', showCrosshairs, 'isOwnedTreeAtPositionRef.current=', !!isOwnedTreeAtPositionRef.current);
-      }
-      
       if (leftMouseDownRef.current && !showCrosshairs && isOwnedTreeAtPositionRef.current) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
-        console.log('[TreeChop] meshesArray.length=', meshesArray.length, 'meshToBlockTypeCache size=', meshToBlockTypeCache.current.size);
         if (meshesArray.length > 0) {
-          const result = raycastMeshes(meshesArray, 15); // Increase raycast distance
-          console.log('[TreeChop] Raycast result:', result ? 'HIT' : 'MISS', result?.instanceId, result?.distance);
+          const result = raycastMeshes(meshesArray, 15);
           
           if (result && result.instanceId !== undefined) {
             const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
-            console.log('[TreeChop] Hit block type:', blockType);
             
             // Check if it's a trunk block (tree block)
             if (blockType === 'trunk') {
@@ -735,31 +727,25 @@ export function FirstPersonControls({
                     choppingPositionRef.current.y !== blockY ||
                     choppingPositionRef.current.z !== blockZ;
                 
-                console.log('[TreeChop] Ownership passed. isNewBlock=', isNewBlock, 'choppingPos=', choppingPositionRef.current, 'current block=', blockX, blockY, blockZ);
-                
                 if (isNewBlock) {
                   // Started chopping a new block - reset progress
                   choppingPositionRef.current = { x: blockX, y: blockY, z: blockZ };
                   chopCountRef.current = 0;
                   // Set to past time so first chop happens immediately
                   lastChopSoundTimeRef.current = now - CHOP_INTERVAL_MS;
-                  console.log('[TreeChop] Started new chop on block:', blockX, blockY, blockZ);
                 }
                 
                 const timeSinceLastChop = now - lastChopSoundTimeRef.current;
-                console.log('[TreeChop] Timer:', timeSinceLastChop, 'ms / needed:', CHOP_INTERVAL_MS, 'chopCount=', chopCountRef.current);
                 
                 // Check if enough time passed for next chop
                 if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
                   lastChopSoundTimeRef.current = now;
                   chopCountRef.current++;
                   
-                  console.log('[TreeChop] CHOP!', chopCountRef.current, '/', CHOPS_REQUIRED, 'audio ref:', !!axeChopAudioRef.current);
-                  
                   // Play chop sound
                   if (axeChopAudioRef.current) {
                     axeChopAudioRef.current.currentTime = 0;
-                    axeChopAudioRef.current.play().catch((e) => console.log('[TreeChop] Audio error:', e));
+                    axeChopAudioRef.current.play().catch(() => {});
                   }
                   
                   // Report progress
@@ -769,7 +755,6 @@ export function FirstPersonControls({
                   
                   // Check if we've reached the required chops
                   if (chopCountRef.current >= CHOPS_REQUIRED) {
-                    console.log('[TreeChop] Complete! Calling onTreeChopComplete');
                     // Trigger the confirmation modal via callback
                     if (onTreeChopCompleteRef.current) {
                       onTreeChopCompleteRef.current(blockX, blockY, blockZ);
@@ -783,25 +768,19 @@ export function FirstPersonControls({
                 }
               } else {
                 // Not an owned tree - reset chopping state
-                console.log('[TreeChop] RESET: not owned tree');
                 choppingPositionRef.current = null;
                 chopCountRef.current = 0;
               }
             } else {
               // Not looking at a trunk - reset chopping state
-              console.log('[TreeChop] RESET: not trunk, blockType=', blockType);
               choppingPositionRef.current = null;
               chopCountRef.current = 0;
             }
           } else {
             // Not looking at any block - reset chopping state
-            console.log('[TreeChop] RESET: no block hit (no instanceId)');
             choppingPositionRef.current = null;
             chopCountRef.current = 0;
           }
-        } else {
-          // No meshes to raycast
-          console.log('[TreeChop] RESET: meshesArray empty');
         }
       } else if (!leftMouseDownRef.current && chopCountRef.current > 0) {
         // Mouse released - reset chopping

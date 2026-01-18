@@ -15,7 +15,7 @@ interface UseTreeChoppingOptions {
   plantedTrees: PlantedTree[];
   seedDefinitions: SeedDefinition[];
   returnSeed: (seedDefId: string) => Promise<boolean>;
-  refreshBlocks: () => void;
+  refetchChunk: (chunkX: number, chunkZ: number) => Promise<void>;
 }
 
 interface ChopResult {
@@ -80,11 +80,13 @@ export function useTreeChopping({
   plantedTrees,
   seedDefinitions,
   returnSeed,
-  refreshBlocks,
+  refetchChunk,
 }: UseTreeChoppingOptions) {
   const { toast } = useToast();
   const lastChopTimeRef = useRef(0);
   const isChoppingRef = useRef(false);
+  
+  const CHUNK_SIZE = 16; // Match the chunk size used in the game
 
   /**
    * Attempt to chop a tree at the given block position
@@ -170,8 +172,10 @@ export function useTreeChopping({
         });
       }
 
-      // Trigger a blocks refresh to update the UI
-      refreshBlocks();
+      // Refresh only the affected chunk instead of all blocks
+      const chunkX = Math.floor(tree.base_x / CHUNK_SIZE);
+      const chunkZ = Math.floor(tree.base_z / CHUNK_SIZE);
+      await refetchChunk(chunkX, chunkZ);
 
       return { success: true, seedReturned };
     } catch (error) {
@@ -185,7 +189,7 @@ export function useTreeChopping({
     } finally {
       isChoppingRef.current = false;
     }
-  }, [worldId, userId, plantedTrees, seedDefinitions, returnSeed, refreshBlocks, toast]);
+  }, [worldId, userId, plantedTrees, seedDefinitions, returnSeed, refetchChunk, toast, CHUNK_SIZE]);
 
   /**
    * Check if a position is on a tree owned by the current user
@@ -196,20 +200,10 @@ export function useTreeChopping({
     blockZ: number
   ): boolean => {
     if (!userId) {
-      console.log('[TreeChopping] No userId, returning false');
       return false;
     }
     
-    console.log(`[TreeChopping] Checking position (${blockX}, ${blockY}, ${blockZ}), userId=${userId}, plantedTrees count=${plantedTrees.length}`);
-    
     const tree = findTreeAtPosition(blockX, blockY, blockZ, plantedTrees);
-    
-    if (tree) {
-      console.log(`[TreeChopping] Found tree: id=${tree.id}, planted_by=${tree.planted_by}, isOwner=${tree.planted_by === userId}`);
-    } else {
-      console.log('[TreeChopping] No tree found at position');
-    }
-    
     return tree !== null && tree.planted_by === userId;
   }, [userId, plantedTrees]);
 
