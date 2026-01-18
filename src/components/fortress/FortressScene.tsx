@@ -121,16 +121,25 @@ function CameraTrackedBlocks({
   const CHUNK_UPDATE_THROTTLE = 100; // ms
 
   // Initialize visible chunks on mount
+  // CRITICAL: Use the known camera starting position, not camera.position which may be (0,0,0) at mount
   useEffect(() => {
-    const visibleChunkKeys = getVisibleChunkKeys(
-      camera.position.x,
-      camera.position.z,
-      visualDistance
-    );
+    // Camera starting position from FortressControls: [-8, 1.8, 22]
+    const CAMERA_START_X = -8;
+    const CAMERA_START_Z = 22;
+    
+    // Use camera position if it's been set, otherwise use starting position
+    const initX = camera.position.x !== 0 || camera.position.z !== 0 
+      ? camera.position.x 
+      : CAMERA_START_X;
+    const initZ = camera.position.x !== 0 || camera.position.z !== 0 
+      ? camera.position.z 
+      : CAMERA_START_Z;
+    
+    const visibleChunkKeys = getVisibleChunkKeys(initX, initZ, visualDistance);
     visibleChunksRef.current = new Set(visibleChunkKeys);
     lastChunkRef.current = {
-      x: Math.floor(camera.position.x / CHUNK_SIZE),
-      z: Math.floor(camera.position.z / CHUNK_SIZE)
+      x: Math.floor(initX / CHUNK_SIZE),
+      z: Math.floor(initZ / CHUNK_SIZE)
     };
     setRenderTrigger(prev => prev + 1);
   }, [camera, visualDistance, visibleChunksRef]);
