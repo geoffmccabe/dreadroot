@@ -1,150 +1,144 @@
 import * as THREE from 'three';
 
-/**
- * Spatial Hash Grid for O(1) collision lookups
- * ZERO-ALLOCATION implementation for hot path
- * 
- * Uses numeric cell indices instead of string keys
- * Uses generation counter for O(1) deduplication instead of O(n²) linear scan
- */
-
 const CELL_SIZE = 4;
-const GRID_OFFSET = 128; // Offset to handle negative coordinates (supports -128 to +128)
-const GRID_WIDTH = 256;  // Total grid size
-const MAX_NEARBY_RESULTS = 64; // Max colliders returned from getNearby
+const MAX_NEARBY_RESULTS = 64;
 
+/**
+ * Sparse, unbounded spatial hash grid.
+ * - No preallocation (zero memory until colliders added)
+ * - Handles any coordinate (positive or negative)
+ * - getNearby returns count, caller accesses nearbyResult array
+ */
 class SpatialHashGrid {
-  // Use a 2D array indexed by (cellX + GRID_OFFSET) * GRID_WIDTH + (cellZ + GRID_OFFSET)
-  private cells: THREE.Box3[][] = [];
-  private colliderCellIndices: Map<THREE.Box3, number[]> = new Map();
+  // Sparse grid: cellX -> (cellZ -> colliders[])
+  private cells: Map<number, Map<number, THREE.Box3[]>> = new Map();
   
-  // Pre-allocated result array - PUBLIC so callers can access without allocation
+  // Track which cells each collider occupies for O(1) removal
+  private colliderCells: Map<THREE.Box3, number[]> = new Map();
+  
+  // Generation counter for deduplication (avoids Set allocation per query)
+  private generation = 1;
+  
+  // Pre-allocated result array for zero-allocation queries
   public nearbyResult: THREE.Box3[] = new Array(MAX_NEARBY_RESULTS);
   
-  // Generation-based deduplication using property on Box3 (zero allocation)
-  // Uses __gen property directly on objects instead of Map lookup
-  private currentGeneration = 1;
+  private cellCoord(v: number): number {
+    return Math.floor(v / CELL_SIZE);
+  }
   
-  constructor() {
-    // Pre-allocate grid cells
-    const totalCells = GRID_WIDTH * GRID_WIDTH;
-    for (let i = 0; i < totalCells; i++) {
-      this.cells[i] = [];
+  private getOrCreateCell(cellX: number, cellZ: number): THREE.Box3[] {
+    let zMap = this.cells.get(cellX);
+    if (!zMap) {
+      zMap = new Map();
+      this.cells.set(cellX, zMap);
     }
+    let cell = zMap.get(cellZ);
+    if (!cell) {
+      cell = [];
+      zMap.set(cellZ, cell);
+    }
+    return cell;
   }
   
-  private getCellIndex(x: number, z: number): number {
-    const cx = Math.floor(x / CELL_SIZE) + GRID_OFFSET;
-    const cz = Math.floor(z / CELL_SIZE) + GRID_OFFSET;
-    // Clamp to valid range
-    const clampedX = Math.max(0, Math.min(GRID_WIDTH - 1, cx));
-    const clampedZ = Math.max(0, Math.min(GRID_WIDTH - 1, cz));
-    return clampedX * GRID_WIDTH + clampedZ;
-  }
-  
-  /**
-   * Add a collider to the grid
-   */
   insert(collider: THREE.Box3): void {
-    const minCX = Math.floor(collider.min.x / CELL_SIZE) + GRID_OFFSET;
-    const maxCX = Math.floor(collider.max.x / CELL_SIZE) + GRID_OFFSET;
-    const minCZ = Math.floor(collider.min.z / CELL_SIZE) + GRID_OFFSET;
-    const maxCZ = Math.floor(collider.max.z / CELL_SIZE) + GRID_OFFSET;
+    // Prevent duplicates
+    if (this.colliderCells.has(collider)) {
+      this.remove(collider);
+    }
     
-    const cellIndices: number[] = [];
+    const minCellX = this.cellCoord(collider.min.x);
+    const maxCellX = this.cellCoord(collider.max.x);
+    const minCellZ = this.cellCoord(collider.min.z);
+    const maxCellZ = this.cellCoord(collider.max.z);
     
-    // Add collider to all cells it overlaps
-    for (let cx = Math.max(0, minCX); cx <= Math.min(GRID_WIDTH - 1, maxCX); cx++) {
-      for (let cz = Math.max(0, minCZ); cz <= Math.min(GRID_WIDTH - 1, maxCZ); cz++) {
-        const idx = cx * GRID_WIDTH + cz;
-        cellIndices.push(idx);
-        this.cells[idx].push(collider);
+    const indices: number[] = [];
+    
+    for (let cx = minCellX; cx <= maxCellX; cx++) {
+      for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+        const cell = this.getOrCreateCell(cx, cz);
+        cell.push(collider);
+        indices.push(cx, cz); // Store as pairs
       }
     }
     
-    this.colliderCellIndices.set(collider, cellIndices);
-    // Initialize generation on the object itself (zero allocation)
+    this.colliderCells.set(collider, indices);
     (collider as any).__gen = 0;
   }
   
-  /**
-   * Remove a collider from the grid
-   */
   remove(collider: THREE.Box3): void {
-    const cellIndices = this.colliderCellIndices.get(collider);
-    if (!cellIndices) return;
+    const indices = this.colliderCells.get(collider);
+    if (!indices) return;
     
-    for (const idx of cellIndices) {
-      const cell = this.cells[idx];
-      const pos = cell.indexOf(collider);
-      if (pos !== -1) {
+    for (let i = 0; i < indices.length; i += 2) {
+      const cellX = indices[i];
+      const cellZ = indices[i + 1];
+      
+      const zMap = this.cells.get(cellX);
+      const cell = zMap?.get(cellZ);
+      if (!cell) continue;
+      
+      const idx = cell.indexOf(collider);
+      if (idx !== -1) {
         // Swap with last and pop (faster than splice)
-        cell[pos] = cell[cell.length - 1];
+        cell[idx] = cell[cell.length - 1];
         cell.pop();
+      }
+      
+      // Clean up empty cells to keep Map small
+      if (cell.length === 0) {
+        zMap!.delete(cellZ);
+        if (zMap!.size === 0) this.cells.delete(cellX);
       }
     }
     
-    this.colliderCellIndices.delete(collider);
-    // No need to clean up __gen - the object is being discarded
+    this.colliderCells.delete(collider);
   }
   
-  /**
-   * Clear all colliders from the grid
-   */
   clear(): void {
-    for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i].length = 0; // Clear without reallocating
-    }
-    this.colliderCellIndices.clear();
-    // Bump generation to invalidate all __gen markers
-    this.currentGeneration++;
+    this.cells.clear();
+    this.colliderCells.clear();
+    this.generation++;
   }
   
   /**
-   * Get all colliders near a position - ZERO ALLOCATIONS
-   * Uses generation counter for O(1) deduplication via __gen property on objects
-   * Returns count only - caller accesses grid.nearbyResult directly
+   * Get nearby colliders - ZERO ALLOCATIONS
+   * Returns count; caller reads grid.nearbyResult[0..count-1]
    */
   getNearby(x: number, z: number, radius: number = 2): number {
-    // Increment generation for this query - any collider with this gen is already added
-    this.currentGeneration++;
-    let nearbyCount = 0;
+    const gen = ++this.generation;
+    let count = 0;
     
-    // Calculate cell range to check
-    const minCX = Math.floor((x - radius) / CELL_SIZE) + GRID_OFFSET;
-    const maxCX = Math.floor((x + radius) / CELL_SIZE) + GRID_OFFSET;
-    const minCZ = Math.floor((z - radius) / CELL_SIZE) + GRID_OFFSET;
-    const maxCZ = Math.floor((z + radius) / CELL_SIZE) + GRID_OFFSET;
+    const minCX = this.cellCoord(x - radius);
+    const maxCX = this.cellCoord(x + radius);
+    const minCZ = this.cellCoord(z - radius);
+    const maxCZ = this.cellCoord(z + radius);
     
-    for (let cx = Math.max(0, minCX); cx <= Math.min(GRID_WIDTH - 1, maxCX); cx++) {
-      for (let cz = Math.max(0, minCZ); cz <= Math.min(GRID_WIDTH - 1, maxCZ); cz++) {
-        const cell = this.cells[cx * GRID_WIDTH + cz];
+    for (let cx = minCX; cx <= maxCX; cx++) {
+      const zMap = this.cells.get(cx);
+      if (!zMap) continue;
+      
+      for (let cz = minCZ; cz <= maxCZ; cz++) {
+        const cell = zMap.get(cz);
+        if (!cell) continue;
         
         for (let i = 0; i < cell.length; i++) {
-          const collider = cell[i];
+          const collider = cell[i] as any;
+          if (collider.__gen === gen) continue;
+          collider.__gen = gen;
           
-          // O(1) deduplication using __gen property on object (no Map lookup!)
-          if ((collider as any).__gen === this.currentGeneration) {
-            continue; // Already added in this query
-          }
-          
-          // Mark as added for this generation (no Map.set allocation!)
-          (collider as any).__gen = this.currentGeneration;
-          
-          if (nearbyCount < MAX_NEARBY_RESULTS) {
-            this.nearbyResult[nearbyCount++] = collider;
+          if (count < MAX_NEARBY_RESULTS) {
+            this.nearbyResult[count++] = collider;
           }
         }
       }
     }
     
-    return nearbyCount;
+    return count;
   }
   
   get size(): number {
-    return this.colliderCellIndices.size;
+    return this.colliderCells.size;
   }
 }
 
-// Singleton instance for the game
 export const collisionGrid = new SpatialHashGrid();
