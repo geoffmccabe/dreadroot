@@ -556,7 +556,6 @@ function addShroomWithSymmetry(
  * Blocks in the same symmetryGroup get the same growthOrder so they appear together
  */
 function assignGrowthOrder(blocks: BlueprintBlock[], rng: () => number): void {
-  console.log(`[assignGrowthOrder] Processing ${blocks.length} blocks`);
   
   // Group blocks by symmetryGroup
   const groupToBlocks = new Map<number, BlueprintBlock[]>();
@@ -599,8 +598,6 @@ function assignGrowthOrder(blocks: BlueprintBlock[], rng: () => number): void {
       order++;
     }
   }
-  
-  console.log(`[assignGrowthOrder] Final order count: ${order}, blocks with order > 0: ${blocks.filter(b => b.growthOrder > 0).length}`);
 }
 
 /**
