@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
-
+import type { ShwarmDefinition } from '@/features/shwarm/types';
 // ============================================================
 // DEBUG CONFIGURATION
 // ============================================================
@@ -87,6 +87,9 @@ export interface SceneProps {
   healthRef?: React.MutableRefObject<{ currentHealth: number; maxHealth: number; isDead: boolean }>;
   // Take damage callback
   takeDamage?: (amount: number, knockbackDir?: THREE.Vector3, knockbackDistance?: number) => { died: boolean };
+  // Shwarm system
+  shwarmDefinitions?: ShwarmDefinition[];
+  onShwarmDamage?: (shwarmId: string, blockId: string, damage: number) => boolean;
 }
 
 // First person controls props
