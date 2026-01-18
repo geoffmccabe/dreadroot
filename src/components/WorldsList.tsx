@@ -7,10 +7,11 @@ import { useWorlds, World } from '@/hooks/useWorlds';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Trash2, Check, Globe, Upload, Star } from 'lucide-react';
+import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DEFAULT_TEXTURES } from '@/hooks/useCurrentWorldId';
 import { cn } from '@/lib/utils';
+import { blockDB } from '@/hooks/useIndexedDB';
 
 const LOCAL_STORAGE_KEY = 'currentWorldId';
 
@@ -32,8 +33,61 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
   const [newWorld, setNewWorld] = useState({
     name: ''
   });
+  const [isCleaningGhostTrees, setIsCleaningGhostTrees] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clear ghost trees from all persistence layers
+  const handleClearGhostTrees = async () => {
+    setIsCleaningGhostTrees(true);
+    try {
+      const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom'];
+      
+      // 1. Clear tree blocks from IndexedDB chunk cache
+      const removedFromCache = await blockDB.clearTreeBlocksFromCache();
+      console.log(`[GhostTreeCleanup] Removed ${removedFromCache} blocks from IndexedDB`);
+      
+      // 2. Delete ghost tree blocks from Supabase (null texture)
+      const { error: deleteError, count: dbCount } = await supabase
+        .from('placed_blocks')
+        .delete({ count: 'exact' })
+        .in('block_type', TREE_BLOCK_TYPES)
+        .is('texture_url', null);
+      
+      if (deleteError) {
+        console.error('[GhostTreeCleanup] DB delete error:', deleteError);
+      } else {
+        console.log(`[GhostTreeCleanup] Removed ${dbCount} blocks from Supabase`);
+      }
+      
+      // 3. Force chunk version bump for all chunks to trigger refetch
+      const { error: bumpError } = await supabase
+        .from('chunk_versions')
+        .update({ 
+          version: 99999, // High version to force all clients to refetch
+          updated_at: new Date().toISOString() 
+        })
+        .gte('chunk_x', -1000); // Match all chunks
+      
+      if (bumpError) {
+        console.error('[GhostTreeCleanup] Version bump error:', bumpError);
+      }
+      
+      toast({
+        title: 'Ghost trees cleared',
+        description: `Removed ${removedFromCache} from cache, ${dbCount || 0} from database. Refresh page to see changes.`
+      });
+    } catch (err) {
+      console.error('[GhostTreeCleanup] Error:', err);
+      toast({
+        title: 'Cleanup failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsCleaningGhostTrees(false);
+    }
+  };
 
   const handleCreateWorld = async () => {
     if (!newWorld.name.trim()) {
@@ -158,9 +212,20 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Worlds</h3>
-        <Button onClick={() => setShowCreateDialog(true)} size="sm">
-          <Plus className="h-4 w-4 mr-1" /> Create World
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={handleClearGhostTrees} 
+            size="sm" 
+            variant="destructive"
+            disabled={isCleaningGhostTrees}
+          >
+            <TreeDeciduous className="h-4 w-4 mr-1" /> 
+            {isCleaningGhostTrees ? 'Clearing...' : 'Clear Ghost Trees'}
+          </Button>
+          <Button onClick={() => setShowCreateDialog(true)} size="sm">
+            <Plus className="h-4 w-4 mr-1" /> Create World
+          </Button>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
