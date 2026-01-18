@@ -39,20 +39,29 @@ class BlockDB {
   private sessionStoreName = 'user_session';
   private textureStoreName = 'texture_blobs';
   private chunkCacheStoreName = 'chunk_cache'; // Phase 3D
+  private initPromise: Promise<void> | null = null; // Singleton guard
 
   async init(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    // If already initialized, return immediately
+    if (this.db) return;
+    
+    // If init is in progress, wait for it
+    if (this.initPromise) return this.initPromise;
+    
+    // Start init and store the promise
+    this.initPromise = new Promise((resolve, reject) => {
       try {
         const request = indexedDB.open(this.dbName, this.dbVersion);
         
         request.onerror = () => {
           console.error('IndexedDB open error:', request.error);
+          this.initPromise = null;
           reject(request.error);
         };
         
         request.onsuccess = () => {
           this.db = request.result;
-          console.log('IndexedDB initialized successfully, version:', this.db.version);
+          console.log('IndexedDB initialized, version:', this.db.version);
           resolve();
         };
         
@@ -115,12 +124,16 @@ class BlockDB {
           console.warn('Attempting to delete and recreate database...');
           indexedDB.deleteDatabase(this.dbName);
           // Retry once after deletion
+          this.initPromise = null;
           setTimeout(() => this.init().then(resolve).catch(reject), 100);
         } else {
+          this.initPromise = null;
           reject(error);
         }
       }
     });
+    
+    return this.initPromise;
   }
 
   async getAllBlocks(): Promise<DBBlock[]> {

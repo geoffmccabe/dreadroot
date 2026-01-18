@@ -80,7 +80,7 @@ export const useAnimatedTexture = (url: string) => {
   }, [url]);
 
   const loadTextureWithCache = async (url: string, isGif: boolean) => {
-    console.log('🔄 Loading texture:', url);
+    // Removed console.log spam for texture loading
     try {
       // 1. Check IndexedDB cache first
       const cachedBlob = await blockDB.getTextureBlob(url);
@@ -127,7 +127,7 @@ export const useAnimatedTexture = (url: string) => {
       
       // Simple check: if size is different, it's been updated
       if (blob.size !== cachedSize) {
-        console.log('🆕 Texture updated, hot-swapping');
+        // Hot-swap texture silently
         
         // Dispose old texture before creating new one
         if (textureRef.current) {
@@ -171,12 +171,10 @@ export const useAnimatedTexture = (url: string) => {
 
   const loadStaticTextureFromBlob = (blob: Blob) => {
     const blobUrl = URL.createObjectURL(blob);
-    console.log('✅ Created blob URL for texture:', blobUrl);
     const loader = new THREE.TextureLoader();
     loader.load(
       blobUrl, 
       (loadedTexture) => {
-        console.log('✅ Texture loaded successfully');
         if (isMountedRef.current) {
           textureRef.current = loadedTexture;
           setTexture(loadedTexture);
