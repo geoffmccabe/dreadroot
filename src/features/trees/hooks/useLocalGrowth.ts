@@ -133,6 +133,16 @@ export function useLocalGrowth({
     return growingTreesRef.current.has(treeId);
   }, []);
 
+  /**
+   * Stop growing a specific tree (used when tree is deleted)
+   */
+  const stopGrowing = useCallback((treeId: string) => {
+    if (growingTreesRef.current.has(treeId)) {
+      console.log(`[LocalGrowth] Stopping growth for tree ${treeId}`);
+      growingTreesRef.current.delete(treeId);
+    }
+  }, []);
+
   // Main growth loop - checks once per second
   useEffect(() => {
     if (!TREE_CONFIG.ENABLED) return;
@@ -146,6 +156,11 @@ export function useLocalGrowth({
 
       try {
         for (const [id, tree] of growingTreesRef.current) {
+          // Skip temp trees that haven't been saved to DB yet
+          if (id.startsWith('temp_')) {
+            continue;
+          }
+
           // Check if enough time has passed for this tree
           if (now - tree.lastGrowthTime < tree.growthInterval) continue;
 
@@ -174,12 +189,8 @@ export function useLocalGrowth({
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
 
-          // Place blocks - placeBlockFn already adds colliders via usePlacedBlocksWithCache
-          for (const block of blocksToPlace) {
-            placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
-          }
-
-          // Also store in tree_blocks for reliable deletion (fire-and-forget)
+          // CRITICAL: Insert to tree_blocks FIRST - if this fails, skip block placement
+          // This prevents orphan blocks that can't be deleted later
           if (blocksToPlace.length > 0) {
             const treeBlockInserts = blocksToPlace.map(block => ({
               tree_id: tree.id,
@@ -191,12 +202,20 @@ export function useLocalGrowth({
               growth_order: tree.currentOrder,
             }));
             
-            supabase
+            const { error: treeBlockError } = await supabase
               .from('tree_blocks')
-              .upsert(treeBlockInserts, { onConflict: 'world_id,position_x,position_y,position_z' })
-              .then(({ error }) => {
-                if (error) console.warn('[LocalGrowth] Failed to insert tree_blocks:', error.message);
-              });
+              .upsert(treeBlockInserts, { onConflict: 'world_id,position_x,position_y,position_z' });
+            
+            if (treeBlockError) {
+              console.error('[LocalGrowth] Failed to insert tree_blocks, skipping block placement:', treeBlockError.message);
+              // Don't place blocks - this prevents orphans
+              continue;
+            }
+          }
+
+          // Only place blocks AFTER tree_blocks insert succeeded
+          for (const block of blocksToPlace) {
+            placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
           }
 
           // Update ref state (no React re-render)
@@ -224,6 +243,7 @@ export function useLocalGrowth({
     startGrowing,
     updateTreeId,
     isTreeGrowing,
+    stopGrowing,
     growingTreesRef,
   };
 }
