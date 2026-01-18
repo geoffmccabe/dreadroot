@@ -290,6 +290,8 @@ export async function deleteTree(
 
     // Delete all placed_blocks at these positions
     let deletedCount = 0;
+    const colliderRemovalFailures: { x: number; y: number; z: number }[] = [];
+    
     for (const block of blocksToDelete) {
       const { error } = await supabase
         .from('placed_blocks')
@@ -301,9 +303,18 @@ export async function deleteTree(
 
       if (!error) {
         deletedCount++;
-        // Also remove from collision grid
-        collisionGrid.removeByPosition(block.x, block.y, block.z);
+        // Also remove from collision grid - track failures for debugging
+        const removed = collisionGrid.removeByPosition(block.x, block.y, block.z);
+        if (!removed) {
+          colliderRemovalFailures.push(block);
+        }
       }
+    }
+    
+    // If any colliders failed to be removed, log them for debugging
+    if (colliderRemovalFailures.length > 0) {
+      console.warn(`[deleteTree] ${colliderRemovalFailures.length} colliders failed to remove:`, 
+        colliderRemovalFailures.slice(0, 5));
     }
 
     // Delete tree_blocks entries (cascade should handle this, but be explicit)
