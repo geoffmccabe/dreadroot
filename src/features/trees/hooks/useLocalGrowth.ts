@@ -148,6 +148,9 @@ export function useLocalGrowth({
           if (now - tree.lastGrowthTime < tree.growthInterval) continue;
 
           const maxOrder = getMaxGrowthOrder(tree.blueprint);
+          
+          // Debug: Log growth state
+          console.log(`[LocalGrowth] Tree ${id}: order ${tree.currentOrder}/${maxOrder}, interval ${tree.growthInterval}ms`);
 
           // Check if fully grown
           if (tree.currentOrder > maxOrder) {
@@ -171,6 +174,9 @@ export function useLocalGrowth({
 
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
+          
+          // Debug: Log blocks being placed
+          console.log(`[LocalGrowth] Order ${tree.currentOrder}: placing ${blocksToPlace.length} blocks`);
 
           // Place blocks and add colliders immediately
           for (const block of blocksToPlace) {
