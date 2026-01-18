@@ -61,7 +61,7 @@ class BlockDB {
         
         request.onsuccess = () => {
           this.db = request.result;
-          console.log('IndexedDB initialized, version:', this.db.version);
+          // Silenced: IndexedDB init is now a singleton
           resolve();
         };
         
