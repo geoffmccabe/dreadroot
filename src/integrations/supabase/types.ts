@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_shwarms: {
+        Row: {
+          authority_user_id: string | null
+          definition_id: string
+          id: string
+          is_active: boolean
+          killer_user_id: string | null
+          spawned_at: string | null
+          state_json: Json | null
+          world_id: string
+        }
+        Insert: {
+          authority_user_id?: string | null
+          definition_id: string
+          id?: string
+          is_active?: boolean
+          killer_user_id?: string | null
+          spawned_at?: string | null
+          state_json?: Json | null
+          world_id: string
+        }
+        Update: {
+          authority_user_id?: string | null
+          definition_id?: string
+          id?: string
+          is_active?: boolean
+          killer_user_id?: string | null
+          spawned_at?: string | null
+          state_json?: Json | null
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "active_shwarms_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "shwarm_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "active_shwarms_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_settings: {
         Row: {
           active_token_theme_id: string | null
@@ -555,6 +603,104 @@ export type Database = {
         }
         Relationships: []
       }
+      shwarm_blocks: {
+        Row: {
+          block_index: number
+          current_health: number
+          id: string
+          initial_x: number
+          initial_y: number
+          initial_z: number
+          is_alive: boolean
+          last_hit_at: string | null
+          last_hit_by: string | null
+          max_health: number
+          shwarm_id: string
+        }
+        Insert: {
+          block_index: number
+          current_health: number
+          id?: string
+          initial_x: number
+          initial_y: number
+          initial_z: number
+          is_alive?: boolean
+          last_hit_at?: string | null
+          last_hit_by?: string | null
+          max_health: number
+          shwarm_id: string
+        }
+        Update: {
+          block_index?: number
+          current_health?: number
+          id?: string
+          initial_x?: number
+          initial_y?: number
+          initial_z?: number
+          is_alive?: boolean
+          last_hit_at?: string | null
+          last_hit_by?: string | null
+          max_health?: number
+          shwarm_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shwarm_blocks_shwarm_id_fkey"
+            columns: ["shwarm_id"]
+            isOneToOne: false
+            referencedRelation: "active_shwarms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shwarm_definitions: {
+        Row: {
+          created_at: string | null
+          damage_per_hit: number
+          health_per_block: number
+          id: string
+          max_blocks: number
+          min_blocks: number
+          name: string
+          spawn_chance_per_minute: number
+          speed: number
+          texture_url: string | null
+          tier: number
+          updated_at: string | null
+          x_factor: number
+        }
+        Insert: {
+          created_at?: string | null
+          damage_per_hit?: number
+          health_per_block?: number
+          id?: string
+          max_blocks?: number
+          min_blocks?: number
+          name: string
+          spawn_chance_per_minute?: number
+          speed?: number
+          texture_url?: string | null
+          tier: number
+          updated_at?: string | null
+          x_factor?: number
+        }
+        Update: {
+          created_at?: string | null
+          damage_per_hit?: number
+          health_per_block?: number
+          id?: string
+          max_blocks?: number
+          min_blocks?: number
+          name?: string
+          spawn_chance_per_minute?: number
+          speed?: number
+          texture_url?: string | null
+          tier?: number
+          updated_at?: string | null
+          x_factor?: number
+        }
+        Relationships: []
+      }
       token_themes: {
         Row: {
           block_explorer_url: string | null
@@ -735,6 +881,33 @@ export type Database = {
           },
         ]
       }
+      user_combat_stats: {
+        Row: {
+          created_at: string | null
+          enemy_type: string
+          id: string
+          kills: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          enemy_type: string
+          id?: string
+          kills?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          enemy_type?: string
+          id?: string
+          kills?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_equipped_items: {
         Row: {
           equipped_at: string
@@ -802,8 +975,10 @@ export type Database = {
           blockchain_address: string | null
           coins: number
           created_at: string
+          current_health: number
           fog_enabled: boolean
           id: string
+          max_health: number
           updated_at: string
           user_id: string
           visual_distance: number
@@ -812,8 +987,10 @@ export type Database = {
           blockchain_address?: string | null
           coins?: number
           created_at?: string
+          current_health?: number
           fog_enabled?: boolean
           id?: string
+          max_health?: number
           updated_at?: string
           user_id: string
           visual_distance?: number
@@ -822,8 +999,10 @@ export type Database = {
           blockchain_address?: string | null
           coins?: number
           created_at?: string
+          current_health?: number
           fog_enabled?: boolean
           id?: string
+          max_health?: number
           updated_at?: string
           user_id?: string
           visual_distance?: number
