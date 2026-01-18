@@ -1,7 +1,7 @@
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 
 export const TERRAIN_CONFIG = {
-  SURFACE_Y: 0,
+  SURFACE_Y: -1,  // Ground block top is at y=0 (block centered at y=-0.5)
   WORLD_HALF_SIZE: 640,  // World extends from -640 to +640 (1280 total)
 } as const;
 
