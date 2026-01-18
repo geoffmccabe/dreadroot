@@ -1382,6 +1382,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     const onGridCleared = () => {
       console.log('[ChunkLoader] Grid cleared event received, reinserting colliders...');
+      
+      // CRITICAL: Clear the collider cache FIRST - old collider refs are now invalid
+      // This prevents "collider.min.set is not a function" errors
+      colliderByBlockId.clear();
+      
       let reinsertedCount = 0;
       // Reinsert colliders for all loaded blocks (O(n) but only on rare clear events)
       for (const chunkData of loadedChunksRef.current.values()) {
