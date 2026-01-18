@@ -304,6 +304,7 @@ export function FirstPersonControls({
         if (event.code === 'Digit0' && !event.shiftKey) break; // Only Shift+0 triggers clear
         if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
           event.preventDefault();
+          const oldSize = collisionGrid.size;
           console.log('[Debug] EMERGENCY: Clearing entire collision grid!');
           collisionGrid.clear();
 
@@ -311,7 +312,11 @@ export function FirstPersonControls({
           resetFortressGridState();
           createFortressColliders();
 
-          console.log('[Debug] Grid cleared. Fortress rebuilt, blocks will rebuild via collisionGridCleared event.');
+          const newSize = collisionGrid.size;
+          console.log(`[Debug] Grid cleared. Was ${oldSize}, now ${newSize} (fortress). Blocks will rebuild via collisionGridCleared event.`);
+          
+          // Show toast so user knows it worked
+          alert(`Collision grid cleared! Was: ${oldSize} → Now: ${newSize} colliders`);
         }
         break;
       case 'KeyQ':
