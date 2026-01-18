@@ -14,7 +14,8 @@ import {
   checkAxisCollision,
   findStepUpTarget,
   createPlayerBox,
-  resetFortressGridState
+  resetFortressGridState,
+  findPushOutDirection
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { collisionGrid } from '@/lib/spatialHashGrid';
@@ -809,16 +810,18 @@ export function FirstPersonControls({
       const right = rightVecRef.current.set(Math.cos(yaw.current), 0, -Math.sin(yaw.current));
       
       const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
-      deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
-      deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
+      // Use clamped delta for movement to prevent tunneling
+      const moveDt = Math.min(delta, 1/30);
+      deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * moveDt);
+      deltaMovement.addScaledVector(right, direction.current.x * runSpeed * moveDt);
       
       // Apply knockback velocity (decays over time)
       if (knockbackVelRef.current.lengthSq() > 0.0001) {
-        deltaMovement.x += knockbackVelRef.current.x * delta;
-        deltaMovement.z += knockbackVelRef.current.z * delta;
+        deltaMovement.x += knockbackVelRef.current.x * moveDt;
+        deltaMovement.z += knockbackVelRef.current.z * moveDt;
         
         // Fast decay (knockback dissipates in ~0.2 seconds)
-        knockbackVelRef.current.multiplyScalar(Math.pow(0.05, delta));
+        knockbackVelRef.current.multiplyScalar(Math.pow(0.05, moveDt));
         if (knockbackVelRef.current.lengthSq() < 0.0001) {
           knockbackVelRef.current.set(0, 0, 0);
         }
@@ -850,8 +853,13 @@ export function FirstPersonControls({
       }
 
       // Normal physics below (only when NOT in god mode)
+      // Delta clamping to prevent tunneling during FPS drops
+      const MAX_PHYSICS_DELTA = 1 / 30;
+      const dt = Math.min(delta, MAX_PHYSICS_DELTA);
+      const SURFACE_EPS = 0.002;
+      
       // Gravity and jumping
-      velocity.current.y -= 9.8 * delta;
+      velocity.current.y -= 9.8 * dt;
 
       // Player dimensions
       const playerRadius = 0.3;
@@ -867,10 +875,40 @@ export function FirstPersonControls({
       
       const currentColliders = collidersRef.current;
       
-      // Only check stuck-in-block when trying to jump (saves a collision check per frame)
-      const stuckInBlock = keys.current.space && !onGround.current 
-        ? checkAxisCollision(camera.position, currentColliders, playerRadius, standingHeight, false, true) !== null
-        : false;
+      // Continuous overlap resolution (stuck detection every frame)
+      let stuckCollision = checkAxisCollision(
+        camera.position,
+        currentColliders,
+        playerRadius,
+        playerHeight,
+        false,
+        true
+      );
+
+      if (stuckCollision) {
+        const push = findPushOutDirection(camera.position, playerRadius, playerHeight, stuckCollision);
+        if (push) {
+          if (push.axis === 'y' && push.direction === 1) {
+            camera.position.y = stuckCollision.max.y + playerHeight + SURFACE_EPS;
+            velocity.current.y = 0;
+            onGround.current = true;
+          } else {
+            (camera.position as any)[push.axis] += push.direction * (push.distance + SURFACE_EPS);
+          }
+        }
+
+        // Re-check once to see if we still overlap after push-out
+        stuckCollision = checkAxisCollision(
+          camera.position,
+          currentColliders,
+          playerRadius,
+          playerHeight,
+          false,
+          true
+        );
+      }
+
+      const stuckInBlock = stuckCollision !== null;
       
       // Allow jumping if on ground OR stuck inside a block (escape mechanism)
       const canJump = (onGround.current || stuckInBlock) && !keys.current.ctrl;
@@ -888,7 +926,7 @@ export function FirstPersonControls({
         velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
         onGround.current = false;
       }
-      deltaMovement.y += velocity.current.y * delta;
+      deltaMovement.y += velocity.current.y * dt;
       
       // Note: isMoving used implicitly - throttling happens inside checkAxisCollision
 
@@ -929,16 +967,16 @@ export function FirstPersonControls({
         const collision = checkAxisCollision(testPosRef.current, currentColliders, playerRadius, playerHeight, false, true);
         if (collision) {
           if (velocity.current.y < 0) {
-            camera.position.y = collision.max.y + playerHeight;
+            camera.position.y = collision.max.y + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
             onGround.current = true;
           } else {
-            camera.position.y = collision.min.y - 0.01;
+            camera.position.y = collision.min.y - SURFACE_EPS;
             velocity.current.y = 0;
           }
         } else {
           if (testPosRef.current.y < playerHeight && velocity.current.y < 0) {
-            camera.position.y = playerHeight;
+            camera.position.y = playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
             onGround.current = true;
           } else {
@@ -964,22 +1002,40 @@ export function FirstPersonControls({
         );
         
         if (stepUpY !== null) {
-          camera.position.y = stepUpY + playerHeight;
+          camera.position.y = stepUpY + playerHeight + SURFACE_EPS;
           velocity.current.y = 0;
           onGround.current = true;
         }
       }
       
-      // Ground detection - only check when potentially in air or landing
+      // Ground detection (robust): test a small downward move using the SAME player box convention
       const needsGroundCheck = !onGround.current || velocity.current.y < -0.1;
       if (needsGroundCheck) {
-        const feetY = camera.position.y - playerHeight;
-        const onGroundLevel = feetY <= 0.05 && Math.abs(velocity.current.y) < 0.1;
+        const GROUND_SNAP_DIST = 0.08;
+
         feetCheckPosRef.current.copy(camera.position);
-        feetCheckPosRef.current.y = camera.position.y - playerHeight - 0.05;
-        const hasBlockBeneath = checkAxisCollision(feetCheckPosRef.current, currentColliders, playerRadius, playerHeight, false, true);
-        
-        if (onGroundLevel || (hasBlockBeneath && Math.abs(velocity.current.y) < 0.1)) {
+        feetCheckPosRef.current.y = camera.position.y - GROUND_SNAP_DIST;
+
+        const groundHit = checkAxisCollision(
+          feetCheckPosRef.current,
+          currentColliders,
+          playerRadius,
+          playerHeight,
+          false,
+          true
+        );
+
+        const feetY = camera.position.y - playerHeight;
+        const onWorldGround = feetY <= (SURFACE_EPS + 0.01);
+
+        if ((groundHit && velocity.current.y <= 0.05) || onWorldGround) {
+          if (groundHit && velocity.current.y < 0) {
+            camera.position.y = groundHit.max.y + playerHeight + SURFACE_EPS;
+            velocity.current.y = 0;
+          } else if (onWorldGround && velocity.current.y < 0) {
+            camera.position.y = playerHeight + SURFACE_EPS;
+            velocity.current.y = 0;
+          }
           onGround.current = true;
         } else {
           onGround.current = false;
