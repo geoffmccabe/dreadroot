@@ -1,13 +1,24 @@
 import { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { frameLoop } from '@/lib/frameLoop';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import type { ShwarmInstance } from './useShwarmSystem';
-import { MOVEMENT_UPDATE_PRIORITY, PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS } from '../constants';
+import type { ShwarmBlock } from '../types';
+import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS } from '../constants';
+
+// Movement phase interval (1 second)
+const MOVEMENT_PHASE_MS = 1000;
+
+// Minimum distance between shwarm block centers
+const MIN_SHWARM_SPACING = 1.0;
+
+// Gravity: fall 1 unit per phase if above ground
+const GRAVITY_FALL = 1.0;
+
+// Ground level
+const GROUND_LEVEL = 0.25; // Half of 0.5 block size
 
 // Pre-allocated vectors for zero-allocation movement
 const _toPlayer = new THREE.Vector3();
-const _randomOffset = new THREE.Vector3();
 const _newPos = new THREE.Vector3();
 const _testBox = new THREE.Box3();
 const _testMin = new THREE.Vector3();
@@ -32,9 +43,8 @@ interface UseShwarmMovementOptions {
 }
 
 /**
- * Hook to update shwarm block positions each frame
- * Blocks move toward player with random variance (+/- 1 in random direction per step)
- * Also handles player collision detection
+ * Hook to update shwarm block positions in 1-second phases
+ * Blocks move toward player with random variance, respect spacing, and have gravity
  */
 export function useShwarmMovement({
   shwarmsRef,
@@ -44,6 +54,7 @@ export function useShwarmMovement({
 }: UseShwarmMovementOptions) {
   // Per-shwarm random generators (keyed by shwarm id)
   const rngMapRef = useRef<Map<string, () => number>>(new Map());
+  const lastPhaseTimeRef = useRef<number>(0);
 
   // Get or create RNG for a shwarm
   const getRng = useCallback((shwarmId: string, seed: number): () => number => {
@@ -53,11 +64,49 @@ export function useShwarmMovement({
     return rngMapRef.current.get(shwarmId)!;
   }, []);
 
-  // Frame loop registration
+  // Check if a position is too close to other shwarm blocks
+  const isTooCloseToOthers = useCallback((
+    pos: THREE.Vector3,
+    currentBlock: ShwarmBlock,
+    allBlocks: ShwarmBlock[]
+  ): boolean => {
+    for (const other of allBlocks) {
+      if (other === currentBlock || !other.isAlive) continue;
+      
+      const dx = pos.x - other.position.x;
+      const dy = pos.y - other.position.y;
+      const dz = pos.z - other.position.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      
+      if (distSq < MIN_SHWARM_SPACING * MIN_SHWARM_SPACING) {
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
+  // Check collision with world blocks
+  const checkWorldCollision = useCallback((pos: THREE.Vector3): boolean => {
+    const halfSize = 0.25;
+    _testMin.set(pos.x - halfSize, pos.y - halfSize, pos.z - halfSize);
+    _testMax.set(pos.x + halfSize, pos.y + halfSize, pos.z + halfSize);
+    _testBox.set(_testMin, _testMax);
+
+    const nearbyCount = collisionGrid.getNearby(pos.x, pos.z, 2);
+    for (let i = 0; i < nearbyCount; i++) {
+      const collider = collisionGrid.nearbyResult[i] as THREE.Box3;
+      if (_testBox.intersectsBox(collider)) {
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
+  // Movement phase using setInterval (1 second phases)
   useEffect(() => {
     if (!isEnabled) return;
 
-    const unregister = frameLoop.register('shwarmMovement', (delta) => {
+    const intervalId = setInterval(() => {
       const shwarms = shwarmsRef.current;
       const camera = cameraRef.current;
       if (!shwarms || shwarms.length === 0 || !camera) return;
@@ -65,15 +114,28 @@ export function useShwarmMovement({
       const playerPos = camera.position;
       const now = Date.now();
 
+      // Collect all alive blocks for inter-shwarm collision checking
+      const allBlocks: ShwarmBlock[] = [];
+      for (const shwarm of shwarms) {
+        if (!shwarm.isActive) continue;
+        for (const block of shwarm.blocks) {
+          if (block.isAlive) {
+            allBlocks.push(block);
+          }
+        }
+      }
+
       for (const shwarm of shwarms) {
         if (!shwarm.isActive) continue;
 
         const { definition, blocks, seed, id: shwarmId } = shwarm;
-        const speed = definition.speed;
-        const xFactor = definition.x_factor;
         const tier = definition.tier;
         const damagePerHit = definition.damage_per_hit;
         const rng = getRng(shwarmId, seed);
+
+        // x_factor for random range: Tier 1 = 3, scales with tier
+        // We'll use: 3 + (tier - 1) so tier 1 = 3, tier 5 = 7, tier 10 = 12
+        const randomRange = 2 + tier;
 
         for (const block of blocks) {
           if (!block.isAlive) continue;
@@ -84,105 +146,82 @@ export function useShwarmMovement({
           const distToPlayer = pos.distanceTo(playerPos);
           
           if (distToPlayer < PLAYER_HIT_RADIUS && onPlayerHit) {
-            // Check debounce
             if (!block.lastHitPlayerAt || now - block.lastHitPlayerAt > PLAYER_HIT_DEBOUNCE_MS) {
               block.lastHitPlayerAt = now;
               
-              // Calculate knockback force: 1 + tier (e.g., tier 6 = 7 knockback)
+              // Knockback force: 1 + tier
               const knockbackForce = 1 + tier;
               
               // Direction: from block to player
               const knockbackDir = _toPlayer.subVectors(playerPos, pos).normalize();
-              knockbackDir.y = 0.3; // Add some upward component
+              knockbackDir.y = 0.3;
               knockbackDir.normalize();
               
               onPlayerHit(damagePerHit, knockbackForce, knockbackDir.clone());
-              
-              // Also knock back the block (opposite direction)
-              pos.addScaledVector(knockbackDir, -knockbackForce * 0.5);
             }
           }
 
-          // Direction toward player (mostly horizontal)
+          // Calculate direction toward player (horizontal mainly)
           _toPlayer.subVectors(playerPos, pos);
-          _toPlayer.y *= 0.2; // reduce vertical movement
+          _toPlayer.y = 0; // Horizontal only for direction
           
-          if (_toPlayer.length() > 0.1) {
-            _toPlayer.normalize();
-          } else {
+          if (_toPlayer.length() < 0.5) {
             continue; // Too close, don't move
           }
-
-          // KEY FIX: Each block takes 1 step toward player + random offset
-          // x_factor 1-10 controls how much random variance (1=10%, 10=100%)
-          const randomStrength = xFactor * 0.1;
           
-          // Random offset: +/- 1 in random direction each step
-          _randomOffset.set(
-            (rng() - 0.5) * 2 * randomStrength, // -1 to +1 * strength
-            (rng() - 0.5) * 0.5 * randomStrength, // less vertical
-            (rng() - 0.5) * 2 * randomStrength
-          );
+          _toPlayer.normalize();
 
-          // Calculate movement distance this frame
-          const moveDist = speed * delta;
+          // Random offset: +/- randomRange in each axis (integer steps for blocky feel)
+          const randX = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
+          const randY = Math.floor(rng() * 2); // 0 or 1 up (step-up)
+          const randZ = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
 
-          // Calculate new position: move toward player + random offset
+          // Calculate new position: 1 step toward player + random offset
           _newPos.copy(pos);
-          _newPos.addScaledVector(_toPlayer, moveDist);
-          _newPos.add(_randomOffset.multiplyScalar(moveDist));
+          _newPos.x += Math.round(_toPlayer.x) + randX;
+          _newPos.z += Math.round(_toPlayer.z) + randZ;
+          _newPos.y += randY; // Can step up
 
-          // Keep above ground
-          _newPos.y = Math.max(0.25, _newPos.y);
-
-          // Check collision with world blocks (0.5 size blocks)
-          const halfSize = 0.25;
-          _testMin.set(_newPos.x - halfSize, _newPos.y - halfSize, _newPos.z - halfSize);
-          _testMax.set(_newPos.x + halfSize, _newPos.y + halfSize, _newPos.z + halfSize);
-          _testBox.set(_testMin, _testMax);
-
-          // Check collision grid
-          const nearbyCount = collisionGrid.getNearby(_newPos.x, _newPos.z, 2);
-          let blocked = false;
-
-          for (let i = 0; i < nearbyCount; i++) {
-            const collider = collisionGrid.nearbyResult[i] as THREE.Box3;
-            if (_testBox.intersectsBox(collider)) {
-              blocked = true;
-              break;
-            }
+          // Apply gravity: if above ground, fall 1 unit
+          if (_newPos.y > GROUND_LEVEL + 0.5) {
+            _newPos.y -= GRAVITY_FALL;
           }
 
-          // Only move if not blocked (or if very close to player, force through)
-          if (!blocked || distToPlayer < 2) {
+          // Clamp to ground
+          _newPos.y = Math.max(GROUND_LEVEL, _newPos.y);
+
+          // Check if new position is valid:
+          // 1. Not colliding with world blocks
+          // 2. Not too close to other shwarm blocks
+          const collidesWorld = checkWorldCollision(_newPos);
+          const tooClose = isTooCloseToOthers(_newPos, block, allBlocks);
+
+          if (!collidesWorld && !tooClose) {
+            // Valid move - snap to new position (bubbling effect)
             pos.copy(_newPos);
-          } else {
-            // Try to slide around obstacle - horizontal only
+          } else if (!collidesWorld) {
+            // Try just horizontal movement if spacing is the issue
             _newPos.y = pos.y;
-            _testMin.set(_newPos.x - halfSize, _newPos.y - halfSize, _newPos.z - halfSize);
-            _testMax.set(_newPos.x + halfSize, _newPos.y + halfSize, _newPos.z + halfSize);
-            _testBox.set(_testMin, _testMax);
-
-            let stillBlocked = false;
-            for (let i = 0; i < nearbyCount; i++) {
-              const collider = collisionGrid.nearbyResult[i] as THREE.Box3;
-              if (_testBox.intersectsBox(collider)) {
-                stillBlocked = true;
-                break;
-              }
-            }
-
-            if (!stillBlocked) {
+            if (!isTooCloseToOthers(_newPos, block, allBlocks)) {
               pos.copy(_newPos);
             }
-            // If still blocked, don't move this frame
+            // Else: stay in place this phase
+          } else {
+            // Try step-up over obstacle
+            _newPos.y = pos.y + 1;
+            if (!checkWorldCollision(_newPos) && !isTooCloseToOthers(_newPos, block, allBlocks)) {
+              pos.copy(_newPos);
+            }
+            // Else: stay in place, blocked
           }
         }
       }
-    }, MOVEMENT_UPDATE_PRIORITY);
 
-    return unregister;
-  }, [isEnabled, shwarmsRef, cameraRef, getRng, onPlayerHit]);
+      lastPhaseTimeRef.current = now;
+    }, MOVEMENT_PHASE_MS);
+
+    return () => clearInterval(intervalId);
+  }, [isEnabled, shwarmsRef, cameraRef, getRng, onPlayerHit, checkWorldCollision, isTooCloseToOthers]);
 
   // Cleanup RNG map when shwarms are removed
   useEffect(() => {
