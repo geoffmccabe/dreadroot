@@ -213,6 +213,7 @@ export function createPlayerBox(
 /**
  * Checks for collision on a specific axis using spatial hash grid
  * ZERO ALLOCATIONS in hot path
+ * Uses Y-filtered query for Minecraft-style collision (avoids vertical stack overhead)
  * @returns The collider that was hit, or null if no collision
  */
 export function checkAxisCollision(
@@ -229,8 +230,13 @@ export function checkAxisCollision(
   // Use pre-allocated player box (no allocations!)
   const playerBox = createPlayerBox(pos, playerRadius, playerHeight);
   
-  // Use spatial hash grid for O(1) nearby lookup - ZERO allocations
-  const count = collisionGrid.getNearby(pos.x, pos.z, 3);
+  // Query only colliders near the player's vertical span (+ margin)
+  // This is the key Minecraft-style optimization: filter by Y to avoid scanning tall columns
+  const minY = playerBox.min.y - 0.5;
+  const maxY = playerBox.max.y + 0.5;
+  
+  // Use Y-filtered spatial hash grid query - radius 2 is sufficient with Y filtering
+  const count = collisionGrid.getNearbyFiltered(pos.x, pos.z, 2, minY, maxY);
   const nearbyColliders = collisionGrid.nearbyResult;
   
   // IMPORTANT: Only use fallback if the grid is TRULY empty (no colliders anywhere).
@@ -280,7 +286,7 @@ export function checkAxisCollision(
 
 /**
  * Finds a valid step-up target when player is blocked horizontally
- * Uses spatial hash grid for O(1) nearby lookup - ZERO allocations
+ * Uses Y-filtered spatial hash grid for Minecraft-style collision
  * @returns The Y coordinate to step up to, or null if no valid target
  */
 export function findStepUpTarget(
@@ -299,8 +305,13 @@ export function findStepUpTarget(
   const currentFootY = camera.position.y - playerHeight;
   let bestStepUpY: number | null = null;
   
-  // Use spatial hash grid - ZERO allocations
-  const count = collisionGrid.getNearby(camera.position.x, camera.position.z, 3);
+  // Step-up only cares about colliders near feet up through head clearance
+  // Filter Y hard to avoid scanning vertical stacks
+  const minY = currentFootY - 0.5;
+  const maxY = currentFootY + stepUpHeight + playerHeight + 0.5;
+  
+  // Use Y-filtered spatial hash grid - radius 2 is sufficient with Y filtering
+  const count = collisionGrid.getNearbyFiltered(camera.position.x, camera.position.z, 2, minY, maxY);
   const nearbyColliders = collisionGrid.nearbyResult;
   
   for (let i = 0; i < count; i++) {

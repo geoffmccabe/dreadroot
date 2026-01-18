@@ -181,6 +181,54 @@ class SpatialHashGrid {
     return count;
   }
   
+  /**
+   * Get nearby colliders with Y-filtering - ZERO ALLOCATIONS
+   * Filters colliders by vertical overlap before returning.
+   * Critical for voxel worlds where 2D (XZ) hash can return huge vertical stacks.
+   * Mimics Minecraft-style collision gathering: only consider shapes intersecting the entity AABB region.
+   */
+  getNearbyFiltered(
+    x: number,
+    z: number,
+    radius: number,
+    minY: number,
+    maxY: number
+  ): number {
+    const gen = ++this.generation;
+    let count = 0;
+    
+    const minCX = this.cellCoord(x - radius);
+    const maxCX = this.cellCoord(x + radius);
+    const minCZ = this.cellCoord(z - radius);
+    const maxCZ = this.cellCoord(z + radius);
+    
+    for (let cx = minCX; cx <= maxCX; cx++) {
+      const zMap = this.cells.get(cx);
+      if (!zMap) continue;
+      
+      for (let cz = minCZ; cz <= maxCZ; cz++) {
+        const cell = zMap.get(cz);
+        if (!cell) continue;
+        
+        for (let i = 0; i < cell.length; i++) {
+          const collider = cell[i] as any;
+          
+          if (collider.__gen === gen) continue;
+          collider.__gen = gen;
+          
+          // Vertical filter FIRST (cheap) — prevents huge candidate sets
+          if (collider.max.y < minY || collider.min.y > maxY) continue;
+          
+          if (count < MAX_NEARBY_RESULTS) {
+            this.nearbyResult[count++] = collider;
+          }
+        }
+      }
+    }
+    
+    return count;
+  }
+  
   get size(): number {
     return this.colliderCells.size;
   }
