@@ -870,6 +870,10 @@ export function FirstPersonControls({
       const dt = Math.min(delta, MAX_PHYSICS_DELTA);
       const SURFACE_EPS = 0.002;
       
+      // CRITICAL: Invalidate collision grid cache at start of physics frame
+      // This allows multiple collision checks at same position to reuse cached results
+      collisionGrid.invalidateCache();
+      
       // Gravity and jumping
       velocity.current.y -= 9.8 * dt;
 
