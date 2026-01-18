@@ -4,6 +4,14 @@ import * as THREE from 'three';
 const CELL_SIZE = 2;
 const MAX_NEARBY_RESULTS = 128;
 
+// Frame-local cache for nearby query results (avoids re-querying same position)
+let _cachedQueryX = NaN;
+let _cachedQueryZ = NaN;
+let _cachedQueryMinY = NaN;
+let _cachedQueryMaxY = NaN;
+let _cachedQueryCount = 0;
+let _cachedQueryGeneration = 0;
+
 /**
  * Sparse, unbounded spatial hash grid.
  * - No preallocation (zero memory until colliders added)
@@ -187,6 +195,9 @@ class SpatialHashGrid {
    * Filters colliders by vertical overlap before returning.
    * Critical for voxel worlds where 2D (XZ) hash can return huge vertical stacks.
    * Mimics Minecraft-style collision gathering: only consider shapes intersecting the entity AABB region.
+   * 
+   * OPTIMIZATION: Caches query results for same position within a frame.
+   * Multiple collision checks (X, Y, Z axes) at same position will reuse cached results.
    */
   getNearbyFiltered(
     x: number,
@@ -195,6 +206,24 @@ class SpatialHashGrid {
     minY: number,
     maxY: number
   ): number {
+    // Check if we can reuse cached results (same position, same Y range, same frame)
+    // Round to 0.1 precision to catch nearly-identical queries
+    const qx = Math.round(x * 10);
+    const qz = Math.round(z * 10);
+    const qMinY = Math.round(minY * 10);
+    const qMaxY = Math.round(maxY * 10);
+    
+    if (
+      qx === _cachedQueryX &&
+      qz === _cachedQueryZ &&
+      qMinY === _cachedQueryMinY &&
+      qMaxY === _cachedQueryMaxY &&
+      _cachedQueryGeneration === this.generation
+    ) {
+      // Cache hit - return previously computed count (nearbyResult already populated)
+      return _cachedQueryCount;
+    }
+    
     const gen = ++this.generation;
     let count = 0;
     
@@ -227,7 +256,24 @@ class SpatialHashGrid {
       }
     }
     
+    // Cache the results for subsequent queries at same position
+    _cachedQueryX = qx;
+    _cachedQueryZ = qz;
+    _cachedQueryMinY = qMinY;
+    _cachedQueryMaxY = qMaxY;
+    _cachedQueryCount = count;
+    _cachedQueryGeneration = this.generation;
+    
     return count;
+  }
+  
+  /**
+   * Invalidate frame cache - call at start of physics frame
+   * to ensure fresh queries after position changes
+   */
+  invalidateCache(): void {
+    _cachedQueryX = NaN;
+    _cachedQueryZ = NaN;
   }
   
   get size(): number {
