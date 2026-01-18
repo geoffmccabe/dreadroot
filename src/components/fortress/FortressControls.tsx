@@ -270,6 +270,23 @@ export function FirstPersonControls({
           onGodModeChange?.(godModeRef.current);
         }
         break;
+      case 'F9': // Debug: show nearby colliders and clear orphans
+        if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+          event.preventDefault();
+          console.log(`[Debug] Camera at: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
+          console.log(`[Debug] Total colliders in grid: ${collisionGrid.size}`);
+          (collisionGrid as any).debugNearby?.(camera.position.x, camera.position.z, 5);
+        }
+        break;
+      case 'F10': // Emergency: clear entire collision grid and rebuild
+        if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+          event.preventDefault();
+          console.log('[Debug] EMERGENCY: Clearing entire collision grid!');
+          collisionGrid.clear();
+          resetFortressGridState(); // Allow fortress colliders to be re-added
+          console.log('[Debug] Grid cleared. Colliders will rebuild on next frame.');
+        }
+        break;
       case 'KeyQ':
         keys.current.q = true;
         break;

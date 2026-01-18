@@ -1242,6 +1242,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     setIsLoading(true);
     initialLoadDone.current = false;
+    
+    // CRITICAL: Remove all block colliders before clearing chunks
+    for (const [, chunkData] of loadedChunksRef.current) {
+      for (const block of chunkData.blocks) {
+        removeBlockCollider(block);
+      }
+    }
     loadedChunksRef.current.clear();
     
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
@@ -1268,8 +1275,16 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Clear all chunks (on world change)
    * Phase 3.0: Directly calls onBlocksChanged (not batched) for immediate clear
    * Phase 3E: Also resets prefetch state
+   * FIXED: Now properly removes all block colliders before clearing
    */
   const clearAllChunks = useCallback(() => {
+    // CRITICAL: Remove all block colliders from the collision grid before clearing chunks
+    for (const [, chunkData] of loadedChunksRef.current) {
+      for (const block of chunkData.blocks) {
+        removeBlockCollider(block);
+      }
+    }
+    
     loadedChunksRef.current.clear();
     playerChunkRef.current = null;
     initialLoadDone.current = false;
