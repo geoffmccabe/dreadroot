@@ -195,9 +195,21 @@ export function useTreeChopping({
     blockY: number,
     blockZ: number
   ): boolean => {
-    if (!userId) return false;
+    if (!userId) {
+      console.log('[TreeChopping] No userId, returning false');
+      return false;
+    }
+    
+    console.log(`[TreeChopping] Checking position (${blockX}, ${blockY}, ${blockZ}), userId=${userId}, plantedTrees count=${plantedTrees.length}`);
     
     const tree = findTreeAtPosition(blockX, blockY, blockZ, plantedTrees);
+    
+    if (tree) {
+      console.log(`[TreeChopping] Found tree: id=${tree.id}, planted_by=${tree.planted_by}, isOwner=${tree.planted_by === userId}`);
+    } else {
+      console.log('[TreeChopping] No tree found at position');
+    }
+    
     return tree !== null && tree.planted_by === userId;
   }, [userId, plantedTrees]);
 
