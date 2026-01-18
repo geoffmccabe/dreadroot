@@ -616,7 +616,8 @@ export function FortressScene({
           
           // Check shwarm collisions (if not already hit something)
           if (!hit) {
-            const SHWARM_HIT_RADIUS = 0.25; // half of 0.5m hitbox (constant regardless of visual scale)
+            // Hitbox radius: half of 0.5m cube size = 0.25, but add some tolerance for bullet width
+            const SHWARM_HIT_RADIUS = 0.4;
             const BULLET_DAMAGE = 25;
             
             for (const shwarm of activeShwarms) {
@@ -635,11 +636,15 @@ export function FortressScene({
                   damageBlock(shwarm.id, block.id, BULLET_DAMAGE);
                   
                   // Create particle effect at hit position
-                  shwarmRendererRef.current?.createHitEffect(block.position.clone());
+                  if (shwarmRendererRef.current) {
+                    shwarmRendererRef.current.createHitEffect(block.position.clone());
+                  }
                   
-                  // Play hit sound
-                  if (audioRefs.current.shwarmHit) {
-                    playAudio(audioRefs.current.shwarmHit);
+                  // Play hit sound directly (bypass throttle for combat feedback)
+                  const hitSound = audioRefs.current.shwarmHit;
+                  if (hitSound) {
+                    hitSound.currentTime = 0;
+                    hitSound.play().catch(() => {});
                   }
                   
                   break;
