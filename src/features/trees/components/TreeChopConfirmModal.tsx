@@ -23,7 +23,6 @@ export function TreeChopConfirmModal({
   onCancel,
   treeName = "this tree"
 }: TreeChopConfirmModalProps) {
-  console.log('[TreeChopConfirmModal] Rendering, isOpen=', isOpen);
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
       <AlertDialogContent className="bg-background/95 backdrop-blur-sm border-primary/20">

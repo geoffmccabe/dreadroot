@@ -169,22 +169,21 @@ export function Fortress() {
   });
   
   // Tree chopping - allows owner to destroy tree and get seed back
+  const { refetchSingleChunk } = useBlocks();
   const { chopTreeAtPosition, isOwnedTreeAtPosition } = useTreeChopping({
     worldId: currentWorldId,
     userId: user?.id ?? null,
     plantedTrees,
     seedDefinitions,
     returnSeed,
-    refreshBlocks,
+    refetchChunk: refetchSingleChunk,
   });
   
   // Tree chop modal handlers
   const handleTreeChopComplete = useCallback(async (x: number, y: number, z: number) => {
-    console.log('[Fortress] handleTreeChopComplete called!', x, y, z);
     // Show confirmation modal
     setPendingChopPosition({ x, y, z });
     setTreeChopModalOpen(true);
-    console.log('[Fortress] setTreeChopModalOpen(true) called');
     // Exit pointer lock so user can click modal
     document.exitPointerLock();
   }, []);
