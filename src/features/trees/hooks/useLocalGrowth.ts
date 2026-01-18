@@ -13,7 +13,7 @@ import { collisionGrid } from '@/lib/spatialHashGrid';
 const GROWTH_CHECK_INTERVAL = 1000;
 
 // Type for the placeBlock function from useBlocks
-type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => any;
+type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string, branchDepth?: number) => any;
 
 interface GrowingTree {
   id: string;
@@ -174,7 +174,7 @@ export function useLocalGrowth({
 
           // Place blocks and add colliders immediately
           for (const block of blocksToPlace) {
-            const placedBlock = placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl);
+            const placedBlock = placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
             
             // Add collider immediately for tree blocks
             if (placedBlock && !(placedBlock as any).__collider) {

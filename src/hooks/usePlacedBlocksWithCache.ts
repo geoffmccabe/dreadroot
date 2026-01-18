@@ -339,7 +339,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   }, [setBlocksIfChanged]);
 
   // PHASE 1: Optimized block placement with INSTANT local feedback (no await for auth)
-  const placeBlock = useCallback((x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => {
+  const placeBlock = useCallback((x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string, branchDepth?: number) => {
     // Use cached user ID for instant placement - no await!
     const cachedUserId = cachedUserRef.current?.id || userId;
     
@@ -382,6 +382,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       texture_url: textureUrl || null, // Include texture_url for stable rendering
+      branch_depth: branchDepth ?? undefined, // Include branch_depth for tree lightening
     };
     
     // Add expiration if provided

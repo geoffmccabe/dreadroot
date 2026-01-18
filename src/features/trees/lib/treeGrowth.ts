@@ -139,7 +139,7 @@ export function generateTreeBlueprint(
   };
   
   // Helper to check/add position with symmetry - all symmetric blocks share same group
-  const addBlock = (x: number, y: number, z: number, type: TreeBlockType): boolean => {
+  const addBlock = (x: number, y: number, z: number, type: TreeBlockType, branchDepth: number = -1): boolean => {
     const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
     let addedAny = false;
     const groupId = nextSymmetryGroup++;
@@ -148,7 +148,7 @@ export function generateTreeBlueprint(
       const key = `${pos.x},${y},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0, symmetryGroup: groupId });
+        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0, symmetryGroup: groupId, branchDepth });
         addedAny = true;
       }
     }
@@ -156,11 +156,12 @@ export function generateTreeBlueprint(
   };
   
   // 1. Generate trunk (always straight up) - trunk is always at center, each trunk block is its own group
+  // Trunk blocks have branchDepth -1 (darkest)
   for (let h = 0; h < maxHeight; h++) {
     const key = `${baseX},${baseY + h},${baseZ}`;
     if (!occupied.has(key)) {
       occupied.add(key);
-      blocks.push({ x: baseX, y: baseY + h, z: baseZ, type: 'trunk', growthOrder: 0, symmetryGroup: nextSymmetryGroup++ });
+      blocks.push({ x: baseX, y: baseY + h, z: baseZ, type: 'trunk', growthOrder: 0, symmetryGroup: nextSymmetryGroup++, branchDepth: -1 });
     }
   }
   
@@ -254,6 +255,7 @@ function growBranch(
   
   // Helper to add block with symmetry - always relative to tree base
   // All symmetric blocks share the same symmetryGroup
+  // branchDepth tracks how many forks from main trunk (passed as depth parameter)
   const addBlockWithSymmetry = (x: number, y: number, z: number, type: TreeBlockType): number => {
     const positions = applySymmetry(x, z, treeBaseX, treeBaseZ, symmetryMode);
     let firstAnchorIndex = -1;
@@ -263,7 +265,7 @@ function growBranch(
       const key = `${pos.x},${y},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0, symmetryGroup: groupId });
+        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0, symmetryGroup: groupId, branchDepth: depth });
         if (firstAnchorIndex === -1) {
           firstAnchorIndex = blocks.length - 1;
         }
@@ -302,22 +304,22 @@ function growBranch(
     
     // SPIKE: Vertical blocks going up
     if (opts.spikeChance > 0 && rng() < opts.spikeChance) {
-      addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode);
+      addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth);
     }
     
     // NOB: Cube of blocks adjacent to this point
     if (opts.nobChance > 0 && rng() < opts.nobChance) {
-      addNobWithSymmetry(blocks, occupied, x, y, z, opts.nobSize, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode);
+      addNobWithSymmetry(blocks, occupied, x, y, z, opts.nobSize, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth);
     }
     
     // CROSS: Perpendicular + shape
     if (opts.crossChance > 0 && rng() < opts.crossChance) {
-      addCrossWithSymmetry(blocks, occupied, x, y, z, direction, opts.crossLength, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode);
+      addCrossWithSymmetry(blocks, occupied, x, y, z, direction, opts.crossLength, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth);
     }
     
     // SHROOM: Stem + cap
     if (opts.shroomChance > 0 && rng() < opts.shroomChance) {
-      addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode);
+      addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth);
     }
     
     // ========== END DECORATIONS ==========
@@ -375,7 +377,8 @@ function addSpikeWithSymmetry(
   rng: () => number,
   baseX: number,
   baseZ: number,
-  symmetryMode: SymmetryMode
+  symmetryMode: SymmetryMode,
+  branchDepth: number = 0
 ): void {
   for (let i = 1; i <= length; i++) {
     const positions = applySymmetry(startX, startZ, baseX, baseZ, symmetryMode);
@@ -389,7 +392,8 @@ function addSpikeWithSymmetry(
           z: pos.z,
           type: 'spike',
           growthOrder: -anchorIndex - 1,
-          symmetryGroup: anchorGroup
+          symmetryGroup: anchorGroup,
+          branchDepth
         });
       }
     }
@@ -411,7 +415,8 @@ function addNobWithSymmetry(
   rng: () => number,
   baseX: number,
   baseZ: number,
-  symmetryMode: SymmetryMode
+  symmetryMode: SymmetryMode,
+  branchDepth: number = 0
 ): void {
   const directions: [number, number, number][] = [
     [0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1],
@@ -439,7 +444,7 @@ function addNobWithSymmetry(
           const key = `${pos.x},${y},${pos.z}`;
           if (!occupied.has(key)) {
             occupied.add(key);
-            blocks.push({ x: pos.x, y, z: pos.z, type: 'nob', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
+            blocks.push({ x: pos.x, y, z: pos.z, type: 'nob', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
           }
         }
       }
@@ -462,7 +467,8 @@ function addCrossWithSymmetry(
   anchorGroup: number,
   baseX: number,
   baseZ: number,
-  symmetryMode: SymmetryMode
+  symmetryMode: SymmetryMode,
+  branchDepth: number = 0
 ): void {
   const perpX = branchDir[0] === 0 ? 1 : 0;
   const perpZ = branchDir[1] === 0 ? 1 : 0;
@@ -477,7 +483,7 @@ function addCrossWithSymmetry(
       const key = `${pos.x},${centerY},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({ x: pos.x, y: centerY, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
+        blocks.push({ x: pos.x, y: centerY, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
       }
     }
   }
@@ -489,7 +495,7 @@ function addCrossWithSymmetry(
       const key = `${pos.x},${centerY + i},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({ x: pos.x, y: centerY + i, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
+        blocks.push({ x: pos.x, y: centerY + i, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
       }
     }
   }
@@ -510,7 +516,8 @@ function addShroomWithSymmetry(
   anchorGroup: number,
   baseX: number,
   baseZ: number,
-  symmetryMode: SymmetryMode
+  symmetryMode: SymmetryMode,
+  branchDepth: number = 0
 ): void {
   for (let i = 1; i <= stemLength; i++) {
     const positions = applySymmetry(shroomBaseX, shroomBaseZ, baseX, baseZ, symmetryMode);
@@ -518,7 +525,7 @@ function addShroomWithSymmetry(
       const key = `${pos.x},${shroomBaseY + i},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({ x: pos.x, y: shroomBaseY + i, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
+        blocks.push({ x: pos.x, y: shroomBaseY + i, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
       }
     }
   }
@@ -535,7 +542,7 @@ function addShroomWithSymmetry(
         const key = `${pos.x},${capY},${pos.z}`;
         if (!occupied.has(key)) {
           occupied.add(key);
-          blocks.push({ x: pos.x, y: capY, z: pos.z, type: 'shroom_cap', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
+          blocks.push({ x: pos.x, y: capY, z: pos.z, type: 'shroom_cap', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
         }
       }
     }

@@ -10,7 +10,7 @@ import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
 
 // Type for the placeBlock function from useBlocks
-type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => any;
+type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string, branchDepth?: number) => any;
 
 // Type for the startGrowing function from useLocalGrowth
 type StartGrowingFn = (
@@ -136,7 +136,7 @@ export function useSeedPlanting({
       const textureUrl = seedDef.trunk_texture_url || undefined;
       
       for (const block of firstBlocks) {
-        placeBlock(block.x, block.y, block.z, 'trunk', undefined, textureUrl);
+        placeBlock(block.x, block.y, block.z, 'trunk', undefined, textureUrl, block.branchDepth);
       }
 
       // Start local growth with temp ID (will update after DB insert)
