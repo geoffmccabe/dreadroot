@@ -18,8 +18,8 @@ const shwarmBlockGeometry = new THREE.BoxGeometry(
   SHWARM_BLOCK_SIZE
 );
 
-// Particle geometry (small squares)
-const particleGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+// Particle geometry (small squares - larger for visibility)
+const particleGeometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 
 // Maximum particles for hit effects
 const MAX_HIT_PARTICLES = 200;
@@ -91,28 +91,28 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
       return arr;
     }, []);
 
-    // Create hit particle effect at position
+    // Create hit particle effect at position - spray of small squares like coin explosions
     const createHitEffect = (position: THREE.Vector3, color: number = DEFAULT_SHWARM_COLOR) => {
-      const particleCount = 12; // 12 particles per hit
+      const particleCount = 20; // More particles for better effect
       let spawned = 0;
 
       for (let i = 0; i < particles.length && spawned < particleCount; i++) {
         const particle = particles[i];
         if (!particle.active) {
-          // Spherical distribution
-          const angle = (Math.PI * 2 * spawned) / particleCount;
-          const elevation = (Math.random() - 0.3) * Math.PI * 0.5;
-          const speed = 3 + Math.random() * 4;
+          // Spherical distribution - radial burst
+          const angle = (Math.PI * 2 * spawned) / particleCount + Math.random() * 0.3;
+          const elevation = (Math.random() - 0.2) * Math.PI * 0.6;
+          const speed = 5 + Math.random() * 6; // Faster for more punch
 
           particle.active = true;
           particle.position.copy(position);
           particle.velocity.set(
             Math.cos(angle) * Math.cos(elevation) * speed,
-            Math.sin(elevation) * speed + 2, // bias upward
+            Math.sin(elevation) * speed + 3, // bias upward
             Math.sin(angle) * Math.cos(elevation) * speed
           );
           particle.opacity = 1;
-          particle.scale = 0.06 + Math.random() * 0.06;
+          particle.scale = 0.12 + Math.random() * 0.1; // Larger particles
           particle.color.setHex(color);
           spawned++;
         }
