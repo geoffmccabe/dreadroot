@@ -730,34 +730,47 @@ export function FirstPersonControls({
               // Check if this is an owned tree
               if (isOwnedTreeAtPositionRef.current(blockX, blockY, blockZ)) {
                 // Initialize or continue chopping on this position
-                if (!choppingPositionRef.current || 
+                const isNewBlock = !choppingPositionRef.current || 
                     choppingPositionRef.current.x !== blockX ||
                     choppingPositionRef.current.y !== blockY ||
-                    choppingPositionRef.current.z !== blockZ) {
+                    choppingPositionRef.current.z !== blockZ;
+                
+                if (isNewBlock) {
                   // Started chopping a new block - reset progress
                   choppingPositionRef.current = { x: blockX, y: blockY, z: blockZ };
                   chopCountRef.current = 0;
-                  lastChopSoundTimeRef.current = now;
+                  // Set to past time so first chop happens immediately
+                  lastChopSoundTimeRef.current = now - CHOP_INTERVAL_MS;
+                  console.log('[TreeChop] Started new chop on block:', blockX, blockY, blockZ);
                 }
                 
+                const timeSinceLastChop = now - lastChopSoundTimeRef.current;
+                
                 // Check if enough time passed for next chop
-                if (now - lastChopSoundTimeRef.current >= CHOP_INTERVAL_MS) {
+                if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
                   lastChopSoundTimeRef.current = now;
                   chopCountRef.current++;
+                  
+                  console.log('[TreeChop] CHOP!', chopCountRef.current, '/', CHOPS_REQUIRED, 'audio ref:', !!axeChopAudioRef.current);
                   
                   // Play chop sound
                   if (axeChopAudioRef.current) {
                     axeChopAudioRef.current.currentTime = 0;
-                    axeChopAudioRef.current.play().catch(() => {});
+                    axeChopAudioRef.current.play().catch((e) => console.log('[TreeChop] Audio error:', e));
                   }
                   
                   // Report progress
-                  onTreeChopProgressRef.current?.(chopCountRef.current, CHOPS_REQUIRED);
+                  if (onTreeChopProgressRef.current) {
+                    onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);
+                  }
                   
                   // Check if we've reached the required chops
                   if (chopCountRef.current >= CHOPS_REQUIRED) {
+                    console.log('[TreeChop] Complete! Calling onTreeChopComplete');
                     // Trigger the confirmation modal via callback
-                    onTreeChopCompleteRef.current?.(blockX, blockY, blockZ);
+                    if (onTreeChopCompleteRef.current) {
+                      onTreeChopCompleteRef.current(blockX, blockY, blockZ);
+                    }
                     
                     // Reset state
                     leftMouseDownRef.current = false;
