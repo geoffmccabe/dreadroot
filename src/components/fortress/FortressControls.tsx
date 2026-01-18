@@ -50,7 +50,8 @@ export function FirstPersonControls({
   meshToBlockTypeCache,
   blocksByTypeAndUser,
   onGodModeChange,
-  updatePlayerPosition
+  updatePlayerPosition,
+  applyKnockback: externalApplyKnockback
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -74,6 +75,9 @@ export function FirstPersonControls({
   const lastGroundCheck = useRef(0);
   const stuckTimer = useRef(0);
   const lastPositionLog = useRef(0);
+  
+  // Knockback velocity for shwarm hits (decays over time)
+  const knockbackVelRef = useRef(new THREE.Vector3());
   
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
@@ -106,6 +110,25 @@ export function FirstPersonControls({
   const FIRE_RATE_LIMIT = 150;
 
   const gridInitialized = useRef(false);
+  
+  // Apply knockback function - can be called externally via prop or internally
+  const applyKnockback = useCallback((direction: THREE.Vector3, distance: number) => {
+    // Calculate velocity needed to travel 'distance' over ~0.2 seconds
+    const secondsToApply = 0.2;
+    knockbackVelRef.current.addScaledVector(direction, distance / secondsToApply);
+  }, []);
+  
+  // Expose applyKnockback to parent via ref pattern
+  useEffect(() => {
+    if (externalApplyKnockback) {
+      // Parent provided a callback - they can call our internal function
+      // For now, we expose via a global for shwarm system to access
+      (window as any).__applyPlayerKnockback = applyKnockback;
+    }
+    return () => {
+      delete (window as any).__applyPlayerKnockback;
+    };
+  }, [applyKnockback, externalApplyKnockback]);
   
   // Initialize fortress colliders on mount
   // NOTE: We no longer clear the grid here because block colliders from useChunkLoader
@@ -627,6 +650,18 @@ export function FirstPersonControls({
       const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
       deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * delta);
       deltaMovement.addScaledVector(right, direction.current.x * runSpeed * delta);
+      
+      // Apply knockback velocity (decays over time)
+      if (knockbackVelRef.current.lengthSq() > 0.0001) {
+        deltaMovement.x += knockbackVelRef.current.x * delta;
+        deltaMovement.z += knockbackVelRef.current.z * delta;
+        
+        // Fast decay (knockback dissipates in ~0.2 seconds)
+        knockbackVelRef.current.multiplyScalar(Math.pow(0.05, delta));
+        if (knockbackVelRef.current.lengthSq() < 0.0001) {
+          knockbackVelRef.current.set(0, 0, 0);
+        }
+      }
 
       // God Mode: Q = fly up, Z = fly down, no gravity
       if (godModeRef.current) {
