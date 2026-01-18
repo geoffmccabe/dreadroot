@@ -204,7 +204,7 @@ export function useTreeChopping({
     } finally {
       isChoppingRef.current = false;
     }
-  }, [worldId, userId, plantedTrees, seedDefinitions, returnSeed, refetchChunk, toast, CHUNK_SIZE]);
+  }, [worldId, userId, plantedTrees, seedDefinitions, returnSeed, refetchChunk, toast, stopGrowing]);
 
   /**
    * Check if a position is on a tree owned by the current user

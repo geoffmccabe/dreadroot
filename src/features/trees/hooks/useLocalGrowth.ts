@@ -3,7 +3,6 @@
 // Growth check runs once per second max
 
 import { useEffect, useRef, useCallback } from 'react';
-import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 import { SeedDefinition, PlantedTree, TreeBlueprint, TreeGrowthOptions } from '../types';
 import { generateTreeBlueprint, getBlocksAtOrder, getMaxGrowthOrder } from '../lib/treeGrowth';
