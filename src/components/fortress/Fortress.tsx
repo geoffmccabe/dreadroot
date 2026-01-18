@@ -989,6 +989,17 @@ export function Fortress() {
         </div>
       )}
       
+      {/* Tree Chop Confirmation Modal */}
+      <TreeChopConfirmModal
+        isOpen={treeChopModalOpen}
+        onConfirm={handleTreeChopConfirm}
+        onCancel={() => {
+          setTreeChopModalOpen(false);
+          setPendingChopPosition(null);
+          setChopProgress(0);
+        }}
+      />
+      
       {/* Toast notifications */}
       <Toaster />
       
