@@ -746,6 +746,11 @@ export function FirstPersonControls({
                 
                 const timeSinceLastChop = now - lastChopSoundTimeRef.current;
                 
+                // Debug: Log time every ~500ms to avoid spam
+                if (Math.random() < 0.05) {
+                  console.log('[TreeChop] Timer check:', timeSinceLastChop, 'ms, need', CHOP_INTERVAL_MS, 'isNewBlock was', isNewBlock, 'chopCount=', chopCountRef.current);
+                }
+                
                 // Check if enough time passed for next chop
                 if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
                   lastChopSoundTimeRef.current = now;
