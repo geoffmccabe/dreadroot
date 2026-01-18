@@ -210,16 +210,6 @@ export function checkAxisCollision(
   const count = collisionGrid.getNearby(pos.x, pos.z, 3);
   const nearbyColliders = collisionGrid.nearbyResult;
   
-  // Debug: Log collision grid state periodically
-  if (Math.random() < 0.005) {
-    // Check if any nearby colliders are tree blocks (typically at y > 1)
-    let treeBlockCount = 0;
-    for (let i = 0; i < count; i++) {
-      if (nearbyColliders[i].min.y > 1) treeBlockCount++;
-    }
-    console.log(`[Collision] Grid: ${collisionGrid.size}, nearby: ${count}, treeBlocks: ${treeBlockCount}, pos: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`);
-  }
-  
   // If grid is empty, fall back to array (should not happen in normal use)
   if (count === 0 && colliders.length > 0) {
     // Fallback: check all colliders with spatial filter
