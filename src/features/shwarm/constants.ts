@@ -2,6 +2,13 @@
  * Shwarm system constants
  */
 
+// Player spawn point (used for respawning after death)
+export const PLAYER_SPAWN_POINT = {
+  x: -8,
+  y: 1.8,
+  z: 22,
+};
+
 // Spawn bounds (reuse from useWispBlock MAP_BOUNDS)
 export const SHWARM_SPAWN_BOUNDS = {
   minX: -130,
