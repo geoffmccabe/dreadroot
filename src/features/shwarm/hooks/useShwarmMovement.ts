@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { collisionGrid } from '@/lib/spatialHashGrid';
+import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
 import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS } from '../constants';
@@ -16,6 +17,9 @@ const GRAVITY_FALL = 1.0;
 
 // Ground level
 const GROUND_LEVEL = 0.25; // Half of 0.5 block size
+
+// Interpolation speed (lerp factor per frame, adjusted by delta)
+const LERP_SPEED = 8;
 
 // Pre-allocated vectors for zero-allocation movement
 const _toPlayer = new THREE.Vector3();
@@ -35,6 +39,13 @@ function seededRandom(seed: number): () => number {
   };
 }
 
+/**
+ * Extended block with target position for interpolation
+ */
+interface BlockTargetData {
+  targetPosition: THREE.Vector3;
+}
+
 interface UseShwarmMovementOptions {
   shwarmsRef: React.RefObject<ShwarmInstance[]>;
   cameraRef: React.RefObject<THREE.Camera>;
@@ -43,7 +54,7 @@ interface UseShwarmMovementOptions {
 }
 
 /**
- * Hook to update shwarm block positions in 1-second phases
+ * Hook to update shwarm block positions in 1-second phases with smooth interpolation
  * Blocks move toward player with random variance, respect spacing, and have gravity
  */
 export function useShwarmMovement({
@@ -54,7 +65,9 @@ export function useShwarmMovement({
 }: UseShwarmMovementOptions) {
   // Per-shwarm random generators (keyed by shwarm id)
   const rngMapRef = useRef<Map<string, () => number>>(new Map());
-  const lastPhaseTimeRef = useRef<number>(0);
+  
+  // Target positions for interpolation (keyed by block id)
+  const blockTargetsRef = useRef<Map<string, BlockTargetData>>(new Map());
 
   // Get or create RNG for a shwarm
   const getRng = useCallback((shwarmId: string, seed: number): () => number => {
@@ -62,6 +75,16 @@ export function useShwarmMovement({
       rngMapRef.current.set(shwarmId, seededRandom(seed));
     }
     return rngMapRef.current.get(shwarmId)!;
+  }, []);
+
+  // Get or create target data for a block
+  const getBlockTarget = useCallback((block: ShwarmBlock): BlockTargetData => {
+    if (!blockTargetsRef.current.has(block.id)) {
+      blockTargetsRef.current.set(block.id, {
+        targetPosition: block.position.clone(),
+      });
+    }
+    return blockTargetsRef.current.get(block.id)!;
   }, []);
 
   // Check if a position is too close to other shwarm blocks
@@ -73,9 +96,13 @@ export function useShwarmMovement({
     for (const other of allBlocks) {
       if (other === currentBlock || !other.isAlive) continue;
       
-      const dx = pos.x - other.position.x;
-      const dy = pos.y - other.position.y;
-      const dz = pos.z - other.position.z;
+      // Use target positions for collision checking
+      const otherTarget = blockTargetsRef.current.get(other.id);
+      const otherPos = otherTarget?.targetPosition ?? other.position;
+      
+      const dx = pos.x - otherPos.x;
+      const dy = pos.y - otherPos.y;
+      const dz = pos.z - otherPos.z;
       const distSq = dx * dx + dy * dy + dz * dz;
       
       if (distSq < MIN_SHWARM_SPACING * MIN_SHWARM_SPACING) {
@@ -102,7 +129,60 @@ export function useShwarmMovement({
     return false;
   }, []);
 
-  // Movement phase using setInterval (1 second phases)
+  // Frame loop for smooth interpolation AND continuous player hit detection
+  useEffect(() => {
+    if (!isEnabled) return;
+
+    const unregister = frameLoop.register('shwarmInterpolation', (delta) => {
+      const shwarms = shwarmsRef.current;
+      const camera = cameraRef.current;
+      if (!shwarms || shwarms.length === 0 || !camera) return;
+
+      const playerPos = camera.position;
+      const now = Date.now();
+      const lerpFactor = Math.min(1, LERP_SPEED * delta);
+
+      for (const shwarm of shwarms) {
+        if (!shwarm.isActive) continue;
+
+        const { definition, blocks } = shwarm;
+        const tier = definition.tier;
+        const damagePerHit = definition.damage_per_hit;
+
+        for (const block of blocks) {
+          if (!block.isAlive) continue;
+
+          const target = getBlockTarget(block);
+          
+          // Smooth interpolation: lerp visual position toward target
+          block.position.lerp(target.targetPosition, lerpFactor);
+
+          // Continuous player collision check (not just during phases)
+          const distToPlayer = block.position.distanceTo(playerPos);
+          
+          if (distToPlayer < PLAYER_HIT_RADIUS && onPlayerHit) {
+            if (!block.lastHitPlayerAt || now - block.lastHitPlayerAt > PLAYER_HIT_DEBOUNCE_MS) {
+              block.lastHitPlayerAt = now;
+              
+              // Knockback force: 1 + tier
+              const knockbackForce = 1 + tier;
+              
+              // Direction: from block to player
+              const knockbackDir = _toPlayer.subVectors(playerPos, block.position).normalize();
+              knockbackDir.y = 0.3;
+              knockbackDir.normalize();
+              
+              onPlayerHit(damagePerHit, knockbackForce, knockbackDir.clone());
+            }
+          }
+        }
+      }
+    }, 60); // After controls
+
+    return unregister;
+  }, [isEnabled, shwarmsRef, cameraRef, onPlayerHit, getBlockTarget]);
+
+  // Movement phase using setInterval (1 second phases) - updates TARGET positions
   useEffect(() => {
     if (!isEnabled) return;
 
@@ -112,7 +192,6 @@ export function useShwarmMovement({
       if (!shwarms || shwarms.length === 0 || !camera) return;
 
       const playerPos = camera.position;
-      const now = Date.now();
 
       // Collect all alive blocks for inter-shwarm collision checking
       const allBlocks: ShwarmBlock[] = [];
@@ -130,39 +209,19 @@ export function useShwarmMovement({
 
         const { definition, blocks, seed, id: shwarmId } = shwarm;
         const tier = definition.tier;
-        const damagePerHit = definition.damage_per_hit;
         const rng = getRng(shwarmId, seed);
 
         // x_factor for random range: Tier 1 = 3, scales with tier
-        // We'll use: 3 + (tier - 1) so tier 1 = 3, tier 5 = 7, tier 10 = 12
         const randomRange = 2 + tier;
 
         for (const block of blocks) {
           if (!block.isAlive) continue;
 
-          const pos = block.position;
-
-          // Check player collision first
-          const distToPlayer = pos.distanceTo(playerPos);
-          
-          if (distToPlayer < PLAYER_HIT_RADIUS && onPlayerHit) {
-            if (!block.lastHitPlayerAt || now - block.lastHitPlayerAt > PLAYER_HIT_DEBOUNCE_MS) {
-              block.lastHitPlayerAt = now;
-              
-              // Knockback force: 1 + tier
-              const knockbackForce = 1 + tier;
-              
-              // Direction: from block to player
-              const knockbackDir = _toPlayer.subVectors(playerPos, pos).normalize();
-              knockbackDir.y = 0.3;
-              knockbackDir.normalize();
-              
-              onPlayerHit(damagePerHit, knockbackForce, knockbackDir.clone());
-            }
-          }
+          const target = getBlockTarget(block);
+          const currentTargetPos = target.targetPosition;
 
           // Calculate direction toward player (horizontal mainly)
-          _toPlayer.subVectors(playerPos, pos);
+          _toPlayer.subVectors(playerPos, currentTargetPos);
           _toPlayer.y = 0; // Horizontal only for direction
           
           if (_toPlayer.length() < 0.5) {
@@ -177,7 +236,7 @@ export function useShwarmMovement({
           const randZ = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
 
           // Calculate new position: 1 step toward player + random offset
-          _newPos.copy(pos);
+          _newPos.copy(currentTargetPos);
           _newPos.x += Math.round(_toPlayer.x) + randX;
           _newPos.z += Math.round(_toPlayer.z) + randZ;
           _newPos.y += randY; // Can step up
@@ -197,42 +256,59 @@ export function useShwarmMovement({
           const tooClose = isTooCloseToOthers(_newPos, block, allBlocks);
 
           if (!collidesWorld && !tooClose) {
-            // Valid move - snap to new position (bubbling effect)
-            pos.copy(_newPos);
+            // Valid move - update target position
+            target.targetPosition.copy(_newPos);
           } else if (!collidesWorld) {
             // Try just horizontal movement if spacing is the issue
-            _newPos.y = pos.y;
+            _newPos.y = currentTargetPos.y;
             if (!isTooCloseToOthers(_newPos, block, allBlocks)) {
-              pos.copy(_newPos);
+              target.targetPosition.copy(_newPos);
             }
             // Else: stay in place this phase
           } else {
             // Try step-up over obstacle
-            _newPos.y = pos.y + 1;
+            _newPos.y = currentTargetPos.y + 1;
             if (!checkWorldCollision(_newPos) && !isTooCloseToOthers(_newPos, block, allBlocks)) {
-              pos.copy(_newPos);
+              target.targetPosition.copy(_newPos);
             }
             // Else: stay in place, blocked
           }
         }
       }
-
-      lastPhaseTimeRef.current = now;
     }, MOVEMENT_PHASE_MS);
 
     return () => clearInterval(intervalId);
-  }, [isEnabled, shwarmsRef, cameraRef, getRng, onPlayerHit, checkWorldCollision, isTooCloseToOthers]);
+  }, [isEnabled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
 
-  // Cleanup RNG map when shwarms are removed
+  // Cleanup maps when shwarms are removed
   useEffect(() => {
     const cleanup = setInterval(() => {
       const shwarms = shwarmsRef.current;
       if (!shwarms) return;
 
-      const activeIds = new Set(shwarms.map(s => s.id));
+      const activeBlockIds = new Set<string>();
+      const activeShwarmIds = new Set<string>();
+      
+      for (const shwarm of shwarms) {
+        activeShwarmIds.add(shwarm.id);
+        for (const block of shwarm.blocks) {
+          if (block.isAlive) {
+            activeBlockIds.add(block.id);
+          }
+        }
+      }
+      
+      // Cleanup RNG map
       for (const id of rngMapRef.current.keys()) {
-        if (!activeIds.has(id)) {
+        if (!activeShwarmIds.has(id)) {
           rngMapRef.current.delete(id);
+        }
+      }
+      
+      // Cleanup target positions
+      for (const id of blockTargetsRef.current.keys()) {
+        if (!activeBlockIds.has(id)) {
+          blockTargetsRef.current.delete(id);
         }
       }
     }, 5000);
