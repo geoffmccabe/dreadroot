@@ -1,5 +1,6 @@
 import React, { useRef, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
+import { useLoader } from '@react-three/fiber';
 import { SHWARM_BLOCK_SIZE, DEFAULT_SHWARM_COLOR, MAX_SHWARM_BLOCKS } from '../constants';
 import type { ShwarmInstance } from '../hooks/useShwarmSystem';
 import { frameLoop } from '@/lib/frameLoop';
@@ -24,6 +25,54 @@ const particleGeometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 // Maximum particles for hit effects
 const MAX_HIT_PARTICLES = 200;
 
+// Cache for loaded textures
+const textureCache = new Map<string, THREE.Texture>();
+const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+
+// Get or create material for a texture URL
+function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMaterial {
+  const cacheKey = textureUrl || 'default';
+  
+  if (materialCache.has(cacheKey)) {
+    return materialCache.get(cacheKey)!;
+  }
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: textureUrl ? 0xffffff : DEFAULT_SHWARM_COLOR,
+    roughness: 0.5,
+    metalness: 0.2,
+  });
+
+  if (textureUrl) {
+    // Check texture cache first
+    if (textureCache.has(textureUrl)) {
+      mat.map = textureCache.get(textureUrl)!;
+      mat.needsUpdate = true;
+    } else {
+      // Load texture asynchronously
+      const loader = new THREE.TextureLoader();
+      loader.load(
+        textureUrl,
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          textureCache.set(textureUrl, texture);
+          mat.map = texture;
+          mat.needsUpdate = true;
+        },
+        undefined,
+        (error) => {
+          console.warn(`[ShwarmRenderer] Failed to load texture: ${textureUrl}`, error);
+        }
+      );
+    }
+  }
+
+  materialCache.set(cacheKey, mat);
+  return mat;
+}
+
 // Particle interface
 interface HitParticle {
   position: THREE.Vector3;
@@ -45,26 +94,34 @@ interface ShwarmRendererProps {
 }
 
 /**
- * Renders all shwarm blocks using InstancedMesh for performance
+ * Renders all shwarm blocks using InstancedMesh per texture for performance
  * Also renders hit particles when shwarms are damaged
  * Exposes update() for frame loop integration (no useFrame)
  */
 export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererProps>(
   ({ shwarms }, ref) => {
-    const meshRef = useRef<THREE.InstancedMesh>(null);
+    const meshRefsMap = useRef<Map<string, THREE.InstancedMesh>>(new Map());
     const particleMeshRef = useRef<THREE.InstancedMesh>(null);
-    const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
-    // Create material once
-    const material = useMemo(() => {
-      const mat = new THREE.MeshStandardMaterial({
-        color: DEFAULT_SHWARM_COLOR,
-        roughness: 0.5,
-        metalness: 0.2,
-      });
-      materialRef.current = mat;
-      return mat;
-    }, []);
+    // Get unique texture URLs from active shwarms
+    const textureUrls = useMemo(() => {
+      const urls = new Set<string>();
+      for (const shwarm of shwarms) {
+        const url = shwarm.definition.texture_url || 'default';
+        urls.add(url);
+      }
+      return Array.from(urls);
+    }, [shwarms]);
+
+    // Create/get materials for each texture
+    const materials = useMemo(() => {
+      const mats: Map<string, THREE.MeshStandardMaterial> = new Map();
+      for (const url of textureUrls) {
+        const actualUrl = url === 'default' ? null : url;
+        mats.set(url, getOrCreateMaterial(actualUrl));
+      }
+      return mats;
+    }, [textureUrls]);
 
     // Create particle material
     const particleMaterial = useMemo(() => {
@@ -170,10 +227,9 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
       return unregister;
     }, [particles]);
 
-    // Cleanup material on unmount
+    // Cleanup particle material on unmount
     useEffect(() => {
       return () => {
-        materialRef.current?.dispose();
         particleMaterial.dispose();
       };
     }, [particleMaterial]);
@@ -181,68 +237,96 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
     // Expose update function, mesh getter, and hit effect creator
     useImperativeHandle(ref, () => ({
       update: () => {
-        const mesh = meshRef.current;
-        if (!mesh) return;
-
-        let instanceCount = 0;
-
+        // Group shwarms by texture URL
+        const shwarmsByTexture = new Map<string, ShwarmInstance[]>();
+        
         for (const shwarm of shwarms) {
           if (!shwarm.isActive) continue;
-
-          for (const block of shwarm.blocks) {
-            if (!block.isAlive) continue;
-            if (instanceCount >= MAX_SHWARM_BLOCKS) break;
-
-            // Set position
-            tmpPosition.copy(block.position);
-
-            // Set scale based on health (in 10% increments)
-            // Geometry is already SHWARM_BLOCK_SIZE, so block.scale (0.2 to 1.0) gives us the visual size
-            const visualScale = block.scale;
-            tmpScale.set(visualScale, visualScale, visualScale);
-
-            // Compose matrix
-            tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
-            mesh.setMatrixAt(instanceCount, tmpMatrix);
-
-            // Color based on health percentage (red -> dark red as damaged)
-            const healthPercent = block.currentHealth / block.maxHealth;
-            // Lerp from dark red (0x880000) to bright red (0xff4444)
-            tmpColor.setRGB(
-              0.53 + healthPercent * 0.47,  // 0.53 to 1.0
-              healthPercent * 0.27,          // 0 to 0.27
-              healthPercent * 0.27           // 0 to 0.27
-            );
-            mesh.setColorAt(instanceCount, tmpColor);
-
-            instanceCount++;
+          const url = shwarm.definition.texture_url || 'default';
+          if (!shwarmsByTexture.has(url)) {
+            shwarmsByTexture.set(url, []);
           }
-
-          if (instanceCount >= MAX_SHWARM_BLOCKS) break;
+          shwarmsByTexture.get(url)!.push(shwarm);
         }
 
-        mesh.count = instanceCount;
-        
-        if (instanceCount > 0) {
-          mesh.instanceMatrix.needsUpdate = true;
-          if (mesh.instanceColor) {
-            mesh.instanceColor.needsUpdate = true;
+        // Update each instanced mesh
+        for (const [textureUrl, textureShwarms] of shwarmsByTexture) {
+          const mesh = meshRefsMap.current.get(textureUrl);
+          if (!mesh) continue;
+
+          let instanceCount = 0;
+
+          for (const shwarm of textureShwarms) {
+            for (const block of shwarm.blocks) {
+              if (!block.isAlive) continue;
+              if (instanceCount >= MAX_SHWARM_BLOCKS) break;
+
+              // Set position
+              tmpPosition.copy(block.position);
+
+              // Set scale based on health (in 10% increments)
+              const visualScale = block.scale;
+              tmpScale.set(visualScale, visualScale, visualScale);
+
+              // Compose matrix
+              tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
+              mesh.setMatrixAt(instanceCount, tmpMatrix);
+
+              // Color based on health percentage (tint darker as damaged)
+              const healthPercent = block.currentHealth / block.maxHealth;
+              // White at full health, darken as damaged
+              tmpColor.setRGB(healthPercent, healthPercent, healthPercent);
+              mesh.setColorAt(instanceCount, tmpColor);
+
+              instanceCount++;
+            }
+
+            if (instanceCount >= MAX_SHWARM_BLOCKS) break;
+          }
+
+          mesh.count = instanceCount;
+          
+          if (instanceCount > 0) {
+            mesh.instanceMatrix.needsUpdate = true;
+            if (mesh.instanceColor) {
+              mesh.instanceColor.needsUpdate = true;
+            }
+          }
+        }
+
+        // Clear unused meshes
+        for (const [url, mesh] of meshRefsMap.current) {
+          if (!shwarmsByTexture.has(url)) {
+            mesh.count = 0;
           }
         }
       },
-      getMesh: () => meshRef.current,
+      getMesh: () => meshRefsMap.current.values().next().value ?? null,
       createHitEffect,
     }), [shwarms, createHitEffect]);
 
+    // Callback to store mesh refs
+    const setMeshRef = (url: string) => (mesh: THREE.InstancedMesh | null) => {
+      if (mesh) {
+        meshRefsMap.current.set(url, mesh);
+      } else {
+        meshRefsMap.current.delete(url);
+      }
+    };
+
     return (
       <>
-        <instancedMesh
-          ref={meshRef}
-          args={[shwarmBlockGeometry, material, MAX_SHWARM_BLOCKS]}
-          frustumCulled={false}
-          castShadow
-          receiveShadow
-        />
+        {/* Render one instanced mesh per unique texture */}
+        {textureUrls.map((url) => (
+          <instancedMesh
+            key={url}
+            ref={setMeshRef(url)}
+            args={[shwarmBlockGeometry, materials.get(url)!, MAX_SHWARM_BLOCKS]}
+            frustumCulled={false}
+            castShadow
+            receiveShadow
+          />
+        ))}
         <instancedMesh
           ref={particleMeshRef}
           args={[particleGeometry, particleMaterial, MAX_HIT_PARTICLES]}
