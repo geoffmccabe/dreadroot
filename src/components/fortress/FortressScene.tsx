@@ -421,13 +421,37 @@ export function FortressScene({
   const skyRef = useRef<SkyHandle>(null);
   const fpsCounterRef = useRef<FPSCounterHandle>(null);
   
+  // Track meshes by a unique ID (mesh reference) to allow multiple meshes per blockType
+  // This is needed because tree blocks share the same type ("trunk") but have different textures
+  const meshIdCounter = useRef(0);
+  const meshToIdRef = useRef(new WeakMap<THREE.InstancedMesh, string>());
+  
   const handleMeshReady = useCallback((blockType: string, mesh: THREE.InstancedMesh | null) => {
     if (mesh) {
-      instancedMeshesRef.current.set(blockType, mesh);
+      // Generate a unique ID for this mesh if it doesn't have one
+      let meshId = meshToIdRef.current.get(mesh);
+      if (!meshId) {
+        meshId = `${blockType}_${meshIdCounter.current++}`;
+        meshToIdRef.current.set(mesh, meshId);
+      }
+      
+      instancedMeshesRef.current.set(meshId, mesh);
       meshToBlockTypeCache.current.set(mesh, blockType);
       meshesArrayCache.current = Array.from(instancedMeshesRef.current.values());
     } else {
-      instancedMeshesRef.current.delete(blockType);
+      // When removing, we need to find and remove by mesh reference
+      for (const [key, storedMesh] of instancedMeshesRef.current.entries()) {
+        if (storedMesh === mesh || !mesh) {
+          // If mesh is null, we need to find by blockType prefix
+          if (!mesh && key.startsWith(blockType + '_')) {
+            instancedMeshesRef.current.delete(key);
+          } else if (storedMesh === mesh) {
+            instancedMeshesRef.current.delete(key);
+            break;
+          }
+        }
+      }
+      meshesArrayCache.current = Array.from(instancedMeshesRef.current.values());
     }
   }, []);
 
