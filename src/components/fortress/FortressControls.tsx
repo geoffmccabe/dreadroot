@@ -299,7 +299,9 @@ export function FirstPersonControls({
         }
         break;
       case 'F10': // Emergency: clear entire collision grid and rebuild
-        if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+      case 'Backquote': // Also ` (backtick) key - Mac-friendly alternative
+        if (event.code === 'Backquote' && !event.shiftKey) break; // Only Shift+` triggers clear
+        if (event.code === 'Backquote' || userRoles.includes('admin') || userRoles.includes('superadmin')) {
           event.preventDefault();
           console.log('[Debug] EMERGENCY: Clearing entire collision grid!');
           collisionGrid.clear();
