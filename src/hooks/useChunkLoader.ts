@@ -983,7 +983,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Phase 3C: Load chunks progressively in rings (near-first)
-   * PERF: Loads all chunks first, then emits once to prevent flashing
+   * Loads ring 0 first for fast initial display, then remaining rings
    */
   const loadProgressiveRings = useCallback(async (
     centerX: number,
@@ -992,15 +992,15 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   ): Promise<void> => {
     if (!worldId) return;
 
-    // Collect all chunks to load
-    const allChunks: Array<{ x: number; z: number }> = [];
-    for (let ring = 0; ring <= maxRadius; ring++) {
-      const ringChunks = getRingChunks(centerX, centerZ, ring);
-      allChunks.push(...ringChunks);
-    }
+    // Load ring 0 first (immediate center chunk) for quick initial display
+    const ring0Chunks = getRingChunks(centerX, centerZ, 0);
+    await loadSpecificChunks(ring0Chunks);
 
-    // Load all chunks in one batch - scheduleEmit will be called once at the end
-    await loadSpecificChunks(allChunks);
+    // Then load remaining rings
+    for (let ring = 1; ring <= maxRadius; ring++) {
+      const ringChunks = getRingChunks(centerX, centerZ, ring);
+      await loadSpecificChunks(ringChunks);
+    }
   }, [worldId, getRingChunks, loadSpecificChunks]);
 
   /**
@@ -1270,7 +1270,6 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Clear all chunks (on world change)
    * Phase 3E: Also resets prefetch state
    * FIXED: Now properly removes all block colliders before clearing
-   * PERF: Don't emit empty blocks immediately - let next load populate naturally
    */
   const clearAllChunks = useCallback(() => {
     // CRITICAL: Remove all block colliders from the collision grid before clearing chunks
@@ -1288,16 +1287,17 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Phase 3E: Reset prefetch state
     resetPrefetchState();
     
-    // Don't emit empty blocks - the next initializeForWorld will populate
-    // This prevents visual flashing on world change
-  }, [resetPrefetchState]);
+    // Emit empty blocks to clear the UI
+    onBlocksChanged([]);
+  }, [resetPrefetchState, onBlocksChanged]);
 
-  // Handle world changes - only clear internal state, don't flash UI
+  // Handle world changes - clear and re-initialize
   useEffect(() => {
-    if (currentWorldRef.current !== worldId) {
+    const prevWorld = currentWorldRef.current;
+    if (prevWorld !== worldId) {
       currentWorldRef.current = worldId;
       // Only clear if there was a previous world (not initial mount)
-      if (currentWorldRef.current !== null) {
+      if (prevWorld !== null) {
         clearAllChunks();
       }
     }

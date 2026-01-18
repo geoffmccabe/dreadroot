@@ -143,6 +143,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   // Store chunkLoader in a ref to use in callbacks without causing dependency changes
   const chunkLoaderRef = useRef(chunkLoader);
   chunkLoaderRef.current = chunkLoader;
+  
+  // Track if we've initialized for the current world
+  const initializedWorldRef = useRef<string | null>(null);
 
   // REMOVED: syncWithSupabase is orphaned - chunk loader now handles all loading
 
@@ -154,6 +157,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       return;
     }
     
+    // Skip if already initialized for this world
+    if (initializedWorldRef.current === worldId) {
+      return;
+    }
+    initializedWorldRef.current = worldId;
+    
     try {
       setIsLoading(true);
       await initDB();
@@ -162,6 +171,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
     } catch (error) {
       console.error('Error initializing:', error);
+      initializedWorldRef.current = null; // Allow retry on error
     } finally {
       setIsLoading(false);
     }
@@ -275,21 +285,23 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
   }, [worldId, addBlock]);
 
-  // Track world changes - chunk loader handles clearing and loading
-  // Don't clear blocks immediately to prevent visual flashing
+  // Track world changes - reset initialization tracking
   useEffect(() => {
     if (currentWorldIdRef.current !== worldId) {
       currentWorldIdRef.current = worldId;
-      // Note: Don't setBlocks([]) here - let chunk loader handle it gracefully
+      // Reset initialization tracking for new world
+      initializedWorldRef.current = null;
     }
   }, [worldId]);
 
+  // Main initialization effect - runs once per world
   useEffect(() => {
     if (userId && worldId) {
       initializeCache();
     } else {
       setIsLoading(true);
       setBlocksIfChanged([]);
+      initializedWorldRef.current = null;
     }
     
     const cleanup = setupRealtimeSubscription();
