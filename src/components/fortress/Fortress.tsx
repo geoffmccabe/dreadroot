@@ -24,6 +24,7 @@ import { clearBlocksCache } from '@/hooks/useBlocksData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
+import { useTreeChopping } from '@/features/trees/hooks/useTreeChopping';
 
 import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
@@ -107,8 +108,8 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock } = useUserData();
-  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId } = useBlocks();
+  const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock, returnSeed } = useUserData();
+  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
@@ -159,6 +160,16 @@ export function Fortress() {
     placeBlock,
     startGrowing,
     updateTreeId,
+  });
+  
+  // Tree chopping - allows owner to destroy tree and get seed back
+  const { chopTreeAtPosition, isOwnedTreeAtPosition } = useTreeChopping({
+    worldId: currentWorldId,
+    userId: user?.id ?? null,
+    plantedTrees,
+    seedDefinitions,
+    returnSeed,
+    refreshBlocks,
   });
   
   // Audio refs
@@ -215,8 +226,26 @@ export function Fortress() {
     }
   }, [respawnTimer, isDead, respawn]);
 
-  // Block removal handler
+  // Block removal handler - checks if block is part of a tree first
   const handleBlockRemove = useCallback(async (blockId: string) => {
+    // Find the block to get its position
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) {
+      console.warn('Block not found for removal:', blockId);
+      return;
+    }
+    
+    // Check if this is a tree block (trunk type) and if user owns the tree
+    if (block.block_type === 'trunk' && TREE_CONFIG.ENABLED) {
+      const isOwned = isOwnedTreeAtPosition(block.position_x, block.position_y, block.position_z);
+      if (isOwned) {
+        // Chop the entire tree instead of just removing one block
+        await chopTreeAtPosition(block.position_x, block.position_y, block.position_z);
+        return;
+      }
+    }
+    
+    // Standard block removal
     playReversedAudio('/wooden_thud_sound.mp3');
     
     const success = await removeBlock(blockId);
@@ -227,7 +256,7 @@ export function Fortress() {
         duration: 2000
       });
     }
-  }, [removeBlock, toast]);
+  }, [blocks, removeBlock, toast, isOwnedTreeAtPosition, chopTreeAtPosition]);
 
   // Settings handlers
   const handleSettingsChange = (key: string, value: any) => {
