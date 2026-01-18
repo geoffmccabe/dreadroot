@@ -625,10 +625,16 @@ export function FortressScene({
           
           // Check shwarm collisions (if not already hit something)
           if (!hit) {
-            // Use proper AABB collision for 0.5x0.5m hitbox centered on block position
-            // Slightly expanded hitbox (0.3 instead of 0.25) to account for visual lerping
-            const SHWARM_HALF_SIZE = 0.3; // Slightly larger than 0.25 for better hit detection
+            // Use ray-AABB intersection to prevent bullets tunneling through targets
+            // Check the bullet's travel path this frame, not just its current position
+            const SHWARM_HALF_SIZE = 0.35; // Slightly larger for forgiving hit detection
             const BULLET_DAMAGE = 25;
+            
+            // Calculate bullet's previous position (before this frame's movement)
+            const moveDistance = bullet.speed * delta;
+            const prevX = bullet.position.x - bullet.direction.x * moveDistance;
+            const prevY = bullet.position.y - bullet.direction.y * moveDistance;
+            const prevZ = bullet.position.z - bullet.direction.z * moveDistance;
             
             for (const shwarm of activeShwarms) {
               if (!shwarm.isActive || hit) break;
@@ -636,20 +642,64 @@ export function FortressScene({
               for (const block of shwarm.blocks) {
                 if (!block.isAlive) continue;
                 
-                // AABB collision: check if bullet is within the hitbox cube CENTERED on block
-                // block.position is the visual center of the block
+                // AABB bounds centered on block
                 const bx = block.position.x;
                 const by = block.position.y;
                 const bz = block.position.z;
-                const px = bullet.position.x;
-                const py = bullet.position.y;
-                const pz = bullet.position.z;
+                const minX = bx - SHWARM_HALF_SIZE;
+                const maxX = bx + SHWARM_HALF_SIZE;
+                const minY = by - SHWARM_HALF_SIZE;
+                const maxY = by + SHWARM_HALF_SIZE;
+                const minZ = bz - SHWARM_HALF_SIZE;
+                const maxZ = bz + SHWARM_HALF_SIZE;
                 
-                if (
-                  px >= bx - SHWARM_HALF_SIZE && px <= bx + SHWARM_HALF_SIZE &&
-                  py >= by - SHWARM_HALF_SIZE && py <= by + SHWARM_HALF_SIZE &&
-                  pz >= bz - SHWARM_HALF_SIZE && pz <= bz + SHWARM_HALF_SIZE
-                ) {
+                // Ray-AABB intersection (slab method)
+                // Check if ray from prevPos to currentPos intersects the box
+                const dx = bullet.direction.x;
+                const dy = bullet.direction.y;
+                const dz = bullet.direction.z;
+                
+                let tMin = 0;
+                let tMax = moveDistance;
+                
+                // X slab
+                if (Math.abs(dx) > 0.0001) {
+                  const t1 = (minX - prevX) / dx;
+                  const t2 = (maxX - prevX) / dx;
+                  const tNear = Math.min(t1, t2);
+                  const tFar = Math.max(t1, t2);
+                  tMin = Math.max(tMin, tNear);
+                  tMax = Math.min(tMax, tFar);
+                } else if (prevX < minX || prevX > maxX) {
+                  continue; // Ray parallel and outside X slab
+                }
+                
+                // Y slab
+                if (Math.abs(dy) > 0.0001) {
+                  const t1 = (minY - prevY) / dy;
+                  const t2 = (maxY - prevY) / dy;
+                  const tNear = Math.min(t1, t2);
+                  const tFar = Math.max(t1, t2);
+                  tMin = Math.max(tMin, tNear);
+                  tMax = Math.min(tMax, tFar);
+                } else if (prevY < minY || prevY > maxY) {
+                  continue; // Ray parallel and outside Y slab
+                }
+                
+                // Z slab
+                if (Math.abs(dz) > 0.0001) {
+                  const t1 = (minZ - prevZ) / dz;
+                  const t2 = (maxZ - prevZ) / dz;
+                  const tNear = Math.min(t1, t2);
+                  const tFar = Math.max(t1, t2);
+                  tMin = Math.max(tMin, tNear);
+                  tMax = Math.min(tMax, tFar);
+                } else if (prevZ < minZ || prevZ > maxZ) {
+                  continue; // Ray parallel and outside Z slab
+                }
+                
+                // If tMin <= tMax, ray intersects the box
+                if (tMin <= tMax) {
                   // Hit shwarm block!
                   hit = true;
                   needsBulletRender = true;
