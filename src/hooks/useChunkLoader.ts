@@ -59,6 +59,16 @@ interface UseChunkLoaderProps {
  */
 const colliderByBlockId = new Map<string, THREE.Box3>();
 
+// CRITICAL: Clear the collider cache when the collision grid is cleared.
+// This MUST be a module-level listener so it runs synchronously before any
+// chunk loading attempts to reuse stale collider references.
+if (typeof window !== 'undefined') {
+  window.addEventListener('collisionGridCleared', () => {
+    console.log('[ChunkLoader] Module-level: Clearing colliderByBlockId cache');
+    colliderByBlockId.clear();
+  });
+}
+
 /**
  * Update collider bounds to match block position
  */
