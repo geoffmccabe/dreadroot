@@ -116,6 +116,9 @@ export function generateTreeBlueprint(
   // Get symmetry mode
   const symmetryMode: SymmetryMode = options?.symmetry ?? 'none';
   
+  // Symmetry group counter - blocks in the same group grow together
+  let nextSymmetryGroup = 0;
+  
   // Calculate dimensions from tier and factors
   const maxHeight = tier * TREE_CONFIG.BLOCKS_PER_TIER_HEIGHT;
   const maxBranchLength = Math.max(1, Math.floor(maxHeight * widthFactor));
@@ -135,36 +138,36 @@ export function generateTreeBlueprint(
     symmetry: symmetryMode,
   };
   
-  // Helper to check/add position with symmetry
+  // Helper to check/add position with symmetry - all symmetric blocks share same group
   const addBlock = (x: number, y: number, z: number, type: TreeBlockType): boolean => {
     const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
     let addedAny = false;
+    const groupId = nextSymmetryGroup++;
 
     for (const pos of positions) {
       const key = `${pos.x},${y},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0 });
+        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0, symmetryGroup: groupId });
         addedAny = true;
       }
     }
     return addedAny;
   };
   
-  // 1. Generate trunk (always straight up) - trunk is always at center, no symmetry
+  // 1. Generate trunk (always straight up) - trunk is always at center, each trunk block is its own group
   for (let h = 0; h < maxHeight; h++) {
     const key = `${baseX},${baseY + h},${baseZ}`;
     if (!occupied.has(key)) {
       occupied.add(key);
-      blocks.push({ x: baseX, y: baseY + h, z: baseZ, type: 'trunk', growthOrder: 0 });
+      blocks.push({ x: baseX, y: baseY + h, z: baseZ, type: 'trunk', growthOrder: 0, symmetryGroup: nextSymmetryGroup++ });
     }
   }
   
   // 2. Calculate branch count based on height and branching factor
-  // Reduce count for symmetric modes since each branch creates multiple
-  const symmetryMultiplier = symmetryMode === 'none' ? 1 : symmetryMode === '4x2' ? 0.125 : 0.25;
-  const minBranches = Math.max(1, Math.floor(maxHeight * 0.2 * symmetryMultiplier));
-  const maxBranches = Math.max(1, Math.floor(maxHeight * branchingFactor * 0.6 * 3 * symmetryMultiplier));
+  // NO reduction for symmetric modes - symmetry creates visual density, not more "actions"
+  const minBranches = Math.max(1, Math.floor(maxHeight * 0.2));
+  const maxBranches = Math.floor(maxHeight * branchingFactor * 0.6 * 3);
   const branchCount = seededInt(minBranches, maxBranches, rng);
   
   // 3. Pick branch heights (at least lowBranchHeight up, below top)
@@ -179,13 +182,16 @@ export function generateTreeBlueprint(
   // 4. Get directions based on symmetry mode
   const availableDirections = getDirectionsForSymmetry(symmetryMode, rng);
   
+  // Mutable counter for symmetry groups (passed by reference)
+  const groupCounter = { value: nextSymmetryGroup };
+  
   // 5. Generate branches at selected heights
   for (const branchY of branchHeights) {
     const direction = seededChoice(availableDirections, rng);
     growBranch(
       blocks,
       occupied,
-      baseX,
+      baseX,        // branch starts at trunk
       branchY,
       baseZ,
       direction,
@@ -194,7 +200,10 @@ export function generateTreeBlueprint(
       rng,
       opts,
       0,
-      symmetryMode
+      symmetryMode,
+      baseX,        // tree base X for symmetry
+      baseZ,        // tree base Z for symmetry
+      groupCounter  // mutable group counter
     );
   }
   
@@ -220,6 +229,8 @@ export function generateTreeBlueprint(
  * Recursively grow a branch in a direction
  * Branches can go horizontal or up, never down
  * Inline decoration generation - decorations use negative growthOrder as anchor links
+ * treeBaseX/treeBaseZ are the trunk coordinates used for symmetry calculations
+ * groupCounter is a mutable ref to track symmetry groups across recursive calls
  */
 function growBranch(
   blocks: BlueprintBlock[],
@@ -233,27 +244,26 @@ function growBranch(
   rng: () => number,
   opts: Required<TreeGrowthOptions>,
   depth: number = 0,
-  symmetryMode: SymmetryMode = 'none'
+  symmetryMode: SymmetryMode = 'none',
+  treeBaseX: number = startX,
+  treeBaseZ: number = startZ,
+  groupCounter: { value: number } = { value: 0 }
 ): void {
   // Limit recursion depth
   if (depth > 3) return;
-
-  // Get base position for symmetry calculations
-  // We need to pass the original tree base, not branch start
-  // For now, we calculate it from the trunk position (startX/startZ at depth 0)
-  const baseX = startX - (depth > 0 ? 0 : 0);  // At depth 0, startX IS baseX
-  const baseZ = startZ - (depth > 0 ? 0 : 0);  // At depth 0, startZ IS baseZ
   
-  // Helper to add block with symmetry
+  // Helper to add block with symmetry - always relative to tree base
+  // All symmetric blocks share the same symmetryGroup
   const addBlockWithSymmetry = (x: number, y: number, z: number, type: TreeBlockType): number => {
-    const positions = applySymmetry(x, z, startX, startZ, symmetryMode);
+    const positions = applySymmetry(x, z, treeBaseX, treeBaseZ, symmetryMode);
     let firstAnchorIndex = -1;
+    const groupId = groupCounter.value++;
 
     for (const pos of positions) {
       const key = `${pos.x},${y},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0 });
+        blocks.push({ x: pos.x, y, z: pos.z, type, growthOrder: 0, symmetryGroup: groupId });
         if (firstAnchorIndex === -1) {
           firstAnchorIndex = blocks.length - 1;
         }
@@ -283,28 +293,31 @@ function growBranch(
     const anchorIndex = addBlockWithSymmetry(x, y, z, 'trunk');
     if (anchorIndex === -1) continue; // All positions occupied
     
+    // Get the symmetry group of the anchor for decorations
+    const anchorGroup = blocks[anchorIndex]?.symmetryGroup ?? 0;
+    
     // ========== INLINE DECORATION GENERATION ==========
     // Decorations are added at the primary position only
     // The symmetry is handled at the branch block level
     
     // SPIKE: Vertical blocks going up
     if (opts.spikeChance > 0 && rng() < opts.spikeChance) {
-      addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, rng, startX, startZ, symmetryMode);
+      addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode);
     }
     
     // NOB: Cube of blocks adjacent to this point
     if (opts.nobChance > 0 && rng() < opts.nobChance) {
-      addNobWithSymmetry(blocks, occupied, x, y, z, opts.nobSize, anchorIndex, rng, startX, startZ, symmetryMode);
+      addNobWithSymmetry(blocks, occupied, x, y, z, opts.nobSize, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode);
     }
     
     // CROSS: Perpendicular + shape
     if (opts.crossChance > 0 && rng() < opts.crossChance) {
-      addCrossWithSymmetry(blocks, occupied, x, y, z, direction, opts.crossLength, anchorIndex, startX, startZ, symmetryMode);
+      addCrossWithSymmetry(blocks, occupied, x, y, z, direction, opts.crossLength, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode);
     }
     
     // SHROOM: Stem + cap
     if (opts.shroomChance > 0 && rng() < opts.shroomChance) {
-      addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, startX, startZ, symmetryMode);
+      addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode);
     }
     
     // ========== END DECORATIONS ==========
@@ -336,7 +349,10 @@ function growBranch(
         rng,
         opts,
         depth + 1,
-        symmetryMode
+        symmetryMode,
+        treeBaseX,    // Pass tree base through recursion
+        treeBaseZ,
+        groupCounter  // Pass mutable counter through recursion
       );
     }
   }
@@ -355,6 +371,7 @@ function addSpikeWithSymmetry(
   startZ: number,
   length: number,
   anchorIndex: number,
+  anchorGroup: number,
   rng: () => number,
   baseX: number,
   baseZ: number,
@@ -371,7 +388,8 @@ function addSpikeWithSymmetry(
           y: startY + i,
           z: pos.z,
           type: 'spike',
-          growthOrder: -anchorIndex - 1
+          growthOrder: -anchorIndex - 1,
+          symmetryGroup: anchorGroup
         });
       }
     }
@@ -389,35 +407,26 @@ function addNobWithSymmetry(
   centerZ: number,
   size: number,
   anchorIndex: number,
+  anchorGroup: number,
   rng: () => number,
   baseX: number,
   baseZ: number,
   symmetryMode: SymmetryMode
 ): void {
-  // Pick random direction: up, down, +X, -X, +Z, -Z
   const directions: [number, number, number][] = [
-    [0, 1, 0],   // up
-    [0, -1, 0],  // down
-    [1, 0, 0],   // +X
-    [-1, 0, 0],  // -X
-    [0, 0, 1],   // +Z
-    [0, 0, -1],  // -Z
+    [0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1],
   ];
-  const dirIdx = Math.floor(rng() * directions.length);
-  const dir = directions[dirIdx];
+  const dir = directions[Math.floor(rng() * directions.length)];
   
-  // Calculate the center of the nob cube
   const nobCenterX = centerX + dir[0] * (1 + Math.floor(size / 2));
   const nobCenterY = centerY + dir[1] * (1 + Math.floor(size / 2));
   const nobCenterZ = centerZ + dir[2] * (1 + Math.floor(size / 2));
   
-  // Calculate the starting corner of the cube
   const halfSize = Math.floor(size / 2);
   const nobStartX = nobCenterX - halfSize;
   const nobStartY = nobCenterY - halfSize;
   const nobStartZ = nobCenterZ - halfSize;
   
-  // Generate cube of blocks with symmetry
   for (let dx = 0; dx < size; dx++) {
     for (let dy = 0; dy < size; dy++) {
       for (let dz = 0; dz < size; dz++) {
@@ -430,11 +439,7 @@ function addNobWithSymmetry(
           const key = `${pos.x},${y},${pos.z}`;
           if (!occupied.has(key)) {
             occupied.add(key);
-            blocks.push({
-              x: pos.x, y, z: pos.z,
-              type: 'nob',
-              growthOrder: -anchorIndex - 1
-            });
+            blocks.push({ x: pos.x, y, z: pos.z, type: 'nob', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
           }
         }
       }
@@ -454,6 +459,7 @@ function addCrossWithSymmetry(
   branchDir: [number, number],
   length: number,
   anchorIndex: number,
+  anchorGroup: number,
   baseX: number,
   baseZ: number,
   symmetryMode: SymmetryMode
@@ -461,7 +467,6 @@ function addCrossWithSymmetry(
   const perpX = branchDir[0] === 0 ? 1 : 0;
   const perpZ = branchDir[1] === 0 ? 1 : 0;
   
-  // Horizontal arm
   for (let i = -length; i <= length; i++) {
     if (i === 0) continue;
     const x = centerX + perpX * i;
@@ -472,16 +477,11 @@ function addCrossWithSymmetry(
       const key = `${pos.x},${centerY},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({
-          x: pos.x, y: centerY, z: pos.z,
-          type: 'cross',
-          growthOrder: -anchorIndex - 1
-        });
+        blocks.push({ x: pos.x, y: centerY, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
       }
     }
   }
   
-  // Vertical arm - symmetry applied to centerX/Z
   const centerPositions = applySymmetry(centerX, centerZ, baseX, baseZ, symmetryMode);
   for (let i = -length; i <= length; i++) {
     if (i === 0) continue;
@@ -489,11 +489,7 @@ function addCrossWithSymmetry(
       const key = `${pos.x},${centerY + i},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({
-          x: pos.x, y: centerY + i, z: pos.z,
-          type: 'cross',
-          growthOrder: -anchorIndex - 1
-        });
+        blocks.push({ x: pos.x, y: centerY + i, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
       }
     }
   }
@@ -511,48 +507,35 @@ function addShroomWithSymmetry(
   stemLength: number,
   capDiameter: number,
   anchorIndex: number,
+  anchorGroup: number,
   baseX: number,
   baseZ: number,
   symmetryMode: SymmetryMode
 ): void {
-  // Stem
   for (let i = 1; i <= stemLength; i++) {
     const positions = applySymmetry(shroomBaseX, shroomBaseZ, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
       const key = `${pos.x},${shroomBaseY + i},${pos.z}`;
       if (!occupied.has(key)) {
         occupied.add(key);
-        blocks.push({
-          x: pos.x, y: shroomBaseY + i, z: pos.z,
-          type: 'shroom_stem',
-          growthOrder: -anchorIndex - 1
-        });
+        blocks.push({ x: pos.x, y: shroomBaseY + i, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
       }
     }
   }
   
-  // Cap
   const capY = shroomBaseY + stemLength + 1;
   const radius = Math.floor(capDiameter / 2);
   
   for (let dx = -radius; dx <= radius; dx++) {
     for (let dz = -radius; dz <= radius; dz++) {
-      const isCorner = Math.abs(dx) === radius && Math.abs(dz) === radius;
-      if (isCorner && capDiameter > 2) continue;
+      if (Math.abs(dx) === radius && Math.abs(dz) === radius && capDiameter > 2) continue;
       
-      const x = shroomBaseX + dx;
-      const z = shroomBaseZ + dz;
-      
-      const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
+      const positions = applySymmetry(shroomBaseX + dx, shroomBaseZ + dz, baseX, baseZ, symmetryMode);
       for (const pos of positions) {
         const key = `${pos.x},${capY},${pos.z}`;
         if (!occupied.has(key)) {
           occupied.add(key);
-          blocks.push({
-            x: pos.x, y: capY, z: pos.z,
-            type: 'shroom_cap',
-            growthOrder: -anchorIndex - 1
-          });
+          blocks.push({ x: pos.x, y: capY, z: pos.z, type: 'shroom_cap', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup });
         }
       }
     }
@@ -562,35 +545,49 @@ function addShroomWithSymmetry(
 // ========== END DECORATION HELPERS ==========
 
 /**
- * Assign growth order to blocks for interesting growth animation
- * Trunk grows first (bottom to top), then branches spread out
- * Decorations inherit the growthOrder of their anchor block
+ * Assign growth order to blocks
+ * Blocks in the same symmetryGroup get the same growthOrder so they appear together
  */
 function assignGrowthOrder(blocks: BlueprintBlock[], rng: () => number): void {
-  // First pass: assign orders to trunk blocks only (non-decoration blocks)
-  const trunkBlocks = blocks.filter(b => b.type === 'trunk');
+  // Group blocks by symmetryGroup
+  const groupToBlocks = new Map<number, BlueprintBlock[]>();
   
-  // Sort trunk by Y (bottom first)
-  trunkBlocks.sort((a, b) => a.y - b.y);
-  
-  // Build index map for trunk blocks
-  const blockIndexToOrder = new Map<number, number>();
-  
-  let order = 0;
-  for (const block of trunkBlocks) {
-    const idx = blocks.indexOf(block);
-    block.growthOrder = order;
-    blockIndexToOrder.set(idx, order);
-    order++;
+  for (const block of blocks) {
+    const group = block.symmetryGroup ?? 0;
+    if (!groupToBlocks.has(group)) {
+      groupToBlocks.set(group, []);
+    }
+    groupToBlocks.get(group)!.push(block);
   }
   
-  // Second pass: decorations inherit anchor's order
-  for (const block of blocks) {
-    if (block.growthOrder < 0) {
-      // Decode anchor index from negative growthOrder
-      const anchorIndex = -(block.growthOrder + 1);
-      const anchorOrder = blockIndexToOrder.get(anchorIndex);
-      block.growthOrder = anchorOrder ?? 0;
+  // Sort groups by the minimum Y of their blocks (trunk first, branches later)
+  const sortedGroups = Array.from(groupToBlocks.entries())
+    .sort((a, b) => {
+      const minYA = Math.min(...a[1].map(b => b.y));
+      const minYB = Math.min(...b[1].map(b => b.y));
+      return minYA - minYB;
+    });
+  
+  // Assign growth orders - all blocks in same group get same order
+  let order = 0;
+  for (const [groupId, groupBlocks] of sortedGroups) {
+    // Check if these are decoration blocks (negative growthOrder means decoration)
+    const isDecoration = groupBlocks.some(b => b.growthOrder < 0);
+    
+    if (isDecoration) {
+      // Decorations inherit their anchor's order
+      const anchorIndex = -(groupBlocks[0].growthOrder + 1);
+      const anchorBlock = blocks[anchorIndex];
+      const anchorOrder = anchorBlock?.growthOrder ?? order;
+      for (const block of groupBlocks) {
+        block.growthOrder = anchorOrder;
+      }
+    } else {
+      // Regular blocks get sequential order
+      for (const block of groupBlocks) {
+        block.growthOrder = order;
+      }
+      order++;
     }
   }
 }

@@ -89,6 +89,7 @@ export interface BlueprintBlock {
   z: number;
   type: TreeBlockType;
   growthOrder: number;
+  symmetryGroup?: number; // Blocks in same group grow together
 }
 
 export interface TreeBlueprint {
