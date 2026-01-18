@@ -697,6 +697,11 @@ export function FirstPersonControls({
       }
       
       // Tree chopping detection - hold left mouse on owned tree blocks (not in shooting mode)
+      // Debug: Log every 60 frames to avoid spam
+      if (leftMouseDownRef.current && Math.random() < 0.02) {
+        console.log('[TreeChop] leftMouseDown=true, showCrosshairs=', showCrosshairs, 'isOwnedTreeAtPositionRef.current=', !!isOwnedTreeAtPositionRef.current);
+      }
+      
       if (leftMouseDownRef.current && !showCrosshairs && isOwnedTreeAtPositionRef.current) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
@@ -705,6 +710,7 @@ export function FirstPersonControls({
           
           if (result && result.instanceId !== undefined) {
             const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
+            console.log('[TreeChop] Hit block type:', blockType);
             
             // Check if it's a trunk block (tree block)
             if (blockType === 'trunk') {
