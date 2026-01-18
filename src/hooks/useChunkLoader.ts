@@ -321,7 +321,14 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           oldBlock.block_type !== newBlock.block_type ||
           oldBlock.texture_url !== newBlock.texture_url;
         
-        chunkData.blocks[index] = newBlock;
+        // Preserve branch_depth from old block if new block doesn't have it
+        // This keeps tree lightening working after server sync
+        const preservedBlock = {
+          ...newBlock,
+          branch_depth: newBlock.branch_depth ?? (oldBlock as any).branch_depth,
+        };
+        
+        chunkData.blocks[index] = preservedBlock;
         chunkData.lastAccessedAt = Date.now();
         
         // Phase 3A: Recompute hasOptimisticBlocks after replacement
