@@ -44,7 +44,7 @@ interface BlockTargetData {
   targetPosition: THREE.Vector3;
   visualOffset: THREE.Vector3; // Random offset within buffer for visual variety
   collider: THREE.Box3 | null; // Collider for player standing
-  skipCounter: number; // How many intervals to skip before next move (for async timing)
+  nextMoveTime: number; // When this block should next move (ms timestamp)
 }
 
 interface UseShwarmMovementOptions {
@@ -105,15 +105,14 @@ export function useShwarmMovement({
       // Add to collision grid so player can stand on it
       collisionGrid.insert(collider);
       
-      // Random skip counter for async movement: 0-2 intervals to skip initially
-      // This staggers blocks so they don't all move at once
-      const skipCounter = Math.floor(Math.random() * 3);
+      // Stagger initial move: random time within first 0.5-1.5s window
+      const nextMoveTime = Date.now() + 500 + Math.random() * 1000;
       
       blockTargetsRef.current.set(block.id, {
         targetPosition: block.position.clone(),
         visualOffset: offset,
         collider,
-        skipCounter,
+        nextMoveTime,
       });
     }
     return blockTargetsRef.current.get(block.id)!;
@@ -236,8 +235,7 @@ export function useShwarmMovement({
     return unregister;
   }, [isEnabled, shwarmsRef, cameraRef, onPlayerHit, getBlockTarget]);
 
-  // Movement phase using setInterval (1 second phases) - updates TARGET positions
-  // Each block has async timing via skip counters
+  // Movement phase - check every 100ms, each block has its own timer (0.5-1.5s)
   useEffect(() => {
     if (!isEnabled) return;
 
@@ -247,6 +245,7 @@ export function useShwarmMovement({
       if (!shwarms || shwarms.length === 0 || !camera) return;
 
       const playerPos = camera.position;
+      const now = Date.now();
 
       // Collect all alive blocks for inter-shwarm collision checking
       const allBlocks: ShwarmBlock[] = [];
@@ -288,22 +287,11 @@ export function useShwarmMovement({
 
           const target = getBlockTarget(block);
           
-          // Check skip counter for async timing
-          if (target.skipCounter > 0) {
-            target.skipCounter--;
-            continue; // Skip this interval
-          }
+          // Check if it's time for this block to move
+          if (now < target.nextMoveTime) continue;
           
-          // Randomize next skip: 0, 1, or 2 intervals (avg ~1 sec, range 0.5-1.5 with 500ms base)
-          // 50% chance move next interval, 30% skip 1, 20% skip 2
-          const skipRoll = rng();
-          if (skipRoll < 0.5) {
-            target.skipCounter = 0; // Move next interval too
-          } else if (skipRoll < 0.8) {
-            target.skipCounter = 1; // Skip 1 interval
-          } else {
-            target.skipCounter = 2; // Skip 2 intervals
-          }
+          // Schedule next move: 0.5 to 1.5 seconds from now
+          target.nextMoveTime = now + 500 + Math.random() * 1000;
           
           const currentTargetPos = target.targetPosition;
 
@@ -407,7 +395,7 @@ export function useShwarmMovement({
           }
         }
       }
-    }, MOVEMENT_PHASE_MS);
+    }, 100); // Check every 100ms for per-block timers
 
     return () => clearInterval(intervalId);
   }, [isEnabled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
