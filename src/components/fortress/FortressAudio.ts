@@ -28,7 +28,10 @@ export function createAudioRefs() {
     coinHit: new Audio('/coin_hit_sound.mp3'),
     woodenThud: new Audio('/wooden_thud_sound.mp3'),
     wispBoom: new Audio('/space_gunshot.mp3'),
-    wispCheer: new Audio('/coin_hit_sound.mp3')
+    wispCheer: new Audio('/coin_hit_sound.mp3'),
+    // Shwarm sounds
+    shwarmHit: new Audio('/brick_drop_sound.mp3'),
+    playerHit: new Audio('/wooden_thud_sound.mp3')
   };
 }
 

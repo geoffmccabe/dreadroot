@@ -2,6 +2,7 @@ import React, { useRef, useImperativeHandle, forwardRef, useMemo, useEffect } fr
 import * as THREE from 'three';
 import { SHWARM_BLOCK_SIZE, DEFAULT_SHWARM_COLOR, MAX_SHWARM_BLOCKS } from '../constants';
 import type { ShwarmInstance } from '../hooks/useShwarmSystem';
+import { frameLoop } from '@/lib/frameLoop';
 
 // Pre-allocated objects for InstancedMesh updates
 const tmpMatrix = new THREE.Matrix4();
@@ -17,9 +18,26 @@ const shwarmBlockGeometry = new THREE.BoxGeometry(
   SHWARM_BLOCK_SIZE
 );
 
+// Particle geometry (small squares)
+const particleGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+
+// Maximum particles for hit effects
+const MAX_HIT_PARTICLES = 200;
+
+// Particle interface
+interface HitParticle {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  opacity: number;
+  scale: number;
+  active: boolean;
+  color: THREE.Color;
+}
+
 export interface ShwarmRendererHandle {
   update: () => void;
   getMesh: () => THREE.InstancedMesh | null;
+  createHitEffect: (position: THREE.Vector3, color?: number) => void;
 }
 
 interface ShwarmRendererProps {
@@ -28,11 +46,13 @@ interface ShwarmRendererProps {
 
 /**
  * Renders all shwarm blocks using InstancedMesh for performance
+ * Also renders hit particles when shwarms are damaged
  * Exposes update() for frame loop integration (no useFrame)
  */
 export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererProps>(
   ({ shwarms }, ref) => {
     const meshRef = useRef<THREE.InstancedMesh>(null);
+    const particleMeshRef = useRef<THREE.InstancedMesh>(null);
     const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
     // Create material once
@@ -46,14 +66,119 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
       return mat;
     }, []);
 
+    // Create particle material
+    const particleMaterial = useMemo(() => {
+      return new THREE.MeshBasicMaterial({
+        color: 0xff4444,
+        transparent: true,
+        opacity: 1,
+      });
+    }, []);
+
+    // Pre-allocate particles
+    const particles = useMemo<HitParticle[]>(() => {
+      const arr: HitParticle[] = [];
+      for (let i = 0; i < MAX_HIT_PARTICLES; i++) {
+        arr.push({
+          position: new THREE.Vector3(),
+          velocity: new THREE.Vector3(),
+          opacity: 0,
+          scale: 0.08,
+          active: false,
+          color: new THREE.Color(0xff4444),
+        });
+      }
+      return arr;
+    }, []);
+
+    // Create hit particle effect at position
+    const createHitEffect = (position: THREE.Vector3, color: number = DEFAULT_SHWARM_COLOR) => {
+      const particleCount = 12; // 12 particles per hit
+      let spawned = 0;
+
+      for (let i = 0; i < particles.length && spawned < particleCount; i++) {
+        const particle = particles[i];
+        if (!particle.active) {
+          // Spherical distribution
+          const angle = (Math.PI * 2 * spawned) / particleCount;
+          const elevation = (Math.random() - 0.3) * Math.PI * 0.5;
+          const speed = 3 + Math.random() * 4;
+
+          particle.active = true;
+          particle.position.copy(position);
+          particle.velocity.set(
+            Math.cos(angle) * Math.cos(elevation) * speed,
+            Math.sin(elevation) * speed + 2, // bias upward
+            Math.sin(angle) * Math.cos(elevation) * speed
+          );
+          particle.opacity = 1;
+          particle.scale = 0.06 + Math.random() * 0.06;
+          particle.color.setHex(color);
+          spawned++;
+        }
+      }
+    };
+
+    // Register particle updates with frame loop
+    useEffect(() => {
+      const unregister = frameLoop.register('shwarmParticles', (delta) => {
+        const particleMesh = particleMeshRef.current;
+        if (!particleMesh) return;
+
+        let activeCount = 0;
+        const gravity = 15;
+
+        for (const particle of particles) {
+          if (!particle.active) continue;
+
+          // Update position
+          particle.position.addScaledVector(particle.velocity, delta);
+          
+          // Apply gravity
+          particle.velocity.y -= gravity * delta;
+          
+          // Fade out
+          particle.opacity -= delta * 2.5;
+
+          if (particle.opacity <= 0 || particle.position.y <= 0) {
+            particle.active = false;
+            continue;
+          }
+
+          // Set matrix
+          tmpPosition.copy(particle.position);
+          tmpScale.set(particle.scale, particle.scale, particle.scale);
+          tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
+          particleMesh.setMatrixAt(activeCount, tmpMatrix);
+
+          // Set color with opacity
+          tmpColor.copy(particle.color);
+          particleMesh.setColorAt(activeCount, tmpColor);
+
+          activeCount++;
+        }
+
+        particleMesh.count = activeCount;
+        if (activeCount > 0) {
+          particleMesh.instanceMatrix.needsUpdate = true;
+          if (particleMesh.instanceColor) {
+            particleMesh.instanceColor.needsUpdate = true;
+          }
+        }
+      }, 65); // After movement
+
+      return unregister;
+    }, [particles]);
+
     // Cleanup material on unmount
     useEffect(() => {
       return () => {
         materialRef.current?.dispose();
+        particleMaterial.dispose();
       };
-    }, []);
+    }, [particleMaterial]);
 
-    // Expose update function and mesh getter
+    // Expose update function, mesh getter, and hit effect creator
     useImperativeHandle(ref, () => ({
       update: () => {
         const mesh = meshRef.current;
@@ -71,8 +196,8 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
             // Set position
             tmpPosition.copy(block.position);
 
-            // Set scale based on health (hitbox is constant, visual scales)
-            const visualScale = block.scale;
+            // Set scale based on health (in 10% increments)
+            const visualScale = block.scale * SHWARM_BLOCK_SIZE;
             tmpScale.set(visualScale, visualScale, visualScale);
 
             // Compose matrix
@@ -105,16 +230,24 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
         }
       },
       getMesh: () => meshRef.current,
-    }), [shwarms]);
+      createHitEffect,
+    }), [shwarms, createHitEffect]);
 
     return (
-      <instancedMesh
-        ref={meshRef}
-        args={[shwarmBlockGeometry, material, MAX_SHWARM_BLOCKS]}
-        frustumCulled={false}
-        castShadow
-        receiveShadow
-      />
+      <>
+        <instancedMesh
+          ref={meshRef}
+          args={[shwarmBlockGeometry, material, MAX_SHWARM_BLOCKS]}
+          frustumCulled={false}
+          castShadow
+          receiveShadow
+        />
+        <instancedMesh
+          ref={particleMeshRef}
+          args={[particleGeometry, particleMaterial, MAX_HIT_PARTICLES]}
+          frustumCulled={false}
+        />
+      </>
     );
   }
 );
