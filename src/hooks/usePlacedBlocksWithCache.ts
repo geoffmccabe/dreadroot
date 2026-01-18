@@ -5,7 +5,8 @@ import { useIndexedDB } from './useIndexedDB';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
-
+import { collisionGrid } from '@/lib/spatialHashGrid';
+import * as THREE from 'three';
 interface DBBlock extends PlacedBlock {
   synced: boolean;
   local_id?: string;
@@ -387,6 +388,15 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     if (expiresAt) {
       optimisticBlock.expires_at = expiresAt;
     }
+
+    // IMMEDIATE COLLISION: Add collider to spatial grid RIGHT NOW (no waiting for React render)
+    // This prevents the player from falling through newly placed blocks
+    const collider = new THREE.Box3(
+      new THREE.Vector3(x, y, z),
+      new THREE.Vector3(x + 1, y + 1, z + 1)
+    );
+    (optimisticBlock as any).__collider = collider; // Store reference for cache reuse
+    collisionGrid.insert(collider);
 
     // INSTANT: Add to chunk loader (single source of truth) for immediate UI
     chunkLoader.addBlockOptimistically(optimisticBlock);

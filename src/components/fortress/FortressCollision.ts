@@ -116,12 +116,21 @@ export function createBlockColliders(
   // STEP 1: Add new blocks to cache
   for (const block of blocks) {
     if (!cache.has(block.id)) {
-      const box = new THREE.Box3(
-        new THREE.Vector3(block.position_x, block.position_y, block.position_z),
-        new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
-      );
+      // Check if collider was pre-registered during optimistic placement
+      // This prevents duplicate colliders and ensures instant collision
+      let box = (block as any).__collider as THREE.Box3 | undefined;
+      
+      if (!box) {
+        // No pre-registered collider, create one
+        box = new THREE.Box3(
+          new THREE.Vector3(block.position_x, block.position_y, block.position_z),
+          new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
+        );
+        collisionGrid.insert(box);
+      }
+      // else: collider already in grid from optimistic placement - reuse it
+      
       cache.set(block.id, box);
-      collisionGrid.insert(box);
     }
   }
   
