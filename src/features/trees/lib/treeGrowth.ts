@@ -304,10 +304,10 @@ function growBranch(
     
     // SPIKE: Vertical blocks going up
     if (opts.spikeChance > 0 && rng() < opts.spikeChance) {
-      addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth);
+      addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
     }
     
-    // NOB: Cube of blocks adjacent to this point
+    // NOB: Cube of blocks adjacent to this point (no invisiblocks - nobs are not vertical obstacles)
     if (opts.nobChance > 0 && rng() < opts.nobChance) {
       addNobWithSymmetry(blocks, occupied, x, y, z, opts.nobSize, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth);
     }
@@ -319,7 +319,7 @@ function growBranch(
     
     // SHROOM: Stem + cap
     if (opts.shroomChance > 0 && rng() < opts.shroomChance) {
-      addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth);
+      addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
     }
     
     // ========== END DECORATIONS ==========
@@ -363,6 +363,64 @@ function growBranch(
 // ========== DECORATION HELPER FUNCTIONS WITH SYMMETRY ==========
 
 /**
+ * Add invisiblocks on both sides of a decoration for walkability
+ * Places 3 blocks on each perpendicular side (6 total)
+ * @param branchDir - The direction the branch is growing [dx, dz]
+ */
+function addInvisiblocksAroundDecoration(
+  blocks: BlueprintBlock[],
+  occupied: Set<string>,
+  centerX: number,
+  centerY: number,  // Y level of the branch (where feet walk)
+  centerZ: number,
+  branchDir: [number, number],
+  anchorIndex: number,
+  anchorGroup: number,
+  baseX: number,
+  baseZ: number,
+  symmetryMode: SymmetryMode,
+  branchDepth: number
+): void {
+  // Get perpendicular direction to the branch
+  // If branch is [1,0] or [-1,0] (X-axis), perp is [0,1] (Z-axis)
+  // If branch is [0,1] or [0,-1] (Z-axis), perp is [1,0] (X-axis)
+  const perpX = branchDir[0] === 0 ? 1 : 0;
+  const perpZ = branchDir[1] === 0 ? 1 : 0;
+  
+  // Offsets along the branch direction: -1, 0, +1 (3 blocks per side)
+  const alongOffsets = [-1, 0, 1];
+  
+  // Two perpendicular sides: +1 and -1
+  const perpSides = [1, -1];
+  
+  for (const perpSide of perpSides) {
+    for (const alongOffset of alongOffsets) {
+      // Calculate position relative to decoration center
+      const x = centerX + branchDir[0] * alongOffset + perpX * perpSide;
+      const z = centerZ + branchDir[1] * alongOffset + perpZ * perpSide;
+      
+      // Apply symmetry and place blocks
+      const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
+      for (const pos of positions) {
+        const key = `${pos.x},${centerY},${pos.z}`;
+        if (!occupied.has(key)) {
+          occupied.add(key);
+          blocks.push({
+            x: pos.x,
+            y: centerY,
+            z: pos.z,
+            type: 'invisiblock',
+            growthOrder: -anchorIndex - 1,  // Same as decoration
+            symmetryGroup: anchorGroup,
+            branchDepth
+          });
+        }
+      }
+    }
+  }
+}
+
+/**
  * Add a vertical spike from a point with symmetry
  */
 function addSpikeWithSymmetry(
@@ -378,7 +436,8 @@ function addSpikeWithSymmetry(
   baseX: number,
   baseZ: number,
   symmetryMode: SymmetryMode,
-  branchDepth: number = 0
+  branchDepth: number = 0,
+  branchDir: [number, number]  // Branch direction for invisiblock placement
 ): void {
   for (let i = 1; i <= length; i++) {
     const positions = applySymmetry(startX, startZ, baseX, baseZ, symmetryMode);
@@ -398,6 +457,13 @@ function addSpikeWithSymmetry(
       }
     }
   }
+  
+  // Add invisiblocks for walkability at the branch Y level
+  addInvisiblocksAroundDecoration(
+    blocks, occupied, startX, startY, startZ,
+    branchDir, anchorIndex, anchorGroup,
+    baseX, baseZ, symmetryMode, branchDepth
+  );
 }
 
 /**
@@ -499,6 +565,13 @@ function addCrossWithSymmetry(
       }
     }
   }
+  
+  // Add invisiblocks for walkability at the branch Y level
+  addInvisiblocksAroundDecoration(
+    blocks, occupied, centerX, centerY, centerZ,
+    branchDir, anchorIndex, anchorGroup,
+    baseX, baseZ, symmetryMode, branchDepth
+  );
 }
 
 /**
@@ -517,7 +590,8 @@ function addShroomWithSymmetry(
   baseX: number,
   baseZ: number,
   symmetryMode: SymmetryMode,
-  branchDepth: number = 0
+  branchDepth: number = 0,
+  branchDir: [number, number]  // Branch direction for invisiblock placement
 ): void {
   for (let i = 1; i <= stemLength; i++) {
     const positions = applySymmetry(shroomBaseX, shroomBaseZ, baseX, baseZ, symmetryMode);
@@ -547,6 +621,13 @@ function addShroomWithSymmetry(
       }
     }
   }
+  
+  // Add invisiblocks for walkability at the branch Y level
+  addInvisiblocksAroundDecoration(
+    blocks, occupied, shroomBaseX, shroomBaseY, shroomBaseZ,
+    branchDir, anchorIndex, anchorGroup,
+    baseX, baseZ, symmetryMode, branchDepth
+  );
 }
 
 // ========== END DECORATION HELPERS ==========
