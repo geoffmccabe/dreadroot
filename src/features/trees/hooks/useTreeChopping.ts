@@ -6,6 +6,7 @@ import { PlantedTree, SeedDefinition } from '../types';
 import { deleteTree } from './useLocalGrowth';
 import { useToast } from '@/hooks/use-toast';
 import { blockDB } from '@/hooks/useIndexedDB';
+import { collisionGrid } from '@/lib/spatialHashGrid';
 
 // Throttle chopping to prevent accidental double-chops
 const CHOP_COOLDOWN_MS = 1000;
@@ -175,6 +176,27 @@ export function useTreeChopping({
         });
       }
 
+      // CRITICAL: Force remove all colliders in the tree's area
+      // The removeByPosition in deleteTree can fail if colliders don't match exactly
+      // Brute-force remove any collider that could be from this tree
+      const maxSpread = (seedDef.tier ?? 5) * 2;
+      const maxHeight = (seedDef.tier ?? 5) * 10;
+      
+      let collidersRemoved = 0;
+      for (let dx = -maxSpread; dx <= maxSpread; dx++) {
+        for (let dz = -maxSpread; dz <= maxSpread; dz++) {
+          for (let dy = 0; dy <= maxHeight; dy++) {
+            const x = tree.base_x + dx;
+            const y = tree.base_y + dy;
+            const z = tree.base_z + dz;
+            if (collisionGrid.removeByPosition(x, y, z)) {
+              collidersRemoved++;
+            }
+          }
+        }
+      }
+      console.log(`[TreeChopping] Removed ${collidersRemoved} colliders in tree area`);
+
       // Clear IndexedDB cache for the affected chunk to prevent ghost blocks
       const chunkX = Math.floor(tree.base_x / CHUNK_SIZE);
       const chunkZ = Math.floor(tree.base_z / CHUNK_SIZE);
@@ -189,8 +211,14 @@ export function useTreeChopping({
         }
       }
 
-      // Refresh the affected chunk from the database
+      // Refresh the affected chunk from the database - this will rebuild correct colliders
       await refetchChunk(chunkX, chunkZ);
+      
+      // Also refetch adjacent chunks if tree could have spanned across chunk boundaries
+      const adjacentOffsets = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      for (const [dx, dz] of adjacentOffsets) {
+        await refetchChunk(chunkX + dx, chunkZ + dz);
+      }
 
       return { success: true, seedReturned };
     } catch (error) {
