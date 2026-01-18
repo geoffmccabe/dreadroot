@@ -4,19 +4,14 @@ import { collisionGrid } from '@/lib/spatialHashGrid';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
-import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE } from '../constants';
+import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE, MIN_SHWARM_SPACING, MOVEMENT_PHASE_MS, GRAVITY_FALL, GROUND_LEVEL } from '../constants';
 
-// Movement phase interval (1 second)
-const MOVEMENT_PHASE_MS = 1000;
+// Per-block movement timing: base 1000ms ± 50% (500-1500ms)
+const BASE_MOVEMENT_MS = 1000;
+const MOVEMENT_VARIANCE = 0.5; // ± 50%
 
-// Minimum distance between shwarm block centers
-const MIN_SHWARM_SPACING = 1.0;
-
-// Gravity: fall 1 unit per phase if above ground
-const GRAVITY_FALL = 1.0;
-
-// Ground level
-const GROUND_LEVEL = 0.25; // Half of 0.5 block size
+// Maximum center pull multiplier (when far from center)
+const MAX_CENTER_PULL_MULTIPLIER = 3.0;
 
 // Interpolation speed (lerp factor per frame, adjusted by delta)
 const LERP_SPEED = 8;
@@ -53,6 +48,8 @@ interface BlockTargetData {
   targetPosition: THREE.Vector3;
   visualOffset: THREE.Vector3; // Random offset within buffer for visual variety
   collider: THREE.Box3 | null; // Collider for player standing
+  nextMoveTime: number; // When this block should next move (randomized per block)
+  moveInterval: number; // This block's movement interval (1s ± 50%)
 }
 
 interface UseShwarmMovementOptions {
@@ -113,10 +110,17 @@ export function useShwarmMovement({
       // Add to collision grid so player can stand on it
       collisionGrid.insert(collider);
       
+      // Per-block randomized movement timing: 1s ± 50% (500ms to 1500ms)
+      const moveInterval = BASE_MOVEMENT_MS * (1 + (Math.random() - 0.5) * 2 * MOVEMENT_VARIANCE);
+      // Stagger initial move time randomly within first interval
+      const nextMoveTime = Date.now() + Math.random() * moveInterval;
+      
       blockTargetsRef.current.set(block.id, {
         targetPosition: block.position.clone(),
         visualOffset: offset,
         collider,
+        nextMoveTime,
+        moveInterval,
       });
     }
     return blockTargetsRef.current.get(block.id)!;
@@ -239,16 +243,20 @@ export function useShwarmMovement({
     return unregister;
   }, [isEnabled, shwarmsRef, cameraRef, onPlayerHit, getBlockTarget]);
 
-  // Movement phase using setInterval (1 second phases) - updates TARGET positions
+  // Movement phase using requestAnimationFrame-based checking - per-block timers
   useEffect(() => {
     if (!isEnabled) return;
 
+    // Use a fast interval to check per-block timers (60fps check)
+    const checkInterval = 16; // ~60fps
+    
     const intervalId = setInterval(() => {
       const shwarms = shwarmsRef.current;
       const camera = cameraRef.current;
       if (!shwarms || shwarms.length === 0 || !camera) return;
 
       const playerPos = camera.position;
+      const now = Date.now();
 
       // Collect all alive blocks for inter-shwarm collision checking
       const allBlocks: ShwarmBlock[] = [];
@@ -289,6 +297,13 @@ export function useShwarmMovement({
           if (!block.isAlive) continue;
 
           const target = getBlockTarget(block);
+          
+          // Check if it's time for this block to move
+          if (now < target.nextMoveTime) continue;
+          
+          // Schedule next move with randomized interval
+          target.nextMoveTime = now + target.moveInterval;
+          
           const currentTargetPos = target.targetPosition;
 
           // Calculate direction toward player (horizontal mainly)
@@ -305,6 +320,14 @@ export function useShwarmMovement({
           _toCenter.subVectors(_centerOfMass, currentTargetPos);
           _toCenter.y = 0;
           const distToCenter = _toCenter.length();
+          
+          // Distance-weighted center pull: farther blocks get pulled stronger
+          // At distance 0: pull = 0.5, at distance 10+: pull = MAX_CENTER_PULL_MULTIPLIER
+          const centerPullStrength = Math.min(
+            MAX_CENTER_PULL_MULTIPLIER,
+            0.5 + (distToCenter / 5) * (MAX_CENTER_PULL_MULTIPLIER - 0.5)
+          );
+          
           if (distToCenter > 0.1) {
             _toCenter.normalize();
           } else {
@@ -316,10 +339,10 @@ export function useShwarmMovement({
           const randY = Math.floor(rng() * 2); // 0 or 1 up (step-up)
           const randZ = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
 
-          // Calculate new position: 1.5 toward player + 1 toward center + random offset
+          // Calculate new position: toward player + distance-weighted toward center + random offset
           _newPos.copy(currentTargetPos);
-          _newPos.x += _toPlayer.x * MOVE_TOWARDS_PLAYER + _toCenter.x * 1.5 + randX;
-          _newPos.z += _toPlayer.z * MOVE_TOWARDS_PLAYER + _toCenter.z * 1.5 + randZ;
+          _newPos.x += _toPlayer.x * MOVE_TOWARDS_PLAYER + _toCenter.x * centerPullStrength + randX;
+          _newPos.z += _toPlayer.z * MOVE_TOWARDS_PLAYER + _toCenter.z * centerPullStrength + randZ;
           _newPos.y += randY; // Can step up
 
           // Apply gravity: if above ground, fall 1 unit
@@ -383,7 +406,7 @@ export function useShwarmMovement({
           }
         }
       }
-    }, MOVEMENT_PHASE_MS);
+    }, checkInterval);
 
     return () => clearInterval(intervalId);
   }, [isEnabled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
