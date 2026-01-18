@@ -148,9 +148,6 @@ export function useLocalGrowth({
           if (now - tree.lastGrowthTime < tree.growthInterval) continue;
 
           const maxOrder = getMaxGrowthOrder(tree.blueprint);
-          
-          // Debug: Log growth state
-          console.log(`[LocalGrowth] Tree ${id}: order ${tree.currentOrder}/${maxOrder}, interval ${tree.growthInterval}ms`);
 
           // Check if fully grown
           if (tree.currentOrder > maxOrder) {
@@ -174,17 +171,10 @@ export function useLocalGrowth({
 
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
-          
-          // Debug: Log blocks being placed
-          console.log(`[LocalGrowth] Order ${tree.currentOrder}: placing ${blocksToPlace.length} blocks`);
 
           // Place blocks - placeBlockFn already adds colliders via usePlacedBlocksWithCache
           for (const block of blocksToPlace) {
-            const placedBlock = placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
-            
-            // Debug: Check if collider was added
-            const hasCollider = placedBlock && (placedBlock as any).__collider;
-            console.log(`[LocalGrowth] Placed block at (${block.x}, ${block.y}, ${block.z}), hasCollider: ${hasCollider}`);
+            placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
           }
 
           // Update ref state (no React re-render)
