@@ -6,8 +6,8 @@ import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
 import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE, MIN_SHWARM_SPACING, MOVEMENT_PHASE_MS, GRAVITY_FALL, GROUND_LEVEL } from '../constants';
 
-// Per-block movement timing: base 1000ms ± 50% (500-1500ms)
-const BASE_MOVEMENT_MS = 1000;
+// Per-block movement timing: base 1500ms ± 50% (750-2250ms)
+const BASE_MOVEMENT_MS = 1500;
 const MOVEMENT_VARIANCE = 0.5; // ± 50%
 
 // Maximum center pull multiplier (when far from center)
@@ -247,8 +247,8 @@ export function useShwarmMovement({
   useEffect(() => {
     if (!isEnabled) return;
 
-    // Use a fast interval to check per-block timers (60fps check)
-    const checkInterval = 16; // ~60fps
+    // Check per-block timers at a reasonable rate (10fps is plenty)
+    const checkInterval = 100;
     
     const intervalId = setInterval(() => {
       const shwarms = shwarmsRef.current;
