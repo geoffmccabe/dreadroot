@@ -38,9 +38,10 @@ function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMater
   }
 
   const mat = new THREE.MeshStandardMaterial({
-    color: textureUrl ? 0xffffff : DEFAULT_SHWARM_COLOR,
-    roughness: 0.5,
-    metalness: 0.2,
+    color: 0xffffff, // Always white base - texture provides color
+    roughness: 0.4,
+    metalness: 0.1,
+    // Disable vertex colors initially - we'll enable when needed
   });
 
   if (textureUrl) {
@@ -57,16 +58,25 @@ function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMater
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.wrapS = THREE.RepeatWrapping;
           texture.wrapT = THREE.RepeatWrapping;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
           textureCache.set(textureUrl, texture);
           mat.map = texture;
           mat.needsUpdate = true;
+          console.log(`[ShwarmRenderer] Loaded texture: ${textureUrl}`);
         },
         undefined,
         (error) => {
           console.warn(`[ShwarmRenderer] Failed to load texture: ${textureUrl}`, error);
+          // Fallback to red color if texture fails
+          mat.color.setHex(DEFAULT_SHWARM_COLOR);
+          mat.needsUpdate = true;
         }
       );
     }
+  } else {
+    // No texture URL - use default red color
+    mat.color.setHex(DEFAULT_SHWARM_COLOR);
   }
 
   materialCache.set(cacheKey, mat);
@@ -272,10 +282,11 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
               tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
               mesh.setMatrixAt(instanceCount, tmpMatrix);
 
-              // Color based on health percentage (tint darker as damaged)
+              // Color tint based on health - white (1,1,1) at full health, darker when damaged
+              // Using 0.4 minimum so blocks don't go completely black
               const healthPercent = block.currentHealth / block.maxHealth;
-              // White at full health, darken as damaged
-              tmpColor.setRGB(healthPercent, healthPercent, healthPercent);
+              const brightness = 0.4 + healthPercent * 0.6; // Range 0.4 to 1.0
+              tmpColor.setRGB(brightness, brightness, brightness);
               mesh.setColorAt(instanceCount, tmpColor);
 
               instanceCount++;

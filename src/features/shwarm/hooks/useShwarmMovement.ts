@@ -4,7 +4,7 @@ import { collisionGrid } from '@/lib/spatialHashGrid';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
-import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER } from '../constants';
+import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE } from '../constants';
 
 // Movement phase interval (1 second)
 const MOVEMENT_PHASE_MS = 1000;
@@ -30,6 +30,10 @@ const _testBox = new THREE.Box3();
 const _testMin = new THREE.Vector3();
 const _testMax = new THREE.Vector3();
 
+// Pre-allocated for shwarm collider updates
+const _colliderMin = new THREE.Vector3();
+const _colliderMax = new THREE.Vector3();
+
 /**
  * Seeded random number generator for deterministic movement
  */
@@ -48,6 +52,7 @@ function seededRandom(seed: number): () => number {
 interface BlockTargetData {
   targetPosition: THREE.Vector3;
   visualOffset: THREE.Vector3; // Random offset within buffer for visual variety
+  collider: THREE.Box3 | null; // Collider for player standing
 }
 
 interface UseShwarmMovementOptions {
@@ -81,7 +86,7 @@ export function useShwarmMovement({
     return rngMapRef.current.get(shwarmId)!;
   }, []);
 
-  // Get or create target data for a block
+  // Get or create target data for a block (including collider for player standing)
   const getBlockTarget = useCallback((block: ShwarmBlock): BlockTargetData => {
     if (!blockTargetsRef.current.has(block.id)) {
       // Initialize with random visual offset within buffer
@@ -90,9 +95,28 @@ export function useShwarmMovement({
         0,
         (Math.random() - 0.5) * 0.3
       );
+      
+      // Create collider for player standing (0.5m cube)
+      const halfSize = SHWARM_BLOCK_SIZE / 2;
+      const collider = new THREE.Box3(
+        new THREE.Vector3(
+          block.position.x - halfSize,
+          block.position.y - halfSize,
+          block.position.z - halfSize
+        ),
+        new THREE.Vector3(
+          block.position.x + halfSize,
+          block.position.y + halfSize,
+          block.position.z + halfSize
+        )
+      );
+      // Add to collision grid so player can stand on it
+      collisionGrid.insert(collider);
+      
       blockTargetsRef.current.set(block.id, {
         targetPosition: block.position.clone(),
         visualOffset: offset,
+        collider,
       });
     }
     return blockTargetsRef.current.get(block.id)!;
@@ -170,6 +194,25 @@ export function useShwarmMovement({
           
           // Smooth interpolation: lerp visual position toward target + offset
           block.position.lerp(visualTarget, lerpFactor);
+
+          // Update collider position to match block position (for player standing)
+          if (target.collider) {
+            const halfSize = SHWARM_BLOCK_SIZE / 2;
+            _colliderMin.set(
+              block.position.x - halfSize,
+              block.position.y - halfSize,
+              block.position.z - halfSize
+            );
+            _colliderMax.set(
+              block.position.x + halfSize,
+              block.position.y + halfSize,
+              block.position.z + halfSize
+            );
+            // Remove and re-insert to update spatial grid position
+            collisionGrid.remove(target.collider);
+            target.collider.set(_colliderMin, _colliderMax);
+            collisionGrid.insert(target.collider);
+          }
 
           // Continuous player collision check (not just during phases)
           const distToPlayer = block.position.distanceTo(playerPos);
@@ -345,7 +388,7 @@ export function useShwarmMovement({
     return () => clearInterval(intervalId);
   }, [isEnabled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
 
-  // Cleanup maps when shwarms are removed
+  // Cleanup maps and colliders when shwarms/blocks are removed
   useEffect(() => {
     const cleanup = setInterval(() => {
       const shwarms = shwarmsRef.current;
@@ -370,9 +413,13 @@ export function useShwarmMovement({
         }
       }
       
-      // Cleanup target positions
-      for (const id of blockTargetsRef.current.keys()) {
+      // Cleanup target positions and remove colliders from grid
+      for (const [id, target] of blockTargetsRef.current.entries()) {
         if (!activeBlockIds.has(id)) {
+          // Remove collider from collision grid so player doesn't collide with dead blocks
+          if (target.collider) {
+            collisionGrid.remove(target.collider);
+          }
           blockTargetsRef.current.delete(id);
         }
       }
