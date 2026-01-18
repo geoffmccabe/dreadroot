@@ -178,19 +178,13 @@ export function useLocalGrowth({
           // Debug: Log blocks being placed
           console.log(`[LocalGrowth] Order ${tree.currentOrder}: placing ${blocksToPlace.length} blocks`);
 
-          // Place blocks and add colliders immediately
+          // Place blocks - placeBlockFn already adds colliders via usePlacedBlocksWithCache
           for (const block of blocksToPlace) {
             const placedBlock = placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
             
-            // Add collider immediately for tree blocks
-            if (placedBlock && !(placedBlock as any).__collider) {
-              const collider = new THREE.Box3(
-                new THREE.Vector3(block.x, block.y, block.z),
-                new THREE.Vector3(block.x + 1, block.y + 1, block.z + 1)
-              );
-              collisionGrid.insert(collider);
-              (placedBlock as any).__collider = collider;
-            }
+            // Debug: Check if collider was added
+            const hasCollider = placedBlock && (placedBlock as any).__collider;
+            console.log(`[LocalGrowth] Placed block at (${block.x}, ${block.y}, ${block.z}), hasCollider: ${hasCollider}`);
           }
 
           // Update ref state (no React re-render)
