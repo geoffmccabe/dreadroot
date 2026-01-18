@@ -204,6 +204,11 @@ export function checkAxisCollision(
   const count = collisionGrid.getNearby(pos.x, pos.z, 5);
   const nearbyColliders = collisionGrid.nearbyResult;
   
+  // Debug: Log collision grid state periodically
+  if (Math.random() < 0.01) {
+    console.log(`[Collision] Grid size: ${collisionGrid.size}, nearby count: ${count}, pos: (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
+  }
+  
   // If grid is empty, fall back to array (should not happen in normal use)
   if (count === 0 && colliders.length > 0) {
     // Fallback: check all colliders with spatial filter
