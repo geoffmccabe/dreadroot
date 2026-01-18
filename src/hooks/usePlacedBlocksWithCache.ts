@@ -275,12 +275,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
   }, [worldId, addBlock]);
 
-  // Clear blocks when world changes
+  // Track world changes - chunk loader handles clearing and loading
+  // Don't clear blocks immediately to prevent visual flashing
   useEffect(() => {
     if (currentWorldIdRef.current !== worldId) {
-      // World changed - clear state immediately before loading new world
-      setBlocks([]);
       currentWorldIdRef.current = worldId;
+      // Note: Don't setBlocks([]) here - let chunk loader handle it gracefully
     }
   }, [worldId]);
 

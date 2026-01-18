@@ -983,7 +983,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Phase 3C: Load chunks progressively in rings (near-first)
-   * This provides smooth initial loading with immediate visibility
+   * PERF: Loads all chunks first, then emits once to prevent flashing
    */
   const loadProgressiveRings = useCallback(async (
     centerX: number,
@@ -992,20 +992,15 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   ): Promise<void> => {
     if (!worldId) return;
 
-    // Load ring 0 (center) first for immediate visibility
-    const ring0 = getRingChunks(centerX, centerZ, 0);
-    await loadSpecificChunks(ring0);
-
-    // Load remaining rings progressively
-    for (let ring = 1; ring <= maxRadius; ring++) {
+    // Collect all chunks to load
+    const allChunks: Array<{ x: number; z: number }> = [];
+    for (let ring = 0; ring <= maxRadius; ring++) {
       const ringChunks = getRingChunks(centerX, centerZ, ring);
-      await loadSpecificChunks(ringChunks);
-      
-      // Small delay between rings to prevent frame drops (except for close rings)
-      if (ring >= 2) {
-        await new Promise(resolve => setTimeout(resolve, 16)); // ~1 frame
-      }
+      allChunks.push(...ringChunks);
     }
+
+    // Load all chunks in one batch - scheduleEmit will be called once at the end
+    await loadSpecificChunks(allChunks);
   }, [worldId, getRingChunks, loadSpecificChunks]);
 
   /**
@@ -1273,9 +1268,9 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   /**
    * Clear all chunks (on world change)
-   * Phase 3.0: Directly calls onBlocksChanged (not batched) for immediate clear
    * Phase 3E: Also resets prefetch state
    * FIXED: Now properly removes all block colliders before clearing
+   * PERF: Don't emit empty blocks immediately - let next load populate naturally
    */
   const clearAllChunks = useCallback(() => {
     // CRITICAL: Remove all block colliders from the collision grid before clearing chunks
@@ -1293,14 +1288,18 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Phase 3E: Reset prefetch state
     resetPrefetchState();
     
-    onBlocksChanged([]);
-  }, [onBlocksChanged, resetPrefetchState]);
+    // Don't emit empty blocks - the next initializeForWorld will populate
+    // This prevents visual flashing on world change
+  }, [resetPrefetchState]);
 
-  // Handle world changes
+  // Handle world changes - only clear internal state, don't flash UI
   useEffect(() => {
     if (currentWorldRef.current !== worldId) {
       currentWorldRef.current = worldId;
-      clearAllChunks();
+      // Only clear if there was a previous world (not initial mount)
+      if (currentWorldRef.current !== null) {
+        clearAllChunks();
+      }
     }
   }, [worldId, clearAllChunks]);
 
