@@ -25,9 +25,46 @@ const particleGeometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
 // Maximum particles for hit effects
 const MAX_HIT_PARTICLES = 200;
 
-// Cache for loaded textures
+// Cache for loaded textures (module-level for persistence across re-renders)
 const textureCache = new Map<string, THREE.Texture>();
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+const textureLoadPromises = new Map<string, Promise<THREE.Texture>>();
+
+// Load texture with promise caching to prevent duplicate loads
+function loadTexture(url: string): Promise<THREE.Texture> {
+  if (textureCache.has(url)) {
+    return Promise.resolve(textureCache.get(url)!);
+  }
+  
+  if (textureLoadPromises.has(url)) {
+    return textureLoadPromises.get(url)!;
+  }
+  
+  const promise = new Promise<THREE.Texture>((resolve, reject) => {
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      url,
+      (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        textureCache.set(url, texture);
+        console.log(`[ShwarmRenderer] Loaded texture: ${url}`);
+        resolve(texture);
+      },
+      undefined,
+      (error) => {
+        console.warn(`[ShwarmRenderer] Failed to load texture: ${url}`, error);
+        reject(error);
+      }
+    );
+  });
+  
+  textureLoadPromises.set(url, promise);
+  return promise;
+}
 
 // Get or create material for a texture URL
 function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMaterial {
@@ -41,39 +78,20 @@ function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMater
     color: 0xffffff, // Always white base - texture provides color
     roughness: 0.4,
     metalness: 0.1,
-    // Disable vertex colors initially - we'll enable when needed
   });
 
   if (textureUrl) {
-    // Check texture cache first
-    if (textureCache.has(textureUrl)) {
-      mat.map = textureCache.get(textureUrl)!;
-      mat.needsUpdate = true;
-    } else {
-      // Load texture asynchronously
-      const loader = new THREE.TextureLoader();
-      loader.load(
-        textureUrl,
-        (texture) => {
-          texture.colorSpace = THREE.SRGBColorSpace;
-          texture.wrapS = THREE.RepeatWrapping;
-          texture.wrapT = THREE.RepeatWrapping;
-          texture.minFilter = THREE.LinearMipmapLinearFilter;
-          texture.magFilter = THREE.LinearFilter;
-          textureCache.set(textureUrl, texture);
-          mat.map = texture;
-          mat.needsUpdate = true;
-          console.log(`[ShwarmRenderer] Loaded texture: ${textureUrl}`);
-        },
-        undefined,
-        (error) => {
-          console.warn(`[ShwarmRenderer] Failed to load texture: ${textureUrl}`, error);
-          // Fallback to red color if texture fails
-          mat.color.setHex(DEFAULT_SHWARM_COLOR);
-          mat.needsUpdate = true;
-        }
-      );
-    }
+    // Start loading texture asynchronously
+    loadTexture(textureUrl)
+      .then((texture) => {
+        mat.map = texture;
+        mat.needsUpdate = true;
+      })
+      .catch(() => {
+        // Fallback to red color if texture fails
+        mat.color.setHex(DEFAULT_SHWARM_COLOR);
+        mat.needsUpdate = true;
+      });
   } else {
     // No texture URL - use default red color
     mat.color.setHex(DEFAULT_SHWARM_COLOR);
