@@ -33,6 +33,9 @@ import { getVisibleChunkKeys } from '@/lib/chunkManager';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 
+// Shwarm system imports
+import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
+
 // Wisp particles using InstancedMesh for performance (no React re-renders per particle)
 const MAX_WISP_PARTICLES = 50;
 const wispParticleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
@@ -257,10 +260,34 @@ export function FortressScene({
   skyTextureUrl,
   seedDefinitions,
   healthRef,
-  takeDamage
+  takeDamage,
+  shwarmDefinitions,
+  onShwarmDamage
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
+  const { camera } = useThree();
+  
+  // Shwarm system
+  const cameraRef = useRef<THREE.Camera>(camera);
+  cameraRef.current = camera;
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
+  
+  const { shwarms, shwarmsRef, damageBlock } = useShwarmSystem({
+    definitions: shwarmDefinitions,
+    cameraRef,
+    blocksRef,
+    isEnabled: true,
+  });
+  
+  useShwarmMovement({
+    shwarmsRef,
+    cameraRef,
+    isEnabled: true,
+  });
+  
+  const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
   
   // Shared cycle state ref for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -324,7 +351,7 @@ export function FortressScene({
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioRefs = useRef(createAudioRefs());
   
-  const { camera, scene } = useThree();
+  const { scene } = useThree();
   const { raycastMeshes } = useRaycaster();
   
   // Instanced mesh refs for raycasting
@@ -689,6 +716,9 @@ export function FortressScene({
       )}
       
       <WispParticlesMesh ref={wispParticlesMeshRef} particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />
+      
+      {/* Shwarm Renderer */}
+      <ShwarmRenderer ref={shwarmRendererRef} shwarms={shwarms} />
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>

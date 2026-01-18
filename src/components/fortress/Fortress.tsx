@@ -26,7 +26,7 @@ import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
 
 import { TREE_CONFIG } from '@/features/trees/constants';
-import { usePlayerHealth, HealthBar, DeathOverlay } from '@/features/shwarm';
+import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
 
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
@@ -123,6 +123,9 @@ export function Fortress() {
     respawn,
     healthRef 
   } = usePlayerHealth();
+  
+  // Shwarm definitions
+  const { data: shwarmDefinitions } = useShwarmDefinitions();
   
   // Death/respawn state
   const [respawnTimer, setRespawnTimer] = useState(0);
