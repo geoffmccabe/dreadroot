@@ -616,8 +616,9 @@ export function FortressScene({
           
           // Check shwarm collisions (if not already hit something)
           if (!hit) {
-            // Use proper AABB collision for 0.5x0.5m hitbox (constant regardless of visual scale)
-            const SHWARM_HALF_SIZE = 0.25; // Half of 0.5m cube
+            // Use proper AABB collision for 0.5x0.5m hitbox centered on block position
+            // Slightly expanded hitbox (0.3 instead of 0.25) to account for visual lerping
+            const SHWARM_HALF_SIZE = 0.3; // Slightly larger than 0.25 for better hit detection
             const BULLET_DAMAGE = 25;
             
             for (const shwarm of activeShwarms) {
@@ -626,7 +627,8 @@ export function FortressScene({
               for (const block of shwarm.blocks) {
                 if (!block.isAlive) continue;
                 
-                // AABB collision: check if bullet is within the 0.5x0.5x0.5 cube
+                // AABB collision: check if bullet is within the hitbox cube CENTERED on block
+                // block.position is the visual center of the block
                 const bx = block.position.x;
                 const by = block.position.y;
                 const bz = block.position.z;
@@ -646,9 +648,12 @@ export function FortressScene({
                   // Apply damage
                   damageBlock(shwarm.id, block.id, BULLET_DAMAGE);
                   
-                  // Create particle effect at hit position
+                  // Create particle effect at hit position using the shwarm's texture
                   if (shwarmRendererRef.current) {
-                    shwarmRendererRef.current.createHitEffect(block.position.clone());
+                    shwarmRendererRef.current.createHitEffect(
+                      block.position.clone(),
+                      shwarm.definition.texture_url
+                    );
                   }
                   
                   // Play hit sound directly (bypass throttle for combat feedback)
