@@ -738,6 +738,7 @@ export function Fortress() {
           seedDefinitions={seedDefinitions}
           healthRef={healthRef}
           takeDamage={takeDamage}
+          shwarmDefinitions={shwarmDefinitions}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (

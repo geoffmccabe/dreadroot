@@ -634,6 +634,9 @@ export function FortressScene({
       lastWispRender.current = now;
       setWispRenderTrigger(prev => prev + 1);
     }
+    
+    // Update shwarm renderer (always, since movement is continuous)
+    shwarmRendererRef.current?.update();
   });
 
   return (
