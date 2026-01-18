@@ -17,6 +17,7 @@ type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expires
 
 interface GrowingTree {
   id: string;
+  worldId: string;
   blueprint: TreeBlueprint;
   currentOrder: number;
   lastGrowthTime: number;
@@ -96,6 +97,7 @@ export function useLocalGrowth({
 
     const growingTree: GrowingTree = {
       id: treeId,
+      worldId: worldId || '',
       blueprint,
       currentOrder: startingOrder,
       lastGrowthTime: Date.now(),
@@ -110,7 +112,7 @@ export function useLocalGrowth({
 
     growingTreesRef.current.set(treeId, growingTree);
     console.log(`[LocalGrowth] Started growing tree ${treeId}, ${blueprint.blocks.length} blocks`);
-  }, []);
+  }, [worldId]);
 
   /**
    * Update tree ID (used when temp ID is replaced with real DB ID)
@@ -177,6 +179,26 @@ export function useLocalGrowth({
             placeBlockFn(block.x, block.y, block.z, 'trunk', undefined, tree.textureUrl, block.branchDepth);
           }
 
+          // Also store in tree_blocks for reliable deletion (fire-and-forget)
+          if (blocksToPlace.length > 0) {
+            const treeBlockInserts = blocksToPlace.map(block => ({
+              tree_id: tree.id,
+              world_id: tree.worldId,
+              position_x: block.x,
+              position_y: block.y,
+              position_z: block.z,
+              block_type: block.branchDepth && block.branchDepth > 0 ? 'branch' : 'trunk',
+              growth_order: tree.currentOrder,
+            }));
+            
+            supabase
+              .from('tree_blocks')
+              .upsert(treeBlockInserts, { onConflict: 'world_id,position_x,position_y,position_z' })
+              .then(({ error }) => {
+                if (error) console.warn('[LocalGrowth] Failed to insert tree_blocks:', error.message);
+              });
+          }
+
           // Update ref state (no React re-render)
           tree.currentOrder++;
           tree.lastGrowthTime = now;
@@ -207,29 +229,49 @@ export function useLocalGrowth({
 }
 
 /**
- * Delete a tree by regenerating its blueprint and removing all blocks
- * This uses the dormant scaffold stored in planted_trees
+ * Delete a tree using the tree_blocks table (reliable)
+ * Falls back to blueprint regeneration if tree_blocks is empty
  */
 export async function deleteTree(
   tree: PlantedTree,
   seedDef: SeedDefinition
 ): Promise<{ success: boolean; error?: string; deletedCount: number }> {
   try {
-    // Regenerate the blueprint from stored seed
-    const blueprint = generateTreeBlueprint(
-      tree.base_x,
-      tree.base_y,
-      tree.base_z,
-      seedDef.tier,
-      seedDef.width_factor,
-      seedDef.branching_factor,
-      tree.growth_seed,
-      buildGrowthOptions(seedDef)
-    );
+    // First try to get blocks from tree_blocks table (most reliable)
+    const { data: treeBlocks, error: fetchError } = await supabase
+      .from('tree_blocks')
+      .select('position_x, position_y, position_z')
+      .eq('tree_id', tree.id);
 
-    // Delete all blocks at blueprint positions
+    let blocksToDelete: { x: number; y: number; z: number }[] = [];
+
+    if (!fetchError && treeBlocks && treeBlocks.length > 0) {
+      // Use the stored blocks (reliable)
+      blocksToDelete = treeBlocks.map(b => ({
+        x: b.position_x,
+        y: b.position_y,
+        z: b.position_z,
+      }));
+      console.log(`[deleteTree] Using ${blocksToDelete.length} blocks from tree_blocks table`);
+    } else {
+      // Fallback: regenerate blueprint (less reliable)
+      console.log('[deleteTree] Falling back to blueprint regeneration');
+      const blueprint = generateTreeBlueprint(
+        tree.base_x,
+        tree.base_y,
+        tree.base_z,
+        seedDef.tier,
+        seedDef.width_factor,
+        seedDef.branching_factor,
+        tree.growth_seed,
+        buildGrowthOptions(seedDef)
+      );
+      blocksToDelete = blueprint.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
+    }
+
+    // Delete all placed_blocks at these positions
     let deletedCount = 0;
-    for (const block of blueprint.blocks) {
+    for (const block of blocksToDelete) {
       const { error } = await supabase
         .from('placed_blocks')
         .delete()
@@ -238,8 +280,18 @@ export async function deleteTree(
         .eq('position_y', block.y)
         .eq('position_z', block.z);
 
-      if (!error) deletedCount++;
+      if (!error) {
+        deletedCount++;
+        // Also remove from collision grid
+        collisionGrid.removeByPosition(block.x, block.y, block.z);
+      }
     }
+
+    // Delete tree_blocks entries (cascade should handle this, but be explicit)
+    await supabase
+      .from('tree_blocks')
+      .delete()
+      .eq('tree_id', tree.id);
 
     // Delete the planted_trees record
     const { error: treeError } = await supabase
@@ -248,9 +300,11 @@ export async function deleteTree(
       .eq('id', tree.id);
 
     if (treeError) {
+      console.error('[deleteTree] Failed to delete tree record:', treeError);
       return { success: false, error: 'Failed to delete tree record', deletedCount };
     }
 
+    console.log(`[deleteTree] Successfully deleted tree ${tree.id}, ${deletedCount} blocks removed`);
     return { success: true, deletedCount };
   } catch (err) {
     console.error('[deleteTree] Error:', err);

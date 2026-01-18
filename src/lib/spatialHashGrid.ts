@@ -94,6 +94,27 @@ class SpatialHashGrid {
     this.colliderCells.delete(collider);
   }
   
+  /**
+   * Remove a collider by its block position (x, y, z)
+   * Searches nearby colliders and removes the one containing this position
+   */
+  removeByPosition(x: number, y: number, z: number): boolean {
+    const count = this.getNearby(x, z, 1);
+    for (let i = 0; i < count; i++) {
+      const collider = this.nearbyResult[i];
+      // Check if this collider contains the block position
+      if (
+        collider.min.x <= x && x < collider.max.x &&
+        collider.min.y <= y && y < collider.max.y &&
+        collider.min.z <= z && z < collider.max.z
+      ) {
+        this.remove(collider);
+        return true;
+      }
+    }
+    return false;
+  }
+  
   clear(): void {
     console.log(`[CollisionGrid] Clearing ${this.colliderCells.size} colliders`);
     this.cells.clear();
