@@ -152,6 +152,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   // Phase 2B: Initialize with chunk loading instead of full world load
   // Use ref to avoid chunkLoader dependency causing re-initialization
   const initializeCache = useCallback(async () => {
+    console.log('[InitCache] Called with userId:', !!userId, 'worldId:', worldId);
+    
     if (!userId || !worldId) {
       setIsLoading(false);
       return;
@@ -159,6 +161,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     
     // Skip if already initialized for this world
     if (initializedWorldRef.current === worldId) {
+      console.log('[InitCache] Already initialized for this world, skipping');
       return;
     }
     initializedWorldRef.current = worldId;
@@ -167,8 +170,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       setIsLoading(true);
       await initDB();
       
+      console.log('[InitCache] Calling initializeForWorld');
       // Phase 2B: Use chunk loader for initial load from camera starting position
       await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
+      console.log('[InitCache] initializeForWorld complete');
     } catch (error) {
       console.error('Error initializing:', error);
       initializedWorldRef.current = null; // Allow retry on error
