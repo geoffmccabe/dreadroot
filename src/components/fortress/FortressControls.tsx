@@ -780,19 +780,25 @@ export function FirstPersonControls({
                 }
               } else {
                 // Not an owned tree - reset chopping state
+                console.log('[TreeChop] RESET: not owned tree');
                 choppingPositionRef.current = null;
                 chopCountRef.current = 0;
               }
             } else {
               // Not looking at a trunk - reset chopping state
+              console.log('[TreeChop] RESET: not trunk, blockType=', blockType);
               choppingPositionRef.current = null;
               chopCountRef.current = 0;
             }
           } else {
             // Not looking at any block - reset chopping state
+            console.log('[TreeChop] RESET: no block hit (no instanceId)');
             choppingPositionRef.current = null;
             chopCountRef.current = 0;
           }
+        } else {
+          // No meshes to raycast
+          console.log('[TreeChop] RESET: meshesArray empty');
         }
       } else if (!leftMouseDownRef.current && chopCountRef.current > 0) {
         // Mouse released - reset chopping
