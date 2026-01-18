@@ -204,7 +204,7 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
             Math.sin(angle) * Math.cos(elevation) * speed
           );
           particle.opacity = 1;
-          particle.scale = 0.12 + Math.random() * 0.1; // Larger particles
+          particle.scale = 0.24 + Math.random() * 0.2; // Double size particles
           particle.textureUrl = textureUrl || null;
           
           // Generate a color based on the texture URL or use varied colors

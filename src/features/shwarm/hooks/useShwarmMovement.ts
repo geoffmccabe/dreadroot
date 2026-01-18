@@ -318,8 +318,8 @@ export function useShwarmMovement({
 
           // Calculate new position: 1.5 toward player + 1 toward center + random offset
           _newPos.copy(currentTargetPos);
-          _newPos.x += _toPlayer.x * MOVE_TOWARDS_PLAYER + _toCenter.x * 1.0 + randX;
-          _newPos.z += _toPlayer.z * MOVE_TOWARDS_PLAYER + _toCenter.z * 1.0 + randZ;
+          _newPos.x += _toPlayer.x * MOVE_TOWARDS_PLAYER + _toCenter.x * 1.5 + randX;
+          _newPos.z += _toPlayer.z * MOVE_TOWARDS_PLAYER + _toCenter.z * 1.5 + randZ;
           _newPos.y += randY; // Can step up
 
           // Apply gravity: if above ground, fall 1 unit
