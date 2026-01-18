@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.cleanup-fake-users]
 verify_jwt = true
+
+[functions.cleanup-ghost-trees]
+verify_jwt = true

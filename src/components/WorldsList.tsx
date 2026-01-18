@@ -37,7 +37,7 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Clear ghost trees from ALL persistence layers (complete fix)
+  // Clear ghost trees from ALL persistence layers using edge function (bypasses RLS)
   const handleClearGhostTrees = async () => {
     setIsCleaningGhostTrees(true);
     try {
@@ -55,70 +55,45 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       console.log('[GhostTreeCleanup] Cleared entire IndexedDB chunk cache');
       
       // STEP 2: CRITICAL - Clear tree blocks from the main 'blocks' store
-      // This prevents the sync loop from re-uploading ghost blocks!
       const blocksStoreCount = await blockDB.clearTreeBlocksFromBlocksStore(TREE_BLOCK_TYPES);
       console.log(`[GhostTreeCleanup] Removed ${blocksStoreCount} tree blocks from blocks store`);
       
-      // STEP 3: Delete ALL tree blocks from Supabase placed_blocks
-      const { error: deleteError, count: dbCount } = await supabase
-        .from('placed_blocks')
-        .delete({ count: 'exact' })
-        .in('block_type', TREE_BLOCK_TYPES);
-      
-      if (deleteError) {
-        console.error('[GhostTreeCleanup] DB delete error:', deleteError);
-      } else {
-        console.log(`[GhostTreeCleanup] Removed ${dbCount} blocks from Supabase placed_blocks`);
+      // STEP 3: Call edge function to delete from DB (bypasses RLS with service role)
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        throw new Error('Not authenticated - please log in');
       }
       
-      // STEP 4: Delete ALL tree_blocks records
-      const { error: treeBlocksError, count: treeBlocksCount } = await supabase
-        .from('tree_blocks')
-        .delete({ count: 'exact' })
-        .neq('id', ''); // Match all
+      const response = await fetch(
+        `https://ditecxjpkgbqkeckebzb.supabase.co/functions/v1/cleanup-ghost-trees`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.session.access_token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
       
-      if (treeBlocksError) {
-        console.error('[GhostTreeCleanup] tree_blocks delete error:', treeBlocksError);
-      } else {
-        console.log(`[GhostTreeCleanup] Removed ${treeBlocksCount} records from tree_blocks`);
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || `Edge function failed: ${response.status}`);
       }
       
-      // STEP 5: Delete ALL planted_trees records  
-      const { error: plantedTreesError, count: plantedTreesCount } = await supabase
-        .from('planted_trees')
-        .delete({ count: 'exact' })
-        .neq('id', ''); // Match all
+      console.log('[GhostTreeCleanup] Edge function result:', result);
       
-      if (plantedTreesError) {
-        console.error('[GhostTreeCleanup] planted_trees delete error:', plantedTreesError);
-      } else {
-        console.log(`[GhostTreeCleanup] Removed ${plantedTreesCount} records from planted_trees`);
-      }
-      
-      // STEP 6: Force chunk version bump for all chunks to trigger refetch
-      const { error: bumpError } = await supabase
-        .from('chunk_versions')
-        .update({ 
-          version: 999999, // High version to force all clients to refetch
-          updated_at: new Date().toISOString() 
-        })
-        .gte('chunk_x', -1000); // Match all chunks
-      
-      if (bumpError) {
-        console.error('[GhostTreeCleanup] Version bump error:', bumpError);
-      }
-      
-      // STEP 7: Clear collision grid to remove ghost colliders
+      // STEP 4: Clear collision grid to remove ghost colliders
       const { collisionGrid } = await import('@/lib/spatialHashGrid');
       collisionGrid.clear();
       console.log('[GhostTreeCleanup] Cleared collision grid');
       
       toast({
         title: 'Ghost trees completely cleared',
-        description: `Deleted ${dbCount || 0} placed blocks, ${treeBlocksCount || 0} tree_blocks, ${plantedTreesCount || 0} planted_trees, ${blocksStoreCount} from IndexedDB. Page will reload...`
+        description: `Deleted ${result.deleted.placed_blocks} blocks, ${result.deleted.tree_blocks} tree_blocks, ${result.deleted.planted_trees} planted_trees from DB. Page will reload...`
       });
       
-      // STEP 8: Force page reload to get fresh state
+      // STEP 5: Force page reload to get fresh state
       setTimeout(() => {
         window.location.reload();
       }, 1500);
