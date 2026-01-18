@@ -875,30 +875,11 @@ export function FirstPersonControls({
       
       const currentColliders = collidersRef.current;
       
-      // Continuous overlap resolution (stuck detection every frame)
-      let stuckCollision = checkAxisCollision(
-        camera.position,
-        currentColliders,
-        playerRadius,
-        playerHeight,
-        false,
-        true
-      );
+      // Continuous overlap resolution (stuck detection every frame, max 2 iterations)
+      let stuckCollision: THREE.Box3 | null = null;
 
-      if (stuckCollision) {
-        const push = findPushOutDirection(camera.position, playerRadius, playerHeight, stuckCollision);
-        if (push) {
-          if (push.axis === 'y' && push.direction === 1) {
-            camera.position.y = stuckCollision.max.y + playerHeight + SURFACE_EPS;
-            velocity.current.y = 0;
-            onGround.current = true;
-          } else {
-            (camera.position as any)[push.axis] += push.direction * (push.distance + SURFACE_EPS);
-          }
-        }
-
-        // Re-check once to see if we still overlap after push-out
-        stuckCollision = checkAxisCollision(
+      for (let i = 0; i < 2; i++) {
+        const stuck = checkAxisCollision(
           camera.position,
           currentColliders,
           playerRadius,
@@ -906,6 +887,33 @@ export function FirstPersonControls({
           false,
           true
         );
+
+        if (!stuck) break;
+        stuckCollision = stuck;
+
+        const push = findPushOutDirection(camera.position, playerRadius, playerHeight, stuck);
+        if (!push) break;
+
+        if (push.axis === 'y' && push.direction === 1) {
+          // Push UP: set to top of block
+          camera.position.y = stuck.max.y + playerHeight + SURFACE_EPS;
+          velocity.current.y = 0;
+          onGround.current = true;
+        } else if (push.axis === 'y' && push.direction === -1) {
+          // Push DOWN: set to bottom of block (rare)
+          camera.position.y = stuck.min.y - SURFACE_EPS;
+          velocity.current.y = Math.min(0, velocity.current.y);
+        } else if (push.axis === 'x') {
+          // Push X: set to block face
+          camera.position.x = push.direction === 1 
+            ? stuck.max.x + playerRadius + SURFACE_EPS 
+            : stuck.min.x - playerRadius - SURFACE_EPS;
+        } else if (push.axis === 'z') {
+          // Push Z: set to block face
+          camera.position.z = push.direction === 1 
+            ? stuck.max.z + playerRadius + SURFACE_EPS 
+            : stuck.min.z - playerRadius - SURFACE_EPS;
+        }
       }
 
       const stuckInBlock = stuckCollision !== null;

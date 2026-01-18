@@ -352,7 +352,7 @@ export function findPushOutDirection(
   playerHeight: number,
   block: THREE.Box3
 ): { axis: 'x' | 'y' | 'z'; direction: 1 | -1; distance: number } | null {
-  // Player AABB (playerPos.y is top of player in this codebase)
+  // Player AABB (playerPos.y is TOP of player in this codebase)
   const pMinX = playerPos.x - playerRadius;
   const pMaxX = playerPos.x + playerRadius;
   const pMinY = playerPos.y - playerHeight;
@@ -360,26 +360,33 @@ export function findPushOutDirection(
   const pMinZ = playerPos.z - playerRadius;
   const pMaxZ = playerPos.z + playerRadius;
 
-  // Penetration distances to escape in each direction
-  const pushNegX = pMaxX - block.min.x;
-  const pushPosX = block.max.x - pMinX;
-  const pushNegY = pMaxY - block.min.y;
-  const pushPosY = block.max.y - pMinY;
-  const pushNegZ = pMaxZ - block.min.z;
-  const pushPosZ = block.max.z - pMinZ;
+  // Safety: only compute push if actually intersecting
+  const intersects =
+    pMaxX > block.min.x && pMinX < block.max.x &&
+    pMaxY > block.min.y && pMinY < block.max.y &&
+    pMaxZ > block.min.z && pMinZ < block.max.z;
+
+  if (!intersects) return null;
+
+  // Distances to move player so they no longer intersect (distance-to-face)
+  const distNegX = pMaxX - block.min.x; // move left
+  const distPosX = block.max.x - pMinX; // move right
+  const distNegY = pMaxY - block.min.y; // move down
+  const distPosY = block.max.y - pMinY; // move up
+  const distNegZ = pMaxZ - block.min.z; // move back
+  const distPosZ = block.max.z - pMinZ; // move forward
 
   type Candidate = { axis: 'x' | 'y' | 'z'; direction: 1 | -1; distance: number; score: number };
   const candidates: Candidate[] = [];
 
-  // Only consider positive penetrations
-  if (pushNegX > 0) candidates.push({ axis: 'x', direction: -1, distance: pushNegX, score: pushNegX });
-  if (pushPosX > 0) candidates.push({ axis: 'x', direction:  1, distance: pushPosX, score: pushPosX });
-  if (pushNegZ > 0) candidates.push({ axis: 'z', direction: -1, distance: pushNegZ, score: pushNegZ });
-  if (pushPosZ > 0) candidates.push({ axis: 'z', direction:  1, distance: pushPosZ, score: pushPosZ });
+  if (distNegX > 0) candidates.push({ axis: 'x', direction: -1, distance: distNegX, score: distNegX });
+  if (distPosX > 0) candidates.push({ axis: 'x', direction:  1, distance: distPosX, score: distPosX });
+  if (distNegZ > 0) candidates.push({ axis: 'z', direction: -1, distance: distNegZ, score: distNegZ });
+  if (distPosZ > 0) candidates.push({ axis: 'z', direction:  1, distance: distPosZ, score: distPosZ });
 
-  // Bias: prefer pushing UP (0.95 multiplier) over DOWN (1.50 penalty)
-  if (pushPosY > 0) candidates.push({ axis: 'y', direction:  1, distance: pushPosY, score: pushPosY * 0.95 });
-  if (pushNegY > 0) candidates.push({ axis: 'y', direction: -1, distance: pushNegY, score: pushNegY * 1.50 });
+  // Bias: prefer pushing UP (0.95 multiplier), strongly avoid DOWN (1.50 penalty)
+  if (distPosY > 0) candidates.push({ axis: 'y', direction:  1, distance: distPosY, score: distPosY * 0.95 });
+  if (distNegY > 0) candidates.push({ axis: 'y', direction: -1, distance: distNegY, score: distNegY * 1.50 });
 
   if (candidates.length === 0) return null;
 
