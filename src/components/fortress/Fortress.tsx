@@ -153,7 +153,7 @@ export function Fortress() {
   );
   
   // Local growth manager - stores growing trees in refs, not React state
-  const { startGrowing, updateTreeId } = useLocalGrowth({
+  const { startGrowing, updateTreeId, stopGrowing } = useLocalGrowth({
     worldId: currentWorldId,
     userId: user?.id ?? null,
     placeBlock,
@@ -177,6 +177,7 @@ export function Fortress() {
     seedDefinitions,
     returnSeed,
     refetchChunk: refetchSingleChunk,
+    stopGrowing,
   });
   
   // Tree chop modal handlers

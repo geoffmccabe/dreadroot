@@ -5,6 +5,7 @@ import { useCallback, useRef } from 'react';
 import { PlantedTree, SeedDefinition } from '../types';
 import { deleteTree } from './useLocalGrowth';
 import { useToast } from '@/hooks/use-toast';
+import { blockDB } from '@/hooks/useIndexedDB';
 
 // Throttle chopping to prevent accidental double-chops
 const CHOP_COOLDOWN_MS = 1000;
@@ -16,6 +17,7 @@ interface UseTreeChoppingOptions {
   seedDefinitions: SeedDefinition[];
   returnSeed: (seedDefId: string) => Promise<boolean>;
   refetchChunk: (chunkX: number, chunkZ: number) => Promise<void>;
+  stopGrowing?: (treeId: string) => void;
 }
 
 interface ChopResult {
@@ -81,6 +83,7 @@ export function useTreeChopping({
   seedDefinitions,
   returnSeed,
   refetchChunk,
+  stopGrowing,
 }: UseTreeChoppingOptions) {
   const { toast } = useToast();
   const lastChopTimeRef = useRef(0);
@@ -138,6 +141,10 @@ export function useTreeChopping({
     lastChopTimeRef.current = now;
 
     try {
+      // CRITICAL: Stop local growth FIRST to prevent new blocks from being placed
+      // This prevents the tree from growing back after we delete it
+      stopGrowing?.(tree.id);
+
       // Play axe chop sound
       await playAxeChopSound();
 
@@ -152,10 +159,6 @@ export function useTreeChopping({
         });
         return { success: false, error: deleteResult.error };
       }
-
-      // Remove blocks from collision grid
-      // The deleteTree function removes from DB, but we need to clear local collision
-      // This will be handled by the chunk system detecting the deleted blocks
 
       // Return the seed to inventory
       const seedReturned = await returnSeed(seedDef.id);
@@ -172,9 +175,21 @@ export function useTreeChopping({
         });
       }
 
-      // Refresh only the affected chunk instead of all blocks
+      // Clear IndexedDB cache for the affected chunk to prevent ghost blocks
       const chunkX = Math.floor(tree.base_x / CHUNK_SIZE);
       const chunkZ = Math.floor(tree.base_z / CHUNK_SIZE);
+      
+      if (worldId) {
+        try {
+          // Clear the entire world cache to ensure no stale data
+          await blockDB.clearCachedChunksForWorld(worldId);
+          console.log(`[TreeChopping] Cleared IndexedDB cache for world ${worldId}`);
+        } catch (cacheError) {
+          console.warn('[TreeChopping] Failed to clear IndexedDB cache:', cacheError);
+        }
+      }
+
+      // Refresh the affected chunk from the database
       await refetchChunk(chunkX, chunkZ);
 
       return { success: true, seedReturned };
