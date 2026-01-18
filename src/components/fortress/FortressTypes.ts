@@ -96,6 +96,10 @@ export interface SceneProps {
   // Respawn position for teleporting player
   respawnPosition?: THREE.Vector3 | null;
   onRespawnComplete?: () => void;
+  // Tree chopping props
+  isOwnedTreeAtPosition?: (x: number, y: number, z: number) => boolean;
+  onTreeChopComplete?: (x: number, y: number, z: number) => Promise<void>;
+  onTreeChopProgress?: (chopCount: number, maxChops: number) => void;
 }
 
 // First person controls props
@@ -136,6 +140,10 @@ export interface FirstPersonControlsProps {
   // Respawn position - when set, teleport player to this position
   respawnPosition?: THREE.Vector3 | null;
   onRespawnComplete?: () => void;
+  // Tree chopping props
+  isOwnedTreeAtPosition?: (x: number, y: number, z: number) => boolean;
+  onTreeChopComplete?: (x: number, y: number, z: number) => Promise<void>;
+  onTreeChopProgress?: (chopCount: number, maxChops: number) => void;
 }
 
 // Bullet interface

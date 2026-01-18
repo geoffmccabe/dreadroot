@@ -53,7 +53,10 @@ export function FirstPersonControls({
   updatePlayerPosition,
   applyKnockback: externalApplyKnockback,
   respawnPosition,
-  onRespawnComplete
+  onRespawnComplete,
+  isOwnedTreeAtPosition,
+  onTreeChopComplete,
+  onTreeChopProgress
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -110,6 +113,22 @@ export function FirstPersonControls({
   // Firing rate limiting
   const lastFireTime = useRef(0);
   const FIRE_RATE_LIMIT = 150;
+  
+  // Tree chopping state - Minecraft style hold-to-chop
+  const CHOP_INTERVAL_MS = 350; // Time between chops (like Minecraft)
+  const CHOPS_REQUIRED = 5; // Number of chops to trigger modal
+  const leftMouseDownRef = useRef(false);
+  const chopStartTimeRef = useRef(0);
+  const chopCountRef = useRef(0);
+  const choppingPositionRef = useRef<{ x: number; y: number; z: number } | null>(null);
+  const lastChopSoundTimeRef = useRef(0);
+  const axeChopAudioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Initialize axe chop audio once
+  useEffect(() => {
+    axeChopAudioRef.current = new Audio('/axe_chop.mp3');
+    axeChopAudioRef.current.volume = 0.5;
+  }, []);
 
   const gridInitialized = useRef(false);
   
@@ -518,6 +537,12 @@ export function FirstPersonControls({
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
     if (event.button === 2) keys.current.rightMouse = true;
+    if (event.button === 0) {
+      leftMouseDownRef.current = true;
+      chopStartTimeRef.current = performance.now();
+      chopCountRef.current = 0;
+      choppingPositionRef.current = null;
+    }
   }, []);
   
   handleMouseDownRef.current = handleMouseDown;
@@ -527,7 +552,14 @@ export function FirstPersonControls({
       keys.current.rightMouse = false;
       setHoveredBlockId(null);
     }
-  }, [setHoveredBlockId]);
+    if (event.button === 0) {
+      leftMouseDownRef.current = false;
+      chopCountRef.current = 0;
+      choppingPositionRef.current = null;
+      // Reset progress when releasing
+      onTreeChopProgress?.(0, CHOPS_REQUIRED);
+    }
+  }, [setHoveredBlockId, onTreeChopProgress]);
   
   handleMouseUpRef.current = handleMouseUp;
 
@@ -595,6 +627,11 @@ export function FirstPersonControls({
   const broadcastPositionRef = useRef(broadcastPosition);
   const updatePlayerPositionRef = useRef(updatePlayerPosition);
   
+  // Tree chopping refs
+  const isOwnedTreeAtPositionRef = useRef(isOwnedTreeAtPosition);
+  const onTreeChopCompleteRef = useRef(onTreeChopComplete);
+  const onTreeChopProgressRef = useRef(onTreeChopProgress);
+  
   // Phase 2B: Throttle for chunk loading updates (separate from broadcast)
   const lastChunkUpdateRef = useRef(0);
   const CHUNK_UPDATE_INTERVAL = 500; // ms - less frequent than broadcast
@@ -607,6 +644,9 @@ export function FirstPersonControls({
   useEffect(() => { hoveredBlockIdRef.current = hoveredBlockId; }, [hoveredBlockId]);
   useEffect(() => { broadcastPositionRef.current = broadcastPosition; }, [broadcastPosition]);
   useEffect(() => { updatePlayerPositionRef.current = updatePlayerPosition; }, [updatePlayerPosition]);
+  useEffect(() => { isOwnedTreeAtPositionRef.current = isOwnedTreeAtPosition; }, [isOwnedTreeAtPosition]);
+  useEffect(() => { onTreeChopCompleteRef.current = onTreeChopComplete; }, [onTreeChopComplete]);
+  useEffect(() => { onTreeChopProgressRef.current = onTreeChopProgress; }, [onTreeChopProgress]);
 
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
@@ -654,6 +694,89 @@ export function FirstPersonControls({
         }
       } else if (hoveredBlockIdRef.current) {
         setHoveredBlockId(null);
+      }
+      
+      // Tree chopping detection - hold left mouse on owned tree blocks (not in shooting mode)
+      if (leftMouseDownRef.current && !showCrosshairs && isOwnedTreeAtPositionRef.current) {
+        // Raycast to find what we're looking at
+        const meshesArray = meshesArrayCache.current;
+        if (meshesArray.length > 0) {
+          const result = raycastMeshes(meshesArray, 5);
+          
+          if (result && result.instanceId !== undefined) {
+            const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
+            
+            // Check if it's a trunk block (tree block)
+            if (blockType === 'trunk') {
+              // Get the block position from the instanced mesh matrix
+              const mesh = result.object as THREE.InstancedMesh;
+              const matrix = new THREE.Matrix4();
+              mesh.getMatrixAt(result.instanceId, matrix);
+              const position = new THREE.Vector3();
+              position.setFromMatrixPosition(matrix);
+              
+              const blockX = Math.round(position.x);
+              const blockY = Math.round(position.y);
+              const blockZ = Math.round(position.z);
+              
+              // Check if this is an owned tree
+              if (isOwnedTreeAtPositionRef.current(blockX, blockY, blockZ)) {
+                // Initialize or continue chopping on this position
+                if (!choppingPositionRef.current || 
+                    choppingPositionRef.current.x !== blockX ||
+                    choppingPositionRef.current.y !== blockY ||
+                    choppingPositionRef.current.z !== blockZ) {
+                  // Started chopping a new block - reset progress
+                  choppingPositionRef.current = { x: blockX, y: blockY, z: blockZ };
+                  chopCountRef.current = 0;
+                  lastChopSoundTimeRef.current = now;
+                }
+                
+                // Check if enough time passed for next chop
+                if (now - lastChopSoundTimeRef.current >= CHOP_INTERVAL_MS) {
+                  lastChopSoundTimeRef.current = now;
+                  chopCountRef.current++;
+                  
+                  // Play chop sound
+                  if (axeChopAudioRef.current) {
+                    axeChopAudioRef.current.currentTime = 0;
+                    axeChopAudioRef.current.play().catch(() => {});
+                  }
+                  
+                  // Report progress
+                  onTreeChopProgressRef.current?.(chopCountRef.current, CHOPS_REQUIRED);
+                  
+                  // Check if we've reached the required chops
+                  if (chopCountRef.current >= CHOPS_REQUIRED) {
+                    // Trigger the confirmation modal via callback
+                    onTreeChopCompleteRef.current?.(blockX, blockY, blockZ);
+                    
+                    // Reset state
+                    leftMouseDownRef.current = false;
+                    chopCountRef.current = 0;
+                    choppingPositionRef.current = null;
+                  }
+                }
+              } else {
+                // Not an owned tree - reset chopping state
+                choppingPositionRef.current = null;
+                chopCountRef.current = 0;
+              }
+            } else {
+              // Not looking at a trunk - reset chopping state
+              choppingPositionRef.current = null;
+              chopCountRef.current = 0;
+            }
+          } else {
+            // Not looking at any block - reset chopping state
+            choppingPositionRef.current = null;
+            chopCountRef.current = 0;
+          }
+        }
+      } else if (!leftMouseDownRef.current && chopCountRef.current > 0) {
+        // Mouse released - reset chopping
+        choppingPositionRef.current = null;
+        chopCountRef.current = 0;
       }
       
       // Movement input
