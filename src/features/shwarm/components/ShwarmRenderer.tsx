@@ -109,12 +109,13 @@ interface HitParticle {
   scale: number;
   active: boolean;
   color: THREE.Color;
+  textureUrl: string | null; // For textured particles
 }
 
 export interface ShwarmRendererHandle {
   update: () => void;
   getMesh: () => THREE.InstancedMesh | null;
-  createHitEffect: (position: THREE.Vector3, color?: number) => void;
+  createHitEffect: (position: THREE.Vector3, textureUrl?: string | null) => void;
 }
 
 interface ShwarmRendererProps {
@@ -151,10 +152,10 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
       return mats;
     }, [textureUrls]);
 
-    // Create particle material
+    // Create particle material - uses instance colors
     const particleMaterial = useMemo(() => {
       return new THREE.MeshBasicMaterial({
-        color: 0xff4444,
+        color: 0xffffff, // White base, use instance colors
         transparent: true,
         opacity: 1,
       });
@@ -170,17 +171,23 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
           opacity: 0,
           scale: 0.08,
           active: false,
-          color: new THREE.Color(0xff4444),
+          color: new THREE.Color(0xffffff),
+          textureUrl: null,
         });
       }
       return arr;
     }, []);
 
-    // Create hit particle effect at position - spray of small squares like coin explosions
-    const createHitEffect = (position: THREE.Vector3, color: number = DEFAULT_SHWARM_COLOR) => {
+    // Create hit particle effect at position - spray of small squares matching the shwarm texture
+    const createHitEffect = (position: THREE.Vector3, textureUrl?: string | null) => {
       const particleCount = 20; // More particles for better effect
       let spawned = 0;
 
+      // Get a sample color from the texture if available, otherwise use a bright version
+      // For now, we'll use white which will show the instance color
+      // The color will be set per-particle to give variety
+      const baseHue = Math.random(); // Random hue for variety
+      
       for (let i = 0; i < particles.length && spawned < particleCount; i++) {
         const particle = particles[i];
         if (!particle.active) {
@@ -198,7 +205,26 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
           );
           particle.opacity = 1;
           particle.scale = 0.12 + Math.random() * 0.1; // Larger particles
-          particle.color.setHex(color);
+          particle.textureUrl = textureUrl || null;
+          
+          // Generate a color based on the texture URL or use varied colors
+          // This creates a bright, varied particle burst effect
+          if (textureUrl) {
+            // Use HSL with slight variation for textured shwarms
+            // Extract a "theme" from the texture URL hash to keep colors consistent per shwarm type
+            let hash = 0;
+            for (let c = 0; c < textureUrl.length; c++) {
+              hash = ((hash << 5) - hash) + textureUrl.charCodeAt(c);
+              hash |= 0;
+            }
+            const hue = (Math.abs(hash) % 360) / 360;
+            const saturation = 0.6 + Math.random() * 0.3;
+            const lightness = 0.5 + Math.random() * 0.3;
+            particle.color.setHSL(hue, saturation, lightness);
+          } else {
+            // Default: red-orange burst for non-textured
+            particle.color.setHSL(0.05 + Math.random() * 0.1, 0.8, 0.5 + Math.random() * 0.2);
+          }
           spawned++;
         }
       }
