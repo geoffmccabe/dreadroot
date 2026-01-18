@@ -321,12 +321,18 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           oldBlock.block_type !== newBlock.block_type ||
           oldBlock.texture_url !== newBlock.texture_url;
         
-        // Preserve branch_depth from old block if new block doesn't have it
-        // This keeps tree lightening working after server sync
+        // Preserve branch_depth and collider from old block
+        // This keeps tree lightening working after server sync and maintains collision
         const preservedBlock = {
           ...newBlock,
           branch_depth: newBlock.branch_depth ?? (oldBlock as any).branch_depth,
         };
+        
+        // Transfer the collider reference from old block to new block
+        // The collider is already in the grid, we just need to maintain the reference
+        if ((oldBlock as any).__collider) {
+          (preservedBlock as any).__collider = (oldBlock as any).__collider;
+        }
         
         chunkData.blocks[index] = preservedBlock;
         chunkData.lastAccessedAt = Date.now();
