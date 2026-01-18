@@ -95,9 +95,23 @@ class SpatialHashGrid {
   }
   
   clear(): void {
+    console.log(`[CollisionGrid] Clearing ${this.colliderCells.size} colliders`);
     this.cells.clear();
     this.colliderCells.clear();
     this.generation++;
+  }
+  
+  /**
+   * Debug: Log info about colliders near a position
+   */
+  debugNearby(x: number, z: number, radius: number = 5): void {
+    const count = this.getNearby(x, z, radius);
+    console.log(`[CollisionGrid] ${count} colliders near (${x.toFixed(1)}, ${z.toFixed(1)}):`);
+    for (let i = 0; i < Math.min(count, 10); i++) {
+      const c = this.nearbyResult[i];
+      console.log(`  ${i}: (${c.min.x.toFixed(1)},${c.min.y.toFixed(1)},${c.min.z.toFixed(1)}) to (${c.max.x.toFixed(1)},${c.max.y.toFixed(1)},${c.max.z.toFixed(1)})`);
+    }
+    if (count > 10) console.log(`  ... and ${count - 10} more`);
   }
   
   /**
