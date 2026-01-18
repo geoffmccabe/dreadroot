@@ -809,6 +809,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_tree_blocks_planted_trees"
+            columns: ["tree_id"]
+            isOneToOne: false
+            referencedRelation: "planted_trees"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tree_blocks_tree_id_fkey"
             columns: ["tree_id"]
             isOneToOne: false
