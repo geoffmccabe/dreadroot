@@ -32,6 +32,9 @@ export interface AudioRefs {
   woodenThud: HTMLAudioElement;
   wispBoom: HTMLAudioElement;
   wispCheer: HTMLAudioElement;
+  // Shwarm combat sounds
+  shwarmHit: HTMLAudioElement;
+  playerHit: HTMLAudioElement;
 }
 
 // Cycle state for weather/sky/lighting

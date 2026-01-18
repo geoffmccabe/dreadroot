@@ -281,10 +281,35 @@ export function FortressScene({
     isEnabled: true,
   });
   
+  // Player hit callback for shwarm collisions - use ref to avoid stale closure
+  const handleShwarmPlayerHitRef = useRef<(damage: number, knockbackForce: number, direction: THREE.Vector3) => void>();
+  
+  // Update the ref after playAudio is defined
+  useEffect(() => {
+    handleShwarmPlayerHitRef.current = (damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+      // Apply damage
+      if (takeDamage) {
+        takeDamage(damage, direction, knockbackForce);
+      }
+      
+      // Play player hit sound
+      if (audioRefs.current.playerHit) {
+        audioRefs.current.playerHit.currentTime = 0;
+        audioRefs.current.playerHit.play().catch(() => {});
+      }
+    };
+  }, [takeDamage]);
+  
+  // Wrapper callback that delegates to ref
+  const handleShwarmPlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+    handleShwarmPlayerHitRef.current?.(damage, knockbackForce, direction);
+  }, []);
+  
   useShwarmMovement({
     shwarmsRef,
     cameraRef,
     isEnabled: true,
+    onPlayerHit: handleShwarmPlayerHit,
   });
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
@@ -556,6 +581,7 @@ export function FortressScene({
     const bullets = bulletsRef.current;
     if (bullets.length > 0) {
       const coins = (window as any).getCoins ? (window as any).getCoins() : [];
+      const activeShwarms = shwarmsRef.current || [];
       let writeIndex = 0;
       
       for (let i = 0; i < bullets.length; i++) {
@@ -567,6 +593,7 @@ export function FortressScene({
         if (bullet.life > 0) {
           let hit = false;
           
+          // Check coin collisions
           for (const coin of coins) {
             if (coin.visible) {
               const distance = bullet.position.distanceTo(coin.position);
@@ -581,6 +608,40 @@ export function FortressScene({
                 hit = true;
                 needsBulletRender = true;
                 break;
+              }
+            }
+          }
+          
+          // Check shwarm collisions (if not already hit something)
+          if (!hit) {
+            const SHWARM_HIT_RADIUS = 0.35; // hitbox for 0.5 size blocks
+            const BULLET_DAMAGE = 25;
+            
+            for (const shwarm of activeShwarms) {
+              if (!shwarm.isActive || hit) break;
+              
+              for (const block of shwarm.blocks) {
+                if (!block.isAlive) continue;
+                
+                const distance = bullet.position.distanceTo(block.position);
+                if (distance < SHWARM_HIT_RADIUS) {
+                  // Hit shwarm block!
+                  hit = true;
+                  needsBulletRender = true;
+                  
+                  // Apply damage
+                  damageBlock(shwarm.id, block.id, BULLET_DAMAGE);
+                  
+                  // Create particle effect at hit position
+                  shwarmRendererRef.current?.createHitEffect(block.position.clone());
+                  
+                  // Play hit sound
+                  if (audioRefs.current.shwarmHit) {
+                    playAudio(audioRefs.current.shwarmHit);
+                  }
+                  
+                  break;
+                }
               }
             }
           }

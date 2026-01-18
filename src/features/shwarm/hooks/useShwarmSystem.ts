@@ -158,9 +158,11 @@ export function useShwarmSystem({
         const newHealth = Math.max(0, block.currentHealth - damage);
         const isAlive = newHealth > 0;
         
-        // Calculate visual scale based on health (min 0.2, max 1.0)
+        // Calculate visual scale based on health in 10% increments
+        // e.g., 100% health = 1.0, 90% = 0.9, 80% = 0.8, etc.
+        // Minimum visual scale is 0.1 (10%)
         const healthPercent = newHealth / block.maxHealth;
-        const scale = 0.2 + healthPercent * 0.8;
+        const scale = Math.max(0.1, Math.floor(healthPercent * 10) / 10);
 
         if (!isAlive) {
           wasKilled = true;

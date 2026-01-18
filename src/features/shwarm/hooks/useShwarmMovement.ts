@@ -3,11 +3,11 @@ import * as THREE from 'three';
 import { frameLoop } from '@/lib/frameLoop';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import type { ShwarmInstance } from './useShwarmSystem';
-import { MOVEMENT_UPDATE_PRIORITY } from '../constants';
+import { MOVEMENT_UPDATE_PRIORITY, PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS } from '../constants';
 
 // Pre-allocated vectors for zero-allocation movement
 const _toPlayer = new THREE.Vector3();
-const _moveDir = new THREE.Vector3();
+const _randomOffset = new THREE.Vector3();
 const _newPos = new THREE.Vector3();
 const _testBox = new THREE.Box3();
 const _testMin = new THREE.Vector3();
@@ -28,16 +28,19 @@ interface UseShwarmMovementOptions {
   shwarmsRef: React.RefObject<ShwarmInstance[]>;
   cameraRef: React.RefObject<THREE.Camera>;
   isEnabled: boolean;
+  onPlayerHit?: (damage: number, knockbackForce: number, direction: THREE.Vector3) => void;
 }
 
 /**
  * Hook to update shwarm block positions each frame
- * Blocks move toward player with x_factor random variance
+ * Blocks move toward player with random variance (+/- 1 in random direction per step)
+ * Also handles player collision detection
  */
 export function useShwarmMovement({
   shwarmsRef,
   cameraRef,
   isEnabled,
+  onPlayerHit,
 }: UseShwarmMovementOptions) {
   // Per-shwarm random generators (keyed by shwarm id)
   const rngMapRef = useRef<Map<string, () => number>>(new Map());
@@ -60,6 +63,7 @@ export function useShwarmMovement({
       if (!shwarms || shwarms.length === 0 || !camera) return;
 
       const playerPos = camera.position;
+      const now = Date.now();
 
       for (const shwarm of shwarms) {
         if (!shwarm.isActive) continue;
@@ -67,6 +71,8 @@ export function useShwarmMovement({
         const { definition, blocks, seed, id: shwarmId } = shwarm;
         const speed = definition.speed;
         const xFactor = definition.x_factor;
+        const tier = definition.tier;
+        const damagePerHit = definition.damage_per_hit;
         const rng = getRng(shwarmId, seed);
 
         for (const block of blocks) {
@@ -74,29 +80,57 @@ export function useShwarmMovement({
 
           const pos = block.position;
 
-          // Direction toward player
+          // Check player collision first
+          const distToPlayer = pos.distanceTo(playerPos);
+          
+          if (distToPlayer < PLAYER_HIT_RADIUS && onPlayerHit) {
+            // Check debounce
+            if (!block.lastHitPlayerAt || now - block.lastHitPlayerAt > PLAYER_HIT_DEBOUNCE_MS) {
+              block.lastHitPlayerAt = now;
+              
+              // Calculate knockback force: 1 + tier (e.g., tier 6 = 7 knockback)
+              const knockbackForce = 1 + tier;
+              
+              // Direction: from block to player
+              const knockbackDir = _toPlayer.subVectors(playerPos, pos).normalize();
+              knockbackDir.y = 0.3; // Add some upward component
+              knockbackDir.normalize();
+              
+              onPlayerHit(damagePerHit, knockbackForce, knockbackDir.clone());
+              
+              // Also knock back the block (opposite direction)
+              pos.addScaledVector(knockbackDir, -knockbackForce * 0.5);
+            }
+          }
+
+          // Direction toward player (mostly horizontal)
           _toPlayer.subVectors(playerPos, pos);
-          const distToPlayer = _toPlayer.length();
-
-          // Normalize direction (mostly horizontal)
           _toPlayer.y *= 0.2; // reduce vertical movement
-          _toPlayer.normalize();
+          
+          if (_toPlayer.length() > 0.1) {
+            _toPlayer.normalize();
+          } else {
+            continue; // Too close, don't move
+          }
 
-          // Add random variance based on x_factor
-          // x_factor 1-10 maps to 0.1-1.0 variance
-          const variance = xFactor * 0.1;
-          _moveDir.set(
-            _toPlayer.x + (rng() - 0.5) * variance,
-            _toPlayer.y + (rng() - 0.5) * variance * 0.3, // less vertical variance
-            _toPlayer.z + (rng() - 0.5) * variance
+          // KEY FIX: Each block takes 1 step toward player + random offset
+          // x_factor 1-10 controls how much random variance (1=10%, 10=100%)
+          const randomStrength = xFactor * 0.1;
+          
+          // Random offset: +/- 1 in random direction each step
+          _randomOffset.set(
+            (rng() - 0.5) * 2 * randomStrength, // -1 to +1 * strength
+            (rng() - 0.5) * 0.5 * randomStrength, // less vertical
+            (rng() - 0.5) * 2 * randomStrength
           );
-          _moveDir.normalize();
 
           // Calculate movement distance this frame
           const moveDist = speed * delta;
 
-          // Calculate new position
-          _newPos.copy(pos).addScaledVector(_moveDir, moveDist);
+          // Calculate new position: move toward player + random offset
+          _newPos.copy(pos);
+          _newPos.addScaledVector(_toPlayer, moveDist);
+          _newPos.add(_randomOffset.multiplyScalar(moveDist));
 
           // Keep above ground
           _newPos.y = Math.max(0.25, _newPos.y);
@@ -123,8 +157,7 @@ export function useShwarmMovement({
           if (!blocked || distToPlayer < 2) {
             pos.copy(_newPos);
           } else {
-            // Try to slide around obstacle
-            // Try horizontal only
+            // Try to slide around obstacle - horizontal only
             _newPos.y = pos.y;
             _testMin.set(_newPos.x - halfSize, _newPos.y - halfSize, _newPos.z - halfSize);
             _testMax.set(_newPos.x + halfSize, _newPos.y + halfSize, _newPos.z + halfSize);
@@ -149,7 +182,7 @@ export function useShwarmMovement({
     }, MOVEMENT_UPDATE_PRIORITY);
 
     return unregister;
-  }, [isEnabled, shwarmsRef, cameraRef, getRng]);
+  }, [isEnabled, shwarmsRef, cameraRef, getRng, onPlayerHit]);
 
   // Cleanup RNG map when shwarms are removed
   useEffect(() => {
