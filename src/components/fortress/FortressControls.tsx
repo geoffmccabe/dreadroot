@@ -229,15 +229,16 @@ export function FirstPersonControls({
         keys.current.ctrl = true;
         break;
       case 'KeyR':
-        if (event.shiftKey) {
+        // Block rain: Shift+R but NOT if Command/Meta is held (allows Cmd+Shift+R for browser refresh)
+        if (event.shiftKey && !event.metaKey && !event.ctrlKey) {
           event.preventDefault();
           onBlockRain();
-        } else if (!blockPlacementMode) {
+        } else if (!event.shiftKey && !blockPlacementMode) {
           const newCrosshairsState = !showCrosshairs;
           onModeChange(newCrosshairsState ? 'shooting' : null);
           const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
           playAudio(audio);
-        } else {
+        } else if (!event.shiftKey) {
           onModeChange('shooting');
           playAudio(audioRefs.pistolCocking);
         }
@@ -283,8 +284,8 @@ export function FirstPersonControls({
           document.exitPointerLock();
         }
         break;
-      case 'Backquote': // ~ key for God Mode
-        if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+      case 'Backquote': // ~ key (Shift+`) for God Mode
+        if (event.shiftKey && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           godModeRef.current = !godModeRef.current;
           setGodModeEnabled(godModeRef.current);
           onGodModeChange?.(godModeRef.current);
