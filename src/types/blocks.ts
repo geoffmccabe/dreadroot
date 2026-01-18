@@ -10,6 +10,8 @@ export interface PlacedBlock {
   expires_at?: string;
   // Optional texture override - used for tree blocks with per-seed textures
   texture_url?: string | null;
+  // Branch depth for tree lightening: -1=trunk, 0+=branches
+  branch_depth?: number;
 }
 
 export interface BlockType {

@@ -90,6 +90,7 @@ export interface BlueprintBlock {
   type: TreeBlockType;
   growthOrder: number;
   symmetryGroup?: number; // Blocks in same group grow together
+  branchDepth: number; // -1=trunk, 0=main branch, 1=sub, 2=sub-sub, 3=sub-sub-sub
 }
 
 export interface TreeBlueprint {
