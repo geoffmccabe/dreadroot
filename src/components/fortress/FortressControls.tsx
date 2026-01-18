@@ -705,8 +705,10 @@ export function FirstPersonControls({
       if (leftMouseDownRef.current && !showCrosshairs && isOwnedTreeAtPositionRef.current) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
+        console.log('[TreeChop] meshesArray.length=', meshesArray.length, 'meshToBlockTypeCache size=', meshToBlockTypeCache.current.size);
         if (meshesArray.length > 0) {
-          const result = raycastMeshes(meshesArray, 5);
+          const result = raycastMeshes(meshesArray, 15); // Increase raycast distance
+          console.log('[TreeChop] Raycast result:', result ? 'HIT' : 'MISS', result?.instanceId, result?.distance);
           
           if (result && result.instanceId !== undefined) {
             const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
