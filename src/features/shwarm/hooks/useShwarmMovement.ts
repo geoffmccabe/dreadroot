@@ -174,19 +174,18 @@ export function useShwarmMovement({
       const lerpFactor = Math.min(1, LERP_SPEED * delta);
 
       for (const shwarm of shwarms) {
-        if (!shwarm.isActive) continue;
-
         const { definition, blocks } = shwarm;
         const tier = definition.tier;
         const damagePerHit = definition.damage_per_hit;
 
         for (const block of blocks) {
-          // Immediately remove colliders for dead blocks
-          if (!block.isAlive) {
+          // Immediately remove colliders for dead blocks OR inactive shwarms
+          if (!block.isAlive || !shwarm.isActive) {
             const target = blockTargetsRef.current.get(block.id);
             if (target?.collider) {
               collisionGrid.remove(target.collider);
               target.collider = null;
+              blockTargetsRef.current.delete(block.id);
             }
             continue;
           }
