@@ -1086,6 +1086,20 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       return; // Early exit - no visual change needed
     }
 
+    // FIX: Remove colliders for blocks that no longer exist (ghost collider cleanup)
+    // This prevents invisible collision barriers from deleted blocks (e.g., chopped trees)
+    const mergedBlockIds = new Set(mergedBlocks.map(b => b.id));
+    for (const oldBlock of existingBlocks) {
+      if (!mergedBlockIds.has(oldBlock.id)) {
+        removeBlockCollider(oldBlock);
+      }
+    }
+
+    // Ensure colliders exist for all current blocks
+    for (const block of mergedBlocks) {
+      ensureBlockCollider(block);
+    }
+
     // Update chunk data with Phase 3A fields (only if blocks changed)
     loadedChunksRef.current.set(chunkKey, {
       blocks: mergedBlocks,
