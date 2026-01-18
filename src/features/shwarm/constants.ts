@@ -4,9 +4,9 @@
 
 // Player spawn point (used for respawning after death)
 export const PLAYER_SPAWN_POINT = {
-  x: -8,
+  x: 0,
   y: 1.8,
-  z: 22,
+  z: 0,
 };
 
 // Spawn bounds (reuse from useWispBlock MAP_BOUNDS)
@@ -22,11 +22,14 @@ export const SHWARM_SPAWN_BOUNDS = {
 // Rendering
 export const MAX_SHWARM_BLOCKS = 100;
 export const SHWARM_BLOCK_SIZE = 0.5; // half normal block size
-export const SHWARM_HITBOX_SIZE = 0.5; // constant hitbox regardless of visual scale
+export const SHWARM_HITBOX_SIZE = 0.5; // constant hitbox regardless of visual scale (0.5x0.5m)
 
 // Visual scaling based on health
-export const MIN_VISUAL_SCALE = 0.2;
+export const MIN_VISUAL_SCALE = 0.2; // 20% minimum visual size
 export const MAX_VISUAL_SCALE = 1.0;
+
+// Movement towards player
+export const MOVE_TOWARDS_PLAYER = 1.5; // Always move 1.5 units towards player
 
 // Movement
 export const MOVEMENT_PHASE_MS = 1000; // 1-second movement phases

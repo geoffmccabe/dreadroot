@@ -4,7 +4,7 @@ import { collisionGrid } from '@/lib/spatialHashGrid';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
-import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS } from '../constants';
+import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER } from '../constants';
 
 // Movement phase interval (1 second)
 const MOVEMENT_PHASE_MS = 1000;
@@ -235,10 +235,10 @@ export function useShwarmMovement({
           const randY = Math.floor(rng() * 2); // 0 or 1 up (step-up)
           const randZ = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
 
-          // Calculate new position: 1 step toward player + random offset
+          // Calculate new position: 1.5 steps toward player + random offset
           _newPos.copy(currentTargetPos);
-          _newPos.x += Math.round(_toPlayer.x) + randX;
-          _newPos.z += Math.round(_toPlayer.z) + randZ;
+          _newPos.x += _toPlayer.x * MOVE_TOWARDS_PLAYER + randX;
+          _newPos.z += _toPlayer.z * MOVE_TOWARDS_PLAYER + randZ;
           _newPos.y += randY; // Can step up
 
           // Apply gravity: if above ground, fall 1 unit
