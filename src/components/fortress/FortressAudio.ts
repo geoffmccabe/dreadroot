@@ -31,7 +31,8 @@ export function createAudioRefs() {
     wispCheer: new Audio('/coin_hit_sound.mp3'),
     // Shwarm sounds
     shwarmHit: new Audio('/brick_drop_sound.mp3'),
-    playerHit: new Audio('/wooden_thud_sound.mp3')
+    playerHit: new Audio('/wooden_thud_sound.mp3'),
+    shwarmGroupKilled: new Audio('/yay_sound.mp3')
   };
 }
 
