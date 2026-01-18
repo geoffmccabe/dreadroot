@@ -25,6 +25,7 @@ import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
 import { useTreeChopping } from '@/features/trees/hooks/useTreeChopping';
+import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
 
 import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
@@ -104,6 +105,11 @@ export function Fortress() {
   const [godMode, setGodMode] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
   
+  // Tree chopping modal state
+  const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
+  const [pendingChopPosition, setPendingChopPosition] = useState<{ x: number; y: number; z: number } | null>(null);
+  const [chopProgress, setChopProgress] = useState(0);
+  
   // Waterfall disabled for performance testing (Phase 1)
   const waterfallEnabled = false;
   
@@ -171,6 +177,34 @@ export function Fortress() {
     returnSeed,
     refreshBlocks,
   });
+  
+  // Tree chop modal handlers
+  const handleTreeChopComplete = useCallback(async (x: number, y: number, z: number) => {
+    // Show confirmation modal
+    setPendingChopPosition({ x, y, z });
+    setTreeChopModalOpen(true);
+    // Exit pointer lock so user can click modal
+    document.exitPointerLock();
+  }, []);
+  
+  const handleTreeChopConfirm = useCallback(async () => {
+    if (pendingChopPosition) {
+      await chopTreeAtPosition(pendingChopPosition.x, pendingChopPosition.y, pendingChopPosition.z);
+    }
+    setTreeChopModalOpen(false);
+    setPendingChopPosition(null);
+    setChopProgress(0);
+  }, [pendingChopPosition, chopTreeAtPosition]);
+  
+  const handleTreeChopCancel = useCallback(() => {
+    setTreeChopModalOpen(false);
+    setPendingChopPosition(null);
+    setChopProgress(0);
+  }, []);
+  
+  const handleTreeChopProgress = useCallback((current: number, max: number) => {
+    setChopProgress(current);
+  }, []);
   
   // Audio refs
   const mainAudioRefs = useRef(createMainAudioRefs());
@@ -772,6 +806,9 @@ export function Fortress() {
           shwarmDefinitions={shwarmDefinitions}
           respawnPosition={respawnPosition}
           onRespawnComplete={() => setRespawnPosition(null)}
+          isOwnedTreeAtPosition={isOwnedTreeAtPosition}
+          onTreeChopComplete={handleTreeChopComplete}
+          onTreeChopProgress={handleTreeChopProgress}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
