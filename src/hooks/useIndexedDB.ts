@@ -613,6 +613,38 @@ class BlockDB {
       };
     });
   }
+
+  /**
+   * Clear tree blocks from the main 'blocks' store (not chunk cache)
+   * This prevents the sync loop from re-uploading ghost tree blocks
+   */
+  async clearTreeBlocksFromBlocksStore(treeBlockTypes: string[]): Promise<number> {
+    if (!this.db) await this.init();
+    
+    let removedCount = 0;
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.openCursor();
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          const block = cursor.value;
+          if (treeBlockTypes.includes(block.block_type)) {
+            cursor.delete();
+            removedCount++;
+          }
+          cursor.continue();
+        } else {
+          console.log(`[IndexedDB] Removed ${removedCount} tree blocks from blocks store`);
+          resolve(removedCount);
+        }
+      };
+    });
+  }
 }
 
 export const blockDB = new BlockDB();
@@ -647,6 +679,7 @@ export const useIndexedDB = () => {
     clearOldCachedChunks: (maxAgeMs?: number) => blockDB.clearOldCachedChunks(maxAgeMs),
     // Ghost tree cleanup
     clearTreeBlocksFromCache: () => blockDB.clearTreeBlocksFromCache(),
-    clearAllChunkCache: () => blockDB.clearAllChunkCache()
+    clearAllChunkCache: () => blockDB.clearAllChunkCache(),
+    clearTreeBlocksFromBlocksStore: (treeBlockTypes: string[]) => blockDB.clearTreeBlocksFromBlocksStore(treeBlockTypes)
   }), []); // Empty deps since blockDB is stable
 };
