@@ -235,27 +235,27 @@ export function checkAxisCollision(
   const minY = playerBox.min.y - 0.5;
   const maxY = playerBox.max.y + 0.5;
   
-  // Use Y-filtered spatial hash grid query - radius 2 is sufficient with Y filtering
-  const count = collisionGrid.getNearbyFiltered(pos.x, pos.z, 2, minY, maxY);
+  // Use Y-filtered spatial hash grid query - radius 1.5 is sufficient for player collision
+  const count = collisionGrid.getNearbyFiltered(pos.x, pos.z, 1.5, minY, maxY);
   const nearbyColliders = collisionGrid.nearbyResult;
   
   // IMPORTANT: Only use fallback if the grid is TRULY empty (no colliders anywhere).
-  // If grid.size > 0 but count === 0, it means there are simply no colliders near
-  // the player's position - this is NORMAL and should NOT trigger expensive O(N) fallback.
-  // The fallback is only for the case where the grid was never populated at all.
   if (count === 0 && colliders.length > 0 && collisionGrid.size === 0) {
     // Fallback: check all colliders with spatial filter
-    // This should only happen during initialization before fortress colliders are added
     for (let i = 0; i < colliders.length; i++) {
       const collider = colliders[i];
       diagnostics.e5++;
       
       const dx = pos.x - (collider.min.x + collider.max.x) * 0.5;
       const dz = pos.z - (collider.min.z + collider.max.z) * 0.5;
-      if (dx * dx + dz * dz > 4) continue; // 2 unit radius squared
+      if (dx * dx + dz * dz > 4) continue;
       
       if (isHorizontal) {
-        const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.2) && (playerBox.min.y <= collider.max.y + 0.2);
+        // For horizontal collision, skip blocks player is standing ON (feet at block top)
+        // But don't skip blocks at waist/head height - those should block!
+        const feetY = playerBox.min.y;
+        const blockTopY = collider.max.y;
+        const standingOnBlock = feetY >= blockTopY - 0.1 && feetY <= blockTopY + 0.15;
         if (standingOnBlock) continue;
       }
       
@@ -273,7 +273,11 @@ export function checkAxisCollision(
     
     // For horizontal movement, skip blocks the player is standing on
     if (isHorizontal) {
-      const standingOnBlock = (playerBox.min.y >= collider.max.y - 0.2) && (playerBox.min.y <= collider.max.y + 0.2);
+      const feetY = playerBox.min.y;
+      const blockTopY = collider.max.y;
+      // Standing on block = feet are at block top level (within tolerance)
+      // This allows walking ON blocks while still blocking walking INTO blocks
+      const standingOnBlock = feetY >= blockTopY - 0.1 && feetY <= blockTopY + 0.15;
       if (standingOnBlock) continue;
     }
     
@@ -306,12 +310,11 @@ export function findStepUpTarget(
   let bestStepUpY: number | null = null;
   
   // Step-up only cares about colliders near feet up through head clearance
-  // Filter Y hard to avoid scanning vertical stacks
   const minY = currentFootY - 0.5;
   const maxY = currentFootY + stepUpHeight + playerHeight + 0.5;
   
-  // Use Y-filtered spatial hash grid - radius 2 is sufficient with Y filtering
-  const count = collisionGrid.getNearbyFiltered(camera.position.x, camera.position.z, 2, minY, maxY);
+  // Use Y-filtered spatial hash grid - radius 1.5 is sufficient
+  const count = collisionGrid.getNearbyFiltered(camera.position.x, camera.position.z, 1.5, minY, maxY);
   const nearbyColliders = collisionGrid.nearbyResult;
   
   for (let i = 0; i < count; i++) {

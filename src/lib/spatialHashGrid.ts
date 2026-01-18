@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 
-const CELL_SIZE = 4;
-const MAX_NEARBY_RESULTS = 256;
+// Smaller cell size = fewer colliders per cell = faster iteration
+const CELL_SIZE = 2;
+const MAX_NEARBY_RESULTS = 128;
 
 /**
  * Sparse, unbounded spatial hash grid.
