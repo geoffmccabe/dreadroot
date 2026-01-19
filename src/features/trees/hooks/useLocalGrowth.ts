@@ -60,6 +60,17 @@ function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
 // Module-level reference for clearing growing trees from outside the hook
 let growingTreesRefGlobal: React.MutableRefObject<Map<string, GrowingTree>> | null = null;
 
+// Module-level reference to pending tree blocks for cleanup from outside
+let pendingTreeBlocksRefGlobal: React.MutableRefObject<Array<{
+  tree_id: string;
+  world_id: string;
+  position_x: number;
+  position_y: number;
+  position_z: number;
+  block_type: string;
+  growth_order: number;
+}>> | null = null;
+
 // Set of tree IDs that have been deleted - prevents race conditions
 const deletedTreeIds = new Set<string>();
 
@@ -73,6 +84,23 @@ export function clearGrowingTrees() {
     console.log(`[LocalGrowth] Cleared ${count} growing trees from memory`);
   }
   deletedTreeIds.clear();
+}
+
+/**
+ * Remove pending blocks for a specific tree from the flush buffer
+ * Called when a tree is deleted to prevent ghost blocks
+ */
+export function clearPendingBlocksForTree(treeId: string) {
+  if (pendingTreeBlocksRefGlobal?.current) {
+    const before = pendingTreeBlocksRefGlobal.current.length;
+    pendingTreeBlocksRefGlobal.current = pendingTreeBlocksRefGlobal.current.filter(
+      b => b.tree_id !== treeId
+    );
+    const removed = before - pendingTreeBlocksRefGlobal.current.length;
+    if (removed > 0) {
+      console.log(`[LocalGrowth] Cleared ${removed} pending blocks for deleted tree ${treeId}`);
+    }
+  }
 }
 
 export function useLocalGrowth({
@@ -98,6 +126,14 @@ export function useLocalGrowth({
   }>>([]);
   const lastDbFlushRef = useRef(Date.now());
   const isFlushingRef = useRef(false);
+  
+  // Store refs globally for access from deleteTree
+  useEffect(() => {
+    pendingTreeBlocksRefGlobal = pendingTreeBlocksRef;
+    return () => {
+      pendingTreeBlocksRefGlobal = null;
+    };
+  }, []);
 
   // Keep placeBlocksBatch ref in sync AND set global reference (once)
   useEffect(() => {
@@ -318,26 +354,33 @@ export function useLocalGrowth({
           const timeSinceLastFlush = now - lastDbFlushRef.current;
           if (timeSinceLastFlush >= DB_FLUSH_INTERVAL) {
             isFlushingRef.current = true;
-            const blocksToFlush = [...pendingTreeBlocksRef.current];
+            // CRITICAL: Filter out any blocks for trees that were deleted while pending
+            const blocksToFlush = pendingTreeBlocksRef.current.filter(
+              b => !deletedTreeIds.has(b.tree_id)
+            );
             pendingTreeBlocksRef.current = [];
             lastDbFlushRef.current = now;
             
             // Fire-and-forget DB write (use async IIFE to handle promise properly)
-            (async () => {
-              try {
-                const { error } = await supabase
-                  .from('tree_blocks')
-                  .upsert(blocksToFlush, { 
-                    onConflict: 'world_id,position_x,position_y,position_z',
-                    ignoreDuplicates: true
-                  });
-                if (error) {
-                  console.error('[LocalGrowth] Batched tree_blocks upsert error:', error.message);
+            if (blocksToFlush.length > 0) {
+              (async () => {
+                try {
+                  const { error } = await supabase
+                    .from('tree_blocks')
+                    .upsert(blocksToFlush, { 
+                      onConflict: 'world_id,position_x,position_y,position_z',
+                      ignoreDuplicates: true
+                    });
+                  if (error) {
+                    console.error('[LocalGrowth] Batched tree_blocks upsert error:', error.message);
+                  }
+                } finally {
+                  isFlushingRef.current = false;
                 }
-              } finally {
-                isFlushingRef.current = false;
-              }
-            })();
+              })();
+            } else {
+              isFlushingRef.current = false;
+            }
           }
         }
         
@@ -419,6 +462,12 @@ export async function deleteTree(
   removeBlocksByPositions?: (positions: Array<{ x: number; y: number; z: number }>) => number
 ): Promise<{ success: boolean; error?: string; deletedCount: number }> {
   try {
+    // CRITICAL: Add tree to deleted set FIRST to prevent any pending blocks from being flushed
+    deletedTreeIds.add(tree.id);
+    
+    // Clear any pending blocks for this tree from the flush buffer
+    clearPendingBlocksForTree(tree.id);
+    
     // First try to get blocks from tree_blocks table (most reliable)
     const { data: treeBlocks, error: fetchError } = await supabase
       .from('tree_blocks')
