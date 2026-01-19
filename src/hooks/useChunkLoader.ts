@@ -1507,6 +1507,57 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     return loadedChunksRef.current.has(chunkKey);
   }, []);
 
+  /**
+   * BULK: Remove all blocks at specified positions with a SINGLE React re-render.
+   * Used by tree chopping for instant tree disappearance.
+   * 
+   * PERFORMANCE: Uses scheduleEmit for batched RAF callback instead of
+   * individual removes.
+   * 
+   * @param positions Array of {x, y, z} positions to remove
+   * @returns Number of blocks removed
+   */
+  const removeBlocksByPositions = useCallback((positions: Array<{ x: number; y: number; z: number }>): number => {
+    if (positions.length === 0) return 0;
+
+    // Create a Set for O(1) lookups
+    const positionSet = new Set<string>();
+    for (const pos of positions) {
+      positionSet.add(`${pos.x},${pos.y},${pos.z}`);
+    }
+
+    let removedCount = 0;
+
+    // Iterate through all loaded chunks and filter out matching blocks
+    for (const [chunkKey, chunkData] of loadedChunksRef.current.entries()) {
+      const originalLength = chunkData.blocks.length;
+      
+      // Filter blocks, removing colliders for deleted blocks
+      chunkData.blocks = chunkData.blocks.filter(block => {
+        const posKey = `${block.position_x},${block.position_y},${block.position_z}`;
+        if (positionSet.has(posKey)) {
+          // Remove collider immediately
+          removeBlockCollider(block);
+          removedCount++;
+          return false; // Remove from array
+        }
+        return true; // Keep in array
+      });
+
+      // Update lastAccessedAt if blocks were removed
+      if (chunkData.blocks.length !== originalLength) {
+        chunkData.lastAccessedAt = Date.now();
+      }
+    }
+
+    // Single re-render at the end
+    if (removedCount > 0) {
+      scheduleEmit();
+    }
+
+    return removedCount;
+  }, [scheduleEmit]);
+
   // Return stable object using useMemo to prevent dependency cascades
   return useMemo(() => ({
     isLoading,
@@ -1522,6 +1573,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     addBlocksBatch, // BATCH: For tree growth - single re-render for N blocks
     replaceBlockByPosition,
     removeBlockById,
+    removeBlocksByPositions, // BULK: For tree chopping - single re-render for N removes
     LOAD_RADIUS,
     UNLOAD_RADIUS
   }), [
@@ -1535,6 +1587,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     addBlockOptimistically,
     addBlocksBatch,
     replaceBlockByPosition,
-    removeBlockById
+    removeBlockById,
+    removeBlocksByPositions
   ]);
 }
