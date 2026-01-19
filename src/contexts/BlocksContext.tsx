@@ -31,6 +31,7 @@ interface BlocksContextType {
   getLoadedChunkKeys: () => Set<string>;
   isChunkLoaded: (chunkX: number, chunkZ: number) => boolean;
   refetchSingleChunk: (chunkX: number, chunkZ: number) => Promise<void>;
+  removeBlocksByPositions: (positions: Array<{ x: number; y: number; z: number }>) => number;
   LOAD_RADIUS: number;
   UNLOAD_RADIUS: number;
 }
@@ -92,6 +93,7 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     getLoadedChunkKeys: blocksHook.getLoadedChunkKeys,
     isChunkLoaded: blocksHook.isChunkLoaded,
     refetchSingleChunk: blocksHook.refetchSingleChunk,
+    removeBlocksByPositions: blocksHook.removeBlocksByPositions,
     LOAD_RADIUS: blocksHook.LOAD_RADIUS,
     UNLOAD_RADIUS: blocksHook.UNLOAD_RADIUS
   };

@@ -702,6 +702,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     getLoadedChunkKeys: chunkLoader.getLoadedChunkKeys,
     isChunkLoaded: chunkLoader.isChunkLoaded,
     refetchSingleChunk: chunkLoader.refetchSingleChunk,
+    removeBlocksByPositions: chunkLoader.removeBlocksByPositions, // BULK: For tree chopping
     LOAD_RADIUS: chunkLoader.LOAD_RADIUS,
     UNLOAD_RADIUS: chunkLoader.UNLOAD_RADIUS
   };

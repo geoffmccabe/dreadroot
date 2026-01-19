@@ -19,6 +19,7 @@ interface UseTreeChoppingOptions {
   returnSeed: (seedDefId: string) => Promise<boolean>;
   refetchChunk: (chunkX: number, chunkZ: number) => Promise<void>;
   stopGrowing?: (treeId: string) => void;
+  removeBlocksByPositions?: (positions: Array<{ x: number; y: number; z: number }>) => number;
 }
 
 interface ChopResult {
@@ -85,6 +86,7 @@ export function useTreeChopping({
   returnSeed,
   refetchChunk,
   stopGrowing,
+  removeBlocksByPositions,
 }: UseTreeChoppingOptions) {
   const { toast } = useToast();
   const lastChopTimeRef = useRef(0);
@@ -95,6 +97,8 @@ export function useTreeChopping({
   /**
    * Attempt to chop a tree at the given block position
    * Returns success if the tree was owned by the user and successfully chopped
+   * 
+   * PERFORMANCE: Uses fast-path bulk removal for instant tree disappearance
    */
   const chopTreeAtPosition = useCallback(async (
     blockX: number,
@@ -149,8 +153,8 @@ export function useTreeChopping({
       // Play axe chop sound
       await playAxeChopSound();
 
-      // Delete the tree (blocks + planted_trees record)
-      const deleteResult = await deleteTree(tree, seedDef);
+      // Delete the tree using FAST PATH (instant local removal + background DB cleanup)
+      const deleteResult = await deleteTree(tree, seedDef, removeBlocksByPositions);
 
       if (!deleteResult.success) {
         toast({
@@ -175,27 +179,6 @@ export function useTreeChopping({
           description: `${deleteResult.deletedCount} blocks removed`,
         });
       }
-
-      // CRITICAL: Force remove all colliders in the tree's area
-      // The removeByPosition in deleteTree can fail if colliders don't match exactly
-      // Brute-force remove any collider that could be from this tree
-      const maxSpread = (seedDef.tier ?? 5) * 2;
-      const maxHeight = (seedDef.tier ?? 5) * 10;
-      
-      let collidersRemoved = 0;
-      for (let dx = -maxSpread; dx <= maxSpread; dx++) {
-        for (let dz = -maxSpread; dz <= maxSpread; dz++) {
-          for (let dy = 0; dy <= maxHeight; dy++) {
-            const x = tree.base_x + dx;
-            const y = tree.base_y + dy;
-            const z = tree.base_z + dz;
-            if (collisionGrid.removeByPosition(x, y, z)) {
-              collidersRemoved++;
-            }
-          }
-        }
-      }
-      console.log(`[TreeChopping] Removed ${collidersRemoved} colliders in tree area`);
 
       // Clear IndexedDB cache for the affected chunk to prevent ghost blocks
       const chunkX = Math.floor(tree.base_x / CHUNK_SIZE);
@@ -232,7 +215,7 @@ export function useTreeChopping({
     } finally {
       isChoppingRef.current = false;
     }
-  }, [worldId, userId, plantedTrees, seedDefinitions, returnSeed, refetchChunk, toast, stopGrowing]);
+  }, [worldId, userId, plantedTrees, seedDefinitions, returnSeed, refetchChunk, toast, stopGrowing, removeBlocksByPositions]);
 
   /**
    * Check if a position is on a tree owned by the current user

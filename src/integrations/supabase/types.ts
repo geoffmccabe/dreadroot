@@ -1110,6 +1110,10 @@ export type Database = {
         Returns: undefined
       }
       delete_expired_blocks: { Args: never; Returns: number }
+      delete_tree_blocks: {
+        Args: { p_positions: Json; p_world_id: string }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

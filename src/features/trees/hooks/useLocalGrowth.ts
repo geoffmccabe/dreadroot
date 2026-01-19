@@ -348,10 +348,17 @@ export function useLocalGrowth({
 /**
  * Delete a tree using the tree_blocks table (reliable)
  * Falls back to blueprint regeneration if tree_blocks is empty
+ * 
+ * PERFORMANCE OPTIMIZED: Uses bulk local removal + single DB query
+ * 
+ * @param tree - The planted tree to delete
+ * @param seedDef - The seed definition for blueprint fallback
+ * @param removeBlocksByPositions - Optional bulk removal function from chunk loader
  */
 export async function deleteTree(
   tree: PlantedTree,
-  seedDef: SeedDefinition
+  seedDef: SeedDefinition,
+  removeBlocksByPositions?: (positions: Array<{ x: number; y: number; z: number }>) => number
 ): Promise<{ success: boolean; error?: string; deletedCount: number }> {
   try {
     // First try to get blocks from tree_blocks table (most reliable)
@@ -386,33 +393,42 @@ export async function deleteTree(
       blocksToDelete = blueprint.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
     }
 
-    // Delete all placed_blocks at these positions
-    let deletedCount = 0;
-    const colliderRemovalFailures: { x: number; y: number; z: number }[] = [];
-    
-    for (const block of blocksToDelete) {
-      const { error } = await supabase
-        .from('placed_blocks')
-        .delete()
-        .eq('world_id', tree.world_id)
-        .eq('position_x', block.x)
-        .eq('position_y', block.y)
-        .eq('position_z', block.z);
-
-      if (!error) {
-        deletedCount++;
-        // Also remove from collision grid - track failures for debugging
-        const removed = collisionGrid.removeByPosition(block.x, block.y, block.z);
-        if (!removed) {
-          colliderRemovalFailures.push(block);
-        }
+    // STEP 1: INSTANT local removal (blocks disappear immediately, single re-render)
+    let locallyRemoved = 0;
+    if (removeBlocksByPositions) {
+      locallyRemoved = removeBlocksByPositions(blocksToDelete);
+      console.log(`[deleteTree] Instantly removed ${locallyRemoved} blocks locally`);
+    } else {
+      // Fallback: manual collider removal (slower, but still works)
+      for (const block of blocksToDelete) {
+        collisionGrid.removeByPosition(block.x, block.y, block.z);
       }
     }
+
+    // STEP 2: Database cleanup (runs in background, fire-and-forget style)
+    // Use the bulk delete function for efficiency
+    const positions = blocksToDelete.map(b => ({ x: b.x, y: b.y, z: b.z }));
     
-    // If any colliders failed to be removed, log them for debugging
-    if (colliderRemovalFailures.length > 0) {
-      console.warn(`[deleteTree] ${colliderRemovalFailures.length} colliders failed to remove:`, 
-        colliderRemovalFailures.slice(0, 5));
+    const { data: dbDeleteCount, error: bulkDeleteError } = await supabase
+      .rpc('delete_tree_blocks', {
+        p_world_id: tree.world_id,
+        p_positions: positions
+      });
+
+    if (bulkDeleteError) {
+      console.warn('[deleteTree] Bulk delete RPC failed, falling back to individual deletes:', bulkDeleteError.message);
+      // Fallback to individual deletes (slower but works)
+      for (const block of blocksToDelete) {
+        await supabase
+          .from('placed_blocks')
+          .delete()
+          .eq('world_id', tree.world_id)
+          .eq('position_x', block.x)
+          .eq('position_y', block.y)
+          .eq('position_z', block.z);
+      }
+    } else {
+      console.log(`[deleteTree] Bulk deleted ${dbDeleteCount} blocks from DB`);
     }
 
     // Delete tree_blocks entries (cascade should handle this, but be explicit)
@@ -429,11 +445,11 @@ export async function deleteTree(
 
     if (treeError) {
       console.error('[deleteTree] Failed to delete tree record:', treeError);
-      return { success: false, error: 'Failed to delete tree record', deletedCount };
+      return { success: false, error: 'Failed to delete tree record', deletedCount: locallyRemoved };
     }
 
-    console.log(`[deleteTree] Successfully deleted tree ${tree.id}, ${deletedCount} blocks removed`);
-    return { success: true, deletedCount };
+    console.log(`[deleteTree] Successfully deleted tree ${tree.id}, ${locallyRemoved} blocks removed`);
+    return { success: true, deletedCount: locallyRemoved };
   } catch (err) {
     console.error('[deleteTree] Error:', err);
     return { success: false, error: 'Unexpected error', deletedCount: 0 };

@@ -198,7 +198,7 @@ export function Fortress() {
   });
   
   // Tree chopping - allows owner to destroy tree and get seed back
-  const { refetchSingleChunk } = useBlocks();
+  const { refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { chopTreeAtPosition, isOwnedTreeAtPosition } = useTreeChopping({
     worldId: currentWorldId,
     userId: user?.id ?? null,
@@ -207,6 +207,7 @@ export function Fortress() {
     returnSeed,
     refetchChunk: refetchSingleChunk,
     stopGrowing,
+    removeBlocksByPositions,
   });
   
   // Tree chop modal handlers
