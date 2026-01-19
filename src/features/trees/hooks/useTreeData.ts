@@ -12,6 +12,7 @@ interface TreeData {
   plantedTrees: PlantedTree[];
   treeFruits: TreeFruit[];
   seedDefinitions: SeedDefinition[];
+  myIncompleteTrees: PlantedTree[];  // User's trees that need to resume growing
   isLoading: boolean;
   error: string | null;
 }
@@ -25,6 +26,7 @@ export function useTreeData(
   const [plantedTrees, setPlantedTrees] = useState<PlantedTree[]>([]);
   const [treeFruits, setTreeFruits] = useState<TreeFruit[]>([]);
   const [seedDefinitions, setSeedDefinitions] = useState<SeedDefinition[]>([]);
+  const [myIncompleteTrees, setMyIncompleteTrees] = useState<PlantedTree[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +58,17 @@ export function useTreeData(
         treesQuery = treesQuery.eq('is_fully_grown', true);
       }
 
-      const [treesRes, fruitsRes, seedsRes] = await Promise.all([
+      // Also fetch user's own incomplete trees separately (for resuming growth)
+      const myIncompleteQuery = userId 
+        ? supabase
+            .from('planted_trees')
+            .select('*, seed_definitions(*)')
+            .eq('world_id', worldId)
+            .eq('planted_by', userId)
+            .eq('is_fully_grown', false)
+        : null;
+
+      const [treesRes, fruitsRes, seedsRes, myIncompleteRes] = await Promise.all([
         treesQuery,
         supabase
           .from('tree_fruits')
@@ -66,6 +78,7 @@ export function useTreeData(
           .from('seed_definitions')
           .select('*')
           .order('tier', { ascending: true }),
+        myIncompleteQuery,
       ]);
 
       if (treesRes.error) throw treesRes.error;
@@ -78,9 +91,18 @@ export function useTreeData(
         seed_definition: tree.seed_definitions as unknown as SeedDefinition,
       })) as PlantedTree[];
 
+      // Map my incomplete trees as well
+      const mappedIncomplete = myIncompleteRes?.data 
+        ? (myIncompleteRes.data || []).map(tree => ({
+            ...tree,
+            seed_definition: tree.seed_definitions as unknown as SeedDefinition,
+          })) as PlantedTree[]
+        : [];
+
       setPlantedTrees(mappedTrees);
       setTreeFruits((fruitsRes.data || []) as TreeFruit[]);
       setSeedDefinitions((seedsRes.data || []) as SeedDefinition[]);
+      setMyIncompleteTrees(mappedIncomplete);
     } catch (err) {
       console.error('[TreeData] Fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch tree data');
@@ -207,6 +229,7 @@ export function useTreeData(
     plantedTrees,
     treeFruits,
     seedDefinitions,
+    myIncompleteTrees,
     isLoading,
     error,
     refetch: fetchData,

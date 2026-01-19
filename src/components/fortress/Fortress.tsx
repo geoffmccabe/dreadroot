@@ -26,6 +26,7 @@ import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
 import { useTreeChopping } from '@/features/trees/hooks/useTreeChopping';
 import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
+import { supabase } from '@/integrations/supabase/client';
 
 import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
@@ -147,17 +148,45 @@ export function Fortress() {
   
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
   // Note: Tree blocks are now stored in placed_blocks and come through the regular chunk loading system
-  const { seedDefinitions, plantedTrees } = useTreeData(
+  const { seedDefinitions, plantedTrees, myIncompleteTrees } = useTreeData(
     TREE_CONFIG.ENABLED ? currentWorldId : null,
     user?.id ?? null
   );
   
   // Local growth manager - stores growing trees in refs, not React state
-  const { startGrowing, updateTreeId, stopGrowing } = useLocalGrowth({
+  const { startGrowing, updateTreeId, stopGrowing, isTreeGrowing } = useLocalGrowth({
     worldId: currentWorldId,
     userId: user?.id ?? null,
     placeBlock,
   });
+  
+  // Resume incomplete trees on page load
+  useEffect(() => {
+    if (!myIncompleteTrees.length || !TREE_CONFIG.ENABLED) return;
+    
+    // For each incomplete tree, check if it's already being grown locally
+    for (const tree of myIncompleteTrees) {
+      if (isTreeGrowing(tree.id)) continue;
+      
+      const seedDef = tree.seed_definition;
+      if (!seedDef) continue;
+      
+      // Fetch the current growth order from tree_blocks
+      (async () => {
+        const { data: maxOrderData } = await supabase
+          .from('tree_blocks')
+          .select('growth_order')
+          .eq('tree_id', tree.id)
+          .order('growth_order', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        const startOrder = maxOrderData?.growth_order ?? 0;
+        console.log(`[Fortress] Resuming tree ${tree.id} from order ${startOrder + 1}`);
+        startGrowing(tree.id, seedDef, tree.base_x, tree.base_y, tree.base_z, tree.growth_seed, startOrder + 1);
+      })();
+    }
+  }, [myIncompleteTrees, startGrowing, isTreeGrowing]);
   
   const { plantSeed } = useSeedPlanting({
     worldId: currentWorldId,
