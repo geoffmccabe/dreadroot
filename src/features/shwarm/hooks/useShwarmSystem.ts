@@ -132,7 +132,9 @@ export function useShwarmSystem({
       seed,
     };
 
-    setShwarms(prev => [...prev, instance]);
+    // Update ref synchronously first, then state
+    shwarmsRef.current = [...shwarmsRef.current, instance];
+    setShwarms(shwarmsRef.current);
     console.log(`[Shwarm] Spawned tier ${definition.tier} shwarm with ${actualBlockCount} blocks at`, spawnPos);
 
     return instance;
@@ -142,7 +144,9 @@ export function useShwarmSystem({
    * Remove a shwarm instance
    */
   const removeShwarm = useCallback((shwarmId: string) => {
-    setShwarms(prev => prev.filter(s => s.id !== shwarmId));
+    // Update ref synchronously first, then state
+    shwarmsRef.current = shwarmsRef.current.filter(s => s.id !== shwarmId);
+    setShwarms(shwarmsRef.current);
   }, []);
 
   /**
@@ -157,6 +161,7 @@ export function useShwarmSystem({
     
     const currentShwarms = shwarmsRef.current;
     const targetShwarm = currentShwarms.find(s => s.id === shwarmId);
+    
     if (targetShwarm) {
       const targetBlock = targetShwarm.blocks.find(b => b.id === blockId && b.isAlive);
       if (targetBlock) {
@@ -166,8 +171,8 @@ export function useShwarmSystem({
       }
     }
     
-    // Now apply the state update
-    setShwarms(prev => prev.map(shwarm => {
+    // Apply the update to the ref synchronously (for rapid fire accuracy)
+    const updatedShwarms = shwarmsRef.current.map(shwarm => {
       if (shwarm.id !== shwarmId) return shwarm;
 
       const updatedBlocks = shwarm.blocks.map(block => {
@@ -201,7 +206,11 @@ export function useShwarmSystem({
         blocks: updatedBlocks,
         isActive: !allDead,
       };
-    }));
+    });
+    
+    // Update ref synchronously, then state
+    shwarmsRef.current = updatedShwarms;
+    setShwarms(updatedShwarms);
 
     return { wasKilled, actualDamage };
   }, [onGroupKilled]);

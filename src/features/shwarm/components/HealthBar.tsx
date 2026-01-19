@@ -8,10 +8,11 @@ import { cn } from '@/lib/utils';
 interface HealthBarProps {
   currentHealth: number;
   maxHealth: number;
+  totalPoints?: number;
   className?: string;
 }
 
-export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProps) {
+export function HealthBar({ currentHealth, maxHealth, totalPoints, className }: HealthBarProps) {
   const [shake, setShake] = useState(false);
   const [prevHealth, setPrevHealth] = useState(currentHealth);
   
@@ -90,6 +91,13 @@ export function HealthBar({ currentHealth, maxHealth, className }: HealthBarProp
       )}>
         {currentHealth}/{maxHealth}
       </span>
+      
+      {/* Points display */}
+      {totalPoints !== undefined && (
+        <span className="ml-2 text-[10px] font-bold tabular-nums text-yellow-400">
+          PTS {totalPoints}
+        </span>
+      )}
     </div>
   );
 }

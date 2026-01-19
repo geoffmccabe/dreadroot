@@ -982,8 +982,8 @@ export function Fortress() {
             <span className="font-bold">x{inventory.filter(item => item.quantity > 0).reduce((total, item) => total + item.quantity, 0)}</span>
           </div>
           
-          {/* Health Bar - inline with block counter */}
-          <HealthBar currentHealth={currentHealth} maxHealth={maxHealth} />
+          {/* Health Bar with Points - inline with block counter */}
+          <HealthBar currentHealth={currentHealth} maxHealth={maxHealth} totalPoints={profile?.total_points || 0} />
           
           {blockPlacementMode && selectedBlockType && (
             <div className="bg-blue-500/70 text-white px-2 py-1 rounded text-xs">
