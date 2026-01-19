@@ -11,6 +11,9 @@ import { collisionGrid } from '@/lib/spatialHashGrid';
 // Check interval - 1 second max for FPS optimization
 const GROWTH_CHECK_INTERVAL = 1000;
 
+// DB write batching - flush accumulated writes every N seconds
+const DB_FLUSH_INTERVAL = 5000; // 5 seconds
+
 // Type for the placeBlocksBatch function from useBlocks
 type PlaceBlocksBatchFn = (positions: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string; branchDepth?: number }>) => any[];
 
@@ -81,6 +84,20 @@ export function useLocalGrowth({
   const growingTreesRef = useRef<Map<string, GrowingTree>>(new Map());
   const placeBlocksBatchRef = useRef(placeBlocksBatch);
   const isGrowingRef = useRef(false);
+  
+  // Phase 4: Batched DB writes - accumulate tree_blocks and flush periodically
+  // This reduces realtime events and prevents chunk refetches during growth
+  const pendingTreeBlocksRef = useRef<Array<{
+    tree_id: string;
+    world_id: string;
+    position_x: number;
+    position_y: number;
+    position_z: number;
+    block_type: string;
+    growth_order: number;
+  }>>([]);
+  const lastDbFlushRef = useRef(Date.now());
+  const isFlushingRef = useRef(false);
 
   // Keep placeBlocksBatch ref in sync AND set global reference (once)
   useEffect(() => {
@@ -257,28 +274,18 @@ export function useLocalGrowth({
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
 
-          // OPTIMIZED: Insert to tree_blocks in batch
+          // PHASE 4: Accumulate tree_blocks for batched DB write (reduces realtime events)
           if (blocksToPlace.length > 0) {
-            const treeBlockInserts = blocksToPlace.map(block => ({
-              tree_id: tree.id,
-              world_id: tree.worldId,
-              position_x: block.x,
-              position_y: block.y,
-              position_z: block.z,
-              block_type: block.type,
-              growth_order: tree.currentOrder,
-            }));
-            
-            const { error: treeBlockError } = await supabase
-              .from('tree_blocks')
-              .upsert(treeBlockInserts, { 
-                onConflict: 'world_id,position_x,position_y,position_z',
-                ignoreDuplicates: true // Allow partial success - just skip conflicts
+            for (const block of blocksToPlace) {
+              pendingTreeBlocksRef.current.push({
+                tree_id: tree.id,
+                world_id: tree.worldId,
+                position_x: block.x,
+                position_y: block.y,
+                position_z: block.z,
+                block_type: block.type,
+                growth_order: tree.currentOrder,
               });
-            
-            if (treeBlockError) {
-              console.error('[LocalGrowth] tree_blocks upsert error:', treeBlockError.message);
-              // Continue anyway - some blocks may have succeeded, and we need to keep growing
             }
             
             // Collect blocks for batch placement (with tree-specific texture)
@@ -305,6 +312,35 @@ export function useLocalGrowth({
           placeBlocksBatchFn(allBlocksToPlace);
         }
         
+        // PHASE 4: Flush pending tree_blocks to DB every DB_FLUSH_INTERVAL
+        // This batches multiple growth ticks into a single DB write, reducing realtime events
+        if (!isFlushingRef.current && pendingTreeBlocksRef.current.length > 0) {
+          const timeSinceLastFlush = now - lastDbFlushRef.current;
+          if (timeSinceLastFlush >= DB_FLUSH_INTERVAL) {
+            isFlushingRef.current = true;
+            const blocksToFlush = [...pendingTreeBlocksRef.current];
+            pendingTreeBlocksRef.current = [];
+            lastDbFlushRef.current = now;
+            
+            // Fire-and-forget DB write (use async IIFE to handle promise properly)
+            (async () => {
+              try {
+                const { error } = await supabase
+                  .from('tree_blocks')
+                  .upsert(blocksToFlush, { 
+                    onConflict: 'world_id,position_x,position_y,position_z',
+                    ignoreDuplicates: true
+                  });
+                if (error) {
+                  console.error('[LocalGrowth] Batched tree_blocks upsert error:', error.message);
+                }
+              } finally {
+                isFlushingRef.current = false;
+              }
+            })();
+          }
+        }
+        
         // Update DB for trees that grew (fire-and-forget, after React update)
         for (const tree of treesToUpdate) {
           // Update current_block_count in DB periodically (every 10 orders) for resume support
@@ -326,6 +362,24 @@ export function useLocalGrowth({
         isGrowingRef.current = false;
       }
     };
+    
+    // Flush any remaining blocks when trees finish or on cleanup
+    const flushPendingBlocks = async () => {
+      if (pendingTreeBlocksRef.current.length > 0 && !isFlushingRef.current) {
+        isFlushingRef.current = true;
+        const blocksToFlush = [...pendingTreeBlocksRef.current];
+        pendingTreeBlocksRef.current = [];
+        
+        await supabase
+          .from('tree_blocks')
+          .upsert(blocksToFlush, { 
+            onConflict: 'world_id,position_x,position_y,position_z',
+            ignoreDuplicates: true
+          });
+        
+        isFlushingRef.current = false;
+      }
+    };
 
     // Check once per second
     const intervalId = setInterval(checkGrowth, GROWTH_CHECK_INTERVAL);
@@ -333,7 +387,11 @@ export function useLocalGrowth({
     // Initial check after a short delay
     setTimeout(checkGrowth, 100);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      // Flush any pending blocks on cleanup
+      flushPendingBlocks();
+    };
   }, []);
 
   return {
