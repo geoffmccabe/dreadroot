@@ -272,6 +272,7 @@ export function FortressScene({
   takeDamage,
   shwarmDefinitions,
   onShwarmDamage,
+  onPointsEarned,
   respawnPosition,
   onRespawnComplete,
   isOwnedTreeAtPosition,
@@ -740,8 +741,13 @@ export function FortressScene({
                   hit = true;
                   needsBulletRender = true;
                   
-                  // Apply damage
-                  damageBlock(shwarm.id, block.id, BULLET_DAMAGE);
+                  // Apply damage and get actual damage dealt (capped at remaining health)
+                  const { actualDamage } = damageBlock(shwarm.id, block.id, BULLET_DAMAGE);
+                  
+                  // Award points based on actual damage dealt
+                  if (actualDamage > 0 && onPointsEarned) {
+                    onPointsEarned(actualDamage);
+                  }
                   
                   // Create particle effect at hit position using the shwarm's texture
                   if (shwarmRendererRef.current) {

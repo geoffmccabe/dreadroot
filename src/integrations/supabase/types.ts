@@ -983,9 +983,11 @@ export type Database = {
           coins: number
           created_at: string
           current_health: number
+          current_level: number
           fog_enabled: boolean
           id: string
           max_health: number
+          total_points: number
           updated_at: string
           user_id: string
           visual_distance: number
@@ -995,9 +997,11 @@ export type Database = {
           coins?: number
           created_at?: string
           current_health?: number
+          current_level?: number
           fog_enabled?: boolean
           id?: string
           max_health?: number
+          total_points?: number
           updated_at?: string
           user_id: string
           visual_distance?: number
@@ -1007,9 +1011,11 @@ export type Database = {
           coins?: number
           created_at?: string
           current_health?: number
+          current_level?: number
           fog_enabled?: boolean
           id?: string
           max_health?: number
+          total_points?: number
           updated_at?: string
           user_id?: string
           visual_distance?: number
