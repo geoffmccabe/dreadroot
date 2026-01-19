@@ -1,18 +1,42 @@
 // Player Health System Hook
-// Manages current health, max health, damage, healing, respawn
+// Manages current health, max health, damage, healing, respawn, and passive regeneration
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import * as THREE from 'three';
-import { PLAYER_SPAWN_POINT } from '../constants';
+import { 
+  PLAYER_SPAWN_POINT, 
+  HEALTH_REGEN_INTERVAL_MS, 
+  HEALTH_REGEN_AMOUNT,
+  HEALTH_REGEN_DELAY_AFTER_DAMAGE_MS 
+} from '../constants';
 
 export interface PlayerHealthState {
   currentHealth: number;
   maxHealth: number;
   isDead: boolean;
 }
+
+/**
+ * Regeneration modifiers that can be adjusted by items, buffs, etc.
+ * All values are multipliers (1.0 = normal rate)
+ */
+export interface RegenModifiers {
+  /** Multiplier for heal amount (e.g., 1.5 = 50% more healing) */
+  amountMultiplier: number;
+  /** Multiplier for regen interval (e.g., 0.5 = heals twice as fast) */
+  intervalMultiplier: number;
+  /** Multiplier for delay after damage (e.g., 0.5 = half the delay) */
+  delayMultiplier: number;
+}
+
+const DEFAULT_REGEN_MODIFIERS: RegenModifiers = {
+  amountMultiplier: 1.0,
+  intervalMultiplier: 1.0,
+  delayMultiplier: 1.0,
+};
 
 // Spawn point for respawn (from constants for single source of truth)
 const SPAWN_POINT = new THREE.Vector3(
@@ -34,6 +58,12 @@ export function usePlayerHealth() {
   // Refs for instant access in callbacks (avoid stale closures)
   const healthRef = useRef(healthState);
   const userIdRef = useRef(user?.id);
+  
+  // Regeneration modifiers ref - can be modified by items/buffs
+  const regenModifiersRef = useRef<RegenModifiers>({ ...DEFAULT_REGEN_MODIFIERS });
+  
+  // Track last damage time for regen delay
+  const lastDamageTimeRef = useRef<number>(0);
   
   // Sync refs with state
   useEffect(() => {
@@ -107,6 +137,62 @@ export function usePlayerHealth() {
   }, [user?.id]);
 
   /**
+   * Passive health regeneration loop (Minecraft-style)
+   * Heals player over time when not dead and not at max health
+   */
+  useEffect(() => {
+    const modifiers = regenModifiersRef.current;
+    const interval = HEALTH_REGEN_INTERVAL_MS * modifiers.intervalMultiplier;
+    
+    const regenTick = () => {
+      const current = healthRef.current;
+      const userId = userIdRef.current;
+      const mods = regenModifiersRef.current;
+      
+      // Don't regenerate if dead, not logged in, or already at max health
+      if (current.isDead || !userId || current.currentHealth >= current.maxHealth) {
+        return;
+      }
+      
+      // Check if enough time has passed since last damage
+      const now = Date.now();
+      const delay = HEALTH_REGEN_DELAY_AFTER_DAMAGE_MS * mods.delayMultiplier;
+      if (now - lastDamageTimeRef.current < delay) {
+        return;
+      }
+      
+      // Calculate heal amount with modifiers
+      const healAmount = Math.round(HEALTH_REGEN_AMOUNT * mods.amountMultiplier);
+      const newHealth = Math.min(current.maxHealth, current.currentHealth + healAmount);
+      
+      // Only update if health actually changed
+      if (newHealth === current.currentHealth) return;
+      
+      // Optimistic update
+      setHealthState(prev => ({
+        ...prev,
+        currentHealth: newHealth,
+      }));
+      
+      // Sync to database (non-blocking)
+      supabase
+        .from('user_profiles')
+        .update({ current_health: newHealth })
+        .eq('user_id', userId)
+        .then(({ error }) => {
+          if (error) {
+            console.error('[usePlayerHealth] Failed to sync regen:', error);
+          }
+        });
+    };
+    
+    // Start regen interval
+    const intervalId = setInterval(regenTick, interval);
+    
+    return () => clearInterval(intervalId);
+  }, []);
+
+  /**
    * Take damage and apply knockback
    * Returns knockback info for FirstPersonControls to apply
    */
@@ -121,6 +207,9 @@ export function usePlayerHealth() {
     if (current.isDead || !userId) {
       return { died: false, knockbackDir: null, knockbackDistance: 0 };
     }
+    
+    // Record damage time for regen delay
+    lastDamageTimeRef.current = Date.now();
     
     const newHealth = Math.max(0, current.currentHealth - amount);
     const died = newHealth <= 0;
@@ -159,7 +248,7 @@ export function usePlayerHealth() {
   }, [toast]);
 
   /**
-   * Heal the player
+   * Heal the player (instant heal, e.g., from items)
    */
   const heal = useCallback((amount: number) => {
     const current = healthRef.current;
@@ -197,6 +286,9 @@ export function usePlayerHealth() {
     const userId = userIdRef.current;
     
     if (!userId) return SPAWN_POINT.clone();
+    
+    // Reset damage timer so regen kicks in immediately after respawn
+    lastDamageTimeRef.current = 0;
     
     // Reset to full health
     setHealthState(prev => ({
@@ -251,6 +343,24 @@ export function usePlayerHealth() {
       });
   }, []);
 
+  /**
+   * Update regeneration modifiers (for items, buffs, etc.)
+   * Pass partial modifiers to update only specific values
+   */
+  const setRegenModifiers = useCallback((modifiers: Partial<RegenModifiers>) => {
+    regenModifiersRef.current = {
+      ...regenModifiersRef.current,
+      ...modifiers,
+    };
+  }, []);
+
+  /**
+   * Reset regeneration modifiers to defaults
+   */
+  const resetRegenModifiers = useCallback(() => {
+    regenModifiersRef.current = { ...DEFAULT_REGEN_MODIFIERS };
+  }, []);
+
   return {
     currentHealth: healthState.currentHealth,
     maxHealth: healthState.maxHealth,
@@ -260,6 +370,10 @@ export function usePlayerHealth() {
     heal,
     respawn,
     setMaxHealth,
+    // Regen modifier controls for items/buffs
+    setRegenModifiers,
+    resetRegenModifiers,
+    regenModifiersRef,
     // Ref for direct access in frame loops
     healthRef,
   };

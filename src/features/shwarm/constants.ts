@@ -50,3 +50,11 @@ export const SHWARM_CHANNEL_PREFIX = 'shwarm:';
 
 // Colors
 export const DEFAULT_SHWARM_COLOR = 0xff4444; // Red tint for default shwarm blocks
+
+// Health Regeneration (Minecraft-style)
+// Minecraft: 1 heart (2 HP / 20 total) every 4 seconds = 10% HP per 4 seconds
+// Our system: 100 HP with 10 hearts = 10 HP per heart
+// Base rate: 10 HP per 4 seconds = 2.5 HP/second
+export const HEALTH_REGEN_INTERVAL_MS = 4000; // How often to heal (4 seconds like Minecraft)
+export const HEALTH_REGEN_AMOUNT = 10; // HP to heal per interval (1 heart = 10% of 100 HP)
+export const HEALTH_REGEN_DELAY_AFTER_DAMAGE_MS = 2000; // Wait 2 seconds after taking damage before regenerating
