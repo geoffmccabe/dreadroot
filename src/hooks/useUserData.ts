@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
+import { checkLevelUp, getLevelForPoints } from '@/lib/levelSystem';
 
 export interface UserProfile {
   id: string;
@@ -12,6 +13,8 @@ export interface UserProfile {
   blockchain_address?: string;
   visual_distance?: number;
   fog_enabled?: boolean;
+  total_points?: number;
+  current_level?: number;
   created_at: string;
   updated_at: string;
 }
@@ -713,6 +716,43 @@ export const useUserData = () => {
     }
   };
 
+  // Add points (from dealing damage to enemies)
+  const addPoints = useCallback(async (amount: number): Promise<{ newLevel: number | null }> => {
+    if (!user?.id || !profile) return { newLevel: null };
+    
+    const currentPoints = profile.total_points || 0;
+    const currentLevel = profile.current_level || 1;
+    const newPoints = currentPoints + amount;
+    const newLevel = getLevelForPoints(newPoints);
+    const leveledUp = checkLevelUp(currentPoints, newPoints);
+    
+    // Optimistic update
+    setProfile(prev => prev ? { 
+      ...prev, 
+      total_points: newPoints, 
+      current_level: newLevel 
+    } : null);
+    
+    // Sync to database in background
+    supabase
+      .from('user_profiles')
+      .update({ total_points: newPoints, current_level: newLevel })
+      .eq('user_id', user.id)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Error syncing points:', error);
+          // Revert on error
+          setProfile(prev => prev ? {
+            ...prev,
+            total_points: currentPoints,
+            current_level: currentLevel
+          } : null);
+        }
+      });
+    
+    return { newLevel: leveledUp };
+  }, [user?.id, profile]);
+
   return {
     profile,
     tokenBalance,
@@ -722,6 +762,7 @@ export const useUserData = () => {
     buyBlock,
     useBlock,
     addCoins,
+    addPoints,
     updateBlockchainAddress,
     updateVisualDistance,
     updateFogEnabled,

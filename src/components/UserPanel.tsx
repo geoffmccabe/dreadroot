@@ -16,6 +16,7 @@ import { useBlocksData } from '@/hooks/useBlocksData';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { getInventoryQuantity } from '@/lib/inventoryHelpers';
+import { LevelTab } from '@/components/LevelTab';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -223,8 +224,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="user">User</TabsTrigger>
+            <TabsTrigger value="level">Level</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
             <TabsTrigger value="store">Store</TabsTrigger>
@@ -286,6 +288,23 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 />
               </div>
             </Card>
+          </TabsContent>
+
+          {/* Level Tab */}
+          <TabsContent 
+            value="level" 
+            className="overflow-y-auto" 
+            style={{ 
+              height: `${panelSize.height - 104}px`,
+              marginTop: 0,
+              paddingTop: '1rem'
+            }}
+          >
+            <LevelTab 
+              totalPoints={profile?.total_points || 0}
+              currentLevel={profile?.current_level || 1}
+              height={panelSize.height - 104}
+            />
           </TabsContent>
 
           {/* Wallet Tab */}

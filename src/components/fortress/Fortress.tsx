@@ -115,7 +115,7 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock, returnSeed } = useUserData();
+  const { profile, tokenBalance, inventory, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed } = useUserData();
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
@@ -836,6 +836,21 @@ export function Fortress() {
           healthRef={healthRef}
           takeDamage={takeDamage}
           shwarmDefinitions={shwarmDefinitions}
+          onPointsEarned={async (points) => {
+            const { newLevel } = await addPoints(points);
+            if (newLevel) {
+              // Play level up sound
+              const audio = new Audio('/yay_sound.mp3');
+              audio.volume = 0.5;
+              audio.play().catch(() => {});
+              // Show toast
+              toast({
+                title: `🎉 Level Up!`,
+                description: `You reached Level ${newLevel}!`,
+                duration: 4000,
+              });
+            }
+          }}
           respawnPosition={respawnPosition}
           onRespawnComplete={() => setRespawnPosition(null)}
           isOwnedTreeAtPosition={isOwnedTreeAtPosition}

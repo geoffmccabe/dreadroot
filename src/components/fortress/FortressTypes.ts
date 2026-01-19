@@ -93,6 +93,8 @@ export interface SceneProps {
   // Shwarm system
   shwarmDefinitions?: ShwarmDefinition[];
   onShwarmDamage?: (shwarmId: string, blockId: string, damage: number) => boolean;
+  // Points system callback
+  onPointsEarned?: (points: number) => void;
   // Respawn position for teleporting player
   respawnPosition?: THREE.Vector3 | null;
   onRespawnComplete?: () => void;
