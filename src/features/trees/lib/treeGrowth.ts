@@ -298,6 +298,12 @@ function growBranch(
     // Get the symmetry group of the anchor for decorations
     const anchorGroup = blocks[anchorIndex]?.symmetryGroup ?? 0;
     
+    // ========== TRUNK JUNCTION RING (first step of branch) ==========
+    // Add invisiblocks around the trunk at this height for walkability between branches
+    if (i === 0) {
+      addTrunkJunctionRing(blocks, occupied, treeBaseX, y, treeBaseZ, anchorIndex, anchorGroup, symmetryMode, depth);
+    }
+    
     // ========== INLINE DECORATION GENERATION ==========
     // Decorations are added at the primary position only
     // The symmetry is handled at the branch block level
@@ -361,6 +367,49 @@ function growBranch(
 }
 
 // ========== DECORATION HELPER FUNCTIONS WITH SYMMETRY ==========
+
+/**
+ * Add a ring of invisiblocks around the trunk at a specific height
+ * This allows players to walk between branches at the same height
+ */
+function addTrunkJunctionRing(
+  blocks: BlueprintBlock[],
+  occupied: Set<string>,
+  trunkX: number,
+  y: number,
+  trunkZ: number,
+  anchorIndex: number,
+  anchorGroup: number,
+  symmetryMode: SymmetryMode,
+  branchDepth: number
+): void {
+  // 8 positions around the trunk (excluding trunk itself)
+  const offsets = [
+    [-1, -1], [0, -1], [1, -1],
+    [-1, 0],          [1, 0],
+    [-1, 1],  [0, 1],  [1, 1]
+  ];
+  
+  for (const [dx, dz] of offsets) {
+    const x = trunkX + dx;
+    const z = trunkZ + dz;
+    const key = `${x},${y},${z}`;
+    
+    // Only add if not already occupied (no symmetry needed - trunk is always at center)
+    if (!occupied.has(key)) {
+      occupied.add(key);
+      blocks.push({
+        x,
+        y,
+        z,
+        type: 'invisiblock',
+        growthOrder: -anchorIndex - 1,
+        symmetryGroup: anchorGroup,
+        branchDepth
+      });
+    }
+  }
+}
 
 /**
  * Add invisiblocks on both sides of a decoration for walkability
@@ -439,7 +488,7 @@ function addSpikeWithSymmetry(
   branchDepth: number = 0,
   branchDir: [number, number]  // Branch direction for invisiblock placement
 ): void {
-  // Find the first available Y position above startY that isn't occupied
+  // Build spike blocks upward from branch
   let spikeBaseY = startY;
   for (let i = 1; i <= length; i++) {
     const positions = applySymmetry(startX, startZ, baseX, baseZ, symmetryMode);
@@ -448,19 +497,17 @@ function addSpikeWithSymmetry(
     
     for (const pos of positions) {
       const key = `${pos.x},${actualY},${pos.z}`;
-      // Always add spike blocks - don't skip if occupied (spikes should overwrite visually)
-      if (!occupied.has(key)) {
-        occupied.add(key);
-        blocks.push({
-          x: pos.x,
-          y: actualY,
-          z: pos.z,
-          type: 'spike',
-          growthOrder: -anchorIndex - 1,
-          symmetryGroup: anchorGroup,
-          branchDepth
-        });
-      }
+      // Always add spike blocks - mark occupied but don't skip (allows visual overlap)
+      occupied.add(key);
+      blocks.push({
+        x: pos.x,
+        y: actualY,
+        z: pos.z,
+        type: 'spike',
+        growthOrder: -anchorIndex - 1,
+        symmetryGroup: anchorGroup,
+        branchDepth
+      });
     }
   }
   
@@ -514,10 +561,9 @@ function addNobWithSymmetry(
         const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
         for (const pos of positions) {
           const key = `${pos.x},${y},${pos.z}`;
-          if (!occupied.has(key)) {
-            occupied.add(key);
-            blocks.push({ x: pos.x, y, z: pos.z, type: 'nob', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
-          }
+          // Always add nob blocks - mark occupied but don't skip (allows visual overlap)
+          occupied.add(key);
+          blocks.push({ x: pos.x, y, z: pos.z, type: 'nob', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
         }
       }
     }
@@ -545,6 +591,7 @@ function addCrossWithSymmetry(
   const perpX = branchDir[0] === 0 ? 1 : 0;
   const perpZ = branchDir[1] === 0 ? 1 : 0;
   
+  // Horizontal arm of cross (perpendicular to branch)
   for (let i = -length; i <= length; i++) {
     if (i === 0) continue;
     const x = centerX + perpX * i;
@@ -553,22 +600,21 @@ function addCrossWithSymmetry(
     const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
       const key = `${pos.x},${centerY},${pos.z}`;
-      if (!occupied.has(key)) {
-        occupied.add(key);
-        blocks.push({ x: pos.x, y: centerY, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
-      }
+      // Always add cross blocks - mark occupied but don't skip (allows visual overlap)
+      occupied.add(key);
+      blocks.push({ x: pos.x, y: centerY, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
     }
   }
   
+  // Vertical arm of cross
   const centerPositions = applySymmetry(centerX, centerZ, baseX, baseZ, symmetryMode);
   for (let i = -length; i <= length; i++) {
     if (i === 0) continue;
     for (const pos of centerPositions) {
       const key = `${pos.x},${centerY + i},${pos.z}`;
-      if (!occupied.has(key)) {
-        occupied.add(key);
-        blocks.push({ x: pos.x, y: centerY + i, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
-      }
+      // Always add cross blocks - mark occupied but don't skip (allows visual overlap)
+      occupied.add(key);
+      blocks.push({ x: pos.x, y: centerY + i, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
     }
   }
   
@@ -599,17 +645,18 @@ function addShroomWithSymmetry(
   branchDepth: number = 0,
   branchDir: [number, number]  // Branch direction for invisiblock placement
 ): void {
+  // Shroom stem (vertical)
   for (let i = 1; i <= stemLength; i++) {
     const positions = applySymmetry(shroomBaseX, shroomBaseZ, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
       const key = `${pos.x},${shroomBaseY + i},${pos.z}`;
-      if (!occupied.has(key)) {
-        occupied.add(key);
-        blocks.push({ x: pos.x, y: shroomBaseY + i, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
-      }
+      // Always add shroom blocks - mark occupied but don't skip (allows visual overlap)
+      occupied.add(key);
+      blocks.push({ x: pos.x, y: shroomBaseY + i, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
     }
   }
   
+  // Shroom cap (horizontal disc)
   const capY = shroomBaseY + stemLength + 1;
   const radius = Math.floor(capDiameter / 2);
   
@@ -620,10 +667,9 @@ function addShroomWithSymmetry(
       const positions = applySymmetry(shroomBaseX + dx, shroomBaseZ + dz, baseX, baseZ, symmetryMode);
       for (const pos of positions) {
         const key = `${pos.x},${capY},${pos.z}`;
-        if (!occupied.has(key)) {
-          occupied.add(key);
-          blocks.push({ x: pos.x, y: capY, z: pos.z, type: 'shroom_cap', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
-        }
+        // Always add shroom blocks - mark occupied but don't skip (allows visual overlap)
+        occupied.add(key);
+        blocks.push({ x: pos.x, y: capY, z: pos.z, type: 'shroom_cap', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
       }
     }
   }
