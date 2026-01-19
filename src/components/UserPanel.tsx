@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
-import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 
@@ -68,7 +68,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { user } = useAuth();
   const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
-  const { currentTheme } = useTokenTheme();
+  const { currentTheme } = useCoinTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const [visualDistance, setVisualDistance] = useState(4);
   const [fogEnabled, setFogEnabled] = useState(true);

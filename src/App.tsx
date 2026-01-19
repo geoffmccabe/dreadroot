@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { BlocksProvider } from "@/contexts/BlocksContext";
 import { UserPanelProvider } from "@/contexts/UserPanelContext";
 import { AdminPanelProvider } from "@/contexts/AdminPanelContext";
-import { TokenThemeProvider } from "@/contexts/TokenThemeContext";
+import { CoinThemeProvider } from "@/contexts/CoinThemeContext";
 import { AvatarProvider } from "@/contexts/AvatarContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -60,7 +60,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
-        <TokenThemeProvider>
+        <CoinThemeProvider>
           <BlocksProvider>
             <AvatarProvider>
               <UserPanelProvider>
@@ -94,7 +94,7 @@ const App = () => (
               </UserPanelProvider>
             </AvatarProvider>
           </BlocksProvider>
-        </TokenThemeProvider>
+        </CoinThemeProvider>
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
