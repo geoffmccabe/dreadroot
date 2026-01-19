@@ -255,8 +255,20 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     // Apply branch depth lightening for tree blocks via instance colors
     // This works WITHOUT vertexColors on material - Three.js applies instanceColor as tint
+    // OPTIMIZATION: Reuse existing instanceColor attribute if possible to avoid flashing
     if (textureOverride && blocks.length > 0) {
-      const colorArray = new Float32Array(blocks.length * 3);
+      let colorAttr = mesh.instanceColor as THREE.InstancedBufferAttribute | null;
+      
+      // Only create new attribute if needed (size changed or doesn't exist)
+      if (!colorAttr || colorAttr.count < blocks.length) {
+        // Allocate with some extra capacity to reduce reallocations
+        const capacity = Math.max(blocks.length, 64);
+        const colorArray = new Float32Array(capacity * 3);
+        colorAttr = new THREE.InstancedBufferAttribute(colorArray, 3);
+        colorAttr.setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor = colorAttr;
+      }
+      
       const tempColor = new THREE.Color();
       
       for (let i = 0; i < blocks.length; i++) {
@@ -264,17 +276,13 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         const depth = (block as any).branch_depth ?? -1;
         
         // Calculate lightening factor: trunk(-1)=1.0, depth0=1.1, depth1=1.2, etc.
-        // This creates a gradient from dark trunk to lighter branches
         const lightenFactor = 1.0 + Math.max(0, depth + 1) * 0.12;
-        
-        // Clamp to avoid overbrightening (max 50% lighter at depth 3)
         const factor = Math.min(lightenFactor, 1.5);
         tempColor.setRGB(factor, factor, factor);
-        tempColor.toArray(colorArray, i * 3);
+        colorAttr.setXYZ(i, factor, factor, factor);
       }
       
-      mesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
-      mesh.instanceColor.needsUpdate = true;
+      colorAttr.needsUpdate = true;
     }
     
     // Set bounding box/sphere on the MESH for proper frustum culling

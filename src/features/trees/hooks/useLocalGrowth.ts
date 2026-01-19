@@ -165,8 +165,13 @@ export function useLocalGrowth({
   }, []);
 
   // Main growth loop - checks once per second
+  // OPTIMIZED: Batch DB operations, reduce parent checks
   useEffect(() => {
     if (!TREE_CONFIG.ENABLED) return;
+
+    // Track last parent check per tree to avoid redundant checks
+    const lastParentCheck = new Map<string, number>();
+    const PARENT_CHECK_INTERVAL = 10000; // Only check parent existence every 10 seconds
 
     const checkGrowth = async () => {
       const placeBlockFn = placeBlockRef.current;
@@ -176,6 +181,9 @@ export function useLocalGrowth({
       const now = Date.now();
 
       try {
+        // Collect all trees that need to grow this tick
+        const treesToGrow: GrowingTree[] = [];
+        
         for (const [id, tree] of growingTreesRef.current) {
           // CRITICAL: Check deleted set FIRST (sync, no race condition)
           if (deletedTreeIds.has(id)) {
@@ -214,25 +222,37 @@ export function useLocalGrowth({
             continue;
           }
 
-          // CRITICAL: Verify parent tree still exists before placing ANY blocks
-          // This prevents orphan blocks when trees are deleted during growth
-          const { data: parentExists, error: existsError } = await supabase
-            .from('planted_trees')
-            .select('id')
-            .eq('id', tree.id)
-            .maybeSingle();
+          // Periodic parent check (not every tick - too expensive)
+          const lastCheck = lastParentCheck.get(id) || 0;
+          if (now - lastCheck > PARENT_CHECK_INTERVAL) {
+            const { data: parentExists, error: existsError } = await supabase
+              .from('planted_trees')
+              .select('id')
+              .eq('id', tree.id)
+              .maybeSingle();
 
-          if (existsError || !parentExists) {
-            console.log(`[LocalGrowth] Parent tree ${tree.id} no longer exists, stopping growth`);
-            growingTreesRef.current.delete(id);
-            continue;
+            lastParentCheck.set(id, now);
+
+            if (existsError || !parentExists) {
+              console.log(`[LocalGrowth] Parent tree ${tree.id} no longer exists, stopping growth`);
+              growingTreesRef.current.delete(id);
+              lastParentCheck.delete(id);
+              continue;
+            }
           }
 
+          treesToGrow.push(tree);
+        }
+
+        // Process up to 3 trees per tick for better performance
+        const maxTreesPerTick = 3;
+        for (let t = 0; t < Math.min(treesToGrow.length, maxTreesPerTick); t++) {
+          const tree = treesToGrow[t];
+          
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
 
-          // CRITICAL: Insert to tree_blocks FIRST - if this fails, skip block placement
-          // This prevents orphan blocks that can't be deleted later
+          // OPTIMIZED: Insert to tree_blocks in batch
           if (blocksToPlace.length > 0) {
             const treeBlockInserts = blocksToPlace.map(block => ({
               tree_id: tree.id,
@@ -240,7 +260,7 @@ export function useLocalGrowth({
               position_x: block.x,
               position_y: block.y,
               position_z: block.z,
-              block_type: block.type, // Use actual block type (trunk, branch, spike, invisiblock, etc.)
+              block_type: block.type,
               growth_order: tree.currentOrder,
             }));
             
@@ -255,7 +275,7 @@ export function useLocalGrowth({
             }
           }
 
-          // Only place blocks AFTER tree_blocks insert succeeded
+          // Place blocks AFTER tree_blocks insert succeeded
           for (const block of blocksToPlace) {
             placeBlockFn(block.x, block.y, block.z, block.type, undefined, tree.textureUrl, block.branchDepth);
           }
@@ -263,9 +283,6 @@ export function useLocalGrowth({
           // Update ref state (no React re-render)
           tree.currentOrder++;
           tree.lastGrowthTime = now;
-
-          // Only grow one tree per tick to spread load
-          break;
         }
       } finally {
         isGrowingRef.current = false;
