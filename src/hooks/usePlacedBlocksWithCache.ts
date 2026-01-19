@@ -452,15 +452,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     
     const blocksToAdd: PlacedBlock[] = [];
     
+    // NOTE: Duplicate checking is done in chunkLoader.addBlocksBatch() which
+    // operates on the live chunk refs. Checking against React `blocks` state here
+    // would be O(n*m) AND miss blocks placed earlier in the same batch.
+    
     for (const pos of positions) {
-      // Check for duplicate at this position
-      const isDuplicate = blocks.some(block => 
-        block.position_x === pos.x && 
-        block.position_y === pos.y && 
-        block.position_z === pos.z
-      );
-      if (isDuplicate) continue;
-      
       const tempId = `temp-${Date.now()}-${Math.random()}`;
       const block: any = {
         id: tempId,
@@ -489,6 +485,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     
     if (blocksToAdd.length > 0) {
       // BATCH: Add all blocks with single React re-render
+      // Duplicate positions are filtered inside addBlocksBatch
       chunkLoader.addBlocksBatch(blocksToAdd);
       
       // Mark chunks as recently modified (fire-and-forget)
@@ -499,7 +496,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
     
     return blocksToAdd;
-  }, [blocks, userId, worldId, chunkLoader]);
+  }, [userId, worldId, chunkLoader]); // Removed 'blocks' dependency - not needed
 
   // PHASE 1: Sync a single block to Supabase (uses cached user, fire-and-forget)
   const syncBlockToSupabase = useCallback(async (dbBlock: DBBlock) => {
