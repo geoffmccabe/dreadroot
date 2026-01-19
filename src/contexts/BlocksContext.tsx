@@ -21,6 +21,7 @@ interface BlocksContextType {
   navigateWorld: (direction: 'next' | 'prev') => void;
   worldIndex: { current: number; total: number };
   placeBlock: (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => PlacedBlock | null;
+  placeBlocksBatch: (positions: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string; branchDepth?: number }>) => PlacedBlock[];
   removeBlock: (blockId: string) => Promise<boolean>;
   refreshBlocks: () => Promise<void>;
   setBlockMode: (enabled: boolean) => void;
@@ -81,6 +82,7 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     navigateWorld,
     worldIndex,
     placeBlock: blocksHook.placeBlock,
+    placeBlocksBatch: blocksHook.placeBlocksBatch,
     removeBlock: blocksHook.removeBlock,
     refreshBlocks: blocksHook.refreshBlocks,
     setBlockMode: blocksHook.setBlockMode,

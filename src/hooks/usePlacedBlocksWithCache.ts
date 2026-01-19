@@ -438,7 +438,68 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }).catch(() => {});
 
     return optimisticBlock;
-  }, [blocks, userId, worldId, toast, setBlocksIfChanged, addBlock]);
+  }, [blocks, userId, worldId, toast, setBlocksIfChanged, addBlock, chunkLoader]);
+
+  /**
+   * BATCH: Place multiple blocks at once with a SINGLE React re-render.
+   * Used by tree growth to prevent N re-renders when placing N blocks.
+   */
+  const placeBlocksBatch = useCallback((
+    positions: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string; branchDepth?: number }>
+  ): PlacedBlock[] => {
+    const cachedUserId = cachedUserRef.current?.id || userId;
+    if (!cachedUserId || !worldId) return [];
+    
+    const blocksToAdd: PlacedBlock[] = [];
+    
+    for (const pos of positions) {
+      // Check for duplicate at this position
+      const isDuplicate = blocks.some(block => 
+        block.position_x === pos.x && 
+        block.position_y === pos.y && 
+        block.position_z === pos.z
+      );
+      if (isDuplicate) continue;
+      
+      const tempId = `temp-${Date.now()}-${Math.random()}`;
+      const block: any = {
+        id: tempId,
+        user_id: cachedUserId,
+        world_id: worldId,
+        position_x: pos.x,
+        position_y: pos.y,
+        position_z: pos.z,
+        block_type: pos.blockType,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        texture_url: pos.textureUrl || null,
+        branch_depth: pos.branchDepth,
+      };
+      
+      // IMMEDIATE COLLISION: Add collider to spatial grid RIGHT NOW
+      const collider = new THREE.Box3(
+        new THREE.Vector3(pos.x, pos.y, pos.z),
+        new THREE.Vector3(pos.x + 1, pos.y + 1, pos.z + 1)
+      );
+      block.__collider = collider;
+      collisionGrid.insert(collider);
+      
+      blocksToAdd.push(block);
+    }
+    
+    if (blocksToAdd.length > 0) {
+      // BATCH: Add all blocks with single React re-render
+      chunkLoader.addBlocksBatch(blocksToAdd);
+      
+      // Mark chunks as recently modified (fire-and-forget)
+      for (const block of blocksToAdd) {
+        const chunkKey = getChunkKey(block.position_x, block.position_z);
+        recentlyModifiedChunks.current.set(chunkKey, Date.now());
+      }
+    }
+    
+    return blocksToAdd;
+  }, [blocks, userId, worldId, chunkLoader]);
 
   // PHASE 1: Sync a single block to Supabase (uses cached user, fire-and-forget)
   const syncBlockToSupabase = useCallback(async (dbBlock: DBBlock) => {
@@ -634,6 +695,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     blocks,
     isLoading: isLoading || chunkLoader.isLoading,
     placeBlock,
+    placeBlocksBatch, // BATCH: For tree growth - single re-render for N blocks
     removeBlock,
     refreshBlocks: () => chunkLoader.initializeForWorld(CAMERA_START_X, CAMERA_START_Z),
     setBlockMode, // New function to enable/disable block mode
