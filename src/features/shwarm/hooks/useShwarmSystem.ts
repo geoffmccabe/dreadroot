@@ -150,17 +150,28 @@ export function useShwarmSystem({
    * @returns Object with wasKilled flag and actualDamage dealt (capped at remaining health)
    */
   const damageBlock = useCallback((shwarmId: string, blockId: string, damage: number): { wasKilled: boolean; actualDamage: number } => {
+    // First, synchronously look up the block's current health from the ref
+    // This ensures we return the correct actualDamage before state updates
     let wasKilled = false;
     let actualDamage = 0;
     
+    const currentShwarms = shwarmsRef.current;
+    const targetShwarm = currentShwarms.find(s => s.id === shwarmId);
+    if (targetShwarm) {
+      const targetBlock = targetShwarm.blocks.find(b => b.id === blockId && b.isAlive);
+      if (targetBlock) {
+        // Calculate actual damage (capped at remaining health for points)
+        actualDamage = Math.min(damage, targetBlock.currentHealth);
+        wasKilled = targetBlock.currentHealth <= damage;
+      }
+    }
+    
+    // Now apply the state update
     setShwarms(prev => prev.map(shwarm => {
       if (shwarm.id !== shwarmId) return shwarm;
 
       const updatedBlocks = shwarm.blocks.map(block => {
         if (block.id !== blockId || !block.isAlive) return block;
-
-        // Calculate actual damage (capped at remaining health for points)
-        actualDamage = Math.min(damage, block.currentHealth);
         
         const newHealth = Math.max(0, block.currentHealth - damage);
         const isAlive = newHealth > 0;
@@ -168,10 +179,6 @@ export function useShwarmSystem({
         // Calculate visual scale based on health in 10% increments
         const healthPercent = newHealth / block.maxHealth;
         const scale = Math.max(0.1, Math.floor(healthPercent * 10) / 10);
-
-        if (!isAlive) {
-          wasKilled = true;
-        }
 
         return {
           ...block,
