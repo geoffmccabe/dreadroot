@@ -197,6 +197,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
   // Phase 3.0: Single emit per frame batching
   const emitScheduledRef = useRef(false);
+  
+  // Phase 4: Stable block array reference tracking
+  // Only emit a new array if contents actually changed (prevents React re-renders)
+  const lastEmittedBlocksRef = useRef<PlacedBlock[]>([]);
+  const lastEmittedSignatureRef = useRef<string>('');
 
   // Phase 3E: Velocity tracking with ring buffer
   const posHistRef = useRef({
@@ -213,8 +218,25 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   const lastDirRef = useRef<{ dx: number; dz: number } | null>(null);
 
   /**
+   * Generate a fast signature for block array comparison
+   * Uses block count + sample of IDs for O(1) quick check
+   */
+  const generateBlockSignature = useCallback((blocks: PlacedBlock[]): string => {
+    if (blocks.length === 0) return '0:';
+    // Sample first, middle, and last block IDs for a quick signature
+    const first = blocks[0]?.id || '';
+    const mid = blocks[Math.floor(blocks.length / 2)]?.id || '';
+    const last = blocks[blocks.length - 1]?.id || '';
+    return `${blocks.length}:${first}:${mid}:${last}`;
+  }, []);
+
+  /**
    * Phase 3.0: Schedule a single emission per animation frame
    * This prevents multiple React updates from rapid chunk operations
+   * 
+   * Phase 4 OPTIMIZATION: Only emit if block array contents actually changed.
+   * Compares signature (count + sample IDs) before emitting to prevent
+   * redundant React re-renders that cause flashing during tree growth.
    */
   const scheduleEmit = useCallback(() => {
     if (emitScheduledRef.current) return;
@@ -235,9 +257,19 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           allBlocks[idx++] = blocks[i];
         }
       }
+      
+      // Phase 4: Only emit if contents changed
+      const newSignature = generateBlockSignature(allBlocks);
+      if (newSignature === lastEmittedSignatureRef.current) {
+        // Contents haven't changed, skip the React update
+        return;
+      }
+      
+      lastEmittedSignatureRef.current = newSignature;
+      lastEmittedBlocksRef.current = allBlocks;
       onBlocksChanged(allBlocks);
     });
-  }, [onBlocksChanged]);
+  }, [onBlocksChanged, generateBlockSignature]);
 
   /**
    * Flatten all loaded chunks into a single blocks array

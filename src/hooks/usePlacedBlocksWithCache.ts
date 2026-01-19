@@ -189,7 +189,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   
   // Track chunks we recently modified locally to skip redundant refetch
   const recentlyModifiedChunks = useRef<Map<string, number>>(new Map());
-  const LOCAL_MODIFICATION_GRACE_PERIOD = 2000; // 2 seconds
+  const LOCAL_MODIFICATION_GRACE_PERIOD = 2000; // 2 seconds for normal blocks
+  
+  // Track chunks with active tree growth (longer grace period)
+  const activeGrowthChunks = useRef<Set<string>>(new Set());
+  const TREE_GROWTH_GRACE_PERIOD = 15000; // 15 seconds for tree growth chunks
 
   const setupRealtimeSubscription = useCallback(() => {
     if (!worldId) return () => {};
@@ -221,6 +225,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
           // Only process if this chunk is currently loaded
           if (!chunkLoader.isChunkLoaded(chunkX, chunkZ)) {
             return; // Ignore changes to chunks we haven't loaded
+          }
+          
+          // Skip refetch for chunks with active tree growth (longer grace period)
+          // Tree growth continuously places blocks, so we need to suppress realtime refetch
+          if (activeGrowthChunks.current.has(chunkKey)) {
+            return;
           }
           
           // Skip refetch for chunks we recently modified locally
@@ -488,10 +498,21 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // Duplicate positions are filtered inside addBlocksBatch
       chunkLoader.addBlocksBatch(blocksToAdd);
       
-      // Mark chunks as recently modified (fire-and-forget)
+      // Mark chunks as recently modified AND as active growth chunks
+      // This prevents realtime refetch from causing flashing during tree growth
       for (const block of blocksToAdd) {
         const chunkKey = getChunkKey(block.position_x, block.position_z);
         recentlyModifiedChunks.current.set(chunkKey, Date.now());
+        
+        // Mark as active growth chunk for tree blocks (longer suppression)
+        const isTreeBlock = ['trunk', 'branch', 'fruit', 'spike', 'invisiblock', 'shroom_stem', 'shroom_cap', 'nob', 'cross'].includes(block.block_type);
+        if (isTreeBlock) {
+          activeGrowthChunks.current.add(chunkKey);
+          // Auto-clear after grace period
+          setTimeout(() => {
+            activeGrowthChunks.current.delete(chunkKey);
+          }, TREE_GROWTH_GRACE_PERIOD);
+        }
       }
     }
     
