@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { Textarea } from '@/components/ui/textarea';
 import { AvatarPanel } from '@/components/AvatarPanel';
 import { WorldsList } from '@/components/WorldsList';
@@ -35,7 +35,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCoinDetailsCollapsed, setIsCoinDetailsCollapsed] = useState(false);
   const [showAddCoinDialog, setShowAddCoinDialog] = useState(false);
-  const { currentTheme, availableThemes, setActiveTheme, updateThemeSettings, refreshThemes } = useTokenTheme();
+  const { currentTheme, availableThemes, setActiveTheme, updateThemeSettings, refreshThemes } = useCoinTheme();
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [coinDetailsTimeout, setCoinDetailsTimeout] = useState<NodeJS.Timeout | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -337,7 +337,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
       }
 
       toast({
-        title: "Token created successfully",
+        title: "Coin created successfully",
         description: `${newCoin.displayName} has been created and is ready to use`
       });
 
@@ -370,9 +370,9 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
         await setActiveTheme(newTheme.id);
       }
     } catch (error) {
-      console.error('Failed to create token:', error);
+      console.error('Failed to create coin:', error);
       toast({
-        title: "Failed to create token",
+        title: "Failed to create coin",
         description: "Please try again",
         variant: "destructive"
       });
@@ -383,10 +383,10 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
 
   return (
     <Card className="waterfall-card w-full">
-      {/* Token Theme Selector */}
+      {/* Coin Theme Selector */}
       <div className="mb-4 pb-3 border-b border-border">
         <div className="flex items-center justify-between mb-2">
-          <Label className="text-xs opacity-85">Active Token</Label>
+          <Label className="text-xs opacity-85">Active Coin</Label>
           <Button
             variant="outline"
             size="sm"
@@ -402,7 +402,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
           onValueChange={setActiveTheme}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select token theme" />
+            <SelectValue placeholder="Select coin theme" />
           </SelectTrigger>
           <SelectContent>
             {availableThemes.map(theme => (
@@ -468,7 +468,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
               <Input
                 value={coinDetails.coinName}
                 onChange={(e) => handleCoinDetailsChange('coinName', e.target.value)}
-                placeholder="e.g., Waterfall Token"
+                placeholder="e.g., Waterfall Coin"
                 className="text-sm"
               />
             </div>
@@ -556,7 +556,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
               <Textarea
                 value={coinDetails.description}
                 onChange={(e) => handleCoinDetailsChange('description', e.target.value)}
-                placeholder="Brief description of the token..."
+                placeholder="Brief description of the coin..."
                 className="text-sm min-h-[60px]"
               />
             </div>
@@ -701,7 +701,7 @@ function WaterfallControls({ settings, onSettingsChange }: WaterfallControlsProp
               <Input
                 value={newCoin.coinName}
                 onChange={(e) => setNewCoin({ ...newCoin, coinName: e.target.value })}
-                placeholder="e.g., Bitcoin Token"
+                placeholder="e.g., Bitcoin Coin"
               />
             </div>
 
@@ -1127,7 +1127,7 @@ function UsersList({}: UsersListProps) {
               <TableHead>Email / User ID</TableHead>
               <TableHead>Roles & Status</TableHead>
               <TableHead>Inventory</TableHead>
-              <TableHead>Token Balances</TableHead>
+              <TableHead>Coin Balances</TableHead>
               <TableHead>Wallet</TableHead>
               <TableHead>Created</TableHead>
               <TableHead>Actions</TableHead>

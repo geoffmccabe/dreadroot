@@ -15,7 +15,7 @@ import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
-import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
@@ -38,7 +38,7 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 
 // Main Fortress orchestrator component
 export function Fortress() {
-  const { currentTheme, isLoading: themeLoading } = useTokenTheme();
+  const { currentTheme, isLoading: themeLoading } = useCoinTheme();
   
   const defaultColorPalette = [
     { hex: '#06c8c0', weight: 10 },

@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { useUserData } from '@/hooks/useUserData';
 import { Card } from '@/components/ui/card';
 import { useBlocksData } from '@/hooks/useBlocksData';
-import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
 
 interface InventoryProps {
@@ -16,7 +16,7 @@ interface InventoryProps {
 export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
   const { profile, inventory, isLoading, updateBlockchainAddress } = useUserData();
   const { getBlockByKey } = useBlocksData();
-  const { currentTheme } = useTokenTheme();
+  const { currentTheme } = useCoinTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
 

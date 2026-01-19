@@ -7,7 +7,7 @@ interface ColorWeight {
   weight: number;
 }
 
-interface TokenTheme {
+interface CoinTheme {
   id: string;
   name: string;
   display_name: string;
@@ -29,20 +29,20 @@ interface TokenTheme {
   description?: string | null;
 }
 
-interface TokenThemeContextType {
-  currentTheme: TokenTheme | null;
-  availableThemes: TokenTheme[];
+interface CoinThemeContextType {
+  currentTheme: CoinTheme | null;
+  availableThemes: CoinTheme[];
   isLoading: boolean;
   setActiveTheme: (themeId: string) => Promise<void>;
-  updateThemeSettings: (settings: Partial<Omit<TokenTheme, 'id' | 'name' | 'display_name' | 'is_active'>>) => Promise<void>;
+  updateThemeSettings: (settings: Partial<Omit<CoinTheme, 'id' | 'name' | 'display_name' | 'is_active'>>) => Promise<void>;
   refreshThemes: () => Promise<void>;
 }
 
-const TokenThemeContext = createContext<TokenThemeContextType | undefined>(undefined);
+const CoinThemeContext = createContext<CoinThemeContextType | undefined>(undefined);
 
-export const TokenThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentTheme, setCurrentTheme] = useState<TokenTheme | null>(null);
-  const [availableThemes, setAvailableThemes] = useState<TokenTheme[]>([]);
+export const CoinThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [currentTheme, setCurrentTheme] = useState<CoinTheme | null>(null);
+  const [availableThemes, setAvailableThemes] = useState<CoinTheme[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -146,7 +146,7 @@ export const TokenThemeProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   // Update current theme's settings
-  const updateThemeSettings = async (settings: Partial<Omit<TokenTheme, 'id' | 'name' | 'display_name' | 'is_active'>>) => {
+  const updateThemeSettings = async (settings: Partial<Omit<CoinTheme, 'id' | 'name' | 'display_name' | 'is_active'>>) => {
     if (!currentTheme) return;
 
     try {
@@ -193,7 +193,7 @@ export const TokenThemeProvider: React.FC<{ children: ReactNode }> = ({ children
   }, []);
 
   return (
-    <TokenThemeContext.Provider value={{
+    <CoinThemeContext.Provider value={{
       currentTheme,
       availableThemes,
       isLoading,
@@ -202,14 +202,14 @@ export const TokenThemeProvider: React.FC<{ children: ReactNode }> = ({ children
       refreshThemes
     }}>
       {children}
-    </TokenThemeContext.Provider>
+    </CoinThemeContext.Provider>
   );
 };
 
-export const useTokenTheme = () => {
-  const context = useContext(TokenThemeContext);
+export const useCoinTheme = () => {
+  const context = useContext(CoinThemeContext);
   if (!context) {
-    throw new Error('useTokenTheme must be used within TokenThemeProvider');
+    throw new Error('useCoinTheme must be used within CoinThemeProvider');
   }
   return context;
 };

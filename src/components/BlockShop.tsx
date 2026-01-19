@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { BlockType } from '@/types/blocks';
-import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 
 interface BlockShopProps {
@@ -67,7 +67,7 @@ const BlockIcon: React.FC<{ block: BlockType }> = ({ block }) => {
 export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPurchased }) => {
   const { profile, inventory, buyBlock, isLoading: userLoading } = useUserData();
   const { blocks, isLoading: blocksLoading } = useBlocksData();
-  const { currentTheme } = useTokenTheme();
+  const { currentTheme } = useCoinTheme();
   const [activeClass, setActiveClass] = React.useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [isPurchasing, setIsPurchasing] = React.useState(false);
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';

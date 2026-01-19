@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTokenTheme } from '@/contexts/TokenThemeContext';
+import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
 
 export interface UserProfile {
@@ -44,7 +44,7 @@ export const useUserData = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
-  const { currentTheme } = useTokenTheme();
+  const { currentTheme } = useCoinTheme();
   const loadingRef = useRef(false);
   
   // Refs for instant access to current state (avoids stale closures in rapid calls)
