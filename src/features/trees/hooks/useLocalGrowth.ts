@@ -11,8 +11,8 @@ import { collisionGrid } from '@/lib/spatialHashGrid';
 // Check interval - 1 second max for FPS optimization
 const GROWTH_CHECK_INTERVAL = 1000;
 
-// Type for the placeBlock function from useBlocks
-type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string, branchDepth?: number) => any;
+// Type for the placeBlocksBatch function from useBlocks
+type PlaceBlocksBatchFn = (positions: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string; branchDepth?: number }>) => any[];
 
 interface GrowingTree {
   id: string;
@@ -32,7 +32,7 @@ interface GrowingTree {
 interface UseLocalGrowthOptions {
   worldId: string | null;
   userId: string | null;
-  placeBlock: PlaceBlockFn | null;
+  placeBlocksBatch: PlaceBlocksBatchFn | null;
 }
 
 /**
@@ -75,19 +75,19 @@ export function clearGrowingTrees() {
 export function useLocalGrowth({
   worldId,
   userId,
-  placeBlock,
+  placeBlocksBatch,
 }: UseLocalGrowthOptions) {
   // All growing trees stored in a ref - no React state = no re-renders
   const growingTreesRef = useRef<Map<string, GrowingTree>>(new Map());
-  const placeBlockRef = useRef(placeBlock);
+  const placeBlocksBatchRef = useRef(placeBlocksBatch);
   const isGrowingRef = useRef(false);
 
-  // Keep placeBlock ref in sync AND set global reference (once)
+  // Keep placeBlocksBatch ref in sync AND set global reference (once)
   useEffect(() => {
-    placeBlockRef.current = placeBlock;
+    placeBlocksBatchRef.current = placeBlocksBatch;
     // Set the global reference for external clearing
     growingTreesRefGlobal = growingTreesRef;
-  }, [placeBlock]);
+  }, [placeBlocksBatch]);
 
   /**
    * Start growing a new tree locally
@@ -174,8 +174,8 @@ export function useLocalGrowth({
     const PARENT_CHECK_INTERVAL = 10000; // Only check parent existence every 10 seconds
 
     const checkGrowth = async () => {
-      const placeBlockFn = placeBlockRef.current;
-      if (!placeBlockFn || isGrowingRef.current) return;
+      const placeBlocksBatchFn = placeBlocksBatchRef.current;
+      if (!placeBlocksBatchFn || isGrowingRef.current) return;
 
       isGrowingRef.current = true;
       const now = Date.now();
@@ -246,6 +246,11 @@ export function useLocalGrowth({
 
         // Process up to 3 trees per tick for better performance
         const maxTreesPerTick = 3;
+        
+        // BATCH: Collect ALL blocks from ALL trees to place in a single React update
+        const allBlocksToPlace: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string; branchDepth?: number }> = [];
+        const treesToUpdate: GrowingTree[] = [];
+        
         for (let t = 0; t < Math.min(treesToGrow.length, maxTreesPerTick); t++) {
           const tree = treesToGrow[t];
           
@@ -275,17 +280,33 @@ export function useLocalGrowth({
               console.error('[LocalGrowth] tree_blocks upsert error:', treeBlockError.message);
               // Continue anyway - some blocks may have succeeded, and we need to keep growing
             }
-          }
-
-          // Place blocks AFTER tree_blocks insert succeeded
-          for (const block of blocksToPlace) {
-            placeBlockFn(block.x, block.y, block.z, block.type, undefined, tree.textureUrl, block.branchDepth);
+            
+            // Collect blocks for batch placement (with tree-specific texture)
+            for (const block of blocksToPlace) {
+              allBlocksToPlace.push({
+                x: block.x,
+                y: block.y,
+                z: block.z,
+                blockType: block.type,
+                textureUrl: tree.textureUrl,
+                branchDepth: block.branchDepth
+              });
+            }
           }
 
           // Update ref state (no React re-render)
           tree.currentOrder++;
           tree.lastGrowthTime = now;
-          
+          treesToUpdate.push(tree);
+        }
+        
+        // BATCH: Place ALL blocks from ALL trees with SINGLE React re-render
+        if (allBlocksToPlace.length > 0) {
+          placeBlocksBatchFn(allBlocksToPlace);
+        }
+        
+        // Update DB for trees that grew (fire-and-forget, after React update)
+        for (const tree of treesToUpdate) {
           // Update current_block_count in DB periodically (every 10 orders) for resume support
           if (tree.currentOrder % 10 === 0) {
             const blocksPlacedSoFar = tree.blueprint.blocks

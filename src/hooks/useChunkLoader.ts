@@ -375,6 +375,59 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   }, [onBlocksChanged, flattenLoadedBlocks]);
 
   /**
+   * BATCH: Add multiple blocks at once with a SINGLE React re-render.
+   * Used by tree growth to prevent N re-renders when placing N blocks.
+   * 
+   * PERFORMANCE: Uses scheduleEmit for batched RAF callback instead of
+   * immediate onBlocksChanged per block.
+   */
+  const addBlocksBatch = useCallback((blocks: PlacedBlock[]): void => {
+    if (blocks.length === 0) return;
+    
+    const now = Date.now();
+    let anyAdded = false;
+    
+    for (const block of blocks) {
+      const chunkKey = getChunkKey(block.position_x, block.position_z);
+      let chunkData = loadedChunksRef.current.get(chunkKey);
+      
+      if (!chunkData) {
+        // Create chunk if needed
+        chunkData = {
+          blocks: [],
+          loadedAt: now,
+          lastAccessedAt: now,
+          hasOptimisticBlocks: false
+        };
+        loadedChunksRef.current.set(chunkKey, chunkData);
+      }
+      
+      // Check for duplicates at the same position
+      const existsAtPosition = chunkData.blocks.some(b => 
+        b.position_x === block.position_x &&
+        b.position_y === block.position_y &&
+        b.position_z === block.position_z
+      );
+      
+      if (!existsAtPosition) {
+        // Create collider for new block
+        ensureBlockCollider(block);
+        chunkData.blocks.push(block);
+        if (block.id.startsWith('temp-')) {
+          chunkData.hasOptimisticBlocks = true;
+        }
+        chunkData.lastAccessedAt = now;
+        anyAdded = true;
+      }
+    }
+    
+    // Single emit for ALL blocks via requestAnimationFrame
+    if (anyAdded) {
+      scheduleEmit();
+    }
+  }, [scheduleEmit]);
+
+  /**
    * Replace a temp block with the real server block (by position match)
    * Phase 3A: Update hasOptimisticBlocks when temp blocks are replaced
    * 
@@ -1466,6 +1519,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     loadedChunksRef,
     // New methods for optimistic updates
     addBlockOptimistically,
+    addBlocksBatch, // BATCH: For tree growth - single re-render for N blocks
     replaceBlockByPosition,
     removeBlockById,
     LOAD_RADIUS,
@@ -1479,6 +1533,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     getLoadedChunkKeys,
     isChunkLoaded,
     addBlockOptimistically,
+    addBlocksBatch,
     replaceBlockByPosition,
     removeBlockById
   ]);

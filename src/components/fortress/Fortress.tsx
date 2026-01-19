@@ -116,7 +116,7 @@ export function Fortress() {
   
   // Hooks
   const { profile, tokenBalance, inventory, userRoles, addCoins, useBlock, refreshData, collectWispBlock, returnSeed } = useUserData();
-  const { blocks, placeBlock, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks } = useBlocks();
+  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks } = useBlocks();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
@@ -157,7 +157,7 @@ export function Fortress() {
   const { startGrowing, updateTreeId, stopGrowing, isTreeGrowing } = useLocalGrowth({
     worldId: currentWorldId,
     userId: user?.id ?? null,
-    placeBlock,
+    placeBlocksBatch,
   });
   
   // Resume incomplete trees on page load
