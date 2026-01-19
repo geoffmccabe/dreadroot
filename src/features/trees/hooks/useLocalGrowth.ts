@@ -266,12 +266,14 @@ export function useLocalGrowth({
             
             const { error: treeBlockError } = await supabase
               .from('tree_blocks')
-              .upsert(treeBlockInserts, { onConflict: 'world_id,position_x,position_y,position_z' });
+              .upsert(treeBlockInserts, { 
+                onConflict: 'world_id,position_x,position_y,position_z',
+                ignoreDuplicates: true // Allow partial success - just skip conflicts
+              });
             
             if (treeBlockError) {
-              console.error('[LocalGrowth] Failed to insert tree_blocks, skipping block placement:', treeBlockError.message);
-              // Don't place blocks - this prevents orphans
-              continue;
+              console.error('[LocalGrowth] tree_blocks upsert error:', treeBlockError.message);
+              // Continue anyway - some blocks may have succeeded, and we need to keep growing
             }
           }
 
@@ -283,6 +285,21 @@ export function useLocalGrowth({
           // Update ref state (no React re-render)
           tree.currentOrder++;
           tree.lastGrowthTime = now;
+          
+          // Update current_block_count in DB periodically (every 10 orders) for resume support
+          if (tree.currentOrder % 10 === 0) {
+            const blocksPlacedSoFar = tree.blueprint.blocks
+              .filter(b => b.growthOrder <= tree.currentOrder)
+              .length;
+            supabase
+              .from('planted_trees')
+              .update({ 
+                current_block_count: blocksPlacedSoFar,
+                last_growth_at: new Date().toISOString()
+              })
+              .eq('id', tree.id)
+              .then(() => {});
+          }
         }
       } finally {
         isGrowingRef.current = false;

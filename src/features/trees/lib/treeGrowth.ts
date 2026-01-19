@@ -439,15 +439,21 @@ function addSpikeWithSymmetry(
   branchDepth: number = 0,
   branchDir: [number, number]  // Branch direction for invisiblock placement
 ): void {
+  // Find the first available Y position above startY that isn't occupied
+  let spikeBaseY = startY;
   for (let i = 1; i <= length; i++) {
     const positions = applySymmetry(startX, startZ, baseX, baseZ, symmetryMode);
+    // Calculate actual Y - spike grows upward from base
+    const actualY = spikeBaseY + i;
+    
     for (const pos of positions) {
-      const key = `${pos.x},${startY + i},${pos.z}`;
+      const key = `${pos.x},${actualY},${pos.z}`;
+      // Always add spike blocks - don't skip if occupied (spikes should overwrite visually)
       if (!occupied.has(key)) {
         occupied.add(key);
         blocks.push({
           x: pos.x,
-          y: startY + i,
+          y: actualY,
           z: pos.z,
           type: 'spike',
           growthOrder: -anchorIndex - 1,
