@@ -41,6 +41,15 @@ export const fallingBlocksState = new Map<string, { currentY: number; velocity: 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
 
+// Shared geometry for invisiblock outlines (reused across all invisiblocks)
+const invisiblockEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+const invisiblockOutlineMaterial = new THREE.LineBasicMaterial({ 
+  color: new THREE.Color(0.4, 0.4, 0.4), // Subtle grey
+  linewidth: 1,
+  transparent: true,
+  opacity: 0.5
+});
+
 // Component to render all placed blocks with collision detection using instanced rendering
 export const PlacedBlocks: React.FC<{ 
   blocks: PlacedBlock[]; 
@@ -279,6 +288,17 @@ export const PlacedBlocks: React.FC<{
           />
         );
       })}
+      
+      {/* Render subtle grey outlines for invisiblocks */}
+      {invisiblocks.map((block) => (
+        <lineSegments 
+          key={`invisi-outline-${block.id}`} 
+          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
+        >
+          <primitive object={invisiblockEdgesGeometry} attach="geometry" />
+          <primitive object={invisiblockOutlineMaterial} attach="material" />
+        </lineSegments>
+      ))}
     </>
   );
 };
