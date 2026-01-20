@@ -47,7 +47,8 @@ function createParticleMaterial(color: string): THREE.MeshBasicMaterial {
   });
 }
 
-const particleGeometry = new THREE.SphereGeometry(0.015, 6, 6);
+// Base geometry is a unit sphere - we'll scale it to the desired size
+const particleGeometry = new THREE.SphereGeometry(1, 8, 8);
 
 export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   const { scene } = useThree();
@@ -121,15 +122,17 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       mesh.position.copy(position);
       mesh.visible = true;
       
-      const particleSize = finalSize * (0.3 + Math.random() * 0.7);
-      mesh.scale.setScalar(particleSize);
+      // Scale to get 0.25m diameter base, with variation (0.3-1.0x)
+      // finalSize is the diameter, divide by 2 for radius
+      const particleRadius = (finalSize / 2) * (0.3 + Math.random() * 0.7);
+      mesh.scale.setScalar(particleRadius);
       
       particles.push({
         mesh,
         velocity,
         life: lifeDuration * (0.4 + Math.random() * 0.6),
         maxLife: lifeDuration,
-        baseScale: particleSize,
+        baseScale: particleRadius,
       });
     }
     
@@ -164,7 +167,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
           
           // Fade and shrink
           const lifeRatio = Math.max(0, p.life / p.maxLife);
-          const scale = p.baseScale * lifeRatio;
+          const scale = p.baseScale * lifeRatio; // baseScale is already the radius
           p.mesh.scale.setScalar(scale);
           (p.mesh.material as THREE.MeshBasicMaterial).opacity = lifeRatio * 0.9;
         } else {
