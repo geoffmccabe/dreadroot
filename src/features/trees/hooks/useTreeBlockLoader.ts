@@ -39,6 +39,7 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
     // Skip if already loaded for this world
     if (loadedWorldRef.current === worldId) {
       console.log('[TreeBlockLoader] Already loaded for this world, skipping');
+      initLogStep('useTreeBlockLoader.ts', 'Already loaded, skipping');
       return;
     }
 
@@ -50,7 +51,7 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
 
     isLoadingRef.current = true;
     console.log('[TreeBlockLoader] Loading tree blocks for world:', worldId);
-    initLogStep('useTreeBlockLoader.ts', 'Fetching tree blocks from database...');
+    initLogStep('useTreeBlockLoader.ts', 'Querying tree_blocks table...');
 
     try {
       // Fetch all tree blocks for fully-grown trees, joined with seed definitions for textures
@@ -83,19 +84,21 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
 
       if (error) {
         console.error('[TreeBlockLoader] Error fetching tree blocks:', error);
-        initLogStep('useTreeBlockLoader.ts', `Error: ${error.message}`);
+        initLogStep('useTreeBlockLoader.ts', `Query error: ${error.message}`);
         return;
       }
 
+      initLogStep('useTreeBlockLoader.ts', 'Query complete, raw results', treeBlocks?.length || 0);
+
       if (!treeBlocks || treeBlocks.length === 0) {
         console.log('[TreeBlockLoader] No tree blocks found for world');
-        initLogStep('useTreeBlockLoader.ts', 'No tree blocks found', 0);
+        initLogStep('useTreeBlockLoader.ts', 'No fully-grown trees found');
         loadedWorldRef.current = worldId;
         return;
       }
 
       console.log(`[TreeBlockLoader] Found ${treeBlocks.length} tree blocks to load`);
-      initLogStep('useTreeBlockLoader.ts', 'Tree blocks fetched', treeBlocks.length);
+      initLogStep('useTreeBlockLoader.ts', 'Processing tree blocks...');
 
       // Convert tree_blocks to PlacedBlock format
       const placedBlocks: PlacedBlock[] = treeBlocks.map((tb: any) => {
@@ -124,10 +127,17 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
         };
       });
 
+      initLogStep('useTreeBlockLoader.ts', 'Converted to PlacedBlock format', placedBlocks.length);
+
+      // Count unique trees
+      const uniqueTreeIds = new Set(treeBlocks.map((tb: any) => tb.tree_id));
+      initLogStep('useTreeBlockLoader.ts', `Unique trees found`, uniqueTreeIds.size);
+
       // Inject all tree blocks into the chunk loader in one batch
       console.log(`[TreeBlockLoader] Injecting ${placedBlocks.length} tree blocks into chunk loader`);
+      initLogStep('useTreeBlockLoader.ts', 'Injecting into chunk loader...');
       addBlocksBatch(placedBlocks);
-      initLogStep('useTreeBlockLoader.ts', 'Tree blocks injected into chunk loader', placedBlocks.length);
+      initLogStep('useTreeBlockLoader.ts', 'Tree blocks injected', placedBlocks.length);
 
       loadedWorldRef.current = worldId;
       console.log('[TreeBlockLoader] Tree blocks loaded successfully');
