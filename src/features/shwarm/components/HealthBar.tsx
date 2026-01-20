@@ -16,11 +16,11 @@ export function HealthBar({ currentHealth, maxHealth, totalPoints, className }: 
   const [shake, setShake] = useState(false);
   const [prevHealth, setPrevHealth] = useState(currentHealth);
   
-  // Calculate heart display (10 hearts = 100 HP by default)
-  const hpPerHeart = maxHealth / 10;
-  const fullHearts = Math.floor(currentHealth / hpPerHeart);
-  const partialHeart = (currentHealth % hpPerHeart) / hpPerHeart;
-  const emptyHearts = 10 - Math.ceil(currentHealth / hpPerHeart);
+  // Calculate heart display (1 heart = 1 HP)
+  const fullHearts = Math.floor(currentHealth);
+  const partialHeart = currentHealth % 1; // decimal portion (0 to 0.99)
+  const totalHearts = Math.ceil(maxHealth);
+  const emptyHearts = Math.max(0, totalHearts - Math.ceil(currentHealth));
   
   // Shake animation on damage
   useEffect(() => {
