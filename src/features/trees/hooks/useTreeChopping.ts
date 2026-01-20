@@ -1,15 +1,19 @@
 // Hook for chopping down trees and returning seeds to inventory
 // Only the tree owner can chop their tree
+// NEW ARCHITECTURE: Uses delete_tree_with_blocks RPC with blueprint positions
 
 import { useCallback, useRef } from 'react';
-import { PlantedTree, SeedDefinition } from '../types';
+import { supabase } from '@/integrations/supabase/client';
+import { PlantedTree, SeedDefinition, TreeBlueprint, TreeGrowthOptions } from '../types';
 import { deleteTree } from './useLocalGrowth';
 import { useToast } from '@/hooks/use-toast';
 import { blockDB } from '@/hooks/useIndexedDB';
 import { collisionGrid } from '@/lib/spatialHashGrid';
+import { generateTreeBlueprint } from '../lib/treeGrowth';
 
 // Throttle chopping to prevent accidental double-chops
 const CHOP_COOLDOWN_MS = 1000;
+const CHUNK_SIZE = 16;
 
 interface UseTreeChoppingOptions {
   worldId: string | null;
@@ -29,6 +33,25 @@ interface ChopResult {
 }
 
 /**
+ * Build options object from seed definition for tree generation
+ */
+function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
+  return {
+    lowBranchHeight: seedDef.low_branch_height ?? 2,
+    spikeChance: seedDef.spike_chance ?? 0,
+    spikeLength: seedDef.spike_length ?? 3,
+    nobChance: seedDef.nob_chance ?? 0,
+    nobSize: seedDef.nob_size ?? 1,
+    crossChance: seedDef.cross_chance ?? 0,
+    crossLength: seedDef.cross_length ?? 3,
+    shroomChance: seedDef.shroom_chance ?? 0,
+    shroomLength: seedDef.shroom_length ?? 5,
+    shroomCapDiameter: seedDef.shroom_cap_diameter ?? 3,
+    symmetry: seedDef.symmetry ?? 'none',
+  };
+}
+
+/**
  * Find which tree a block at the given position belongs to
  * Uses the planted_trees base positions and regenerates blueprint to check
  */
@@ -39,9 +62,6 @@ function findTreeAtPosition(
   plantedTrees: PlantedTree[]
 ): PlantedTree | null {
   // A block belongs to a tree if it's within the tree's potential bounds
-  // For efficiency, we check if the block is near any tree's base
-  // Trees grow upward and branch outward, so check a reasonable radius
-  
   for (const tree of plantedTrees) {
     const dx = Math.abs(x - tree.base_x);
     const dy = y - tree.base_y; // y should be at or above base
@@ -78,6 +98,40 @@ async function playAxeChopSound(): Promise<void> {
   }
 }
 
+/**
+ * Get block positions for a tree - tries blueprint table first, then regenerates
+ */
+async function getTreeBlockPositions(
+  tree: PlantedTree,
+  seedDef: SeedDefinition
+): Promise<{ x: number; y: number; z: number }[]> {
+  // First try to get blueprint from tree_blueprints table
+  const { data: blueprintData } = await supabase
+    .from('tree_blueprints')
+    .select('blueprint_data')
+    .eq('planted_tree_id', tree.id)
+    .maybeSingle();
+
+  if (blueprintData?.blueprint_data) {
+    const bp = blueprintData.blueprint_data as { blocks: Array<{ x: number; y: number; z: number }> };
+    return bp.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
+  }
+
+  // Fallback: regenerate blueprint
+  const blueprint = generateTreeBlueprint(
+    tree.base_x,
+    tree.base_y,
+    tree.base_z,
+    seedDef.tier,
+    seedDef.width_factor,
+    seedDef.branching_factor,
+    tree.growth_seed,
+    buildGrowthOptions(seedDef)
+  );
+  
+  return blueprint.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
+}
+
 export function useTreeChopping({
   worldId,
   userId,
@@ -91,14 +145,10 @@ export function useTreeChopping({
   const { toast } = useToast();
   const lastChopTimeRef = useRef(0);
   const isChoppingRef = useRef(false);
-  
-  const CHUNK_SIZE = 16; // Match the chunk size used in the game
 
   /**
    * Attempt to chop a tree at the given block position
-   * Returns success if the tree was owned by the user and successfully chopped
-   * 
-   * PERFORMANCE: Uses fast-path bulk removal for instant tree disappearance
+   * Uses delete_tree_with_blocks RPC for ownership-verified deletion
    */
   const chopTreeAtPosition = useCallback(async (
     blockX: number,
@@ -147,13 +197,12 @@ export function useTreeChopping({
 
     try {
       // CRITICAL: Stop local growth FIRST to prevent new blocks from being placed
-      // This prevents the tree from growing back after we delete it
       stopGrowing?.(tree.id);
 
       // Play axe chop sound
       await playAxeChopSound();
 
-      // Delete the tree using FAST PATH (instant local removal + background DB cleanup)
+      // Delete the tree using the new architecture (RPC with ownership check)
       const deleteResult = await deleteTree(tree, seedDef, removeBlocksByPositions);
 
       if (!deleteResult.success) {
@@ -180,13 +229,12 @@ export function useTreeChopping({
         });
       }
 
-      // Clear IndexedDB cache for the affected chunk to prevent ghost blocks
+      // Clear IndexedDB cache for the affected chunk
       const chunkX = Math.floor(tree.base_x / CHUNK_SIZE);
       const chunkZ = Math.floor(tree.base_z / CHUNK_SIZE);
       
       if (worldId) {
         try {
-          // Clear the entire world cache to ensure no stale data
           await blockDB.clearCachedChunksForWorld(worldId);
           console.log(`[TreeChopping] Cleared IndexedDB cache for world ${worldId}`);
         } catch (cacheError) {
@@ -194,7 +242,7 @@ export function useTreeChopping({
         }
       }
 
-      // Refresh the affected chunk from the database - this will rebuild correct colliders
+      // Refresh the affected chunk from the database
       await refetchChunk(chunkX, chunkZ);
       
       // Also refetch adjacent chunks if tree could have spanned across chunk boundaries

@@ -6,7 +6,6 @@ import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
 import { collisionGrid } from '@/lib/spatialHashGrid';
-import { useTreeBlockLoader } from '@/features/trees/hooks/useTreeBlockLoader';
 import { initLogStep, initLogStart, initLogFinish } from '@/contexts/InitializationContext';
 import * as THREE from 'three';
 interface DBBlock extends PlacedBlock {
@@ -146,12 +145,6 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   const chunkLoaderRef = useRef(chunkLoader);
   chunkLoaderRef.current = chunkLoader;
   
-  // Tree block loader - loads pre-existing tree blocks from tree_blocks table
-  const { loadTreeBlocks, reset: resetTreeLoader } = useTreeBlockLoader({
-    worldId,
-    addBlocksBatch: chunkLoader.addBlocksBatch,
-  });
-  
   // Track if we've initialized for the current world
   const initializedWorldRef = useRef<string | null>(null);
 
@@ -193,13 +186,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       console.log('[InitCache] initializeForWorld complete');
       initLogStep('usePlacedBlocksWithCache.ts', 'Chunk loader initialization complete');
       
-      // Load pre-existing tree blocks from tree_blocks table
-      // This runs AFTER chunks are loaded so trees appear immediately
-      console.log('[InitCache] Loading tree blocks');
-      initLogStep('usePlacedBlocksWithCache.ts', 'Starting tree block loader...');
-      await loadTreeBlocks();
-      console.log('[InitCache] Tree blocks loaded');
-      initLogStep('usePlacedBlocksWithCache.ts', 'Tree block loader complete');
+      // NEW ARCHITECTURE: Tree blocks are now in placed_blocks, loaded by chunk loader
+      // No separate tree block loading needed
       
       // Set up realtime subscription
       initLogStep('usePlacedBlocksWithCache.ts', 'Setting up realtime subscription...');
@@ -215,7 +203,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     } finally {
       setIsLoading(false);
     }
-  }, [userId, worldId, initDB, loadTreeBlocks]);
+  }, [userId, worldId, initDB]);
 
   // Phase 2C: chunk_versions realtime subscription
   // Per-chunk debounce timers to coalesce rapid updates
@@ -341,10 +329,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       currentWorldIdRef.current = worldId;
       // Reset initialization tracking for new world
       initializedWorldRef.current = null;
-      // Reset tree loader so it reloads trees for the new world
-      resetTreeLoader();
     }
-  }, [worldId, resetTreeLoader]);
+  }, [worldId]);
 
   // Main initialization effect - runs once per world
   useEffect(() => {
@@ -477,11 +463,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       local_id: tempId
     };
     
-    // Non-blocking: add to IndexedDB then sync (but NOT for tree blocks)
-    const isTreeBlock = TREE_BLOCK_TYPES.includes(blockType);
+    // Non-blocking: add to IndexedDB then sync
+    // NEW ARCHITECTURE: Tree blocks now go to placed_blocks like all other blocks
     addBlock(dbBlock).then(() => {
-      // CRITICAL: Don't sync tree blocks to placed_blocks - they go to tree_blocks table
-      if (!isBlockModeRef.current && !isTreeBlock) {
+      if (!isBlockModeRef.current) {
         syncBlockToSupabase(dbBlock).catch(() => {});
       }
     }).catch(() => {});
@@ -625,11 +610,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
   }, [getCachedUserId, removeFromDB, updateBlock]);
 
-  // Tree block types that should NEVER be synced to placed_blocks
-  // Tree blocks are managed by useLocalGrowth and go to tree_blocks table instead
-  const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'];
-
   // Batch sync unsynced blocks
+  // NEW ARCHITECTURE: All blocks (including tree blocks) now sync to placed_blocks
   const batchSyncBlocks = async () => {
     try {
       const unsyncedBlocks = await getUnsyncedBlocks();
@@ -637,13 +619,6 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       for (const block of unsyncedBlocks) {
         try {
-          // CRITICAL: Skip tree-type blocks - they're managed by useLocalGrowth
-          // and should only exist in tree_blocks table, not placed_blocks
-          if (TREE_BLOCK_TYPES.includes(block.block_type)) {
-            // Just mark as synced in IndexedDB without writing to placed_blocks
-            await updateBlock(block.id, { synced: true });
-            continue;
-          }
           await syncBlockToSupabase(block);
         } catch (error) {}
       }
@@ -714,6 +689,26 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       }
       
       await removeFromDB(blockId);
+      
+      // Phase 6: Add to overlap check queue for tree hole filling
+      // Only for blocks above ground level (y > 0)
+      if (worldId && blockToRemove.position_y > 0) {
+        // Fire-and-forget: don't await, don't block UI
+        (async () => {
+          try {
+            await supabase
+              .from('overlap_check_queue')
+              .upsert({
+                world_id: worldId,
+                position_x: Math.floor(blockToRemove.position_x),
+                position_y: Math.floor(blockToRemove.position_y),
+                position_z: Math.floor(blockToRemove.position_z),
+              }, { onConflict: 'world_id,position_x,position_y,position_z' });
+          } catch {
+            // Silently ignore errors
+          }
+        })();
+      }
       
       toast({
         title: "Block removed",

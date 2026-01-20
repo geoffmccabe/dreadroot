@@ -8,3 +8,6 @@ verify_jwt = true
 
 [functions.cleanup-ghost-trees]
 verify_jwt = true
+
+[functions.fill-tree-holes]
+verify_jwt = false
