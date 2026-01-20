@@ -1,12 +1,12 @@
 /**
  * Level progression system
  * 30 levels with exponential point requirements
- * Level 2 = 100 points, each subsequent level = previous * 1.5
+ * Level 1 = 0, Level 2 = 100, each subsequent level = previous * 2
  */
 
 export const MAX_LEVEL = 30;
 export const BASE_POINTS_FOR_LEVEL_2 = 100;
-export const POINTS_MULTIPLIER = 1.5;
+export const POINTS_MULTIPLIER = 2;
 
 // Pre-calculate point requirements for all levels
 const levelPointRequirements: number[] = [];
@@ -15,7 +15,7 @@ export function calculatePointsForLevel(level: number): number {
   if (level <= 1) return 0;
   if (level === 2) return BASE_POINTS_FOR_LEVEL_2;
   
-  // Points = 100 * 1.5^(level-2)
+  // Points = 100 * 2^(level-2) → L3=200, L4=400, L5=800, etc.
   return Math.floor(BASE_POINTS_FOR_LEVEL_2 * Math.pow(POINTS_MULTIPLIER, level - 2));
 }
 
