@@ -865,23 +865,44 @@ export function Fortress() {
             }
             }}
           onShwarmGroupKilled={async (tier) => {
+            console.log(`[Fortress] Shwarm group killed - tier ${tier}, user: ${user?.id}`);
+            if (!user?.id) {
+              console.error('[Fortress] Cannot track kill - no user ID');
+              return;
+            }
+            
             // Increment kill count in database
-            const { data: existing } = await supabase
+            const { data: existing, error: fetchError } = await supabase
               .from('user_combat_stats')
               .select('*')
-              .eq('user_id', user?.id)
+              .eq('user_id', user.id)
               .eq('enemy_type', `shwarm_t${tier}`)
               .maybeSingle();
             
+            if (fetchError) {
+              console.error('[Fortress] Error fetching combat stats:', fetchError);
+              return;
+            }
+            
             if (existing) {
-              await supabase
+              const { error: updateError } = await supabase
                 .from('user_combat_stats')
                 .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
                 .eq('id', existing.id);
-            } else if (user?.id) {
-              await supabase
+              if (updateError) {
+                console.error('[Fortress] Error updating kill count:', updateError);
+              } else {
+                console.log(`[Fortress] Updated kills for shwarm_t${tier}: ${existing.kills + 1}`);
+              }
+            } else {
+              const { error: insertError } = await supabase
                 .from('user_combat_stats')
                 .insert({ user_id: user.id, enemy_type: `shwarm_t${tier}`, kills: 1 });
+              if (insertError) {
+                console.error('[Fortress] Error inserting kill count:', insertError);
+              } else {
+                console.log(`[Fortress] Inserted first kill for shwarm_t${tier}`);
+              }
             }
           }}
           respawnPosition={respawnPosition}
