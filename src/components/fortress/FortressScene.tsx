@@ -613,32 +613,24 @@ export function FortressScene({
     // Bullet starts exactly at camera position
     bullet.position.copy(origin);
     
-    // CRITICAL FIX FOR BELOW-HORIZON AIMING:
-    // The horizontal direction must be normalized separately to maintain constant horizontal speed
-    // Otherwise, aiming down reduces horizontal speed (making bullets land short)
-    const horizontalLen = Math.sqrt(normalizedDir.x * normalizedDir.x + normalizedDir.z * normalizedDir.z);
+    // MUZZLE VELOCITY: 100 m/s in the exact direction the player is aiming
+    // The bullet travels as a projectile with gravity applied to Y velocity
+    const MUZZLE_VELOCITY = 100; // meters per second
     
-    // Store normalized HORIZONTAL direction (X and Z only, normalized to length 1)
-    if (horizontalLen > 0.0001) {
-      bullet.direction.set(
-        normalizedDir.x / horizontalLen,  // Normalize X to horizontal plane
-        0,                                  // Y is handled by velocityY
-        normalizedDir.z / horizontalLen   // Normalize Z to horizontal plane
-      );
-    } else {
-      // Shooting straight up/down - no horizontal movement
-      bullet.direction.set(0, 0, 0);
-    }
+    // Store the FULL normalized direction for movement
+    bullet.direction.copy(normalizedDir);
     
-    // Horizontal speed is constant (100 units/sec) scaled by how horizontal the aim is
-    // When aiming at 45° down, horizontalLen ≈ 0.707, so horizontal speed = 70.7
-    // This is physically correct - the bullet's total velocity is still 100, just angled
-    const BULLET_SPEED = 100;
-    bullet.speed = BULLET_SPEED * horizontalLen;  // Horizontal component of total speed
+    // Speed is the muzzle velocity (horizontal component calculated during movement)
+    bullet.speed = MUZZLE_VELOCITY;
     
-    // Initial Y velocity = speed * vertical component of direction
+    // Initial Y velocity = muzzle velocity * vertical component of direction
     // This gets modified by gravity each frame
-    bullet.velocityY = normalizedDir.y * BULLET_SPEED;
+    bullet.velocityY = normalizedDir.y * MUZZLE_VELOCITY;
+    
+    // DEBUG: Log bullet physics
+    console.log('[Bullet] Fired with muzzle velocity:', MUZZLE_VELOCITY, 
+      'direction:', normalizedDir.x.toFixed(3), normalizedDir.y.toFixed(3), normalizedDir.z.toFixed(3),
+      'velocityY:', bullet.velocityY.toFixed(2));
     
     bullet.life = 5.0;
     bullet.tier = 1;
@@ -699,10 +691,11 @@ export function FortressScene({
         // Apply gravity to Y velocity
         bullet.velocityY -= BULLET_GRAVITY * delta;
         
-        // Update position:
-        // - direction is the HORIZONTAL direction (normalized X/Z only)
-        // - speed is the HORIZONTAL speed component
-        // - velocityY handles vertical movement with gravity
+        // Update position using projectile physics:
+        // - X and Z move based on the horizontal components of the aim direction
+        // - Y uses velocityY which includes gravity
+        // direction is the FULL normalized aim direction (x,y,z)
+        // speed is the muzzle velocity (100 m/s)
         bullet.position.x += bullet.direction.x * bullet.speed * delta;
         bullet.position.z += bullet.direction.z * bullet.speed * delta;
         bullet.position.y += bullet.velocityY * delta;
