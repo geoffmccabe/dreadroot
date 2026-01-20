@@ -66,41 +66,41 @@ const App = () => (
         <CoinThemeProvider>
           <InitializationProvider>
             <InitializationOverlay />
-            <BlocksProvider>
-              <AvatarProvider>
-                <UserPanelProvider>
-                  <AdminPanelProvider>
-                    <BulletDefinitionsProvider>
-                    <Toaster />
-                    <Sonner />
-                    <BrowserRouter>
-                      <Routes>
-                        <Route path="/clear-session" element={<ClearSession />} />
-                        <Route 
-                          path="/" 
-                          element={
-                            <ProtectedRoute>
-                              <Index />
-                            </ProtectedRoute>
-                          } 
-                        />
-                        <Route 
-                          path="/auth" 
-                          element={
-                            <AuthRoute>
-                              <Auth />
-                            </AuthRoute>
-                          } 
-                        />
-                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                        <Route path="*" element={<NotFound />} />
-                      </Routes>
-                    </BrowserRouter>
-                    </BulletDefinitionsProvider>
-                  </AdminPanelProvider>
-                </UserPanelProvider>
-              </AvatarProvider>
-            </BlocksProvider>
+            <BulletDefinitionsProvider>
+              <BlocksProvider>
+                <AvatarProvider>
+                  <UserPanelProvider>
+                    <AdminPanelProvider>
+                      <Toaster />
+                      <Sonner />
+                      <BrowserRouter>
+                        <Routes>
+                          <Route path="/clear-session" element={<ClearSession />} />
+                          <Route 
+                            path="/" 
+                            element={
+                              <ProtectedRoute>
+                                <Index />
+                              </ProtectedRoute>
+                            } 
+                          />
+                          <Route 
+                            path="/auth" 
+                            element={
+                              <AuthRoute>
+                                <Auth />
+                              </AuthRoute>
+                            } 
+                          />
+                          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                          <Route path="*" element={<NotFound />} />
+                        </Routes>
+                      </BrowserRouter>
+                    </AdminPanelProvider>
+                  </UserPanelProvider>
+                </AvatarProvider>
+              </BlocksProvider>
+            </BulletDefinitionsProvider>
           </InitializationProvider>
         </CoinThemeProvider>
       </TooltipProvider>
