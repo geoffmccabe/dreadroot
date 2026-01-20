@@ -52,6 +52,7 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
     try {
       // Fetch all tree blocks for fully-grown trees, joined with seed definitions for textures
       // We need: position, block_type, texture from seed_definition
+      // Use explicit FK name to avoid ambiguity (there are 2 FKs between tree_blocks and planted_trees)
       const { data: treeBlocks, error } = await supabase
         .from('tree_blocks')
         .select(`
@@ -64,7 +65,7 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
           block_type,
           growth_order,
           created_at,
-          planted_trees!inner (
+          planted_trees!fk_tree_blocks_planted_trees (
             id,
             is_fully_grown,
             seed_definition_id,
