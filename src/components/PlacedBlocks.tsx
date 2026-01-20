@@ -6,6 +6,7 @@ import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } 
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 import { collisionGrid } from '@/lib/spatialHashGrid';
+import { isInvisiblock } from '@/features/trees/lib/blockTypeEncoder';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
 // Use white color so textures render at full brightness without tinting
@@ -207,7 +208,8 @@ export const PlacedBlocks: React.FC<{
       seenIds.add(block.id);
       
       // Invisiblocks go to separate array for collision-only handling
-      if (block.block_type === 'invisiblock') {
+      // Uses helper to catch both 'invisiblock' and encoded 'invisiblock_0_5'
+      if (isInvisiblock(block.block_type)) {
         invisibleBlocks.push(block);
         return;
       }

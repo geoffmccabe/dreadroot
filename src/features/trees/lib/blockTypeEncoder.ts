@@ -80,29 +80,66 @@ export function decodeBlockType(encoded: string): DecodedBlockType | null {
 
 /**
  * Checks if a block_type string represents a tree block
+ * Handles both simple types ('trunk') and encoded types ('trunk_-1_5')
  */
 export function isTreeBlockType(blockType: string): boolean {
-  const decoded = decodeBlockType(blockType);
-  if (!decoded) {
-    // Check if it's a simple tree block type without encoding
-    return TREE_BLOCK_TYPES.includes(blockType as TreeBlockType);
+  if (!blockType) return false;
+  
+  // First check simple types directly
+  if (TREE_BLOCK_TYPES.includes(blockType as TreeBlockType)) {
+    return true;
   }
-  return TREE_BLOCK_TYPES.includes(decoded.type as TreeBlockType);
+  
+  // Try decoding - works for encoded types like 'trunk_-1_5'
+  const decoded = decodeBlockType(blockType);
+  if (decoded) {
+    return TREE_BLOCK_TYPES.includes(decoded.type as TreeBlockType);
+  }
+  
+  // Check if blockType STARTS with a tree block type followed by underscore
+  // This catches cases like 'trunk_-1_5' that may not decode properly
+  for (const treeType of TREE_BLOCK_TYPES) {
+    if (blockType === treeType || blockType.startsWith(`${treeType}_`)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 /**
  * Gets the base tree block type from an encoded or simple block_type
+ * Returns the base type like 'trunk', 'branch', 'invisiblock' etc.
  */
 export function getBaseTreeBlockType(blockType: string): string | null {
-  const decoded = decodeBlockType(blockType);
-  if (decoded) {
-    return decoded.type;
-  }
+  if (!blockType) return null;
+  
   // Check if it's already a simple tree block type
   if (TREE_BLOCK_TYPES.includes(blockType as TreeBlockType)) {
     return blockType;
   }
+  
+  // Try decoding
+  const decoded = decodeBlockType(blockType);
+  if (decoded) {
+    return decoded.type;
+  }
+  
+  // Fallback: check prefix matching for tree types
+  for (const treeType of TREE_BLOCK_TYPES) {
+    if (blockType.startsWith(`${treeType}_`)) {
+      return treeType;
+    }
+  }
+  
   return null;
+}
+
+/**
+ * Check if a block_type is an invisiblock (encoded or simple)
+ */
+export function isInvisiblock(blockType: string): boolean {
+  return getBaseTreeBlockType(blockType) === 'invisiblock';
 }
 
 /**

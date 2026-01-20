@@ -183,7 +183,7 @@ export function Fortress() {
           .maybeSingle();
         
         if (!treeExists) {
-          console.log(`[Fortress] Tree ${tree.id} no longer exists in DB, skipping resume`);
+          // Tree no longer exists in DB, skip resume
           return;
         }
         
@@ -197,7 +197,7 @@ export function Fortress() {
           .maybeSingle();
         
         const startOrder = maxOrderData?.growth_order ?? 0;
-        console.log(`[Fortress] Resuming tree ${tree.id} from order ${startOrder + 1}`);
+        // Resume tree growth from last order
         startGrowing(tree.id, seedDef, tree.base_x, tree.base_y, tree.base_z, tree.growth_seed, startOrder + 1);
       })();
     }
@@ -436,7 +436,6 @@ export function Fortress() {
         : new Date(Date.now() + blockLifeMinutes * 60 * 1000).toISOString();
       
       const placedBlock = placeBlock(pos.x, targetY, pos.z, pos.type, expiresAt);
-      console.log('Placed block', currentIndex, ':', placedBlock?.id, 'at', pos.x, targetY, pos.z);
       
       if (placedBlock) {
         // Set falling state - blocks will fall from sky
@@ -902,8 +901,6 @@ export function Fortress() {
                 .eq('id', existing.id);
               if (updateError) {
                 console.error('[Fortress] Error updating kill count:', updateError);
-              } else {
-                console.log(`[Fortress] Updated kills for shwarm_t${tier}: ${existing.kills + 1}`);
               }
             } else {
               const { error: insertError } = await supabase
@@ -911,8 +908,6 @@ export function Fortress() {
                 .insert({ user_id: user.id, enemy_type: `shwarm_t${tier}`, kills: 1 });
               if (insertError) {
                 console.error('[Fortress] Error inserting kill count:', insertError);
-              } else {
-                console.log(`[Fortress] Inserted first kill for shwarm_t${tier}`);
               }
             }
           }}
