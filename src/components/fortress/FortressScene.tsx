@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
@@ -592,6 +593,9 @@ export function FortressScene({
     return false;
   }, [wispState, camera, collectWisp, collectWispBlock, wispPositionRef, playAudio, toast]);
 
+  // Get bullet definitions for impact effects
+  const { getDefinition } = useBulletDefinitions();
+  
   const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3) => {
     if (await checkWispHit()) return;
     
@@ -607,24 +611,17 @@ export function FortressScene({
     // Bullet starts exactly at camera position
     bullet.position.copy(origin);
     
-    // Store full 3D direction - DO NOT separate horizontal/vertical
-    // This preserves accurate aim direction for all angles including below horizon
+    // CRITICAL: Store the FULL 3D direction for movement
+    // The bullet moves along this exact direction vector - no separation of components
     bullet.direction.copy(normalizedDir);
     
-    // Initial Y velocity from the actual aim direction
-    bullet.velocityY = normalizedDir.y * 100;
+    // Speed is the total magnitude (100 units/sec in the aim direction)
+    const BULLET_SPEED = 100;
+    bullet.speed = BULLET_SPEED;
     
-    // Horizontal speed based on horizontal component of direction
-    const horizontalLen = Math.sqrt(normalizedDir.x * normalizedDir.x + normalizedDir.z * normalizedDir.z);
-    bullet.speed = horizontalLen * 100;
-    
-    // Normalize horizontal direction for movement (but keep full Y in velocityY)
-    if (horizontalLen > 0.0001) {
-      bullet.direction.set(normalizedDir.x / horizontalLen, 0, normalizedDir.z / horizontalLen);
-    } else {
-      // Aiming straight up/down - minimal horizontal movement
-      bullet.direction.set(0, 0, 0);
-    }
+    // Initial Y velocity = speed * vertical component of direction
+    // This gets modified by gravity each frame
+    bullet.velocityY = normalizedDir.y * BULLET_SPEED;
     
     bullet.life = 5.0;
     bullet.tier = 1;
@@ -685,9 +682,16 @@ export function FortressScene({
         // Apply gravity to Y velocity
         bullet.velocityY -= BULLET_GRAVITY * delta;
         
-        // Update position with physics
-        bullet.position.x += bullet.direction.x * bullet.speed * delta;
-        bullet.position.z += bullet.direction.z * bullet.speed * delta;
+        // Update position using FULL 3D direction
+        // The direction vector contains X, Y, Z components from original aim
+        // But Y gets overridden by velocityY which includes gravity
+        const horizontalLen = Math.sqrt(bullet.direction.x * bullet.direction.x + bullet.direction.z * bullet.direction.z);
+        if (horizontalLen > 0.0001) {
+          // Scale horizontal movement by the horizontal component of direction
+          bullet.position.x += (bullet.direction.x / horizontalLen) * bullet.speed * horizontalLen * delta;
+          bullet.position.z += (bullet.direction.z / horizontalLen) * bullet.speed * horizontalLen * delta;
+        }
+        // Y is controlled by velocityY (which started as direction.y * speed, then gets gravity)
         bullet.position.y += bullet.velocityY * delta;
         
         bullet.life -= delta;
@@ -916,12 +920,15 @@ export function FortressScene({
                 const hitY = prevY + ndy * tMin;
                 const hitZ = prevZ + ndz * tMin;
                 
-                // Spawn impact effect at hit position with bullet properties
+                // Spawn impact effect at hit position with bullet tier settings from context
                 if (bulletImpactsRef.current) {
                   const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                  const tierDef = getDefinition(bullet.tier);
                   bulletImpactsRef.current.spawnImpact(hitPos, {
-                    colors: [bullet.color],
-                    size: 0.25,
+                    colors: tierDef.colors,
+                    size: tierDef.burn_width,
+                    height: tierDef.burn_height,
+                    duration: tierDef.burn_time,
                     tier: bullet.tier,
                   });
                 }
@@ -934,13 +941,16 @@ export function FortressScene({
               hit = true;
               needsBulletRender = true;
               
-              // Spawn impact effect at ground level
+              // Spawn impact effect at ground level with bullet tier settings from context
               if (bulletImpactsRef.current) {
                 const groundPos = bullet.position.clone();
                 groundPos.y = 0.1; // Slightly above ground
+                const tierDef = getDefinition(bullet.tier);
                 bulletImpactsRef.current.spawnImpact(groundPos, {
-                  colors: [bullet.color],
-                  size: 0.25,
+                  colors: tierDef.colors,
+                  size: tierDef.burn_width,
+                  height: tierDef.burn_height,
+                  duration: tierDef.burn_time,
                   tier: bullet.tier,
                 });
               }
