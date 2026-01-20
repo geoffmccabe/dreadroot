@@ -115,10 +115,12 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       const geometry = new particleFire.Geometry(radius, height, particleCount);
       const material = new particleFire.Material({ color: hexToNumber(color) });
       
-      // Fix grey fringe: use additive blending and disable depth write
-      material.blending = THREE.AdditiveBlending;
-      material.depthWrite = false;
-      material.transparent = true;
+      // Fix grey fringe: configure material BEFORE creating Points
+      // AdditiveBlending makes particles add light rather than obscure background
+      (material as any).blending = THREE.AdditiveBlending;
+      (material as any).depthWrite = false;
+      (material as any).transparent = true;
+      (material as any).alphaTest = 0.001; // Discard nearly-transparent fragments
       
       if (camera instanceof THREE.PerspectiveCamera) {
         material.setPerspective(camera.fov, window.innerHeight);
@@ -126,6 +128,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
 
       const firePoints = new THREE.Points(geometry, material);
       firePoints.position.copy(pos);
+      firePoints.renderOrder = 999; // Render on top
       scene.add(firePoints);
 
       return {

@@ -593,8 +593,10 @@ export function FortressScene({
     return false;
   }, [wispState, camera, collectWisp, collectWispBlock, wispPositionRef, playAudio, toast]);
 
-  // Get bullet definitions for impact effects
+  // Get bullet definitions for impact effects - use ref to avoid stale closure in useFrame
   const { getDefinition } = useBulletDefinitions();
+  const getDefinitionRef = useRef(getDefinition);
+  getDefinitionRef.current = getDefinition;
   
   const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3) => {
     if (await checkWispHit()) return;
@@ -682,15 +684,11 @@ export function FortressScene({
         // Apply gravity to Y velocity
         bullet.velocityY -= BULLET_GRAVITY * delta;
         
-        // Update position using FULL 3D direction
-        // The direction vector contains X, Y, Z components from original aim
-        // But Y gets overridden by velocityY which includes gravity
-        const horizontalLen = Math.sqrt(bullet.direction.x * bullet.direction.x + bullet.direction.z * bullet.direction.z);
-        if (horizontalLen > 0.0001) {
-          // Scale horizontal movement by the horizontal component of direction
-          bullet.position.x += (bullet.direction.x / horizontalLen) * bullet.speed * horizontalLen * delta;
-          bullet.position.z += (bullet.direction.z / horizontalLen) * bullet.speed * horizontalLen * delta;
-        }
+        // Update position using the stored direction components directly
+        // The direction vector is already normalized, so multiply by speed * delta
+        // X and Z use the original direction components unchanged
+        bullet.position.x += bullet.direction.x * bullet.speed * delta;
+        bullet.position.z += bullet.direction.z * bullet.speed * delta;
         // Y is controlled by velocityY (which started as direction.y * speed, then gets gravity)
         bullet.position.y += bullet.velocityY * delta;
         
@@ -923,7 +921,7 @@ export function FortressScene({
                 // Spawn impact effect at hit position with bullet tier settings from context
                 if (bulletImpactsRef.current) {
                   const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
-                  const tierDef = getDefinition(bullet.tier);
+                  const tierDef = getDefinitionRef.current(bullet.tier);
                   bulletImpactsRef.current.spawnImpact(hitPos, {
                     colors: tierDef.colors,
                     size: tierDef.burn_width,
@@ -945,7 +943,7 @@ export function FortressScene({
               if (bulletImpactsRef.current) {
                 const groundPos = bullet.position.clone();
                 groundPos.y = 0.1; // Slightly above ground
-                const tierDef = getDefinition(bullet.tier);
+                const tierDef = getDefinitionRef.current(bullet.tier);
                 bulletImpactsRef.current.spawnImpact(groundPos, {
                   colors: tierDef.colors,
                   size: tierDef.burn_width,
