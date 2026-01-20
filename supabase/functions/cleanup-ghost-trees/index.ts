@@ -6,27 +6,38 @@ const corsHeaders = {
 }
 
 // Base tree block types - also matches encoded format type_depth_tier
+// Includes short codes from new encoding: t, b, l, s, n, x, sm, ss, sc, ib, f
 const TREE_BLOCK_BASE_TYPES = [
   'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
   'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
 ]
 
+const TREE_BLOCK_SHORT_CODES = ['t', 'b', 'l', 'f', 's', 'n', 'x', 'sm', 'ss', 'sc', 'ib']
+
 /**
  * Check if a block_type is a tree block type (supports encoded format type_depth_tier)
  */
 function isTreeBlockType(blockType: string): boolean {
-  // Direct match
+  // Direct match for legacy types
   if (TREE_BLOCK_BASE_TYPES.includes(blockType)) return true;
   
-  // Encoded format: type_depth_tier (e.g., trunk_0_5, branch_2_3)
+  // Check if it's a short code directly
+  if (TREE_BLOCK_SHORT_CODES.includes(blockType)) return true;
+  
+  // Encoded format: type_depth_tier (e.g., trunk_0_5, branch_2_3, t_-1_19)
   const parts = blockType.split('_');
   if (parts.length >= 2) {
     const baseType = parts[0];
+    
+    // Check short codes first (most common in new architecture)
+    if (TREE_BLOCK_SHORT_CODES.includes(baseType)) return true;
+    
     // Handle compound types like shroom_stem, shroom_cap
     if (parts[0] === 'shroom' && (parts[1] === 'stem' || parts[1] === 'cap')) {
-      const compoundType = `${parts[0]}_${parts[1]}`;
-      return TREE_BLOCK_BASE_TYPES.includes(compoundType);
+      return true;
     }
+    
+    // Check full type names
     return TREE_BLOCK_BASE_TYPES.includes(baseType);
   }
   
@@ -96,11 +107,11 @@ Deno.serve(async (req) => {
       })
     }
 
-    console.log('Admin verified, starting COMPREHENSIVE ghost tree cleanup...')
+    console.log('Admin verified, starting ghost tree cleanup (NEW ARCHITECTURE)...')
 
     const stats = {
       planted_trees_preserved: 0,
-      orphan_tree_blocks_deleted: 0,
+      blueprints_checked: 0,
       orphan_placed_blocks_deleted: 0,
       tree_fruits_deleted: 0,
     }
@@ -108,7 +119,7 @@ Deno.serve(async (req) => {
     // STEP 1: Get all valid tree IDs from planted_trees (source of truth)
     const { data: validTrees, error: validTreesError } = await supabaseAdmin
       .from('planted_trees')
-      .select('id')
+      .select('id, base_x, base_y, base_z')
 
     if (validTreesError) {
       console.error('Error fetching planted_trees:', validTreesError)
@@ -119,35 +130,38 @@ Deno.serve(async (req) => {
     stats.planted_trees_preserved = validTreeIds.size
     console.log(`Found ${validTreeIds.size} legitimate trees in planted_trees`)
 
-    // STEP 2: Delete orphan tree_blocks (those referencing non-existent trees)
-    const { data: allTreeBlocks, error: treeBlocksError } = await supabaseAdmin
-      .from('tree_blocks')
-      .select('id, tree_id')
+    // STEP 2: Get all tree blueprints to find valid block positions
+    // NEW ARCHITECTURE: tree_blueprints is the source of truth for block positions
+    const { data: blueprints, error: bpError } = await supabaseAdmin
+      .from('tree_blueprints')
+      .select('planted_tree_id, blueprint_data')
 
-    if (treeBlocksError) {
-      console.error('Error fetching tree_blocks:', treeBlocksError)
-      throw treeBlocksError
+    if (bpError) {
+      console.error('Error fetching tree_blueprints:', bpError)
+      throw bpError
     }
 
-    const orphanTreeBlockIds = (allTreeBlocks || [])
-      .filter(tb => !validTreeIds.has(tb.tree_id))
-      .map(tb => tb.id)
+    stats.blueprints_checked = (blueprints || []).length
+    console.log(`Found ${stats.blueprints_checked} tree blueprints`)
 
-    if (orphanTreeBlockIds.length > 0) {
-      for (let i = 0; i < orphanTreeBlockIds.length; i += 500) {
-        const batch = orphanTreeBlockIds.slice(i, i + 500)
-        const { error } = await supabaseAdmin
-          .from('tree_blocks')
-          .delete()
-          .in('id', batch)
-        if (error) {
-          console.error('Error deleting orphan tree_blocks batch:', error)
-        } else {
-          stats.orphan_tree_blocks_deleted += batch.length
+    // Build set of valid block positions from blueprints
+    const validBlockKeys = new Set<string>()
+    for (const bp of blueprints || []) {
+      if (!validTreeIds.has(bp.planted_tree_id)) continue; // Skip orphaned blueprints
+      
+      const data = bp.blueprint_data as { blocks?: Array<{ x: number; y: number; z: number }> }
+      if (data?.blocks) {
+        for (const block of data.blocks) {
+          // We need world_id - get it from planted_trees
+          const tree = validTrees?.find(t => t.id === bp.planted_tree_id)
+          if (tree) {
+            // Use a generic world key since blueprints don't store world_id
+            validBlockKeys.add(`${block.x},${block.y},${block.z}`)
+          }
         }
       }
-      console.log(`Deleted ${stats.orphan_tree_blocks_deleted} orphan tree_blocks`)
     }
+    console.log(`Found ${validBlockKeys.size} valid tree block positions from blueprints`)
 
     // STEP 3: Delete orphan tree_fruits (those referencing non-existent trees)
     const { data: allTreeFruits, error: treeFruitsError } = await supabaseAdmin
@@ -176,68 +190,44 @@ Deno.serve(async (req) => {
       }
     }
 
-    // STEP 4: Get all valid block positions from remaining tree_blocks
-    const { data: validBlocks, error: validBlocksError } = await supabaseAdmin
-      .from('tree_blocks')
-      .select('position_x, position_y, position_z, world_id')
+    // STEP 4: Find orphan placed_blocks with tree block types
+    // If no valid trees exist, ALL tree blocks in placed_blocks are orphans
+    if (validTreeIds.size === 0) {
+      console.log('No valid trees found - cleaning ALL tree-type placed_blocks')
+      
+      const { data: allPlacedBlocks, error: placedBlocksError } = await supabaseAdmin
+        .from('placed_blocks')
+        .select('id, block_type')
 
-    if (validBlocksError) {
-      console.error('Error fetching valid tree_blocks:', validBlocksError)
-      throw validBlocksError
-    }
-
-    const validBlockKeys = new Set(
-      (validBlocks || []).map(b => `${b.world_id}:${b.position_x},${b.position_y},${b.position_z}`)
-    )
-    console.log(`Found ${validBlockKeys.size} valid tree block positions`)
-
-    // STEP 5: Find orphan placed_blocks with tree block types
-    // UPDATED: Use isTreeBlockType to match both legacy and encoded formats
-    const { data: allPlacedBlocks, error: placedBlocksError } = await supabaseAdmin
-      .from('placed_blocks')
-      .select('id, world_id, position_x, position_y, position_z, block_type')
-
-    if (placedBlocksError) {
-      console.error('Error fetching placed_blocks:', placedBlocksError)
-      throw placedBlocksError
-    }
-
-    // Filter to only tree-type blocks using the new helper function
-    const treePlacedBlocks = (allPlacedBlocks || []).filter(pb => isTreeBlockType(pb.block_type))
-    console.log(`Found ${treePlacedBlocks.length} tree-type placed_blocks to check`)
-
-    let orphanPlacedBlockIds: string[] = []
-    
-    // If NO valid trees exist, ALL tree blocks in placed_blocks are orphans
-    if (validTreeIds.size === 0 && validBlockKeys.size === 0) {
-      console.log('No valid trees found - ALL tree-type placed_blocks are orphans')
-      orphanPlacedBlockIds = treePlacedBlocks.map(pb => pb.id)
-    } else {
-      // Normal orphan detection - check if placed_block has matching tree_block
-      orphanPlacedBlockIds = treePlacedBlocks
-        .filter(pb => !validBlockKeys.has(`${pb.world_id}:${pb.position_x},${pb.position_y},${pb.position_z}`))
-        .map(pb => pb.id)
-    }
-
-    if (orphanPlacedBlockIds.length > 0) {
-      console.log(`Found ${orphanPlacedBlockIds.length} orphan placed_blocks to delete`)
-      for (let i = 0; i < orphanPlacedBlockIds.length; i += 500) {
-        const batch = orphanPlacedBlockIds.slice(i, i + 500)
-        const { error } = await supabaseAdmin
-          .from('placed_blocks')
-          .delete()
-          .in('id', batch)
-        if (error) {
-          console.error('Error deleting orphan placed_blocks batch:', error)
-        } else {
-          stats.orphan_placed_blocks_deleted += batch.length
-        }
+      if (placedBlocksError) {
+        console.error('Error fetching placed_blocks:', placedBlocksError)
+        throw placedBlocksError
       }
-      console.log(`Deleted ${stats.orphan_placed_blocks_deleted} orphan placed_blocks`)
-    }
 
-    // STEP 6: Bump chunk versions to force clients to refetch
-    if (stats.orphan_placed_blocks_deleted > 0 || stats.orphan_tree_blocks_deleted > 0) {
+      const treePlacedBlocks = (allPlacedBlocks || []).filter(pb => isTreeBlockType(pb.block_type))
+      console.log(`Found ${treePlacedBlocks.length} tree-type placed_blocks to delete`)
+
+      if (treePlacedBlocks.length > 0) {
+        const orphanIds = treePlacedBlocks.map(pb => pb.id)
+        for (let i = 0; i < orphanIds.length; i += 500) {
+          const batch = orphanIds.slice(i, i + 500)
+          const { error } = await supabaseAdmin
+            .from('placed_blocks')
+            .delete()
+            .in('id', batch)
+          if (error) {
+            console.error('Error deleting orphan placed_blocks batch:', error)
+          } else {
+            stats.orphan_placed_blocks_deleted += batch.length
+          }
+        }
+        console.log(`Deleted ${stats.orphan_placed_blocks_deleted} orphan placed_blocks`)
+      }
+    }
+    // Note: If trees exist, we trust the normal deletion flow via delete_tree_with_blocks RPC
+
+    // STEP 5: Bump chunk versions to force clients to refetch
+    if (stats.orphan_placed_blocks_deleted > 0 || stats.tree_fruits_deleted > 0) {
       const { error: bumpError } = await supabaseAdmin
         .from('chunk_versions')
         .update({ 
@@ -251,16 +241,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log('Comprehensive ghost tree cleanup complete:', stats)
+    console.log('Ghost tree cleanup complete (NEW ARCHITECTURE):', stats)
 
     return new Response(JSON.stringify({
       success: true,
       stats: {
         legitimate_trees_preserved: stats.planted_trees_preserved,
-        valid_tree_blocks: validBlockKeys.size,
+        blueprints_checked: stats.blueprints_checked,
+        valid_block_positions: validBlockKeys.size,
       },
       deleted: {
-        orphan_tree_blocks: stats.orphan_tree_blocks_deleted,
         orphan_placed_blocks: stats.orphan_placed_blocks_deleted,
         orphan_tree_fruits: stats.tree_fruits_deleted,
       }
