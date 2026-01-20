@@ -2,10 +2,12 @@ import { useThree } from '@react-three/fiber';
 import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { useBlocks } from '@/contexts/BlocksContext';
+import { voxelRaycast } from '@/lib/voxelRaycast';
 
 let globalFps = 0;
 let globalPlayerPos = { x: 0, y: 0, z: 0 };
-let globalViewDir = { x: 0, y: 0, z: 0 };
+let globalLookAt = { x: '∞', y: '∞', z: '∞' };
 
 export interface FPSCounterHandle {
   update: () => void;
@@ -20,6 +22,9 @@ export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdm
   const lastTimeRef = useRef(performance.now());
   const { camera } = useThree();
   const viewDirRef = useRef(new THREE.Vector3());
+  const { blocks } = useBlocks();
+  const blocksRef = useRef(blocks);
+  blocksRef.current = blocks;
 
   // Expose update function instead of using useFrame
   useImperativeHandle(ref, () => ({
@@ -41,20 +46,33 @@ export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdm
           z: Math.round(camera.position.z)
         };
         
-        // Update view direction (where camera is looking)
+        // Raycast to find what we're looking at
         camera.getWorldDirection(viewDirRef.current);
-        globalViewDir = {
-          x: Math.round(viewDirRef.current.x * 10) / 10,
-          y: Math.round(viewDirRef.current.y * 10) / 10,
-          z: Math.round(viewDirRef.current.z * 10) / 10
-        };
+        const hit = voxelRaycast(
+          camera.position,
+          viewDirRef.current,
+          100, // max distance
+          blocksRef.current
+        );
+        
+        if (hit) {
+          // Show the grid position of the hit voxel
+          globalLookAt = {
+            x: String(hit.voxelX),
+            y: String(hit.voxelY),
+            z: String(hit.voxelZ)
+          };
+        } else {
+          // Looking at sky/nothing
+          globalLookAt = { x: '∞', y: '∞', z: '∞' };
+        }
         
         // Update DOM directly for better performance
         const fpsElement = document.getElementById('fps-display');
         if (fpsElement) {
           const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
           if (isAdmin) {
-            fpsElement.textContent = `FPS: ${globalFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] V:[${globalViewDir.x},${globalViewDir.y},${globalViewDir.z}]`;
+            fpsElement.textContent = `FPS: ${globalFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] V:[${globalLookAt.x},${globalLookAt.y},${globalLookAt.z}]`;
           } else {
             fpsElement.textContent = `FPS: ${globalFps}${dflowText}`;
           }
