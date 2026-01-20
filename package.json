@@ -65,6 +65,7 @@
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.180.0",
     "three-nebula": "^10.0.3",
+    "three-particle-fire": "^0.1.0",
     "vaul": "^0.9.9",
     "zod": "^3.25.76"
   },
