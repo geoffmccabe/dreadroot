@@ -143,6 +143,21 @@ export const useUserData = () => {
         setTokenBalance(tokenBalanceData);
       }
 
+      // Recalculate level from points (in case formula changed)
+      const correctLevel = getLevelForPoints(existingProfile.total_points || 0);
+      if (correctLevel !== existingProfile.current_level) {
+        console.log(`[UserData] Fixing stale level: ${existingProfile.current_level} → ${correctLevel} (${existingProfile.total_points} pts)`);
+        existingProfile.current_level = correctLevel;
+        // Update DB in background
+        supabase
+          .from('user_profiles')
+          .update({ current_level: correctLevel })
+          .eq('user_id', user.id)
+          .then(({ error }) => {
+            if (error) console.error('Error fixing level:', error);
+          });
+      }
+      
       setProfile(existingProfile);
       setInventory(inventoryData || []);
       setUserRoles(rolesData?.map(r => r.role) || []);
