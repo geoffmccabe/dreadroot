@@ -169,7 +169,8 @@ Deno.serve(async (req) => {
     )
     console.log(`Found ${validBlockKeys.size} valid tree block positions`)
 
-    // STEP 5: Find orphan placed_blocks (tree types with no tree_blocks record)
+    // STEP 5: SIMPLIFIED - If tree_blocks is EMPTY and planted_trees is EMPTY,
+    // ALL tree-type placed_blocks are orphans and should be deleted
     const { data: treePlacedBlocks, error: placedBlocksError } = await supabaseAdmin
       .from('placed_blocks')
       .select('id, world_id, position_x, position_y, position_z')
@@ -180,11 +181,21 @@ Deno.serve(async (req) => {
       throw placedBlocksError
     }
 
-    const orphanPlacedBlockIds = (treePlacedBlocks || [])
-      .filter(pb => !validBlockKeys.has(`${pb.world_id}:${pb.position_x},${pb.position_y},${pb.position_z}`))
-      .map(pb => pb.id)
+    let orphanPlacedBlockIds: string[] = []
+    
+    // If NO valid trees exist, ALL tree blocks in placed_blocks are orphans
+    if (validTreeIds.size === 0 && validBlockKeys.size === 0) {
+      console.log('No valid trees found - ALL tree-type placed_blocks are orphans')
+      orphanPlacedBlockIds = (treePlacedBlocks || []).map(pb => pb.id)
+    } else {
+      // Normal orphan detection - check if placed_block has matching tree_block
+      orphanPlacedBlockIds = (treePlacedBlocks || [])
+        .filter(pb => !validBlockKeys.has(`${pb.world_id}:${pb.position_x},${pb.position_y},${pb.position_z}`))
+        .map(pb => pb.id)
+    }
 
     if (orphanPlacedBlockIds.length > 0) {
+      console.log(`Found ${orphanPlacedBlockIds.length} orphan placed_blocks to delete`)
       for (let i = 0; i < orphanPlacedBlockIds.length; i += 500) {
         const batch = orphanPlacedBlockIds.slice(i, i + 500)
         const { error } = await supabaseAdmin
