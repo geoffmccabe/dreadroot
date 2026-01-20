@@ -602,10 +602,13 @@ export function Fortress() {
       setTreePlacementMode(true);
       setCrosshairsEnabled(false);
       setBlockMode(false);
-      // Only show seeds that have a name configured
-      const namedSeeds = seedDefinitions.filter(s => s.name && s.name.trim() !== '');
-      if (namedSeeds.length > 0) {
-        setSelectedSeedTier(namedSeeds[0].tier);
+      // Show named seeds, and for admins also include T29 (tier 29) even if unnamed
+      const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
+      const availableSeeds = seedDefinitions.filter(s => 
+        (s.name && s.name.trim() !== '') || (isAdmin && s.tier === 29)
+      );
+      if (availableSeeds.length > 0) {
+        setSelectedSeedTier(availableSeeds[0].tier);
         toast({ title: "Tree planting mode", description: `Press [ ] to cycle seeds. Click to plant.`, duration: 3000 });
       } else {
         toast({ title: "No seeds available", description: "Configure seed names in Admin Panel > Seeds", duration: 3000 });
@@ -682,24 +685,28 @@ export function Fortress() {
     });
   }, [selectedBlockType, inventory, toast]);
 
-  // Cycle through available seeds (only named ones) - no toast
+  // Cycle through available seeds - named ones for regular users, plus T29 for admins
   const cycleSelectedSeed = useCallback((direction: 'next' | 'prev') => {
-    const namedSeeds = seedDefinitions.filter(s => s.name && s.name.trim() !== '');
-    if (namedSeeds.length === 0) return;
+    const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
+    // Get named seeds, and for admins also include T29 (tier 29) even if unnamed
+    const availableSeeds = seedDefinitions.filter(s => 
+      (s.name && s.name.trim() !== '') || (isAdmin && s.tier === 29)
+    );
+    if (availableSeeds.length === 0) return;
     if (!selectedSeedTier) {
-      setSelectedSeedTier(namedSeeds[0].tier);
+      setSelectedSeedTier(availableSeeds[0].tier);
       return;
     }
-    const currentIndex = namedSeeds.findIndex(s => s.tier === selectedSeedTier);
+    const currentIndex = availableSeeds.findIndex(s => s.tier === selectedSeedTier);
     if (currentIndex === -1) {
-      setSelectedSeedTier(namedSeeds[0].tier);
+      setSelectedSeedTier(availableSeeds[0].tier);
       return;
     }
     const nextIndex = direction === 'next'
-      ? (currentIndex + 1) % namedSeeds.length
-      : (currentIndex - 1 + namedSeeds.length) % namedSeeds.length;
-    setSelectedSeedTier(namedSeeds[nextIndex].tier);
-  }, [selectedSeedTier, seedDefinitions]);
+      ? (currentIndex + 1) % availableSeeds.length
+      : (currentIndex - 1 + availableSeeds.length) % availableSeeds.length;
+    setSelectedSeedTier(availableSeeds[nextIndex].tier);
+  }, [selectedSeedTier, seedDefinitions, userRoles]);
 
   // Tree placement handler with pitched-up sound
   const handleTreePlace = useCallback(async (position: THREE.Vector3) => {
