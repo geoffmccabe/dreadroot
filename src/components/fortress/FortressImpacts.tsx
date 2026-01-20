@@ -55,10 +55,15 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
 
   // Spawn an impact effect at position
   const spawnImpact = useCallback(async (position: THREE.Vector3, config?: ImpactConfig) => {
+    console.log('[BulletImpacts] Spawning impact at', position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1));
+    
     await ensureInitialized();
     
     const system = systemRef.current;
-    if (!system) return;
+    if (!system) {
+      console.warn('[BulletImpacts] System not initialized');
+      return;
+    }
     
     // Limit concurrent impacts
     if (activeImpactsRef.current.length >= MAX_IMPACTS) {
