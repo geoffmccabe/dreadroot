@@ -16,11 +16,13 @@ export function HealthBar({ currentHealth, maxHealth, totalPoints, className }: 
   const [shake, setShake] = useState(false);
   const [prevHealth, setPrevHealth] = useState(currentHealth);
   
-  // Calculate heart display (1 heart = 1 HP)
-  const fullHearts = Math.floor(currentHealth);
-  const partialHeart = currentHealth % 1; // decimal portion (0 to 0.99)
-  const totalHearts = Math.ceil(maxHealth);
-  const emptyHearts = Math.max(0, totalHearts - Math.ceil(currentHealth));
+  // Calculate heart display (1 heart = 10 HP)
+  const heartsFromHealth = currentHealth / 10;
+  const maxHearts = maxHealth / 10;
+  const fullHearts = Math.floor(heartsFromHealth);
+  const partialHeart = heartsFromHealth % 1; // decimal portion (0 to 0.99)
+  const totalHearts = Math.ceil(maxHearts);
+  const emptyHearts = Math.max(0, totalHearts - Math.ceil(heartsFromHealth));
   
   // Shake animation on damage
   useEffect(() => {
@@ -84,12 +86,12 @@ export function HealthBar({ currentHealth, maxHealth, totalPoints, className }: 
         />
       ))}
       
-      {/* Max health display (multiplied by 10 for display) */}
+      {/* Max health display */}
       <span className={cn(
         "ml-1.5 text-[10px] font-bold tabular-nums",
         isCritical ? "text-destructive" : isLowHealth ? "text-orange-400" : "text-white"
       )}>
-        {Math.round(maxHealth * 10)}
+        {Math.round(maxHealth)}
       </span>
       
       {/* Points display */}
