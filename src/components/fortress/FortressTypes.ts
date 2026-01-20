@@ -154,8 +154,11 @@ export interface FirstPersonControlsProps {
 export interface Bullet {
   position: THREE.Vector3;
   direction: THREE.Vector3;
+  velocityY: number;  // Separate Y velocity for gravity arc
   speed: number;
   life: number;
+  tier: number;       // Bullet tier for impact scaling
+  color: string;      // Hex color for impact effect
 }
 
 // Flying coin interface

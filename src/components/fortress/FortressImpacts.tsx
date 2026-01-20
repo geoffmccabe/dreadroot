@@ -12,12 +12,13 @@ const MAX_IMPACTS = 10;
 
 // Default impact configuration
 const DEFAULT_IMPACT_COLOR = '#FFAA00'; // Yellow/orange
-const DEFAULT_IMPACT_SIZE = 1.0; // 1 meter (block width)
-const DEFAULT_IMPACT_DURATION = 1000; // 1 second in ms
+const DEFAULT_IMPACT_SIZE = 0.25; // 0.25 meter base diameter
+const DEFAULT_IMPACT_DURATION = 500; // 0.5 seconds in ms
 
 export interface ImpactConfig {
-  color?: string; // Hex color (e.g., '#FFAA00')
-  size?: number; // Size multiplier (1.0 = block width)
+  color?: string;   // Hex color for the impact (default: yellow/orange)
+  size?: number;    // Base size in meters (default: 0.25m)
+  tier?: number;    // Bullet tier for scaling (default: 1, adds 10% per tier)
 }
 
 export interface BulletImpactsHandle {
@@ -55,13 +56,10 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
 
   // Spawn an impact effect at position
   const spawnImpact = useCallback(async (position: THREE.Vector3, config?: ImpactConfig) => {
-    console.log('[BulletImpacts] Spawning impact at', position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1));
-    
     await ensureInitialized();
     
     const system = systemRef.current;
     if (!system) {
-      console.warn('[BulletImpacts] System not initialized');
       return;
     }
     
@@ -70,13 +68,18 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       // Remove oldest impact
       const oldest = activeImpactsRef.current.shift();
       if (oldest?.emitter) {
+        oldest.emitter.removeAllParticles?.();
         system.removeEmitter(oldest.emitter);
         oldest.emitter.destroy();
       }
     }
     
     const color = config?.color || DEFAULT_IMPACT_COLOR;
-    const size = config?.size || DEFAULT_IMPACT_SIZE;
+    const baseSize = config?.size || DEFAULT_IMPACT_SIZE;
+    const tier = config?.tier || 1;
+    
+    // Calculate final size: base + 10% per tier
+    const finalSize = baseSize * (1 + tier * 0.1);
     
     // Parse the color to get start/end gradient
     const startColor = color;
@@ -94,8 +97,17 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
               ...init,
               properties: {
                 ...init.properties,
-                min: init.properties.min * size,
-                max: init.properties.max * size,
+                min: init.properties.min * finalSize * 4, // Scale up since base values are small
+                max: init.properties.max * finalSize * 4,
+              },
+            };
+          }
+          if (init.type === 'RadialVelocity') {
+            return {
+              ...init,
+              properties: {
+                ...init.properties,
+                radius: init.properties.radius * finalSize * 2,
               },
             };
           }
@@ -153,6 +165,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     for (let i = active.length - 1; i >= 0; i--) {
       const impact = active[i];
       if (now - impact.startTime > impact.duration) {
+        impact.emitter.removeAllParticles?.();
         system.removeEmitter(impact.emitter);
         impact.emitter.destroy();
         active.splice(i, 1);
