@@ -153,7 +153,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   // Phase 2B: Initialize with chunk loading instead of full world load
   // Use ref to avoid chunkLoader dependency causing re-initialization
   const initializeCache = useCallback(async () => {
-    console.log('[InitCache] Called with userId:', !!userId, 'worldId:', worldId);
+    // REMOVED: console.log spam - use initLogStep instead for init-only logging
     
     if (!userId || !worldId) {
       setIsLoading(false);
@@ -162,7 +162,6 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     
     // Skip if already initialized for this world
     if (initializedWorldRef.current === worldId) {
-      console.log('[InitCache] Already initialized for this world, skipping');
       return;
     }
     initializedWorldRef.current = worldId;
@@ -179,11 +178,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       await initDB();
       initLogStep('usePlacedBlocksWithCache.ts', 'IndexedDB ready');
       
-      console.log('[InitCache] Calling initializeForWorld');
       // Phase 2B: Use chunk loader for initial load from camera starting position
       initLogStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
       await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
-      console.log('[InitCache] initializeForWorld complete');
       
       // NEW ARCHITECTURE: Tree blocks are now in placed_blocks, loaded by chunk loader
       // No separate tree block loading needed

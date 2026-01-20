@@ -68,7 +68,7 @@ const GRID_CLEAR_LISTENER_KEY = '__chunkLoaderGridClearListener';
 if (typeof window !== 'undefined' && !(window as any)[GRID_CLEAR_LISTENER_KEY]) {
   (window as any)[GRID_CLEAR_LISTENER_KEY] = true;
   window.addEventListener('collisionGridCleared', () => {
-    console.log('[ChunkLoader] Module-level: Clearing colliderByBlockId cache');
+    // REMOVED: console.log spam
     colliderByBlockId.clear();
   });
 }
@@ -1525,16 +1525,16 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
     initLogStep('useChunkLoader.ts', 'Total blocks in memory', totalBlocks);
     
-    // Log block types breakdown
+    // OPTIMIZATION: Limit block type logging to top 5 to prevent init panel spam
     const sortedTypes = Array.from(blockTypeCounts.entries()).sort((a, b) => b[1] - a[1]);
-    for (const [type, count] of sortedTypes) {
+    const topTypes = sortedTypes.slice(0, 5);
+    for (const [type, count] of topTypes) {
       initLogStep('useChunkLoader.ts', `Block type: ${type}`, count);
     }
+    if (sortedTypes.length > 5) {
+      initLogStep('useChunkLoader.ts', `...and ${sortedTypes.length - 5} more block types`);
+    }
     
-    // Log live enemies (shwarms are spawned on-demand, so 0 at init)
-    initLogStep('useChunkLoader.ts', 'Live Enemies', 0);
-    
-    console.log(`[ChunkLoader] initializeForWorld complete, grid size: ${collisionGrid.size}`);
     initLogStep('useChunkLoader.ts', 'Collision grid populated', collisionGrid.size);
     
     initialLoadDone.current = true;
