@@ -232,6 +232,39 @@ export type Database = {
         }
         Relationships: []
       }
+      bullet_definitions: {
+        Row: {
+          burn_height: number
+          burn_time: number
+          burn_width: number
+          colors: string[]
+          created_at: string
+          id: number
+          tier: number
+          updated_at: string
+        }
+        Insert: {
+          burn_height?: number
+          burn_time?: number
+          burn_width?: number
+          colors?: string[]
+          created_at?: string
+          id?: number
+          tier: number
+          updated_at?: string
+        }
+        Update: {
+          burn_height?: number
+          burn_time?: number
+          burn_width?: number
+          colors?: string[]
+          created_at?: string
+          id?: number
+          tier?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chunk_versions: {
         Row: {
           chunk_x: number

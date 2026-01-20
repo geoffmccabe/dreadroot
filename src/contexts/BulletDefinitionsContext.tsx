@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Tier color definitions with defaults
 const TIER_DEFAULTS: Record<number, { name: string; colors: string[] }> = {
@@ -35,6 +37,10 @@ interface BulletDefinitionsContextType {
   definitions: Map<number, BulletDefinition>;
   getDefinition: (tier: number) => BulletDefinition;
   updateDefinition: (tier: number, def: BulletDefinition) => void;
+  saveAllToDatabase: () => Promise<boolean>;
+  loadFromDatabase: () => Promise<void>;
+  hasUnsavedChanges: boolean;
+  isLoading: boolean;
   tierDefaults: typeof TIER_DEFAULTS;
 }
 
@@ -49,6 +55,50 @@ export const BulletDefinitionsProvider: React.FC<{ children: ReactNode }> = ({ c
     }
     return map;
   });
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastSavedState, setLastSavedState] = useState<string>('');
+
+  // Load from database on mount
+  const loadFromDatabase = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('bullet_definitions')
+        .select('*')
+        .order('tier', { ascending: true });
+
+      if (error) {
+        console.error('[BulletDefinitions] Load error:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const newMap = new Map<number, BulletDefinition>();
+        for (const row of data) {
+          newMap.set(row.tier, {
+            tier: row.tier,
+            colors: row.colors || ['#FFFFFF'],
+            burn_time: row.burn_time,
+            burn_width: row.burn_width,
+            burn_height: row.burn_height,
+          });
+        }
+        setDefinitions(newMap);
+        setLastSavedState(JSON.stringify(Array.from(newMap.entries())));
+        setHasUnsavedChanges(false);
+        console.log('[BulletDefinitions] Loaded from database:', data.length, 'tiers');
+      }
+    } catch (err) {
+      console.error('[BulletDefinitions] Load exception:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFromDatabase();
+  }, [loadFromDatabase]);
 
   const getDefinition = useCallback((tier: number): BulletDefinition => {
     return definitions.get(tier) || getDefaultBullet(tier);
@@ -58,15 +108,62 @@ export const BulletDefinitionsProvider: React.FC<{ children: ReactNode }> = ({ c
     setDefinitions(prev => {
       const updated = new Map(prev);
       updated.set(tier, def);
+      // Check if state differs from last saved
+      const currentState = JSON.stringify(Array.from(updated.entries()));
+      setHasUnsavedChanges(currentState !== lastSavedState);
       return updated;
     });
-  }, []);
+  }, [lastSavedState]);
+
+  const saveAllToDatabase = useCallback(async (): Promise<boolean> => {
+    try {
+      const updates = Array.from(definitions.entries()).map(([tier, def]) => ({
+        tier,
+        colors: def.colors,
+        burn_time: def.burn_time,
+        burn_width: def.burn_width,
+        burn_height: def.burn_height,
+      }));
+
+      // Upsert all definitions
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('bullet_definitions')
+          .update({
+            colors: update.colors,
+            burn_time: update.burn_time,
+            burn_width: update.burn_width,
+            burn_height: update.burn_height,
+          })
+          .eq('tier', update.tier);
+
+        if (error) {
+          console.error(`[BulletDefinitions] Save error for tier ${update.tier}:`, error);
+          toast.error(`Failed to save tier ${update.tier}: ${error.message}`);
+          return false;
+        }
+      }
+
+      setLastSavedState(JSON.stringify(Array.from(definitions.entries())));
+      setHasUnsavedChanges(false);
+      console.log('[BulletDefinitions] Saved all tiers to database');
+      return true;
+    } catch (err) {
+      console.error('[BulletDefinitions] Save exception:', err);
+      toast.error('Failed to save bullet definitions');
+      return false;
+    }
+  }, [definitions]);
 
   return (
     <BulletDefinitionsContext.Provider value={{ 
       definitions, 
       getDefinition, 
       updateDefinition,
+      saveAllToDatabase,
+      loadFromDatabase,
+      hasUnsavedChanges,
+      isLoading,
       tierDefaults: TIER_DEFAULTS 
     }}>
       {children}

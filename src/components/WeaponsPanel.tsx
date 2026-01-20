@@ -174,11 +174,21 @@ function BulletTierPanel({ tier, definition, onChange }: BulletTierPanelProps) {
 
 export function WeaponsPanel() {
   const [activeSubTab, setActiveSubTab] = useState<'bullets' | 'weapons'>('bullets');
-  const { definitions, getDefinition, updateDefinition } = useBulletDefinitions();
+  const [isSaving, setIsSaving] = useState(false);
+  const { definitions, getDefinition, updateDefinition, saveAllToDatabase, hasUnsavedChanges, isLoading } = useBulletDefinitions();
 
   const handleChange = useCallback((tier: number, def: BulletDefinition) => {
     updateDefinition(tier, def);
   }, [updateDefinition]);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    const success = await saveAllToDatabase();
+    setIsSaving(false);
+    if (success) {
+      toast.success('Bullet definitions saved!');
+    }
+  }, [saveAllToDatabase]);
 
   return (
     <div className="space-y-4">
@@ -189,7 +199,22 @@ export function WeaponsPanel() {
         </TabsList>
 
         <TabsContent value="bullets" className="mt-4">
-          <ScrollArea className="h-[calc(90vh-280px)]">
+          {/* Save button header */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm text-muted-foreground">
+              {isLoading ? 'Loading...' : hasUnsavedChanges ? '⚠️ Unsaved changes' : '✓ All saved'}
+            </div>
+            <Button 
+              onClick={handleSave} 
+              disabled={isSaving || isLoading || !hasUnsavedChanges}
+              variant={hasUnsavedChanges ? "default" : "outline"}
+              size="sm"
+            >
+              {isSaving ? 'Saving...' : 'Save All'}
+            </Button>
+          </div>
+          
+          <ScrollArea className="h-[calc(90vh-320px)]">
             <div className="pr-4 space-y-2">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(tier => {
                 const def = getDefinition(tier);
