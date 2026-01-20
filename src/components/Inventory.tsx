@@ -6,7 +6,8 @@ import { useUserData } from '@/hooks/useUserData';
 import { Card } from '@/components/ui/card';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
-import { findInventoryItem } from '@/lib/inventoryHelpers';
+import { useTreeData } from '@/features/trees/hooks/useTreeData';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface InventoryProps {
   isOpen: boolean;
@@ -14,8 +15,10 @@ interface InventoryProps {
 }
 
 export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
+  const { user } = useAuth();
   const { profile, inventory, isLoading, updateBlockchainAddress } = useUserData();
   const { getBlockByKey } = useBlocksData();
+  const { seedDefinitions } = useTreeData(null, user?.id);
   const { currentTheme } = useCoinTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
@@ -42,6 +45,40 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
       }
     }
   };
+
+  // Parse seed tier from item_type like "seed_tier_5"
+  const parseSeedTier = (itemType: string): number | null => {
+    const match = itemType.match(/^seed_tier_(\d+)$/);
+    return match ? parseInt(match[1], 10) : null;
+  };
+
+  // Get seed definition by tier
+  const getSeedByTier = (tier: number) => {
+    return seedDefinitions.find(s => s.tier === tier);
+  };
+
+  // Categorize inventory items
+  const categorizedInventory = React.useMemo(() => {
+    const seeds: typeof inventory = [];
+    const fruits: typeof inventory = [];
+    const blocks: typeof inventory = [];
+
+    for (const item of inventory) {
+      if (item.quantity <= 0) continue;
+
+      const seedTier = parseSeedTier(item.item_type);
+      if (seedTier !== null) {
+        seeds.push(item);
+      } else if (item.item_type === 'fruit') {
+        fruits.push(item);
+      } else if (item.item_type !== 'trunk') {
+        // Exclude trunk - it's not a valid inventory item
+        blocks.push(item);
+      }
+    }
+
+    return { seeds, fruits, blocks };
+  }, [inventory]);
 
   if (isLoading) {
     return (
@@ -92,7 +129,7 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     handleAddressBlur();
-                    e.currentTarget.blur(); // Force blur to exit focus
+                    e.currentTarget.blur();
                   }
                 }}
                 className="placeholder:text-muted-foreground/50"
@@ -100,57 +137,147 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
             </div>
           </Card>
 
-          {/* Blocks */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">Blocks</h3>
-            {inventory.filter(item => item.quantity > 0).length === 0 ? (
-              <Card className="p-4 text-center text-muted-foreground">
-                No blocks in inventory
-              </Card>
-            ) : (
-              inventory
-                .filter(item => item.quantity > 0)
-                .map((item) => {
-                  // Look up by item_id first (new), then item_type (legacy)
-                  const itemKey = item.item_id || item.item_type;
-                  const blockDef = getBlockByKey(itemKey);
-                  const textureUrl = blockDef?.texture?.diffuse;
-                  const color = blockDef?.properties?.color || '#8B7355';
-                  
-                  return (
-                    <Card key={item.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-6 h-6 rounded border flex items-center justify-center"
-                            style={{
-                              background: textureUrl 
-                                ? `url(${textureUrl}) center/cover`
-                                : `linear-gradient(135deg, ${color}, ${color}CC)`,
-                              borderColor: `${color}DD`
-                            }}
-                          >
-                            {!textureUrl && (
-                              <div 
-                                className="w-4 h-4 rounded-sm border"
-                                style={{
-                                  background: `linear-gradient(135deg, ${color}EE, ${color}AA)`,
-                                  borderColor: `${color}FF`
-                                }}
-                              />
-                            )}
-                          </div>
-                          <span className="font-medium capitalize">
-                            {blockDef?.name || item.item_type.replace('_', ' ')}
-                          </span>
+          {/* Seeds */}
+          {categorizedInventory.seeds.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Seeds</h3>
+              {categorizedInventory.seeds.map((item) => {
+                const seedTier = parseSeedTier(item.item_type);
+                const seedDef = seedTier ? getSeedByTier(seedTier) : null;
+                const textureUrl = seedDef?.trunk_texture_url;
+                const color = '#4a7c59';
+                const displayName = seedDef?.name 
+                  ? `SEED - ${seedDef.name}`
+                  : `SEED - Tier ${seedTier} Tree`;
+                
+                return (
+                  <Card key={item.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-6 h-6 rounded border flex items-center justify-center"
+                          style={{
+                            background: textureUrl 
+                              ? `url(${textureUrl}) center/cover`
+                              : `linear-gradient(135deg, ${color}, ${color}CC)`,
+                            borderColor: `${color}DD`
+                          }}
+                        >
+                          {!textureUrl && (
+                            <div 
+                              className="w-4 h-4 rounded-sm border"
+                              style={{
+                                background: `linear-gradient(135deg, ${color}EE, ${color}AA)`,
+                                borderColor: `${color}FF`
+                              }}
+                            />
+                          )}
                         </div>
-                        <span className="font-bold">x{item.quantity}</span>
+                        <span className="font-medium">{displayName}</span>
                       </div>
-                    </Card>
-                  );
-                })
-            )}
-          </div>
+                      <span className="font-bold">x{item.quantity}</span>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Fruits */}
+          {categorizedInventory.fruits.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Fruits</h3>
+              {categorizedInventory.fruits.map((item) => {
+                const blockDef = getBlockByKey('fruit');
+                const textureUrl = blockDef?.texture?.diffuse;
+                const color = blockDef?.properties?.color || '#FF6B6B';
+                
+                return (
+                  <Card key={item.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-6 h-6 rounded border flex items-center justify-center"
+                          style={{
+                            background: textureUrl 
+                              ? `url(${textureUrl}) center/cover`
+                              : `linear-gradient(135deg, ${color}, ${color}CC)`,
+                            borderColor: `${color}DD`
+                          }}
+                        >
+                          {!textureUrl && (
+                            <div 
+                              className="w-4 h-4 rounded-sm border"
+                              style={{
+                                background: `linear-gradient(135deg, ${color}EE, ${color}AA)`,
+                                borderColor: `${color}FF`
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className="font-medium">Fruit</span>
+                      </div>
+                      <span className="font-bold">x{item.quantity}</span>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Other Blocks */}
+          {categorizedInventory.blocks.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">Blocks</h3>
+              {categorizedInventory.blocks.map((item) => {
+                const itemKey = item.item_id || item.item_type;
+                const blockDef = getBlockByKey(itemKey);
+                const textureUrl = blockDef?.texture?.diffuse;
+                const color = blockDef?.properties?.color || '#8B7355';
+                
+                return (
+                  <Card key={item.id} className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-6 h-6 rounded border flex items-center justify-center"
+                          style={{
+                            background: textureUrl 
+                              ? `url(${textureUrl}) center/cover`
+                              : `linear-gradient(135deg, ${color}, ${color}CC)`,
+                            borderColor: `${color}DD`
+                          }}
+                        >
+                          {!textureUrl && (
+                            <div 
+                              className="w-4 h-4 rounded-sm border"
+                              style={{
+                                background: `linear-gradient(135deg, ${color}EE, ${color}AA)`,
+                                borderColor: `${color}FF`
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className="font-medium capitalize">
+                          {blockDef?.name || item.item_type.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <span className="font-bold">x{item.quantity}</span>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {categorizedInventory.seeds.length === 0 && 
+           categorizedInventory.fruits.length === 0 && 
+           categorizedInventory.blocks.length === 0 && (
+            <Card className="p-4 text-center text-muted-foreground">
+              No items in inventory
+            </Card>
+          )}
         </div>
       </DialogContent>
     </Dialog>
