@@ -560,7 +560,15 @@ export function FirstPersonControls({
       shootOriginRef.current.copy(camera.position);
       
       onShoot(shootOriginRef.current, shootDirectionRef.current);
-      playAudio(audioRefs.gunshot);
+      
+      // Play gunshot with random ±5% speed and pitch variation for organic feel
+      const audio = audioRefs.gunshot;
+      if (audio) {
+        const variation = 0.95 + Math.random() * 0.1; // 0.95 to 1.05
+        audio.playbackRate = variation;
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
     }
   }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, onBlockPlace, onTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId, audioRefs, playAudio]);
   

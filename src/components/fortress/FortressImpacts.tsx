@@ -1,19 +1,19 @@
 // Bullet impact effects component
 // Manages fire-like impact effects when bullets hit blocks
+// Uses THREE.js InstancedMesh for reliable, high-performance particles
 
 import React, { useRef, useImperativeHandle, forwardRef, useCallback } from 'react';
-import { useThree, useFrame } from '@react-three/fiber';
-import System, { SpriteRenderer } from 'three-nebula';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { impactPreset } from '@/features/particles/presets';
 
-// Maximum concurrent impact effects
-const MAX_IMPACTS = 10;
+// Maximum concurrent particles across all impacts
+const MAX_PARTICLES = 200;
 
 // Default impact configuration
 const DEFAULT_IMPACT_COLOR = '#FFAA00'; // Yellow/orange
 const DEFAULT_IMPACT_SIZE = 0.25; // 0.25 meter base diameter
 const DEFAULT_IMPACT_DURATION = 500; // 0.5 seconds in ms
+const PARTICLES_PER_IMPACT = 15;
 
 export interface ImpactConfig {
   color?: string;   // Hex color for the impact (default: yellow/orange)
@@ -25,184 +25,134 @@ export interface BulletImpactsHandle {
   spawnImpact: (position: THREE.Vector3, config?: ImpactConfig) => void;
 }
 
-interface ActiveImpact {
-  emitter: any;
-  startTime: number;
-  duration: number;
+interface ImpactParticle {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  life: number;
+  maxLife: number;
+  color: THREE.Color;
+  size: number;
 }
 
-export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
-  const { scene } = useThree();
-  const systemRef = useRef<System | null>(null);
-  const rendererRef = useRef<SpriteRenderer | null>(null);
-  const activeImpactsRef = useRef<ActiveImpact[]>([]);
-  const initializedRef = useRef(false);
+// Shared geometry and material
+const particleGeometry = new THREE.SphereGeometry(0.02, 6, 6);
+const particleMaterial = new THREE.MeshBasicMaterial({
+  transparent: true,
+  opacity: 0.9,
+});
 
-  // Initialize the particle system once
-  const ensureInitialized = useCallback(async () => {
-    if (initializedRef.current && systemRef.current) return;
-    
-    try {
-      const system = new System();
-      const renderer = new SpriteRenderer(scene, THREE);
-      system.addRenderer(renderer);
-      systemRef.current = system;
-      rendererRef.current = renderer;
-      initializedRef.current = true;
-    } catch (error) {
-      console.error('[BulletImpacts] Failed to initialize:', error);
-    }
-  }, [scene]);
+const tempMatrix = new THREE.Matrix4();
+const tempColor = new THREE.Color();
+
+export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const particlesRef = useRef<ImpactParticle[]>([]);
 
   // Spawn an impact effect at position
-  const spawnImpact = useCallback(async (position: THREE.Vector3, config?: ImpactConfig) => {
-    await ensureInitialized();
-    
-    const system = systemRef.current;
-    if (!system) {
-      return;
-    }
-    
-    // Limit concurrent impacts
-    if (activeImpactsRef.current.length >= MAX_IMPACTS) {
-      // Remove oldest impact
-      const oldest = activeImpactsRef.current.shift();
-      if (oldest?.emitter) {
-        oldest.emitter.removeAllParticles?.();
-        system.removeEmitter(oldest.emitter);
-        oldest.emitter.destroy();
-      }
-    }
-    
+  const spawnImpact = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
     const color = config?.color || DEFAULT_IMPACT_COLOR;
     const baseSize = config?.size || DEFAULT_IMPACT_SIZE;
     const tier = config?.tier || 1;
     
     // Calculate final size: base + 10% per tier
     const finalSize = baseSize * (1 + tier * 0.1);
+    const lifeDuration = DEFAULT_IMPACT_DURATION / 1000; // Convert to seconds
     
-    // Parse the color to get start/end gradient
-    const startColor = color;
-    const endColor = darkenColor(color, 0.4); // Darken for gradient
+    // Parse colors for gradient
+    const startColor = new THREE.Color(color);
+    const endColor = startColor.clone().multiplyScalar(0.4); // Darken
     
-    // Create a modified preset with custom position, color, and size
-    const modifiedPreset = {
-      ...impactPreset,
-      emitters: impactPreset.emitters.map(emitter => ({
-        ...emitter,
-        position: { x: position.x, y: position.y, z: position.z },
-        initializers: emitter.initializers.map((init: any) => {
-          if (init.type === 'Radius') {
-            return {
-              ...init,
-              properties: {
-                ...init.properties,
-                min: init.properties.min * finalSize * 4, // Scale up since base values are small
-                max: init.properties.max * finalSize * 4,
-              },
-            };
-          }
-          if (init.type === 'RadialVelocity') {
-            return {
-              ...init,
-              properties: {
-                ...init.properties,
-                radius: init.properties.radius * finalSize * 2,
-              },
-            };
-          }
-          return init;
-        }),
-        behaviours: emitter.behaviours.map((behaviour: any) => {
-          if (behaviour.type === 'Color') {
-            return {
-              ...behaviour,
-              properties: {
-                ...behaviour.properties,
-                colorA: startColor,
-                colorB: endColor,
-              },
-            };
-          }
-          return behaviour;
-        }),
-      })),
-    };
-
-    // Load the preset and add emitters to our system
-    System.fromJSONAsync(modifiedPreset, THREE).then((loadedSystem) => {
-      loadedSystem.emitters.forEach((emitter: any) => {
-        system.addEmitter(emitter);
-        activeImpactsRef.current.push({
-          emitter,
-          startTime: performance.now(),
-          duration: DEFAULT_IMPACT_DURATION,
-        });
+    // Create burst of particles
+    for (let i = 0; i < PARTICLES_PER_IMPACT; i++) {
+      // Remove oldest if at capacity
+      if (particlesRef.current.length >= MAX_PARTICLES) {
+        particlesRef.current.shift();
+      }
+      
+      // Random direction with upward bias (fire rises)
+      const angle = Math.random() * Math.PI * 2;
+      const upwardBias = 0.5 + Math.random() * 0.5; // 0.5-1.0 upward
+      const horizontalSpeed = (0.5 + Math.random() * 1.5) * finalSize * 4;
+      
+      const velocity = new THREE.Vector3(
+        Math.cos(angle) * horizontalSpeed,
+        upwardBias * 2 * finalSize * 4,
+        Math.sin(angle) * horizontalSpeed
+      );
+      
+      particlesRef.current.push({
+        position: position.clone(),
+        velocity,
+        life: lifeDuration * (0.5 + Math.random() * 0.5), // Varied life
+        maxLife: lifeDuration,
+        color: startColor.clone(),
+        size: finalSize * (0.5 + Math.random() * 0.5),
       });
-    }).catch((err) => {
-      console.error('[BulletImpacts] Failed to spawn impact:', err?.message || err);
-    });
-  }, [ensureInitialized]);
+    }
+  }, []);
 
   // Expose the spawnImpact function
   useImperativeHandle(ref, () => ({
     spawnImpact,
   }), [spawnImpact]);
 
-  // Update particles and clean up expired impacts
+  // Update particles
   useFrame((_, delta) => {
-    const system = systemRef.current;
-    if (!system) return;
+    if (!meshRef.current) return;
     
-    system.update(delta);
+    const particles = particlesRef.current;
+    let writeIndex = 0;
     
-    // Clean up expired impacts - ensure complete particle removal
-    const now = performance.now();
-    const active = activeImpactsRef.current;
+    // Update and filter particles in-place
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      
+      // Update physics
+      p.position.addScaledVector(p.velocity, delta);
+      p.velocity.y += 1.5 * delta; // Slight upward drift (fire rises)
+      p.velocity.multiplyScalar(0.95); // Drag
+      p.life -= delta;
+      
+      if (p.life > 0) {
+        // Calculate alpha based on life
+        const lifeRatio = p.life / p.maxLife;
+        
+        // Update instance matrix
+        const scale = p.size * lifeRatio; // Shrink as it fades
+        tempMatrix.makeScale(scale, scale, scale);
+        tempMatrix.setPosition(p.position.x, p.position.y, p.position.z);
+        meshRef.current.setMatrixAt(writeIndex, tempMatrix);
+        
+        // Fade color from bright to dark
+        tempColor.copy(p.color).multiplyScalar(lifeRatio);
+        meshRef.current.setColorAt(writeIndex, tempColor);
+        
+        // Keep particle
+        particles[writeIndex] = p;
+        writeIndex++;
+      }
+    }
     
-    for (let i = active.length - 1; i >= 0; i--) {
-      const impact = active[i];
-      if (now - impact.startTime > impact.duration) {
-        try {
-          // Stop emitter from spawning new particles
-          impact.emitter.stopEmit?.();
-          // Remove all existing particles
-          if (impact.emitter.particles) {
-            impact.emitter.particles.length = 0;
-          }
-          impact.emitter.removeAllParticles?.();
-          // Remove from system
-          system.removeEmitter(impact.emitter);
-          // Destroy emitter
-          impact.emitter.destroy?.();
-        } catch (e) {
-          // Silently handle cleanup errors
-        }
-        active.splice(i, 1);
+    // Truncate array
+    particles.length = writeIndex;
+    
+    // Update instance count and matrices
+    meshRef.current.count = writeIndex;
+    if (writeIndex > 0) {
+      meshRef.current.instanceMatrix.needsUpdate = true;
+      if (meshRef.current.instanceColor) {
+        meshRef.current.instanceColor.needsUpdate = true;
       }
     }
   });
 
-  return null;
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[particleGeometry, particleMaterial, MAX_PARTICLES]}
+      frustumCulled={false}
+    />
+  );
 });
 
 BulletImpacts.displayName = 'BulletImpacts';
-
-// Helper to darken a hex color
-function darkenColor(hex: string, factor: number): string {
-  // Remove # if present
-  const cleanHex = hex.replace('#', '');
-  
-  // Parse RGB
-  const r = parseInt(cleanHex.slice(0, 2), 16);
-  const g = parseInt(cleanHex.slice(2, 4), 16);
-  const b = parseInt(cleanHex.slice(4, 6), 16);
-  
-  // Darken
-  const newR = Math.round(r * (1 - factor));
-  const newG = Math.round(g * (1 - factor));
-  const newB = Math.round(b * (1 - factor));
-  
-  // Convert back to hex
-  return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
-}
