@@ -417,21 +417,23 @@ export function FirstPersonControls({
     lastMovements.current.push({x: movementX, y: movementY});
     if (lastMovements.current.length > 8) lastMovements.current.shift();
     
-    // Enhanced phantom event detection - filter consistent tiny drift patterns
-    if (lastMovements.current.length >= 3) {
-      const last3 = lastMovements.current.slice(-3);
-      
-      // Check for consistent leftward drift (common browser bug)
-      const allLeftDrift = last3.every(m => m.x === -1 && m.y === 0);
-      if (allLeftDrift) {
+    // Aggressive phantom event detection - filter consistent tiny drift patterns
+    // Check for immediate leftward drift (common Pointer Lock API bug)
+    if (movementX === -1 && movementY === 0) {
+      // Count consecutive left drift events
+      const recentLeftCount = lastMovements.current.filter(m => m.x === -1 && m.y === 0).length;
+      if (recentLeftCount >= 2) {
         mouseDebugData.current.phantomEventsFiltered++;
         return;
       }
-      
-      // Check for identical tiny movements (phantom events)
-      const allIdentical = last3.every(m => m.x === last3[0].x && m.y === last3[0].y);
-      const allTiny = last3.every(m => Math.abs(m.x) <= 1 && Math.abs(m.y) <= 1);
-      const notZero = Math.abs(movementX) > 0 || Math.abs(movementY) > 0;
+    }
+    
+    // Filter any consistent tiny movements (phantom events from browser)
+    if (lastMovements.current.length >= 2) {
+      const last2 = lastMovements.current.slice(-2);
+      const allIdentical = last2.every(m => m.x === movementX && m.y === movementY);
+      const allTiny = Math.abs(movementX) <= 1 && Math.abs(movementY) <= 1;
+      const notZero = movementX !== 0 || movementY !== 0;
       
       if (allIdentical && allTiny && notZero) {
         mouseDebugData.current.phantomEventsFiltered++;
@@ -551,11 +553,11 @@ export function FirstPersonControls({
       // Calculate shoot direction from camera orientation
       shootDirectionRef.current.set(0, 0, -1);
       shootDirectionRef.current.applyQuaternion(camera.quaternion);
+      shootDirectionRef.current.normalize();
       
-      // Set bullet origin slightly in front of camera (0.5m forward from camera)
-      // This makes bullets appear to come from the gun, not from above
+      // Bullet starts exactly at camera position - no offset needed
+      // The bullet will travel in the exact direction the camera is facing
       shootOriginRef.current.copy(camera.position);
-      shootOriginRef.current.addScaledVector(shootDirectionRef.current, 0.5);
       
       onShoot(shootOriginRef.current, shootDirectionRef.current);
       playAudio(audioRefs.gunshot);
