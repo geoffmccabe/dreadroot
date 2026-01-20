@@ -1,19 +1,18 @@
 // Bullet impact effects component
 // Manages fire-like impact effects when bullets hit blocks
-// Uses THREE.js InstancedMesh for reliable, high-performance particles
 
-import React, { useRef, useImperativeHandle, forwardRef, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import React, { useRef, useImperativeHandle, forwardRef, useCallback, useEffect } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-// Maximum concurrent particles across all impacts
-const MAX_PARTICLES = 200;
+// Maximum concurrent impact effects
+const MAX_IMPACTS = 10;
 
 // Default impact configuration
 const DEFAULT_IMPACT_COLOR = '#FFAA00'; // Yellow/orange
 const DEFAULT_IMPACT_SIZE = 0.25; // 0.25 meter base diameter
 const DEFAULT_IMPACT_DURATION = 500; // 0.5 seconds in ms
-const PARTICLES_PER_IMPACT = 15;
+const PARTICLES_PER_IMPACT = 12;
 
 export interface ImpactConfig {
   color?: string;   // Hex color for the impact (default: yellow/orange)
@@ -26,30 +25,56 @@ export interface BulletImpactsHandle {
 }
 
 interface ImpactParticle {
-  position: THREE.Vector3;
+  mesh: THREE.Mesh;
   velocity: THREE.Vector3;
   life: number;
   maxLife: number;
-  color: THREE.Color;
-  size: number;
+  baseScale: number;
 }
 
-// Shared geometry and material
-const particleGeometry = new THREE.SphereGeometry(1, 6, 6); // Unit sphere, scaled per-instance
-const particleMaterial = new THREE.MeshBasicMaterial({
-  transparent: true,
-  opacity: 0.9,
-  vertexColors: true, // Required for instanceColor to work
-});
+interface ActiveImpact {
+  particles: ImpactParticle[];
+  startTime: number;
+}
 
-const tempMatrix = new THREE.Matrix4();
-const tempColor = new THREE.Color();
-const tempPosition = new THREE.Vector3();
-const tempScale = new THREE.Vector3();
+// Create a simple glowing particle material
+function createParticleMaterial(color: string): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+  });
+}
+
+const particleGeometry = new THREE.SphereGeometry(0.015, 6, 6);
 
 export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const particlesRef = useRef<ImpactParticle[]>([]);
+  const { scene } = useThree();
+  const activeImpactsRef = useRef<ActiveImpact[]>([]);
+  const particlePoolRef = useRef<THREE.Mesh[]>([]);
+  const poolIndexRef = useRef(0);
+
+  // Pre-create particle pool
+  useEffect(() => {
+    const poolSize = MAX_IMPACTS * PARTICLES_PER_IMPACT;
+    for (let i = 0; i < poolSize; i++) {
+      const material = createParticleMaterial('#FFAA00');
+      const mesh = new THREE.Mesh(particleGeometry, material);
+      mesh.visible = false;
+      scene.add(mesh);
+      particlePoolRef.current.push(mesh);
+    }
+
+    return () => {
+      particlePoolRef.current.forEach(mesh => {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      });
+      particlePoolRef.current = [];
+    };
+  }, [scene]);
 
   // Spawn an impact effect at position
   const spawnImpact = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
@@ -59,39 +84,59 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     
     // Calculate final size: base + 10% per tier
     const finalSize = baseSize * (1 + tier * 0.1);
-    const lifeDuration = DEFAULT_IMPACT_DURATION / 1000; // Convert to seconds
+    const lifeDuration = DEFAULT_IMPACT_DURATION / 1000;
     
-    // Parse colors for gradient
-    const startColor = new THREE.Color(color);
-    const endColor = startColor.clone().multiplyScalar(0.4); // Darken
-    
-    // Create burst of particles
-    for (let i = 0; i < PARTICLES_PER_IMPACT; i++) {
-      // Remove oldest if at capacity
-      if (particlesRef.current.length >= MAX_PARTICLES) {
-        particlesRef.current.shift();
+    // Remove oldest impact if at capacity
+    if (activeImpactsRef.current.length >= MAX_IMPACTS) {
+      const oldest = activeImpactsRef.current.shift();
+      if (oldest) {
+        oldest.particles.forEach(p => {
+          p.mesh.visible = false;
+        });
       }
+    }
+    
+    const particles: ImpactParticle[] = [];
+    const pool = particlePoolRef.current;
+    
+    // Create burst of particles from pool
+    for (let i = 0; i < PARTICLES_PER_IMPACT; i++) {
+      const mesh = pool[poolIndexRef.current % pool.length];
+      poolIndexRef.current++;
+      
+      // Update material color
+      (mesh.material as THREE.MeshBasicMaterial).color.set(color);
       
       // Random direction with upward bias (fire rises)
       const angle = Math.random() * Math.PI * 2;
-      const upwardBias = 0.5 + Math.random() * 0.5; // 0.5-1.0 upward
-      const horizontalSpeed = (0.5 + Math.random() * 1.5) * finalSize * 4;
+      const upwardBias = 0.5 + Math.random() * 0.5;
+      const horizontalSpeed = (0.3 + Math.random() * 0.7) * finalSize * 3;
       
       const velocity = new THREE.Vector3(
         Math.cos(angle) * horizontalSpeed,
-        upwardBias * 2 * finalSize * 4,
+        upwardBias * finalSize * 4,
         Math.sin(angle) * horizontalSpeed
       );
       
-      particlesRef.current.push({
-        position: position.clone(),
+      mesh.position.copy(position);
+      mesh.visible = true;
+      
+      const particleSize = finalSize * (0.3 + Math.random() * 0.7);
+      mesh.scale.setScalar(particleSize);
+      
+      particles.push({
+        mesh,
         velocity,
-        life: lifeDuration * (0.5 + Math.random() * 0.5), // Varied life
+        life: lifeDuration * (0.4 + Math.random() * 0.6),
         maxLife: lifeDuration,
-        color: startColor.clone(),
-        size: finalSize * (0.5 + Math.random() * 0.5),
+        baseScale: particleSize,
       });
     }
+    
+    activeImpactsRef.current.push({
+      particles,
+      startTime: performance.now(),
+    });
   }, []);
 
   // Expose the spawnImpact function
@@ -101,62 +146,44 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
 
   // Update particles
   useFrame((_, delta) => {
-    if (!meshRef.current) return;
+    const now = performance.now();
     
-    const particles = particlesRef.current;
-    let writeIndex = 0;
-    
-    // Update and filter particles in-place
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
+    for (let i = activeImpactsRef.current.length - 1; i >= 0; i--) {
+      const impact = activeImpactsRef.current[i];
+      let allDead = true;
       
-      // Update physics
-      p.position.addScaledVector(p.velocity, delta);
-      p.velocity.y += 1.5 * delta; // Slight upward drift (fire rises)
-      p.velocity.multiplyScalar(0.95); // Drag
-      p.life -= delta;
-      
-      if (p.life > 0) {
-        // Calculate alpha based on life
-        const lifeRatio = p.life / p.maxLife;
-        
-        // Update instance matrix with position and scale
-        const scale = p.size * lifeRatio * 0.05; // Scale down (base geometry is unit sphere)
-        tempPosition.copy(p.position);
-        tempScale.set(scale, scale, scale);
-        tempMatrix.compose(tempPosition, new THREE.Quaternion(), tempScale);
-        meshRef.current.setMatrixAt(writeIndex, tempMatrix);
-        
-        // Fade color from bright to dark (ensure bright enough to see)
-        tempColor.copy(p.color).multiplyScalar(0.5 + lifeRatio * 0.5);
-        meshRef.current.setColorAt(writeIndex, tempColor);
-        
-        // Keep particle
-        particles[writeIndex] = p;
-        writeIndex++;
+      for (const p of impact.particles) {
+        if (p.life > 0) {
+          allDead = false;
+          
+          // Update physics
+          p.mesh.position.addScaledVector(p.velocity, delta);
+          p.velocity.y += 1.0 * delta; // Slight upward drift (fire rises)
+          p.velocity.multiplyScalar(0.92); // Drag
+          p.life -= delta;
+          
+          // Fade and shrink
+          const lifeRatio = Math.max(0, p.life / p.maxLife);
+          const scale = p.baseScale * lifeRatio;
+          p.mesh.scale.setScalar(scale);
+          (p.mesh.material as THREE.MeshBasicMaterial).opacity = lifeRatio * 0.9;
+        } else {
+          // Hide dead particles immediately
+          p.mesh.visible = false;
+        }
       }
-    }
-    
-    // Truncate array
-    particles.length = writeIndex;
-    
-    // Update instance count and matrices
-    meshRef.current.count = writeIndex;
-    if (writeIndex > 0) {
-      meshRef.current.instanceMatrix.needsUpdate = true;
-      if (meshRef.current.instanceColor) {
-        meshRef.current.instanceColor.needsUpdate = true;
+      
+      // Remove impact when all particles are dead
+      if (allDead) {
+        impact.particles.forEach(p => {
+          p.mesh.visible = false;
+        });
+        activeImpactsRef.current.splice(i, 1);
       }
     }
   });
 
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[particleGeometry, particleMaterial, MAX_PARTICLES]}
-      frustumCulled={false}
-    />
-  );
+  return null;
 });
 
 BulletImpacts.displayName = 'BulletImpacts';
