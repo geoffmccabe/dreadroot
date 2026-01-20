@@ -63,6 +63,9 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   const activeGroupsRef = useRef<ImpactGroup[]>([]);
 
   const spawnImpact = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
+    // DEBUG: Log what config we receive
+    console.log('[FortressImpacts] spawnImpact called with config:', JSON.stringify(config));
+    
     // Get colors - fill missing with first color
     const inputColors = config?.colors ?? ['#FFFF00'];
     const color1 = inputColors[0] || '#FFFF00';
@@ -73,6 +76,13 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     const userWidth = config?.size ?? 0.5;
     const userHeight = config?.height ?? 1.0;
     const userDuration = config?.duration ?? 0.5;
+    
+    console.log('[FortressImpacts] Creating 7 fires:', { 
+      colors: [color1, color2, color3], 
+      width: userWidth, 
+      height: userHeight, 
+      duration: userDuration 
+    });
     
     // Calculate actual sizes based on user's design spec
     const centerWidth = userWidth * 0.5;
