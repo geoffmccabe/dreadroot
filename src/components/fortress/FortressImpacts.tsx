@@ -1,22 +1,27 @@
-// Bullet impact effects component
-// Manages fire-like impact effects when bullets hit blocks
+// Bullet impact fire effects using three-nebula
+// Uses the fire preset scaled for bullet impacts
+// 0.25m diameter for T1, scales with tier
+// 0.5s duration for T1, scales with tier
+// Color matches bullet color
 
-import React, { useRef, useImperativeHandle, forwardRef, useCallback, useEffect } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
+import System, { SpriteRenderer } from 'three-nebula';
 import * as THREE from 'three';
 
 // Maximum concurrent impact effects
-const MAX_IMPACTS = 10;
+const MAX_IMPACTS = 20;
 
-// Default impact configuration
-const DEFAULT_IMPACT_COLOR = '#FFAA00'; // Yellow/orange
-const DEFAULT_IMPACT_SIZE = 0.25; // 0.25 meter base diameter
-const DEFAULT_IMPACT_DURATION = 500; // 0.5 seconds in ms
-const PARTICLES_PER_IMPACT = 12;
+// Base values for T1
+const BASE_SIZE = 0.25; // 0.25m diameter for T1
+const BASE_DURATION = 0.5; // 0.5 seconds for T1
+
+// Particle texture - transparent soft circle (same as in presets.ts)
+const PARTICLE_TEXTURE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABhElEQVRYhe2XMU7DQBBF3yxJgUQBHIAChyAFR+AIdJQcgTJH4AiUFBQcgQo4AFQUSHSAEE9hs9mNvWs7WSt8aSXH8s78P7OzHsMSIYRO+3mC0EEfUEZZ4AR4AO6AZeBU0p2kK0lXkm4k9SXdSrqU1JXUkXQhqS3pVNJJ+v6ppPbY+fOkAXQD9QQ+gDfgFbgGPiW9J5f3AG8I4QhYAjaAFWAT2ALWgXVgDegBC8ACMAcMgAHwDvSBt+SDEQEuJaX/bwBngCPgEPgBnoDH+G0DeDYzAYaBzd8HzA+QdA7MAJ9AV1IP+AAeg1APYAD0g9ADsA9sA9vx6raBDeC7xGS2FPgBnkfEFfAN3AMPIb6dgILXDCH0U+vQJFZ5BXwAzwN8l4TQ97j2gGP+/zJLMCk+TwJrgIVhO/H5JbACZJZlrBBCr4lwlkUYSf8bDWAROGRYc1Q4LwCWGW4zXWCO4d7xJnAS4usB+yGE/hjfJL+LawC1B2B5FPgVxw+B5VL/Pxd/AVKPNJWYuG0QAAAAAElFTkSuQmCC';
 
 export interface ImpactConfig {
-  color?: string;   // Hex color for the impact (default: yellow/orange)
-  size?: number;    // Base size in meters (default: 0.25m)
+  color?: string;   // Hex color for the impact (default: yellow)
+  size?: number;    // Override size in meters
   tier?: number;    // Bullet tier for scaling (default: 1, adds 10% per tier)
 }
 
@@ -24,165 +29,150 @@ export interface BulletImpactsHandle {
   spawnImpact: (position: THREE.Vector3, config?: ImpactConfig) => void;
 }
 
-interface ImpactParticle {
-  mesh: THREE.Mesh;
-  velocity: THREE.Vector3;
-  life: number;
-  maxLife: number;
-  baseScale: number;
-}
-
 interface ActiveImpact {
-  particles: ImpactParticle[];
+  system: System;
   startTime: number;
+  duration: number;
 }
 
-// Create a simple glowing particle material
-function createParticleMaterial(color: string): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({
-    color: new THREE.Color(color),
-    transparent: true,
-    opacity: 0.9,
-    depthWrite: false,
-  });
+// Darken a hex color for the fire fade (shift toward red/orange)
+function darkenColor(hex: string): string {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  
+  // Shift towards red/orange and darken
+  const newR = Math.min(255, Math.floor(r * 0.9));
+  const newG = Math.floor(g * 0.3);
+  const newB = Math.floor(b * 0.1);
+  
+  return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
 }
 
-// Base geometry is a unit sphere - we'll scale it to the desired size
-const particleGeometry = new THREE.SphereGeometry(1, 8, 8);
+// Create fire burst preset for bullet impact
+function createImpactPreset(
+  position: THREE.Vector3,
+  size: number,
+  duration: number,
+  color: string
+) {
+  const startColor = color;
+  const endColor = darkenColor(color);
+  
+  // Scale radius based on size (0.25m diameter = particles up to ~0.125m radius)
+  const radiusMin = size * 0.15;
+  const radiusMax = size * 0.4;
+  
+  // Life duration for individual particles
+  const lifeMin = duration * 0.4;
+  const lifeMax = duration * 0.9;
+  
+  return {
+    preParticles: 25,
+    integrationType: 'EULER',
+    emitters: [
+      {
+        // One-shot burst - emit all particles immediately
+        rate: { particlesMin: 18, particlesMax: 25, perSecondMin: 0.001, perSecondMax: 0.001 },
+        position: { x: position.x, y: position.y, z: position.z },
+        initializers: [
+          { type: 'Mass', properties: { min: 0.5, max: 1, isEnabled: true } },
+          { type: 'Life', properties: { min: lifeMin, max: lifeMax, isEnabled: true } },
+          { type: 'BodySprite', properties: { texture: PARTICLE_TEXTURE, isEnabled: true } },
+          { type: 'Radius', properties: { min: radiusMin, max: radiusMax, isEnabled: true } },
+          { type: 'RadialVelocity', properties: { radius: 2.5, x: 0, y: 1, z: 0, theta: 55, isEnabled: true } },
+        ],
+        behaviours: [
+          { type: 'Alpha', properties: { alphaA: 1, alphaB: 0, life: null, easing: 'easeOutCubic' } },
+          { type: 'Color', properties: { colorA: startColor, colorB: endColor, life: null, easing: 'easeLinear' } },
+          { type: 'Scale', properties: { scaleA: 1.2, scaleB: 0.05, life: null, easing: 'easeOutCubic' } },
+          { type: 'Force', properties: { fx: 0, fy: 1.8, fz: 0, life: null, easing: 'easeLinear' } },
+          { type: 'RandomDrift', properties: { driftX: 0.5, driftY: 0.25, driftZ: 0.5, delay: 0, life: null, easing: 'easeLinear' } },
+        ],
+      },
+    ],
+  };
+}
 
 export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   const { scene } = useThree();
   const activeImpactsRef = useRef<ActiveImpact[]>([]);
-  const particlePoolRef = useRef<THREE.Mesh[]>([]);
-  const poolIndexRef = useRef(0);
-
-  // Pre-create particle pool
-  useEffect(() => {
-    const poolSize = MAX_IMPACTS * PARTICLES_PER_IMPACT;
-    for (let i = 0; i < poolSize; i++) {
-      const material = createParticleMaterial('#FFAA00');
-      const mesh = new THREE.Mesh(particleGeometry, material);
-      mesh.visible = false;
-      scene.add(mesh);
-      particlePoolRef.current.push(mesh);
-    }
-
-    return () => {
-      particlePoolRef.current.forEach(mesh => {
-        scene.remove(mesh);
-        mesh.geometry.dispose();
-        (mesh.material as THREE.Material).dispose();
-      });
-      particlePoolRef.current = [];
-    };
-  }, [scene]);
+  const rendererRef = useRef<SpriteRenderer | null>(null);
 
   // Spawn an impact effect at position
-  const spawnImpact = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
-    const color = config?.color || DEFAULT_IMPACT_COLOR;
-    const baseSize = config?.size || DEFAULT_IMPACT_SIZE;
-    const tier = config?.tier || 1;
+  const spawnImpact = useCallback(async (position: THREE.Vector3, config?: ImpactConfig) => {
+    const tier = config?.tier ?? 1;
+    const color = config?.color ?? '#FFFF00'; // Yellow for T1
     
-    // Calculate final size: base + 10% per tier
-    const finalSize = baseSize * (1 + tier * 0.1);
-    const lifeDuration = DEFAULT_IMPACT_DURATION / 1000;
-    
-    // Remove oldest impact if at capacity
+    // Scale size and duration by tier (10% increase per tier)
+    const tierMultiplier = 1 + (tier - 1) * 0.1;
+    const size = config?.size ?? (BASE_SIZE * tierMultiplier);
+    const duration = BASE_DURATION * tierMultiplier;
+
+    // Remove oldest impact if at limit
     if (activeImpactsRef.current.length >= MAX_IMPACTS) {
       const oldest = activeImpactsRef.current.shift();
       if (oldest) {
-        oldest.particles.forEach(p => {
-          p.mesh.visible = false;
+        // Force cleanup all particles
+        oldest.system.emitters.forEach((emitter: any) => {
+          emitter.stopEmit();
+          emitter.particles.length = 0;
         });
+        oldest.system.destroy();
       }
     }
-    
-    const particles: ImpactParticle[] = [];
-    const pool = particlePoolRef.current;
-    
-    // Create burst of particles from pool
-    for (let i = 0; i < PARTICLES_PER_IMPACT; i++) {
-      const mesh = pool[poolIndexRef.current % pool.length];
-      poolIndexRef.current++;
-      
-      // Update material color
-      (mesh.material as THREE.MeshBasicMaterial).color.set(color);
-      
-      // Random direction with upward bias (fire rises)
-      const angle = Math.random() * Math.PI * 2;
-      const upwardBias = 0.5 + Math.random() * 0.5;
-      const horizontalSpeed = (0.3 + Math.random() * 0.7) * finalSize * 3;
-      
-      const velocity = new THREE.Vector3(
-        Math.cos(angle) * horizontalSpeed,
-        upwardBias * finalSize * 4,
-        Math.sin(angle) * horizontalSpeed
-      );
-      
-      mesh.position.copy(position);
-      mesh.visible = true;
-      
-      // Scale to get 0.25m diameter base, with variation (0.3-1.0x)
-      // finalSize is the diameter, divide by 2 for radius
-      const particleRadius = (finalSize / 2) * (0.3 + Math.random() * 0.7);
-      mesh.scale.setScalar(particleRadius);
-      
-      particles.push({
-        mesh,
-        velocity,
-        life: lifeDuration * (0.4 + Math.random() * 0.6),
-        maxLife: lifeDuration,
-        baseScale: particleRadius,
+
+    try {
+      // Create renderer if needed
+      if (!rendererRef.current) {
+        rendererRef.current = new SpriteRenderer(scene, THREE);
+      }
+
+      const preset = createImpactPreset(position, size, duration, color);
+      const system = await System.fromJSONAsync(preset, THREE);
+      system.addRenderer(rendererRef.current);
+
+      activeImpactsRef.current.push({
+        system,
+        startTime: performance.now(),
+        duration: duration * 1000, // Convert to ms
       });
+    } catch (error) {
+      console.error('[BulletImpacts] Failed to spawn impact:', error);
     }
-    
-    activeImpactsRef.current.push({
-      particles,
-      startTime: performance.now(),
-    });
-  }, []);
+  }, [scene]);
 
-  // Expose the spawnImpact function
-  useImperativeHandle(ref, () => ({
-    spawnImpact,
-  }), [spawnImpact]);
+  useImperativeHandle(ref, () => ({ spawnImpact }), [spawnImpact]);
 
-  // Update particles
+  // Update all active systems and clean up expired ones
   useFrame((_, delta) => {
     const now = performance.now();
-    
-    for (let i = activeImpactsRef.current.length - 1; i >= 0; i--) {
+    const toRemove: number[] = [];
+
+    for (let i = 0; i < activeImpactsRef.current.length; i++) {
       const impact = activeImpactsRef.current[i];
-      let allDead = true;
-      
-      for (const p of impact.particles) {
-        if (p.life > 0) {
-          allDead = false;
-          
-          // Update physics
-          p.mesh.position.addScaledVector(p.velocity, delta);
-          p.velocity.y += 1.0 * delta; // Slight upward drift (fire rises)
-          p.velocity.multiplyScalar(0.92); // Drag
-          p.life -= delta;
-          
-          // Fade and shrink
-          const lifeRatio = Math.max(0, p.life / p.maxLife);
-          const scale = p.baseScale * lifeRatio; // baseScale is already the radius
-          p.mesh.scale.setScalar(scale);
-          (p.mesh.material as THREE.MeshBasicMaterial).opacity = lifeRatio * 0.9;
-        } else {
-          // Hide dead particles immediately
-          p.mesh.visible = false;
-        }
-      }
-      
-      // Remove impact when all particles are dead
-      if (allDead) {
-        impact.particles.forEach(p => {
-          p.mesh.visible = false;
+      const elapsed = now - impact.startTime;
+
+      if (elapsed > impact.duration) {
+        // Time's up - destroy completely, clear all particles
+        impact.system.emitters.forEach((emitter: any) => {
+          emitter.stopEmit();
+          // Force clear particle arrays to prevent last-frame persistence
+          emitter.particles.length = 0;
+          emitter.pool.list.length = 0;
         });
-        activeImpactsRef.current.splice(i, 1);
+        impact.system.destroy();
+        toRemove.push(i);
+      } else {
+        // Still active - update
+        impact.system.update(delta);
       }
+    }
+
+    // Remove expired impacts (reverse order to maintain indices)
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      activeImpactsRef.current.splice(toRemove[i], 1);
     }
   });
 
