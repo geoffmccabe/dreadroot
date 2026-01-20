@@ -107,7 +107,7 @@ export function useParticleSystem() {
         startTime: performance.now(),
       });
 
-      console.log(`[Particles] Spawned ${type} at`, position);
+      // REMOVED: console.log spam - particles spawn frequently, logging kills FPS
       return effectId;
     } catch (error) {
       console.error(`[Particles] Failed to spawn ${type}:`, error);

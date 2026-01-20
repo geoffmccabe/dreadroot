@@ -79,16 +79,14 @@ export function markAllTreesDeleted() {
  * Clear all pending blocks (stub for backwards compatibility)
  */
 export function clearAllPendingBlocks() {
-  // No longer needed - blocks go directly to placed_blocks
-  console.log('[LocalGrowth] clearAllPendingBlocks called (no-op in new architecture)');
+  // No longer needed - blocks go directly to placed_blocks (no-op stub)
 }
 
 /**
  * Clear pending blocks for a specific tree (stub for backwards compatibility)
  */
-export function clearPendingBlocksForTree(treeId: string) {
-  // No longer needed - blocks go directly to placed_blocks
-  console.log(`[LocalGrowth] clearPendingBlocksForTree called for ${treeId} (no-op in new architecture)`);
+export function clearPendingBlocksForTree(_treeId: string) {
+  // No longer needed - blocks go directly to placed_blocks (no-op stub)
 }
 
 /**
