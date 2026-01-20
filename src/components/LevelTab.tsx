@@ -37,7 +37,6 @@ export const LevelTab: React.FC<LevelTabProps> = ({ totalPoints, currentLevel: p
             <div className="text-xs text-muted-foreground mb-1">Level</div>
             <div className="text-3xl font-bold text-foreground">
               {currentLevel}
-              <span className="text-lg text-muted-foreground font-normal">/{MAX_LEVEL}</span>
             </div>
           </div>
         </div>
