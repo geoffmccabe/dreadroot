@@ -17,6 +17,7 @@ import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { LevelTab } from '@/components/LevelTab';
+import { KillsTab } from '@/components/KillsTab';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -75,7 +76,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [fogEnabled, setFogEnabled] = useState(true);
   const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
-  const [panelSize, setPanelSize] = useState({ width: 448, height: 600 }); // 28rem = 448px
+  const [panelSize, setPanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
   const [isResizing, setIsResizing] = useState(false);
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
@@ -224,12 +225,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="user">User</TabsTrigger>
             <TabsTrigger value="level">Level</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
-            <TabsTrigger value="inventory">Inventory</TabsTrigger>
-            <TabsTrigger value="store">Store</TabsTrigger>
+            <TabsTrigger value="kills">Kills</TabsTrigger>
+            <TabsTrigger value="blocks">Blocks</TabsTrigger>
+            <TabsTrigger value="market">Market</TabsTrigger>
           </TabsList>
 
           {/* User Tab */}
@@ -352,9 +354,22 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             </Card>
           </TabsContent>
 
-          {/* Inventory Tab */}
+          {/* Kills Tab */}
           <TabsContent 
-            value="inventory" 
+            value="kills" 
+            className="overflow-y-auto" 
+            style={{ 
+              height: `${panelSize.height - 104}px`,
+              marginTop: 0,
+              paddingTop: '1rem'
+            }}
+          >
+            <KillsTab height={panelSize.height - 104} />
+          </TabsContent>
+
+          {/* Blocks Tab (formerly Inventory) */}
+          <TabsContent 
+            value="blocks"
             style={{ 
               height: `${panelSize.height - 104}px`,
               marginTop: 0,
@@ -454,9 +469,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             </Tabs>
           </TabsContent>
 
-          {/* Store Tab */}
+          {/* Market Tab (formerly Store) */}
           <TabsContent 
-            value="store" 
+            value="market"
             style={{ 
               height: `${panelSize.height - 104}px`,
               marginTop: 0,

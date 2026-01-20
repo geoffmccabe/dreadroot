@@ -201,7 +201,7 @@ export function FirstPersonControls({
     switch (event.code) {
       case 'KeyI':
         event.preventDefault();
-        onOpenPanel('inventory');
+        onOpenPanel('blocks');
         break;
       case 'KeyW':
       case 'ArrowUp':
@@ -261,7 +261,7 @@ export function FirstPersonControls({
         break;
       case 'KeyO':
         event.preventDefault();
-        onOpenPanel('store');
+        onOpenPanel('market');
         break;
       case 'BracketLeft':
         if (blockPlacementMode) {

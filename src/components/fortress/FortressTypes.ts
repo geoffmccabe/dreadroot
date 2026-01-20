@@ -55,7 +55,7 @@ export interface SceneProps {
   onBlockPlace: (position: THREE.Vector3) => void;
   onTreePlace: (position: THREE.Vector3) => void;
   onModeChange: (mode: 'shooting' | 'building' | 'planting' | null) => void;
-  onOpenPanel: (tab: 'user' | 'wallet' | 'inventory' | 'store') => void;
+  onOpenPanel: (tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => void;
   crosshairsEnabled: boolean;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
@@ -95,6 +95,8 @@ export interface SceneProps {
   onShwarmDamage?: (shwarmId: string, blockId: string, damage: number) => boolean;
   // Points system callback
   onPointsEarned?: (points: number) => void;
+  // Shwarm group killed callback (passes tier for kill tracking)
+  onShwarmGroupKilled?: (tier: number) => void;
   // Respawn position for teleporting player
   respawnPosition?: THREE.Vector3 | null;
   onRespawnComplete?: () => void;
@@ -114,7 +116,7 @@ export interface FirstPersonControlsProps {
   treePlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
   onTreePlace?: (position: THREE.Vector3) => void;
-  onOpenPanel: (tab: 'user' | 'wallet' | 'inventory' | 'store') => void;
+  onOpenPanel: (tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => void;
   onModeChange: (mode: 'shooting' | 'building' | 'planting' | null) => void;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
