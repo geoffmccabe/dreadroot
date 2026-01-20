@@ -223,8 +223,9 @@ export function useLocalGrowth({
     if (!TREE_CONFIG.ENABLED) return;
 
     // Track last parent check per tree to avoid redundant checks
+    // Use -Infinity as default so first check happens immediately
     const lastParentCheck = new Map<string, number>();
-    const PARENT_CHECK_INTERVAL = 10000; // Only check parent existence every 10 seconds
+    const PARENT_CHECK_INTERVAL = 3000; // Check parent existence every 3 seconds (reduced from 10)
 
     const checkGrowth = async () => {
       const placeBlocksBatchFn = placeBlocksBatchRef.current;
@@ -275,8 +276,8 @@ export function useLocalGrowth({
             continue;
           }
 
-          // Periodic parent check (not every tick - too expensive)
-          const lastCheck = lastParentCheck.get(id) || 0;
+          // Periodic parent check - CRITICAL: First check must happen immediately (lastCheck defaults to 0)
+          const lastCheck = lastParentCheck.get(id) ?? 0; // 0 ensures first check happens immediately
           if (now - lastCheck > PARENT_CHECK_INTERVAL) {
             const { data: parentExists, error: existsError } = await supabase
               .from('planted_trees')
