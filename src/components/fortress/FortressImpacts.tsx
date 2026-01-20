@@ -129,10 +129,8 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       })),
     };
 
-    try {
-      // Load the preset and add emitters to our system
-      const loadedSystem = await System.fromJSONAsync(modifiedPreset, THREE);
-      
+    // Load the preset and add emitters to our system
+    System.fromJSONAsync(modifiedPreset, THREE).then((loadedSystem) => {
       loadedSystem.emitters.forEach((emitter: any) => {
         system.addEmitter(emitter);
         activeImpactsRef.current.push({
@@ -141,9 +139,9 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
           duration: DEFAULT_IMPACT_DURATION,
         });
       });
-    } catch (error) {
-      console.error('[BulletImpacts] Failed to spawn impact:', error);
-    }
+    }).catch((err) => {
+      console.error('[BulletImpacts] Failed to spawn impact:', err?.message || err);
+    });
   }, [ensureInitialized]);
 
   // Expose the spawnImpact function

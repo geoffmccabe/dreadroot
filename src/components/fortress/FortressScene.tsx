@@ -600,11 +600,27 @@ export function FortressScene({
     const bullet = pool[activeBulletCount.current % MAX_BULLETS];
     activeBulletCount.current++;
     
+    // Normalize direction for consistent speed
+    const normalizedDir = direction.clone().normalize();
+    
     // Reset bullet properties with physics
+    // Bullet starts exactly at camera position (origin is already camera.position from FortressControls)
     bullet.position.copy(origin);
-    bullet.direction.set(direction.x, 0, direction.z).normalize(); // Horizontal direction only
-    bullet.velocityY = direction.y * 100; // Initial Y velocity from aim direction
-    bullet.speed = 100;
+    
+    // Store full 3D direction for horizontal movement
+    const horizontalLen = Math.sqrt(normalizedDir.x * normalizedDir.x + normalizedDir.z * normalizedDir.z);
+    if (horizontalLen > 0.0001) {
+      bullet.direction.set(normalizedDir.x / horizontalLen, 0, normalizedDir.z / horizontalLen);
+    } else {
+      bullet.direction.set(0, 0, -1); // Fallback if looking straight up/down
+    }
+    
+    // Initial Y velocity from the actual aim direction (before normalizing horizontal)
+    bullet.velocityY = normalizedDir.y * 100;
+    
+    // Horizontal speed is proportional to how horizontal the aim is
+    bullet.speed = horizontalLen * 100;
+    
     bullet.life = 5.0; // Increased life since bullets now arc down
     bullet.tier = 1;   // T1 for now
     bullet.color = '#FFFF00'; // Yellow
