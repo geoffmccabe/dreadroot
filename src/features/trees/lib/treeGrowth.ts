@@ -687,13 +687,35 @@ function addShroomWithSymmetry(
 /**
  * Assign growth order to blocks
  * Blocks in the same symmetryGroup get the same growthOrder so they appear together
+ * 
+ * ARCHITECTURE FIX: Two-pass approach
+ * Pass 1: Assign orders to regular (non-decoration) blocks
+ * Pass 2: Decorations (negative growthOrder) inherit their anchor's final order
  */
 function assignGrowthOrder(blocks: BlueprintBlock[], rng: () => number): void {
   
-  // Group blocks by symmetryGroup
-  const groupToBlocks = new Map<number, BlueprintBlock[]>();
+  // Build index map BEFORE any reordering - decorations reference anchor by original array index
+  const originalIndexToBlock = new Map<number, BlueprintBlock>();
+  for (let i = 0; i < blocks.length; i++) {
+    originalIndexToBlock.set(i, blocks[i]);
+  }
+  
+  // Separate decoration blocks from regular blocks
+  const regularBlocks: BlueprintBlock[] = [];
+  const decorationBlocks: BlueprintBlock[] = [];
   
   for (const block of blocks) {
+    if (block.growthOrder < 0) {
+      decorationBlocks.push(block);
+    } else {
+      regularBlocks.push(block);
+    }
+  }
+  
+  // Group regular blocks by symmetryGroup
+  const groupToBlocks = new Map<number, BlueprintBlock[]>();
+  
+  for (const block of regularBlocks) {
     const group = block.symmetryGroup ?? 0;
     if (!groupToBlocks.has(group)) {
       groupToBlocks.set(group, []);
@@ -709,26 +731,25 @@ function assignGrowthOrder(blocks: BlueprintBlock[], rng: () => number): void {
       return minYA - minYB;
     });
   
-  // Assign growth orders - all blocks in same group get same order
+  // PASS 1: Assign growth orders to regular blocks
   let order = 0;
   for (const [groupId, groupBlocks] of sortedGroups) {
-    // Check if these are decoration blocks (negative growthOrder means decoration)
-    const isDecoration = groupBlocks.some(b => b.growthOrder < 0);
+    for (const block of groupBlocks) {
+      block.growthOrder = order;
+    }
+    order++;
+  }
+  
+  // PASS 2: Decorations inherit their anchor's order using the ORIGINAL array index
+  for (const decoration of decorationBlocks) {
+    const anchorIndex = -(decoration.growthOrder + 1);
+    const anchorBlock = originalIndexToBlock.get(anchorIndex);
     
-    if (isDecoration) {
-      // Decorations inherit their anchor's order
-      const anchorIndex = -(groupBlocks[0].growthOrder + 1);
-      const anchorBlock = blocks[anchorIndex];
-      const anchorOrder = anchorBlock?.growthOrder ?? order;
-      for (const block of groupBlocks) {
-        block.growthOrder = anchorOrder;
-      }
+    if (anchorBlock && anchorBlock.growthOrder >= 0) {
+      decoration.growthOrder = anchorBlock.growthOrder;
     } else {
-      // Regular blocks get sequential order
-      for (const block of groupBlocks) {
-        block.growthOrder = order;
-      }
-      order++;
+      // Fallback: assign to order 0 if anchor not found
+      decoration.growthOrder = 0;
     }
   }
 }
