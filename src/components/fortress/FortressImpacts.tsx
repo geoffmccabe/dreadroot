@@ -115,6 +115,11 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       const geometry = new particleFire.Geometry(radius, height, particleCount);
       const material = new particleFire.Material({ color: hexToNumber(color) });
       
+      // Fix grey fringe: use additive blending and disable depth write
+      material.blending = THREE.AdditiveBlending;
+      material.depthWrite = false;
+      material.transparent = true;
+      
       if (camera instanceof THREE.PerspectiveCamera) {
         material.setPerspective(camera.fov, window.innerHeight);
       }
