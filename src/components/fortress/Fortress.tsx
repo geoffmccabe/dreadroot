@@ -213,11 +213,13 @@ export function Fortress() {
   });
   
   // Tree chopping - allows owner to destroy tree and get seed back
+  // IMPORTANT: Combine plantedTrees + myIncompleteTrees so user can chop their growing trees
   const { refetchSingleChunk, removeBlocksByPositions } = useBlocks();
+  const allTrees = [...plantedTrees, ...myIncompleteTrees];
   const { chopTreeAtPosition, isOwnedTreeAtPosition } = useTreeChopping({
     worldId: currentWorldId,
     userId: user?.id ?? null,
-    plantedTrees,
+    plantedTrees: allTrees,  // Pass ALL trees including user's incomplete ones
     seedDefinitions,
     returnSeed,
     refetchChunk: refetchSingleChunk,
