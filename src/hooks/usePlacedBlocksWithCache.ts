@@ -112,7 +112,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   const isBlockModeRef = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const syncingRef = useRef(false);
-  
+  const syncBlockToSupabaseRef = useRef<((dbBlock: DBBlock) => Promise<any>) | null>(null);
   // Debounce sync to prevent auth token refresh from causing freezes
   const lastSyncTimeRef = useRef<number>(0);
   const SYNC_DEBOUNCE_MS = 30000; // Only sync every 30 seconds max
@@ -538,10 +538,25 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
           }, TREE_GROWTH_GRACE_PERIOD);
         }
       }
+      
+      // CRITICAL FIX: Sync batch blocks to IndexedDB and Supabase
+      // Without this, tree blocks only exist locally and disappear on refresh
+      for (const block of blocksToAdd) {
+        const dbBlock: DBBlock = {
+          ...block,
+          synced: false,
+          local_id: block.id
+        };
+        
+        // Non-blocking: add to IndexedDB then sync to Supabase
+        addBlock(dbBlock).then(async () => {
+          await syncBlockToSupabaseRef.current?.(dbBlock);
+        }).catch(() => {});
+      }
     }
     
     return blocksToAdd;
-  }, [userId, worldId, chunkLoader]); // Removed 'blocks' dependency - not needed
+  }, [userId, worldId, chunkLoader, addBlock]);
 
   // PHASE 1: Sync a single block to Supabase (uses cached user, fire-and-forget)
   const syncBlockToSupabase = useCallback(async (dbBlock: DBBlock) => {
@@ -609,6 +624,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       throw error;
     }
   }, [getCachedUserId, removeFromDB, updateBlock]);
+
+  // Keep the ref in sync with the callback
+  useEffect(() => {
+    syncBlockToSupabaseRef.current = syncBlockToSupabase;
+  }, [syncBlockToSupabase]);
 
   // Batch sync unsynced blocks
   // NEW ARCHITECTURE: All blocks (including tree blocks) now sync to placed_blocks

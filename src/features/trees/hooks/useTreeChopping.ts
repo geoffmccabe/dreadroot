@@ -61,6 +61,8 @@ function findTreeAtPosition(
   z: number,
   plantedTrees: PlantedTree[]
 ): PlantedTree | null {
+  console.log(`[TreeChopping] findTreeAtPosition(${x}, ${y}, ${z}) - checking ${plantedTrees.length} trees`);
+  
   // A block belongs to a tree if it's within the tree's potential bounds
   for (const tree of plantedTrees) {
     const dx = Math.abs(x - tree.base_x);
@@ -71,11 +73,15 @@ function findTreeAtPosition(
     const maxSpread = (tree.seed_definition?.tier ?? 5) * 2;
     const maxHeight = (tree.seed_definition?.tier ?? 5) * 10;
     
-    if (dx <= maxSpread && dz <= maxSpread && dy >= 0 && dy <= maxHeight) {
+    const inBounds = dx <= maxSpread && dz <= maxSpread && dy >= 0 && dy <= maxHeight;
+    console.log(`[TreeChopping] Tree at (${tree.base_x}, ${tree.base_y}, ${tree.base_z}) tier=${tree.seed_definition?.tier}, dx=${dx}, dz=${dz}, dy=${dy}, maxSpread=${maxSpread}, maxHeight=${maxHeight}, inBounds=${inBounds}`);
+    
+    if (inBounds) {
       return tree;
     }
   }
   
+  console.log(`[TreeChopping] No tree found at position`);
   return null;
 }
 
