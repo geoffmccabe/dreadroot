@@ -1,8 +1,7 @@
 // Bullet impact fire effects using three-particle-fire
 // Lightweight GPU-accelerated fire using THREE.Points
-// 0.25m diameter for T1, scales with tier
-// 0.5s duration for T1, scales with tier
-// Color matches bullet color
+// Size/duration from BulletDefinitions context
+// Multi-color support: blends colors for performance
 
 import { forwardRef, useImperativeHandle, useRef, useCallback, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
@@ -15,14 +14,17 @@ particleFire.install({ THREE });
 // Maximum concurrent impact effects
 const MAX_IMPACTS = 25;
 
-// Base values for T1
-const BASE_SIZE = 0.25; // 0.25m diameter for T1
-const BASE_DURATION = 0.5; // 0.5 seconds for T1
-const PARTICLE_COUNT = 80; // Particles per fire
+// Fallback base values if no definition found
+const BASE_SIZE = 0.25;
+const BASE_DURATION = 0.5;
+const PARTICLE_COUNT = 80;
 
 export interface ImpactConfig {
-  color?: string;
-  size?: number;
+  colors?: string[];      // Multiple colors to blend
+  color?: string;         // Single color fallback
+  size?: number;          // Override size
+  duration?: number;      // Override duration (seconds)
+  height?: number;        // Override height multiplier
   tier?: number;
 }
 
@@ -35,6 +37,23 @@ interface ActiveImpact {
   material: any; // particleFire.Material
   startTime: number;
   duration: number;
+}
+
+// Blend multiple hex colors into one averaged color (FPS-friendly)
+function blendColors(colors: string[]): string {
+  if (colors.length === 0) return '#FFFF00';
+  if (colors.length === 1) return colors[0];
+  
+  let r = 0, g = 0, b = 0;
+  for (const hex of colors) {
+    const cleaned = hex.replace('#', '');
+    r += parseInt(cleaned.substring(0, 2), 16);
+    g += parseInt(cleaned.substring(2, 4), 16);
+    b += parseInt(cleaned.substring(4, 6), 16);
+  }
+  
+  const count = colors.length;
+  return `#${Math.round(r / count).toString(16).padStart(2, '0')}${Math.round(g / count).toString(16).padStart(2, '0')}${Math.round(b / count).toString(16).padStart(2, '0')}`;
 }
 
 // Convert hex color to THREE.Color number
@@ -50,11 +69,17 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   // Spawn an impact effect at position
   const spawnImpact = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
     const tier = config?.tier ?? 1;
-    const color = config?.color ?? '#FFFF00';
     
+    // Blend multiple colors or use single color
+    const colors = config?.colors ?? (config?.color ? [config.color] : ['#FFFF00']);
+    const blendedColor = blendColors(colors);
+    
+    // Use provided values or calculate from tier
     const tierMultiplier = 1 + (tier - 1) * 0.1;
     const size = config?.size ?? (BASE_SIZE * tierMultiplier);
-    const duration = (BASE_DURATION * tierMultiplier) * 1000; // Convert to ms
+    const durationSec = config?.duration ?? (BASE_DURATION * tierMultiplier);
+    const duration = durationSec * 1000; // Convert to ms
+    const heightMultiplier = config?.height ?? 1.5;
 
     // Remove oldest impact if at limit
     if (activeImpactsRef.current.length >= MAX_IMPACTS) {
@@ -67,11 +92,11 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     }
 
     // Create fire geometry and material
-    const radius = size / 2; // Convert diameter to radius
-    const height = size * 1.5; // Fire height proportional to size
+    const radius = size / 2;
+    const height = size * heightMultiplier;
     
     const geometry = new particleFire.Geometry(radius, height, PARTICLE_COUNT);
-    const material = new particleFire.Material({ color: hexToNumber(color) });
+    const material = new particleFire.Material({ color: hexToNumber(blendedColor) });
     
     // Set perspective for proper point sizing
     if (camera instanceof THREE.PerspectiveCamera) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -6,41 +6,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Save } from 'lucide-react';
+import { useBulletDefinitions, getDefaultBullet, blendColors, BulletDefinition } from '@/contexts/BulletDefinitionsContext';
 
-// Tier color definitions
-const TIER_COLORS: Record<number, { name: string; defaultColors: string[] }> = {
-  1: { name: 'Yellow', defaultColors: ['#FFFF00'] },
-  2: { name: 'Green', defaultColors: ['#00FF00'] },
-  3: { name: 'Blue', defaultColors: ['#0088FF'] },
-  4: { name: 'Purple', defaultColors: ['#8B00FF'] },
-  5: { name: 'Red', defaultColors: ['#FF0000'] },
-  6: { name: 'White', defaultColors: ['#FFFFFF'] },
-  7: { name: 'Pink', defaultColors: ['#FF69B4'] },
-  8: { name: 'Rainbow', defaultColors: ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#8B00FF'] },
-  9: { name: 'Black', defaultColors: ['#1a1a1a'] },
-  10: { name: 'Gold', defaultColors: ['#FFD700'] },
+// Tier color definitions (display names only)
+const TIER_NAMES: Record<number, string> = {
+  1: 'Yellow',
+  2: 'Green',
+  3: 'Blue',
+  4: 'Purple',
+  5: 'Red',
+  6: 'White',
+  7: 'Pink',
+  8: 'Rainbow',
+  9: 'Black',
+  10: 'Gold',
 };
-
-interface BulletDefinition {
-  id?: string;
-  tier: number;
-  colors: string[];
-  burn_time: number;
-  burn_width: number;
-  burn_height: number;
-}
-
-// Default values for new bullet definitions
-const getDefaultBullet = (tier: number): BulletDefinition => ({
-  tier,
-  colors: TIER_COLORS[tier]?.defaultColors || ['#FFFFFF'],
-  burn_time: 0.5 + (tier - 1) * 0.05, // T1: 0.5s, scaling up
-  burn_width: 0.25 + (tier - 1) * 0.025, // T1: 0.25m, scaling up
-  burn_height: 0.5 + (tier - 1) * 0.05, // T1: 0.5m, scaling up
-});
 
 interface BulletTierPanelProps {
   tier: number;
@@ -51,26 +32,30 @@ interface BulletTierPanelProps {
   hasChanges: boolean;
 }
 
-function BulletShape({ color, isRainbow }: { color: string; isRainbow: boolean }) {
+function BulletShape({ colors, isRainbow }: { colors: string[]; isRainbow: boolean }) {
+  // For display, show blended color (same as what fire will show)
+  const blended = isRainbow 
+    ? 'linear-gradient(90deg, #FF0000, #FF7F00, #FFFF00, #00FF00, #0000FF, #8B00FF)'
+    : colors.length > 1 
+      ? blendColors(colors)
+      : colors[0];
+  
   const bgStyle = isRainbow 
-    ? { background: 'linear-gradient(90deg, #FF0000, #FF7F00, #FFFF00, #00FF00, #0000FF, #8B00FF)' }
-    : { background: color };
+    ? { background: blended }
+    : { background: colors.length > 1 ? blended : colors[0] };
   
   return (
-    <div className="flex items-center h-5">
+    <div className="flex items-center h-5" title={colors.length > 1 ? `Blended: ${blendColors(colors)}` : colors[0]}>
       {/* Rectangle body */}
       <div className="w-6 h-4 rounded-l-sm" style={bgStyle} />
       {/* Semi-circle tip */}
-      <div 
-        className="w-2 h-4 rounded-r-full" 
-        style={bgStyle}
-      />
+      <div className="w-2 h-4 rounded-r-full" style={bgStyle} />
     </div>
   );
 }
 
 function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChanges }: BulletTierPanelProps) {
-  const tierInfo = TIER_COLORS[tier];
+  const tierName = TIER_NAMES[tier];
   
   const updateField = <K extends keyof BulletDefinition>(field: K, value: BulletDefinition[K]) => {
     onChange({ ...definition, [field]: value });
@@ -98,8 +83,11 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
       {/* Row 1: Bullet shape, colors, save */}
       <div className="flex items-center gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-[100px]">
-          <BulletShape color={definition.colors[0]} isRainbow={tier === 8} />
+          <BulletShape colors={definition.colors} isRainbow={tier === 8} />
           <span className="text-sm font-medium">T{tier}</span>
+          {definition.colors.length > 1 && (
+            <span className="text-xs text-muted-foreground">(blended)</span>
+          )}
         </div>
         
         <div className="flex items-center gap-1 flex-1 flex-wrap">
@@ -187,10 +175,14 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
         </div>
       </div>
 
-      {/* Special effects note for T6-T10 */}
       {tier >= 6 && (
         <div className="text-xs text-muted-foreground italic mt-1">
           ✨ Special effects coming soon
+        </div>
+      )}
+      {definition.colors.length > 1 && tier < 6 && (
+        <div className="text-xs text-muted-foreground mt-1">
+          🎨 Multiple colors blend into one fire color for performance
         </div>
       )}
     </Card>
