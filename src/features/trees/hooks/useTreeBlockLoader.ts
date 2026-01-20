@@ -54,43 +54,60 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
     initLogStep('useTreeBlockLoader.ts', 'Querying tree_blocks table...');
 
     try {
-      // Fetch all tree blocks for fully-grown trees, joined with seed definitions for textures
-      // We need: position, block_type, texture from seed_definition
-      // Use explicit FK name to avoid ambiguity (there are 2 FKs between tree_blocks and planted_trees)
-      const { data: treeBlocks, error } = await supabase
-        .from('tree_blocks')
-        .select(`
-          id,
-          tree_id,
-          world_id,
-          position_x,
-          position_y,
-          position_z,
-          block_type,
-          growth_order,
-          created_at,
-          planted_trees!fk_tree_blocks_planted_trees (
-            id,
-            is_fully_grown,
-            seed_definition_id,
-            seed_definitions (
-              trunk_texture_url,
-              branch_texture_url
-            )
-          )
-        `)
-        .eq('world_id', worldId)
-        .eq('planted_trees.is_fully_grown', true);
+      // Fetch all tree blocks in batches to avoid Supabase 1000 row limit
+      const allTreeBlocks: any[] = [];
+      const BATCH_SIZE = 1000;
+      let offset = 0;
+      let hasMore = true;
+      let batchNum = 0;
 
-      if (error) {
-        console.error('[TreeBlockLoader] Error fetching tree blocks:', error);
-        initLogStep('useTreeBlockLoader.ts', `Query error: ${error.message}`);
-        return;
+      while (hasMore) {
+        batchNum++;
+        const { data: batch, error } = await supabase
+          .from('tree_blocks')
+          .select(`
+            id,
+            tree_id,
+            world_id,
+            position_x,
+            position_y,
+            position_z,
+            block_type,
+            growth_order,
+            created_at,
+            planted_trees!fk_tree_blocks_planted_trees (
+              id,
+              is_fully_grown,
+              seed_definition_id,
+              seed_definitions (
+                trunk_texture_url,
+                branch_texture_url
+              )
+            )
+          `)
+          .eq('world_id', worldId)
+          .eq('planted_trees.is_fully_grown', true)
+          .range(offset, offset + BATCH_SIZE - 1);
+
+        if (error) {
+          console.error('[TreeBlockLoader] Error fetching tree blocks:', error);
+          initLogStep('useTreeBlockLoader.ts', `Query error: ${error.message}`);
+          return;
+        }
+
+        if (batch && batch.length > 0) {
+          allTreeBlocks.push(...batch);
+          offset += batch.length;
+          hasMore = batch.length === BATCH_SIZE;
+          initLogStep('useTreeBlockLoader.ts', `Fetched batch ${batchNum}`, batch.length);
+        } else {
+          hasMore = false;
+        }
       }
 
-      initLogStep('useTreeBlockLoader.ts', 'Query complete, raw results', treeBlocks?.length || 0);
+      const treeBlocks = allTreeBlocks;
 
-      if (!treeBlocks || treeBlocks.length === 0) {
+      if (treeBlocks.length === 0) {
         console.log('[TreeBlockLoader] No tree blocks found for world');
         initLogStep('useTreeBlockLoader.ts', 'No fully-grown trees found');
         loadedWorldRef.current = worldId;
@@ -98,7 +115,7 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
       }
 
       console.log(`[TreeBlockLoader] Found ${treeBlocks.length} tree blocks to load`);
-      initLogStep('useTreeBlockLoader.ts', 'Processing tree blocks...');
+      initLogStep('useTreeBlockLoader.ts', 'Total tree blocks loaded', treeBlocks.length);
 
       // Convert tree_blocks to PlacedBlock format
       const placedBlocks: PlacedBlock[] = treeBlocks.map((tb: any) => {
