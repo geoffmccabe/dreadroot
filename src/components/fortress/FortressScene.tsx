@@ -273,6 +273,7 @@ export function FortressScene({
   shwarmDefinitions,
   onShwarmDamage,
   onPointsEarned,
+  onShwarmGroupKilled,
   respawnPosition,
   onRespawnComplete,
   isOwnedTreeAtPosition,
@@ -289,13 +290,15 @@ export function FortressScene({
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
   
-  // Callback when entire shwarm group is killed - play yay sound
-  const handleShwarmGroupKilled = useCallback(() => {
+  // Callback when entire shwarm group is killed - play yay sound and notify parent
+  const handleShwarmGroupKilled = useCallback((tier: number) => {
     if (audioRefs.current.shwarmGroupKilled) {
       audioRefs.current.shwarmGroupKilled.currentTime = 0;
       audioRefs.current.shwarmGroupKilled.play().catch(() => {});
     }
-  }, []);
+    // Notify parent for kill tracking
+    onShwarmGroupKilled?.(tier);
+  }, [onShwarmGroupKilled]);
   
   const { shwarms, shwarmsRef, damageBlock } = useShwarmSystem({
     definitions: shwarmDefinitions,

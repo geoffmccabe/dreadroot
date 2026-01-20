@@ -723,7 +723,7 @@ export function Fortress() {
     await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedSeedTier);
   }, [selectedSeedTier, plantSeed]);
 
-  const handleOpenPanel = useCallback((tab: 'user' | 'wallet' | 'inventory' | 'store') => {
+  const handleOpenPanel = useCallback((tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => {
     openPanel(tab);
   }, [openPanel]);
 
@@ -863,6 +863,26 @@ export function Fortress() {
                 duration: 4000,
               });
             }
+            }}
+          onShwarmGroupKilled={async (tier) => {
+            // Increment kill count in database
+            const { data: existing } = await supabase
+              .from('user_combat_stats')
+              .select('*')
+              .eq('user_id', user?.id)
+              .eq('enemy_type', `shwarm_t${tier}`)
+              .maybeSingle();
+            
+            if (existing) {
+              await supabase
+                .from('user_combat_stats')
+                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+            } else if (user?.id) {
+              await supabase
+                .from('user_combat_stats')
+                .insert({ user_id: user.id, enemy_type: `shwarm_t${tier}`, kills: 1 });
+            }
           }}
           respawnPosition={respawnPosition}
           onRespawnComplete={() => setRespawnPosition(null)}
@@ -955,14 +975,14 @@ export function Fortress() {
         <div className="flex items-center gap-0 bg-black/50 text-white rounded">
           <div 
             className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-l"
-            onClick={() => openPanel('inventory')}
+            onClick={() => openPanel('blocks')}
             title="Open inventory"
           >
             <img src={currentTheme?.coin_image_url || '/waterfall_coin.png'} alt="coin" className="w-6 h-6" />
           </div>
           <div 
             className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-r border-l border-white/20"
-            onClick={() => openPanel('inventory')}
+            onClick={() => openPanel('blocks')}
             title="Open inventory"
           >
             <span className="font-bold">x{tokenBalance?.coins || 0}</span>
@@ -981,7 +1001,7 @@ export function Fortress() {
               if (totalBlocks > 0) {
                 handleModeChange(selectedBlockType ? null : 'building');
               } else {
-                openPanel('store');
+                openPanel('market');
               }
             }}
             title={(() => {
