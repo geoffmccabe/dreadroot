@@ -353,19 +353,31 @@ export function FortressScene({
   // Bullet system - use refs to avoid useFrame setState
   // Uses object pool to avoid GC allocations
   const MAX_BULLETS = 20;
-  type Bullet = { position: THREE.Vector3; direction: THREE.Vector3; speed: number; life: number };
+  const BULLET_GRAVITY = 9.8; // m/s^2
+  type BulletLocal = { 
+    position: THREE.Vector3; 
+    direction: THREE.Vector3; 
+    velocityY: number;
+    speed: number; 
+    life: number;
+    tier: number;
+    color: string;
+  };
   
   // Pre-allocate bullet pool to avoid per-shot allocations
-  const bulletPoolRef = useRef<Bullet[]>(
+  const bulletPoolRef = useRef<BulletLocal[]>(
     Array.from({ length: MAX_BULLETS }, () => ({
       position: new THREE.Vector3(),
       direction: new THREE.Vector3(),
+      velocityY: 0,
       speed: 100,
-      life: 0
+      life: 0,
+      tier: 1,
+      color: '#FFFF00'
     }))
   );
   const activeBulletCount = useRef(0);
-  const bulletsRef = useRef<Bullet[]>([]);
+  const bulletsRef = useRef<BulletLocal[]>([]);
   const [bulletRenderTrigger, setBulletRenderTrigger] = useState(0);
   const lastBulletRender = useRef(0);
   const BULLET_RENDER_THROTTLE = 50; // ms
@@ -588,11 +600,14 @@ export function FortressScene({
     const bullet = pool[activeBulletCount.current % MAX_BULLETS];
     activeBulletCount.current++;
     
-    // Reset bullet properties
+    // Reset bullet properties with physics
     bullet.position.copy(origin);
-    bullet.direction.copy(direction);
+    bullet.direction.set(direction.x, 0, direction.z).normalize(); // Horizontal direction only
+    bullet.velocityY = direction.y * 100; // Initial Y velocity from aim direction
     bullet.speed = 100;
-    bullet.life = 3.0;
+    bullet.life = 5.0; // Increased life since bullets now arc down
+    bullet.tier = 1;   // T1 for now
+    bullet.color = '#FFFF00'; // Yellow
     
     // Only add if not already in active list
     if (!bulletsRef.current.includes(bullet)) {
@@ -640,8 +655,15 @@ export function FortressScene({
       
       for (let i = 0; i < bullets.length; i++) {
         const bullet = bullets[i];
-        // Use addScaledVector to avoid allocation
-        bullet.position.addScaledVector(bullet.direction, bullet.speed * delta);
+        
+        // Apply gravity to Y velocity
+        bullet.velocityY -= BULLET_GRAVITY * delta;
+        
+        // Update position with physics
+        bullet.position.x += bullet.direction.x * bullet.speed * delta;
+        bullet.position.z += bullet.direction.z * bullet.speed * delta;
+        bullet.position.y += bullet.velocityY * delta;
+        
         bullet.life -= delta;
         
         if (bullet.life > 0) {
@@ -673,11 +695,23 @@ export function FortressScene({
             const SHWARM_HALF_SIZE = 0.35; // Slightly larger for forgiving hit detection
             const BULLET_DAMAGE = 25;
             
-            // Calculate bullet's previous position (before this frame's movement)
-            const moveDistance = bullet.speed * delta;
-            const prevX = bullet.position.x - bullet.direction.x * moveDistance;
-            const prevY = bullet.position.y - bullet.direction.y * moveDistance;
-            const prevZ = bullet.position.z - bullet.direction.z * moveDistance;
+            // Calculate bullet's actual displacement this frame (not direction-based)
+            const moveDistanceXZ = bullet.speed * delta;
+            const moveDistanceY = bullet.velocityY * delta + 0.5 * BULLET_GRAVITY * delta * delta; // Include gravity in prev calc
+            const prevX = bullet.position.x - bullet.direction.x * moveDistanceXZ;
+            const prevY = bullet.position.y - moveDistanceY;
+            const prevZ = bullet.position.z - bullet.direction.z * moveDistanceXZ;
+            
+            // Total displacement vector for ray intersection
+            const dispX = bullet.position.x - prevX;
+            const dispY = bullet.position.y - prevY;
+            const dispZ = bullet.position.z - prevZ;
+            const dispLen = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
+            
+            // Normalized direction for this frame's movement
+            const ndx = dispLen > 0.0001 ? dispX / dispLen : 0;
+            const ndy = dispLen > 0.0001 ? dispY / dispLen : 0;
+            const ndz = dispLen > 0.0001 ? dispZ / dispLen : 0;
             
             for (const shwarm of activeShwarms) {
               if (!shwarm.isActive || hit) break;
@@ -697,48 +731,43 @@ export function FortressScene({
                 const maxZ = bz + SHWARM_HALF_SIZE;
                 
                 // Ray-AABB intersection (slab method)
-                // Check if ray from prevPos to currentPos intersects the box
-                const dx = bullet.direction.x;
-                const dy = bullet.direction.y;
-                const dz = bullet.direction.z;
-                
                 let tMin = 0;
-                let tMax = moveDistance;
+                let tMax = dispLen;
                 
                 // X slab
-                if (Math.abs(dx) > 0.0001) {
-                  const t1 = (minX - prevX) / dx;
-                  const t2 = (maxX - prevX) / dx;
+                if (Math.abs(ndx) > 0.0001) {
+                  const t1 = (minX - prevX) / ndx;
+                  const t2 = (maxX - prevX) / ndx;
                   const tNear = Math.min(t1, t2);
                   const tFar = Math.max(t1, t2);
                   tMin = Math.max(tMin, tNear);
                   tMax = Math.min(tMax, tFar);
                 } else if (prevX < minX || prevX > maxX) {
-                  continue; // Ray parallel and outside X slab
+                  continue;
                 }
                 
                 // Y slab
-                if (Math.abs(dy) > 0.0001) {
-                  const t1 = (minY - prevY) / dy;
-                  const t2 = (maxY - prevY) / dy;
+                if (Math.abs(ndy) > 0.0001) {
+                  const t1 = (minY - prevY) / ndy;
+                  const t2 = (maxY - prevY) / ndy;
                   const tNear = Math.min(t1, t2);
                   const tFar = Math.max(t1, t2);
                   tMin = Math.max(tMin, tNear);
                   tMax = Math.min(tMax, tFar);
                 } else if (prevY < minY || prevY > maxY) {
-                  continue; // Ray parallel and outside Y slab
+                  continue;
                 }
                 
                 // Z slab
-                if (Math.abs(dz) > 0.0001) {
-                  const t1 = (minZ - prevZ) / dz;
-                  const t2 = (maxZ - prevZ) / dz;
+                if (Math.abs(ndz) > 0.0001) {
+                  const t1 = (minZ - prevZ) / ndz;
+                  const t2 = (maxZ - prevZ) / ndz;
                   const tNear = Math.min(t1, t2);
                   const tFar = Math.max(t1, t2);
                   tMin = Math.max(tMin, tNear);
                   tMax = Math.min(tMax, tFar);
                 } else if (prevZ < minZ || prevZ > maxZ) {
-                  continue; // Ray parallel and outside Z slab
+                  continue;
                 }
                 
                 // If tMin <= tMax, ray intersects the box
@@ -778,14 +807,24 @@ export function FortressScene({
           
           // Check block collisions (if not already hit something)
           if (!hit) {
-            // Use ray-AABB intersection to prevent tunneling
-            const moveDistance = bullet.speed * delta;
-            const prevX = bullet.position.x - bullet.direction.x * moveDistance;
-            const prevY = bullet.position.y - bullet.direction.y * moveDistance;
-            const prevZ = bullet.position.z - bullet.direction.z * moveDistance;
+            // Calculate displacement for ray intersection
+            const moveDistanceXZ = bullet.speed * delta;
+            const moveDistanceY = bullet.velocityY * delta + 0.5 * BULLET_GRAVITY * delta * delta;
+            const prevX = bullet.position.x - bullet.direction.x * moveDistanceXZ;
+            const prevY = bullet.position.y - moveDistanceY;
+            const prevZ = bullet.position.z - bullet.direction.z * moveDistanceXZ;
+            
+            const dispX = bullet.position.x - prevX;
+            const dispY = bullet.position.y - prevY;
+            const dispZ = bullet.position.z - prevZ;
+            const dispLen = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
+            
+            const ndx = dispLen > 0.0001 ? dispX / dispLen : 0;
+            const ndy = dispLen > 0.0001 ? dispY / dispLen : 0;
+            const ndz = dispLen > 0.0001 ? dispZ / dispLen : 0;
             
             // Only check blocks within reasonable distance of bullet path
-            const checkRadius = moveDistance + 2; // Extra margin
+            const checkRadius = dispLen + 2;
             
             for (const block of blocks) {
               // Quick bounding sphere check first
@@ -808,33 +847,29 @@ export function FortressScene({
               const minZ = block.position_z;
               const maxZ = block.position_z + 1;
               
-              const dx = bullet.direction.x;
-              const dy = bullet.direction.y;
-              const dz = bullet.direction.z;
-              
               let tMin = 0;
-              let tMax = moveDistance;
+              let tMax = dispLen;
               
               // X slab
-              if (Math.abs(dx) > 0.0001) {
-                const t1 = (minX - prevX) / dx;
-                const t2 = (maxX - prevX) / dx;
+              if (Math.abs(ndx) > 0.0001) {
+                const t1 = (minX - prevX) / ndx;
+                const t2 = (maxX - prevX) / ndx;
                 tMin = Math.max(tMin, Math.min(t1, t2));
                 tMax = Math.min(tMax, Math.max(t1, t2));
               } else if (prevX < minX || prevX > maxX) continue;
               
               // Y slab
-              if (Math.abs(dy) > 0.0001) {
-                const t1 = (minY - prevY) / dy;
-                const t2 = (maxY - prevY) / dy;
+              if (Math.abs(ndy) > 0.0001) {
+                const t1 = (minY - prevY) / ndy;
+                const t2 = (maxY - prevY) / ndy;
                 tMin = Math.max(tMin, Math.min(t1, t2));
                 tMax = Math.min(tMax, Math.max(t1, t2));
               } else if (prevY < minY || prevY > maxY) continue;
               
               // Z slab
-              if (Math.abs(dz) > 0.0001) {
-                const t1 = (minZ - prevZ) / dz;
-                const t2 = (maxZ - prevZ) / dz;
+              if (Math.abs(ndz) > 0.0001) {
+                const t1 = (minZ - prevZ) / ndz;
+                const t2 = (maxZ - prevZ) / ndz;
                 tMin = Math.max(tMin, Math.min(t1, t2));
                 tMax = Math.min(tMax, Math.max(t1, t2));
               } else if (prevZ < minZ || prevZ > maxZ) continue;
@@ -845,16 +880,17 @@ export function FortressScene({
                 needsBulletRender = true;
                 
                 // Calculate hit position
-                const hitX = prevX + dx * tMin;
-                const hitY = prevY + dy * tMin;
-                const hitZ = prevZ + dz * tMin;
+                const hitX = prevX + ndx * tMin;
+                const hitY = prevY + ndy * tMin;
+                const hitZ = prevZ + ndz * tMin;
                 
-                // Spawn impact effect at hit position
+                // Spawn impact effect at hit position with bullet properties
                 if (bulletImpactsRef.current) {
                   const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
                   bulletImpactsRef.current.spawnImpact(hitPos, {
-                    color: '#FFAA00', // Yellow/orange fire
-                    size: 1.0, // 1 block width
+                    color: bullet.color,
+                    size: 0.25,
+                    tier: bullet.tier,
                   });
                 }
                 break;
@@ -871,8 +907,9 @@ export function FortressScene({
                 const groundPos = bullet.position.clone();
                 groundPos.y = 0.1; // Slightly above ground
                 bulletImpactsRef.current.spawnImpact(groundPos, {
-                  color: '#FFAA00',
-                  size: 1.0,
+                  color: bullet.color,
+                  size: 0.25,
+                  tier: bullet.tier,
                 });
               }
             }

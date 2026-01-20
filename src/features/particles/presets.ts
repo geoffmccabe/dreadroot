@@ -137,27 +137,27 @@ export const magicPreset: NebulaPreset = {
   ],
 };
 
-// Impact effect - short burst fire for bullet hits (1 second, 1m size)
+// Impact effect - short burst fire for bullet hits (0.5 second, 0.25m base size)
 export const impactPreset: NebulaPreset = {
-  preParticles: 30,
+  preParticles: 20,
   integrationType: 'EULER',
   emitters: [
     {
-      rate: { particlesMin: 20, particlesMax: 30, perSecondMin: 0.001, perSecondMax: 0.001 }, // One-shot burst
+      rate: { particlesMin: 15, particlesMax: 20, perSecondMin: 0.001, perSecondMax: 0.001 }, // One-shot burst
       position: { x: 0, y: 0, z: 0 },
       initializers: [
         { type: 'Mass', properties: { min: 0.5, max: 1, isEnabled: true } },
-        { type: 'Life', properties: { min: 0.3, max: 0.8, isEnabled: true } }, // Short life for 1s effect
+        { type: 'Life', properties: { min: 0.15, max: 0.4, isEnabled: true } }, // Shorter life for 0.5s effect
         { type: 'BodySprite', properties: { texture: PARTICLE_TEXTURE, isEnabled: true } },
-        { type: 'Radius', properties: { min: 0.15, max: 0.4, isEnabled: true } }, // ~1m total spread
-        { type: 'RadialVelocity', properties: { radius: 4, x: 0, y: 1, z: 0, theta: 60, isEnabled: true } },
+        { type: 'Radius', properties: { min: 0.03, max: 0.08, isEnabled: true } }, // ~0.25m total spread (scaled by size param)
+        { type: 'RadialVelocity', properties: { radius: 1.5, x: 0, y: 1, z: 0, theta: 60, isEnabled: true } },
       ],
       behaviours: [
         { type: 'Alpha', properties: { alphaA: 1, alphaB: 0, life: null, easing: 'easeOutCubic' } },
         { type: 'Color', properties: { colorA: '#FFAA00', colorB: '#FF4400', life: null, easing: 'easeLinear' } }, // Yellow/orange fire
-        { type: 'Scale', properties: { scaleA: 1.2, scaleB: 0.1, life: null, easing: 'easeOutCubic' } },
-        { type: 'Force', properties: { fx: 0, fy: 1.5, fz: 0, life: null, easing: 'easeLinear' } },
-        { type: 'RandomDrift', properties: { driftX: 0.8, driftY: 0.3, driftZ: 0.8, delay: 0, life: null, easing: 'easeLinear' } },
+        { type: 'Scale', properties: { scaleA: 1.0, scaleB: 0.1, life: null, easing: 'easeOutCubic' } },
+        { type: 'Force', properties: { fx: 0, fy: 0.8, fz: 0, life: null, easing: 'easeLinear' } },
+        { type: 'RandomDrift', properties: { driftX: 0.3, driftY: 0.15, driftZ: 0.3, delay: 0, life: null, easing: 'easeLinear' } },
       ],
     },
   ],
