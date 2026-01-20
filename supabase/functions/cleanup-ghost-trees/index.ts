@@ -5,7 +5,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'invisiblock']
+// ALL possible tree-related block types
+const TREE_BLOCK_TYPES = [
+  'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
+  'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
+]
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -70,7 +74,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    console.log('Admin verified, starting SMART ghost tree cleanup...')
+    console.log('Admin verified, starting COMPREHENSIVE ghost tree cleanup...')
+
+    const stats = {
+      planted_trees_preserved: 0,
+      orphan_tree_blocks_deleted: 0,
+      orphan_placed_blocks_deleted: 0,
+      tree_fruits_deleted: 0,
+    }
 
     // STEP 1: Get all valid tree IDs from planted_trees (source of truth)
     const { data: validTrees, error: validTreesError } = await supabaseAdmin
@@ -83,6 +94,7 @@ Deno.serve(async (req) => {
     }
 
     const validTreeIds = new Set((validTrees || []).map(t => t.id))
+    stats.planted_trees_preserved = validTreeIds.size
     console.log(`Found ${validTreeIds.size} legitimate trees in planted_trees`)
 
     // STEP 2: Delete orphan tree_blocks (those referencing non-existent trees)
@@ -99,9 +111,7 @@ Deno.serve(async (req) => {
       .filter(tb => !validTreeIds.has(tb.tree_id))
       .map(tb => tb.id)
 
-    let deletedTreeBlocks = 0
     if (orphanTreeBlockIds.length > 0) {
-      // Delete in batches
       for (let i = 0; i < orphanTreeBlockIds.length; i += 500) {
         const batch = orphanTreeBlockIds.slice(i, i + 500)
         const { error } = await supabaseAdmin
@@ -111,13 +121,40 @@ Deno.serve(async (req) => {
         if (error) {
           console.error('Error deleting orphan tree_blocks batch:', error)
         } else {
-          deletedTreeBlocks += batch.length
+          stats.orphan_tree_blocks_deleted += batch.length
         }
       }
-      console.log(`Deleted ${deletedTreeBlocks} orphan tree_blocks`)
+      console.log(`Deleted ${stats.orphan_tree_blocks_deleted} orphan tree_blocks`)
     }
 
-    // STEP 3: Get all valid block positions from remaining tree_blocks
+    // STEP 3: Delete orphan tree_fruits (those referencing non-existent trees)
+    const { data: allTreeFruits, error: treeFruitsError } = await supabaseAdmin
+      .from('tree_fruits')
+      .select('id, tree_id')
+
+    if (!treeFruitsError && allTreeFruits) {
+      const orphanFruitIds = allTreeFruits
+        .filter(tf => !validTreeIds.has(tf.tree_id))
+        .map(tf => tf.id)
+
+      if (orphanFruitIds.length > 0) {
+        for (let i = 0; i < orphanFruitIds.length; i += 500) {
+          const batch = orphanFruitIds.slice(i, i + 500)
+          const { error } = await supabaseAdmin
+            .from('tree_fruits')
+            .delete()
+            .in('id', batch)
+          if (error) {
+            console.error('Error deleting orphan tree_fruits batch:', error)
+          } else {
+            stats.tree_fruits_deleted += batch.length
+          }
+        }
+        console.log(`Deleted ${stats.tree_fruits_deleted} orphan tree_fruits`)
+      }
+    }
+
+    // STEP 4: Get all valid block positions from remaining tree_blocks
     const { data: validBlocks, error: validBlocksError } = await supabaseAdmin
       .from('tree_blocks')
       .select('position_x, position_y, position_z, world_id')
@@ -132,7 +169,7 @@ Deno.serve(async (req) => {
     )
     console.log(`Found ${validBlockKeys.size} valid tree block positions`)
 
-    // STEP 4: Find orphan placed_blocks (tree types with no tree_blocks record)
+    // STEP 5: Find orphan placed_blocks (tree types with no tree_blocks record)
     const { data: treePlacedBlocks, error: placedBlocksError } = await supabaseAdmin
       .from('placed_blocks')
       .select('id, world_id, position_x, position_y, position_z')
@@ -147,9 +184,7 @@ Deno.serve(async (req) => {
       .filter(pb => !validBlockKeys.has(`${pb.world_id}:${pb.position_x},${pb.position_y},${pb.position_z}`))
       .map(pb => pb.id)
 
-    let deletedPlacedBlocks = 0
     if (orphanPlacedBlockIds.length > 0) {
-      // Delete in batches of 500 to avoid query limits
       for (let i = 0; i < orphanPlacedBlockIds.length; i += 500) {
         const batch = orphanPlacedBlockIds.slice(i, i + 500)
         const { error } = await supabaseAdmin
@@ -159,14 +194,14 @@ Deno.serve(async (req) => {
         if (error) {
           console.error('Error deleting orphan placed_blocks batch:', error)
         } else {
-          deletedPlacedBlocks += batch.length
+          stats.orphan_placed_blocks_deleted += batch.length
         }
       }
-      console.log(`Deleted ${deletedPlacedBlocks} orphan placed_blocks`)
+      console.log(`Deleted ${stats.orphan_placed_blocks_deleted} orphan placed_blocks`)
     }
 
-    // Bump chunk versions to force clients to refetch if we deleted anything
-    if (deletedPlacedBlocks > 0) {
+    // STEP 6: Bump chunk versions to force clients to refetch
+    if (stats.orphan_placed_blocks_deleted > 0 || stats.orphan_tree_blocks_deleted > 0) {
       const { error: bumpError } = await supabaseAdmin
         .from('chunk_versions')
         .update({ 
@@ -180,17 +215,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log('Smart ghost tree cleanup complete')
+    console.log('Comprehensive ghost tree cleanup complete:', stats)
 
     return new Response(JSON.stringify({
       success: true,
       stats: {
-        legitimate_trees_preserved: validTreeIds.size,
+        legitimate_trees_preserved: stats.planted_trees_preserved,
         valid_tree_blocks: validBlockKeys.size,
       },
       deleted: {
-        orphan_tree_blocks: deletedTreeBlocks,
-        orphan_placed_blocks: deletedPlacedBlocks,
+        orphan_tree_blocks: stats.orphan_tree_blocks_deleted,
+        orphan_placed_blocks: stats.orphan_placed_blocks_deleted,
+        orphan_tree_fruits: stats.tree_fruits_deleted,
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
