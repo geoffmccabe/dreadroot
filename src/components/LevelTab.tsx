@@ -2,7 +2,7 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { getAllLevelThresholds, MAX_LEVEL } from '@/lib/levelSystem';
+import { getAllLevelThresholds, MAX_LEVEL, getLevelForPoints } from '@/lib/levelSystem';
 
 interface LevelTabProps {
   totalPoints: number;
@@ -10,26 +10,41 @@ interface LevelTabProps {
   height: number;
 }
 
-export const LevelTab: React.FC<LevelTabProps> = ({ totalPoints, currentLevel, height }) => {
+export const LevelTab: React.FC<LevelTabProps> = ({ totalPoints, currentLevel: passedLevel, height }) => {
   const levelThresholds = getAllLevelThresholds();
+  
+  // Recalculate level from points to ensure accuracy
+  const currentLevel = getLevelForPoints(totalPoints);
   
   return (
     <div className="space-y-4">
-      {/* Total Points Display */}
+      {/* Points and Level Display - Side by Side */}
       <Card className="p-4 bg-gradient-to-r from-primary/10 to-primary/5">
-        <div className="text-center">
-          <div className="text-sm text-muted-foreground mb-1">Total Points</div>
-          <div className="text-3xl font-bold text-primary">
-            {totalPoints.toLocaleString()}
+        <div className="flex items-center justify-center gap-8">
+          {/* Points - Left */}
+          <div className="text-center">
+            <div className="text-xs text-muted-foreground mb-1">Points</div>
+            <div className="text-3xl font-bold text-primary">
+              {totalPoints.toLocaleString()}
+            </div>
           </div>
-          <div className="text-sm text-muted-foreground mt-2">
-            Level <span className="font-bold text-foreground">{currentLevel}</span> / {MAX_LEVEL}
+          
+          {/* Divider */}
+          <div className="h-12 w-px bg-border" />
+          
+          {/* Level - Right */}
+          <div className="text-center">
+            <div className="text-xs text-muted-foreground mb-1">Level</div>
+            <div className="text-3xl font-bold text-foreground">
+              {currentLevel}
+              <span className="text-lg text-muted-foreground font-normal">/{MAX_LEVEL}</span>
+            </div>
           </div>
         </div>
       </Card>
 
       {/* Level Grid */}
-      <ScrollArea style={{ height: `${height - 180}px` }}>
+      <ScrollArea style={{ height: `${height - 140}px` }}>
         <div className="grid grid-cols-2 gap-2 pr-4">
           {levelThresholds.map(({ level, pointsRequired }) => {
             const isAchieved = currentLevel >= level;
