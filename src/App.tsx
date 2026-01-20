@@ -10,6 +10,7 @@ import { AdminPanelProvider } from "@/contexts/AdminPanelContext";
 import { CoinThemeProvider } from "@/contexts/CoinThemeContext";
 import { AvatarProvider } from "@/contexts/AvatarContext";
 import { InitializationProvider } from "@/contexts/InitializationContext";
+import { InitializationOverlay } from "@/components/InitializationOverlay";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ClearSession from "./pages/ClearSession";
@@ -63,6 +64,7 @@ const App = () => (
       <TooltipProvider>
         <CoinThemeProvider>
           <InitializationProvider>
+            <InitializationOverlay />
             <BlocksProvider>
               <AvatarProvider>
                 <UserPanelProvider>
