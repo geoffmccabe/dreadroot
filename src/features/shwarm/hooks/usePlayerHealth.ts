@@ -168,14 +168,16 @@ export function usePlayerHealth() {
                 };
               });
               
-              // Sync new max health to DB
-              supabase
-                .from('user_profiles')
-                .update({ max_health: calculatedMaxHealth })
-                .eq('user_id', user.id)
-                .then(({ error }) => {
-                  if (error) console.error('[usePlayerHealth] Failed to sync max health:', error);
-                });
+              // Only sync max health if the incoming value differs (prevents infinite loop)
+              if (newData.max_health !== calculatedMaxHealth) {
+                supabase
+                  .from('user_profiles')
+                  .update({ max_health: calculatedMaxHealth })
+                  .eq('user_id', user.id)
+                  .then(({ error }) => {
+                    if (error) console.error('[usePlayerHealth] Failed to sync max health:', error);
+                  });
+              }
             } else if (newData.current_health !== undefined || newData.max_health !== undefined) {
               setHealthState(prev => ({
                 currentHealth: newData.current_health ?? prev.currentHealth,
