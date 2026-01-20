@@ -6,7 +6,7 @@ import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } 
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 import { collisionGrid } from '@/lib/spatialHashGrid';
-import { isInvisiblock } from '@/features/trees/lib/blockTypeEncoder';
+import { isInvisiblock, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
 // Use white color so textures render at full brightness without tinting
@@ -259,11 +259,12 @@ export const PlacedBlocks: React.FC<{
         // Extract block_type from groupKey (before the | if present)
         const blockType = groupKey.includes('|') ? groupKey.split('|')[0] : groupKey;
         
-        // For blocks with textureOverride (like tree blocks), ALWAYS use fallback
+        // For tree blocks (textureOverride OR encoded tree type), ALWAYS use fallback
         // This prevents color tinting from the blocks table (e.g., brown "trunk" block)
         // The fallback has white color so textures render at full brightness
+        // Also handles tree blocks without textures (like branches when branch_texture_url is null)
         let blockDef: BlockType | undefined;
-        if (textureOverride) {
+        if (textureOverride || isTreeBlockType(blockType)) {
           blockDef = TREE_BLOCK_FALLBACK;
         } else {
           blockDef = blocksMap.get(blockType);
