@@ -30,6 +30,7 @@ interface GrowingTree {
   baseY: number;
   baseZ: number;
   growthSeed: number;
+  createdAt: number; // Timestamp when tree was added to growth loop
 }
 
 interface UseLocalGrowthOptions {
@@ -204,6 +205,7 @@ export function useLocalGrowth({
       baseY,
       baseZ,
       growthSeed,
+      createdAt: Date.now(),
     };
 
     growingTreesRef.current.set(treeId, growingTree);
@@ -335,8 +337,20 @@ export function useLocalGrowth({
         for (let t = 0; t < Math.min(treesToGrow.length, maxTreesPerTick); t++) {
           const tree = treesToGrow[t];
           
-          // Skip temp trees (they haven't been saved to DB yet, that's expected)
+          // For temp trees: they should get a real ID quickly (within 30 seconds)
+          // If they still have temp_ ID after that, the DB insert likely failed
           if (tree.id.startsWith('temp_')) {
+            const tempAge = now - (tree.createdAt || tree.lastGrowthTime); // Use createdAt if available
+            const TEMP_TREE_TIMEOUT = 30000; // 30 seconds max for temp trees
+            
+            // If temp tree is too old, it's orphaned - stop it
+            if (tempAge > TEMP_TREE_TIMEOUT) {
+              console.log(`[LocalGrowth] CRITICAL: Temp tree ${tree.id} timed out (${tempAge}ms old), removing`);
+              growingTreesRef.current.delete(tree.id);
+              deletedTreeIds.add(tree.id);
+              continue;
+            }
+            
             verifiedTrees.push(tree);
             continue;
           }
