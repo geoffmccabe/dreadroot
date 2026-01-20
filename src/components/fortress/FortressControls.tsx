@@ -21,8 +21,9 @@ import {
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { collisionGrid } from '@/lib/spatialHashGrid';
+import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 
-export function FirstPersonControls({ 
+export function FirstPersonControls({
   onShoot, 
   showCrosshairs, 
   audioRefs, 
@@ -724,8 +725,8 @@ export function FirstPersonControls({
           if (result && result.instanceId !== undefined) {
             const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
             
-            // Check if it's a trunk block (tree block)
-            if (blockType === 'trunk') {
+            // Check if it's any tree block type (handles encoded types like 'trunk_-1_5')
+            if (blockType && isTreeBlockType(blockType)) {
               // Get the block position from the instanced mesh matrix
               const mesh = result.object as THREE.InstancedMesh;
               const matrix = new THREE.Matrix4();

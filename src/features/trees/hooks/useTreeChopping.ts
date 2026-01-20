@@ -61,8 +61,6 @@ function findTreeAtPosition(
   z: number,
   plantedTrees: PlantedTree[]
 ): PlantedTree | null {
-  console.log(`[TreeChopping] findTreeAtPosition(${x}, ${y}, ${z}) - checking ${plantedTrees.length} trees`);
-  
   // A block belongs to a tree if it's within the tree's potential bounds
   for (const tree of plantedTrees) {
     const dx = Math.abs(x - tree.base_x);
@@ -73,15 +71,11 @@ function findTreeAtPosition(
     const maxSpread = (tree.seed_definition?.tier ?? 5) * 2;
     const maxHeight = (tree.seed_definition?.tier ?? 5) * 10;
     
-    const inBounds = dx <= maxSpread && dz <= maxSpread && dy >= 0 && dy <= maxHeight;
-    console.log(`[TreeChopping] Tree at (${tree.base_x}, ${tree.base_y}, ${tree.base_z}) tier=${tree.seed_definition?.tier}, dx=${dx}, dz=${dz}, dy=${dy}, maxSpread=${maxSpread}, maxHeight=${maxHeight}, inBounds=${inBounds}`);
-    
-    if (inBounds) {
+    if (dx <= maxSpread && dz <= maxSpread && dy >= 0 && dy <= maxHeight) {
       return tree;
     }
   }
   
-  console.log(`[TreeChopping] No tree found at position`);
   return null;
 }
 
@@ -242,9 +236,8 @@ export function useTreeChopping({
       if (worldId) {
         try {
           await blockDB.clearCachedChunksForWorld(worldId);
-          console.log(`[TreeChopping] Cleared IndexedDB cache for world ${worldId}`);
         } catch (cacheError) {
-          console.warn('[TreeChopping] Failed to clear IndexedDB cache:', cacheError);
+          // Silent failure - cache clearing is not critical
         }
       }
 

@@ -1465,7 +1465,6 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     initialLoadDone.current = false;
     
     initLogStep('useChunkLoader.ts', 'Beginning chunk loader initialization...');
-    console.log(`[ChunkLoader] initializeForWorld called, grid size before clear: ${collisionGrid.size}`);
     
     // CRITICAL: Remove all block colliders before clearing chunks
     initLogStep('useChunkLoader.ts', 'Removing existing block colliders...');
@@ -1482,7 +1481,6 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     initLogStep('useChunkLoader.ts', 'Chunk cache cleared');
     
     initLogStep('useChunkLoader.ts', 'Collision grid size after clear', collisionGrid.size);
-    console.log(`[ChunkLoader] Grid size after clear: ${collisionGrid.size}`);
     
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
     const startChunkZ = Math.floor(startZ / CHUNK_SIZE);
@@ -1492,13 +1490,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     // Phase 3D: Clean up old cache entries (fire and forget)
     initLogStep('useChunkLoader.ts', 'Cleaning old cache entries...');
-    blockDB.clearOldCachedChunks(CACHE_MAX_AGE_MS).then(count => {
-      if (count > 0) {
-        console.log(`Phase 3D: Cleared ${count} old cached chunks`);
-      }
-    }).catch(err => {
-      console.warn('Failed to clear old cache:', err);
-    });
+    blockDB.clearOldCachedChunks(CACHE_MAX_AGE_MS).catch(() => {});
 
     // Phase 3C: Use progressive ring loading for smoother initial experience
     const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
@@ -1579,21 +1571,16 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     if (typeof window === 'undefined') return;
 
     const onGridCleared = () => {
-      console.log('[ChunkLoader] Grid cleared event received, reinserting colliders...');
-      
       // CRITICAL: Clear the collider cache FIRST - old collider refs are now invalid
       // This prevents "collider.min.set is not a function" errors
       colliderByBlockId.clear();
       
-      let reinsertedCount = 0;
       // Reinsert colliders for all loaded blocks (O(n) but only on rare clear events)
       for (const chunkData of loadedChunksRef.current.values()) {
         for (const block of chunkData.blocks) {
           ensureBlockCollider(block);
-          reinsertedCount++;
         }
       }
-      console.log(`[ChunkLoader] Reinserted ${reinsertedCount} block colliders`);
     };
 
     window.addEventListener('collisionGridCleared', onGridCleared);

@@ -51,7 +51,6 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const prevWorldIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (currentWorldId && currentWorldId !== prevWorldIdRef.current) {
-      console.log(`[BlocksContext] World changed to ${currentWorldId}, will re-initialize on next player position update`);
       prevWorldIdRef.current = currentWorldId;
       // Clear visible chunks when world changes
       visibleChunksRef.current.clear();

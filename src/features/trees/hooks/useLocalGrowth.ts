@@ -482,19 +482,15 @@ export async function deleteTree(
       });
 
     if (rpcError) {
-      console.error('[deleteTree] RPC error:', rpcError);
-      // Fallback to old method
+      // Fallback to old method on RPC error
       await supabase.from('tree_blocks').delete().eq('tree_id', tree.id);
       await supabase.from('planted_trees').delete().eq('id', tree.id);
     } else if (rpcResult && !(rpcResult as any).success) {
-      console.error('[deleteTree] RPC returned error:', (rpcResult as any).error);
       return { success: false, error: (rpcResult as any).error, deletedCount: locallyRemoved };
     }
 
-    console.log(`[deleteTree] Successfully deleted tree ${tree.id}, ${locallyRemoved} blocks removed`);
     return { success: true, deletedCount: locallyRemoved };
   } catch (err) {
-    console.error('[deleteTree] Error:', err);
     return { success: false, error: 'Unexpected error', deletedCount: 0 };
   }
 }

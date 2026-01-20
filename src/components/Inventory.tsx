@@ -36,13 +36,7 @@ export const Inventory: React.FC<InventoryProps> = ({ isOpen, onClose }) => {
 
   const handleAddressBlur = async () => {
     if (blockchainAddress !== (profile?.blockchain_address || '')) {
-      console.log('Updating blockchain address:', blockchainAddress);
-      const success = await updateBlockchainAddress(blockchainAddress);
-      if (success) {
-        console.log('Blockchain address updated successfully');
-      } else {
-        console.log('Failed to update blockchain address');
-      }
+      await updateBlockchainAddress(blockchainAddress);
     }
   };
 
