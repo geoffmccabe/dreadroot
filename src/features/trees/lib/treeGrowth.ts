@@ -178,7 +178,7 @@ export function generateTreeBlueprint(
   }
   
   const shuffledHeights = seededShuffle(availableHeights, rng);
-  const branchHeights = shuffledHeights.slice(0, branchCount);
+  const candidateBranchHeights = shuffledHeights.slice(0, branchCount * 2); // Get more candidates for filtering
   
   // 4. Get directions based on symmetry mode
   const availableDirections = getDirectionsForSymmetry(symmetryMode, rng);
@@ -186,9 +186,34 @@ export function generateTreeBlueprint(
   // Mutable counter for symmetry groups (passed by reference)
   const groupCounter = { value: nextSymmetryGroup };
   
-  // 5. Generate branches at selected heights
-  for (const branchY of branchHeights) {
+  // 5. Track used heights per direction to enforce 2+ block gap
+  // Key: "dx,dz" -> array of Y heights where branches exist
+  const branchHeightsByDirection = new Map<string, number[]>();
+  const MIN_BRANCH_GAP = 2; // Minimum vertical gap between branches on same side
+  
+  // 6. Generate branches at selected heights with gap enforcement
+  let branchesCreated = 0;
+  for (const branchY of candidateBranchHeights) {
+    if (branchesCreated >= branchCount) break;
+    
     const direction = seededChoice(availableDirections, rng);
+    const dirKey = `${direction[0]},${direction[1]}`;
+    
+    // Check if this height conflicts with existing branches on same side
+    const existingHeights = branchHeightsByDirection.get(dirKey) || [];
+    const hasConflict = existingHeights.some(h => Math.abs(h - branchY) < MIN_BRANCH_GAP);
+    
+    if (hasConflict) {
+      // Skip this branch - too close to another on the same side
+      continue;
+    }
+    
+    // Record this height for this direction
+    if (!branchHeightsByDirection.has(dirKey)) {
+      branchHeightsByDirection.set(dirKey, []);
+    }
+    branchHeightsByDirection.get(dirKey)!.push(branchY);
+    
     growBranch(
       blocks,
       occupied,
@@ -206,6 +231,8 @@ export function generateTreeBlueprint(
       baseZ,        // tree base Z for symmetry
       groupCounter  // mutable group counter
     );
+    
+    branchesCreated++;
   }
   
   // 5. Assign growth order (randomized for interesting growth pattern)
@@ -291,8 +318,8 @@ function growBranch(
       y += 1;
     }
     
-    // Add block(s) with symmetry
-    const anchorIndex = addBlockWithSymmetry(x, y, z, 'trunk');
+    // Add block(s) with symmetry - use 'branch' type for branch blocks (not 'trunk')
+    const anchorIndex = addBlockWithSymmetry(x, y, z, 'branch');
     if (anchorIndex === -1) continue; // All positions occupied
     
     // Get the symmetry group of the anchor for decorations
