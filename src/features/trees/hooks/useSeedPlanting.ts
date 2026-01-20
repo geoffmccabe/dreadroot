@@ -1,6 +1,6 @@
 // Hook for planting seeds
 // Handles inventory check, tree creation, seed consumption
-// Now uses local growth manager for ref-based growth
+// Now saves blueprints to tree_blueprints table for reliable growth/deletion
 
 import { useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,9 +8,10 @@ import { SeedDefinition, TreeGrowthOptions } from '../types';
 import { generateTreeBlueprint, getBlocksAtOrder } from '../lib/treeGrowth';
 import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
+import { encodeBlockType, getTextureUrlForTreeBlock } from '../lib/blockTypeEncoder';
 
 // Type for the placeBlock function from useBlocks
-type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string, branchDepth?: number) => any;
+type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => any;
 
 // Type for the startGrowing function from useLocalGrowth
 type StartGrowingFn = (
@@ -132,18 +133,26 @@ export function useSeedPlanting({
       );
 
       // Place the first block(s) IMMEDIATELY using optimistic update system
+      // Now using encoded block_type format: {type}_{depth}_{tier}
       const firstBlocks = getBlocksAtOrder(blueprint, 0);
-      const textureUrl = seedDef.trunk_texture_url || undefined;
       
       for (const block of firstBlocks) {
-        placeBlock(block.x, block.y, block.z, 'trunk', undefined, textureUrl, block.branchDepth);
+        const encodedType = encodeBlockType(block.type, block.branchDepth, seedDef.tier);
+        const textureUrl = getTextureUrlForTreeBlock(
+          block.type,
+          seedDef.trunk_texture_url,
+          seedDef.branch_texture_url,
+          seedDef.fruit_texture_url
+        );
+        placeBlock(block.x, block.y, block.z, encodedType, undefined, textureUrl || undefined);
       }
 
       // Start local growth with temp ID (will update after DB insert)
       const tempId = `temp_${Date.now()}`;
       startGrowing(tempId, seedDef, baseX, baseY, baseZ, growthSeed, 1); // Start at order 1 since we placed order 0
 
-      // Create the planted tree record (async, doesn't block visibility)
+      // Create the planted tree record
+      // Server-side trigger will enforce chunk planting limits
       const { data: newTree, error: insertError } = await supabase
         .from('planted_trees')
         .insert({
@@ -163,11 +172,43 @@ export function useSeedPlanting({
 
       if (insertError) {
         console.error('[SeedPlanting] Insert error:', insertError);
+        // Check for chunk limit error
+        if (insertError.message?.includes('planting limit')) {
+          toast({
+            title: "Chunk limit reached",
+            description: "Too many trees of this tier in this area",
+            variant: "destructive"
+          });
+          return { success: false, error: 'Chunk planting limit exceeded' };
+        }
         return { success: false, error: 'Failed to plant seed' };
       }
 
       // Update the temp ID to the real ID in the growth manager
       updateTreeId(tempId, newTree.id);
+
+      // Save blueprint to tree_blueprints table (for reliable deletion)
+      // Fire-and-forget - don't block the UI
+      // Note: Cast needed until types are regenerated
+      (supabase
+        .from('tree_blueprints' as any)
+        .insert({
+          planted_tree_id: newTree.id,
+          world_id: worldId,
+          blueprint_data: {
+            blocks: blueprint.blocks,
+            maxHeight: blueprint.maxHeight,
+            maxWidth: blueprint.maxWidth,
+            tier: seedDef.tier,
+            seedDefId: seedDef.id,
+          },
+          block_count: blueprint.blocks.length,
+        } as any) as any)
+        .then(({ error }: { error: any }) => {
+          if (error) {
+            console.error('[SeedPlanting] Blueprint save error:', error);
+          }
+        });
 
       toast({
         title: `Planted ${seedDef.name}!`,

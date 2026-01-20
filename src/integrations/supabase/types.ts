@@ -130,6 +130,57 @@ export type Database = {
         }
         Relationships: []
       }
+      block_overlaps: {
+        Row: {
+          block_type: string
+          created_at: string | null
+          id: string
+          position_x: number
+          position_y: number
+          position_z: number
+          tree_id: string
+          tree_planted_at: string
+          world_id: string
+        }
+        Insert: {
+          block_type: string
+          created_at?: string | null
+          id?: string
+          position_x: number
+          position_y: number
+          position_z: number
+          tree_id: string
+          tree_planted_at: string
+          world_id: string
+        }
+        Update: {
+          block_type?: string
+          created_at?: string | null
+          id?: string
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          tree_id?: string
+          tree_planted_at?: string
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "block_overlaps_tree_id_fkey"
+            columns: ["tree_id"]
+            isOneToOne: false
+            referencedRelation: "planted_trees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "block_overlaps_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       blocks: {
         Row: {
           category: string
@@ -364,6 +415,44 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      overlap_check_queue: {
+        Row: {
+          added_by: string
+          created_at: string | null
+          id: string
+          position_x: number
+          position_y: number
+          position_z: number
+          world_id: string
+        }
+        Insert: {
+          added_by?: string
+          created_at?: string | null
+          id?: string
+          position_x: number
+          position_y: number
+          position_z: number
+          world_id: string
+        }
+        Update: {
+          added_by?: string
+          created_at?: string | null
+          id?: string
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "overlap_check_queue_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       placed_blocks: {
         Row: {
@@ -701,6 +790,24 @@ export type Database = {
         }
         Relationships: []
       }
+      tier_planting_limits: {
+        Row: {
+          max_per_chunk: number
+          tier_max: number
+          tier_min: number
+        }
+        Insert: {
+          max_per_chunk: number
+          tier_max: number
+          tier_min: number
+        }
+        Update: {
+          max_per_chunk?: number
+          tier_max?: number
+          tier_min?: number
+        }
+        Relationships: []
+      }
       token_themes: {
         Row: {
           block_explorer_url: string | null
@@ -824,6 +931,48 @@ export type Database = {
           },
           {
             foreignKeyName: "tree_blocks_world_id_fkey"
+            columns: ["world_id"]
+            isOneToOne: false
+            referencedRelation: "worlds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tree_blueprints: {
+        Row: {
+          block_count: number
+          blueprint_data: Json
+          created_at: string | null
+          id: string
+          planted_tree_id: string
+          world_id: string
+        }
+        Insert: {
+          block_count: number
+          blueprint_data: Json
+          created_at?: string | null
+          id?: string
+          planted_tree_id: string
+          world_id: string
+        }
+        Update: {
+          block_count?: number
+          blueprint_data?: Json
+          created_at?: string | null
+          id?: string
+          planted_tree_id?: string
+          world_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tree_blueprints_planted_tree_id_fkey"
+            columns: ["planted_tree_id"]
+            isOneToOne: true
+            referencedRelation: "planted_trees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tree_blueprints_world_id_fkey"
             columns: ["world_id"]
             isOneToOne: false
             referencedRelation: "worlds"
@@ -1119,6 +1268,15 @@ export type Database = {
       delete_tree_blocks: {
         Args: { p_positions: Json; p_world_id: string }
         Returns: number
+      }
+      delete_tree_with_blocks: {
+        Args: {
+          p_block_positions: Json
+          p_tree_id: string
+          p_user_id: string
+          p_world_id: string
+        }
+        Returns: Json
       }
       has_role: {
         Args: {
