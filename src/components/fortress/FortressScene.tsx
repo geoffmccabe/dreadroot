@@ -613,13 +613,28 @@ export function FortressScene({
     // Bullet starts exactly at camera position
     bullet.position.copy(origin);
     
-    // CRITICAL: Store the FULL 3D direction for movement
-    // The bullet moves along this exact direction vector - no separation of components
-    bullet.direction.copy(normalizedDir);
+    // CRITICAL FIX FOR BELOW-HORIZON AIMING:
+    // The horizontal direction must be normalized separately to maintain constant horizontal speed
+    // Otherwise, aiming down reduces horizontal speed (making bullets land short)
+    const horizontalLen = Math.sqrt(normalizedDir.x * normalizedDir.x + normalizedDir.z * normalizedDir.z);
     
-    // Speed is the total magnitude (100 units/sec in the aim direction)
+    // Store normalized HORIZONTAL direction (X and Z only, normalized to length 1)
+    if (horizontalLen > 0.0001) {
+      bullet.direction.set(
+        normalizedDir.x / horizontalLen,  // Normalize X to horizontal plane
+        0,                                  // Y is handled by velocityY
+        normalizedDir.z / horizontalLen   // Normalize Z to horizontal plane
+      );
+    } else {
+      // Shooting straight up/down - no horizontal movement
+      bullet.direction.set(0, 0, 0);
+    }
+    
+    // Horizontal speed is constant (100 units/sec) scaled by how horizontal the aim is
+    // When aiming at 45° down, horizontalLen ≈ 0.707, so horizontal speed = 70.7
+    // This is physically correct - the bullet's total velocity is still 100, just angled
     const BULLET_SPEED = 100;
-    bullet.speed = BULLET_SPEED;
+    bullet.speed = BULLET_SPEED * horizontalLen;  // Horizontal component of total speed
     
     // Initial Y velocity = speed * vertical component of direction
     // This gets modified by gravity each frame
@@ -684,12 +699,12 @@ export function FortressScene({
         // Apply gravity to Y velocity
         bullet.velocityY -= BULLET_GRAVITY * delta;
         
-        // Update position using the stored direction components directly
-        // The direction vector is already normalized, so multiply by speed * delta
-        // X and Z use the original direction components unchanged
+        // Update position:
+        // - direction is the HORIZONTAL direction (normalized X/Z only)
+        // - speed is the HORIZONTAL speed component
+        // - velocityY handles vertical movement with gravity
         bullet.position.x += bullet.direction.x * bullet.speed * delta;
         bullet.position.z += bullet.direction.z * bullet.speed * delta;
-        // Y is controlled by velocityY (which started as direction.y * speed, then gets gravity)
         bullet.position.y += bullet.velocityY * delta;
         
         bullet.life -= delta;
