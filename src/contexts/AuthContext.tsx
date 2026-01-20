@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useIndexedDB } from '@/hooks/useIndexedDB';
+import { initLogStep } from '@/contexts/InitializationContext';
 
 interface AuthContextType {
   user: User | null;
@@ -52,6 +53,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(newSession);
         setUser(newSession?.user ?? null);
         setIsLoading(false);
+        
+        // Log user info for initialization overlay
+        if (newSession?.user) {
+          initLogStep('AuthContext.tsx', `User: ${newSession.user.email || 'unknown'}`);
+        }
       }
     );
 
