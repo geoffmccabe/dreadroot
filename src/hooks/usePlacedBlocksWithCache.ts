@@ -7,6 +7,7 @@ import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStart, initLogFinish } from '@/contexts/InitializationContext';
+import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import * as THREE from 'three';
 interface DBBlock extends PlacedBlock {
   synced: boolean;
@@ -528,8 +529,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         recentlyModifiedChunks.current.set(chunkKey, Date.now());
         
         // Mark as active growth chunk for tree blocks (longer suppression)
-        const isTreeBlock = ['trunk', 'branch', 'fruit', 'spike', 'invisiblock', 'shroom_stem', 'shroom_cap', 'nob', 'cross'].includes(block.block_type);
-        if (isTreeBlock) {
+        // Uses isTreeBlockType helper which handles encoded types like 'trunk_0_5'
+        if (isTreeBlockType(block.block_type)) {
           activeGrowthChunks.current.add(chunkKey);
           // Auto-clear after grace period
           setTimeout(() => {
