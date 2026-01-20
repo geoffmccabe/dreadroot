@@ -551,18 +551,40 @@ class BlockDB {
   }
 
   /**
+   * Check if a block_type is a tree block type (supports encoded format type_depth_tier)
+   */
+  private isTreeBlockType(blockType: string): boolean {
+    const TREE_BLOCK_BASE_TYPES = [
+      'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
+      'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
+    ];
+    
+    // Direct match
+    if (TREE_BLOCK_BASE_TYPES.includes(blockType)) return true;
+    
+    // Encoded format: type_depth_tier (e.g., trunk_0_5, branch_2_3)
+    const parts = blockType.split('_');
+    if (parts.length >= 2) {
+      const baseType = parts[0];
+      // Handle compound types like shroom_stem, shroom_cap
+      if (parts[0] === 'shroom' && (parts[1] === 'stem' || parts[1] === 'cap')) {
+        const compoundType = `${parts[0]}_${parts[1]}`;
+        return TREE_BLOCK_BASE_TYPES.includes(compoundType);
+      }
+      return TREE_BLOCK_BASE_TYPES.includes(baseType);
+    }
+    
+    return false;
+  }
+
+  /**
    * Clear ALL tree-related blocks from ALL chunk caches
    * This is the nuclear option for ghost tree cleanup
-   * FIXED: Now removes ALL tree blocks regardless of texture_url
+   * FIXED: Now handles both legacy and new encoded block types (type_depth_tier)
    */
   async clearTreeBlocksFromCache(): Promise<number> {
     if (!this.db) await this.init();
     
-    // All possible tree block types - must match TREE_BLOCK_TYPES in WorldsList
-    const TREE_BLOCK_TYPES = [
-      'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
-      'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
-    ];
     let removedCount = 0;
     
     return new Promise((resolve, reject) => {
@@ -577,9 +599,9 @@ class BlockDB {
           const chunk = cursor.value as CachedChunk;
           const originalLength = chunk.blocks.length;
           
-          // Filter out ALL tree blocks - not just those with null texture
+          // Filter out ALL tree blocks - handles both legacy and encoded formats
           chunk.blocks = chunk.blocks.filter(block => {
-            return !TREE_BLOCK_TYPES.includes(block.block_type);
+            return !this.isTreeBlockType(block.block_type);
           });
           
           if (chunk.blocks.length < originalLength) {
@@ -618,6 +640,7 @@ class BlockDB {
   /**
    * Clear tree blocks from the main 'blocks' store (not chunk cache)
    * This prevents the sync loop from re-uploading ghost tree blocks
+   * FIXED: Now handles both legacy and new encoded block types (type_depth_tier)
    */
   async clearTreeBlocksFromBlocksStore(treeBlockTypes: string[]): Promise<number> {
     if (!this.db) await this.init();
@@ -634,7 +657,8 @@ class BlockDB {
         const cursor = request.result;
         if (cursor) {
           const block = cursor.value;
-          if (treeBlockTypes.includes(block.block_type)) {
+          // Use the same isTreeBlockType check for consistency
+          if (this.isTreeBlockType(block.block_type)) {
             cursor.delete();
             removedCount++;
           }

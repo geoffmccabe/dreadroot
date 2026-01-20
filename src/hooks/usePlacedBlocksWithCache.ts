@@ -184,13 +184,15 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       initLogStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
       await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
       console.log('[InitCache] initializeForWorld complete');
-      initLogStep('usePlacedBlocksWithCache.ts', 'Chunk loader initialization complete');
       
       // NEW ARCHITECTURE: Tree blocks are now in placed_blocks, loaded by chunk loader
       // No separate tree block loading needed
       
       // Set up realtime subscription
       initLogStep('usePlacedBlocksWithCache.ts', 'Setting up realtime subscription...');
+      
+      // Signal that React rendering will begin
+      initLogStep('usePlacedBlocksWithCache.ts', 'Queuing React re-render...');
       
       // Finish initialization overlay
       initLogStep('usePlacedBlocksWithCache.ts', 'World initialization complete!');

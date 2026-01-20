@@ -41,11 +41,8 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
   const handleClearGhostTrees = async () => {
     setIsCleaningGhostTrees(true);
     try {
-      // ALL possible tree-related block types
-      const TREE_BLOCK_TYPES = [
-        'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
-        'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
-      ];
+      // Note: TREE_BLOCK_TYPES constant no longer needed here
+      // IndexedDB now uses isTreeBlockType() which handles both legacy and encoded formats
       
       console.log('[GhostTreeCleanup] ========== STARTING COMPREHENSIVE CLEANUP ==========');
       
@@ -75,7 +72,8 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       console.log('[GhostTreeCleanup] ✓ Cleared entire IndexedDB chunk cache');
       
       // STEP 2: Clear tree blocks from the main 'blocks' store
-      const blocksStoreCount = await blockDB.clearTreeBlocksFromBlocksStore(TREE_BLOCK_TYPES);
+      // The function now uses isTreeBlockType internally to handle both legacy and encoded formats
+      const blocksStoreCount = await blockDB.clearTreeBlocksFromBlocksStore([]);
       console.log(`[GhostTreeCleanup] ✓ Removed ${blocksStoreCount} tree blocks from blocks store`);
       
       // STEP 3: Also run clearTreeBlocksFromCache (in case any survive)
