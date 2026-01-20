@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { useBulletDefinitions, getDefaultBullet, blendColors, BulletDefinition } from '@/contexts/BulletDefinitionsContext';
+import { useBulletDefinitions, blendColors, BulletDefinition } from '@/contexts/BulletDefinitionsContext';
 
 // Tier color definitions (display names only)
 const TIER_NAMES: Record<number, string> = {
@@ -27,13 +27,9 @@ interface BulletTierPanelProps {
   tier: number;
   definition: BulletDefinition;
   onChange: (def: BulletDefinition) => void;
-  onSave: () => void;
-  isSaving: boolean;
-  hasChanges: boolean;
 }
 
 function BulletShape({ colors, isRainbow }: { colors: string[]; isRainbow: boolean }) {
-  // For display, show blended color (same as what fire will show)
   const blended = isRainbow 
     ? 'linear-gradient(90deg, #FF0000, #FF7F00, #FFFF00, #00FF00, #0000FF, #8B00FF)'
     : colors.length > 1 
@@ -45,16 +41,14 @@ function BulletShape({ colors, isRainbow }: { colors: string[]; isRainbow: boole
     : { background: colors.length > 1 ? blended : colors[0] };
   
   return (
-    <div className="flex items-center h-5" title={colors.length > 1 ? `Blended: ${blendColors(colors)}` : colors[0]}>
-      {/* Rectangle body */}
+    <div className="flex items-center h-5" title={colors.length > 1 ? `Colors: ${colors.join(', ')}` : colors[0]}>
       <div className="w-6 h-4 rounded-l-sm" style={bgStyle} />
-      {/* Semi-circle tip */}
       <div className="w-2 h-4 rounded-r-full" style={bgStyle} />
     </div>
   );
 }
 
-function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChanges }: BulletTierPanelProps) {
+function BulletTierPanel({ tier, definition, onChange }: BulletTierPanelProps) {
   const tierName = TIER_NAMES[tier];
   
   const updateField = <K extends keyof BulletDefinition>(field: K, value: BulletDefinition[K]) => {
@@ -68,7 +62,9 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
   };
 
   const addColor = () => {
-    onChange({ ...definition, colors: [...definition.colors, '#FFFFFF'] });
+    if (definition.colors.length < 3) {
+      onChange({ ...definition, colors: [...definition.colors, '#FFFFFF'] });
+    }
   };
 
   const removeColor = (index: number) => {
@@ -80,13 +76,13 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
 
   return (
     <Card className="mb-2 p-3">
-      {/* Row 1: Bullet shape, colors, save */}
+      {/* Row 1: Bullet shape, colors */}
       <div className="flex items-center gap-3 mb-2">
         <div className="flex items-center gap-2 min-w-[100px]">
           <BulletShape colors={definition.colors} isRainbow={tier === 8} />
           <span className="text-sm font-medium">T{tier}</span>
           {definition.colors.length > 1 && (
-            <span className="text-xs text-muted-foreground">(blended)</span>
+            <span className="text-xs text-muted-foreground">({definition.colors.length} colors)</span>
           )}
         </div>
         
@@ -117,20 +113,12 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
               )}
             </div>
           ))}
-          <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={addColor}>
-            + Add
-          </Button>
+          {definition.colors.length < 3 && (
+            <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={addColor}>
+              + Add
+            </Button>
+          )}
         </div>
-
-        <Button 
-          size="sm" 
-          onClick={onSave} 
-          disabled={isSaving || !hasChanges}
-          variant={hasChanges ? "default" : "outline"}
-          className="h-6 text-xs px-2"
-        >
-          {isSaving ? '...' : 'Save'}
-        </Button>
       </div>
 
       {/* Row 2: Burn sliders */}
@@ -175,14 +163,9 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
         </div>
       </div>
 
-      {tier >= 6 && (
-        <div className="text-xs text-muted-foreground italic mt-1">
-          ✨ Special effects coming soon
-        </div>
-      )}
-      {definition.colors.length > 1 && tier < 6 && (
+      {definition.colors.length > 1 && (
         <div className="text-xs text-muted-foreground mt-1">
-          🎨 Multiple colors blend into one fire color for performance
+          🔥 Multi-color hex fire pattern: center + 6 surrounding flames
         </div>
       )}
     </Card>
@@ -191,76 +174,11 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
 
 export function WeaponsPanel() {
   const [activeSubTab, setActiveSubTab] = useState<'bullets' | 'weapons'>('bullets');
-  const [bulletDefinitions, setBulletDefinitions] = useState<Map<number, BulletDefinition>>(new Map());
-  const [originalDefinitions, setOriginalDefinitions] = useState<Map<number, BulletDefinition>>(new Map());
-  const [savingTiers, setSavingTiers] = useState<Set<number>>(new Set());
-  const [isLoading, setIsLoading] = useState(true);
+  const { definitions, getDefinition, updateDefinition } = useBulletDefinitions();
 
-  // Initialize with defaults for all 10 tiers
-  useEffect(() => {
-    const loadDefinitions = async () => {
-      setIsLoading(true);
-      
-      // For now, initialize with defaults since we don't have a database table yet
-      // TODO: Load from database when bullet_definitions table is created
-      const defaults = new Map<number, BulletDefinition>();
-      for (let tier = 1; tier <= 10; tier++) {
-        defaults.set(tier, getDefaultBullet(tier));
-      }
-      setBulletDefinitions(defaults);
-      setOriginalDefinitions(new Map(defaults));
-      setIsLoading(false);
-    };
-
-    loadDefinitions();
-  }, []);
-
-  const updateDefinition = useCallback((tier: number, def: BulletDefinition) => {
-    setBulletDefinitions(prev => {
-      const updated = new Map(prev);
-      updated.set(tier, def);
-      return updated;
-    });
-  }, []);
-
-  const saveDefinition = useCallback(async (tier: number) => {
-    const def = bulletDefinitions.get(tier);
-    if (!def) return;
-
-    setSavingTiers(prev => new Set(prev).add(tier));
-    
-    try {
-      // TODO: Save to database when bullet_definitions table is created
-      // For now, just update the "original" state to mark as saved
-      setOriginalDefinitions(prev => {
-        const updated = new Map(prev);
-        updated.set(tier, { ...def });
-        return updated;
-      });
-      
-      toast.success(`T${tier} bullet settings saved`);
-    } catch (error) {
-      console.error('Failed to save bullet definition:', error);
-      toast.error('Failed to save bullet settings');
-    } finally {
-      setSavingTiers(prev => {
-        const updated = new Set(prev);
-        updated.delete(tier);
-        return updated;
-      });
-    }
-  }, [bulletDefinitions]);
-
-  const hasChanges = useCallback((tier: number): boolean => {
-    const current = bulletDefinitions.get(tier);
-    const original = originalDefinitions.get(tier);
-    if (!current || !original) return false;
-    return JSON.stringify(current) !== JSON.stringify(original);
-  }, [bulletDefinitions, originalDefinitions]);
-
-  if (isLoading) {
-    return <div className="p-4 text-center text-muted-foreground">Loading weapon settings...</div>;
-  }
+  const handleChange = useCallback((tier: number, def: BulletDefinition) => {
+    updateDefinition(tier, def);
+  }, [updateDefinition]);
 
   return (
     <div className="space-y-4">
@@ -274,16 +192,13 @@ export function WeaponsPanel() {
           <ScrollArea className="h-[calc(90vh-280px)]">
             <div className="pr-4 space-y-2">
               {Array.from({ length: 10 }, (_, i) => i + 1).map(tier => {
-                const def = bulletDefinitions.get(tier) || getDefaultBullet(tier);
+                const def = getDefinition(tier);
                 return (
                   <BulletTierPanel
                     key={tier}
                     tier={tier}
                     definition={def}
-                    onChange={(d) => updateDefinition(tier, d)}
-                    onSave={() => saveDefinition(tier)}
-                    isSaving={savingTiers.has(tier)}
-                    hasChanges={hasChanges(tier)}
+                    onChange={(d) => handleChange(tier, d)}
                   />
                 );
               })}
