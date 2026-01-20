@@ -5,11 +5,33 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// ALL possible tree-related block types
-const TREE_BLOCK_TYPES = [
+// Base tree block types - also matches encoded format type_depth_tier
+const TREE_BLOCK_BASE_TYPES = [
   'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
   'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
 ]
+
+/**
+ * Check if a block_type is a tree block type (supports encoded format type_depth_tier)
+ */
+function isTreeBlockType(blockType: string): boolean {
+  // Direct match
+  if (TREE_BLOCK_BASE_TYPES.includes(blockType)) return true;
+  
+  // Encoded format: type_depth_tier (e.g., trunk_0_5, branch_2_3)
+  const parts = blockType.split('_');
+  if (parts.length >= 2) {
+    const baseType = parts[0];
+    // Handle compound types like shroom_stem, shroom_cap
+    if (parts[0] === 'shroom' && (parts[1] === 'stem' || parts[1] === 'cap')) {
+      const compoundType = `${parts[0]}_${parts[1]}`;
+      return TREE_BLOCK_BASE_TYPES.includes(compoundType);
+    }
+    return TREE_BLOCK_BASE_TYPES.includes(baseType);
+  }
+  
+  return false;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -169,27 +191,30 @@ Deno.serve(async (req) => {
     )
     console.log(`Found ${validBlockKeys.size} valid tree block positions`)
 
-    // STEP 5: SIMPLIFIED - If tree_blocks is EMPTY and planted_trees is EMPTY,
-    // ALL tree-type placed_blocks are orphans and should be deleted
-    const { data: treePlacedBlocks, error: placedBlocksError } = await supabaseAdmin
+    // STEP 5: Find orphan placed_blocks with tree block types
+    // UPDATED: Use isTreeBlockType to match both legacy and encoded formats
+    const { data: allPlacedBlocks, error: placedBlocksError } = await supabaseAdmin
       .from('placed_blocks')
-      .select('id, world_id, position_x, position_y, position_z')
-      .in('block_type', TREE_BLOCK_TYPES)
+      .select('id, world_id, position_x, position_y, position_z, block_type')
 
     if (placedBlocksError) {
       console.error('Error fetching placed_blocks:', placedBlocksError)
       throw placedBlocksError
     }
 
+    // Filter to only tree-type blocks using the new helper function
+    const treePlacedBlocks = (allPlacedBlocks || []).filter(pb => isTreeBlockType(pb.block_type))
+    console.log(`Found ${treePlacedBlocks.length} tree-type placed_blocks to check`)
+
     let orphanPlacedBlockIds: string[] = []
     
     // If NO valid trees exist, ALL tree blocks in placed_blocks are orphans
     if (validTreeIds.size === 0 && validBlockKeys.size === 0) {
       console.log('No valid trees found - ALL tree-type placed_blocks are orphans')
-      orphanPlacedBlockIds = (treePlacedBlocks || []).map(pb => pb.id)
+      orphanPlacedBlockIds = treePlacedBlocks.map(pb => pb.id)
     } else {
       // Normal orphan detection - check if placed_block has matching tree_block
-      orphanPlacedBlockIds = (treePlacedBlocks || [])
+      orphanPlacedBlockIds = treePlacedBlocks
         .filter(pb => !validBlockKeys.has(`${pb.world_id}:${pb.position_x},${pb.position_y},${pb.position_z}`))
         .map(pb => pb.id)
     }
