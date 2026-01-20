@@ -411,24 +411,37 @@ export function FirstPersonControls({
     if (event.movementX < 0) mouseDebugData.current.leftDriftEvents++;
     if (event.movementX > 0) mouseDebugData.current.rightDriftEvents++;
     
-    lastMovements.current.push({x: event.movementX, y: event.movementY});
-    if (lastMovements.current.length > 5) lastMovements.current.shift();
+    const movementX = event.movementX;
+    const movementY = event.movementY;
     
-    // Phantom event detection
-    if (lastMovements.current.length >= 4) {
-      const last4 = lastMovements.current.slice(-4);
-      const allIdentical = last4.every(m => m.x === last4[0].x && m.y === last4[0].y);
-      const allTiny = last4.every(m => Math.abs(m.x) <= 1 && Math.abs(m.y) <= 1);
+    lastMovements.current.push({x: movementX, y: movementY});
+    if (lastMovements.current.length > 8) lastMovements.current.shift();
+    
+    // Enhanced phantom event detection - filter consistent tiny drift patterns
+    if (lastMovements.current.length >= 3) {
+      const last3 = lastMovements.current.slice(-3);
       
-      if (allIdentical && allTiny && (Math.abs(event.movementX) > 0 || Math.abs(event.movementY) > 0)) {
+      // Check for consistent leftward drift (common browser bug)
+      const allLeftDrift = last3.every(m => m.x === -1 && m.y === 0);
+      if (allLeftDrift) {
+        mouseDebugData.current.phantomEventsFiltered++;
+        return;
+      }
+      
+      // Check for identical tiny movements (phantom events)
+      const allIdentical = last3.every(m => m.x === last3[0].x && m.y === last3[0].y);
+      const allTiny = last3.every(m => Math.abs(m.x) <= 1 && Math.abs(m.y) <= 1);
+      const notZero = Math.abs(movementX) > 0 || Math.abs(movementY) > 0;
+      
+      if (allIdentical && allTiny && notZero) {
         mouseDebugData.current.phantomEventsFiltered++;
         return;
       }
     }
     
     mouseDebugData.current.recentMovements.push({
-      x: event.movementX,
-      y: event.movementY,
+      x: movementX,
+      y: movementY,
       timestamp: Date.now()
     });
     if (mouseDebugData.current.recentMovements.length > 100) {
@@ -436,8 +449,8 @@ export function FirstPersonControls({
     }
     
     const sensitivity = 0.002;
-    yaw.current += -event.movementX * sensitivity;
-    pitch.current += -event.movementY * sensitivity;
+    yaw.current += -movementX * sensitivity;
+    pitch.current += -movementY * sensitivity;
     
     const maxPitch = Math.PI / 2 - 0.01;
     pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
@@ -535,10 +548,15 @@ export function FirstPersonControls({
       if (now - lastFireTime.current < FIRE_RATE_LIMIT) return;
       lastFireTime.current = now;
       
-      // Reuse vectors instead of allocating new ones
+      // Calculate shoot direction from camera orientation
       shootDirectionRef.current.set(0, 0, -1);
       shootDirectionRef.current.applyQuaternion(camera.quaternion);
+      
+      // Set bullet origin slightly in front of camera (0.5m forward from camera)
+      // This makes bullets appear to come from the gun, not from above
       shootOriginRef.current.copy(camera.position);
+      shootOriginRef.current.addScaledVector(shootDirectionRef.current, 0.5);
+      
       onShoot(shootOriginRef.current, shootDirectionRef.current);
       playAudio(audioRefs.gunshot);
     }

@@ -158,16 +158,28 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     
     system.update(delta);
     
-    // Clean up expired impacts
+    // Clean up expired impacts - ensure complete particle removal
     const now = performance.now();
     const active = activeImpactsRef.current;
     
     for (let i = active.length - 1; i >= 0; i--) {
       const impact = active[i];
       if (now - impact.startTime > impact.duration) {
-        impact.emitter.removeAllParticles?.();
-        system.removeEmitter(impact.emitter);
-        impact.emitter.destroy();
+        try {
+          // Stop emitter from spawning new particles
+          impact.emitter.stopEmit?.();
+          // Remove all existing particles
+          if (impact.emitter.particles) {
+            impact.emitter.particles.length = 0;
+          }
+          impact.emitter.removeAllParticles?.();
+          // Remove from system
+          system.removeEmitter(impact.emitter);
+          // Destroy emitter
+          impact.emitter.destroy?.();
+        } catch (e) {
+          // Silently handle cleanup errors
+        }
         active.splice(i, 1);
       }
     }
