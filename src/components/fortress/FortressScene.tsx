@@ -778,21 +778,81 @@ export function FortressScene({
           
           // Check block collisions (if not already hit something)
           if (!hit) {
-            // Simple distance check to nearby blocks
+            // Use ray-AABB intersection to prevent tunneling
+            const moveDistance = bullet.speed * delta;
+            const prevX = bullet.position.x - bullet.direction.x * moveDistance;
+            const prevY = bullet.position.y - bullet.direction.y * moveDistance;
+            const prevZ = bullet.position.z - bullet.direction.z * moveDistance;
+            
+            // Only check blocks within reasonable distance of bullet path
+            const checkRadius = moveDistance + 2; // Extra margin
+            
             for (const block of blocks) {
-              const dx = bullet.position.x - block.position_x - 0.5;
-              const dy = bullet.position.y - block.position_y - 0.5;
-              const dz = bullet.position.z - block.position_z - 0.5;
-              const distSq = dx * dx + dy * dy + dz * dz;
+              // Quick bounding sphere check first
+              const centerX = block.position_x + 0.5;
+              const centerY = block.position_y + 0.5;
+              const centerZ = block.position_z + 0.5;
               
-              // Hit if within 0.6m of block center (block is 1m, so radius ~0.5m + bullet radius)
-              if (distSq < 0.36) { // 0.6^2 = 0.36
+              const toBulletX = bullet.position.x - centerX;
+              const toBulletY = bullet.position.y - centerY;
+              const toBulletZ = bullet.position.z - centerZ;
+              const distSq = toBulletX * toBulletX + toBulletY * toBulletY + toBulletZ * toBulletZ;
+              
+              if (distSq > checkRadius * checkRadius) continue;
+              
+              // Ray-AABB intersection (block goes from position to position+1)
+              const minX = block.position_x;
+              const maxX = block.position_x + 1;
+              const minY = block.position_y;
+              const maxY = block.position_y + 1;
+              const minZ = block.position_z;
+              const maxZ = block.position_z + 1;
+              
+              const dx = bullet.direction.x;
+              const dy = bullet.direction.y;
+              const dz = bullet.direction.z;
+              
+              let tMin = 0;
+              let tMax = moveDistance;
+              
+              // X slab
+              if (Math.abs(dx) > 0.0001) {
+                const t1 = (minX - prevX) / dx;
+                const t2 = (maxX - prevX) / dx;
+                tMin = Math.max(tMin, Math.min(t1, t2));
+                tMax = Math.min(tMax, Math.max(t1, t2));
+              } else if (prevX < minX || prevX > maxX) continue;
+              
+              // Y slab
+              if (Math.abs(dy) > 0.0001) {
+                const t1 = (minY - prevY) / dy;
+                const t2 = (maxY - prevY) / dy;
+                tMin = Math.max(tMin, Math.min(t1, t2));
+                tMax = Math.min(tMax, Math.max(t1, t2));
+              } else if (prevY < minY || prevY > maxY) continue;
+              
+              // Z slab
+              if (Math.abs(dz) > 0.0001) {
+                const t1 = (minZ - prevZ) / dz;
+                const t2 = (maxZ - prevZ) / dz;
+                tMin = Math.max(tMin, Math.min(t1, t2));
+                tMax = Math.min(tMax, Math.max(t1, t2));
+              } else if (prevZ < minZ || prevZ > maxZ) continue;
+              
+              // If tMin <= tMax, ray intersects the block
+              if (tMin <= tMax) {
                 hit = true;
                 needsBulletRender = true;
                 
-                // Spawn impact effect at bullet position
+                // Calculate hit position
+                const hitX = prevX + dx * tMin;
+                const hitY = prevY + dy * tMin;
+                const hitZ = prevZ + dz * tMin;
+                
+                // Spawn impact effect at hit position
                 if (bulletImpactsRef.current) {
-                  bulletImpactsRef.current.spawnImpact(bullet.position.clone(), {
+                  const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                  bulletImpactsRef.current.spawnImpact(hitPos, {
                     color: '#FFAA00', // Yellow/orange fire
                     size: 1.0, // 1 block width
                   });
