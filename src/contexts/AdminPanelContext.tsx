@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds';
+type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'weapons';
 
 interface AdminPanelContextType {
   isOpen: boolean;
