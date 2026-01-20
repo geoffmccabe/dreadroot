@@ -9,6 +9,7 @@ import { UserPanelProvider } from "@/contexts/UserPanelContext";
 import { AdminPanelProvider } from "@/contexts/AdminPanelContext";
 import { CoinThemeProvider } from "@/contexts/CoinThemeContext";
 import { AvatarProvider } from "@/contexts/AvatarContext";
+import { InitializationProvider } from "@/contexts/InitializationContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ClearSession from "./pages/ClearSession";
@@ -61,39 +62,41 @@ const App = () => (
     <AuthProvider>
       <TooltipProvider>
         <CoinThemeProvider>
-          <BlocksProvider>
-            <AvatarProvider>
-              <UserPanelProvider>
-                <AdminPanelProvider>
-                  <Toaster />
-                  <Sonner />
-                  <BrowserRouter>
-                    <Routes>
-                      <Route path="/clear-session" element={<ClearSession />} />
-                      <Route 
-                        path="/" 
-                        element={
-                          <ProtectedRoute>
-                            <Index />
-                          </ProtectedRoute>
-                        } 
-                      />
-                      <Route 
-                        path="/auth" 
-                        element={
-                          <AuthRoute>
-                            <Auth />
-                          </AuthRoute>
-                        } 
-                      />
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </BrowserRouter>
-                </AdminPanelProvider>
-              </UserPanelProvider>
-            </AvatarProvider>
-          </BlocksProvider>
+          <InitializationProvider>
+            <BlocksProvider>
+              <AvatarProvider>
+                <UserPanelProvider>
+                  <AdminPanelProvider>
+                    <Toaster />
+                    <Sonner />
+                    <BrowserRouter>
+                      <Routes>
+                        <Route path="/clear-session" element={<ClearSession />} />
+                        <Route 
+                          path="/" 
+                          element={
+                            <ProtectedRoute>
+                              <Index />
+                            </ProtectedRoute>
+                          } 
+                        />
+                        <Route 
+                          path="/auth" 
+                          element={
+                            <AuthRoute>
+                              <Auth />
+                            </AuthRoute>
+                          } 
+                        />
+                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </BrowserRouter>
+                  </AdminPanelProvider>
+                </UserPanelProvider>
+              </AvatarProvider>
+            </BlocksProvider>
+          </InitializationProvider>
         </CoinThemeProvider>
       </TooltipProvider>
     </AuthProvider>

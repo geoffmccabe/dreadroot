@@ -5,6 +5,7 @@ import { useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PlacedBlock } from '@/types/blocks';
 import { TREE_CONFIG } from '../constants';
+import { initLogStep } from '@/contexts/InitializationContext';
 
 // Type for addBlocksBatch from chunk loader
 type AddBlocksBatchFn = (blocks: PlacedBlock[]) => void;
@@ -31,6 +32,7 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
   const loadTreeBlocks = useCallback(async () => {
     if (!worldId || !addBlocksBatch || !TREE_CONFIG.ENABLED) {
       console.log('[TreeBlockLoader] Skipping: missing worldId, addBlocksBatch, or trees disabled');
+      initLogStep('useTreeBlockLoader.ts', 'Trees disabled or missing config, skipping');
       return;
     }
 
@@ -48,6 +50,7 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
 
     isLoadingRef.current = true;
     console.log('[TreeBlockLoader] Loading tree blocks for world:', worldId);
+    initLogStep('useTreeBlockLoader.ts', 'Fetching tree blocks from database...');
 
     try {
       // Fetch all tree blocks for fully-grown trees, joined with seed definitions for textures
@@ -80,16 +83,19 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
 
       if (error) {
         console.error('[TreeBlockLoader] Error fetching tree blocks:', error);
+        initLogStep('useTreeBlockLoader.ts', `Error: ${error.message}`);
         return;
       }
 
       if (!treeBlocks || treeBlocks.length === 0) {
         console.log('[TreeBlockLoader] No tree blocks found for world');
+        initLogStep('useTreeBlockLoader.ts', 'No tree blocks found', 0);
         loadedWorldRef.current = worldId;
         return;
       }
 
       console.log(`[TreeBlockLoader] Found ${treeBlocks.length} tree blocks to load`);
+      initLogStep('useTreeBlockLoader.ts', 'Tree blocks fetched', treeBlocks.length);
 
       // Convert tree_blocks to PlacedBlock format
       const placedBlocks: PlacedBlock[] = treeBlocks.map((tb: any) => {
@@ -121,11 +127,13 @@ export function useTreeBlockLoader({ worldId, addBlocksBatch }: UseTreeBlockLoad
       // Inject all tree blocks into the chunk loader in one batch
       console.log(`[TreeBlockLoader] Injecting ${placedBlocks.length} tree blocks into chunk loader`);
       addBlocksBatch(placedBlocks);
+      initLogStep('useTreeBlockLoader.ts', 'Tree blocks injected into chunk loader', placedBlocks.length);
 
       loadedWorldRef.current = worldId;
       console.log('[TreeBlockLoader] Tree blocks loaded successfully');
     } catch (err) {
       console.error('[TreeBlockLoader] Unexpected error:', err);
+      initLogStep('useTreeBlockLoader.ts', `Unexpected error: ${err}`);
     } finally {
       isLoadingRef.current = false;
     }
