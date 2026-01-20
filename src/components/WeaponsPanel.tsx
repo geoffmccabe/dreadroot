@@ -51,6 +51,24 @@ interface BulletTierPanelProps {
   hasChanges: boolean;
 }
 
+function BulletShape({ color, isRainbow }: { color: string; isRainbow: boolean }) {
+  const bgStyle = isRainbow 
+    ? { background: 'linear-gradient(90deg, #FF0000, #FF7F00, #FFFF00, #00FF00, #0000FF, #8B00FF)' }
+    : { background: color };
+  
+  return (
+    <div className="flex items-center h-5">
+      {/* Rectangle body */}
+      <div className="w-6 h-4 rounded-l-sm" style={bgStyle} />
+      {/* Semi-circle tip */}
+      <div 
+        className="w-2 h-4 rounded-r-full" 
+        style={bgStyle}
+      />
+    </div>
+  );
+}
+
 function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChanges }: BulletTierPanelProps) {
   const tierInfo = TIER_COLORS[tier];
   
@@ -76,120 +94,105 @@ function BulletTierPanel({ tier, definition, onChange, onSave, isSaving, hasChan
   };
 
   return (
-    <Card className="mb-4">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div 
-              className="w-8 h-8 rounded-full border-2 border-border"
-              style={{ 
-                background: tier === 8 
-                  ? 'linear-gradient(90deg, #FF0000, #FF7F00, #FFFF00, #00FF00, #0000FF, #8B00FF)'
-                  : definition.colors[0] 
-              }}
-            />
-            <CardTitle className="text-lg">T{tier} - {tierInfo.name}</CardTitle>
-          </div>
-          <Button 
-            size="sm" 
-            onClick={onSave} 
-            disabled={isSaving || !hasChanges}
-            variant={hasChanges ? "default" : "outline"}
-          >
-            <Save className="w-4 h-4 mr-1" />
-            {isSaving ? 'Saving...' : 'Save'}
+    <Card className="mb-2 p-3">
+      {/* Row 1: Bullet shape, colors, save */}
+      <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-2 min-w-[100px]">
+          <BulletShape color={definition.colors[0]} isRainbow={tier === 8} />
+          <span className="text-sm font-medium">T{tier}</span>
+        </div>
+        
+        <div className="flex items-center gap-1 flex-1 flex-wrap">
+          {definition.colors.map((color, index) => (
+            <div key={index} className="flex items-center gap-1">
+              <Input
+                type="color"
+                value={color}
+                onChange={(e) => updateColor(index, e.target.value)}
+                className="w-8 h-6 p-0 border-0 cursor-pointer"
+              />
+              <Input
+                type="text"
+                value={color}
+                onChange={(e) => updateColor(index, e.target.value)}
+                className="w-20 h-6 text-xs px-1"
+              />
+              {definition.colors.length > 1 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                  onClick={() => removeColor(index)}
+                >
+                  ×
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={addColor}>
+            + Add
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Colors */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Colors</Label>
-          <div className="flex flex-wrap gap-2">
-            {definition.colors.map((color, index) => (
-              <div key={index} className="flex items-center gap-1">
-                <Input
-                  type="color"
-                  value={color}
-                  onChange={(e) => updateColor(index, e.target.value)}
-                  className="w-12 h-8 p-0 border-0 cursor-pointer"
-                />
-                <Input
-                  type="text"
-                  value={color}
-                  onChange={(e) => updateColor(index, e.target.value)}
-                  className="w-24 h-8 text-xs"
-                />
-                {definition.colors.length > 1 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                    onClick={() => removeColor(index)}
-                  >
-                    ×
-                  </Button>
-                )}
-              </div>
-            ))}
-            <Button size="sm" variant="outline" className="h-8" onClick={addColor}>
-              + Add Color
-            </Button>
-          </div>
-        </div>
 
-        {/* Burn Time */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <Label className="text-sm font-medium">Burn Time</Label>
-            <span className="text-sm text-muted-foreground">{definition.burn_time.toFixed(2)}s</span>
-          </div>
+        <Button 
+          size="sm" 
+          onClick={onSave} 
+          disabled={isSaving || !hasChanges}
+          variant={hasChanges ? "default" : "outline"}
+          className="h-6 text-xs px-2"
+        >
+          {isSaving ? '...' : 'Save'}
+        </Button>
+      </div>
+
+      {/* Row 2: Burn sliders */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-1">
+          <Label className="text-xs w-16 shrink-0">Time</Label>
           <Slider
             value={[definition.burn_time]}
             onValueChange={([v]) => updateField('burn_time', v)}
             min={0.1}
             max={3}
             step={0.05}
+            className="flex-1"
           />
+          <span className="text-xs text-muted-foreground w-10">{definition.burn_time.toFixed(2)}s</span>
         </div>
-
-        {/* Burn Width */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <Label className="text-sm font-medium">Burn Width</Label>
-            <span className="text-sm text-muted-foreground">{definition.burn_width.toFixed(2)}m</span>
-          </div>
+        
+        <div className="flex items-center gap-2 flex-1">
+          <Label className="text-xs w-16 shrink-0">Width</Label>
           <Slider
             value={[definition.burn_width]}
             onValueChange={([v]) => updateField('burn_width', v)}
             min={0.1}
             max={2}
             step={0.025}
+            className="flex-1"
           />
+          <span className="text-xs text-muted-foreground w-10">{definition.burn_width.toFixed(2)}m</span>
         </div>
-
-        {/* Burn Height */}
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <Label className="text-sm font-medium">Burn Height</Label>
-            <span className="text-sm text-muted-foreground">{definition.burn_height.toFixed(2)}m</span>
-          </div>
+        
+        <div className="flex items-center gap-2 flex-1">
+          <Label className="text-xs w-16 shrink-0">Height</Label>
           <Slider
             value={[definition.burn_height]}
             onValueChange={([v]) => updateField('burn_height', v)}
             min={0.1}
             max={3}
             step={0.05}
+            className="flex-1"
           />
+          <span className="text-xs text-muted-foreground w-10">{definition.burn_height.toFixed(2)}m</span>
         </div>
+      </div>
 
-        {/* Special effects note for T6-T10 */}
-        {tier >= 6 && (
-          <div className="text-xs text-muted-foreground italic border-t pt-2 mt-2">
-            ✨ Special effects coming soon for {tierInfo.name} bullets
-          </div>
-        )}
-      </CardContent>
+      {/* Special effects note for T6-T10 */}
+      {tier >= 6 && (
+        <div className="text-xs text-muted-foreground italic mt-1">
+          ✨ Special effects coming soon
+        </div>
+      )}
     </Card>
   );
 }
