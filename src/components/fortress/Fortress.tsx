@@ -171,8 +171,21 @@ export function Fortress() {
       const seedDef = tree.seed_definition;
       if (!seedDef) continue;
       
-      // Fetch the current growth order from tree_blocks
+      // Verify tree still exists in DB before resuming (prevents ghost tree growth)
       (async () => {
+        // First check if the tree still exists in planted_trees
+        const { data: treeExists } = await supabase
+          .from('planted_trees')
+          .select('id')
+          .eq('id', tree.id)
+          .maybeSingle();
+        
+        if (!treeExists) {
+          console.log(`[Fortress] Tree ${tree.id} no longer exists in DB, skipping resume`);
+          return;
+        }
+        
+        // Fetch the current growth order from tree_blocks
         const { data: maxOrderData } = await supabase
           .from('tree_blocks')
           .select('growth_order')
