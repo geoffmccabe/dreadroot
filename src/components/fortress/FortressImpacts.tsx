@@ -35,14 +35,17 @@ interface ImpactParticle {
 }
 
 // Shared geometry and material
-const particleGeometry = new THREE.SphereGeometry(0.02, 6, 6);
+const particleGeometry = new THREE.SphereGeometry(1, 6, 6); // Unit sphere, scaled per-instance
 const particleMaterial = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: 0.9,
+  vertexColors: true, // Required for instanceColor to work
 });
 
 const tempMatrix = new THREE.Matrix4();
 const tempColor = new THREE.Color();
+const tempPosition = new THREE.Vector3();
+const tempScale = new THREE.Vector3();
 
 export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -117,14 +120,15 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
         // Calculate alpha based on life
         const lifeRatio = p.life / p.maxLife;
         
-        // Update instance matrix
-        const scale = p.size * lifeRatio; // Shrink as it fades
-        tempMatrix.makeScale(scale, scale, scale);
-        tempMatrix.setPosition(p.position.x, p.position.y, p.position.z);
+        // Update instance matrix with position and scale
+        const scale = p.size * lifeRatio * 0.05; // Scale down (base geometry is unit sphere)
+        tempPosition.copy(p.position);
+        tempScale.set(scale, scale, scale);
+        tempMatrix.compose(tempPosition, new THREE.Quaternion(), tempScale);
         meshRef.current.setMatrixAt(writeIndex, tempMatrix);
         
-        // Fade color from bright to dark
-        tempColor.copy(p.color).multiplyScalar(lifeRatio);
+        // Fade color from bright to dark (ensure bright enough to see)
+        tempColor.copy(p.color).multiplyScalar(0.5 + lifeRatio * 0.5);
         meshRef.current.setColorAt(writeIndex, tempColor);
         
         // Keep particle
