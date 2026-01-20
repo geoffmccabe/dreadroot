@@ -440,9 +440,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       local_id: tempId
     };
     
-    // Non-blocking: add to IndexedDB then sync
+    // Non-blocking: add to IndexedDB then sync (but NOT for tree blocks)
+    const isTreeBlock = TREE_BLOCK_TYPES.includes(blockType);
     addBlock(dbBlock).then(() => {
-      if (!isBlockModeRef.current) {
+      // CRITICAL: Don't sync tree blocks to placed_blocks - they go to tree_blocks table
+      if (!isBlockModeRef.current && !isTreeBlock) {
         syncBlockToSupabase(dbBlock).catch(() => {});
       }
     }).catch(() => {});
@@ -586,6 +588,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
   }, [getCachedUserId, removeFromDB, updateBlock]);
 
+  // Tree block types that should NEVER be synced to placed_blocks
+  // Tree blocks are managed by useLocalGrowth and go to tree_blocks table instead
+  const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'];
+
   // Batch sync unsynced blocks
   const batchSyncBlocks = async () => {
     try {
@@ -594,6 +600,13 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       for (const block of unsyncedBlocks) {
         try {
+          // CRITICAL: Skip tree-type blocks - they're managed by useLocalGrowth
+          // and should only exist in tree_blocks table, not placed_blocks
+          if (TREE_BLOCK_TYPES.includes(block.block_type)) {
+            // Just mark as synced in IndexedDB without writing to placed_blocks
+            await updateBlock(block.id, { synced: true });
+            continue;
+          }
           await syncBlockToSupabase(block);
         } catch (error) {}
       }
