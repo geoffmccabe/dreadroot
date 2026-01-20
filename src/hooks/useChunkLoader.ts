@@ -694,9 +694,12 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const USE_CHUNK_CACHE = true; // Re-enabled with fix
     if (USE_CHUNK_CACHE) {
       try {
+        initLogStep('useChunkLoader.ts', 'Reading IndexedDB cache...', toLoad.length);
         cachedChunks = await blockDB.getCachedChunksBatch(worldId, toLoad);
+        initLogStep('useChunkLoader.ts', 'IndexedDB cache read complete', cachedChunks.size);
       } catch (err) {
         console.warn('Cache read failed, fetching from server:', err);
+        initLogStep('useChunkLoader.ts', 'Cache read failed, will fetch from server');
       }
     }
 
@@ -714,13 +717,21 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       }
     }
 
+    if (chunksWithCache.length > 0 || chunksWithoutCache.length > 0) {
+      initLogStep('useChunkLoader.ts', `Cache hits: ${chunksWithCache.length}, misses: ${chunksWithoutCache.length}`);
+    }
+
     // Fetch server versions for cached chunks to check staleness
     const chunksToFetchFromServer: Array<{ x: number; z: number }> = [...chunksWithoutCache];
     const chunksFromCache: Array<{ x: number; z: number; blocks: PlacedBlock[] }> = [];
 
     if (chunksWithCache.length > 0) {
+      initLogStep('useChunkLoader.ts', 'Checking chunk versions...', chunksWithCache.length);
       const serverVersions = await fetchChunkVersions(chunksWithCache.map(c => ({ x: c.x, z: c.z })));
+      initLogStep('useChunkLoader.ts', 'Chunk versions fetched', serverVersions.size);
 
+      let freshCount = 0;
+      let staleCount = 0;
       for (const { x, z, cached } of chunksWithCache) {
         const chunkKey = `chunk_${x}_${z}`;
         
@@ -742,20 +753,25 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
             !block.expires_at || new Date(block.expires_at) > now
           );
           chunksFromCache.push({ x, z, blocks: activeBlocks });
+          freshCount++;
         } else {
           // Cache is stale - need to fetch from server
           chunksToFetchFromServer.push({ x, z });
+          staleCount++;
         }
       }
+      initLogStep('useChunkLoader.ts', `Cache freshness: ${freshCount} fresh, ${staleCount} stale`);
     }
 
     // Load chunks from cache into memory (NO emit yet - wait for server data)
+    let cacheBlockCount = 0;
     for (const { x, z, blocks } of chunksFromCache) {
       const chunkKey = `chunk_${x}_${z}`;
       // Create colliders for all blocks from cache
       for (const block of blocks) {
         ensureBlockCollider(block);
       }
+      cacheBlockCount += blocks.length;
       loadedChunksRef.current.set(chunkKey, {
         blocks,
         loadedAt,
@@ -763,9 +779,14 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         hasOptimisticBlocks: blocks.some(b => b.id.startsWith('temp-'))
       });
     }
+    if (chunksFromCache.length > 0) {
+      initLogStep('useChunkLoader.ts', `Loaded from cache: ${chunksFromCache.length} chunks, ${cacheBlockCount} blocks`);
+    }
 
     // Fetch remaining chunks from server
     if (chunksToFetchFromServer.length > 0) {
+      initLogStep('useChunkLoader.ts', 'Fetching chunks from Supabase...', chunksToFetchFromServer.length);
+      
       const minChunkX = Math.min(...chunksToFetchFromServer.map(c => c.x));
       const maxChunkX = Math.max(...chunksToFetchFromServer.map(c => c.x));
       const minChunkZ = Math.min(...chunksToFetchFromServer.map(c => c.z));
@@ -784,6 +805,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
       if (error) {
         console.error('Error loading chunks from server:', error);
+        initLogStep('useChunkLoader.ts', `Supabase error: ${error.message}`);
         // Still emit what we have from cache
         if (chunksFromCache.length > 0) {
           scheduleEmit();
@@ -791,13 +813,17 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         return;
       }
 
+      initLogStep('useChunkLoader.ts', 'Supabase query complete', blocks?.length || 0);
+
       // Get current versions for caching
+      initLogStep('useChunkLoader.ts', 'Fetching versions for caching...');
       const currentVersions = await fetchChunkVersions(chunksToFetchFromServer);
 
       // Filter expired and group by chunk
       const activeBlocks = (blocks || []).filter(block => 
         !block.expires_at || new Date(block.expires_at) > now
       );
+      initLogStep('useChunkLoader.ts', `Active blocks (non-expired)`, activeBlocks.length);
 
       const chunkGroups = new Map<string, PlacedBlock[]>();
       for (const block of activeBlocks) {
@@ -811,6 +837,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
       // Store chunks and prepare cache entries
       const chunksToCache: CachedChunk[] = [];
+      let serverBlockCount = 0;
 
       for (const { x, z } of chunksToFetchFromServer) {
         const chunkKey = `chunk_${x}_${z}`;
@@ -820,6 +847,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         for (const block of chunkBlocks) {
           ensureBlockCollider(block);
         }
+        serverBlockCount += chunkBlocks.length;
         
         loadedChunksRef.current.set(chunkKey, {
           blocks: chunkBlocks,
@@ -840,8 +868,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         });
       }
 
+      initLogStep('useChunkLoader.ts', `Loaded from server: ${chunksToFetchFromServer.length} chunks, ${serverBlockCount} blocks`);
+
       // Batch save to cache (fire and forget)
       if (chunksToCache.length > 0) {
+        initLogStep('useChunkLoader.ts', 'Saving chunks to IndexedDB cache...', chunksToCache.length);
         blockDB.saveCachedChunksBatch(chunksToCache).catch(err => {
           console.warn('Failed to cache chunks:', err);
         });
@@ -849,6 +880,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
 
     // FIX: Single consolidated emit after ALL data (cache + server) is loaded
+    initLogStep('useChunkLoader.ts', 'Emitting blocks to React state...');
     scheduleEmit();
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
@@ -1432,18 +1464,24 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     setIsLoading(true);
     initialLoadDone.current = false;
     
-    initLogStep('useChunkLoader.ts', 'Clearing previous world data...');
+    initLogStep('useChunkLoader.ts', 'Beginning chunk loader initialization...');
     console.log(`[ChunkLoader] initializeForWorld called, grid size before clear: ${collisionGrid.size}`);
     
     // CRITICAL: Remove all block colliders before clearing chunks
+    initLogStep('useChunkLoader.ts', 'Removing existing block colliders...');
+    let removedColliders = 0;
     for (const [, chunkData] of loadedChunksRef.current) {
       for (const block of chunkData.blocks) {
         removeBlockCollider(block);
+        removedColliders++;
       }
     }
-    loadedChunksRef.current.clear();
+    initLogStep('useChunkLoader.ts', 'Block colliders removed', removedColliders);
     
-    initLogStep('useChunkLoader.ts', 'Collision grid cleared', collisionGrid.size);
+    loadedChunksRef.current.clear();
+    initLogStep('useChunkLoader.ts', 'Chunk cache cleared');
+    
+    initLogStep('useChunkLoader.ts', 'Collision grid size after clear', collisionGrid.size);
     console.log(`[ChunkLoader] Grid size after clear: ${collisionGrid.size}`);
     
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
@@ -1453,6 +1491,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     initLogStep('useChunkLoader.ts', `Player start chunk: (${startChunkX}, ${startChunkZ})`);
 
     // Phase 3D: Clean up old cache entries (fire and forget)
+    initLogStep('useChunkLoader.ts', 'Cleaning old cache entries...');
     blockDB.clearOldCachedChunks(CACHE_MAX_AGE_MS).then(count => {
       if (count > 0) {
         console.log(`Phase 3D: Cleared ${count} old cached chunks`);
@@ -1461,17 +1500,26 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       console.warn('Failed to clear old cache:', err);
     });
 
-    initLogStep('useChunkLoader.ts', `Loading chunks in radius ${LOAD_RADIUS}...`);
-
     // Phase 3C: Use progressive ring loading for smoother initial experience
     const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
+    initLogStep('useChunkLoader.ts', `Loading ${totalChunks} chunks (radius ${LOAD_RADIUS})...`);
+    
     for (let ring = 0; ring <= LOAD_RADIUS; ring++) {
       const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
+      initLogStep('useChunkLoader.ts', `Loading ring ${ring} (${ringChunks.length} chunks)...`);
       await loadSpecificChunks(ringChunks);
-      initLogStep('useChunkLoader.ts', `Ring ${ring} loaded`, ringChunks.length);
+      initLogStep('useChunkLoader.ts', `Ring ${ring} complete`, ringChunks.length);
     }
     
-    initLogStep('useChunkLoader.ts', 'All chunks loaded', totalChunks);
+    initLogStep('useChunkLoader.ts', 'All chunk rings loaded', totalChunks);
+    
+    // Count total blocks loaded
+    let totalBlocks = 0;
+    for (const chunkData of loadedChunksRef.current.values()) {
+      totalBlocks += chunkData.blocks.length;
+    }
+    initLogStep('useChunkLoader.ts', 'Total blocks in memory', totalBlocks);
+    
     console.log(`[ChunkLoader] initializeForWorld complete, grid size: ${collisionGrid.size}`);
     initLogStep('useChunkLoader.ts', 'Collision grid populated', collisionGrid.size);
     

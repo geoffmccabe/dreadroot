@@ -180,22 +180,32 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // Start initialization overlay
       initLogStart();
       initLogStep('usePlacedBlocksWithCache.ts', 'Starting world initialization...');
+      initLogStep('usePlacedBlocksWithCache.ts', `User authenticated, world: ${worldId.slice(0, 8)}...`);
       
+      initLogStep('usePlacedBlocksWithCache.ts', 'Initializing IndexedDB...');
       await initDB();
-      initLogStep('usePlacedBlocksWithCache.ts', 'IndexedDB initialized');
+      initLogStep('usePlacedBlocksWithCache.ts', 'IndexedDB ready');
       
       console.log('[InitCache] Calling initializeForWorld');
       // Phase 2B: Use chunk loader for initial load from camera starting position
+      initLogStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
       await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
       console.log('[InitCache] initializeForWorld complete');
+      initLogStep('usePlacedBlocksWithCache.ts', 'Chunk loader initialization complete');
       
       // Load pre-existing tree blocks from tree_blocks table
       // This runs AFTER chunks are loaded so trees appear immediately
       console.log('[InitCache] Loading tree blocks');
+      initLogStep('usePlacedBlocksWithCache.ts', 'Starting tree block loader...');
       await loadTreeBlocks();
       console.log('[InitCache] Tree blocks loaded');
+      initLogStep('usePlacedBlocksWithCache.ts', 'Tree block loader complete');
+      
+      // Set up realtime subscription
+      initLogStep('usePlacedBlocksWithCache.ts', 'Setting up realtime subscription...');
       
       // Finish initialization overlay
+      initLogStep('usePlacedBlocksWithCache.ts', 'World initialization complete!');
       initLogFinish();
     } catch (error) {
       console.error('Error initializing:', error);
