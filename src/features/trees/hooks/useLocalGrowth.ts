@@ -305,9 +305,36 @@ export function useLocalGrowth({
         const allBlocksToPlace: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string; branchDepth?: number }> = [];
         const treesToUpdate: GrowingTree[] = [];
         
+        // CRITICAL: Verify each tree exists in DB BEFORE placing blocks
+        // This prevents ghost trees from growing after DB cleanup
+        const verifiedTrees: GrowingTree[] = [];
         for (let t = 0; t < Math.min(treesToGrow.length, maxTreesPerTick); t++) {
           const tree = treesToGrow[t];
           
+          // Skip temp trees (they haven't been saved to DB yet, that's expected)
+          if (tree.id.startsWith('temp_')) {
+            verifiedTrees.push(tree);
+            continue;
+          }
+          
+          // Quick existence check - if tree was deleted from DB, stop growing it
+          const { data: exists } = await supabase
+            .from('planted_trees')
+            .select('id')
+            .eq('id', tree.id)
+            .maybeSingle();
+          
+          if (!exists) {
+            console.log(`[LocalGrowth] CRITICAL: Tree ${tree.id} not in DB, removing from growth immediately`);
+            growingTreesRef.current.delete(tree.id);
+            deletedTreeIds.add(tree.id);
+            continue;
+          }
+          
+          verifiedTrees.push(tree);
+        }
+        
+        for (const tree of verifiedTrees) {
           // Get blocks at this growth order
           const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
 
