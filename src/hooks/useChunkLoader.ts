@@ -1515,10 +1515,24 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     
     // Count total blocks loaded
     let totalBlocks = 0;
+    const blockTypeCounts = new Map<string, number>();
     for (const chunkData of loadedChunksRef.current.values()) {
       totalBlocks += chunkData.blocks.length;
+      for (const block of chunkData.blocks) {
+        const type = block.block_type || 'unknown';
+        blockTypeCounts.set(type, (blockTypeCounts.get(type) || 0) + 1);
+      }
     }
     initLogStep('useChunkLoader.ts', 'Total blocks in memory', totalBlocks);
+    
+    // Log block types breakdown
+    const sortedTypes = Array.from(blockTypeCounts.entries()).sort((a, b) => b[1] - a[1]);
+    for (const [type, count] of sortedTypes) {
+      initLogStep('useChunkLoader.ts', `Block type: ${type}`, count);
+    }
+    
+    // Log live enemies (shwarms are spawned on-demand, so 0 at init)
+    initLogStep('useChunkLoader.ts', 'Live Enemies', 0);
     
     console.log(`[ChunkLoader] initializeForWorld complete, grid size: ${collisionGrid.size}`);
     initLogStep('useChunkLoader.ts', 'Collision grid populated', collisionGrid.size);

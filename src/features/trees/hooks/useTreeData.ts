@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PlantedTree, TreeFruit, SeedDefinition } from '../types';
 import { TREE_CONFIG } from '../constants';
+import { initLogStep } from '@/contexts/InitializationContext';
 
 interface TreeData {
   plantedTrees: PlantedTree[];
@@ -99,9 +100,30 @@ export function useTreeData(
           })) as PlantedTree[]
         : [];
 
+      // Log planted trees by tier for initialization overlay
+      const seedDefs = (seedsRes.data || []) as SeedDefinition[];
+      const treesByTier = new Map<number, number>();
+      for (const tree of mappedTrees) {
+        const tier = tree.seed_definition?.tier || 0;
+        treesByTier.set(tier, (treesByTier.get(tier) || 0) + 1);
+      }
+      
+      // Log seed definitions count
+      initLogStep('useTreeData.ts', `Seed definitions loaded`, seedDefs.length);
+      
+      // Log trees by tier (only non-zero, sorted T1 to T30)
+      const sortedTiers = Array.from(treesByTier.entries()).sort((a, b) => a[0] - b[0]);
+      if (sortedTiers.length > 0) {
+        for (const [tier, count] of sortedTiers) {
+          initLogStep('useTreeData.ts', `Planted Trees T${tier}`, count);
+        }
+      } else {
+        initLogStep('useTreeData.ts', 'No planted trees in world');
+      }
+
       setPlantedTrees(mappedTrees);
       setTreeFruits((fruitsRes.data || []) as TreeFruit[]);
-      setSeedDefinitions((seedsRes.data || []) as SeedDefinition[]);
+      setSeedDefinitions(seedDefs);
       setMyIncompleteTrees(mappedIncomplete);
     } catch (err) {
       console.error('[TreeData] Fetch error:', err);

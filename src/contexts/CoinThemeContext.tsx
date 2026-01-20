@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { initLogStep } from '@/contexts/InitializationContext';
 
 interface ColorWeight {
   hex: string;
@@ -103,9 +104,16 @@ export const CoinThemeProvider: React.FC<{ children: ReactNode }> = ({ children 
       const activeTheme = themes.find(t => t.id === settings?.active_token_theme_id);
       if (activeTheme) {
         setCurrentTheme(activeTheme);
+        // Log coin theme info for initialization overlay
+        const dropsPerSec = 1000 / activeTheme.ms_between_drops;
+        initLogStep('CoinThemeContext.tsx', `Coin Theme: ${activeTheme.display_name}`);
+        initLogStep('CoinThemeContext.tsx', `Waterfall: ${dropsPerSec.toFixed(1)} coins/sec`);
       } else if (themes.length > 0) {
         // Fallback to first theme
         setCurrentTheme(themes[0]);
+        const dropsPerSec = 1000 / themes[0].ms_between_drops;
+        initLogStep('CoinThemeContext.tsx', `Coin Theme: ${themes[0].display_name} (default)`);
+        initLogStep('CoinThemeContext.tsx', `Waterfall: ${dropsPerSec.toFixed(1)} coins/sec`);
       }
     } catch (error) {
       console.error('Failed to load active theme:', error);

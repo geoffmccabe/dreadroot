@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
 import { checkLevelUp, getLevelForPoints } from '@/lib/levelSystem';
+import { initLogStep } from '@/contexts/InitializationContext';
 
 export interface UserProfile {
   id: string;
@@ -158,9 +159,23 @@ export const useUserData = () => {
           });
       }
       
+      // Log player data for initialization overlay
+      initLogStep('useUserData.ts', `Player Level: ${correctLevel}`);
+      initLogStep('useUserData.ts', `Player Points: ${existingProfile.total_points || 0}`);
+      initLogStep('useUserData.ts', `Player Coins: ${tokenBalanceData?.coins || 100}`);
+      
+      // Count inventory items
+      const totalItems = (inventoryData || []).reduce((sum, item) => sum + item.quantity, 0);
+      const uniqueTypes = new Set((inventoryData || []).map(item => item.item_type)).size;
+      initLogStep('useUserData.ts', `Inventory: ${totalItems} items (${uniqueTypes} types)`);
+      
+      // Log roles
+      const roles = rolesData?.map(r => r.role) || [];
+      initLogStep('useUserData.ts', `Roles: ${roles.length > 0 ? roles.join(', ') : 'user'}`);
+      
       setProfile(existingProfile);
       setInventory(inventoryData || []);
-      setUserRoles(rolesData?.map(r => r.role) || []);
+      setUserRoles(roles);
     } catch (error) {
       toast({
         title: "Error",
