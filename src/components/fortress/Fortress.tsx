@@ -638,12 +638,21 @@ export function Fortress() {
 
   // Mode change handler
   const handleModeChange = useCallback((mode: 'shooting' | 'building' | 'planting' | null) => {
-    const availableItems = inventory.filter(item => item.quantity > 0);
+    // Filter for ONLY placeable blocks (not seeds, fruits, or trunk)
+    const isPlaceableBlock = (itemType: string): boolean => {
+      if (itemType.startsWith('seed_tier_')) return false;
+      if (itemType === 'trunk' || itemType === 'fruit') return false;
+      return true;
+    };
+    
+    const availablePlaceableBlocks = inventory.filter(item => 
+      item.quantity > 0 && item.item_type && isPlaceableBlock(item.item_type)
+    );
     
     if (mode === 'building') {
       setTreePlacementMode(false);
       setSelectedSeedTier(null);
-      const availableItem = availableItems[0];
+      const availableItem = availablePlaceableBlocks[0];
       if (availableItem && availableItem.quantity > 0) {
         setSelectedBlockType(availableItem.item_type);
         setCrosshairsEnabled(false);
@@ -698,9 +707,18 @@ export function Fortress() {
 
   // Cycle through available blocks
   const cycleSelectedBlock = useCallback((direction: 'next' | 'prev') => {
+    // Filter for ONLY placeable blocks (not seeds, fruits, or trunk)
+    const isPlaceableBlock = (itemType: string): boolean => {
+      // Seeds are 'seed_tier_X' format
+      if (itemType.startsWith('seed_tier_')) return false;
+      // Exclude trunk, fruit - these are tree blocks not for manual placement
+      if (itemType === 'trunk' || itemType === 'fruit') return false;
+      return true;
+    };
+    
     const blockQuantities = new Map<string, number>();
     inventory.forEach(item => {
-      if (item.quantity > 0 && item.item_type) {
+      if (item.quantity > 0 && item.item_type && isPlaceableBlock(item.item_type)) {
         const current = blockQuantities.get(item.item_type) || 0;
         blockQuantities.set(item.item_type, current + item.quantity);
       }
@@ -710,7 +728,14 @@ export function Fortress() {
       .map(([blockType, quantity]) => ({ blockType, quantity }))
       .filter(item => item.quantity > 0);
     
-    if (availableBlocks.length === 0) return;
+    if (availableBlocks.length === 0) {
+      toast({
+        title: "No placeable blocks",
+        description: "Purchase blocks from the shop (Press O)",
+        duration: 2000
+      });
+      return;
+    }
     
     if (!selectedBlockType) {
       const firstBlock = availableBlocks[0];

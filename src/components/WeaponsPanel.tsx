@@ -129,7 +129,7 @@ function BulletTierPanel({ tier, definition, onChange }: BulletTierPanelProps) {
             value={[definition.burn_time]}
             onValueChange={([v]) => updateField('burn_time', v)}
             min={0.1}
-            max={3}
+            max={6}
             step={0.05}
             className="flex-1"
           />
@@ -142,7 +142,7 @@ function BulletTierPanel({ tier, definition, onChange }: BulletTierPanelProps) {
             value={[definition.burn_width]}
             onValueChange={([v]) => updateField('burn_width', v)}
             min={0.1}
-            max={2}
+            max={4}
             step={0.025}
             className="flex-1"
           />
@@ -155,7 +155,7 @@ function BulletTierPanel({ tier, definition, onChange }: BulletTierPanelProps) {
             value={[definition.burn_height]}
             onValueChange={([v]) => updateField('burn_height', v)}
             min={0.1}
-            max={3}
+            max={6}
             step={0.05}
             className="flex-1"
           />
