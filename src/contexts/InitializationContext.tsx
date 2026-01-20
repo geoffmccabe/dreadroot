@@ -51,8 +51,9 @@ export function InitializationProvider({ children }: { children: React.ReactNode
   const [steps, setSteps] = useState<InitStep[]>([]);
   const [totalDurationSecs, setTotalDurationSecs] = useState(0);
   
-  const startTimeRef = useRef<number>(0);
-  const lastStepTimeRef = useRef<number>(0);
+  // Initialize with current time so early steps have valid baseline
+  const startTimeRef = useRef<number>(performance.now());
+  const lastStepTimeRef = useRef<number>(performance.now());
 
   const startInitialization = useCallback(() => {
     const now = performance.now();
