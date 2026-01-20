@@ -179,7 +179,7 @@ export function Fortress() {
         // First check if the tree still exists in planted_trees
         const { data: treeExists } = await supabase
           .from('planted_trees')
-          .select('id')
+          .select('id, current_block_count, target_block_count')
           .eq('id', tree.id)
           .maybeSingle();
         
@@ -188,18 +188,15 @@ export function Fortress() {
           return;
         }
         
-        // Fetch the current growth order from tree_blocks
-        const { data: maxOrderData } = await supabase
-          .from('tree_blocks')
-          .select('growth_order')
-          .eq('tree_id', tree.id)
-          .order('growth_order', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        // NEW ARCHITECTURE: Use current_block_count from planted_trees
+        // This is updated by useLocalGrowth during growth
+        // Calculate approximate growth order from block count
+        // Note: Growth order != block count due to batch placement, but this is close enough
+        const currentBlocks = treeExists.current_block_count ?? 0;
         
-        const startOrder = maxOrderData?.growth_order ?? 0;
-        // Resume tree growth from last order
-        startGrowing(tree.id, seedDef, tree.base_x, tree.base_y, tree.base_z, tree.growth_seed, startOrder + 1);
+        // Resume tree growth from approximate order
+        // The growth algorithm will skip already-placed positions anyway
+        startGrowing(tree.id, seedDef, tree.base_x, tree.base_y, tree.base_z, tree.growth_seed, currentBlocks);
       })();
     }
   }, [myIncompleteTrees, startGrowing, isTreeGrowing]);
