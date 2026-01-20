@@ -24,6 +24,7 @@ import { FirstPersonControls } from './FortressControls';
 import { DynamicSky, SkyHandle } from './FortressSky';
 import { DynamicLighting, LightingHandle } from './FortressLighting';
 import { FortressStructure } from './FortressStructure';
+import { FortressParticles } from './FortressParticles';
 import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
 import { Bullets, BulletsHandle } from './FortressBullets';
@@ -878,6 +879,7 @@ export function FortressScene({
       <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} />
 
       <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
+      <FortressParticles />
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
       <CameraTrackedBlocks 
         blocks={blocks} 
