@@ -105,7 +105,7 @@ export function usePlayerHealth() {
         const level = getLevelForPoints(data.total_points || 0);
         const calculatedMaxHealth = calculateMaxHealthForLevel(level);
         
-        // Update max_health in DB if it changed
+        // Update max_health in DB if it changed (ONE-TIME on load only)
         if (data.max_health !== calculatedMaxHealth) {
           supabase
             .from('user_profiles')
@@ -130,7 +130,7 @@ export function usePlayerHealth() {
     loadHealth();
   }, [user?.id]);
 
-  // Real-time subscription for multiplayer sync and level-up max health updates
+  // Real-time subscription for multiplayer sync (READ ONLY - no DB writes!)
   useEffect(() => {
     if (!user?.id) return;
     
@@ -153,31 +153,20 @@ export function usePlayerHealth() {
             };
             
             // Recalculate max health from points if they changed
+            // CRITICAL: Do NOT write to DB here - causes infinite loop!
             if (newData.total_points !== undefined) {
               const level = getLevelForPoints(newData.total_points);
               const calculatedMaxHealth = calculateMaxHealthForLevel(level);
               
               setHealthState(prev => {
-                const newMaxHealth = calculatedMaxHealth;
                 const newCurrentHealth = newData.current_health ?? prev.currentHealth;
                 
                 return {
-                  currentHealth: Math.min(newCurrentHealth, newMaxHealth),
-                  maxHealth: newMaxHealth,
+                  currentHealth: Math.min(newCurrentHealth, calculatedMaxHealth),
+                  maxHealth: calculatedMaxHealth,
                   isDead: newCurrentHealth <= 0,
                 };
               });
-              
-              // Only sync max health if the incoming value differs (prevents infinite loop)
-              if (newData.max_health !== calculatedMaxHealth) {
-                supabase
-                  .from('user_profiles')
-                  .update({ max_health: calculatedMaxHealth })
-                  .eq('user_id', user.id)
-                  .then(({ error }) => {
-                    if (error) console.error('[usePlayerHealth] Failed to sync max health:', error);
-                  });
-              }
             } else if (newData.current_health !== undefined || newData.max_health !== undefined) {
               setHealthState(prev => ({
                 currentHealth: newData.current_health ?? prev.currentHealth,
