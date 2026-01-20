@@ -172,6 +172,9 @@ export function useShwarmSystem({
     }
     
     // Apply the update to the ref synchronously (for rapid fire accuracy)
+    // Track if THIS specific shwarm just died (was active, now all dead)
+    let justKilledTier: number | null = null;
+    
     const updatedShwarms = shwarmsRef.current.map(shwarm => {
       if (shwarm.id !== shwarmId) return shwarm;
 
@@ -196,10 +199,9 @@ export function useShwarmSystem({
       // Check if all blocks dead
       const allDead = updatedBlocks.every(b => !b.isAlive);
       
-      // If this shwarm just became fully dead, trigger callback with tier
+      // Only trigger callback if THIS shwarm was active and just became fully dead
       if (allDead && shwarm.isActive) {
-        const tier = shwarm.definition.tier;
-        setTimeout(() => onGroupKilled?.(tier), 0);
+        justKilledTier = shwarm.definition.tier;
       }
       
       return {
@@ -212,6 +214,11 @@ export function useShwarmSystem({
     // Update ref synchronously, then state
     shwarmsRef.current = updatedShwarms;
     setShwarms(updatedShwarms);
+    
+    // Trigger callback AFTER state update, only once for the killed shwarm
+    if (justKilledTier !== null) {
+      setTimeout(() => onGroupKilled?.(justKilledTier!), 0);
+    }
 
     return { wasKilled, actualDamage };
   }, [onGroupKilled]);
