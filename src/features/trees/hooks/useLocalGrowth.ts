@@ -419,32 +419,18 @@ export async function deleteTree(
       const bp = blueprintData.blueprint_data as { blocks: Array<{ x: number; y: number; z: number }> };
       blocksToDelete = bp.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
     } else {
-      // Fallback: Try old tree_blocks table
-      const { data: treeBlocks, error: fetchError } = await supabase
-        .from('tree_blocks')
-        .select('position_x, position_y, position_z')
-        .eq('tree_id', tree.id);
-
-      if (!fetchError && treeBlocks && treeBlocks.length > 0) {
-        blocksToDelete = treeBlocks.map(b => ({
-          x: b.position_x,
-          y: b.position_y,
-          z: b.position_z,
-        }));
-      } else {
-        // Final fallback: regenerate blueprint
-        const blueprint = generateTreeBlueprint(
-          tree.base_x,
-          tree.base_y,
-          tree.base_z,
-          seedDef.tier,
-          seedDef.width_factor,
-          seedDef.branching_factor,
-          tree.growth_seed,
-          buildGrowthOptions(seedDef)
-        );
-        blocksToDelete = blueprint.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
-      }
+      // NEW ARCHITECTURE: Regenerate blueprint from seed definition (no tree_blocks fallback!)
+      const blueprint = generateTreeBlueprint(
+        tree.base_x,
+        tree.base_y,
+        tree.base_z,
+        seedDef.tier,
+        seedDef.width_factor,
+        seedDef.branching_factor,
+        tree.growth_seed,
+        buildGrowthOptions(seedDef)
+      );
+      blocksToDelete = blueprint.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
     }
 
     // STEP 1: INSTANT local removal (blocks disappear immediately, single re-render)
@@ -458,7 +444,7 @@ export async function deleteTree(
       }
     }
 
-    // STEP 2: Use new ownership-verified RPC for database deletion
+    // STEP 2: Use ownership-verified RPC for database deletion
     const { data: rpcResult, error: rpcError } = await supabase
       .rpc('delete_tree_with_blocks', {
         p_tree_id: tree.id,
@@ -469,8 +455,8 @@ export async function deleteTree(
 
     if (rpcError) {
       console.error('[deleteTree] RPC error:', rpcError);
-      // Fallback to old method on RPC error
-      await supabase.from('tree_blocks').delete().eq('tree_id', tree.id);
+      // Fallback: direct deletion (no tree_blocks reference!)
+      await supabase.from('tree_blueprints').delete().eq('planted_tree_id', tree.id);
       await supabase.from('planted_trees').delete().eq('id', tree.id);
     } else if (rpcResult && !(rpcResult as any).success) {
       console.error('[deleteTree] RPC returned failure:', rpcResult);
