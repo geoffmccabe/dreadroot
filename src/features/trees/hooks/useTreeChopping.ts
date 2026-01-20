@@ -80,12 +80,12 @@ function findTreeAtPosition(
 }
 
 /**
- * Play axe chop sound
+ * Play timber/tree falling sound when successfully chopping a tree
  */
-async function playAxeChopSound(): Promise<void> {
+async function playTimberSound(): Promise<void> {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const response = await fetch('/axe_chop.mp3');
+    const response = await fetch('/timber_falling_sound.mp3');
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     
@@ -94,7 +94,7 @@ async function playAxeChopSound(): Promise<void> {
     source.connect(audioContext.destination);
     source.start();
   } catch (error) {
-    console.warn('Failed to play axe chop sound:', error);
+    console.warn('Failed to play timber sound:', error);
   }
 }
 
@@ -199,8 +199,8 @@ export function useTreeChopping({
       // CRITICAL: Stop local growth FIRST to prevent new blocks from being placed
       stopGrowing?.(tree.id);
 
-      // Play axe chop sound
-      await playAxeChopSound();
+      // Play timber/tree falling sound
+      await playTimberSound();
 
       // Delete the tree using the new architecture (RPC with ownership check)
       const deleteResult = await deleteTree(tree, seedDef, removeBlocksByPositions);
