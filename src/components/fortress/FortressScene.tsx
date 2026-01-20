@@ -28,6 +28,7 @@ import { FortressStructure } from './FortressStructure';
 import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
 import { Bullets, BulletsHandle } from './FortressBullets';
+import { BulletImpacts, BulletImpactsHandle } from './FortressImpacts';
 import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
@@ -434,6 +435,7 @@ export function FortressScene({
   const lightingRef = useRef<LightingHandle>(null);
   const skyRef = useRef<SkyHandle>(null);
   const fpsCounterRef = useRef<FPSCounterHandle>(null);
+  const bulletImpactsRef = useRef<BulletImpactsHandle>(null);
   
   // Track meshes by a unique ID (mesh reference) to allow multiple meshes per blockType
   // This is needed because tree blocks share the same type ("trunk") but have different textures
@@ -774,6 +776,48 @@ export function FortressScene({
             }
           }
           
+          // Check block collisions (if not already hit something)
+          if (!hit) {
+            // Simple distance check to nearby blocks
+            for (const block of blocks) {
+              const dx = bullet.position.x - block.position_x - 0.5;
+              const dy = bullet.position.y - block.position_y - 0.5;
+              const dz = bullet.position.z - block.position_z - 0.5;
+              const distSq = dx * dx + dy * dy + dz * dz;
+              
+              // Hit if within 0.6m of block center (block is 1m, so radius ~0.5m + bullet radius)
+              if (distSq < 0.36) { // 0.6^2 = 0.36
+                hit = true;
+                needsBulletRender = true;
+                
+                // Spawn impact effect at bullet position
+                if (bulletImpactsRef.current) {
+                  bulletImpactsRef.current.spawnImpact(bullet.position.clone(), {
+                    color: '#FFAA00', // Yellow/orange fire
+                    size: 1.0, // 1 block width
+                  });
+                }
+                break;
+              }
+            }
+            
+            // Also check ground collision (y <= 0)
+            if (!hit && bullet.position.y <= 0) {
+              hit = true;
+              needsBulletRender = true;
+              
+              // Spawn impact effect at ground level
+              if (bulletImpactsRef.current) {
+                const groundPos = bullet.position.clone();
+                groundPos.y = 0.1; // Slightly above ground
+                bulletImpactsRef.current.spawnImpact(groundPos, {
+                  color: '#FFAA00',
+                  size: 1.0,
+                });
+              }
+            }
+          }
+          
           if (!hit) {
             // In-place keep: write to writeIndex position
             bullets[writeIndex] = bullet;
@@ -904,6 +948,7 @@ export function FortressScene({
         coinImageUrl={coinImageUrl}
       />
       <Bullets ref={bulletsComponentRef} bullets={bulletsRef.current} />
+      <BulletImpacts ref={bulletImpactsRef} />
       
       {wispState && (
         <WispBlock 
