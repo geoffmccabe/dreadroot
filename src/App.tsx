@@ -10,6 +10,7 @@ import { AdminPanelProvider } from "@/contexts/AdminPanelContext";
 import { CoinThemeProvider } from "@/contexts/CoinThemeContext";
 import { AvatarProvider } from "@/contexts/AvatarContext";
 import { InitializationProvider } from "@/contexts/InitializationContext";
+import { BulletDefinitionsProvider } from "@/contexts/BulletDefinitionsContext";
 import { InitializationOverlay } from "@/components/InitializationOverlay";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -69,6 +70,7 @@ const App = () => (
               <AvatarProvider>
                 <UserPanelProvider>
                   <AdminPanelProvider>
+                    <BulletDefinitionsProvider>
                     <Toaster />
                     <Sonner />
                     <BrowserRouter>
@@ -94,6 +96,7 @@ const App = () => (
                         <Route path="*" element={<NotFound />} />
                       </Routes>
                     </BrowserRouter>
+                    </BulletDefinitionsProvider>
                   </AdminPanelProvider>
                 </UserPanelProvider>
               </AvatarProvider>

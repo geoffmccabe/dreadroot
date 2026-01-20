@@ -604,26 +604,31 @@ export function FortressScene({
     const normalizedDir = direction.clone().normalize();
     
     // Reset bullet properties with physics
-    // Bullet starts exactly at camera position (origin is already camera.position from FortressControls)
+    // Bullet starts exactly at camera position
     bullet.position.copy(origin);
     
-    // Store full 3D direction for horizontal movement
+    // Store full 3D direction - DO NOT separate horizontal/vertical
+    // This preserves accurate aim direction for all angles including below horizon
+    bullet.direction.copy(normalizedDir);
+    
+    // Initial Y velocity from the actual aim direction
+    bullet.velocityY = normalizedDir.y * 100;
+    
+    // Horizontal speed based on horizontal component of direction
     const horizontalLen = Math.sqrt(normalizedDir.x * normalizedDir.x + normalizedDir.z * normalizedDir.z);
+    bullet.speed = horizontalLen * 100;
+    
+    // Normalize horizontal direction for movement (but keep full Y in velocityY)
     if (horizontalLen > 0.0001) {
       bullet.direction.set(normalizedDir.x / horizontalLen, 0, normalizedDir.z / horizontalLen);
     } else {
-      bullet.direction.set(0, 0, -1); // Fallback if looking straight up/down
+      // Aiming straight up/down - minimal horizontal movement
+      bullet.direction.set(0, 0, 0);
     }
     
-    // Initial Y velocity from the actual aim direction (before normalizing horizontal)
-    bullet.velocityY = normalizedDir.y * 100;
-    
-    // Horizontal speed is proportional to how horizontal the aim is
-    bullet.speed = horizontalLen * 100;
-    
-    bullet.life = 5.0; // Increased life since bullets now arc down
-    bullet.tier = 1;   // T1 for now
-    bullet.color = '#FFFF00'; // Yellow
+    bullet.life = 5.0;
+    bullet.tier = 1;
+    bullet.color = '#FFFF00';
     
     // Only add if not already in active list
     if (!bulletsRef.current.includes(bullet)) {
@@ -672,6 +677,11 @@ export function FortressScene({
       for (let i = 0; i < bullets.length; i++) {
         const bullet = bullets[i];
         
+        // Store previous position BEFORE updating (for ray collision)
+        const prevX = bullet.position.x;
+        const prevY = bullet.position.y;
+        const prevZ = bullet.position.z;
+        
         // Apply gravity to Y velocity
         bullet.velocityY -= BULLET_GRAVITY * delta;
         
@@ -681,6 +691,11 @@ export function FortressScene({
         bullet.position.y += bullet.velocityY * delta;
         
         bullet.life -= delta;
+        
+        // Store previous pos in bullet for collision check later
+        (bullet as any).prevX = prevX;
+        (bullet as any).prevY = prevY;
+        (bullet as any).prevZ = prevZ;
         
         if (bullet.life > 0) {
           let hit = false;
@@ -823,21 +838,22 @@ export function FortressScene({
           
           // Check block collisions (if not already hit something)
           if (!hit) {
-            // Calculate displacement for ray intersection
-            const moveDistanceXZ = bullet.speed * delta;
-            const moveDistanceY = bullet.velocityY * delta + 0.5 * BULLET_GRAVITY * delta * delta;
-            const prevX = bullet.position.x - bullet.direction.x * moveDistanceXZ;
-            const prevY = bullet.position.y - moveDistanceY;
-            const prevZ = bullet.position.z - bullet.direction.z * moveDistanceXZ;
+            // Use stored previous position for accurate ray collision
+            const prevX = (bullet as any).prevX ?? bullet.position.x;
+            const prevY = (bullet as any).prevY ?? bullet.position.y;
+            const prevZ = (bullet as any).prevZ ?? bullet.position.z;
             
             const dispX = bullet.position.x - prevX;
             const dispY = bullet.position.y - prevY;
             const dispZ = bullet.position.z - prevZ;
             const dispLen = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
             
-            const ndx = dispLen > 0.0001 ? dispX / dispLen : 0;
-            const ndy = dispLen > 0.0001 ? dispY / dispLen : 0;
-            const ndz = dispLen > 0.0001 ? dispZ / dispLen : 0;
+            // Skip collision if bullet barely moved
+            if (dispLen < 0.001) continue;
+            
+            const ndx = dispX / dispLen;
+            const ndy = dispY / dispLen;
+            const ndz = dispZ / dispLen;
             
             // Only check blocks within reasonable distance of bullet path
             const checkRadius = dispLen + 2;
