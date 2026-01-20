@@ -84,12 +84,12 @@ export function HealthBar({ currentHealth, maxHealth, totalPoints, className }: 
         />
       ))}
       
-      {/* Numeric display */}
+      {/* Max health display */}
       <span className={cn(
         "ml-1.5 text-[10px] font-bold tabular-nums",
         isCritical ? "text-destructive" : isLowHealth ? "text-orange-400" : "text-white"
       )}>
-        {currentHealth}/{maxHealth}
+        {maxHealth}
       </span>
       
       {/* Points display */}
