@@ -27,6 +27,7 @@ import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
 import { useTreeChopping } from '@/features/trees/hooks/useTreeChopping';
 import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
 import { supabase } from '@/integrations/supabase/client';
+import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 
 import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
@@ -315,8 +316,10 @@ export function Fortress() {
       return;
     }
     
-    // Check if this is a tree block (trunk type) and if user owns the tree
-    if (block.block_type === 'trunk' && TREE_CONFIG.ENABLED) {
+    // Check if this is a tree block and if user owns the tree
+    // Uses isTreeBlockType to handle encoded block types like 'trunk_-1_5'
+    const baseType = getBaseTreeBlockType(block.block_type);
+    if (isTreeBlockType(block.block_type) && baseType !== 'invisiblock' && TREE_CONFIG.ENABLED) {
       const isOwned = isOwnedTreeAtPosition(block.position_x, block.position_y, block.position_z);
       if (isOwned) {
         // Chop the entire tree instead of just removing one block
