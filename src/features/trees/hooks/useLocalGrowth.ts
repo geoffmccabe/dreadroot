@@ -75,6 +75,19 @@ let pendingTreeBlocksRefGlobal: React.MutableRefObject<Array<{
 const deletedTreeIds = new Set<string>();
 
 /**
+ * Mark all current growing trees as deleted to prevent any further block placement
+ * This is called BEFORE clearing the map to ensure no race conditions
+ */
+export function markAllTreesDeleted() {
+  if (growingTreesRefGlobal?.current) {
+    for (const treeId of growingTreesRefGlobal.current.keys()) {
+      deletedTreeIds.add(treeId);
+    }
+    console.log(`[LocalGrowth] Marked ${growingTreesRefGlobal.current.size} trees as deleted`);
+  }
+}
+
+/**
  * Clear all growing trees from memory (used for ghost tree cleanup)
  */
 export function clearGrowingTrees() {
@@ -83,7 +96,18 @@ export function clearGrowingTrees() {
     growingTreesRefGlobal.current.clear();
     console.log(`[LocalGrowth] Cleared ${count} growing trees from memory`);
   }
-  deletedTreeIds.clear();
+  // Note: We don't clear deletedTreeIds here - those should persist to prevent regrowth
+}
+
+/**
+ * Clear ALL pending blocks from the flush buffer (for ghost tree cleanup)
+ */
+export function clearAllPendingBlocks() {
+  if (pendingTreeBlocksRefGlobal?.current) {
+    const count = pendingTreeBlocksRefGlobal.current.length;
+    pendingTreeBlocksRefGlobal.current = [];
+    console.log(`[LocalGrowth] Cleared ${count} pending blocks from flush buffer`);
+  }
 }
 
 /**

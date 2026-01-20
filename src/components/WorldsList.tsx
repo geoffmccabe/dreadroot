@@ -41,13 +41,31 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
   const handleClearGhostTrees = async () => {
     setIsCleaningGhostTrees(true);
     try {
-      const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom', 'invisiblock'];
+      // ALL possible tree-related block types
+      const TREE_BLOCK_TYPES = [
+        'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
+        'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
+      ];
       
-      // STEP 0: CRITICAL - Clear in-memory growing trees FIRST to stop new blocks
-      const { clearGrowingTrees } = await import('@/features/trees/hooks/useLocalGrowth');
+      // STEP 0: CRITICAL - Clear in-memory growing trees AND pending flush buffer
+      const { clearGrowingTrees, clearAllPendingBlocks, markAllTreesDeleted } = await import('@/features/trees/hooks/useLocalGrowth');
+      
+      // Mark all current trees as deleted first (prevents regrowth)
+      if (typeof markAllTreesDeleted === 'function') {
+        markAllTreesDeleted();
+        console.log('[GhostTreeCleanup] Marked all in-memory trees as deleted');
+      }
+      
+      // Clear the growing trees map
       if (typeof clearGrowingTrees === 'function') {
         clearGrowingTrees();
         console.log('[GhostTreeCleanup] Cleared in-memory growing trees');
+      }
+      
+      // Clear pending DB flush buffer
+      if (typeof clearAllPendingBlocks === 'function') {
+        clearAllPendingBlocks();
+        console.log('[GhostTreeCleanup] Cleared pending DB flush buffer');
       }
       
       // STEP 1: Clear entire IndexedDB chunk cache
@@ -90,7 +108,7 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       
       toast({
         title: 'Ghost trees completely cleared',
-        description: `Deleted ${result.deleted.placed_blocks} blocks, ${result.deleted.tree_blocks} tree_blocks, ${result.deleted.planted_trees} planted_trees from DB. Page will reload...`
+        description: `Deleted ${result.deleted.orphan_placed_blocks} blocks, ${result.deleted.orphan_tree_blocks} tree_blocks, ${result.deleted.orphan_tree_fruits || 0} tree_fruits. Page will reload...`
       });
       
       // STEP 5: Force page reload to get fresh state
