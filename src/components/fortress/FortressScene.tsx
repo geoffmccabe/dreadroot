@@ -904,7 +904,7 @@ export function FortressScene({
                 if (bulletImpactsRef.current) {
                   const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
                   bulletImpactsRef.current.spawnImpact(hitPos, {
-                    color: bullet.color,
+                    colors: [bullet.color],
                     size: 0.25,
                     tier: bullet.tier,
                   });
@@ -923,7 +923,7 @@ export function FortressScene({
                 const groundPos = bullet.position.clone();
                 groundPos.y = 0.1; // Slightly above ground
                 bulletImpactsRef.current.spawnImpact(groundPos, {
-                  color: bullet.color,
+                  colors: [bullet.color],
                   size: 0.25,
                   tier: bullet.tier,
                 });
