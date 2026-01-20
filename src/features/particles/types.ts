@@ -5,13 +5,15 @@ export type ParticleEffectType =
   | 'explosion' 
   | 'sparkles'
   | 'smoke'
-  | 'magic';
+  | 'magic'
+  | 'impact'; // Bullet impact effect - short burst fire
 
 export interface ParticleEffectConfig {
   type: ParticleEffectType;
   position: [number, number, number];
   scale?: number;
   duration?: number; // null for infinite
+  color?: string; // Optional color override (hex)
   onComplete?: () => void;
 }
 
