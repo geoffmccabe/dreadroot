@@ -127,6 +127,9 @@ export function FirstPersonControls({
   const lastChopSoundTimeRef = useRef(0);
   const axeChopAudioRef = useRef<HTMLAudioElement | null>(null);
   
+  // Track previous crawl state for crouch height transition
+  const wasCrawlingRef = useRef(false);
+  
   // Initialize axe chop audio once
   useEffect(() => {
     axeChopAudioRef.current = new Audio('/axe_chop.mp3');
@@ -881,6 +884,52 @@ export function FirstPersonControls({
       const standingHeight = 1.6;
       const crawlingHeight = 0.8;
       const playerHeight = isCrawling ? crawlingHeight : standingHeight;
+      const heightDiff = standingHeight - crawlingHeight; // 0.8m
+
+      // Handle crouch transition - keep FEET position constant, move camera (head)
+      if (isCrawling !== wasCrawlingRef.current) {
+        if (isCrawling) {
+          // Transitioning TO crawl: lower camera to keep feet in place
+          // Feet were at: camera.y - standingHeight
+          // After crouch, feet should still be there, so: camera.y - crawlingHeight = old feet
+          // Therefore: new camera.y = old feet + crawlingHeight = (old camera.y - standingHeight) + crawlingHeight
+          camera.position.y -= heightDiff;
+        } else {
+          // Transitioning FROM crawl to standing: need to check for ceiling clearance
+          // Check if there's room above to stand up
+          const testStandY = camera.position.y + heightDiff;
+          const testPlayerBox = createPlayerBox(
+            testPosRef.current.set(camera.position.x, testStandY, camera.position.z),
+            playerRadius,
+            standingHeight
+          );
+          
+          // Check for ceiling collision
+          let canStandUp = true;
+          const nearbyCount = collisionGrid.getNearbyFiltered(
+            camera.position.x,
+            camera.position.z,
+            2.0,
+            camera.position.y - crawlingHeight,
+            testStandY + 1.0
+          );
+          const nearbyColliders = collisionGrid.nearbyResult;
+          for (let i = 0; i < nearbyCount; i++) {
+            if (testPlayerBox.intersectsBox(nearbyColliders[i])) {
+              canStandUp = false;
+              break;
+            }
+          }
+          
+          if (canStandUp) {
+            camera.position.y += heightDiff;
+          } else {
+            // Can't stand up - force crawling state to remain
+            keys.current.ctrl = true;
+          }
+        }
+        wasCrawlingRef.current = isCrawling;
+      }
 
       // Step up height is used both for movement and for collision candidate Y range.
       const stepUpHeight = 0.6;
