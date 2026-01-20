@@ -51,8 +51,6 @@ export const useBlocksData = () => {
 
           if (error) throw error;
 
-          console.log('Fetched items from DB:', data?.slice(0, 5).map(b => ({ name: b.name, class: b.class, tier: b.tier })));
-
           const typedBlocks: BlockType[] = (data || []).map(block => ({
             id: block.id,
             key: block.key,
@@ -69,16 +67,6 @@ export const useBlocksData = () => {
               glowFactor: block.glow_factor || undefined
             }
           }));
-          
-          // Debug log for Harold block
-          const haroldBlock = typedBlocks.find(b => b.key === 'harold');
-          if (haroldBlock) {
-            console.log('🎯 Harold block loaded:', {
-              key: haroldBlock.key,
-              texture_url: haroldBlock.texture?.diffuse,
-              has_texture: !!haroldBlock.texture?.diffuse
-            });
-          }
 
           const blockMap = new Map<string, BlockType>();
           typedBlocks.forEach(block => blockMap.set(block.key, block));
@@ -148,16 +136,6 @@ export const useBlocksData = () => {
           glowFactor: block.glow_factor || undefined
         }
       }));
-      
-      // Debug log for Harold block
-      const haroldBlock = typedBlocks.find(b => b.key === 'harold');
-      if (haroldBlock) {
-        console.log('🎯 Harold block refreshed:', {
-          key: haroldBlock.key,
-          texture_url: haroldBlock.texture?.diffuse,
-          has_texture: !!haroldBlock.texture?.diffuse
-        });
-      }
 
       const blockMap = new Map<string, BlockType>();
       typedBlocks.forEach(block => blockMap.set(block.key, block));

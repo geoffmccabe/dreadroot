@@ -163,7 +163,6 @@ export const useAnimatedTexture = (url: string) => {
       
       // Save to cache
       await blockDB.saveTextureBlob(url, blob);
-      console.log('💾 Saved texture to cache');
     } catch (error) {
       console.error('Failed to load from network:', error);
     }
