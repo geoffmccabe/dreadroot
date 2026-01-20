@@ -22,11 +22,11 @@ export interface PlayerHealthState {
 
 /**
  * Calculate max health based on level
- * Base: 10 health at level 1
- * Each additional level adds 0.5 health (half a heart)
+ * Base: 100 health at level 1
+ * Each additional level adds 5 health
  */
 export function calculateMaxHealthForLevel(level: number): number {
-  return 10 + (level - 1) * 0.5;
+  return 100 + (level - 1) * 5;
 }
 
 /**
