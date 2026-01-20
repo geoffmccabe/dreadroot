@@ -173,6 +173,7 @@ export function useTreeChopping({
     const tree = findTreeAtPosition(blockX, blockY, blockZ, plantedTrees);
     
     if (!tree) {
+      console.warn('[TreeChopping] No tree found at position:', blockX, blockY, blockZ, 'Trees available:', plantedTrees.length);
       return { success: false, error: 'No tree found at this position' };
     }
 

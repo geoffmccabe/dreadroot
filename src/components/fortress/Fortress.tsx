@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Perf } from 'r3f-perf';
 import * as THREE from 'three';
@@ -22,6 +22,7 @@ import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers'
 import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
 import { clearBlocksCache } from '@/hooks/useBlocksData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
+import { PlantedTree } from '@/features/trees/types';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
 import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
 import { useTreeChopping } from '@/features/trees/hooks/useTreeChopping';
@@ -156,7 +157,7 @@ export function Fortress() {
   );
   
   // Local growth manager - stores growing trees in refs, not React state
-  const { startGrowing, updateTreeId, stopGrowing, isTreeGrowing } = useLocalGrowth({
+  const { startGrowing, updateTreeId, stopGrowing, isTreeGrowing, growingTreesRef } = useLocalGrowth({
     worldId: currentWorldId,
     userId: user?.id ?? null,
     placeBlocksBatch,
@@ -213,9 +214,67 @@ export function Fortress() {
   });
   
   // Tree chopping - allows owner to destroy tree and get seed back
-  // IMPORTANT: Combine plantedTrees + myIncompleteTrees so user can chop their growing trees
+  // IMPORTANT: Combine plantedTrees + myIncompleteTrees + actively growing trees
+  // This ensures user can chop trees at any stage (just planted, growing, or fully grown)
   const { refetchSingleChunk, removeBlocksByPositions } = useBlocks();
-  const allTrees = [...plantedTrees, ...myIncompleteTrees];
+  
+  // Build allTrees by merging DB trees with actively growing local trees
+  // NOTE: Using a function instead of useMemo so we get fresh data from growingTreesRef on each render
+  const getAllTrees = useCallback((): PlantedTree[] => {
+    const treeIds = new Set<string>();
+    const merged: PlantedTree[] = [];
+    
+    // Add planted trees from DB first
+    for (const tree of plantedTrees) {
+      if (!treeIds.has(tree.id)) {
+        treeIds.add(tree.id);
+        merged.push(tree);
+      }
+    }
+    
+    // Add my incomplete trees from DB
+    for (const tree of myIncompleteTrees) {
+      if (!treeIds.has(tree.id)) {
+        treeIds.add(tree.id);
+        merged.push(tree);
+      }
+    }
+    
+    // Add actively growing trees from local growth loop
+    // These might have temp IDs or IDs not yet in the DB query results
+    if (growingTreesRef.current) {
+      for (const [id, growingTree] of growingTreesRef.current) {
+        // Skip temp IDs - they'll be resolved to real IDs soon
+        if (id.startsWith('temp_')) continue;
+        
+        if (!treeIds.has(id)) {
+          treeIds.add(id);
+          // Convert GrowingTree to PlantedTree format
+          merged.push({
+            id,
+            world_id: growingTree.worldId,
+            seed_definition_id: growingTree.seedDef.id,
+            planted_by: user?.id ?? '',
+            base_x: growingTree.baseX,
+            base_y: growingTree.baseY,
+            base_z: growingTree.baseZ,
+            growth_seed: growingTree.growthSeed,
+            target_block_count: growingTree.blueprint.blocks.length,
+            current_block_count: growingTree.currentOrder,
+            is_fully_grown: false,
+            planted_at: new Date().toISOString(),
+            last_growth_at: new Date().toISOString(),
+            seed_definition: growingTree.seedDef,
+          });
+        }
+      }
+    }
+    
+    return merged;
+  }, [plantedTrees, myIncompleteTrees, user?.id]);
+  
+  // Get all trees for chopping - computed fresh when chopTreeAtPosition is called
+  const allTrees = getAllTrees();
   const { chopTreeAtPosition, isOwnedTreeAtPosition } = useTreeChopping({
     worldId: currentWorldId,
     userId: user?.id ?? null,
