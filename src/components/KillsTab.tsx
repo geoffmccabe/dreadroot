@@ -33,9 +33,7 @@ const getRarityBorderColor = (rarity: string) => {
 
 export const KillsTab: React.FC<KillsTabProps> = ({ height }) => {
   const { isLoading, sortedStatsWithDefs } = useUserCombatStats();
-  const monstersWithKills = sortedStatsWithDefs();
-  
-  const totalKills = monstersWithKills.reduce((sum, m) => sum + m.kills, 0);
+  const monstersWithKills = sortedStatsWithDefs().filter(m => m.kills > 0);
 
   if (isLoading) {
     return (
@@ -46,79 +44,44 @@ export const KillsTab: React.FC<KillsTabProps> = ({ height }) => {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Total Kills Display */}
-      <Card className="p-4 bg-gradient-to-r from-destructive/10 to-destructive/5">
-        <div className="text-center">
-          <div className="text-sm text-muted-foreground mb-1">Total Shwarms Killed</div>
-          <div className="text-3xl font-bold text-destructive flex items-center justify-center gap-2">
-            <Skull className="w-8 h-8" />
-            {totalKills.toLocaleString()}
-          </div>
-        </div>
-      </Card>
-
-      {/* Monster Grid - 2 columns, 3 rows visible */}
-      <ScrollArea style={{ height: `${height - 140}px` }}>
-        <div className="grid grid-cols-2 gap-3 pr-4">
-          {monstersWithKills.map((monster) => (
-            <Card 
-              key={monster.id}
-              className={`p-3 border-2 transition-all hover:shadow-md ${getRarityBorderColor(monster.rarity || 'common')} ${
-                monster.kills > 0 ? 'opacity-100' : 'opacity-50'
-              }`}
+    <ScrollArea style={{ height: `${height - 40}px` }}>
+      <div className="grid grid-cols-5 gap-2 pr-4">
+        {monstersWithKills.map((monster) => (
+          <Card 
+            key={monster.id}
+            className={`p-1.5 border transition-all hover:shadow-md ${getRarityBorderColor(monster.rarity || 'common')}`}
+          >
+            {/* Square Monster Image - top 2/3 */}
+            <div 
+              className="w-full aspect-square rounded mb-1 flex items-center justify-center overflow-hidden"
+              style={{
+                background: monster.texture_url 
+                  ? `url(${monster.texture_url}) center/cover`
+                  : 'linear-gradient(135deg, hsl(var(--muted)), hsl(var(--muted-foreground)/0.2))'
+              }}
             >
-              {/* Monster Image/Icon */}
-              <div 
-                className="w-full aspect-[2/3] rounded mb-2 flex items-center justify-center overflow-hidden"
-                style={{
-                  background: monster.texture_url 
-                    ? `url(${monster.texture_url}) center/cover`
-                    : 'linear-gradient(135deg, hsl(var(--muted)), hsl(var(--muted-foreground)/0.2))'
-                }}
-              >
-                {!monster.texture_url && (
-                  <Skull className="w-12 h-12 text-muted-foreground/50" />
-                )}
+              {!monster.texture_url && (
+                <Skull className="w-6 h-6 text-muted-foreground/50" />
+              )}
+            </div>
+            
+            {/* Name and Kills - bottom 1/3 */}
+            <div className="text-center space-y-0.5">
+              <h4 className="font-medium text-[10px] truncate leading-tight">{monster.name}</h4>
+              <div className="flex items-center justify-center gap-0.5">
+                <Skull className="w-3 h-3 text-destructive" />
+                <span className="font-bold text-sm">{monster.kills.toLocaleString()}</span>
               </div>
-              
-              {/* Monster Info */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-sm truncate flex-1">{monster.name}</h4>
-                  <Badge 
-                    variant="outline" 
-                    className={`text-[10px] ml-1 ${getRarityColor(monster.rarity || 'common')}`}
-                  >
-                    T{monster.tier}
-                  </Badge>
-                </div>
-                
-                <Badge 
-                  variant="secondary" 
-                  className={`text-[10px] ${getRarityColor(monster.rarity || 'common')}`}
-                >
-                  {monster.rarity}
-                </Badge>
-              </div>
-              
-              {/* Kill Count */}
-              <div className="mt-2 pt-2 border-t border-border">
-                <div className="flex items-center justify-center gap-1">
-                  <Skull className="w-4 h-4 text-destructive" />
-                  <span className="font-bold text-lg">{monster.kills.toLocaleString()}</span>
-                </div>
-              </div>
-            </Card>
-          ))}
-          
-          {monstersWithKills.length === 0 && (
-            <Card className="col-span-2 p-8 text-center text-muted-foreground">
-              No monsters defined yet
-            </Card>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
+            </div>
+          </Card>
+        ))}
+        
+        {monstersWithKills.length === 0 && (
+          <Card className="col-span-5 p-8 text-center text-muted-foreground">
+            No kills yet - get hunting!
+          </Card>
+        )}
+      </div>
+    </ScrollArea>
   );
 };
