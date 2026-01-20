@@ -94,9 +94,7 @@ export function clearPendingBlocksForTree(_treeId: string) {
  */
 export function clearGrowingTrees() {
   if (growingTreesRefGlobal?.current) {
-    const count = growingTreesRefGlobal.current.size;
     growingTreesRefGlobal.current.clear();
-    console.log(`[LocalGrowth] Cleared ${count} growing trees from memory`);
   }
 }
 
@@ -158,7 +156,6 @@ export function useLocalGrowth({
     };
 
     growingTreesRef.current.set(treeId, growingTree);
-    console.log(`[LocalGrowth] Started growing tree ${treeId}, ${blueprint.blocks.length} blocks`);
   }, [worldId]);
 
   /**
@@ -187,7 +184,6 @@ export function useLocalGrowth({
     // Add to deleted set IMMEDIATELY to prevent race conditions
     deletedTreeIds.add(treeId);
     if (growingTreesRef.current.has(treeId)) {
-      console.log(`[LocalGrowth] Stopping growth for tree ${treeId}`);
       growingTreesRef.current.delete(treeId);
     }
   }, []);
@@ -215,7 +211,6 @@ export function useLocalGrowth({
         for (const [id, tree] of growingTreesRef.current) {
           // CRITICAL: Check deleted set FIRST (sync, no race condition)
           if (deletedTreeIds.has(id)) {
-            console.log(`[LocalGrowth] Tree ${id} was deleted, removing from growth`);
             growingTreesRef.current.delete(id);
             continue;
           }
@@ -227,7 +222,6 @@ export function useLocalGrowth({
             
             // If temp tree is too old, it's orphaned - stop it
             if (tempAge > TEMP_TREE_TIMEOUT) {
-              console.log(`[LocalGrowth] CRITICAL: Temp tree ${id} timed out (${tempAge}ms old), removing`);
               growingTreesRef.current.delete(id);
               deletedTreeIds.add(id);
             }
@@ -251,9 +245,7 @@ export function useLocalGrowth({
                 last_growth_at: new Date().toISOString(),
               })
               .eq('id', tree.id)
-              .then(() => {
-                console.log(`[LocalGrowth] Tree ${id} fully grown`);
-              });
+              .then(() => {});
 
             // Remove from growing map
             growingTreesRef.current.delete(id);
@@ -272,7 +264,6 @@ export function useLocalGrowth({
             lastParentCheck.set(id, now);
 
             if (existsError || !parentExists) {
-              console.log(`[LocalGrowth] Parent tree ${tree.id} no longer exists, stopping growth`);
               growingTreesRef.current.delete(id);
               lastParentCheck.delete(id);
               continue;
@@ -306,7 +297,6 @@ export function useLocalGrowth({
             .maybeSingle();
           
           if (!exists) {
-            console.log(`[LocalGrowth] CRITICAL: Tree ${tree.id} not in DB, removing from growth immediately`);
             growingTreesRef.current.delete(tree.id);
             deletedTreeIds.add(tree.id);
             continue;
@@ -428,7 +418,6 @@ export async function deleteTree(
       // Use stored blueprint
       const bp = blueprintData.blueprint_data as { blocks: Array<{ x: number; y: number; z: number }> };
       blocksToDelete = bp.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
-      console.log(`[deleteTree] Using ${blocksToDelete.length} blocks from tree_blueprints table`);
     } else {
       // Fallback: Try old tree_blocks table
       const { data: treeBlocks, error: fetchError } = await supabase
@@ -442,10 +431,8 @@ export async function deleteTree(
           y: b.position_y,
           z: b.position_z,
         }));
-        console.log(`[deleteTree] Using ${blocksToDelete.length} blocks from tree_blocks table (legacy)`);
       } else {
         // Final fallback: regenerate blueprint
-        console.log('[deleteTree] Falling back to blueprint regeneration');
         const blueprint = generateTreeBlueprint(
           tree.base_x,
           tree.base_y,
@@ -464,7 +451,6 @@ export async function deleteTree(
     let locallyRemoved = 0;
     if (removeBlocksByPositions) {
       locallyRemoved = removeBlocksByPositions(blocksToDelete);
-      console.log(`[deleteTree] Instantly removed ${locallyRemoved} blocks locally`);
     } else {
       // Fallback: manual collider removal
       for (const block of blocksToDelete) {

@@ -611,7 +611,6 @@ class BlockDB {
           
           cursor.continue();
         } else {
-          console.log(`[IndexedDB] Removed ${removedCount} tree blocks from chunk cache`);
           resolve(removedCount);
         }
       };
