@@ -890,13 +890,10 @@ export function FirstPersonControls({
       if (isCrawling !== wasCrawlingRef.current) {
         if (isCrawling) {
           // Transitioning TO crawl: lower camera to keep feet in place
-          // Feet were at: camera.y - standingHeight
-          // After crouch, feet should still be there, so: camera.y - crawlingHeight = old feet
-          // Therefore: new camera.y = old feet + crawlingHeight = (old camera.y - standingHeight) + crawlingHeight
           camera.position.y -= heightDiff;
+          wasCrawlingRef.current = true;
         } else {
           // Transitioning FROM crawl to standing: need to check for ceiling clearance
-          // Check if there's room above to stand up
           const testStandY = camera.position.y + heightDiff;
           const testPlayerBox = createPlayerBox(
             testPosRef.current.set(camera.position.x, testStandY, camera.position.z),
@@ -923,12 +920,13 @@ export function FirstPersonControls({
           
           if (canStandUp) {
             camera.position.y += heightDiff;
+            wasCrawlingRef.current = false;
           } else {
-            // Can't stand up - force crawling state to remain
+            // Can't stand up - force crawling state to remain, DON'T update ref
             keys.current.ctrl = true;
+            // wasCrawlingRef stays true, preventing re-check next frame
           }
         }
-        wasCrawlingRef.current = isCrawling;
       }
 
       // Step up height is used both for movement and for collision candidate Y range.
