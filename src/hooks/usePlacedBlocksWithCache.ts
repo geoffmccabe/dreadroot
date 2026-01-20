@@ -6,6 +6,7 @@ import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
 import { collisionGrid } from '@/lib/spatialHashGrid';
+import { useTreeBlockLoader } from '@/features/trees/hooks/useTreeBlockLoader';
 import * as THREE from 'three';
 interface DBBlock extends PlacedBlock {
   synced: boolean;
@@ -144,6 +145,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   const chunkLoaderRef = useRef(chunkLoader);
   chunkLoaderRef.current = chunkLoader;
   
+  // Tree block loader - loads pre-existing tree blocks from tree_blocks table
+  const { loadTreeBlocks, reset: resetTreeLoader } = useTreeBlockLoader({
+    worldId,
+    addBlocksBatch: chunkLoader.addBlocksBatch,
+  });
+  
   // Track if we've initialized for the current world
   const initializedWorldRef = useRef<string | null>(null);
 
@@ -174,13 +181,19 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // Phase 2B: Use chunk loader for initial load from camera starting position
       await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
       console.log('[InitCache] initializeForWorld complete');
+      
+      // Load pre-existing tree blocks from tree_blocks table
+      // This runs AFTER chunks are loaded so trees appear immediately
+      console.log('[InitCache] Loading tree blocks');
+      await loadTreeBlocks();
+      console.log('[InitCache] Tree blocks loaded');
     } catch (error) {
       console.error('Error initializing:', error);
       initializedWorldRef.current = null; // Allow retry on error
     } finally {
       setIsLoading(false);
     }
-  }, [userId, worldId, initDB]);
+  }, [userId, worldId, initDB, loadTreeBlocks]);
 
   // Phase 2C: chunk_versions realtime subscription
   // Per-chunk debounce timers to coalesce rapid updates
@@ -306,8 +319,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       currentWorldIdRef.current = worldId;
       // Reset initialization tracking for new world
       initializedWorldRef.current = null;
+      // Reset tree loader so it reloads trees for the new world
+      resetTreeLoader();
     }
-  }, [worldId]);
+  }, [worldId, resetTreeLoader]);
 
   // Main initialization effect - runs once per world
   useEffect(() => {
