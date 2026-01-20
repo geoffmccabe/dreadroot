@@ -553,11 +553,16 @@ class BlockDB {
   /**
    * Clear ALL tree-related blocks from ALL chunk caches
    * This is the nuclear option for ghost tree cleanup
+   * FIXED: Now removes ALL tree blocks regardless of texture_url
    */
   async clearTreeBlocksFromCache(): Promise<number> {
     if (!this.db) await this.init();
     
-    const TREE_BLOCK_TYPES = ['trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 'shroom'];
+    // All possible tree block types - must match TREE_BLOCK_TYPES in WorldsList
+    const TREE_BLOCK_TYPES = [
+      'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
+      'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
+    ];
     let removedCount = 0;
     
     return new Promise((resolve, reject) => {
@@ -572,13 +577,9 @@ class BlockDB {
           const chunk = cursor.value as CachedChunk;
           const originalLength = chunk.blocks.length;
           
-          // Filter out tree blocks (especially those with null texture)
+          // Filter out ALL tree blocks - not just those with null texture
           chunk.blocks = chunk.blocks.filter(block => {
-            // Remove tree blocks with null texture (ghost trees)
-            if (TREE_BLOCK_TYPES.includes(block.block_type) && !block.texture_url) {
-              return false;
-            }
-            return true;
+            return !TREE_BLOCK_TYPES.includes(block.block_type);
           });
           
           if (chunk.blocks.length < originalLength) {
@@ -588,7 +589,7 @@ class BlockDB {
           
           cursor.continue();
         } else {
-          console.log(`[IndexedDB] Removed ${removedCount} ghost tree blocks from chunk cache`);
+          console.log(`[IndexedDB] Removed ${removedCount} tree blocks from chunk cache`);
           resolve(removedCount);
         }
       };

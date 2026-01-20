@@ -47,36 +47,47 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
         'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
       ];
       
+      console.log('[GhostTreeCleanup] ========== STARTING COMPREHENSIVE CLEANUP ==========');
+      
       // STEP 0: CRITICAL - Clear in-memory growing trees AND pending flush buffer
       const { clearGrowingTrees, clearAllPendingBlocks, markAllTreesDeleted } = await import('@/features/trees/hooks/useLocalGrowth');
       
       // Mark all current trees as deleted first (prevents regrowth)
       if (typeof markAllTreesDeleted === 'function') {
         markAllTreesDeleted();
-        console.log('[GhostTreeCleanup] Marked all in-memory trees as deleted');
+        console.log('[GhostTreeCleanup] ✓ Marked all in-memory trees as deleted');
       }
       
       // Clear the growing trees map
       if (typeof clearGrowingTrees === 'function') {
         clearGrowingTrees();
-        console.log('[GhostTreeCleanup] Cleared in-memory growing trees');
+        console.log('[GhostTreeCleanup] ✓ Cleared in-memory growing trees map');
       }
       
       // Clear pending DB flush buffer
       if (typeof clearAllPendingBlocks === 'function') {
         clearAllPendingBlocks();
-        console.log('[GhostTreeCleanup] Cleared pending DB flush buffer');
+        console.log('[GhostTreeCleanup] ✓ Cleared pending DB flush buffer');
       }
       
-      // STEP 1: Clear entire IndexedDB chunk cache
+      // STEP 1: Clear ENTIRE IndexedDB chunk cache (nuclear option)
       await blockDB.clearAllChunkCache();
-      console.log('[GhostTreeCleanup] Cleared entire IndexedDB chunk cache');
+      console.log('[GhostTreeCleanup] ✓ Cleared entire IndexedDB chunk cache');
       
-      // STEP 2: CRITICAL - Clear tree blocks from the main 'blocks' store
+      // STEP 2: Clear tree blocks from the main 'blocks' store
       const blocksStoreCount = await blockDB.clearTreeBlocksFromBlocksStore(TREE_BLOCK_TYPES);
-      console.log(`[GhostTreeCleanup] Removed ${blocksStoreCount} tree blocks from blocks store`);
+      console.log(`[GhostTreeCleanup] ✓ Removed ${blocksStoreCount} tree blocks from blocks store`);
       
-      // STEP 3: Call edge function to delete from DB (bypasses RLS with service role)
+      // STEP 3: Also run clearTreeBlocksFromCache (in case any survive)
+      const cacheCount = await blockDB.clearTreeBlocksFromCache();
+      console.log(`[GhostTreeCleanup] ✓ Removed ${cacheCount} tree blocks from chunk cache`);
+      
+      // STEP 4: Clear collision grid to remove ghost colliders
+      const { collisionGrid } = await import('@/lib/spatialHashGrid');
+      collisionGrid.clear();
+      console.log('[GhostTreeCleanup] ✓ Cleared collision grid');
+      
+      // STEP 5: Call edge function to delete from DB (bypasses RLS with service role)
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session?.access_token) {
         throw new Error('Not authenticated - please log in');
@@ -99,19 +110,15 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
         throw new Error(result.error || `Edge function failed: ${response.status}`);
       }
       
-      console.log('[GhostTreeCleanup] Edge function result:', result);
-      
-      // STEP 4: Clear collision grid to remove ghost colliders
-      const { collisionGrid } = await import('@/lib/spatialHashGrid');
-      collisionGrid.clear();
-      console.log('[GhostTreeCleanup] Cleared collision grid');
+      console.log('[GhostTreeCleanup] ✓ Edge function result:', result);
+      console.log('[GhostTreeCleanup] ========== CLEANUP COMPLETE - RELOADING ==========');
       
       toast({
         title: 'Ghost trees completely cleared',
         description: `Deleted ${result.deleted.orphan_placed_blocks} blocks, ${result.deleted.orphan_tree_blocks} tree_blocks, ${result.deleted.orphan_tree_fruits || 0} tree_fruits. Page will reload...`
       });
       
-      // STEP 5: Force page reload to get fresh state
+      // STEP 6: Force page reload to get fresh state
       setTimeout(() => {
         window.location.reload();
       }, 1500);
