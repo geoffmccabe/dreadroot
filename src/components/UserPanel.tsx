@@ -18,6 +18,9 @@ import { useBlocks } from '@/contexts/BlocksContext';
 import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { LevelTab } from '@/components/LevelTab';
 import { KillsTab } from '@/components/KillsTab';
+import { TreesTab } from '@/components/TreesTab';
+import { useTreeData } from '@/features/trees/hooks/useTreeData';
+import { useCurrentWorldId } from '@/hooks/useCurrentWorldId';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -82,6 +85,24 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
   const tokenDisplayName = currentTheme?.display_name || 'Waterfall';
   const { blocks: allPlacedBlocks } = useBlocks();
+  const { currentWorldId } = useCurrentWorldId();
+  const { plantedTrees, myIncompleteTrees, seedDefinitions, refetch: refetchTrees } = useTreeData(currentWorldId, user?.id);
+  
+  // Combine all user's trees (fully grown + incomplete)
+  const allUserTrees = useMemo(() => {
+    const treeMap = new Map<string, typeof plantedTrees[0]>();
+    plantedTrees.filter(t => t.planted_by === user?.id).forEach(t => treeMap.set(t.id, t));
+    myIncompleteTrees.forEach(t => treeMap.set(t.id, t));
+    return Array.from(treeMap.values());
+  }, [plantedTrees, myIncompleteTrees, user?.id]);
+  
+  // Check if user has any seeds in inventory
+  const hasSeedsInInventory = useMemo(() => {
+    return seedDefinitions.some(sd => inventory.some(i => i.item_id === sd.id && i.quantity > 0));
+  }, [seedDefinitions, inventory]);
+  
+  // Show trees tab only if user has seeds OR planted trees
+  const showTreesTab = hasSeedsInInventory || allUserTrees.length > 0;
   
   // Track if we've loaded data at least once to avoid jarring loading screens
   const hasLoadedOnce = useRef(false);
@@ -89,12 +110,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     hasLoadedOnce.current = true;
   }
   
-  // Refresh profile data when panel opens to ensure points/level are current
+  // Refresh profile and tree data when panel opens to ensure data is current
   useEffect(() => {
     if (isOpen) {
       refreshData();
+      refetchTrees();
     }
-  }, [isOpen, refreshData]);
+  }, [isOpen, refreshData, refetchTrees]);
   
   // Count placed blocks by type for current user
   const placedBlockCounts = useMemo(() => {
@@ -232,13 +254,14 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className={`grid w-full ${showTreesTab ? 'grid-cols-7' : 'grid-cols-6'}`}>
             <TabsTrigger value="user">User</TabsTrigger>
             <TabsTrigger value="level">Level</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
             <TabsTrigger value="kills">Kills</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
             <TabsTrigger value="market">Market</TabsTrigger>
+            {showTreesTab && <TabsTrigger value="trees">Trees</TabsTrigger>}
           </TabsList>
 
           {/* User Tab */}
@@ -579,6 +602,26 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             </Tabs>
           )}
         </TabsContent>
+
+          {/* Trees Tab - Only shown if user has seeds or trees */}
+          {showTreesTab && (
+            <TabsContent 
+              value="trees"
+              className="overflow-y-auto"
+              style={{ 
+                height: `${panelSize.height - 104}px`,
+                marginTop: 0,
+                paddingTop: '1rem'
+              }}
+            >
+              <TreesTab 
+                height={panelSize.height - 104}
+                inventory={inventory}
+                seedDefinitions={seedDefinitions}
+                plantedTrees={allUserTrees}
+              />
+            </TabsContent>
+          )}
       </Tabs>
         
         {/* Resize Handle */}
