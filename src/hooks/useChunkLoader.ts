@@ -4,6 +4,7 @@ import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { collisionGrid } from '@/lib/spatialHashGrid';
+import { initLogStep } from '@/contexts/InitializationContext';
 import * as THREE from 'three';
 
 // Configuration for chunk loading
@@ -1431,6 +1432,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     setIsLoading(true);
     initialLoadDone.current = false;
     
+    initLogStep('useChunkLoader.ts', 'Clearing previous world data...');
     console.log(`[ChunkLoader] initializeForWorld called, grid size before clear: ${collisionGrid.size}`);
     
     // CRITICAL: Remove all block colliders before clearing chunks
@@ -1441,11 +1443,14 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
     loadedChunksRef.current.clear();
     
+    initLogStep('useChunkLoader.ts', 'Collision grid cleared', collisionGrid.size);
     console.log(`[ChunkLoader] Grid size after clear: ${collisionGrid.size}`);
     
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
     const startChunkZ = Math.floor(startZ / CHUNK_SIZE);
     playerChunkRef.current = { x: startChunkX, z: startChunkZ };
+
+    initLogStep('useChunkLoader.ts', `Player start chunk: (${startChunkX}, ${startChunkZ})`);
 
     // Phase 3D: Clean up old cache entries (fire and forget)
     blockDB.clearOldCachedChunks(CACHE_MAX_AGE_MS).then(count => {
@@ -1456,14 +1461,23 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       console.warn('Failed to clear old cache:', err);
     });
 
+    initLogStep('useChunkLoader.ts', `Loading chunks in radius ${LOAD_RADIUS}...`);
+
     // Phase 3C: Use progressive ring loading for smoother initial experience
-    await loadProgressiveRings(startChunkX, startChunkZ, LOAD_RADIUS);
+    const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
+    for (let ring = 0; ring <= LOAD_RADIUS; ring++) {
+      const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
+      await loadSpecificChunks(ringChunks);
+      initLogStep('useChunkLoader.ts', `Ring ${ring} loaded`, ringChunks.length);
+    }
     
+    initLogStep('useChunkLoader.ts', 'All chunks loaded', totalChunks);
     console.log(`[ChunkLoader] initializeForWorld complete, grid size: ${collisionGrid.size}`);
+    initLogStep('useChunkLoader.ts', 'Collision grid populated', collisionGrid.size);
     
     initialLoadDone.current = true;
     setIsLoading(false);
-  }, [worldId, loadProgressiveRings]);
+  }, [worldId, getRingChunks, loadSpecificChunks]);
 
   /**
    * Clear all chunks (on world change)

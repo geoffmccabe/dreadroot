@@ -35,6 +35,7 @@ import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { FlyingCoin, GameSettings, WeatherSettings } from './FortressTypes';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { InitializationOverlay } from '@/components/InitializationOverlay';
 
 // Main Fortress orchestrator component
 export function Fortress() {
@@ -1113,6 +1114,9 @@ export function Fortress() {
       
       {/* Performance Overlay - Toggle with Shift+P */}
       <PerformanceOverlay />
+      
+      {/* World Initialization Overlay */}
+      <InitializationOverlay />
     </div>
   );
 }

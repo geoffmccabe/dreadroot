@@ -7,6 +7,7 @@ import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import { useTreeBlockLoader } from '@/features/trees/hooks/useTreeBlockLoader';
+import { initLogStep, initLogStart, initLogFinish } from '@/contexts/InitializationContext';
 import * as THREE from 'three';
 interface DBBlock extends PlacedBlock {
   synced: boolean;
@@ -175,7 +176,13 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     
     try {
       setIsLoading(true);
+      
+      // Start initialization overlay
+      initLogStart();
+      initLogStep('usePlacedBlocksWithCache.ts', 'Starting world initialization...');
+      
       await initDB();
+      initLogStep('usePlacedBlocksWithCache.ts', 'IndexedDB initialized');
       
       console.log('[InitCache] Calling initializeForWorld');
       // Phase 2B: Use chunk loader for initial load from camera starting position
@@ -187,9 +194,14 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       console.log('[InitCache] Loading tree blocks');
       await loadTreeBlocks();
       console.log('[InitCache] Tree blocks loaded');
+      
+      // Finish initialization overlay
+      initLogFinish();
     } catch (error) {
       console.error('Error initializing:', error);
       initializedWorldRef.current = null; // Allow retry on error
+      initLogStep('usePlacedBlocksWithCache.ts', `Error: ${error}`);
+      initLogFinish();
     } finally {
       setIsLoading(false);
     }
