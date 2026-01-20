@@ -68,7 +68,7 @@ interface UserPanelProps {
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
-  const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled, refreshData } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const { currentTheme } = useCoinTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
@@ -88,6 +88,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   if (!isLoading && !loadingBlocks) {
     hasLoadedOnce.current = true;
   }
+  
+  // Refresh profile data when panel opens to ensure points/level are current
+  useEffect(() => {
+    if (isOpen) {
+      refreshData();
+    }
+  }, [isOpen, refreshData]);
   
   // Count placed blocks by type for current user
   const placedBlockCounts = useMemo(() => {
