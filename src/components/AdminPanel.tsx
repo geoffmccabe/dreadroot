@@ -26,6 +26,7 @@ import { useBlocks } from '@/contexts/BlocksContext';
 import { SeedDesignPanel } from '@/features/trees';
 import { ShwarmDesignPanel } from '@/features/shwarm';
 import { ShnakeDesignPanel } from '@/features/shnake';
+import { ShombieDesignPanel } from '@/features/shombie';
 import { WeaponsPanel } from '@/components/WeaponsPanel';
 
 interface WaterfallControlsProps {
@@ -2424,6 +2425,7 @@ export function AdminPanel({
               <div className="space-y-6">
                 <ShwarmDesignPanel />
                 <ShnakeDesignPanel />
+                <ShombieDesignPanel />
               </div>
             </ScrollArea>
           </TabsContent>

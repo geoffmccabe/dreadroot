@@ -49,8 +49,8 @@ export {
 } from './behaviors';
 
 // Adapters
-export { ShnakeAdapter, ShwarmAdapter } from './adapters';
-export type { ShnakeWithAI, ShwarmWithAI } from './adapters';
+export { ShnakeAdapter, ShwarmAdapter, ShombieAdapter } from './adapters';
+export type { ShnakeWithAI, ShwarmWithAI, ShombieWithAI } from './adapters';
 
 // Hooks
 export { useEnemyAI } from './hooks';

@@ -8,34 +8,116 @@ import {
   SPAWN_CHECK_INTERVAL_MS,
   SHOMBIE_SPAWN_BOUNDS,
 } from '../constants';
+import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
 interface UseShombieSystemOptions {
   definitions: ShombieDefinition[] | undefined;
   cameraRef: React.RefObject<THREE.Camera>;
   isEnabled: boolean;
+  /** User roles for admin hotkey access */
+  userRoles: string[];
   onShombieKilled?: (tier: number) => void;
 }
 
 // Pre-allocated vectors
 const _spawnPos = new THREE.Vector3();
 
+// Audio settings
+const MOAN_SOUND_URL = '/shombie_moan_1.mp3';
+const MOAN_CHECK_INTERVAL_MS = 5000; // Check every 5 seconds
+const MOAN_CHANCE = 0.1; // 10% chance per zombie per check
+const MOAN_VOLUME = 0.5; // 50% volume
+
+// Preload shombie sounds
+preloadSpatialSounds([MOAN_SOUND_URL]);
+
 /**
  * Hook to manage active shombies with chunk-based spawning
- * Spawns 1/min in nearby chunks, halving rate per chunk distance
+ * Ctrl+Z toggles spawning on/off (admin/superadmin only)
  */
 export function useShombieSystem({
   definitions,
   cameraRef,
   isEnabled,
+  userRoles,
   onShombieKilled,
 }: UseShombieSystemOptions) {
   const [shombies, setShombies] = useState<ShombieInstance[]>([]);
+  const [spawningEnabled, setSpawningEnabled] = useState(false);
   const shombiesRef = useRef<ShombieInstance[]>([]);
   
   // Keep ref in sync
   useEffect(() => {
     shombiesRef.current = shombies;
   }, [shombies]);
+
+  // Check if user is admin
+  const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
+
+  /**
+   * Ctrl+Z toggle for zombie spawning (admin only)
+   */
+  useEffect(() => {
+    if (!isEnabled) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if in input fields
+      if (document.activeElement?.tagName === 'INPUT' || 
+          document.activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Ctrl+Z for zombie toggle
+      if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        
+        if (!isAdmin) {
+          console.log('[Shombie] Ctrl+Z denied - admin only');
+          return;
+        }
+
+        setSpawningEnabled(prev => {
+          const newState = !prev;
+          console.log(`[Shombie] Spawning ${newState ? 'ENABLED' : 'DISABLED'}`);
+          return newState;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEnabled, isAdmin]);
+
+  /**
+   * Ambient moan sounds - 10% chance per zombie every 5 seconds
+   */
+  useEffect(() => {
+    if (!isEnabled || !spawningEnabled) return;
+
+    const moanCheck = () => {
+      const camera = cameraRef.current;
+      if (!camera) return;
+
+      for (const shombie of shombiesRef.current) {
+        if (!shombie.isActive) continue;
+        
+        // 10% chance per zombie
+        if (Math.random() < MOAN_CHANCE) {
+          // Calculate distance to camera
+          const dx = shombie.position.x - camera.position.x;
+          const dy = shombie.position.y - camera.position.y;
+          const dz = shombie.position.z - camera.position.z;
+          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          
+          // Play spatial audio with distance-based volume
+          playSpatialSound(MOAN_SOUND_URL, distance, { baseVolume: MOAN_VOLUME });
+        }
+      }
+    };
+
+    const interval = setInterval(moanCheck, MOAN_CHECK_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [isEnabled, spawningEnabled, cameraRef]);
 
   /**
    * Get player's current chunk
@@ -156,7 +238,7 @@ export function useShombieSystem({
    * Spawns from all chunks within range, rate halves per chunk distance
    */
   useEffect(() => {
-    if (!isEnabled || !definitions || definitions.length === 0) return;
+    if (!isEnabled || !spawningEnabled || !definitions || definitions.length === 0) return;
 
     const tier1Def = definitions.find(d => d.tier === 1);
     if (!tier1Def) return;
@@ -203,11 +285,12 @@ export function useShombieSystem({
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, [isEnabled, definitions, getPlayerChunk, countInChunk, spawnShombie]);
+  }, [isEnabled, spawningEnabled, definitions, getPlayerChunk, countInChunk, spawnShombie]);
 
   return {
     shombies,
     shombiesRef,
+    spawningEnabled,
     spawnShombie,
     damageShombie,
     clearAllShombies,
