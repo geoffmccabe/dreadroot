@@ -71,10 +71,17 @@ export function markShnakeIndignant(shnakeId: string): void {
 
 /**
  * Initialize revenge tracking for a shnake (called when head takes damage).
+ * Also marks the shnake as attacked so it can descend to ground level.
  */
 export function initializeShnakeRevenge(shnakeId: string, damageReceived: number): void {
   const entry = EnemyManager.getEntry(shnakeId);
-  if (!entry) return;
+  if (!entry) {
+    console.warn(`[ShnakeAdapter] initializeShnakeRevenge: No entry for ${shnakeId}`);
+    return;
+  }
+  
+  // Mark as attacked so shnake can go to ground
+  markShnakeAttacked(shnakeId);
   
   const state = entry.behaviorState;
   const existing = state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
@@ -85,12 +92,14 @@ export function initializeShnakeRevenge(shnakeId: string, damageReceived: number
       damageReceived: existing.damageReceived + damageReceived,
       damageDealt: existing.damageDealt,
     };
+    console.log(`[ShnakeAdapter] Added ${damageReceived} to revenge (total: ${existing.damageReceived + damageReceived})`);
   } else {
     // Start new revenge
     state.revengeTarget = {
       damageReceived,
       damageDealt: 0,
     };
+    console.log(`[ShnakeAdapter] Started revenge with ${damageReceived} damage`);
   }
 }
 

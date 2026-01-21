@@ -27,6 +27,13 @@ interface DamageFlash {
   duration: number;
 }
 
+// Wiggle animation state per shnake (indignant behavior)
+interface WiggleState {
+  shnakeId: string;
+  startTime: number;
+  duration: number; // 2 seconds of wiggling
+}
+
 export interface ShnakeRendererHandle {
   getSegmentAtPosition: (x: number, y: number, z: number) => { shnakeId: string; segmentIndex: number; isHead: boolean } | null;
   addFireToSegment: (shnakeId: string, segmentIndex: number, duration: number, colors: string[]) => void;
@@ -34,6 +41,7 @@ export interface ShnakeRendererHandle {
   triggerDamageFlash: (shnakeId: string) => void;
   propagateFire: (shnakeId: string) => void; // Called when shnake head moves
   playDeathSound: (position: THREE.Vector3, tier: number) => void; // Play death sound at position
+  triggerWiggle: (shnakeId: string) => void; // Trigger S-formation wiggle animation
 }
 
 // Fallback colors for tiers without textures
@@ -79,11 +87,17 @@ const SHNAKE_SOUND_INTERVAL = 1000; // Check every 1 second
 const SHNAKE_SOUND_BASE_VOLUME = 0.32; // 32% base volume (2x original 16%)
 const SHNAKE_SOUND_VOLUME_PER_TIER = 0.056; // +5.6% per tier (2x original 2.8%)
 
+// Wiggle animation constants
+const WIGGLE_DURATION = 2000; // 2 seconds
+const WIGGLE_FREQUENCY = 3; // 3 full oscillations
+const WIGGLE_AMPLITUDE = 0.4; // Max offset in world units
+
 // Per-tier rendering component
 interface TierRendererProps {
   tier: number;
   shnakesRef: React.RefObject<ShnakeInstance[]>;
   flashesRef: React.RefObject<DamageFlash[]>;
+  wigglesRef: React.RefObject<WiggleState[]>;
   headTexUrl: string | null;
   bodyTexUrl: string | null;
   faceTexUrl: string | null;
@@ -93,6 +107,7 @@ const TierRenderer: React.FC<TierRendererProps> = ({
   tier, 
   shnakesRef, 
   flashesRef,
+  wigglesRef,
   headTexUrl,
   bodyTexUrl,
   faceTexUrl,
@@ -226,6 +241,31 @@ const TierRenderer: React.FC<TierRendererProps> = ({
     return flashCycle % 2 === 0;
   };
 
+  // Get wiggle offset for a segment
+  const getWiggleOffset = (shnakeId: string, segmentIndex: number, totalSegments: number, now: number): THREE.Vector3 => {
+    const wiggle = wigglesRef.current?.find(w => w.shnakeId === shnakeId);
+    if (!wiggle) return new THREE.Vector3(0, 0, 0);
+    
+    const elapsed = now - wiggle.startTime;
+    if (elapsed >= wiggle.duration) return new THREE.Vector3(0, 0, 0);
+    
+    // Progress through animation (0 to 1)
+    const progress = elapsed / wiggle.duration;
+    
+    // Fade out amplitude over time
+    const fadeOut = 1 - progress;
+    
+    // S-wave: phase offset based on segment position
+    const phaseOffset = (segmentIndex / totalSegments) * Math.PI * 2;
+    const timePhase = progress * WIGGLE_FREQUENCY * Math.PI * 2;
+    
+    // Calculate perpendicular offset (S-wave along body)
+    const offset = Math.sin(timePhase + phaseOffset) * WIGGLE_AMPLITUDE * fadeOut;
+    
+    // Return offset in X direction (perpendicular to typical snake movement)
+    return new THREE.Vector3(offset, 0, 0);
+  };
+
   useFrame(() => {
     const now = performance.now();
     const shnakes = shnakesRef.current || [];
@@ -250,16 +290,17 @@ const TierRenderer: React.FC<TierRendererProps> = ({
       const flashing = isFlashing(s.id, now);
       const instanceColor = flashing ? flashColor : white;
 
-      // Head
+      // Head - apply wiggle offset
       const h = s.segments[0];
-      m.makeTranslation(h.x + 0.5, h.y + 0.5, h.z + 0.5);
+      const headWiggle = getWiggleOffset(s.id, 0, s.segments.length, now);
+      m.makeTranslation(h.x + 0.5 + headWiggle.x, h.y + 0.5 + headWiggle.y, h.z + 0.5 + headWiggle.z);
       headMesh.setMatrixAt(headCount, m);
       headMesh.setColorAt(headCount, instanceColor);
       headCount++;
 
-      // Face on head
+      // Face on head - also apply wiggle
       const faceMatrix = new THREE.Matrix4();
-      const facePos = new THREE.Vector3(h.x + 0.5, h.y + 0.5, h.z + 0.5);
+      const facePos = new THREE.Vector3(h.x + 0.5 + headWiggle.x, h.y + 0.5 + headWiggle.y, h.z + 0.5 + headWiggle.z);
       
       if (s.headDir.lengthSq() > 0.01) {
         const targetDir = s.headDir.clone().normalize();
@@ -275,10 +316,11 @@ const TierRenderer: React.FC<TierRendererProps> = ({
       faceMesh.setColorAt(faceCount, instanceColor);
       faceCount++;
 
-      // Body segments
+      // Body segments - apply wiggle offset to each
       for (let i = 1; i < s.segments.length; i++) {
         const seg = s.segments[i];
-        m.makeTranslation(seg.x + 0.5, seg.y + 0.5, seg.z + 0.5);
+        const wiggle = getWiggleOffset(s.id, i, s.segments.length, now);
+        m.makeTranslation(seg.x + 0.5 + wiggle.x, seg.y + 0.5 + wiggle.y, seg.z + 0.5 + wiggle.z);
         bodyMesh.setMatrixAt(bodyCount, m);
         bodyMesh.setColorAt(bodyCount, instanceColor);
         bodyCount++;
@@ -333,6 +375,7 @@ const TierRenderer: React.FC<TierRendererProps> = ({
 export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ shnakesRef, cameraRef }, ref) => {
   const firesRef = useRef<SegmentFire[]>([]);
   const flashesRef = useRef<DamageFlash[]>([]);
+  const wigglesRef = useRef<WiggleState[]>([]);
   
   // Track which tiers have active shnakes and their texture URLs
   const [tierData, setTierData] = useState<Map<number, { head: string | null; body: string | null; face: string | null }>>(new Map());
@@ -520,6 +563,18 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         playbackRate: pitchMultiplier,
       });
     },
+    
+    // Trigger S-formation wiggle animation for indignant behavior
+    triggerWiggle: (shnakeId: string) => {
+      // Remove existing wiggle for this shnake
+      wigglesRef.current = wigglesRef.current.filter(w => w.shnakeId !== shnakeId);
+      // Add new wiggle
+      wigglesRef.current.push({
+        shnakeId,
+        startTime: performance.now(),
+        duration: WIGGLE_DURATION,
+      });
+    },
   }), [shnakesRef, cameraRef]);
 
   // Render a TierRenderer for each active tier
@@ -533,6 +588,7 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
           tier={tier}
           shnakesRef={shnakesRef}
           flashesRef={flashesRef}
+          wigglesRef={wigglesRef}
           headTexUrl={urls.head}
           bodyTexUrl={urls.body}
           faceTexUrl={urls.face}
