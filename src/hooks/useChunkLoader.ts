@@ -783,7 +783,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       initLogStep('useChunkLoader.ts', `Loaded from cache: ${chunksFromCache.length} chunks, ${cacheBlockCount} blocks`);
     }
 
-    // Fetch remaining chunks from server
+    // Fetch remaining chunks from server with retry logic
     if (chunksToFetchFromServer.length > 0) {
       initLogStep('useChunkLoader.ts', 'Fetching chunks from Supabase...', chunksToFetchFromServer.length);
       
@@ -794,18 +794,38 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
       const wantedChunkKeys = new Set(chunksToFetchFromServer.map(c => `chunk_${c.x}_${c.z}`));
 
-      const { data: blocks, error } = await supabase
-        .from('placed_blocks')
-        .select('*')
-        .eq('world_id', worldId)
-        .gte('chunk_x', minChunkX)
-        .lte('chunk_x', maxChunkX)
-        .gte('chunk_z', minChunkZ)
-        .lte('chunk_z', maxChunkZ);
+      // Retry logic for network errors
+      const MAX_RETRIES = 3;
+      let blocks: PlacedBlock[] | null = null;
+      let lastError: Error | null = null;
+      
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const { data, error } = await supabase
+          .from('placed_blocks')
+          .select('*')
+          .eq('world_id', worldId)
+          .gte('chunk_x', minChunkX)
+          .lte('chunk_x', maxChunkX)
+          .gte('chunk_z', minChunkZ)
+          .lte('chunk_z', maxChunkZ);
 
-      if (error) {
-        console.error('Error loading chunks from server:', error);
-        initLogStep('useChunkLoader.ts', `Supabase error: ${error.message}`);
+        if (!error) {
+          blocks = data;
+          break;
+        }
+
+        lastError = new Error(error.message);
+        console.warn(`Chunk load attempt ${attempt}/${MAX_RETRIES} failed:`, error.message);
+        
+        if (attempt < MAX_RETRIES) {
+          // Exponential backoff: 500ms, 1000ms, 2000ms
+          await new Promise(resolve => setTimeout(resolve, 250 * Math.pow(2, attempt)));
+        }
+      }
+
+      if (blocks === null) {
+        console.error('Error loading chunks from server after retries:', lastError);
+        initLogStep('useChunkLoader.ts', `Supabase error after ${MAX_RETRIES} retries: ${lastError?.message}`);
         // Still emit what we have from cache
         if (chunksFromCache.length > 0) {
           scheduleEmit();
