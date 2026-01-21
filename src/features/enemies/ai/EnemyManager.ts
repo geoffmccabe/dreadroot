@@ -272,7 +272,7 @@ class EnemyManagerClass {
         if (DEBUG_AI && result.kind === 'move') {
           console.log(`[AI] ${id} moving to (${result.tx.toFixed(1)}, ${result.ty.toFixed(1)}, ${result.tz.toFixed(1)})`);
         }
-        reg.adapter.applyResult(reg.enemy, result, deltaMs);
+        reg.adapter.applyResult(reg.enemy, result, deltaMs, this.sharedContext);
       }
     }
     

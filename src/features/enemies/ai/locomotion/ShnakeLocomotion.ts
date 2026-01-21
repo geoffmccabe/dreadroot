@@ -389,25 +389,55 @@ export function applyShnakeMove(
 /**
  * Apply an attack result to a shnake - execute player damage.
  * OPTIMIZED: Pre-allocated direction vector.
+ * 
+ * @param shnake The shnake instance
+ * @param result The attack behavior result
+ * @param playerX Current player X position
+ * @param playerY Current player Y position
+ * @param playerZ Current player Z position
+ * @param onPlayerHit Callback to apply damage to player
  */
 export function applyShnakeAttack(
   shnake: ShnakeInstance,
   result: Extract<BehaviorResult, { kind: 'attack' }>,
+  playerX: number,
+  playerY: number,
+  playerZ: number,
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3, shnakeId?: string) => void
 ): void {
   const now = performance.now();
   // Access ai_config from definition (use type assertion for JSONB field)
-  const defAiConfig = (shnake.definition as { ai_config?: { attackCooldownMs?: number } }).ai_config;
+  const defAiConfig = (shnake.definition as { ai_config?: { attackCooldownMs?: number; attackRange?: number } }).ai_config;
   const cooldownMs = defAiConfig?.attackCooldownMs ?? 600;
+  const attackRange = defAiConfig?.attackRange ?? 1.5;
 
   if (now - shnake.lastAttackAt < cooldownMs) {
     return; // Still in cooldown
   }
 
+  // CRITICAL: Verify actual distance before applying damage
+  // This prevents "invisible" attacks from far-away shnakes
+  const head = shnake.segments[0];
+  const headX = head.x + 0.5;
+  const headY = head.y + 0.5;
+  const headZ = head.z + 0.5;
+  
+  const dx = playerX - headX;
+  const dy = playerY - headY;
+  const dz = playerZ - headZ;
+  const actualDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  
+  if (actualDist > attackRange) {
+    // Shnake is too far - attack missed (AI decision was stale)
+    return;
+  }
+
   shnake.lastAttackAt = now;
 
   if (onPlayerHit) {
-    _attackDir.set(result.dirX, result.dirY, result.dirZ);
+    // Use actual direction to player (more accurate than AI-computed direction)
+    const len = Math.max(0.1, actualDist);
+    _attackDir.set(dx / len, dy / len, dz / len);
     // Pass shnakeId so FortressScene can track revenge damage
     onPlayerHit(result.damage, result.knockback, _attackDir, shnake.id);
   }
