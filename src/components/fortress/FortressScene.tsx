@@ -315,7 +315,9 @@ export function FortressScene({
   onTreeChopComplete,
   onTreeChopProgress,
   selectedBulletTier = 1,
-  onBulletTierChange
+  onBulletTierChange,
+  playerLevel = 1,
+  onPentabulletChargeChange
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
