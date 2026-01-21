@@ -2,9 +2,11 @@ import React, { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import type { ShnakeInstance } from '../types';
+import { playSpatialSound } from '@/lib/spatialAudio';
 
 interface Props {
   shnakesRef: React.RefObject<ShnakeInstance[]>;
+  cameraRef?: React.RefObject<THREE.Camera>;
 }
 
 // Fire effect tracking per shnake segment
@@ -55,6 +57,23 @@ const TIER_COLORS: { [tier: number]: number } = {
 };
 
 const getTierColor = (tier: number): number => TIER_COLORS[tier] || 0x22ff44;
+
+// Convert .psd URLs to .webp equivalent (fix legacy uploads)
+const fixTextureUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  // If it's a .psd file, we can't use it - return null to use fallback color
+  const lower = url.toLowerCase();
+  if (lower.endsWith('.psd') || lower.endsWith('.ai') || lower.endsWith('.eps')) {
+    console.warn(`[ShnakeRenderer] Unsupported format, using fallback color: ${url}`);
+    return null;
+  }
+  return url;
+};
+
+// Shnake sound constants
+const SHNAKE_SOUND_URL = '/shnake_sound_1.mp3';
+const SHNAKE_SOUND_CHANCE = 0.01; // 1% chance per second
+const SHNAKE_SOUND_INTERVAL = 1000; // Check every 1 second
 
 // Per-tier rendering component
 interface TierRendererProps {
@@ -261,14 +280,14 @@ const TierRenderer: React.FC<TierRendererProps> = ({
   );
 };
 
-export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ shnakesRef }, ref) => {
+export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ shnakesRef, cameraRef }, ref) => {
   const firesRef = useRef<SegmentFire[]>([]);
   const flashesRef = useRef<DamageFlash[]>([]);
   
   // Track which tiers have active shnakes and their texture URLs
   const [tierData, setTierData] = useState<Map<number, { head: string | null; body: string | null; face: string | null }>>(new Map());
   
-  // Update tier data when shnakes change
+  // Update tier data when shnakes change - apply texture URL fixes
   useEffect(() => {
     const interval = setInterval(() => {
       const shnakes = shnakesRef.current || [];
@@ -278,10 +297,11 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         if (!s.isActive) continue;
         if (newData.has(s.tier)) continue;
         
+        // Fix texture URLs - convert .psd to null so fallback colors are used
         newData.set(s.tier, {
-          head: s.definition.head_texture_url || null,
-          body: s.definition.body_texture_url || null,
-          face: s.definition.face_texture_url || null,
+          head: fixTextureUrl(s.definition.head_texture_url),
+          body: fixTextureUrl(s.definition.body_texture_url),
+          face: fixTextureUrl(s.definition.face_texture_url),
         });
       }
       
@@ -294,6 +314,40 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
     
     return () => clearInterval(interval);
   }, [shnakesRef, tierData]);
+
+  // Shnake sounds - 1% chance per second per shnake
+  useEffect(() => {
+    const soundInterval = setInterval(() => {
+      const shnakes = shnakesRef.current || [];
+      const camera = cameraRef?.current;
+      if (!camera) return;
+      
+      for (const s of shnakes) {
+        if (!s.isActive || s.segments.length === 0) continue;
+        
+        // 1% chance per second
+        if (Math.random() > SHNAKE_SOUND_CHANCE) continue;
+        
+        // Calculate distance to player
+        const head = s.segments[0];
+        const dx = head.x + 0.5 - camera.position.x;
+        const dy = head.y + 0.5 - camera.position.y;
+        const dz = head.z + 0.5 - camera.position.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        // Lower pitch by 2.5% per tier above 1
+        // Tier 1 = 1.0, Tier 2 = 0.975, Tier 3 = 0.95, etc.
+        const pitchMultiplier = 1.0 - ((s.tier - 1) * 0.025);
+        
+        playSpatialSound(SHNAKE_SOUND_URL, distance, {
+          baseVolume: 0.5,
+          playbackRate: pitchMultiplier,
+        });
+      }
+    }, SHNAKE_SOUND_INTERVAL);
+    
+    return () => clearInterval(soundInterval);
+  }, [shnakesRef, cameraRef]);
 
   // Clean up flashes periodically
   useFrame(() => {

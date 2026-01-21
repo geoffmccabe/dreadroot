@@ -91,7 +91,6 @@ export function useShnakeMovement({
 
   /**
    * Check if position is adjacent to a tree block (including invisiblocks).
-   * This is the PRIMARY constraint - shnake must always touch tree.
    */
   const isTouchingTree = (tier: number, x: number, y: number, z: number): boolean => {
     const tierMap = treeBlocksByTierRef.current?.get(tier);
@@ -111,8 +110,35 @@ export function useShnakeMovement({
   };
 
   /**
-   * Check if at least one segment in the array would still be touching tree
-   * after a potential move. This ensures shnake never completely detaches.
+   * Check if position is close enough to any non-invisiblock tree block.
+   * Distance of 2 allows some freedom while staying near tree.
+   */
+  const isNearNonInvisTreeBlock = (tier: number, x: number, y: number, z: number): boolean => {
+    const nonInvisSet = nonInvisTreeBlocksByTierRef.current?.get(tier);
+    if (!nonInvisSet) return false;
+    
+    // Check within distance of 2 (Manhattan)
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 2) continue;
+          if (nonInvisSet.has(key(x + dx, y + dy, z + dz))) return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  /**
+   * Check if a position is valid for a shnake segment.
+   * Must either touch tree OR be near a non-invisiblock.
+   */
+  const isValidShnakePosition = (tier: number, x: number, y: number, z: number): boolean => {
+    return isTouchingTree(tier, x, y, z) || isNearNonInvisTreeBlock(tier, x, y, z);
+  };
+
+  /**
+   * Check if at least one segment would be valid after move.
    */
   const wouldStayConnected = (
     tier: number,
@@ -120,13 +146,12 @@ export function useShnakeMovement({
     existingSegments: { x: number; y: number; z: number }[],
   ): boolean => {
     // Check new head position
-    if (isTouchingTree(tier, newHead.x, newHead.y, newHead.z)) return true;
+    if (isValidShnakePosition(tier, newHead.x, newHead.y, newHead.z)) return true;
     
-    // Check all remaining segments (excluding tail which will be removed)
-    // After move: [newHead, ...existingSegments.slice(0, -1)]
+    // Check remaining segments (excluding tail which will be removed)
     for (let i = 0; i < existingSegments.length - 1; i++) {
       const seg = existingSegments[i];
-      if (isTouchingTree(tier, seg.x, seg.y, seg.z)) return true;
+      if (isValidShnakePosition(tier, seg.x, seg.y, seg.z)) return true;
     }
     
     return false;

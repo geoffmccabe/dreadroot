@@ -1541,7 +1541,7 @@ export function FortressScene({
       <ShwarmRenderer ref={shwarmRendererRef} shwarms={shwarms} />
 
       {/* Shnake Renderer */}
-      <ShnakeRenderer ref={shnakeRendererRef} shnakesRef={shnakesRef} />
+      <ShnakeRenderer ref={shnakeRendererRef} shnakesRef={shnakesRef} cameraRef={cameraRef} />
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>
