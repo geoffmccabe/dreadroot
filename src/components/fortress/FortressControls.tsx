@@ -720,39 +720,35 @@ export function FirstPersonControls({
     onPentabulletChargeChange?.(0);
   }, [onPentabulletChargeChange]);
   
-  // Calculate pentabullet directions with spread based on player level
-  // First bullet fires true, others spread ±5% minus 0.1% per level
-  const calculatePentabulletDirections = useCallback((baseDirection: THREE.Vector3): THREE.Vector3[] => {
-    // Base spread: 5% angle (0.05 radians) minus 0.1% per level
-    const spreadAngle = Math.max(0.005, 0.05 - (playerLevelRef.current * 0.001));
+  // Fire pentabullet (5 bullets with spread, 0.1s apart; 10 bullets if level >= 9)
+  // Calculate spread direction for a single bullet (first bullet true, others have spread)
+  const calculateSpreadDirection = useCallback((isFirstInRound: boolean): THREE.Vector3 => {
+    // Get current camera direction at fire time
+    const baseDirection = new THREE.Vector3(0, 0, -1);
+    baseDirection.applyQuaternion(camera.quaternion);
+    baseDirection.normalize();
     
-    const directions: THREE.Vector3[] = [];
+    // First bullet fires true (straight)
+    if (isFirstInRound) {
+      return baseDirection;
+    }
+    
+    // Apply spread to non-first bullets
+    const spreadAngle = Math.max(0.005, 0.05 - (playerLevelRef.current * 0.001));
     const up = new THREE.Vector3(0, 1, 0);
     const right = new THREE.Vector3().crossVectors(baseDirection, up).normalize();
     const realUp = new THREE.Vector3().crossVectors(right, baseDirection).normalize();
     
-    // First bullet fires true (straight)
-    directions.push(baseDirection.clone());
+    const dir = baseDirection.clone();
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.random() * spreadAngle;
+    dir.addScaledVector(right, Math.cos(theta) * Math.sin(phi));
+    dir.addScaledVector(realUp, Math.sin(theta) * Math.sin(phi));
+    dir.normalize();
     
-    // Remaining 4 bullets spread randomly from the base direction
-    for (let i = 1; i < 5; i++) {
-      const dir = baseDirection.clone();
-      
-      // Random angular offset within spread cone
-      const theta = Math.random() * Math.PI * 2; // Random angle around cone
-      const phi = Math.random() * spreadAngle; // Random distance from center
-      
-      // Apply rotation to direction
-      dir.addScaledVector(right, Math.cos(theta) * Math.sin(phi));
-      dir.addScaledVector(realUp, Math.sin(theta) * Math.sin(phi));
-      dir.normalize();
-      
-      directions.push(dir);
-    }
-    return directions;
-  }, []);
-  
-  // Fire pentabullet (5 bullets with spread, 0.1s apart)
+    return dir;
+  }, [camera]);
+
   const firePentabullet = useCallback(() => {
     if (!onShoot) return;
     
@@ -766,33 +762,41 @@ export function FirstPersonControls({
       pentabulletSteadyAudioRef.current.currentTime = 0;
     }
     
-    // Calculate base direction from camera
-    const baseDirection = new THREE.Vector3(0, 0, -1);
-    baseDirection.applyQuaternion(camera.quaternion);
-    baseDirection.normalize();
+    // Determine number of rounds based on player level
+    const playerLevel = playerLevelRef.current;
+    const numRounds = playerLevel >= 9 ? 2 : 1;
     
-    // Get all 5 bullet directions
-    const directions = calculatePentabulletDirections(baseDirection);
-    
-    // Play pentabullet fire sound
-    const fireAudio = new Audio('/pentabullet_sound.mp3');
-    fireAudio.volume = 0.6;
-    fireAudio.play().catch(() => {});
-    
-    // Fire bullets 0.1 seconds apart using the existing onShoot callback
-    const origin = camera.position.clone();
-    directions.forEach((dir, index) => {
+    // Fire each round
+    for (let round = 0; round < numRounds; round++) {
+      const roundDelay = round * 600; // 0.6 seconds between rounds (5 bullets * 0.1s + 0.1s gap)
+      
+      // Play pentabullet fire sound for each round
       setTimeout(() => {
-        onShoot(origin.clone(), dir);
-      }, index * 100); // 0.1 seconds apart
-    });
+        const fireAudio = new Audio('/pentabullet_sound.mp3');
+        fireAudio.volume = 0.6;
+        fireAudio.play().catch(() => {});
+      }, roundDelay);
+      
+      // Fire 5 bullets 0.1 seconds apart, calculating direction at fire time
+      for (let i = 0; i < 5; i++) {
+        const bulletDelay = roundDelay + i * 100;
+        const isFirstInRound = i === 0;
+        
+        setTimeout(() => {
+          // Get current camera position and direction at fire time
+          const origin = camera.position.clone();
+          const direction = calculateSpreadDirection(isFirstInRound);
+          onShoot(origin, direction);
+        }, bulletDelay);
+      }
+    }
     
     // Reset state
     pentabulletChargeStartRef.current = null;
     pentabulletChargeRef.current = 0;
     pentabulletPhaseRef.current = 'idle';
     onPentabulletChargeChange?.(0);
-  }, [camera, calculatePentabulletDirections, onShoot, onPentabulletChargeChange]);
+  }, [camera, calculateSpreadDirection, onShoot, onPentabulletChargeChange]);
   
   const handleRightClick = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
