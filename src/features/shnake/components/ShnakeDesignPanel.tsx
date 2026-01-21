@@ -330,21 +330,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
   }
 
   return (
-    <div className={`flex flex-col gap-4 ${className || ''}`}>
-      {/* Global Sound Settings Panel */}
+    <Card className={`p-4 ${className || ''}`}>
+      {/* Global Sound Settings Panel - at top of Shnake section */}
       <EnemySoundSettings
         enemyType="shnake"
         sounds={soundConfigs}
         volume={soundVolume}
         onSoundChange={handleSoundChange}
         onVolumeChange={handleVolumeChange}
+        className="mb-4"
       />
       
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-3">
-          <Card className="p-3">
+          <div className="border rounded-lg p-3 bg-muted/30">
             <h3 className="font-semibold mb-3 text-sm">Shnakes</h3>
-            <ScrollArea className="h-[500px]">
+            <ScrollArea className="h-[440px]">
             <div className="space-y-1 pr-2">
               {definitions.map(def => (
                 <Button
@@ -389,7 +390,7 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
               ))}
             </div>
           </ScrollArea>
-        </Card>
+          </div>
       </div>
 
       <div className="col-span-9">
@@ -581,6 +582,6 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
         </Card>
       </div>
       </div>
-    </div>
+    </Card>
   );
 }
