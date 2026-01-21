@@ -1,10 +1,10 @@
 /**
  * ShwarmAdapter - Bridges Shwarm instances to the universal AI system
  * 
- * Phase 3: Advisory mode - behaviors are evaluated but movement is still
- * handled by useShwarmMovement. applyResult is a no-op.
+ * Phase 4: Full locomotion control - applyResult executes movement.
  */
 
+import * as THREE from 'three';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
 import type { 
   EnemyAdapter, 
@@ -16,6 +16,22 @@ import type {
 } from '../types';
 import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
+import { 
+  applyShwarmMove, 
+  getOrCreateBlockTarget,
+  type ShwarmBlockTarget,
+  type ShwarmLocomotionContext,
+} from '../locomotion/ShwarmLocomotion';
+import { EnemyManager } from '../EnemyManager';
+
+// Seeded random number generator for deterministic movement
+function seededRandom(seed: number): () => number {
+  let s = seed;
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+}
 
 /**
  * Extended shwarm instance with AI state
@@ -26,6 +42,35 @@ export interface ShwarmWithAI extends ShwarmInstance {
   lastDamagedAt?: number;
   /** Last attack timestamp */
   lastAttackAt?: number;
+}
+
+// Module-level locomotion context (set by useEnemyAI hook)
+let locomotionContext: {
+  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
+} | null = null;
+
+// Per-shwarm RNG generators
+const rngMap = new Map<string, () => number>();
+
+// Block target data storage
+const blockTargets = new Map<string, ShwarmBlockTarget>();
+
+/**
+ * Set locomotion context for shwarm movement execution.
+ * Called by useEnemyAI hook when aiControlled=true.
+ */
+export function setShwarmLocomotionContext(ctx: typeof locomotionContext): void {
+  locomotionContext = ctx;
+}
+
+/**
+ * Get or create RNG for a shwarm
+ */
+function getRng(shwarmId: string, seed: number): () => number {
+  if (!rngMap.has(shwarmId)) {
+    rngMap.set(shwarmId, seededRandom(seed));
+  }
+  return rngMap.get(shwarmId)!;
 }
 
 /**
@@ -149,13 +194,39 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
   },
   
   applyResult(
-    _shwarm: ShwarmWithAI, 
-    _result: BehaviorResult, 
+    shwarm: ShwarmWithAI, 
+    result: BehaviorResult, 
     _deltaMs: number
   ): void {
-    // Phase 3: Results are purely advisory - NO MUTATIONS
-    // Actual movement and attacks are handled by useShwarmMovement
-    // Future: migrate locomotion control here to unify AI decision-making
+    // Only execute if AI is in control
+    if (!EnemyManager.isAIControlled()) {
+      return;
+    }
+    
+    if (result.kind === 'idle') {
+      return;
+    }
+    
+    if (result.kind === 'move') {
+      const rng = getRng(shwarm.id, shwarm.seed);
+      
+      // Collect all alive blocks for spacing checks
+      const allBlocks = shwarm.blocks.filter(b => b.isAlive);
+      
+      const ctx: ShwarmLocomotionContext = {
+        playerX: result.tx,
+        playerY: result.ty,
+        playerZ: result.tz,
+        blockTargets,
+        rng,
+        tier: shwarm.definition.tier,
+      };
+      
+      applyShwarmMove(shwarm, result, ctx, allBlocks);
+    }
+    
+    // Attack is handled by the interpolation loop in useShwarmMovement
+    // Since shwarm attacks are per-block continuous collision detection
   },
   
   getBehaviors(shwarm: ShwarmWithAI): BehaviorModule[] {
