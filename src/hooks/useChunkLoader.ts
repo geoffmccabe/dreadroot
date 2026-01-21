@@ -778,6 +778,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         lastAccessedAt: loadedAt,
         hasOptimisticBlocks: blocks.some(b => b.id.startsWith('temp-'))
       });
+      
+      // DEBUG: Log chunk (3,1) specifically
+      if (x === 3 && z === 1) {
+        console.log(`[ChunkLoader DEBUG] Chunk (3,1) from CACHE: ${blocks.length} blocks`);
+      }
     }
     if (chunksFromCache.length > 0) {
       initLogStep('useChunkLoader.ts', `Loaded from cache: ${chunksFromCache.length} chunks, ${cacheBlockCount} blocks`);
@@ -862,6 +867,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       for (const { x, z } of chunksToFetchFromServer) {
         const chunkKey = `chunk_${x}_${z}`;
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
+        
+        // DEBUG: Log chunk (3,1) specifically
+        if (x === 3 && z === 1) {
+          console.log(`[ChunkLoader DEBUG] Chunk (3,1) from SERVER: ${chunkBlocks.length} blocks`);
+        }
         
         // Create colliders for all blocks from server
         for (const block of chunkBlocks) {

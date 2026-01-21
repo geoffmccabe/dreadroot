@@ -200,10 +200,18 @@ function CameraTrackedBlocks({
     const filtered: PlacedBlock[] = [];
     const seenIds = new Set<string>();
     
+    // DEBUG: Track chunk (3,1) specifically
+    let chunk31Count = 0;
+    
     // Add blocks from visible chunks (includes tree blocks now - unified system)
     for (const chunkKey of visibleChunksRef.current) {
       const chunkBlocks = blocksByChunk.get(chunkKey);
       if (chunkBlocks) {
+        // DEBUG: Track chunk (3,1)
+        if (chunkKey === 'chunk_3_1') {
+          chunk31Count = chunkBlocks.length;
+        }
+        
         for (const block of chunkBlocks) {
           if (!seenIds.has(block.id)) {
             seenIds.add(block.id);
@@ -211,6 +219,11 @@ function CameraTrackedBlocks({
           }
         }
       }
+    }
+    
+    // DEBUG: Log chunk (3,1) visibility
+    if (visibleChunksRef.current.has('chunk_3_1')) {
+      console.log(`[Render DEBUG] Chunk (3,1) is VISIBLE: ${chunk31Count} blocks in chunk, ${filtered.length} total visible`);
     }
     
     diagnostics.visibleBlocks = filtered.length;
