@@ -135,30 +135,58 @@ export function useShnakeSystem({
   const spawnOnTree = useCallback((tree: PlantedTree): ShnakeInstance | null => {
     const tier = (tree as any).seed_tier ?? tree.seed_definition?.tier ?? 1;
     const def = defsByTier.get(tier);
-    if (!def) return null;
+    
+    console.log(`[Shnake Spawn] Tree tier: ${tier}, def exists: ${!!def}, defsCount: ${defsByTier.size}`);
+    
+    if (!def) {
+      console.log(`[Shnake Spawn] No definition found for tier ${tier}`);
+      return null;
+    }
 
     const len = LENGTH_BASE + tier;
     const b = treeBounds(tree);
 
     // Build trunk column candidates (same x/z as base, any y)
     const blocks = blocksRef.current || [];
+    console.log(`[Shnake Spawn] Checking ${blocks.length} blocks for trunk at (${tree.base_x}, ${tree.base_z})`);
+    
     const trunkYs: number[] = [];
+    let matchingPosCount = 0;
+    let treeBlockCount = 0;
+    let tierMatchCount = 0;
+    let trunkCount = 0;
+    
     for (let i = 0; i < blocks.length; i++) {
       const bl: any = blocks[i];
       if (bl.position_x !== tree.base_x || bl.position_z !== tree.base_z) continue;
+      matchingPosCount++;
+      
       const bt: string | undefined = bl.block_type;
       if (!bt || !isTreeBlockType(bt)) continue;
+      treeBlockCount++;
+      
       const decoded = decodeBlockType(bt);
       if (!decoded || decoded.tier !== tier) continue;
+      tierMatchCount++;
+      
       const baseType = getBaseTreeBlockType(bt);
       if (baseType !== 'trunk') continue;
+      trunkCount++;
+      
       if (bl.position_y >= tree.base_y) trunkYs.push(bl.position_y);
     }
-    if (trunkYs.length === 0) return null;
+    
+    console.log(`[Shnake Spawn] Filter results: posMatch=${matchingPosCount}, treeBlock=${treeBlockCount}, tierMatch=${tierMatchCount}, trunk=${trunkCount}, validY=${trunkYs.length}`);
+    
+    if (trunkYs.length === 0) {
+      console.log(`[Shnake Spawn] No valid trunk Y positions found`);
+      return null;
+    }
     trunkYs.sort((a, b) => a - b);
 
     // pick a spawn y somewhere above base
     const spawnY = trunkYs[Math.floor(Math.random() * trunkYs.length)];
+    console.log(`[Shnake Spawn] Selected spawn Y: ${spawnY}, bounds: minY=${b.minY}, maxY=${b.maxY}`);
 
     // Choose an initial head cell adjacent to trunk
     const candidates: Array<[number, number, number]> = [
@@ -174,12 +202,17 @@ export function useShnakeSystem({
       const gx = Math.floor(x);
       const gy = Math.floor(y);
       const gz = Math.floor(z);
-      if (!insideBounds(b, gx, gy, gz)) continue;
-      if (isCellOccupiedByWorld(gx, gy, gz)) continue;
+      const inBounds = insideBounds(b, gx, gy, gz);
+      const occupied = isCellOccupiedByWorld(gx, gy, gz);
+      if (!inBounds || occupied) continue;
       head = { x: gx, y: gy, z: gz };
+      console.log(`[Shnake Spawn] Head placed at (${gx}, ${gy}, ${gz})`);
       break;
     }
-    if (!head) return null;
+    if (!head) {
+      console.log(`[Shnake Spawn] Failed to find valid head position adjacent to trunk`);
+      return null;
+    }
 
     // Extend segments along -Y (downward) if possible; otherwise along +Y
     const segments: ShnakeSegment[] = [head];
@@ -209,8 +242,13 @@ export function useShnakeSystem({
         placed = true;
         break;
       }
-      if (!placed) return null; // no space
+      if (!placed) {
+        console.log(`[Shnake Spawn] Failed to place segment ${i}/${len - 1} at prev=(${prev.x},${prev.y},${prev.z})`);
+        return null; // no space
+      }
     }
+    
+    console.log(`[Shnake Spawn] All ${segments.length} segments placed successfully`);
 
     const id = `shnake_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const colliders = segments.map(s => aabbForCell(s.x, s.y, s.z));
