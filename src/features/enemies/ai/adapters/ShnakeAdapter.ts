@@ -98,6 +98,7 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         angrySpeedMultiplier: config.angrySpeedMultiplier,
         damage: shnake.definition.damage_per_hit,
         knockback: shnake.definition.knockback,
+        // TODO: Move to ai_config when Phase 3 adds DB column
         attackCooldownMs: 600,
       },
       
@@ -106,20 +107,13 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
   },
   
   applyResult(
-    shnake: ShnakeWithAI, 
-    result: BehaviorResult, 
+    _shnake: ShnakeWithAI, 
+    _result: BehaviorResult, 
     _deltaMs: number
   ): void {
-    // Phase 2: Results are advisory - actual movement is still handled by useShnakeMovement
-    // This will be used for tracking intent and debugging
-    
-    if (result.kind === 'attack') {
-      // Attack intent is noted but actual attack handled by existing code
-      shnake.lastAttackAt = performance.now();
-    }
-    
-    // Move intents will be used in Phase 3 when we refactor locomotion
-    // For now, the existing RAF loop handles actual movement
+    // Phase 2: Results are purely advisory - NO MUTATIONS
+    // Actual movement and attacks are handled by useShnakeMovement
+    // This will be used in Phase 3 when we migrate locomotion control
   },
   
   getBehaviors(shnake: ShnakeWithAI): BehaviorModule[] {

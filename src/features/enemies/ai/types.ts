@@ -3,6 +3,8 @@
  * 
  * Zero-allocation design: uses numeric coords instead of THREE.Vector3
  * to prevent GC churn during hot loops.
+ * 
+ * @module enemies/ai/types
  */
 
 import type * as THREE from 'three';
