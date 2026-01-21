@@ -71,8 +71,10 @@ const isValidTextureUrl = (url: string | null | undefined): boolean => {
 
 // Shnake sound constants
 const SHNAKE_SOUND_URL = '/shnake_sound_1.mp3';
-const SHNAKE_SOUND_CHANCE = 0.01; // 1% chance per second
+const SHNAKE_SOUND_CHANCE = 0.00333; // ~0.33% chance per second (1/3 of previous 1%)
 const SHNAKE_SOUND_INTERVAL = 1000; // Check every 1 second
+const SHNAKE_SOUND_BASE_VOLUME = 0.16; // 16% base volume
+const SHNAKE_SOUND_VOLUME_PER_TIER = 0.028; // +2.8% per tier
 
 // Per-tier rendering component
 interface TierRendererProps {
@@ -362,7 +364,7 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
     return () => clearInterval(interval);
   }, [shnakesRef, tierData]);
 
-  // Shnake sounds - 1% chance per second per shnake
+  // Shnake sounds - ~0.33% chance per second per shnake
   useEffect(() => {
     const soundInterval = setInterval(() => {
       const shnakes = shnakesRef.current || [];
@@ -372,7 +374,7 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
       for (const s of shnakes) {
         if (!s.isActive || s.segments.length === 0) continue;
         
-        // 1% chance per second
+        // ~0.33% chance per second (1/3 of original)
         if (Math.random() > SHNAKE_SOUND_CHANCE) continue;
         
         // Calculate distance to player
@@ -385,8 +387,12 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         // Lower pitch by 2.5% per tier above 1
         const pitchMultiplier = 1.0 - ((s.tier - 1) * 0.025);
         
+        // Volume: 16% base + 2.8% per tier (tier 1 = 18.8%, tier 30 = 100%)
+        const tierVolume = SHNAKE_SOUND_BASE_VOLUME + (s.tier * SHNAKE_SOUND_VOLUME_PER_TIER);
+        const clampedVolume = Math.min(1.0, tierVolume);
+        
         playSpatialSound(SHNAKE_SOUND_URL, distance, {
-          baseVolume: 0.5,
+          baseVolume: clampedVolume,
           playbackRate: pitchMultiplier,
         });
       }
