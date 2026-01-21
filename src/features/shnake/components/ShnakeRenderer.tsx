@@ -1,7 +1,6 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
-import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import type { ShnakeInstance } from '../types';
 
 interface Props {
@@ -21,41 +20,64 @@ interface SegmentFire {
 interface DamageFlash {
   shnakeId: string;
   startTime: number;
-  duration: number; // 1 second for 3 flashes
+  duration: number;
+}
+
+// Texture cache per URL
+interface TextureCache {
+  [url: string]: THREE.Texture | null;
 }
 
 export interface ShnakeRendererHandle {
-  /** Get segment at position (returns {shnakeId, segmentIndex, isHead} or null) */
   getSegmentAtPosition: (x: number, y: number, z: number) => { shnakeId: string; segmentIndex: number; isHead: boolean } | null;
-  /** Add fire to a segment - fire propagates as shnake moves */
   addFireToSegment: (shnakeId: string, segmentIndex: number, duration: number, colors: string[]) => void;
-  /** Get active fires for rendering */
   getActiveFires: () => Array<{ position: THREE.Vector3; colors: string[]; progress: number }>;
-  /** Trigger damage flash on entire shnake */
   triggerDamageFlash: (shnakeId: string) => void;
 }
 
+// Fallback colors for tiers without textures
+const TIER_COLORS = [
+  0x22ff44, // T1 - bright green
+  0x44ff66, // T2
+  0x66ff88, // T3
+  0x88ffaa, // T4
+  0xaaffcc, // T5
+  0xccffee, // T6
+  0x44ccff, // T7 - cyan
+  0x6688ff, // T8
+  0x8844ff, // T9
+  0xaa22ff, // T10 - purple
+  0xff44aa, // T11 - pink
+  0xff6688, // T12
+  0xff8866, // T13 - orange
+  0xffaa44, // T14
+  0xffcc22, // T15 - yellow
+  0xeeff00, // T16
+  0xccff00, // T17
+  0xaaff00, // T18
+  0x88ff22, // T19
+  0x66ff44, // T20
+];
+
+// Get fallback color for tier
+const getTierColor = (tier: number): number => {
+  return TIER_COLORS[(tier - 1) % TIER_COLORS.length];
+};
+
 export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ shnakesRef }, ref) => {
-  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+  // Texture loading state
+  const textureLoaderRef = useRef(new THREE.TextureLoader());
+  const textureCacheRef = useRef<TextureCache>({});
+  const loadingUrlsRef = useRef<Set<string>>(new Set());
   
-  // Get first active shnake for textures (all shnakes of same tier share textures)
-  const first = shnakesRef.current?.find(s => s.isActive) || null;
-  const headUrl = first?.definition.head_texture_url || BLANK;
-  const bodyUrl = first?.definition.body_texture_url || BLANK;
-  const faceUrl = first?.definition.face_texture_url || BLANK;
-
-  const { texture: headTex } = useAnimatedTexture(headUrl || '');
-  const { texture: bodyTex } = useAnimatedTexture(bodyUrl || '');
-  const { texture: faceTex } = useAnimatedTexture(faceUrl || '');
-
+  // Force re-render when textures load
+  const [, forceUpdate] = React.useState(0);
+  
   // Geometry for cubes
   const headGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
-  
-  // Face plane geometry (positioned on +Z face of head)
   const faceGeo = useMemo(() => {
     const geo = new THREE.PlaneGeometry(1, 1);
-    // Position at front face of cube (+Z), offset slightly to avoid z-fighting
     geo.translate(0, 0, 0.501);
     return geo;
   }, []);
@@ -64,54 +86,73 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
   const faceMeshRef = useRef<THREE.InstancedMesh>(null);
   
-  // Fire tracking - uses segment index which shifts as shnake moves
   const firesRef = useRef<SegmentFire[]>([]);
-  
-  // Damage flash tracking
   const flashesRef = useRef<DamageFlash[]>([]);
 
-  // Materials with detection for textures
-  const hasHeadTex = headTex && headUrl !== BLANK;
-  const hasBodyTex = bodyTex && bodyUrl !== BLANK;
-  const hasFaceTex = faceTex && faceUrl !== BLANK;
+  // Load texture from URL (with caching)
+  const loadTexture = (url: string | null | undefined): THREE.Texture | null => {
+    if (!url) return null;
+    
+    // Skip unsupported formats like .psd
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.endsWith('.psd') || lowerUrl.endsWith('.ai') || lowerUrl.endsWith('.eps')) {
+      console.warn(`[ShnakeRenderer] Unsupported texture format: ${url}`);
+      return null;
+    }
+    
+    // Return cached texture if available
+    if (textureCacheRef.current[url] !== undefined) {
+      return textureCacheRef.current[url];
+    }
+    
+    // Start loading if not already loading
+    if (!loadingUrlsRef.current.has(url)) {
+      loadingUrlsRef.current.add(url);
+      textureCacheRef.current[url] = null; // Mark as loading
+      
+      textureLoaderRef.current.load(
+        url,
+        (texture) => {
+          texture.magFilter = THREE.NearestFilter;
+          texture.minFilter = THREE.NearestFilter;
+          texture.colorSpace = THREE.SRGBColorSpace;
+          textureCacheRef.current[url] = texture;
+          loadingUrlsRef.current.delete(url);
+          forceUpdate(n => n + 1); // Trigger re-render
+        },
+        undefined,
+        (error) => {
+          console.warn(`[ShnakeRenderer] Failed to load texture: ${url}`, error);
+          textureCacheRef.current[url] = null;
+          loadingUrlsRef.current.delete(url);
+        }
+      );
+    }
+    
+    return null;
+  };
 
-  // Normal material for head (bright green fallback)
-  const headMaterial = useMemo(() => {
-    return hasHeadTex 
-      ? new THREE.MeshLambertMaterial({ map: headTex })
-      : new THREE.MeshLambertMaterial({ color: 0x22ff44 });
-  }, [headTex, hasHeadTex]);
+  // Create material for a texture or fallback color
+  const createMaterial = (
+    texture: THREE.Texture | null, 
+    fallbackColor: number, 
+    isPlane: boolean = false
+  ): THREE.MeshLambertMaterial => {
+    if (texture) {
+      return new THREE.MeshLambertMaterial({ 
+        map: texture, 
+        vertexColors: true,
+        side: isPlane ? THREE.DoubleSide : THREE.FrontSide
+      });
+    }
+    return new THREE.MeshLambertMaterial({ 
+      color: fallbackColor, 
+      vertexColors: true,
+      side: isPlane ? THREE.DoubleSide : THREE.FrontSide
+    });
+  };
 
-  // Inverted material for damage flash
-  const headMaterialInverted = useMemo(() => {
-    return new THREE.MeshLambertMaterial({ color: 0xdd00bb }); // Magenta inverse
-  }, []);
-
-  // Normal body material (darker green fallback)
-  const bodyMaterial = useMemo(() => {
-    return hasBodyTex
-      ? new THREE.MeshLambertMaterial({ map: bodyTex })
-      : new THREE.MeshLambertMaterial({ color: 0x44cc44 });
-  }, [bodyTex, hasBodyTex]);
-
-  // Inverted body material
-  const bodyMaterialInverted = useMemo(() => {
-    return new THREE.MeshLambertMaterial({ color: 0xbb33bb }); // Magenta inverse
-  }, []);
-
-  // Face material (red fallback)
-  const faceMaterial = useMemo(() => {
-    return hasFaceTex
-      ? new THREE.MeshLambertMaterial({ map: faceTex, side: THREE.DoubleSide })
-      : new THREE.MeshLambertMaterial({ color: 0xff4444, side: THREE.DoubleSide });
-  }, [faceTex, hasFaceTex]);
-
-  // Inverted face material
-  const faceMaterialInverted = useMemo(() => {
-    return new THREE.MeshLambertMaterial({ color: 0x00bbbb, side: THREE.DoubleSide });
-  }, []);
-
-  // Expose methods for bullet collision and fire
+  // Expose methods
   React.useImperativeHandle(ref, () => ({
     getSegmentAtPosition: (x: number, y: number, z: number) => {
       const shnakes = shnakesRef.current || [];
@@ -146,17 +187,13 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
       const shnakes = shnakesRef.current || [];
       const result: Array<{ position: THREE.Vector3; colors: string[]; progress: number }> = [];
       
-      // Clean up expired fires and collect active ones
       firesRef.current = firesRef.current.filter(fire => {
         const elapsed = now - fire.startTime;
         if (elapsed >= fire.duration) return false;
         
-        // Find the shnake and segment
         const shnake = shnakes.find(s => s.id === fire.shnakeId && s.isActive);
         if (!shnake) return false;
         
-        // Fire stays at the same segment INDEX as shnake moves
-        // This means fire "propagates" down the body as new segments are added at head
         if (fire.segmentIndex < shnake.segments.length) {
           const seg = shnake.segments[fire.segmentIndex];
           result.push({
@@ -173,9 +210,7 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
     },
     
     triggerDamageFlash: (shnakeId: string) => {
-      // Remove any existing flash for this shnake
       flashesRef.current = flashesRef.current.filter(f => f.shnakeId !== shnakeId);
-      // Add new flash (1 second duration for 3 flashes)
       flashesRef.current.push({
         shnakeId,
         startTime: performance.now(),
@@ -192,11 +227,40 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
     const elapsed = now - flash.startTime;
     if (elapsed >= flash.duration) return false;
     
-    // 3 flashes over 1 second: each flash is ~166ms on, ~166ms off
-    // Flash pattern: ON at 0-166ms, OFF at 166-333ms, ON at 333-500ms, etc.
-    const flashCycle = Math.floor(elapsed / (flash.duration / 6)); // 6 half-cycles for 3 full flashes
+    const flashCycle = Math.floor(elapsed / (flash.duration / 6));
     return flashCycle % 2 === 0;
   };
+
+  // Build per-tier texture/material data
+  const tierMaterials = useMemo(() => {
+    const shnakes = shnakesRef.current || [];
+    const materials: Map<number, { head: THREE.MeshLambertMaterial; body: THREE.MeshLambertMaterial; face: THREE.MeshLambertMaterial }> = new Map();
+    
+    for (const s of shnakes) {
+      if (!s.isActive || materials.has(s.tier)) continue;
+      
+      const def = s.definition;
+      const headTex = loadTexture(def.head_texture_url);
+      const bodyTex = loadTexture(def.body_texture_url);
+      const faceTex = loadTexture(def.face_texture_url);
+      
+      const tierColor = getTierColor(s.tier);
+      const faceColor = 0xff4444; // Red fallback for face
+      
+      materials.set(s.tier, {
+        head: createMaterial(headTex, tierColor, false),
+        body: createMaterial(bodyTex, tierColor, false),
+        face: createMaterial(faceTex, faceColor, true),
+      });
+    }
+    
+    return materials;
+  }, [shnakesRef.current, forceUpdate]);
+
+  // Use single shared materials for InstancedMesh (we'll use colors per-instance)
+  const sharedHeadMat = useMemo(() => new THREE.MeshLambertMaterial({ vertexColors: true }), []);
+  const sharedBodyMat = useMemo(() => new THREE.MeshLambertMaterial({ vertexColors: true }), []);
+  const sharedFaceMat = useMemo(() => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), []);
 
   // Update instances each frame
   useFrame(() => {
@@ -215,56 +279,49 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
     flashesRef.current = flashesRef.current.filter(f => now - f.startTime < f.duration);
 
     const m = new THREE.Matrix4();
-    const rot = new THREE.Quaternion();
 
     for (const s of shnakes) {
       if (!s.isActive || s.segments.length === 0) continue;
       
       const flashing = isFlashing(s.id, now);
+      const def = s.definition;
+      
+      // Load textures for this tier
+      const headTex = loadTexture(def.head_texture_url);
+      const bodyTex = loadTexture(def.body_texture_url);
+      const faceTex = loadTexture(def.face_texture_url);
+      
+      // Determine colors - use texture color (white) if texture loaded, else tier fallback
+      const tierColor = getTierColor(s.tier);
+      const headColor = new THREE.Color(headTex ? 0xffffff : tierColor);
+      const bodyColor = new THREE.Color(bodyTex ? 0xffffff : tierColor);
+      const faceColor = new THREE.Color(faceTex ? 0xffffff : 0xff4444);
+      
+      const flashColor = new THREE.Color(0xff00ff); // Magenta flash
 
-      // Head - always render first segment as head
+      // Head
       const h = s.segments[0];
       m.makeTranslation(h.x + 0.5, h.y + 0.5, h.z + 0.5);
       headMesh.setMatrixAt(headCount, m);
-      
-      // Set color based on flash state
-      if (flashing) {
-        headMesh.setColorAt(headCount, new THREE.Color(0xff00ff)); // Magenta flash
-      } else {
-        headMesh.setColorAt(headCount, new THREE.Color(0xffffff)); // Normal (texture or fallback)
-      }
+      headMesh.setColorAt(headCount, flashing ? flashColor : headColor);
       headCount++;
 
-      // Face on head - rotated to face the direction of movement
-      // Calculate rotation based on headDir
+      // Face on head
       const faceMatrix = new THREE.Matrix4();
       const facePos = new THREE.Vector3(h.x + 0.5, h.y + 0.5, h.z + 0.5);
       
-      // Create rotation to face the headDir direction
       if (s.headDir.lengthSq() > 0.01) {
-        // headDir is the movement direction - face should point that way
         const targetDir = s.headDir.clone().normalize();
         const faceQuat = new THREE.Quaternion();
-        
-        // Default face looks at +Z, rotate to look at headDir
         const defaultDir = new THREE.Vector3(0, 0, 1);
         faceQuat.setFromUnitVectors(defaultDir, targetDir);
-        
-        faceMatrix.compose(
-          facePos,
-          faceQuat,
-          new THREE.Vector3(1, 1, 1)
-        );
+        faceMatrix.compose(facePos, faceQuat, new THREE.Vector3(1, 1, 1));
       } else {
         faceMatrix.makeTranslation(facePos.x, facePos.y, facePos.z);
       }
       
       faceMesh.setMatrixAt(faceCount, faceMatrix);
-      if (flashing) {
-        faceMesh.setColorAt(faceCount, new THREE.Color(0x00ffff)); // Cyan flash (inverted red)
-      } else {
-        faceMesh.setColorAt(faceCount, new THREE.Color(0xffffff));
-      }
+      faceMesh.setColorAt(faceCount, flashing ? new THREE.Color(0x00ffff) : faceColor);
       faceCount++;
 
       // Body segments
@@ -272,12 +329,7 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         const seg = s.segments[i];
         m.makeTranslation(seg.x + 0.5, seg.y + 0.5, seg.z + 0.5);
         bodyMesh.setMatrixAt(bodyCount, m);
-        
-        if (flashing) {
-          bodyMesh.setColorAt(bodyCount, new THREE.Color(0xff00ff)); // Magenta flash
-        } else {
-          bodyMesh.setColorAt(bodyCount, new THREE.Color(0xffffff));
-        }
+        bodyMesh.setColorAt(bodyCount, flashing ? flashColor : bodyColor);
         bodyCount++;
       }
     }
@@ -295,48 +347,51 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
     if (faceMesh.instanceColor) faceMesh.instanceColor.needsUpdate = true;
   });
 
-  // Upper bound instance counts
+  // Get first shnake to determine which material to use (for now shared)
+  const shnakes = shnakesRef.current || [];
+  const firstActive = shnakes.find(s => s.isActive);
+  
+  // Create materials with textures if available
+  const { headMaterial, bodyMaterial, faceMaterial } = useMemo(() => {
+    if (!firstActive) {
+      return {
+        headMaterial: new THREE.MeshLambertMaterial({ color: 0x22ff44, vertexColors: true }),
+        bodyMaterial: new THREE.MeshLambertMaterial({ color: 0x44cc44, vertexColors: true }),
+        faceMaterial: new THREE.MeshLambertMaterial({ color: 0xff4444, vertexColors: true, side: THREE.DoubleSide }),
+      };
+    }
+    
+    const def = firstActive.definition;
+    const headTex = loadTexture(def.head_texture_url);
+    const bodyTex = loadTexture(def.body_texture_url);
+    const faceTex = loadTexture(def.face_texture_url);
+    
+    return {
+      headMaterial: createMaterial(headTex, getTierColor(firstActive.tier), false),
+      bodyMaterial: createMaterial(bodyTex, getTierColor(firstActive.tier), false),
+      faceMaterial: createMaterial(faceTex, 0xff4444, true),
+    };
+  }, [firstActive?.tier, forceUpdate]);
+
   const maxHeads = 256;
   const maxBodies = 8192;
   const maxFaces = 256;
-
-  // Use MeshLambertMaterial with vertex colors for flash effect
-  const headMatWithColor = useMemo(() => {
-    const mat = hasHeadTex 
-      ? new THREE.MeshLambertMaterial({ map: headTex, vertexColors: true })
-      : new THREE.MeshLambertMaterial({ color: 0x22ff44, vertexColors: true });
-    return mat;
-  }, [headTex, hasHeadTex]);
-
-  const bodyMatWithColor = useMemo(() => {
-    const mat = hasBodyTex
-      ? new THREE.MeshLambertMaterial({ map: bodyTex, vertexColors: true })
-      : new THREE.MeshLambertMaterial({ color: 0x44cc44, vertexColors: true });
-    return mat;
-  }, [bodyTex, hasBodyTex]);
-
-  const faceMatWithColor = useMemo(() => {
-    const mat = hasFaceTex
-      ? new THREE.MeshLambertMaterial({ map: faceTex, side: THREE.DoubleSide, vertexColors: true })
-      : new THREE.MeshLambertMaterial({ color: 0xff4444, side: THREE.DoubleSide, vertexColors: true });
-    return mat;
-  }, [faceTex, hasFaceTex]);
 
   return (
     <group>
       <instancedMesh 
         ref={headMeshRef} 
-        args={[headGeo, headMatWithColor, maxHeads]} 
+        args={[headGeo, headMaterial, maxHeads]} 
         frustumCulled={false}
       />
       <instancedMesh 
         ref={bodyMeshRef} 
-        args={[bodyGeo, bodyMatWithColor, maxBodies]} 
+        args={[bodyGeo, bodyMaterial, maxBodies]} 
         frustumCulled={false}
       />
       <instancedMesh 
         ref={faceMeshRef} 
-        args={[faceGeo, faceMatWithColor, maxFaces]} 
+        args={[faceGeo, faceMaterial, maxFaces]} 
         frustumCulled={false}
       />
     </group>
