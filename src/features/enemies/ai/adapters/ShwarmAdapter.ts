@@ -233,9 +233,8 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
     if (result.kind === 'move') {
       const rng = getRng(shwarm.id, shwarm.seed);
       
-      // Collect all alive blocks for spacing checks
-      const allBlocks = shwarm.blocks.filter(b => b.isAlive);
-      
+      // Pass blocks directly - locomotion already skips dead blocks internally
+      // Avoids .filter() allocation per tick
       const ctx: ShwarmLocomotionContext = {
         playerX: result.tx,
         playerY: result.ty,
@@ -245,7 +244,7 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
         tier: shwarm.definition.tier,
       };
       
-      applyShwarmMove(shwarm, result, ctx, allBlocks);
+      applyShwarmMove(shwarm, result, ctx, shwarm.blocks);
     }
     
     // Attack is handled by the interpolation loop in useShwarmMovement

@@ -4,6 +4,9 @@ import type { PlantedTree } from '@/features/trees/types';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import type { ShnakeInstance } from '../types';
 
+// Debug flag - disable in production for FPS
+const DEBUG_SHNAKE = false;
+
 const CHUNK_SIZE = 16;
 
 function key(x: number, y: number, z: number) {
@@ -294,8 +297,8 @@ export function useShnakeMovement({
           navState.destinationZ = dest.z;
         }
 
-        // Debug log every 2 seconds
-        if (debugLogTimer > 2) {
+        // Debug log every 2 seconds (guarded for FPS)
+        if (DEBUG_SHNAKE && debugLogTimer > 2) {
           const mode = shouldChase ? 'CHASE' : 'WANDER';
           console.log(`[Shnake ${s.id.slice(-6)}] ${mode} segs=${s.segments.length} dist=${distToPlayer.toFixed(1)} canGround=${canGoToGround}`);
         }

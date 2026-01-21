@@ -18,6 +18,9 @@ import {
   TICK_INTERVALS_MS,
 } from './types';
 
+// Debug flag - disable in production for FPS
+const DEBUG_AI = false;
+
 // Pre-allocated scratch vectors for zero-allocation locomotion
 const _scratchVec1 = new THREE.Vector3();
 const _scratchVec2 = new THREE.Vector3();
@@ -69,7 +72,7 @@ class EnemyManagerClass {
    */
   setAIControlled(controlled: boolean): void {
     this.aiControlled = controlled;
-    console.log(`[EnemyManager] AI controlled mode: ${controlled}`);
+    if (DEBUG_AI) console.log(`[EnemyManager] AI controlled mode: ${controlled}`);
   }
   
   /**
@@ -90,7 +93,7 @@ class EnemyManagerClass {
     this.isRegistered = true;
     this.lastFrameTime = performance.now();
     
-    console.log('[EnemyManager] Initialized and registered with frameLoop');
+    if (DEBUG_AI) console.log('[EnemyManager] Initialized and registered with frameLoop');
   }
   
   /**
@@ -104,7 +107,7 @@ class EnemyManagerClass {
     this.enemies.clear();
     this.spatialIndex.clear();
     
-    console.log('[EnemyManager] Shutdown complete');
+    if (DEBUG_AI) console.log('[EnemyManager] Shutdown complete');
   }
   
   /**

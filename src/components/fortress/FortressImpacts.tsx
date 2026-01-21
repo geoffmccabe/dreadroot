@@ -10,6 +10,9 @@ import particleFire from 'three-particle-fire';
 // Install with our THREE instance
 particleFire.install({ THREE });
 
+// Debug flag - disable in production for FPS
+const DEBUG_IMPACTS = false;
+
 // Maximum concurrent impact effect groups
 const MAX_IMPACT_GROUPS = 15;
 const PARTICLE_COUNT_CENTER = 80;
@@ -63,8 +66,10 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   const activeGroupsRef = useRef<ImpactGroup[]>([]);
 
   const spawnImpact = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
-    // DEBUG: Log what config we receive
-    console.log('[FortressImpacts] spawnImpact called with config:', JSON.stringify(config));
+    // DEBUG: Log what config we receive (guarded for FPS)
+    if (DEBUG_IMPACTS) {
+      console.log('[FortressImpacts] spawnImpact called with config:', JSON.stringify(config));
+    }
     
     // Get colors - fill missing with first color
     const inputColors = config?.colors ?? ['#FFFF00'];
@@ -77,12 +82,14 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     const userHeight = config?.height ?? 1.0;
     const userDuration = config?.duration ?? 0.5;
     
-    console.log('[FortressImpacts] Creating 7 fires:', { 
-      colors: [color1, color2, color3], 
-      width: userWidth, 
-      height: userHeight, 
-      duration: userDuration 
-    });
+    if (DEBUG_IMPACTS) {
+      console.log('[FortressImpacts] Creating 7 fires:', { 
+        colors: [color1, color2, color3], 
+        width: userWidth, 
+        height: userHeight, 
+        duration: userDuration 
+      });
+    }
     
     // Calculate actual sizes based on user's design spec
     const centerWidth = userWidth * 0.5;

@@ -256,8 +256,12 @@ export function applyShwarmMove(
   }
 }
 
+// Pre-allocated attack direction vector for zero-allocation attacks
+const _shwarmAttackDir = new THREE.Vector3();
+
 /**
  * Apply an attack result to a shwarm - execute player damage.
+ * OPTIMIZED: Pre-allocated direction vector.
  */
 export function applyShwarmAttack(
   shwarm: ShwarmInstance,
@@ -275,7 +279,7 @@ export function applyShwarmAttack(
   block.lastHitPlayerAt = now;
 
   if (onPlayerHit) {
-    const dir = new THREE.Vector3(result.dirX, result.dirY, result.dirZ);
-    onPlayerHit(result.damage, result.knockback, dir);
+    _shwarmAttackDir.set(result.dirX, result.dirY, result.dirZ);
+    onPlayerHit(result.damage, result.knockback, _shwarmAttackDir);
   }
 }

@@ -32,7 +32,7 @@ export interface ShnakeWithAI extends ShnakeInstance {
 // Module-level locomotion context (set by useEnemyAI hook)
 let locomotionContext: {
   plantedTrees: PlantedTree[];
-  worldBlocks: { position_x: number; position_y: number; position_z: number }[];
+  treeById: Map<string, PlantedTree>;
   treeBlocksByTier: Map<number, Map<string, string>> | null;
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
   onHeadMoved?: (shnakeId: string) => void;
@@ -163,8 +163,8 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
     }
     
     if (result.kind === 'move') {
-      // Find the tree for this shnake
-      const tree = locomotionContext.plantedTrees.find(t => t.id === shnake.treeId);
+      // O(1) tree lookup using treeById Map instead of O(n) find
+      const tree = locomotionContext.treeById.get(shnake.treeId);
       if (!tree) return;
       
       // Check attacked state for canGoToGround
@@ -181,11 +181,10 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         }
       }
       
-      // Build locomotion context for this shnake
+      // Build locomotion context for this shnake (no worldBlocks - uses collisionGrid O(1) lookup)
       const ctx: ShnakeLocomotionContext = {
         tree,
         treeBlocksByTier: locomotionContext.treeBlocksByTier,
-        worldBlocks: locomotionContext.worldBlocks,
         canGoToGround,
         onHeadMoved: locomotionContext.onHeadMoved,
       };
