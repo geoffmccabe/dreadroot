@@ -1,8 +1,8 @@
 /**
  * ShnakeAdapter - Bridges Shnake instances to the universal AI system
  * 
- * Phase 2: Wraps existing shnake logic, will be called by EnemyManager
- * instead of the shnake's own requestAnimationFrame loop.
+ * Phase 3: Advisory mode - behaviors are evaluated but movement is still
+ * handled by useShnakeMovement. applyResult is a no-op.
  */
 
 import type { ShnakeInstance } from '@/features/shnake/types';
@@ -116,9 +116,9 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
     _result: BehaviorResult, 
     _deltaMs: number
   ): void {
-    // Phase 2: Results are purely advisory - NO MUTATIONS
+    // Phase 3: Results are purely advisory - NO MUTATIONS
     // Actual movement and attacks are handled by useShnakeMovement
-    // This will be used in Phase 3 when we migrate locomotion control
+    // Future: migrate locomotion control here to unify AI decision-making
   },
   
   getBehaviors(shnake: ShnakeWithAI): BehaviorModule[] {
