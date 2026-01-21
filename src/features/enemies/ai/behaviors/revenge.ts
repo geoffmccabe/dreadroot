@@ -14,6 +14,9 @@ import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
 /** How long revenge lasts without damage exchange (3 minutes) */
 export const REVENGE_TIMEOUT_MS = 3 * 60 * 1000;
 
+/** How long headshot stun lasts (2 seconds) */
+export const STUN_DURATION_MS = 2000;
+
 export interface RevengeTarget {
   damageReceived: number;      // Total damage received from ALL attackers
   damageDealt: number;         // Total damage dealt to ANY player
@@ -74,6 +77,16 @@ export const RevengeBehavior: BehaviorModule = {
       return { kind: 'idle' };
     }
     
+    // STUN CHECK: If stunned by headshot, stay idle until stun expires
+    const stunnedUntil = ctx.state.stunnedUntil as number | undefined;
+    if (stunnedUntil && now < stunnedUntil) {
+      // Still stunned - can't move or attack
+      return { kind: 'idle' };
+    } else if (stunnedUntil) {
+      // Stun just expired - clear it
+      ctx.state.stunnedUntil = undefined;
+    }
+    
     // IMPORTANT: Shnakes now ALWAYS chase until timeout expires
     // They no longer stop when damageDealt >= damageReceived
     // This keeps them aggressive and prevents getting "stuck" after hitting player
@@ -92,9 +105,10 @@ export const RevengeBehavior: BehaviorModule = {
       const dz = ctx.pz - ctx.ez;
       const horizDist = Math.sqrt(dx * dx + dz * dz);
       
-      // Horizontal knockback with minimal vertical component
+      // PURELY HORIZONTAL knockback - NO vertical component
+      // This prevents knocking player straight up into the sky
       const dirX = horizDist > 0.1 ? dx / horizDist : 0;
-      const dirY = 0.1; // Small upward component only
+      const dirY = 0; // ZERO vertical - prevents floating/flying bugs
       const dirZ = horizDist > 0.1 ? dz / horizDist : 1;
       
       return {
@@ -194,4 +208,13 @@ export function recordRevengeDamageDealt(state: Record<string, unknown>, damageD
       currentTargetId: existing.currentTargetId,
     } as RevengeTarget;
   }
+}
+
+/**
+ * Helper: Stun a shnake for 2 seconds after headshot during revenge.
+ * Call this when the shnake's head takes damage while in revenge mode.
+ */
+export function applyShnakeStun(state: Record<string, unknown>): void {
+  const now = performance.now();
+  state.stunnedUntil = now + STUN_DURATION_MS;
 }

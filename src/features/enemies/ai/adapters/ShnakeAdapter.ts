@@ -15,7 +15,7 @@ import type {
   BehaviorState,
   BehaviorModule,
 } from '../types';
-import { getBehaviorsByIds, type RevengeTarget } from '../behaviors';
+import { getBehaviorsByIds, type RevengeTarget, STUN_DURATION_MS } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
 import { applyShnakeMove, applyShnakeAttack, type ShnakeLocomotionContext } from '../locomotion/ShnakeLocomotion';
 import { EnemyManager } from '../EnemyManager';
@@ -95,6 +95,13 @@ export function initializeShnakeRevenge(shnakeId: string, damageReceived: number
   const state = entry.behaviorState;
   const existing = state.revengeTarget as RevengeTarget | null;
   
+  // STUN MECHANIC: If already in revenge mode, headshot stuns for 2 seconds
+  // This gives the player a chance to escape or deal more damage
+  if (existing) {
+    state.stunnedUntil = now + STUN_DURATION_MS;
+    console.log(`[ShnakeAdapter] Headshot stun applied for ${STUN_DURATION_MS}ms`);
+  }
+  
   if (existing) {
     // Add to existing revenge, switch target to newest attacker, and reset timeout
     state.revengeTarget = {
@@ -106,7 +113,7 @@ export function initializeShnakeRevenge(shnakeId: string, damageReceived: number
     } as RevengeTarget;
     console.log(`[ShnakeAdapter] Added ${damageReceived} to revenge (total: ${existing.damageReceived + damageReceived}), new target: ${attackerId ?? 'same'}`);
   } else {
-    // Start new revenge
+    // Start new revenge (no stun on first hit - only subsequent headshots stun)
     state.revengeTarget = {
       damageReceived,
       damageDealt: 0,

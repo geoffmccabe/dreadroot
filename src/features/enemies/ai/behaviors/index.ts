@@ -61,6 +61,6 @@ export { ChaseBehavior } from './chase';
 export { AttackBehavior } from './attack';
 export { AngryBehavior } from './angry';
 export { PatrolBehavior } from './patrol';
-export { RevengeBehavior, initializeRevenge, recordRevengeDamageDealt, type RevengeTarget, REVENGE_TIMEOUT_MS } from './revenge';
+export { RevengeBehavior, initializeRevenge, recordRevengeDamageDealt, applyShnakeStun, type RevengeTarget, REVENGE_TIMEOUT_MS, STUN_DURATION_MS } from './revenge';
 export { ReturnHomeBehavior } from './returnHome';
 export { IndignantBehavior, markIndignant } from './indignant';
