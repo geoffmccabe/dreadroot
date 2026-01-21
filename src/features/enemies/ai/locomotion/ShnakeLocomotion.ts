@@ -534,15 +534,24 @@ export function applyShnakeMove(
 
   // Update collision grid: remove tail collider first
   const oldTailCollider = cols[length - 1];
-  if (oldTailCollider) collisionGrid.remove(oldTailCollider);
+  if (oldTailCollider) {
+    collisionGrid.remove(oldTailCollider);
+  }
 
-  // Create new head collider - tag it so player can stand on it
+  // Create new head collider - tag it so player can stand on them and collide with them
   const newHeadCollider = aabbForCell(newHead.x, newHead.y, newHead.z);
   (newHeadCollider as any).isShnakeSegment = true;
   (newHeadCollider as any).shnakeId = shnake.id;
   collisionGrid.insert(newHeadCollider);
+  
+  // Verify collider was inserted (debug check)
+  if (!collisionGrid.has(newHeadCollider)) {
+    console.warn(`[Shnake] Failed to insert head collider for ${shnake.id}`);
+  }
 
   // In-place segment/collider shifting (zero array allocation)
+  // NOTE: This correctly shifts the collider references. Each collider Box3 remains in the grid
+  // at its original position, which is now the correct position for the segment that moved into it.
   for (let i = length - 1; i > 0; i--) {
     segs[i] = segs[i - 1];
     cols[i] = cols[i - 1];
@@ -577,8 +586,9 @@ export function applyShnakeAttack(
   // Access ai_config from definition (use type assertion for JSONB field)
   const defAiConfig = (shnake.definition as { ai_config?: { attackCooldownMs?: number; attackRange?: number } }).ai_config;
   const cooldownMs = defAiConfig?.attackCooldownMs ?? 600;
-  // TIGHTER attack range - shnake must be very close (head touching player)
-  const attackRange = defAiConfig?.attackRange ?? 1.2;
+  // VERY TIGHT attack range - shnake HEAD must be physically adjacent to player
+  // 0.9 blocks = head center must be within 0.9 of player center
+  const attackRange = defAiConfig?.attackRange ?? 0.9;
 
   if (now - shnake.lastAttackAt < cooldownMs) {
     return; // Still in cooldown
@@ -587,17 +597,27 @@ export function applyShnakeAttack(
   // CRITICAL: Verify actual distance before applying damage
   // This prevents "invisible" attacks from far-away shnakes
   const head = shnake.segments[0];
-  const headX = head.x + 0.5;
-  const headY = head.y + 0.5;
-  const headZ = head.z + 0.5;
+  // Use head corner closest to player for range check (not center)
+  // This ensures attack only triggers when physically adjacent
+  const headMinX = head.x;
+  const headMaxX = head.x + 1;
+  const headMinY = head.y;
+  const headMaxY = head.y + 1;
+  const headMinZ = head.z;
+  const headMaxZ = head.z + 1;
   
-  const dx = playerX - headX;
-  const dy = playerY - headY;
-  const dz = playerZ - headZ;
+  // Calculate closest point on head AABB to player
+  const closestX = Math.max(headMinX, Math.min(playerX, headMaxX));
+  const closestY = Math.max(headMinY, Math.min(playerY, headMaxY));
+  const closestZ = Math.max(headMinZ, Math.min(playerZ, headMaxZ));
+  
+  const dx = playerX - closestX;
+  const dy = playerY - closestY;
+  const dz = playerZ - closestZ;
   const actualDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
   
   if (actualDist > attackRange) {
-    // Shnake is too far - attack missed (AI decision was stale)
+    // Shnake head is too far - attack missed
     return;
   }
 
