@@ -1,15 +1,10 @@
-import { useRef, useImperativeHandle, forwardRef, useMemo, useEffect, useState } from 'react';
+import { useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
 import * as THREE from 'three';
-import { Line2 } from 'three/examples/jsm/lines/Line2.js';
-import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { useThree } from '@react-three/fiber';
 
 const MAX_TRACERS = 500; // Max tracer segments in pool
 const TRACER_VISIBLE_DURATION = 1.0; // Seconds at full opacity
 const TRACER_FADE_DURATION = 1.0; // Seconds to fade out
 const BASE_OPACITY = 0.5; // 50% base transparency
-const TRACER_LINE_WIDTH = 0.1; // 2x bullet size (bullet is 0.05)
 
 interface TracerSegment {
   startX: number;
@@ -18,7 +13,6 @@ interface TracerSegment {
   endX: number;
   endY: number;
   endZ: number;
-  color: string;
   lightenedR: number; // Pre-computed lightened color
   lightenedG: number;
   lightenedB: number;
@@ -40,7 +34,6 @@ const tmpColor = new THREE.Color();
 
 /**
  * Lighten a color 50% toward white for vapor effect
- * Modifies the passed color in-place and returns RGB components
  */
 function computeLightenedColor(hexColor: string, factor: number = 0.5): { r: number; g: number; b: number } {
   tmpColor.set(hexColor);
@@ -51,74 +44,51 @@ function computeLightenedColor(hexColor: string, factor: number = 0.5): { r: num
   return { r, g, b };
 }
 
-// Pre-allocated arrays to avoid per-frame allocations
-// Max size: 500 segments * 2 vertices * 3 components = 3000
-// Using regular arrays since LineGeometry.setPositions/setColors expect number[]
-const positionsArray: number[] = new Array(MAX_TRACERS * 2 * 3);
-const colorsArray: number[] = new Array(MAX_TRACERS * 2 * 3);
-
 export const Tracers = forwardRef<TracersHandle>((_, ref) => {
   const segmentsRef = useRef<TracerSegment[]>([]);
   const nextIndexRef = useRef(0);
-  const lineRef = useRef<Line2 | null>(null);
-  const geometryRef = useRef<LineGeometry | null>(null);
-  const materialRef = useRef<LineMaterial | null>(null);
-  const { size } = useThree();
-  const [lineReady, setLineReady] = useState(false);
+  const geometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const positionsRef = useRef<Float32Array | null>(null);
+  const colorsRef = useRef<Float32Array | null>(null);
+  const meshRef = useRef<THREE.LineSegments | null>(null);
   
-  // Pre-allocate pool with lightened color cache
-  useMemo(() => {
+  // Create geometry and material once
+  const { geometry, material } = useMemo(() => {
+    // Pre-allocate pool
     segmentsRef.current = [];
     for (let i = 0; i < MAX_TRACERS; i++) {
       segmentsRef.current.push({
         startX: 0, startY: 0, startZ: 0,
         endX: 0, endY: 0, endZ: 0,
-        color: '#ffffff',
         lightenedR: 1, lightenedG: 1, lightenedB: 1,
         createdAt: 0,
         active: false,
       });
     }
-  }, []);
-
-  // Create Line2 geometry and material for fat lines
-  useEffect(() => {
-    const geometry = new LineGeometry();
-    const material = new LineMaterial({
+    
+    // Create buffer geometry with pre-allocated arrays
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(MAX_TRACERS * 2 * 3); // 2 vertices per segment, 3 components
+    const colors = new Float32Array(MAX_TRACERS * 2 * 3);
+    
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setDrawRange(0, 0); // Start with nothing visible
+    
+    positionsRef.current = positions;
+    colorsRef.current = colors;
+    geometryRef.current = geo;
+    
+    const mat = new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: BASE_OPACITY,
-      linewidth: TRACER_LINE_WIDTH,
-      worldUnits: true, // Use world units for consistent thickness
-      alphaToCoverage: false,
-      depthWrite: false,
+      opacity: 1.0, // Opacity handled per-vertex via color
       blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
     
-    // Set initial resolution
-    material.resolution.set(size.width, size.height);
-    
-    const line = new Line2(geometry, material);
-    line.frustumCulled = false;
-    line.visible = false; // Start hidden, update() will show when segments exist
-    
-    geometryRef.current = geometry;
-    materialRef.current = material;
-    lineRef.current = line;
-    setLineReady(true); // Trigger re-render so primitive gets the line
-    
-    return () => {
-      geometry.dispose();
-      material.dispose();
-    };
+    return { geometry: geo, material: mat };
   }, []);
-  
-  // Update resolution when window resizes
-  useEffect(() => {
-    if (materialRef.current) {
-      materialRef.current.resolution.set(size.width, size.height);
-    }
-  }, [size]);
 
   useImperativeHandle(ref, () => ({
     addSegment: (
@@ -133,9 +103,8 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
       segment.endX = endX;
       segment.endY = endY;
       segment.endZ = endZ;
-      segment.color = color;
       
-      // Pre-compute lightened color at segment creation (once per segment, not per frame)
+      // Pre-compute lightened color at segment creation
       const lightened = computeLightenedColor(color, 0.5);
       segment.lightenedR = lightened.r;
       segment.lightenedG = lightened.g;
@@ -147,16 +116,18 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
     },
     
     update: () => {
-      if (!geometryRef.current || !materialRef.current) return;
+      const positions = positionsRef.current;
+      const colors = colorsRef.current;
+      const geo = geometryRef.current;
+      if (!positions || !colors || !geo) return;
       
       const now = performance.now();
-      let posIndex = 0;
-      let colIndex = 0;
+      let vertexIndex = 0;
       
       for (const segment of segmentsRef.current) {
         if (!segment.active) continue;
         
-        const age = (now - segment.createdAt) / 1000; // Convert to seconds
+        const age = (now - segment.createdAt) / 1000;
         const totalDuration = TRACER_VISIBLE_DURATION + TRACER_FADE_DURATION;
         
         if (age > totalDuration) {
@@ -164,56 +135,48 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
           continue;
         }
         
-        // Calculate opacity - start at BASE_OPACITY, fade to 0
+        // Calculate opacity fade
         let opacity = BASE_OPACITY;
         if (age > TRACER_VISIBLE_DURATION) {
           const fadeProgress = (age - TRACER_VISIBLE_DURATION) / TRACER_FADE_DURATION;
           opacity = BASE_OPACITY * (1.0 - fadeProgress);
         }
         
-        // Add start position
-        positionsArray[posIndex++] = segment.startX;
-        positionsArray[posIndex++] = segment.startY;
-        positionsArray[posIndex++] = segment.startZ;
-        // Add end position  
-        positionsArray[posIndex++] = segment.endX;
-        positionsArray[posIndex++] = segment.endY;
-        positionsArray[posIndex++] = segment.endZ;
+        const baseIdx = vertexIndex * 3;
         
-        // Use pre-computed lightened colors, apply opacity fade
-        const opacityScale = opacity / BASE_OPACITY;
-        const r = segment.lightenedR * opacityScale;
-        const g = segment.lightenedG * opacityScale;
-        const b = segment.lightenedB * opacityScale;
-        colorsArray[colIndex++] = r;
-        colorsArray[colIndex++] = g;
-        colorsArray[colIndex++] = b;
-        colorsArray[colIndex++] = r;
-        colorsArray[colIndex++] = g;
-        colorsArray[colIndex++] = b;
+        // Start position
+        positions[baseIdx] = segment.startX;
+        positions[baseIdx + 1] = segment.startY;
+        positions[baseIdx + 2] = segment.startZ;
+        // End position
+        positions[baseIdx + 3] = segment.endX;
+        positions[baseIdx + 4] = segment.endY;
+        positions[baseIdx + 5] = segment.endZ;
+        
+        // Apply opacity to colors (additive blending handles the rest)
+        const r = segment.lightenedR * opacity;
+        const g = segment.lightenedG * opacity;
+        const b = segment.lightenedB * opacity;
+        colors[baseIdx] = r;
+        colors[baseIdx + 1] = g;
+        colors[baseIdx + 2] = b;
+        colors[baseIdx + 3] = r;
+        colors[baseIdx + 4] = g;
+        colors[baseIdx + 5] = b;
+        
+        vertexIndex += 2;
       }
       
-      // Update geometry if we have segments
-      if (posIndex > 0) {
-        // Slice to get only the filled portion - LineGeometry expects exact length
-        // Note: slice() creates a new array but this is unavoidable with LineGeometry API
-        geometryRef.current.setPositions(positionsArray.slice(0, posIndex));
-        geometryRef.current.setColors(colorsArray.slice(0, colIndex));
-        if (lineRef.current) {
-          lineRef.current.computeLineDistances();
-          lineRef.current.visible = true;
-        }
-      } else {
-        if (lineRef.current) {
-          lineRef.current.visible = false;
-        }
-      }
+      // Update draw range and mark attributes as needing update
+      geo.setDrawRange(0, vertexIndex);
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.color.needsUpdate = true;
     },
   }), []);
 
-  return lineReady && lineRef.current ? (
-    <primitive object={lineRef.current} />
-  ) : null;
+  return (
+    <lineSegments ref={meshRef} geometry={geometry} material={material} frustumCulled={false} />
+  );
 });
 
 Tracers.displayName = 'Tracers';
