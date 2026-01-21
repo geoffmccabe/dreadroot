@@ -3,7 +3,7 @@
  * 
  * When damaged, shnakes pursue the player relentlessly until they deal
  * equal or greater damage back. They ignore tree constraints and move
- * at 1.5x speed. Once satisfied, they transition to returnHome behavior.
+ * at 2x speed with angry undulations. Once satisfied, they transition to returnHome behavior.
  */
 
 import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
@@ -82,8 +82,13 @@ export const RevengeBehavior: BehaviorModule = {
       };
     }
     
-    // Chase the player at 1.5x speed
-    const angrySpeedMultiplier = (ctx.custom.angrySpeedMultiplier as number) ?? 1.5;
+    // Chase the player at 2x speed with angry undulations
+    const angrySpeedMultiplier = (ctx.custom.angrySpeedMultiplier as number) ?? 2.0;
+    
+    // Trigger continuous angry undulations during chase
+    if (ctx.custom.onTriggerWiggle) {
+      (ctx.custom.onTriggerWiggle as () => void)();
+    }
     
     return {
       kind: 'move',
