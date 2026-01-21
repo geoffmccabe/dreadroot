@@ -331,21 +331,11 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
 
   return (
     <Card className={`p-4 ${className || ''}`}>
-      {/* Global Sound Settings Panel - at top of Shnake section */}
-      <EnemySoundSettings
-        enemyType="shnake"
-        sounds={soundConfigs}
-        volume={soundVolume}
-        onSoundChange={handleSoundChange}
-        onVolumeChange={handleVolumeChange}
-        className="mb-4"
-      />
-      
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-3">
           <div className="border rounded-lg p-3 bg-muted/30">
-            <h3 className="font-semibold mb-3 text-sm">Shnakes</h3>
-            <ScrollArea className="h-[440px]">
+            <h3 className="font-semibold mb-3 text-base">Shnakes</h3>
+            <ScrollArea className="h-[500px]">
             <div className="space-y-1 pr-2">
               {definitions.map(def => (
                 <Button
@@ -391,13 +381,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
             </div>
           </ScrollArea>
           </div>
-      </div>
+        </div>
 
-      <div className="col-span-9">
-        <Card className="p-4">
-          {currentDef ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b">
+        <div className="col-span-9 flex flex-col gap-4">
+          {/* Global Sound Settings Panel - above tier editor */}
+          <EnemySoundSettings
+            enemyType="shnake"
+            sounds={soundConfigs}
+            volume={soundVolume}
+            onSoundChange={handleSoundChange}
+            onVolumeChange={handleVolumeChange}
+          />
+          
+          <Card className="p-4 flex-1">
+            {currentDef ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b">
                 <div>
                   <h3 className="font-semibold">Tier {selectedTier} Shnake</h3>
                   <p className="text-xs text-muted-foreground">Length: {10 + selectedTier} segments</p>
