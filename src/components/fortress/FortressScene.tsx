@@ -397,9 +397,8 @@ export function FortressScene({
   }, [applyDamageWithKnockback, takeDamage]);
   
   // Universal Enemy AI system control flag
-  // Phase 5: Set to true to enable AI-driven movement (disables legacy loops)
-  // Currently false - legacy movement hooks still control enemies
-  const AI_CONTROLLED = false;
+  // Phase 6: AI controls enemy movement
+  const AI_CONTROLLED = true;
   
   // Only enable AI system when AI_CONTROLLED is true to avoid double-overhead
   const ENABLE_ENEMY_AI = AI_CONTROLLED;

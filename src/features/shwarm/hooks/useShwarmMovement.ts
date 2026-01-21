@@ -5,10 +5,11 @@ import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
 import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE, MIN_SHWARM_SPACING, MOVEMENT_PHASE_MS, GRAVITY_FALL, GROUND_LEVEL } from '../constants';
+import { playSpatialSound, SHWARM_SOUNDS } from '@/lib/spatialAudio';
+import { shwarmBlockTargets as aiBlockTargets } from '@/features/enemies/ai/adapters/ShwarmAdapter';
 
 // Pre-computed squared radius for O(1) distance checks (no sqrt)
 const PLAYER_HIT_RADIUS_SQ = PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS;
-import { playSpatialSound, SHWARM_SOUNDS } from '@/lib/spatialAudio';
 
 // Maximum center pull multiplier (when far from center)
 const MAX_CENTER_PULL_MULTIPLIER = 3.0;
@@ -86,8 +87,12 @@ export function useShwarmMovement({
   }, []);
 
   // Get or create target data for a block (including collider for player standing)
+  // When AI controls, use the shared AI block targets; otherwise use local ref
   const getBlockTarget = useCallback((block: ShwarmBlock): BlockTargetData => {
-    if (!blockTargetsRef.current.has(block.id)) {
+    // When AI controls, use shared AI targets
+    const targetMap = aiControlled ? aiBlockTargets : blockTargetsRef.current;
+    
+    if (!targetMap.has(block.id)) {
       // Initialize with random visual offset within buffer
       const offset = new THREE.Vector3(
         (Math.random() - 0.5) * 0.3, // +/- 0.15m
@@ -115,15 +120,15 @@ export function useShwarmMovement({
       // Stagger initial move: random time within first 0.5-1.5s window
       const nextMoveTime = Date.now() + 500 + Math.random() * 1000;
       
-      blockTargetsRef.current.set(block.id, {
+      targetMap.set(block.id, {
         targetPosition: block.position.clone(),
         visualOffset: offset,
         collider,
         nextMoveTime,
       });
     }
-    return blockTargetsRef.current.get(block.id)!;
-  }, []);
+    return targetMap.get(block.id)!;
+  }, [aiControlled]);
 
   // Check if a position is too close to other shwarm blocks
   const isTooCloseToOthers = useCallback((
@@ -131,11 +136,14 @@ export function useShwarmMovement({
     currentBlock: ShwarmBlock,
     allBlocks: ShwarmBlock[]
   ): boolean => {
+    // Use appropriate target map based on control mode
+    const targetMap = aiControlled ? aiBlockTargets : blockTargetsRef.current;
+    
     for (const other of allBlocks) {
       if (other === currentBlock || !other.isAlive) continue;
       
       // Use target positions for collision checking
-      const otherTarget = blockTargetsRef.current.get(other.id);
+      const otherTarget = targetMap.get(other.id);
       const otherPos = otherTarget?.targetPosition ?? other.position;
       
       const dx = pos.x - otherPos.x;
@@ -148,7 +156,7 @@ export function useShwarmMovement({
       }
     }
     return false;
-  }, []);
+  }, [aiControlled]);
 
   // Check collision with world blocks
   const checkWorldCollision = useCallback((pos: THREE.Vector3): boolean => {
@@ -439,7 +447,11 @@ export function useShwarmMovement({
   }, [isEnabled, aiControlled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
 
   // Cleanup maps and colliders when shwarms/blocks are removed
+  // When AI controls, cleanup is handled by cleanupShwarmResources in adapter
   useEffect(() => {
+    // Skip cleanup when AI controls - adapter handles it
+    if (aiControlled) return;
+    
     const cleanup = setInterval(() => {
       const shwarms = shwarmsRef.current;
       if (!shwarms) return;
@@ -476,5 +488,5 @@ export function useShwarmMovement({
     }, 1000); // Faster cleanup interval as safety net
 
     return () => clearInterval(cleanup);
-  }, [shwarmsRef]);
+  }, [shwarmsRef, aiControlled]);
 }
