@@ -281,7 +281,9 @@ export function FortressScene({
   onRespawnComplete,
   isOwnedTreeAtPosition,
   onTreeChopComplete,
-  onTreeChopProgress
+  onTreeChopProgress,
+  selectedBulletTier = 1,
+  onBulletTierChange
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
@@ -633,7 +635,7 @@ export function FortressScene({
       'velocityY:', bullet.velocityY.toFixed(2));
     
     bullet.life = 5.0;
-    bullet.tier = 1;
+    bullet.tier = selectedBulletTier;
     bullet.color = '#FFFF00';
     
     // Only add if not already in active list
@@ -643,7 +645,7 @@ export function FortressScene({
     
     setBulletRenderTrigger(prev => prev + 1);
     setShowCrosshairs(true);
-  }, [checkWispHit]);
+  }, [checkWispHit, selectedBulletTier]);
 
   // Frame loop for bullets and particles - NO setState inside!
   // Uses in-place array filtering (swap-delete) to avoid GC pressure
@@ -1057,6 +1059,7 @@ export function FortressScene({
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}
+        onBulletTierChange={onBulletTierChange}
       />
       
       <MultiplayerPlayers players={players} />

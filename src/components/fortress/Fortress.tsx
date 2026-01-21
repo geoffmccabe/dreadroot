@@ -108,6 +108,7 @@ export function Fortress() {
   const [flyingCoins, setFlyingCoins] = useState<FlyingCoin[]>([]);
   const [godMode, setGodMode] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
+  const [selectedBulletTier, setSelectedBulletTier] = useState(1);
   
   // Tree chopping modal state
   const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
@@ -999,6 +1000,8 @@ export function Fortress() {
           isOwnedTreeAtPosition={isOwnedTreeAtPosition}
           onTreeChopComplete={handleTreeChopComplete}
           onTreeChopProgress={handleTreeChopProgress}
+          selectedBulletTier={selectedBulletTier}
+          onBulletTierChange={setSelectedBulletTier}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
