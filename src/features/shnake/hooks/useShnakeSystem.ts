@@ -88,6 +88,11 @@ export function useShnakeSystem({
     return m;
   }, [definitions]);
 
+  // Create a stable key from texture URLs for comparison
+  const defKey = useCallback((d: ShnakeDefinition) => 
+    `${d.head_texture_url || ''}|${d.body_texture_url || ''}|${d.face_texture_url || ''}`,
+  []);
+
   // Keep shnake definitions in sync with database - enables immediate texture updates
   useEffect(() => {
     if (!definitions || definitions.length === 0) return;
@@ -95,7 +100,8 @@ export function useShnakeSystem({
     let updated = false;
     const newShnakes = shnakesRef.current.map(shnake => {
       const latestDef = defsByTier.get(shnake.tier);
-      if (latestDef && latestDef !== shnake.definition) {
+      // Compare by texture URL content, not object reference
+      if (latestDef && defKey(latestDef) !== defKey(shnake.definition)) {
         updated = true;
         return { ...shnake, definition: latestDef };
       }
@@ -106,7 +112,7 @@ export function useShnakeSystem({
       shnakesRef.current = newShnakes;
       setShnakes(newShnakes);
     }
-  }, [definitions, defsByTier]);
+  }, [definitions, defsByTier, defKey]);
 
   /** Global per-tier tree block index for movement cling checks */
   const treeBlocksByTierRef = useRef<Map<number, Map<string, string>>>(new Map());
