@@ -259,14 +259,40 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
                   key={def.tier}
                   variant={selectedTier === def.tier ? 'default' : 'ghost'}
                   size="sm"
-                  className="w-full justify-between text-xs"
+                  className="w-full justify-start text-xs h-auto py-1"
                   onClick={() => setSelectedTier(def.tier)}
                 >
-                  <span className="flex items-center gap-2">
-                    <Bug className="h-3 w-3" />
-                    T{def.tier}
+                  <span className="flex items-center gap-1">
+                    <span className="w-6 font-mono">T{def.tier}</span>
+                    <div className="flex gap-0.5">
+                      {/* Face */}
+                      <div className="w-4 h-4 rounded-sm bg-muted border border-border overflow-hidden flex-shrink-0">
+                        {def.face_texture_url ? (
+                          <img src={def.face_texture_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-muted-foreground/20" />
+                        )}
+                      </div>
+                      {/* Head */}
+                      <div className="w-4 h-4 rounded-sm bg-muted border border-border overflow-hidden flex-shrink-0">
+                        {def.head_texture_url ? (
+                          <img src={def.head_texture_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-muted-foreground/20" />
+                        )}
+                      </div>
+                      {/* Body x3 */}
+                      {[0, 1, 2].map(i => (
+                        <div key={i} className="w-4 h-4 rounded-sm bg-muted border border-border overflow-hidden flex-shrink-0">
+                          {def.body_texture_url ? (
+                            <img src={def.body_texture_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-muted-foreground/20" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </span>
-                  <span className="text-muted-foreground">L={10 + def.tier}</span>
                 </Button>
               ))}
             </div>
