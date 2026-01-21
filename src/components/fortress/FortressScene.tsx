@@ -45,6 +45,9 @@ import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandl
 // Universal Enemy AI system (Phase 3)
 import { useEnemyAI } from '@/features/enemies/ai';
 
+// Debug flag - disable in production for FPS
+const DEBUG_RENDER = false;
+
 // Wisp particles using InstancedMesh for performance (no React re-renders per particle)
 const MAX_WISP_PARTICLES = 50;
 const wispParticleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
@@ -225,8 +228,8 @@ function CameraTrackedBlocks({
       }
     }
     
-    // DEBUG: Log chunk (3,1) visibility
-    if (visibleChunksRef.current.has('chunk_3_1')) {
+    // DEBUG: Log chunk (3,1) visibility (guarded for FPS)
+    if (DEBUG_RENDER && visibleChunksRef.current.has('chunk_3_1')) {
       console.log(`[Render DEBUG] Chunk (3,1) is VISIBLE: ${chunk31Count} blocks in chunk, ${filtered.length} total visible`);
     }
     

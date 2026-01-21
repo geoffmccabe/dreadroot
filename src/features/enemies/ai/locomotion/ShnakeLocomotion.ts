@@ -2,7 +2,7 @@
  * ShnakeLocomotion - Movement execution for Shnakes
  * 
  * Phase 4: Extracted from useShnakeMovement to be called by ShnakeAdapter.applyResult
- * Contains the core movement logic without React hook dependencies.
+ * Phase 6.1: Optimized for zero-allocation hot path
  */
 
 import * as THREE from 'three';
@@ -18,9 +18,26 @@ const _tempBox = new THREE.Box3();
 const _tempMin = new THREE.Vector3();
 const _tempMax = new THREE.Vector3();
 
-function key(x: number, y: number, z: number) {
-  return `${x},${y},${z}`;
+// Pre-allocated for collision checks (O(1) spatial lookup)
+const _cellBox = new THREE.Box3();
+const _cellMin = new THREE.Vector3();
+const _cellMax = new THREE.Vector3();
+
+// Pre-allocated attack direction vector
+const _attackDir = new THREE.Vector3();
+
+// Numeric key packing for zero-allocation occupied set
+const KEY_BASE = 4096;
+const KEY_OFF = 2048;
+function posKey(x: number, y: number, z: number): number {
+  return (x + KEY_OFF) + (y + KEY_OFF) * KEY_BASE + (z + KEY_OFF) * KEY_BASE * KEY_BASE;
 }
+
+// Reusable occupied set (cleared each tick, never reallocated)
+const _occupiedSet = new Set<number>();
+
+// Cache for tree chunk keys (avoids recomputing per tick)
+const treeChunksCache = new Map<string, Set<string>>();
 
 function chunkKey(x: number, z: number) {
   return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
@@ -66,16 +83,28 @@ function getTreeChunkKeys(tree: PlantedTree): Set<string> {
   return chunks;
 }
 
+/**
+ * Get cached tree chunk keys (avoids allocation per tick)
+ */
+function getCachedTreeChunks(tree: PlantedTree): Set<string> {
+  let chunks = treeChunksCache.get(tree.id);
+  if (!chunks) {
+    chunks = getTreeChunkKeys(tree);
+    treeChunksCache.set(tree.id, chunks);
+  }
+  return chunks;
+}
+
 export interface ShnakeLocomotionContext {
   tree: PlantedTree;
   treeBlocksByTier: Map<number, Map<string, string>> | null;
-  worldBlocks: { position_x: number; position_y: number; position_z: number }[];
   canGoToGround: boolean;
   onHeadMoved?: (shnakeId: string) => void;
 }
 
 /**
  * Check if position is adjacent to any tree block of this tier.
+ * OPTIMIZED: Direct neighbor checks instead of array allocation.
  */
 function isTouchingTree(
   tier: number,
@@ -87,45 +116,47 @@ function isTouchingTree(
   const tierMap = treeBlocksByTier?.get(tier);
   if (!tierMap) return false;
 
-  const neighbors = [
-    key(x + 1, y, z), key(x - 1, y, z),
-    key(x, y + 1, z), key(x, y - 1, z),
-    key(x, y, z + 1), key(x, y, z - 1),
-  ];
+  // Direct checks - no array allocation
+  if (tierMap.has(`${x + 1},${y},${z}`)) return true;
+  if (tierMap.has(`${x - 1},${y},${z}`)) return true;
+  if (tierMap.has(`${x},${y + 1},${z}`)) return true;
+  if (tierMap.has(`${x},${y - 1},${z}`)) return true;
+  if (tierMap.has(`${x},${y},${z + 1}`)) return true;
+  if (tierMap.has(`${x},${y},${z - 1}`)) return true;
 
-  for (const nk of neighbors) {
-    if (tierMap.has(nk)) return true;
-  }
   return false;
 }
 
 /**
  * Check if position is within tree's chunk bounds
+ * OPTIMIZED: Uses cached chunk keys
  */
 function isInTreeChunks(tree: PlantedTree, x: number, z: number): boolean {
-  const treeChunks = getTreeChunkKeys(tree);
+  const treeChunks = getCachedTreeChunks(tree);
   const ck = chunkKey(x, z);
   return treeChunks.has(ck);
 }
 
 /**
- * Check if world position is occupied by a placed block
+ * Check if cell is occupied by world blocks using O(1) spatial lookup
+ * OPTIMIZED: Uses collisionGrid instead of O(n) block scan
  */
-function isWorldOccupied(
-  x: number,
-  y: number,
-  z: number,
-  blocks: { position_x: number; position_y: number; position_z: number }[]
-): boolean {
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    if (b.position_x === x && b.position_y === y && b.position_z === z) return true;
+function isCellOccupiedByWorld(x: number, y: number, z: number): boolean {
+  _cellMin.set(x + 0.1, y + 0.1, z + 0.1);
+  _cellMax.set(x + 0.9, y + 0.9, z + 0.9);
+  _cellBox.set(_cellMin, _cellMax);
+
+  const nearbyCount = collisionGrid.getNearby(x + 0.5, z + 0.5, 2);
+  for (let i = 0; i < nearbyCount; i++) {
+    const box = collisionGrid.nearbyResult[i] as THREE.Box3;
+    if (_cellBox.intersectsBox(box)) return true;
   }
   return false;
 }
 
 /**
  * Apply a move result to a shnake - core movement execution.
+ * OPTIMIZED: Zero-allocation hot path with in-place array shifting.
  * 
  * @param shnake The shnake instance to move
  * @param result The behavior result (must be kind: 'move')
@@ -136,13 +167,20 @@ export function applyShnakeMove(
   result: Extract<BehaviorResult, { kind: 'move' }>,
   ctx: ShnakeLocomotionContext
 ): void {
-  const headSeg = shnake.segments[0];
-  const length = shnake.segments.length;
-  const tail = shnake.segments[length - 1];
-  const occupied = new Set<string>(shnake.segments.map(seg => key(seg.x, seg.y, seg.z)));
+  const segs = shnake.segments;
+  const cols = shnake.colliders;
+  const headSeg = segs[0];
+  const length = segs.length;
+  const tail = segs[length - 1];
 
+  // Build occupied set using numeric keys (zero string allocation)
+  _occupiedSet.clear();
+  for (let i = 0; i < length; i++) {
+    const seg = segs[i];
+    _occupiedSet.add(posKey(seg.x, seg.y, seg.z));
+  }
   // Allow moving into current tail cell because it vacates this step
-  occupied.delete(key(tail.x, tail.y, tail.z));
+  _occupiedSet.delete(posKey(tail.x, tail.y, tail.z));
 
   const candidates = [
     [1, 0, 0], [-1, 0, 0],
@@ -169,15 +207,24 @@ export function applyShnakeMove(
     if (ny < 0 && !ctx.canGoToGround) continue;
     if (ny < -1) continue; // Never below -1 (ground level)
 
-    const k = key(nx, ny, nz);
-    if (occupied.has(k)) continue;
-    if (isWorldOccupied(nx, ny, nz, ctx.worldBlocks)) continue;
+    // Check self-collision with numeric key
+    if (_occupiedSet.has(posKey(nx, ny, nz))) continue;
+    
+    // Check world collision with O(1) spatial lookup
+    if (isCellOccupiedByWorld(nx, ny, nz)) continue;
 
     // TREE CONNECTION CONSTRAINT: At least one segment must touch tree after move
     const newHeadTouchesTree = isTouchingTree(shnake.tier, nx, ny, nz, ctx.treeBlocksByTier);
-    const anyBodyTouchesTree = shnake.segments.slice(0, -1).some(
-      seg => isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)
-    );
+    
+    // Check body segments with loop (no slice allocation)
+    let anyBodyTouchesTree = false;
+    for (let i = 0; i < length - 1; i++) {
+      const seg = segs[i];
+      if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
+        anyBodyTouchesTree = true;
+        break;
+      }
+    }
 
     // When wandering: must always stay connected to tree
     // When chasing on ground after attack: can temporarily leave tree vicinity
@@ -200,14 +247,18 @@ export function applyShnakeMove(
       if (!isInTreeChunks(ctx.tree, nx, nz)) continue;
       if (ny < 0) continue;
 
-      const k = key(nx, ny, nz);
-      if (occupied.has(k)) continue;
-      if (isWorldOccupied(nx, ny, nz, ctx.worldBlocks)) continue;
+      if (_occupiedSet.has(posKey(nx, ny, nz))) continue;
+      if (isCellOccupiedByWorld(nx, ny, nz)) continue;
 
       const newHeadTouchesTree = isTouchingTree(shnake.tier, nx, ny, nz, ctx.treeBlocksByTier);
-      const anyBodyTouchesTree = shnake.segments.slice(0, -1).some(
-        seg => isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)
-      );
+      let anyBodyTouchesTree = false;
+      for (let i = 0; i < length - 1; i++) {
+        const seg = segs[i];
+        if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
+          anyBodyTouchesTree = true;
+          break;
+        }
+      }
       if (!newHeadTouchesTree && !anyBodyTouchesTree) continue;
 
       scored.push({ dx, dy, dz, score: Math.random() * 100 });
@@ -215,8 +266,8 @@ export function applyShnakeMove(
   }
 
   // BACKTRACK: If still stuck, allow head to fold back
-  if (scored.length === 0 && shnake.segments.length > 2) {
-    const seg1 = shnake.segments[1];
+  if (scored.length === 0 && length > 2) {
+    const seg1 = segs[1];
     for (const [dx, dy, dz] of candidates) {
       const nx = headSeg.x + dx;
       const ny = headSeg.y + dy;
@@ -225,13 +276,18 @@ export function applyShnakeMove(
       if (nx !== seg1.x || ny !== seg1.y || nz !== seg1.z) continue;
       if (!isInTreeChunks(ctx.tree, nx, nz)) continue;
 
-      const remainingBody = shnake.segments.slice(2, -1);
-      const anyRemainingTouchesTree = remainingBody.some(
-        seg => isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)
-      );
+      // Check remaining body with loop (no slice allocation)
+      let anyRemainingTouchesTree = false;
+      for (let i = 2; i < length - 1; i++) {
+        const seg = segs[i];
+        if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
+          anyRemainingTouchesTree = true;
+          break;
+        }
+      }
       const headTouchesTree = isTouchingTree(shnake.tier, nx, ny, nz, ctx.treeBlocksByTier);
 
-      if (headTouchesTree || anyRemainingTouchesTree || remainingBody.length === 0) {
+      if (headTouchesTree || anyRemainingTouchesTree || length <= 3) {
         scored.push({ dx, dy, dz, score: 1000 });
         break;
       }
@@ -251,17 +307,21 @@ export function applyShnakeMove(
   const newHead = { x: headSeg.x + choice.dx, y: headSeg.y + choice.dy, z: headSeg.z + choice.dz };
   shnake.headDir.set(choice.dx, choice.dy, choice.dz);
 
-  // Update collision grid: remove tail collider, insert new head collider
-  const oldTailCollider = shnake.colliders[shnake.colliders.length - 1];
+  // Update collision grid: remove tail collider first
+  const oldTailCollider = cols[length - 1];
   if (oldTailCollider) collisionGrid.remove(oldTailCollider);
+
+  // Create new head collider
   const newHeadCollider = aabbForCell(newHead.x, newHead.y, newHead.z);
   collisionGrid.insert(newHeadCollider);
 
-  // Shift arrays (worm movement)
-  const newSegments = [newHead, ...shnake.segments.slice(0, -1)];
-  const newColliders = [newHeadCollider, ...shnake.colliders.slice(0, -1)];
-  shnake.segments = newSegments;
-  shnake.colliders = newColliders;
+  // In-place segment/collider shifting (zero array allocation)
+  for (let i = length - 1; i > 0; i--) {
+    segs[i] = segs[i - 1];
+    cols[i] = cols[i - 1];
+  }
+  segs[0] = newHead;
+  cols[0] = newHeadCollider;
 
   // Notify that head moved (for fire propagation)
   ctx.onHeadMoved?.(shnake.id);
@@ -269,6 +329,7 @@ export function applyShnakeMove(
 
 /**
  * Apply an attack result to a shnake - execute player damage.
+ * OPTIMIZED: Pre-allocated direction vector.
  */
 export function applyShnakeAttack(
   shnake: ShnakeInstance,
@@ -276,8 +337,8 @@ export function applyShnakeAttack(
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void
 ): void {
   const now = performance.now();
-  // Access ai_config from definition (type includes it but LSP may lag)
-  const defAiConfig = (shnake.definition as any).ai_config;
+  // Access ai_config from definition (use type assertion for JSONB field)
+  const defAiConfig = (shnake.definition as { ai_config?: { attackCooldownMs?: number } }).ai_config;
   const cooldownMs = defAiConfig?.attackCooldownMs ?? 600;
 
   if (now - shnake.lastAttackAt < cooldownMs) {
@@ -287,7 +348,14 @@ export function applyShnakeAttack(
   shnake.lastAttackAt = now;
 
   if (onPlayerHit) {
-    const dir = new THREE.Vector3(result.dirX, result.dirY, result.dirZ);
-    onPlayerHit(result.damage, result.knockback, dir);
+    _attackDir.set(result.dirX, result.dirY, result.dirZ);
+    onPlayerHit(result.damage, result.knockback, _attackDir);
   }
+}
+
+/**
+ * Clear tree chunks cache (call when trees change)
+ */
+export function clearTreeChunksCache(): void {
+  treeChunksCache.clear();
 }

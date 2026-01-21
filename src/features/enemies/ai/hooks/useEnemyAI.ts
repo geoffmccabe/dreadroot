@@ -76,10 +76,16 @@ export function useEnemyAI({
   useEffect(() => {
     if (!isEnabled || !aiControlled) return;
     
-    // Update shnake locomotion context
+    // Build O(1) tree lookup map
+    const treeById = new Map<string, PlantedTree>();
+    for (const t of (plantedTrees ?? [])) {
+      treeById.set(t.id, t);
+    }
+    
+    // Update shnake locomotion context (no worldBlocks - uses collisionGrid O(1) lookup)
     setShnakeLocomotionContext({
       plantedTrees: plantedTrees ?? [],
-      worldBlocks: blocksRef?.current ?? [],
+      treeById,
       treeBlocksByTier: treeBlocksByTierRef?.current ?? null,
       onPlayerHit,
       onHeadMoved: onShnakeHeadMoved,
@@ -89,7 +95,7 @@ export function useEnemyAI({
     setShwarmLocomotionContext({
       onPlayerHit,
     });
-  }, [isEnabled, aiControlled, plantedTrees, blocksRef, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved]);
+  }, [isEnabled, aiControlled, plantedTrees, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved]);
   
   // Stable sync function for shnakes (avoids stale closures)
   // OPTIMIZED: Reuses tempShnakeIds set instead of allocating new Set each call
