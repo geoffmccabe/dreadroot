@@ -306,7 +306,13 @@ export function useShnakeSystem({
     console.log(`[Shnake Spawn] Success! ${segments.length} segments at (${head.x}, ${head.y}, ${head.z})`);
 
     const id = `shnake_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const colliders = segments.map(s => aabbForCell(s.x, s.y, s.z));
+    const colliders = segments.map(s => {
+      const box = aabbForCell(s.x, s.y, s.z);
+      // Tag colliders as shnake segments so player can stand on them
+      (box as any).isShnakeSegment = true;
+      (box as any).shnakeId = id;
+      return box;
+    });
     colliders.forEach(c => collisionGrid.insert(c));
 
     const inst: ShnakeInstance = {
