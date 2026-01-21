@@ -173,6 +173,16 @@ export function useShnakeMovement({
         // Check if player is in any of the tree's chunks
         const treeChunks = getTreeChunkKeys(tree);
         const playerInTreeChunks = treeChunks.has(playerChunk);
+        
+        // Also check distance-based aggro - shnake always chases if player is within tier*16 blocks
+        const headSeg = s.segments[0];
+        const distToPlayer = Math.sqrt(
+          Math.pow(px - headSeg.x, 2) + 
+          Math.pow(py - headSeg.y, 2) + 
+          Math.pow(pz - headSeg.z, 2)
+        );
+        const aggroRange = s.tier * 16;
+        const shouldChase = playerInTreeChunks || distToPlayer < aggroRange;
 
         // Attack if adjacent (regardless of chunk)
         const head = s.segments[0];
@@ -197,7 +207,7 @@ export function useShnakeMovement({
 
         // Debug log every 2 seconds
         if (debugLogTimer > 2) {
-          console.log(`[Shnake Move] id=${s.id.slice(-6)} steps=${steps} segments=${s.segments.length} playerInChunks=${playerInTreeChunks}`);
+          console.log(`[Shnake Move] id=${s.id.slice(-6)} steps=${steps} segments=${s.segments.length} shouldChase=${shouldChase} dist=${distToPlayer.toFixed(1)}`);
         }
 
         for (let si = 0; si < steps; si++) {
@@ -222,6 +232,9 @@ export function useShnakeMovement({
             const ny = headSeg.y + dy;
             const nz = headSeg.z + dz;
             
+            // GROUND CONSTRAINT: Shnakes cannot go below ground level (y < 0)
+            if (ny < 0) continue;
+            
             const k = key(nx, ny, nz);
             if (occupied.has(k)) continue;
             if (isWorldOccupied(nx, ny, nz)) continue;
@@ -233,7 +246,7 @@ export function useShnakeMovement({
             }
             
             let score: number;
-            if (playerInTreeChunks) {
+            if (shouldChase) {
               // Move toward player
               const tx = Math.floor(px);
               const ty = Math.floor(py);
@@ -271,6 +284,10 @@ export function useShnakeMovement({
               const nx = headSeg.x + ox;
               const ny = headSeg.y + oy;
               const nz = headSeg.z + oz;
+              
+              // GROUND CONSTRAINT: Cannot backtrack below ground
+              if (ny < 0) continue;
+              
               const k = key(nx, ny, nz);
               
               // For backtracking, allow moving into any segment position except head
