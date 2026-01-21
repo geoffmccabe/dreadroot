@@ -40,6 +40,7 @@ import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from '.
 import { FlyingCoin, GameSettings, WeatherSettings } from './FortressTypes';
 import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { getDefaultBulletTier } from '@/lib/bulletScaling';
 
 
 // Main Fortress orchestrator component
@@ -111,12 +112,9 @@ export function Fortress() {
   const [flyingCoins, setFlyingCoins] = useState<FlyingCoin[]>([]);
   const [godMode, setGodMode] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
-  const [selectedBulletTier, setSelectedBulletTier] = useState(1);
+  // Admin override for bullet tier (R-mode)
+  const [adminTierOverride, setAdminTierOverride] = useState<number | null>(null);
   const [pentabulletCharge, setPentabulletCharge] = useState(0);
-  
-  // Get bullet color for crosshair
-  const { getDefinition } = useBulletDefinitions();
-  const bulletColor = getDefinition(selectedBulletTier).colors[0] || '#FFFF00';
   
   // Tree chopping modal state
   const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
@@ -134,6 +132,20 @@ export function Fortress() {
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
   
+  // Compute bullet tier from player level (automatic for all players)
+  // Level 1-3 → Tier 1, Level 4-6 → Tier 2, etc.
+  const baseBulletTier = useMemo(() => 
+    getDefaultBulletTier(profile?.current_level ?? 1), 
+    [profile?.current_level]
+  );
+  
+  // Effective tier: admin override OR level-based automatic tier
+  const selectedBulletTier = adminTierOverride ?? baseBulletTier;
+  
+  // Get bullet color for crosshair
+  const { getDefinition } = useBulletDefinitions();
+  const bulletColor = getDefinition(selectedBulletTier).colors[0] || '#FFFF00';
+  
   // Player health system
   const { 
     currentHealth, 
@@ -147,7 +159,7 @@ export function Fortress() {
   
   // Shwarm definitions
   const { data: shwarmDefinitions } = useShwarmDefinitions();
-  
+
   // Shnake definitions
   const { data: shnakeDefinitions } = useShnakeDefinitions();
 
@@ -1057,7 +1069,7 @@ export function Fortress() {
           onTreeChopComplete={handleTreeChopComplete}
           onTreeChopProgress={handleTreeChopProgress}
           selectedBulletTier={selectedBulletTier}
-          onBulletTierChange={setSelectedBulletTier}
+          onBulletTierChange={setAdminTierOverride}
           playerLevel={profile?.current_level ?? 1}
           onPentabulletChargeChange={setPentabulletCharge}
         />

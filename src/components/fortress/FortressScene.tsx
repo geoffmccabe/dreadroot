@@ -849,6 +849,14 @@ export function FortressScene({
     bullet.color = tierDef.colors[0] || '#FFFF00'; // Use first color from tier definition
     bullet.ricochetScale = 1.0; // Full size for first impact
     
+    // Add immediate muzzle tracer segment (0.5m forward) for real-time feedback
+    const muzzleEnd = origin.clone().add(normalizedDir.clone().multiplyScalar(0.5));
+    tracersRef.current?.addSegment(
+      origin.x, origin.y, origin.z,
+      muzzleEnd.x, muzzleEnd.y, muzzleEnd.z,
+      bullet.color
+    );
+    
     // Only add if not already in active list
     if (!bulletsRef.current.includes(bullet)) {
       bulletsRef.current.push(bullet);
