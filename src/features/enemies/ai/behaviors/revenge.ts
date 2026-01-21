@@ -43,15 +43,9 @@ export const RevengeBehavior: BehaviorModule = {
       return 0;
     }
     
-    // Still seeking revenge (haven't dealt enough damage back)
-    if (revengeTarget.damageDealt < revengeTarget.damageReceived) {
-      return 0.95; // Very high priority - revenge is important!
-    }
-    
-    // Revenge is satisfied, let returnHome take over
-    ctx.state.revengeTarget = null;
-    ctx.state.returningHome = true;
-    return 0;
+    // ALWAYS pursue until timeout - shnakes are relentless!
+    // (Previously stopped when damageDealt >= damageReceived, causing stuck behavior)
+    return 0.95; // Very high priority - revenge is important!
   },
   
   enter(ctx: BehaviorContext): void {
@@ -72,19 +66,17 @@ export const RevengeBehavior: BehaviorModule = {
   tick(ctx: BehaviorContext, _deltaMs: number): BehaviorResult {
     const revengeTarget = ctx.state.revengeTarget as RevengeTarget | null;
     
-    if (!revengeTarget || revengeTarget.damageDealt >= revengeTarget.damageReceived) {
-      // Revenge satisfied! Mark for return home
-      ctx.state.returningHome = true;
-      return { kind: 'idle' };
-    }
-    
-    // Check timeout
+    // Check timeout first (this is the ONLY exit condition now)
     const now = performance.now();
-    if (now - revengeTarget.lastDamageAt > REVENGE_TIMEOUT_MS) {
+    if (!revengeTarget || now - revengeTarget.lastDamageAt > REVENGE_TIMEOUT_MS) {
       ctx.state.revengeTarget = null;
       ctx.state.returningHome = true;
       return { kind: 'idle' };
     }
+    
+    // IMPORTANT: Shnakes now ALWAYS chase until timeout expires
+    // They no longer stop when damageDealt >= damageReceived
+    // This keeps them aggressive and prevents getting "stuck" after hitting player
     
     // Get attack parameters
     const attackRange = (ctx.custom.attackRange as number) ?? 1.5;

@@ -1320,17 +1320,30 @@ export function FirstPersonControls({
             ? overlap.min.x - playerRadius - SURFACE_EPS
             : overlap.max.x + playerRadius + SURFACE_EPS;
           velocity.current.x = 0;
+          // Clear knockback on this axis too to prevent re-pushing
+          knockbackVelRef.current.x = 0;
         } else if (push.axis === 'z') {
           camera.position.z = push.direction === -1
             ? overlap.min.z - playerRadius - SURFACE_EPS
             : overlap.max.z + playerRadius + SURFACE_EPS;
           velocity.current.z = 0;
+          // Clear knockback on this axis too to prevent re-pushing
+          knockbackVelRef.current.z = 0;
         } else {
           if (push.direction === 1) {
+            // Pushed UP onto a surface - set position but DON'T zero velocity
+            // This allows gravity to immediately start pulling player back down
             camera.position.y = overlap.max.y + playerHeight + SURFACE_EPS;
-            velocity.current.y = 0;
-            onGround.current = true;
+            // Only zero velocity and set onGround if we're falling DOWN onto this block
+            // If we're being pushed up from the side, keep falling
+            if (velocity.current.y < 0) {
+              velocity.current.y = 0;
+              onGround.current = true;
+            }
+            // Don't set onGround = true if we're moving up or stationary
+            // This prevents knockback-induced floating
           } else {
+            // Pushed DOWN (hit ceiling)
             camera.position.y = overlap.min.y - SURFACE_EPS;
             velocity.current.y = 0;
           }
