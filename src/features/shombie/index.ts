@@ -10,6 +10,6 @@ export type { ShombieRendererHandle } from './components/ShombieRenderer';
 export { ShombieDesignPanel } from './components/ShombieDesignPanel';
 
 // Hooks
-export { useShombieDefinitions, getShombieDefinitionByTier } from './hooks/useShombieDefinitions';
+export { useShombieDefinitions, getShombieDefinitionByTier, getShombieDefinitionsCache } from './hooks/useShombieDefinitions';
 export { useShombieSystem } from './hooks/useShombieSystem';
-export type { ShombieInstance } from './types';
+export type { ShombieInstance, ShombieDefinition } from './types';
