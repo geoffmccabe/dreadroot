@@ -476,7 +476,8 @@ export function FortressScene({
   }, []);
   
   const handleTriggerWiggle = useCallback((shnakeId: string) => {
-    // TODO: Trigger S-formation wiggle animation in ShnakeRenderer
+    // Trigger S-formation wiggle animation in ShnakeRenderer
+    shnakeRendererRef.current?.triggerWiggle(shnakeId);
     console.log(`[Shnake] Trigger wiggle for ${shnakeId}`);
   }, []);
 
