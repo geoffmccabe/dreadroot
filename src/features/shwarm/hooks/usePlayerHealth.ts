@@ -1,5 +1,5 @@
 // Player Health System Hook
-// Manages current health, max health, damage, healing, respawn, and passive regeneration
+// Manages current health, max health, damage pipeline, status effects, and respawn
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,20 @@ import {
   HEALTH_REGEN_DELAY_AFTER_DAMAGE_MS 
 } from '../constants';
 import { getLevelForPoints } from '@/lib/levelSystem';
+import {
+  DamageEvent,
+  DamageResult,
+  DamageType,
+  ModifierContext,
+  ActiveStatusEffect,
+  StatusEffectType,
+  processDamageEvent,
+  createDefaultModifierContext,
+  createActiveEffect,
+  isEffectActive,
+  shouldEffectTick,
+  createDamageEvent,
+} from '@/lib/damage';
 
 export interface PlayerHealthState {
   currentHealth: number;
@@ -48,7 +62,13 @@ const DEFAULT_REGEN_MODIFIERS: RegenModifiers = {
   delayMultiplier: 1.0,
 };
 
-// Spawn point for respawn (from constants for single source of truth)
+// I-frame duration after taking damage (ms)
+const INVULNERABILITY_DURATION_MS = 200;
+
+// DoT tick check interval (ms)
+const DOT_TICK_INTERVAL_MS = 100;
+
+// Spawn point for respawn
 const SPAWN_POINT = new THREE.Vector3(
   PLAYER_SPAWN_POINT.x,
   PLAYER_SPAWN_POINT.y,
@@ -68,12 +88,23 @@ export function usePlayerHealth() {
   // Refs for instant access in callbacks (avoid stale closures)
   const healthRef = useRef(healthState);
   const userIdRef = useRef(user?.id);
+  const playerLevelRef = useRef(1);
   
-  // Regeneration modifiers ref - can be modified by items/buffs
+  // Regeneration modifiers ref
   const regenModifiersRef = useRef<RegenModifiers>({ ...DEFAULT_REGEN_MODIFIERS });
   
   // Track last damage time for regen delay
   const lastDamageTimeRef = useRef<number>(0);
+  
+  // Damage pipeline context
+  const modifierContextRef = useRef<ModifierContext>(createDefaultModifierContext(1));
+  
+  // I-frames tracking
+  const lastDamageEventIdRef = useRef<string | null>(null);
+  const invulnerableUntilRef = useRef<number>(0);
+  
+  // Active status effects
+  const activeEffectsRef = useRef<ActiveStatusEffect[]>([]);
   
   // Sync refs with state
   useEffect(() => {
@@ -104,6 +135,10 @@ export function usePlayerHealth() {
         // Calculate max health based on level (level derived from points for accuracy)
         const level = getLevelForPoints(data.total_points || 0);
         const calculatedMaxHealth = calculateMaxHealthForLevel(level);
+        
+        // Update player level ref and modifier context
+        playerLevelRef.current = level;
+        modifierContextRef.current.playerLevel = level;
         
         // Update max_health in DB if it changed (ONE-TIME on load only)
         if (data.max_health !== calculatedMaxHealth) {
@@ -153,10 +188,13 @@ export function usePlayerHealth() {
             };
             
             // Recalculate max health from points if they changed
-            // CRITICAL: Do NOT write to DB here - causes infinite loop!
             if (newData.total_points !== undefined) {
               const level = getLevelForPoints(newData.total_points);
               const calculatedMaxHealth = calculateMaxHealthForLevel(level);
+              
+              // Update level refs
+              playerLevelRef.current = level;
+              modifierContextRef.current.playerLevel = level;
               
               setHealthState(prev => {
                 const newCurrentHealth = newData.current_health ?? prev.currentHealth;
@@ -185,8 +223,243 @@ export function usePlayerHealth() {
   }, [user?.id]);
 
   /**
+   * Internal damage application (bypasses pipeline, used for DoT)
+   */
+  const takeDamageInternal = useCallback((amount: number): { died: boolean } => {
+    const current = healthRef.current;
+    const userId = userIdRef.current;
+    
+    if (current.isDead || !userId) {
+      return { died: false };
+    }
+    
+    // Record damage time for regen delay
+    lastDamageTimeRef.current = Date.now();
+    
+    const newHealth = Math.max(0, current.currentHealth - amount);
+    const died = newHealth <= 0;
+    
+    // Optimistic update
+    setHealthState(prev => ({
+      ...prev,
+      currentHealth: newHealth,
+      isDead: died,
+    }));
+    
+    // Sync to database (non-blocking)
+    supabase
+      .from('user_profiles')
+      .update({ current_health: newHealth })
+      .eq('user_id', userId)
+      .then(({ error }) => {
+        if (error) {
+          console.error('[usePlayerHealth] Failed to sync damage:', error);
+        }
+      });
+    
+    if (died) {
+      toast({
+        title: "You died!",
+        description: "Respawning in 3 seconds...",
+        variant: "destructive",
+      });
+    }
+    
+    return { died };
+  }, [toast]);
+
+  /**
+   * Add a status effect to the player
+   */
+  const addStatusEffect = useCallback((
+    type: StatusEffectType,
+    overrides?: Partial<ActiveStatusEffect>
+  ) => {
+    const effect = createActiveEffect(type, overrides);
+    
+    // Check if same type already exists - refresh duration instead of stacking
+    const existingIndex = activeEffectsRef.current.findIndex(e => e.type === type);
+    if (existingIndex >= 0) {
+      activeEffectsRef.current[existingIndex] = effect;
+    } else {
+      activeEffectsRef.current.push(effect);
+    }
+    
+    return effect;
+  }, []);
+
+  /**
+   * Remove a status effect by type
+   */
+  const removeStatusEffect = useCallback((type: StatusEffectType) => {
+    activeEffectsRef.current = activeEffectsRef.current.filter(e => e.type !== type);
+  }, []);
+
+  /**
+   * Check if player has a specific status effect
+   */
+  const hasStatusEffect = useCallback((type: StatusEffectType): boolean => {
+    return activeEffectsRef.current.some(e => e.type === type && isEffectActive(e));
+  }, []);
+
+  /**
+   * Universal damage application - processes through pipeline
+   * This is the MAIN entry point for all damage to the player
+   */
+  const applyDamage = useCallback((event: DamageEvent): DamageResult => {
+    const now = Date.now();
+    const current = healthRef.current;
+    
+    // Can't damage dead players
+    if (current.isDead) {
+      return { blocked: true, reason: 'dead' };
+    }
+    
+    // Check i-frames (but allow DoT to bypass)
+    if (event.source.type !== 'dot' && now < invulnerableUntilRef.current) {
+      return { blocked: true, reason: 'invulnerable' };
+    }
+    
+    // Deduplicate (same event ID within 100ms)
+    if (event.id === lastDamageEventIdRef.current) {
+      return { blocked: true, reason: 'duplicate' };
+    }
+    lastDamageEventIdRef.current = event.id;
+    
+    // Clear old event ID after 100ms
+    setTimeout(() => {
+      if (lastDamageEventIdRef.current === event.id) {
+        lastDamageEventIdRef.current = null;
+      }
+    }, 100);
+    
+    // Process through damage pipeline
+    const processed = processDamageEvent(event, modifierContextRef.current);
+    
+    if (processed.blocked) {
+      return { blocked: true, reason: 'modifier' };
+    }
+    
+    // Apply final damage to health
+    const result = takeDamageInternal(processed.finalDamage);
+    
+    // Apply knockback (deferred to avoid render loop issues)
+    if (processed.knockback && processed.knockback.finalForce > 0) {
+      setTimeout(() => {
+        const applyKnockback = (window as any).__applyPlayerKnockback;
+        if (applyKnockback && typeof applyKnockback === 'function') {
+          applyKnockback(
+            processed.knockback!.direction.clone(),
+            processed.knockback!.finalForce
+          );
+        }
+      }, 0);
+    }
+    
+    // Apply status effects from the damage event
+    if (processed.statusEffects) {
+      for (const effectApp of processed.statusEffects) {
+        addStatusEffect(effectApp.effectType as StatusEffectType, {
+          duration: effectApp.duration,
+          intensity: effectApp.intensity,
+          sourceId: effectApp.sourceId,
+        });
+      }
+    }
+    
+    // Grant i-frames after taking damage (unless fatal)
+    if (!result.died && event.source.type !== 'dot') {
+      invulnerableUntilRef.current = now + INVULNERABILITY_DURATION_MS;
+    }
+    
+    return { 
+      blocked: false, 
+      died: result.died, 
+      finalDamage: processed.finalDamage 
+    };
+  }, [takeDamageInternal, addStatusEffect]);
+
+  /**
+   * Convenience function for simple damage with knockback
+   * Creates a DamageEvent and processes it
+   */
+  const applyDamageWithKnockback = useCallback((
+    damage: number,
+    knockbackDir: THREE.Vector3,
+    knockbackForce: number,
+    source: { type: 'enemy' | 'environment' | 'player'; entityId?: string; entityName?: string },
+    damageType: DamageType = DamageType.PHYSICAL
+  ): DamageResult => {
+    const event = createDamageEvent({
+      baseDamage: damage,
+      damageType,
+      source,
+      knockback: {
+        direction: knockbackDir,
+        force: knockbackForce,
+      },
+    });
+    
+    return applyDamage(event);
+  }, [applyDamage]);
+
+  /**
+   * Legacy takeDamage function for backwards compatibility
+   * @deprecated Use applyDamage or applyDamageWithKnockback instead
+   */
+  const takeDamage = useCallback((
+    amount: number,
+    knockbackDir?: THREE.Vector3,
+    knockbackDistance?: number
+  ): { died: boolean; knockbackDir: THREE.Vector3 | null; knockbackDistance: number } => {
+    const event = createDamageEvent({
+      baseDamage: amount,
+      damageType: DamageType.PHYSICAL,
+      source: { type: 'environment' },
+      knockback: knockbackDir ? {
+        direction: knockbackDir,
+        force: knockbackDistance ?? 0,
+      } : undefined,
+    });
+    
+    const result = applyDamage(event);
+    
+    return {
+      died: result.died ?? false,
+      knockbackDir: knockbackDir ?? null,
+      knockbackDistance: knockbackDistance ?? 0,
+    };
+  }, [applyDamage]);
+
+  /**
+   * DoT tick loop - processes status effect damage
+   */
+  useEffect(() => {
+    const tickInterval = setInterval(() => {
+      const now = Date.now();
+      const effects = activeEffectsRef.current;
+      
+      // Filter expired effects
+      activeEffectsRef.current = effects.filter(e => isEffectActive(e));
+      
+      // Process DoT ticks
+      for (const effect of activeEffectsRef.current) {
+        if (!shouldEffectTick(effect)) continue;
+        
+        // Update last tick time
+        effect.lastTickTime = now;
+        
+        // Apply DoT damage directly (bypasses i-frames, already processed)
+        const dotDamage = effect.intensity ?? 1;
+        takeDamageInternal(dotDamage);
+      }
+    }, DOT_TICK_INTERVAL_MS);
+    
+    return () => clearInterval(tickInterval);
+  }, [takeDamageInternal]);
+
+  /**
    * Passive health regeneration loop (Minecraft-style)
-   * Heals player over time when not dead and not at max health
    */
   useEffect(() => {
     const modifiers = regenModifiersRef.current;
@@ -234,66 +507,10 @@ export function usePlayerHealth() {
         });
     };
     
-    // Start regen interval
     const intervalId = setInterval(regenTick, interval);
     
     return () => clearInterval(intervalId);
   }, []);
-
-  /**
-   * Take damage and apply knockback
-   * Returns knockback info for FirstPersonControls to apply
-   */
-  const takeDamage = useCallback((
-    amount: number,
-    knockbackDir?: THREE.Vector3,
-    knockbackDistance?: number
-  ): { died: boolean; knockbackDir: THREE.Vector3 | null; knockbackDistance: number } => {
-    const current = healthRef.current;
-    const userId = userIdRef.current;
-    
-    if (current.isDead || !userId) {
-      return { died: false, knockbackDir: null, knockbackDistance: 0 };
-    }
-    
-    // Record damage time for regen delay
-    lastDamageTimeRef.current = Date.now();
-    
-    const newHealth = Math.max(0, current.currentHealth - amount);
-    const died = newHealth <= 0;
-    
-    // Optimistic update
-    setHealthState(prev => ({
-      ...prev,
-      currentHealth: newHealth,
-      isDead: died,
-    }));
-    
-    // Sync to database (non-blocking)
-    supabase
-      .from('user_profiles')
-      .update({ current_health: newHealth })
-      .eq('user_id', userId)
-      .then(({ error }) => {
-        if (error) {
-          console.error('[usePlayerHealth] Failed to sync damage:', error);
-        }
-      });
-    
-    if (died) {
-      toast({
-        title: "You died!",
-        description: "Respawning in 3 seconds...",
-        variant: "destructive",
-      });
-    }
-    
-    return {
-      died,
-      knockbackDir: knockbackDir || null,
-      knockbackDistance: knockbackDistance || 0,
-    };
-  }, [toast]);
 
   /**
    * Heal the player (instant heal, e.g., from items)
@@ -306,14 +523,12 @@ export function usePlayerHealth() {
     
     const newHealth = Math.min(current.maxHealth, current.currentHealth + amount);
     
-    // Optimistic update
     setHealthState(prev => ({
       ...prev,
       currentHealth: newHealth,
       isDead: false,
     }));
     
-    // Sync to database
     supabase
       .from('user_profiles')
       .update({ current_health: newHealth })
@@ -327,7 +542,6 @@ export function usePlayerHealth() {
 
   /**
    * Respawn the player at spawn point with full health
-   * Returns the spawn position for FirstPersonControls
    */
   const respawn = useCallback((): THREE.Vector3 => {
     const current = healthRef.current;
@@ -338,6 +552,12 @@ export function usePlayerHealth() {
     // Reset damage timer so regen kicks in immediately after respawn
     lastDamageTimeRef.current = 0;
     
+    // Clear all status effects
+    activeEffectsRef.current = [];
+    
+    // Reset i-frames
+    invulnerableUntilRef.current = 0;
+    
     // Reset to full health
     setHealthState(prev => ({
       ...prev,
@@ -345,7 +565,6 @@ export function usePlayerHealth() {
       isDead: false,
     }));
     
-    // Sync to database
     supabase
       .from('user_profiles')
       .update({ current_health: current.maxHealth })
@@ -365,7 +584,7 @@ export function usePlayerHealth() {
   }, [toast]);
 
   /**
-   * Set max health (for future upgrades)
+   * Set max health (for upgrades)
    */
   const setMaxHealth = useCallback((newMax: number) => {
     const userId = userIdRef.current;
@@ -375,11 +594,9 @@ export function usePlayerHealth() {
     setHealthState(prev => ({
       ...prev,
       maxHealth: newMax,
-      // Also heal to new max if current exceeds it or if at full health
       currentHealth: prev.currentHealth >= prev.maxHealth ? newMax : Math.min(prev.currentHealth, newMax),
     }));
     
-    // Sync to database
     supabase
       .from('user_profiles')
       .update({ max_health: newMax })
@@ -392,8 +609,7 @@ export function usePlayerHealth() {
   }, []);
 
   /**
-   * Update regeneration modifiers (for items, buffs, etc.)
-   * Pass partial modifiers to update only specific values
+   * Update regeneration modifiers
    */
   const setRegenModifiers = useCallback((modifiers: Partial<RegenModifiers>) => {
     regenModifiersRef.current = {
@@ -409,20 +625,73 @@ export function usePlayerHealth() {
     regenModifiersRef.current = { ...DEFAULT_REGEN_MODIFIERS };
   }, []);
 
+  /**
+   * Update player armor value
+   */
+  const setPlayerArmor = useCallback((armor: number) => {
+    modifierContextRef.current.playerArmor = armor;
+  }, []);
+
+  /**
+   * Update resistance for a damage type
+   */
+  const setResistance = useCallback((type: DamageType, percent: number) => {
+    modifierContextRef.current.resistances[type] = Math.max(0, Math.min(1, percent));
+  }, []);
+
+  /**
+   * Add additional STEADY value (beyond level-based)
+   */
+  const addSteady = useCallback((amount: number) => {
+    modifierContextRef.current.steady += amount;
+  }, []);
+
+  /**
+   * Set total additional STEADY value
+   */
+  const setSteady = useCallback((amount: number) => {
+    modifierContextRef.current.steady = amount;
+  }, []);
+
   return {
+    // Health state
     currentHealth: healthState.currentHealth,
     maxHealth: healthState.maxHealth,
     isDead: healthState.isDead,
     healthPercent: (healthState.currentHealth / healthState.maxHealth) * 100,
+    
+    // Universal damage functions (preferred)
+    applyDamage,
+    applyDamageWithKnockback,
+    
+    // Legacy function (deprecated)
     takeDamage,
+    
+    // Healing and respawn
     heal,
     respawn,
     setMaxHealth,
-    // Regen modifier controls for items/buffs
+    
+    // Status effects
+    addStatusEffect,
+    removeStatusEffect,
+    hasStatusEffect,
+    activeEffectsRef,
+    
+    // Modifier context controls
+    setPlayerArmor,
+    setResistance,
+    addSteady,
+    setSteady,
+    modifierContextRef,
+    
+    // Regen modifier controls
     setRegenModifiers,
     resetRegenModifiers,
     regenModifiersRef,
-    // Ref for direct access in frame loops
+    
+    // Refs for direct access in frame loops
     healthRef,
+    playerLevelRef,
   };
 }

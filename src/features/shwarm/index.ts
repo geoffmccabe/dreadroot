@@ -12,6 +12,8 @@ export type { ShwarmRendererHandle } from './components/ShwarmRenderer';
 
 // Hooks
 export { usePlayerHealth } from './hooks/usePlayerHealth';
+export { calculateMaxHealthForLevel } from './hooks/usePlayerHealth';
+export type { PlayerHealthState, RegenModifiers } from './hooks/usePlayerHealth';
 export { useShwarmDefinitions, getDefinitionByTier } from './hooks/useShwarmDefinitions';
 export { useShwarmSystem } from './hooks/useShwarmSystem';
 export type { ShwarmInstance } from './hooks/useShwarmSystem';

@@ -139,7 +139,8 @@ export function Fortress() {
     currentHealth, 
     maxHealth, 
     isDead, 
-    takeDamage, 
+    takeDamage,
+    applyDamageWithKnockback,
     respawn,
     healthRef 
   } = usePlayerHealth();
@@ -952,6 +953,7 @@ export function Fortress() {
           seedDefinitions={seedDefinitions}
           plantedTrees={plantedTrees}
           healthRef={healthRef}
+          applyDamageWithKnockback={applyDamageWithKnockback}
           takeDamage={takeDamage}
           shwarmDefinitions={shwarmDefinitions}
           shnakeDefinitions={shnakeDefinitions}

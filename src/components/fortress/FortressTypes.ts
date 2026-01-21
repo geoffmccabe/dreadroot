@@ -93,11 +93,17 @@ export interface SceneProps {
   skyTextureUrl?: string | null;
   // Seed definitions for tree planting
   seedDefinitions?: Array<{ id: string; tier: number; trunk_texture_url: string | null }>;
-  // Knockback function for shwarm damage
-  applyKnockback?: (direction: THREE.Vector3, distance: number) => void;
   // Player health ref for combat
   healthRef?: React.MutableRefObject<{ currentHealth: number; maxHealth: number; isDead: boolean }>;
-  // Take damage callback
+  // Universal damage function (processes through damage pipeline with STEADY, armor, etc.)
+  applyDamageWithKnockback?: (
+    damage: number,
+    knockbackDir: THREE.Vector3,
+    knockbackForce: number,
+    source: { type: 'enemy' | 'environment' | 'player'; entityId?: string; entityName?: string },
+    damageType?: string
+  ) => { blocked: boolean; died?: boolean; finalDamage?: number };
+  // Legacy take damage callback (deprecated - use applyDamageWithKnockback)
   takeDamage?: (amount: number, knockbackDir?: THREE.Vector3, knockbackDistance?: number) => { died: boolean };
   // Shwarm system
   shwarmDefinitions?: ShwarmDefinition[];
