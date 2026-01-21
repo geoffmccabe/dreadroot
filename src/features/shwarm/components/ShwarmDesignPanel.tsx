@@ -39,8 +39,63 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
   
   const textureInputRef = useRef<HTMLInputElement>(null);
 
+  // Global sound settings state
+  const [soundVolume, setSoundVolume] = useState(100);
+  const [ambientSoundUrl, setAmbientSoundUrl] = useState<string | null>(null);
+  const [deathSoundUrl, setDeathSoundUrl] = useState<string | null>(null);
+
   // Current definition being edited
   const currentDef = definitions.find(d => d.tier === selectedTier);
+
+  // Load sound settings
+  useEffect(() => {
+    const loadSoundSettings = async () => {
+      const { data } = await supabase
+        .from('enemy_sound_settings')
+        .select('*')
+        .eq('enemy_type', 'shwarm')
+        .single();
+      
+      if (data) {
+        setSoundVolume(data.volume);
+        setAmbientSoundUrl(data.ambient_sound_url);
+        setDeathSoundUrl(data.death_sound_url);
+      }
+    };
+    loadSoundSettings();
+  }, []);
+
+  // Save sound settings
+  const saveSoundSettings = async (key: string, value: any) => {
+    const { error } = await supabase
+      .from('enemy_sound_settings')
+      .update({ [key]: value, updated_at: new Date().toISOString() })
+      .eq('enemy_type', 'shwarm');
+    
+    if (error) {
+      toast({ title: 'Failed to save sound setting', variant: 'destructive' });
+    }
+  };
+
+  const handleSoundChange = (key: string, url: string | null) => {
+    if (key === 'ambient') {
+      setAmbientSoundUrl(url);
+      saveSoundSettings('ambient_sound_url', url);
+    } else if (key === 'death') {
+      setDeathSoundUrl(url);
+      saveSoundSettings('death_sound_url', url);
+    }
+  };
+
+  const handleVolumeChange = (volume: number) => {
+    setSoundVolume(volume);
+    saveSoundSettings('volume', volume);
+  };
+
+  const soundConfigs: SoundConfig[] = [
+    { key: 'ambient', label: 'Ambient Sound', url: ambientSoundUrl },
+    { key: 'death', label: 'Death Sound', url: deathSoundUrl },
+  ];
 
   // Fetch all shwarm definitions
   useEffect(() => {
@@ -213,12 +268,22 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
   }
 
   return (
-    <div className={`grid grid-cols-12 gap-4 ${className}`}>
-      {/* Tier Selector - Left Column */}
-      <div className="col-span-3">
-        <Card className="p-3">
-          <h3 className="font-semibold mb-3 text-sm">Select Tier</h3>
-          <ScrollArea className="h-[500px]">
+    <div className={`flex flex-col gap-4 ${className}`}>
+      {/* Global Sound Settings Panel */}
+      <EnemySoundSettings
+        enemyType="shwarm"
+        sounds={soundConfigs}
+        volume={soundVolume}
+        onSoundChange={handleSoundChange}
+        onVolumeChange={handleVolumeChange}
+      />
+      
+      <div className="grid grid-cols-12 gap-4">
+        {/* Tier Selector - Left Column */}
+        <div className="col-span-3">
+          <Card className="p-3">
+            <h3 className="font-semibold mb-3 text-sm">Select Tier</h3>
+            <ScrollArea className="h-[500px]">
             <div className="space-y-1 pr-2">
               {definitions.map(def => {
                 const isNew = def.id.startsWith('temp-');
@@ -496,6 +561,7 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
             </div>
           )}
         </Card>
+      </div>
       </div>
     </div>
   );
