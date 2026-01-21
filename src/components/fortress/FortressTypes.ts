@@ -162,8 +162,6 @@ export interface FirstPersonControlsProps {
   blocksByTypeAndUser: React.MutableRefObject<Map<string, PlacedBlock[]>>;
   // Phase 2B: Chunk loading callback
   updatePlayerPosition?: (worldX: number, worldZ: number) => void;
-  // Knockback function for shwarm damage
-  applyKnockback?: (direction: THREE.Vector3, distance: number) => void;
   // Respawn position - when set, teleport player to this position
   respawnPosition?: THREE.Vector3 | null;
   onRespawnComplete?: () => void;
