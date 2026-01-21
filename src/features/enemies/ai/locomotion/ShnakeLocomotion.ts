@@ -3,6 +3,7 @@
  * 
  * Phase 4: Extracted from useShnakeMovement to be called by ShnakeAdapter.applyResult
  * Phase 6.1: Optimized for zero-allocation hot path
+ * Phase 7: Real physics with configurable gravity
  */
 
 import * as THREE from 'three';
@@ -12,6 +13,8 @@ import type { PlantedTree } from '@/features/trees/types';
 import type { BehaviorResult } from '../types';
 
 const CHUNK_SIZE = 16;
+const GRAVITY = 9.8; // blocks per second squared (matching player gravity)
+const GROUND_LEVEL = 0; // Minimum Y position (ground)
 
 // Pre-allocated Box3 for head collider creation (reused, then cloned only on assignment)
 const _tempBox = new THREE.Box3();
@@ -101,6 +104,8 @@ export interface ShnakeLocomotionContext {
   canGoToGround: boolean;
   /** Tier of the shnake - used for extended range calculation */
   tier: number;
+  /** Delta time in seconds for physics calculations */
+  deltaSeconds: number;
   onHeadMoved?: (shnakeId: string) => void;
 }
 
@@ -176,9 +181,153 @@ function isCellOccupiedByWorld(x: number, y: number, z: number): boolean {
   const nearbyCount = collisionGrid.getNearby(x + 0.5, z + 0.5, 2);
   for (let i = 0; i < nearbyCount; i++) {
     const box = collisionGrid.nearbyResult[i] as THREE.Box3;
+    // Skip shnake segments for world collision check
+    if ((box as any).isShnakeSegment) continue;
     if (_cellBox.intersectsBox(box)) return true;
   }
   return false;
+}
+
+/**
+ * Check if cell has support below (ground or block)
+ * Returns true if the shnake can stand at this position
+ */
+function hasSupportBelow(x: number, y: number, z: number): boolean {
+  // On ground level - always supported
+  if (y <= GROUND_LEVEL) return true;
+  
+  // Check for block directly below
+  return isCellOccupiedByWorld(x, y - 1, z);
+}
+
+/**
+ * Apply gravity physics to a shnake.
+ * Accelerates velocityY and moves the entire shnake down if unsupported.
+ * 
+ * @param shnake The shnake instance
+ * @param ctx Locomotion context with deltaSeconds and gravity config
+ * @returns true if the shnake moved due to gravity (skip horizontal move this tick)
+ */
+function applyGravityPhysics(
+  shnake: ShnakeInstance,
+  ctx: ShnakeLocomotionContext
+): boolean {
+  // Get gravity multiplier from AI config (default 1.0 = full gravity)
+  const defAiConfig = (shnake.definition as { ai_config?: { gravityMultiplier?: number } }).ai_config;
+  const gravityMultiplier = defAiConfig?.gravityMultiplier ?? 1.0;
+  
+  // No gravity = floating (like on trees)
+  if (gravityMultiplier === 0) {
+    shnake.velocityY = 0;
+    return false;
+  }
+  
+  const segs = shnake.segments;
+  const cols = shnake.colliders;
+  const head = segs[0];
+  
+  // Check if shnake is on a tree (any segment touching tree block)
+  let onTree = false;
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
+      onTree = true;
+      break;
+    }
+  }
+  
+  // If on tree, no gravity applies
+  if (onTree) {
+    shnake.velocityY = 0;
+    return false;
+  }
+  
+  // Check if head has support below
+  if (hasSupportBelow(head.x, head.y, head.z)) {
+    // On ground or block - reset velocity
+    shnake.velocityY = 0;
+    return false;
+  }
+  
+  // Apply gravity acceleration: v = v + g * dt
+  const dt = ctx.deltaSeconds;
+  shnake.velocityY -= GRAVITY * gravityMultiplier * dt;
+  
+  // Calculate fall distance this tick
+  // Using simple integration: distance = v * dt (already accumulated velocity)
+  // We move in discrete blocks, so accumulate until we need to move a full block
+  const fallDistance = Math.abs(shnake.velocityY * dt);
+  
+  // If we haven't accumulated enough to fall a full block, wait
+  if (fallDistance < 0.5) {
+    return false;
+  }
+  
+  // Try to move the entire shnake down by 1 block
+  const newY = head.y - 1;
+  
+  // Can't go below ground
+  if (newY < GROUND_LEVEL) {
+    // Hit ground - clamp and stop falling
+    const groundY = GROUND_LEVEL;
+    
+    // Move all segments to ground level if not already there
+    let needsGroundSnap = false;
+    for (const seg of segs) {
+      if (seg.y > groundY) {
+        needsGroundSnap = true;
+        break;
+      }
+    }
+    
+    if (needsGroundSnap) {
+      // Snap entire shnake to ground level
+      const yOffset = head.y - groundY;
+      for (let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        const oldCollider = cols[i];
+        if (oldCollider) collisionGrid.remove(oldCollider);
+        
+        seg.y = Math.max(groundY, seg.y - yOffset);
+        
+        const newCollider = aabbForCell(seg.x, seg.y, seg.z);
+        (newCollider as any).isShnakeSegment = true;
+        (newCollider as any).shnakeId = shnake.id;
+        collisionGrid.insert(newCollider);
+        cols[i] = newCollider;
+      }
+    }
+    
+    shnake.velocityY = 0;
+    return true;
+  }
+  
+  // Check if the new head position is blocked
+  if (isCellOccupiedByWorld(head.x, newY, head.z)) {
+    // Hit a block below - stop falling
+    shnake.velocityY = 0;
+    return false;
+  }
+  
+  // Move entire shnake down by 1 block (shift all segments)
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    const oldCollider = cols[i];
+    if (oldCollider) collisionGrid.remove(oldCollider);
+    
+    seg.y -= 1;
+    
+    const newCollider = aabbForCell(seg.x, seg.y, seg.z);
+    (newCollider as any).isShnakeSegment = true;
+    (newCollider as any).shnakeId = shnake.id;
+    collisionGrid.insert(newCollider);
+    cols[i] = newCollider;
+  }
+  
+  // Consumed some velocity
+  shnake.velocityY *= 0.8; // Some damping
+  
+  return true; // Moved due to gravity, skip horizontal move
 }
 
 /**
@@ -194,6 +343,14 @@ export function applyShnakeMove(
   result: Extract<BehaviorResult, { kind: 'move' }>,
   ctx: ShnakeLocomotionContext
 ): void {
+  // PHASE 1: Apply gravity physics first
+  // If shnake is falling, skip horizontal movement this tick
+  const fellThisTick = applyGravityPhysics(shnake, ctx);
+  if (fellThisTick) {
+    return; // Gravity consumed this tick's movement
+  }
+  
+  // PHASE 2: Normal horizontal movement
   const segs = shnake.segments;
   const cols = shnake.colliders;
   const headSeg = segs[0];

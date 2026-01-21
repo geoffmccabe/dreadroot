@@ -340,6 +340,7 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         treeBlocksByTier: locomotionContext.treeBlocksByTier,
         canGoToGround,
         tier: shnake.tier,
+        deltaSeconds: (shared?.deltaMs ?? 100) / 1000,
         onHeadMoved: locomotionContext.onHeadMoved,
       };
       

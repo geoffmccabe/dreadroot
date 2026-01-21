@@ -327,6 +327,7 @@ export function useShnakeSystem({
       lastAttackAt: 0,
       colliders,
       isActive: true,
+      velocityY: 0, // Start with no vertical velocity
     };
 
     shnakesRef.current = [...shnakesRef.current, inst];

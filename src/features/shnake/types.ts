@@ -25,6 +25,8 @@ export interface ShnakeDefinitionRow {
     angrySpeedMultiplier?: number;
     angryDurationMs?: number;
     attackCooldownMs?: number;
+    /** Gravity multiplier: 0 = float, 0.5 = slow fall, 1.0 = full gravity (9.8 m/s²) */
+    gravityMultiplier?: number;
     custom?: Record<string, unknown>;
   } | null;
 }
@@ -53,6 +55,8 @@ export interface ShnakeDefinition {
     angrySpeedMultiplier?: number;
     angryDurationMs?: number;
     attackCooldownMs?: number;
+    /** Gravity multiplier: 0 = float, 0.5 = slow fall, 1.0 = full gravity (9.8 m/s²) */
+    gravityMultiplier?: number;
     custom?: Record<string, unknown>;
   } | null;
 }
@@ -80,4 +84,6 @@ export interface ShnakeInstance {
   /** Collision boxes for each segment, same order as segments */
   colliders: THREE.Box3[];
   isActive: boolean;
+  /** Vertical velocity for physics (blocks per second) */
+  velocityY: number;
 }

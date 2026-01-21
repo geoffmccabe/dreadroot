@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Slider } from '@/components/ui/slider';
 import { Upload, Save, Bug, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -162,11 +163,29 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
     setHasChanges(true);
   };
 
+  // Helper to update ai_config sub-fields
+  const updateAiConfig = (field: string, value: any) => {
+    setDefinitions(prev =>
+      prev.map(d => {
+        if (d.tier !== selectedTier) return d;
+        const existingConfig = d.ai_config || {};
+        return { ...d, ai_config: { ...existingConfig, [field]: value } };
+      })
+    );
+    setHasChanges(true);
+  };
+
   const saveDef = async () => {
     if (!currentDef) return;
     setIsSaving(true);
     try {
       const isNew = currentDef.id.startsWith('temp-');
+      
+      // Cast ai_config to JSON-compatible format for Supabase
+      const aiConfigForDb = currentDef.ai_config 
+        ? JSON.parse(JSON.stringify(currentDef.ai_config))
+        : null;
+      
       const payload = {
         tier: currentDef.tier,
         name: currentDef.name,
@@ -180,6 +199,7 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
         speed: currentDef.speed,
         spawn_chance_per_minute: currentDef.spawn_chance_per_minute,
         max_spawn_per_tree: currentDef.max_spawn_per_tree,
+        ai_config: aiConfigForDb,
       };
 
       if (isNew) {
@@ -474,6 +494,29 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
                     value={currentDef.max_spawn_per_tree}
                     onChange={e => updateDef('max_spawn_per_tree', parseInt(e.target.value || '0', 10))}
                   />
+                </div>
+              </div>
+
+              {/* AI Physics Section */}
+              <div className="border-t pt-4 mt-4">
+                <h4 className="font-medium mb-3">Physics</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Gravity Multiplier</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {(currentDef.ai_config?.gravityMultiplier ?? 1.0).toFixed(1)}x
+                    </span>
+                  </div>
+                  <Slider
+                    value={[currentDef.ai_config?.gravityMultiplier ?? 1.0]}
+                    onValueChange={([v]) => updateAiConfig('gravityMultiplier', v)}
+                    min={0}
+                    max={2}
+                    step={0.1}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    0 = float (no gravity), 1 = normal, 2 = heavy
+                  </p>
                 </div>
               </div>
 
