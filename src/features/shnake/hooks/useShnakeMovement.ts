@@ -145,20 +145,10 @@ export function useShnakeMovement({
         if (!tree) continue;
 
         const b = treeBounds(tree);
-        // Only attack if player is within this tree's bounds ("same tree")
+        // Shnake always pursues player - no longer restricted to tree bounds
         const px = tmpPlayer.current.x;
         const py = tmpPlayer.current.y;
         const pz = tmpPlayer.current.z;
-        const playerInTree = px >= b.minX && px <= b.maxX && py >= b.minY && py <= b.maxY && pz >= b.minZ && pz <= b.maxZ;
-        
-        // DEBUG: Log why shnake isn't moving (throttled)
-        if (!playerInTree && now - (s as any).lastBoundsLog > 2000) {
-          (s as any).lastBoundsLog = now;
-          console.log(`[Shnake Move] Player NOT in tree bounds. Player: (${px.toFixed(1)}, ${py.toFixed(1)}, ${pz.toFixed(1)}), Bounds: X[${b.minX},${b.maxX}] Y[${b.minY},${b.maxY}] Z[${b.minZ},${b.maxZ}]`);
-        }
-        
-        if (!playerInTree) continue;
-        if (!playerInTree) continue;
 
         // Attack if adjacent
         const head = s.segments[0];

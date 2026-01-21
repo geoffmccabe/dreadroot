@@ -34,17 +34,29 @@ export function ShnakeRenderer({ shnakesRef }: Props) {
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
 
   const headMaterials = useMemo(() => {
-    // BoxGeometry face order: +x,-x,+y,-y,+z,-z (varies by Three version but groups align)
-    // We want face texture on +z (front). We'll just apply faceTex to one group, fallback to headTex.
-    const baseMap = headTex || null;
-    const faceMap = faceTex || baseMap;
-    const mk = (map: THREE.Texture | null) => new THREE.MeshLambertMaterial({ map: map || undefined });
-    return [mk(baseMap), mk(baseMap), mk(baseMap), mk(baseMap), mk(faceMap), mk(baseMap)];
-  }, [headTex, faceTex]);
+    // BoxGeometry face order: +x,-x,+y,-y,+z,-z
+    // Use bright fallback colors when no textures exist so shnakes are visible
+    const hasHeadTex = headTex && headUrl !== BLANK;
+    const hasFaceTex = faceTex && faceUrl !== BLANK;
+    
+    const baseMat = hasHeadTex 
+      ? new THREE.MeshLambertMaterial({ map: headTex })
+      : new THREE.MeshLambertMaterial({ color: 0x22cc44 }); // Green fallback for head
+    
+    const faceMat = hasFaceTex
+      ? new THREE.MeshLambertMaterial({ map: faceTex })
+      : new THREE.MeshLambertMaterial({ color: 0xff4444 }); // Red fallback for face
+    
+    // Face is on +z (index 4)
+    return [baseMat, baseMat, baseMat, baseMat, faceMat, baseMat];
+  }, [headTex, faceTex, headUrl, faceUrl, BLANK]);
 
   const bodyMaterial = useMemo(() => {
-    return new THREE.MeshLambertMaterial({ map: bodyTex || undefined });
-  }, [bodyTex]);
+    const hasBodyTex = bodyTex && bodyUrl !== BLANK;
+    return hasBodyTex
+      ? new THREE.MeshLambertMaterial({ map: bodyTex })
+      : new THREE.MeshLambertMaterial({ color: 0x44aa44 }); // Slightly darker green for body
+  }, [bodyTex, bodyUrl, BLANK]);
 
   // Update instances each frame (cheap: just matrix updates)
   useFrame(() => {
