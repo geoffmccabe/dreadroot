@@ -40,6 +40,7 @@ import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
+import { useShnakeSystem, useShnakeMovement, ShnakeRenderer } from '@/features/shnake';
 
 // Wisp particles using InstancedMesh for performance (no React re-renders per particle)
 const MAX_WISP_PARTICLES = 50;
@@ -392,6 +393,9 @@ export function FortressScene({
     isEnabled: true,
     onPlayerHit: handleShwarmPlayerHit,
   });
+  
+  // Shnake system - placeholder ref (system needs plantedTrees prop which isn't passed yet)
+  const shnakesRef = useRef<any[]>([]);
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
   
@@ -1263,6 +1267,9 @@ export function FortressScene({
       
       {/* Shwarm Renderer */}
       <ShwarmRenderer ref={shwarmRendererRef} shwarms={shwarms} />
+
+      {/* Shnake Renderer */}
+      <ShnakeRenderer shnakesRef={shnakesRef} />
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>

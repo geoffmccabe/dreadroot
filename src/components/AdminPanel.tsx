@@ -25,6 +25,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { SeedDesignPanel } from '@/features/trees';
 import { ShwarmDesignPanel } from '@/features/shwarm';
+import { ShnakeDesignPanel } from '@/features/shnake';
 import { WeaponsPanel } from '@/components/WeaponsPanel';
 
 interface WaterfallControlsProps {
@@ -2420,7 +2421,10 @@ export function AdminPanel({
 
           <TabsContent value="enemies" className="mt-4 flex-1 overflow-hidden">
             <ScrollArea className="h-[calc(90vh-180px)] pr-4">
-              <ShwarmDesignPanel />
+              <div className="space-y-6">
+                <ShwarmDesignPanel />
+                <ShnakeDesignPanel />
+              </div>
             </ScrollArea>
           </TabsContent>
 
