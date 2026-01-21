@@ -34,7 +34,9 @@ export function createAudioRefs() {
     playerHit: new Audio('/wooden_thud_sound.mp3'),
     shwarmGroupKilled: new Audio('/yay_sound.mp3'),
     // Tree sounds
-    axeChop: new Audio('/axe_chop.mp3')
+    axeChop: new Audio('/axe_chop.mp3'),
+    // Bullet ricochet sound
+    ricochet: new Audio('/ricochet_sound.mp3')
   };
 }
 
