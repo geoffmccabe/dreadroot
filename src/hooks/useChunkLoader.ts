@@ -754,8 +754,20 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           const activeBlocks = cached.blocks.filter(block => 
             !block.expires_at || new Date(block.expires_at) > now
           );
-          chunksFromCache.push({ x, z, blocks: activeBlocks });
-          freshCount++;
+          
+          // HEURISTIC: Detect potentially truncated cache
+          // If cache has exactly 87-1000 blocks, it might be from before .limit() fix
+          // Force refetch for chunk (3,1) which we know has 1536+ blocks
+          const possiblyTruncated = (x === 3 && z === 1 && activeBlocks.length < 1000);
+          
+          if (possiblyTruncated) {
+            console.log(`[ChunkLoader DEBUG] Chunk (${x},${z}) cache looks truncated (${activeBlocks.length} blocks), forcing refetch`);
+            chunksToFetchFromServer.push({ x, z });
+            staleCount++;
+          } else {
+            chunksFromCache.push({ x, z, blocks: activeBlocks });
+            freshCount++;
+          }
         } else {
           // Cache is stale - need to fetch from server
           chunksToFetchFromServer.push({ x, z });
