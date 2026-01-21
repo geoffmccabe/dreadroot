@@ -13,8 +13,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { EnemyManager } from '../EnemyManager';
-import { ShnakeAdapter, type ShnakeWithAI, setShnakeLocomotionContext } from '../adapters/ShnakeAdapter';
-import { ShwarmAdapter, type ShwarmWithAI, setShwarmLocomotionContext } from '../adapters/ShwarmAdapter';
+import { ShnakeAdapter, type ShnakeWithAI, setShnakeLocomotionContext, cleanupShnakeResources } from '../adapters/ShnakeAdapter';
+import { ShwarmAdapter, type ShwarmWithAI, setShwarmLocomotionContext, cleanupShwarmResources } from '../adapters/ShwarmAdapter';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShnakeInstance } from '@/features/shnake/types';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
@@ -67,8 +67,10 @@ export function useEnemyAI({
   const registeredShnakesRef = useRef<Set<string>>(new Set());
   const registeredShwarmsRef = useRef<Set<string>>(new Set());
   
-  // Reusable set for sync operations (avoids new Set() allocation each sync)
-  const tempIdsRef = useRef<Set<string>>(new Set());
+  // Separate reusable sets for sync operations (avoids new Set() allocation each sync)
+  // Using separate sets prevents race condition when both sync at same interval
+  const tempShnakeIdsRef = useRef<Set<string>>(new Set());
+  const tempShwarmIdsRef = useRef<Set<string>>(new Set());
   
   // Update locomotion context when deps change
   useEffect(() => {
@@ -90,10 +92,10 @@ export function useEnemyAI({
   }, [isEnabled, aiControlled, plantedTrees, blocksRef, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved]);
   
   // Stable sync function for shnakes (avoids stale closures)
-  // OPTIMIZED: Reuses tempIds set instead of allocating new Set each call
+  // OPTIMIZED: Reuses tempShnakeIds set instead of allocating new Set each call
   const syncShnakes = useCallback(() => {
     const shnakes = shnakesRef.current ?? [];
-    const tempIds = tempIdsRef.current;
+    const tempIds = tempShnakeIdsRef.current;
     tempIds.clear();
     
     // Build current IDs without allocation
@@ -111,9 +113,10 @@ export function useEnemyAI({
       }
     }
     
-    // Unregister removed shnakes
+    // Unregister removed shnakes and cleanup resources
     for (const id of registered) {
       if (!tempIds.has(id)) {
+        cleanupShnakeResources(id);
         EnemyManager.unregister(id);
         registered.delete(id);
       }
@@ -121,10 +124,10 @@ export function useEnemyAI({
   }, [shnakesRef]);
   
   // Stable sync function for shwarms (avoids stale closures)
-  // OPTIMIZED: Reuses tempIds set instead of allocating new Set each call
+  // OPTIMIZED: Reuses tempShwarmIds set instead of allocating new Set each call
   const syncShwarms = useCallback(() => {
     const shwarms = shwarmsRef.current ?? [];
-    const tempIds = tempIdsRef.current;
+    const tempIds = tempShwarmIdsRef.current;
     tempIds.clear();
     
     // Build current IDs without allocation
@@ -142,9 +145,14 @@ export function useEnemyAI({
       }
     }
     
-    // Unregister removed shwarms
+    // Unregister removed shwarms and cleanup resources
     for (const id of registered) {
       if (!tempIds.has(id)) {
+        // Find shwarm to get its blocks for cleanup
+        const shwarm = shwarms.find(s => s.id === id);
+        if (shwarm) {
+          cleanupShwarmResources(id, shwarm.blocks);
+        }
         EnemyManager.unregister(id);
         registered.delete(id);
       }

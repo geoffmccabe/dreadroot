@@ -16,6 +16,10 @@ import { SHWARM_BLOCK_SIZE, GROUND_LEVEL } from '@/features/shwarm/constants';
 const _testBox = new THREE.Box3();
 const _testMin = new THREE.Vector3();
 const _testMax = new THREE.Vector3();
+const _toTarget = new THREE.Vector3();
+const _toCenter = new THREE.Vector3();
+const _centerOfMass = new THREE.Vector3();
+const _newPos = new THREE.Vector3();
 
 /**
  * Block target data maintained by the locomotion system.
@@ -157,18 +161,18 @@ export function applyShwarmMove(
   // Random range scales with tier
   const randomRange = 2 + tier;
 
-  // Calculate center of mass for this shwarm
-  const centerOfMass = new THREE.Vector3(0, 0, 0);
+  // Calculate center of mass for this shwarm (reuse pre-allocated vector)
+  _centerOfMass.set(0, 0, 0);
   let aliveCount = 0;
   for (const block of shwarm.blocks) {
     if (!block.isAlive) continue;
     const target = blockTargets.get(block.id);
     const pos = target?.targetPosition ?? block.position;
-    centerOfMass.add(pos);
+    _centerOfMass.add(pos);
     aliveCount++;
   }
   if (aliveCount > 0) {
-    centerOfMass.divideScalar(aliveCount);
+    _centerOfMass.divideScalar(aliveCount);
   }
 
   const MAX_CENTER_PULL_MULTIPLIER = 3.0;
@@ -189,15 +193,15 @@ export function applyShwarmMove(
 
     const currentPos = blockTarget.targetPosition;
 
-    // Direction toward target (from AI)
-    const toTarget = new THREE.Vector3(targetX - currentPos.x, 0, targetZ - currentPos.z);
-    if (toTarget.length() < 0.5) continue;
-    toTarget.normalize();
+    // Direction toward target (from AI) - reuse pre-allocated vector
+    _toTarget.set(targetX - currentPos.x, 0, targetZ - currentPos.z);
+    if (_toTarget.length() < 0.5) continue;
+    _toTarget.normalize();
 
-    // Direction toward center of mass
-    const toCenter = new THREE.Vector3().subVectors(centerOfMass, currentPos);
-    toCenter.y = 0;
-    const distToCenter = toCenter.length();
+    // Direction toward center of mass - reuse pre-allocated vector
+    _toCenter.subVectors(_centerOfMass, currentPos);
+    _toCenter.y = 0;
+    const distToCenter = _toCenter.length();
 
     const centerPullStrength = Math.min(
       MAX_CENTER_PULL_MULTIPLIER,
@@ -205,9 +209,9 @@ export function applyShwarmMove(
     );
 
     if (distToCenter > 0.1) {
-      toCenter.normalize();
+      _toCenter.normalize();
     } else {
-      toCenter.set(0, 0, 0);
+      _toCenter.set(0, 0, 0);
     }
 
     // Random offset
@@ -215,37 +219,37 @@ export function applyShwarmMove(
     const randY = Math.floor(rng() * 2);
     const randZ = Math.floor((rng() - 0.5) * 2 * (randomRange + 1));
 
-    // Calculate new position
-    const newPos = new THREE.Vector3().copy(currentPos);
-    newPos.x += toTarget.x * MOVE_TOWARDS_PLAYER + toCenter.x * centerPullStrength + randX;
-    newPos.z += toTarget.z * MOVE_TOWARDS_PLAYER + toCenter.z * centerPullStrength + randZ;
-    newPos.y += randY;
+    // Calculate new position - reuse pre-allocated vector
+    _newPos.copy(currentPos);
+    _newPos.x += _toTarget.x * MOVE_TOWARDS_PLAYER + _toCenter.x * centerPullStrength + randX;
+    _newPos.z += _toTarget.z * MOVE_TOWARDS_PLAYER + _toCenter.z * centerPullStrength + randZ;
+    _newPos.y += randY;
 
     // Gravity
-    if (newPos.y > GROUND_LEVEL + 0.5) {
-      newPos.y -= 1;
+    if (_newPos.y > GROUND_LEVEL + 0.5) {
+      _newPos.y -= 1;
     }
-    newPos.y = Math.max(GROUND_LEVEL, newPos.y);
+    _newPos.y = Math.max(GROUND_LEVEL, _newPos.y);
 
     // Validate move
-    const collidesWorld = checkWorldCollision(newPos);
-    const tooClose = isTooCloseToOthers(newPos, block, allBlocks, blockTargets, MIN_SHWARM_SPACING);
+    const collidesWorld = checkWorldCollision(_newPos);
+    const tooClose = isTooCloseToOthers(_newPos, block, allBlocks, blockTargets, MIN_SHWARM_SPACING);
 
     if (!collidesWorld && !tooClose) {
-      blockTarget.targetPosition.copy(newPos);
+      blockTarget.targetPosition.copy(_newPos);
       blockTarget.visualOffset.set((rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3);
     } else if (tooClose && !collidesWorld) {
       // Try stacking
-      newPos.y = currentPos.y + 0.5;
-      if (!isTooCloseToOthers(newPos, block, allBlocks, blockTargets, MIN_SHWARM_SPACING) && !checkWorldCollision(newPos)) {
-        blockTarget.targetPosition.copy(newPos);
+      _newPos.y = currentPos.y + 0.5;
+      if (!isTooCloseToOthers(_newPos, block, allBlocks, blockTargets, MIN_SHWARM_SPACING) && !checkWorldCollision(_newPos)) {
+        blockTarget.targetPosition.copy(_newPos);
         blockTarget.visualOffset.set((rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3);
       }
     } else if (collidesWorld) {
       // Try step-up
-      newPos.y = currentPos.y + 1;
-      if (!checkWorldCollision(newPos) && !isTooCloseToOthers(newPos, block, allBlocks, blockTargets, MIN_SHWARM_SPACING)) {
-        blockTarget.targetPosition.copy(newPos);
+      _newPos.y = currentPos.y + 1;
+      if (!checkWorldCollision(_newPos) && !isTooCloseToOthers(_newPos, block, allBlocks, blockTargets, MIN_SHWARM_SPACING)) {
+        blockTarget.targetPosition.copy(_newPos);
         blockTarget.visualOffset.set((rng() - 0.5) * 0.3, 0, (rng() - 0.5) * 0.3);
       }
     }
