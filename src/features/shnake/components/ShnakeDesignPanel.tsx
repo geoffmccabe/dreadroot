@@ -334,7 +334,7 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-3">
           <div className="border rounded-lg p-3 bg-muted/30">
-            <h3 className="font-semibold mb-3 text-base">Shnakes</h3>
+            <h3 className="font-semibold mb-3 text-2xl">Shnakes</h3>
             <ScrollArea className="h-[500px]">
             <div className="space-y-1 pr-2">
               {definitions.map(def => (

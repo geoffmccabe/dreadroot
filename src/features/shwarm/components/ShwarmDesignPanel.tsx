@@ -273,7 +273,7 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
         {/* Tier Selector - Left Column */}
         <div className="col-span-3">
           <div className="border rounded-lg p-3 bg-muted/30">
-            <h3 className="font-semibold mb-3 text-base">Shwarms</h3>
+            <h3 className="font-semibold mb-3 text-2xl">Shwarms</h3>
             <ScrollArea className="h-[500px]">
             <div className="space-y-1 pr-2">
               {definitions.map(def => {
