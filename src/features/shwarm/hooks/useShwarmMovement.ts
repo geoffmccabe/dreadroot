@@ -5,6 +5,9 @@ import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
 import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE, MIN_SHWARM_SPACING, MOVEMENT_PHASE_MS, GRAVITY_FALL, GROUND_LEVEL } from '../constants';
+
+// Pre-computed squared radius for O(1) distance checks (no sqrt)
+const PLAYER_HIT_RADIUS_SQ = PLAYER_HIT_RADIUS * PLAYER_HIT_RADIUS;
 import { playSpatialSound, SHWARM_SOUNDS } from '@/lib/spatialAudio';
 
 // Maximum center pull multiplier (when far from center)
@@ -222,18 +225,21 @@ export function useShwarmMovement({
             collisionGrid.update(target.collider);
           }
 
-          // Continuous player collision check (not just during phases)
-          const distToPlayer = block.position.distanceTo(playerPos);
+          // Continuous player collision check (squared distance - no sqrt)
+          const dx = block.position.x - playerPos.x;
+          const dy = block.position.y - playerPos.y;
+          const dz = block.position.z - playerPos.z;
+          const distSq = dx * dx + dy * dy + dz * dz;
           
-          if (distToPlayer < PLAYER_HIT_RADIUS && onPlayerHit) {
+          if (distSq < PLAYER_HIT_RADIUS_SQ && onPlayerHit) {
             if (!block.lastHitPlayerAt || now - block.lastHitPlayerAt > PLAYER_HIT_DEBOUNCE_MS) {
               block.lastHitPlayerAt = now;
               
               // Knockback force: 1 + tier
               const knockbackForce = 1 + tier;
               
-              // Direction: from block to player
-              const knockbackDir = _toPlayer.subVectors(playerPos, block.position).normalize();
+              // Direction: from block to player (reuse _toPlayer, negate dx/dy/dz)
+              const knockbackDir = _toPlayer.set(-dx, -dy, -dz).normalize();
               knockbackDir.y = 0.3;
               knockbackDir.normalize();
               
