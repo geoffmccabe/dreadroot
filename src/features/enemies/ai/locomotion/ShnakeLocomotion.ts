@@ -435,9 +435,14 @@ export function applyShnakeAttack(
   shnake.lastAttackAt = now;
 
   if (onPlayerHit) {
-    // Use actual direction to player (more accurate than AI-computed direction)
-    const len = Math.max(0.1, actualDist);
-    _attackDir.set(dx / len, dy / len, dz / len);
+    // HORIZONTAL knockback - use XZ plane direction only
+    // This prevents knocking player upward into the sky
+    const horizDist = Math.sqrt(dx * dx + dz * dz);
+    const dirX = horizDist > 0.1 ? dx / horizDist : 0;
+    const dirY = 0.1; // Minimal upward component
+    const dirZ = horizDist > 0.1 ? dz / horizDist : 1;
+    
+    _attackDir.set(dirX, dirY, dirZ).normalize();
     // Pass shnakeId so FortressScene can track revenge damage
     onPlayerHit(result.damage, result.knockback, _attackDir, shnake.id);
   }
