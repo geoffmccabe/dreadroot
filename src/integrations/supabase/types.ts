@@ -815,6 +815,51 @@ export type Database = {
         }
         Relationships: []
       }
+      shombie_definitions: {
+        Row: {
+          ai_config: Json | null
+          created_at: string | null
+          damage_per_hit: number
+          health: number
+          id: string
+          knockback_received: number
+          name: string
+          spawn_chance_per_minute: number
+          speed: number
+          texture_url: string | null
+          tier: number
+          updated_at: string | null
+        }
+        Insert: {
+          ai_config?: Json | null
+          created_at?: string | null
+          damage_per_hit?: number
+          health?: number
+          id?: string
+          knockback_received?: number
+          name?: string
+          spawn_chance_per_minute?: number
+          speed?: number
+          texture_url?: string | null
+          tier?: number
+          updated_at?: string | null
+        }
+        Update: {
+          ai_config?: Json | null
+          created_at?: string | null
+          damage_per_hit?: number
+          health?: number
+          id?: string
+          knockback_received?: number
+          name?: string
+          spawn_chance_per_minute?: number
+          speed?: number
+          texture_url?: string | null
+          tier?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       shwarm_blocks: {
         Row: {
           block_index: number
