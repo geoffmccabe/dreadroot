@@ -370,8 +370,39 @@ export function useShnakeMovement({
             }
           }
 
+          // BACKTRACK: If still stuck, allow head to move INTO a body segment 
+          // (causes the shnake to "fold" back on itself to escape dead ends)
+          if (scored.length === 0 && s.segments.length > 2) {
+            // Try to move toward segment[1] position - this "reverses" the shnake
+            const seg1 = s.segments[1];
+            for (const [dx, dy, dz] of candidates) {
+              const nx = headSeg.x + dx;
+              const ny = headSeg.y + dy;
+              const nz = headSeg.z + dz;
+              
+              // Only allow backtracking to segment[1] specifically
+              if (nx !== seg1.x || ny !== seg1.y || nz !== seg1.z) continue;
+              
+              // Must stay in tree chunks
+              if (!isInTreeChunks(tree, nx, nz)) continue;
+              
+              // For backtrack, we're "absorbing" seg1, so check if resulting body still touches tree
+              const remainingBody = s.segments.slice(2, -1);
+              const anyRemainingTouchesTree = remainingBody.some(
+                seg => isTouchingTree(s.tier, seg.x, seg.y, seg.z)
+              );
+              const headTouchesTree = isTouchingTree(s.tier, nx, ny, nz);
+              
+              if (headTouchesTree || anyRemainingTouchesTree || remainingBody.length === 0) {
+                // Valid backtrack - move head to seg1 position, effectively "shrinking" temporarily
+                scored.push({ dx, dy, dz, score: 1000 }); // Low priority but valid
+                break;
+              }
+            }
+          }
+
           if (scored.length === 0) {
-            // Truly stuck - pick new destination next tick
+            // Truly stuck - pick new destination and wait for next tick
             const dest = getRandomTreePosition(tree, s.tier);
             navState.destinationX = dest.x;
             navState.destinationY = dest.y;
