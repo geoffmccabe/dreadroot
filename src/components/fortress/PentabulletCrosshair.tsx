@@ -22,18 +22,17 @@ function CrosshairRing({
   
   return (
     <div 
-      className="absolute left-1/2 top-1/2 rounded-full pointer-events-none"
+      className="absolute left-1/2 top-1/2 rounded-full pointer-events-none border-2 border-[#ff2431]"
       style={{
         width: diameter,
         height: diameter,
         transform: `translate(-50%, -50%) rotate(${rotation + baseOffset}deg)`,
         opacity,
-        border: '2px solid rgb(239, 68, 68)', // red-500
       }}
     >
       {/* Top line */}
       <div 
-        className="absolute left-1/2 bg-red-500"
+        className="absolute left-1/2 bg-[#ff2431]"
         style={{
           width: lineThickness,
           height: lineLength,
@@ -43,7 +42,7 @@ function CrosshairRing({
       />
       {/* Bottom line */}
       <div 
-        className="absolute left-1/2 bg-red-500"
+        className="absolute left-1/2 bg-[#ff2431]"
         style={{
           width: lineThickness,
           height: lineLength,
@@ -53,7 +52,7 @@ function CrosshairRing({
       />
       {/* Left line */}
       <div 
-        className="absolute top-1/2 bg-red-500"
+        className="absolute top-1/2 bg-[#ff2431]"
         style={{
           width: lineLength,
           height: lineThickness,
@@ -63,7 +62,7 @@ function CrosshairRing({
       />
       {/* Right line */}
       <div 
-        className="absolute top-1/2 bg-red-500"
+        className="absolute top-1/2 bg-[#ff2431]"
         style={{
           width: lineLength,
           height: lineThickness,
@@ -78,20 +77,15 @@ function CrosshairRing({
 export function PentabulletCrosshair({ chargeProgress, baseMode }: PentabulletCrosshairProps) {
   const [rotation, setRotation] = useState(0);
   
-  // Calculate number of rings based on charge time
-  // Ring 1 (base): at 1.0s
-  // Ring 2: at 1.75s (1s + 0.75s) - X shape (45° offset)
-  // Ring 3: at 2.5s - + shape
-  // Ring 4: at 3.25s - X shape
-  // Ring 5: at 4.0s - + shape
-  const ringCount = chargeProgress >= 4.0 ? 5 :
-                    chargeProgress >= 3.25 ? 4 :
-                    chargeProgress >= 2.5 ? 3 :
-                    chargeProgress >= 1.75 ? 2 :
-                    chargeProgress >= 1.0 ? 1 : 0;
+  // Calculate number of additional rings based on charge time
+  // Ring timing: 1.0s, 1.75s, 2.5s, 3.25s, 4.0s (every 0.75s after 1s)
+  const additionalRingCount = chargeProgress >= 4.0 ? 4 :
+                              chargeProgress >= 3.25 ? 3 :
+                              chargeProgress >= 2.5 ? 2 :
+                              chargeProgress >= 1.75 ? 1 :
+                              chargeProgress >= 1.0 ? 0 : -1; // -1 means no extra rings yet
   
   const isFullyCharged = chargeProgress >= 5.0;
-  const isCharging = chargeProgress > 0;
   
   // Rotation animation when fully charged
   useEffect(() => {
@@ -118,7 +112,7 @@ export function PentabulletCrosshair({ chargeProgress, baseMode }: PentabulletCr
   // Don't show crosshair when inactive
   if (baseMode === 'inactive') return null;
   
-  // Base crosshair diameter
+  // Base crosshair diameter (matches original CSS)
   const baseDiameter = 14;
   
   return (
@@ -132,71 +126,63 @@ export function PentabulletCrosshair({ chargeProgress, baseMode }: PentabulletCr
         />
       )}
       
-      {/* Block mode crosshair */}
+      {/* Block placement mode - hand emoji (matches original CSS) */}
       {baseMode === 'building' && (
         <div 
-          className="absolute left-1/2 top-1/2 w-4 h-4 border-2 border-blue-500 rounded-full"
+          className="absolute left-1/2 top-1/2 w-6 h-6 flex items-center justify-center text-xl opacity-50"
           style={{ transform: 'translate(-50%, -50%)' }}
-        />
+        >
+          ✋
+        </div>
       )}
       
       {/* Planting mode crosshair */}
       {baseMode === 'planting' && (
         <div 
-          className="absolute left-1/2 top-1/2 w-4 h-4 border-2 border-green-500 rounded-full"
+          className="absolute left-1/2 top-1/2 w-4 h-4 border-2 border-green-500 rounded-full opacity-75"
           style={{ transform: 'translate(-50%, -50%)' }}
         />
       )}
       
       {/* Pentabullet charging rings - only in shooting mode */}
-      {baseMode === 'shooting' && ringCount >= 1 && (
+      {/* Ring 1: at 1.0s - 2x diameter, X shape (45° offset) */}
+      {baseMode === 'shooting' && additionalRingCount >= 0 && (
         <CrosshairRing 
           diameter={baseDiameter * 2} 
           rotation={isFullyCharged ? -rotation : 0} 
-          baseOffset={45} // X shape
+          baseOffset={45}
           opacity={0.9}
         />
       )}
       
-      {baseMode === 'shooting' && ringCount >= 2 && (
+      {/* Ring 2: at 1.75s - 4x diameter, + shape */}
+      {baseMode === 'shooting' && additionalRingCount >= 1 && (
         <CrosshairRing 
           diameter={baseDiameter * 4} 
           rotation={isFullyCharged ? rotation : 0} 
-          baseOffset={0} // + shape
+          baseOffset={0}
           opacity={0.8}
         />
       )}
       
-      {baseMode === 'shooting' && ringCount >= 3 && (
+      {/* Ring 3: at 2.5s - 8x diameter, X shape */}
+      {baseMode === 'shooting' && additionalRingCount >= 2 && (
         <CrosshairRing 
           diameter={baseDiameter * 8} 
           rotation={isFullyCharged ? -rotation : 0} 
-          baseOffset={45} // X shape
+          baseOffset={45}
           opacity={0.7}
         />
       )}
       
-      {baseMode === 'shooting' && ringCount >= 4 && (
+      {/* Ring 4: at 3.25s - 16x diameter, + shape */}
+      {baseMode === 'shooting' && additionalRingCount >= 3 && (
         <CrosshairRing 
           diameter={baseDiameter * 16} 
           rotation={isFullyCharged ? rotation : 0} 
-          baseOffset={0} // + shape
+          baseOffset={0}
           opacity={0.6}
         />
-      )}
-      
-      {/* Charging indicator text */}
-      {isCharging && baseMode === 'shooting' && (
-        <div 
-          className="absolute left-1/2 text-center text-white text-xs font-bold"
-          style={{ 
-            transform: 'translateX(-50%)',
-            top: baseDiameter * 16 + 20,
-            textShadow: '0 0 4px rgba(0,0,0,0.8)'
-          }}
-        >
-          {isFullyCharged ? 'PENTABULLET READY!' : `Charging... ${Math.min(chargeProgress, 5).toFixed(1)}s`}
-        </div>
       )}
     </div>
   );

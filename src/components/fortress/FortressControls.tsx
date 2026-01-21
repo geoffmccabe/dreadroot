@@ -64,8 +64,7 @@ export function FirstPersonControls({
   onBulletTierChange,
   // Pentabullet props
   playerLevel = 1,
-  onPentabulletChargeChange,
-  onPentabulletShoot
+  onPentabulletChargeChange
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -695,7 +694,7 @@ export function FirstPersonControls({
   
   // Fire pentabullet (5 bullets with spread, 0.1s apart)
   const firePentabullet = useCallback(() => {
-    if (!onPentabulletShoot) return;
+    if (!onShoot) return;
     
     // Stop charging sounds
     if (pentabulletPowerupAudioRef.current) {
@@ -720,16 +719,20 @@ export function FirstPersonControls({
     fireAudio.volume = 0.6;
     fireAudio.play().catch(() => {});
     
-    // Fire bullets 0.1 seconds apart
+    // Fire bullets 0.1 seconds apart using the existing onShoot callback
     const origin = camera.position.clone();
-    onPentabulletShoot(origin, directions);
+    directions.forEach((dir, index) => {
+      setTimeout(() => {
+        onShoot(origin.clone(), dir);
+      }, index * 100); // 0.1 seconds apart
+    });
     
     // Reset state
     pentabulletChargeStartRef.current = null;
     pentabulletChargeRef.current = 0;
     pentabulletPhaseRef.current = 'idle';
     onPentabulletChargeChange?.(0);
-  }, [camera, calculatePentabulletDirections, onPentabulletShoot, onPentabulletChargeChange]);
+  }, [camera, calculatePentabulletDirections, onShoot, onPentabulletChargeChange]);
   
   const handleRightClick = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
