@@ -1,4 +1,4 @@
-import React, { useRef, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
+import { useRef, useImperativeHandle, forwardRef, useMemo, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
@@ -19,6 +19,9 @@ interface TracerSegment {
   endY: number;
   endZ: number;
   color: string;
+  lightenedR: number; // Pre-computed lightened color
+  lightenedG: number;
+  lightenedB: number;
   createdAt: number;
   active: boolean;
 }
@@ -32,17 +35,27 @@ export interface TracersHandle {
   update: () => void;
 }
 
+// Reusable scratch color to avoid GC pressure
+const tmpColor = new THREE.Color();
+
 /**
  * Lighten a color 50% toward white for vapor effect
+ * Modifies the passed color in-place and returns RGB components
  */
-function lightenColor(hexColor: string, factor: number = 0.5): THREE.Color {
-  const color = new THREE.Color(hexColor);
+function computeLightenedColor(hexColor: string, factor: number = 0.5): { r: number; g: number; b: number } {
+  tmpColor.set(hexColor);
   // Lerp each channel toward white (1.0)
-  color.r = color.r + (1 - color.r) * factor;
-  color.g = color.g + (1 - color.g) * factor;
-  color.b = color.b + (1 - color.b) * factor;
-  return color;
+  const r = tmpColor.r + (1 - tmpColor.r) * factor;
+  const g = tmpColor.g + (1 - tmpColor.g) * factor;
+  const b = tmpColor.b + (1 - tmpColor.b) * factor;
+  return { r, g, b };
 }
+
+// Pre-allocated arrays to avoid per-frame allocations
+// Max size: 500 segments * 2 vertices * 3 components = 3000
+// Using regular arrays since LineGeometry.setPositions/setColors expect number[]
+const positionsArray: number[] = new Array(MAX_TRACERS * 2 * 3);
+const colorsArray: number[] = new Array(MAX_TRACERS * 2 * 3);
 
 export const Tracers = forwardRef<TracersHandle>((_, ref) => {
   const segmentsRef = useRef<TracerSegment[]>([]);
@@ -51,8 +64,9 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
   const geometryRef = useRef<LineGeometry | null>(null);
   const materialRef = useRef<LineMaterial | null>(null);
   const { size } = useThree();
+  const [lineReady, setLineReady] = useState(false);
   
-  // Pre-allocate pool
+  // Pre-allocate pool with lightened color cache
   useMemo(() => {
     segmentsRef.current = [];
     for (let i = 0; i < MAX_TRACERS; i++) {
@@ -60,6 +74,7 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
         startX: 0, startY: 0, startZ: 0,
         endX: 0, endY: 0, endZ: 0,
         color: '#ffffff',
+        lightenedR: 1, lightenedG: 1, lightenedB: 1,
         createdAt: 0,
         active: false,
       });
@@ -90,6 +105,7 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
     geometryRef.current = geometry;
     materialRef.current = material;
     lineRef.current = line;
+    setLineReady(true); // Trigger re-render so primitive gets the line
     
     return () => {
       geometry.dispose();
@@ -118,6 +134,13 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
       segment.endY = endY;
       segment.endZ = endZ;
       segment.color = color;
+      
+      // Pre-compute lightened color at segment creation (once per segment, not per frame)
+      const lightened = computeLightenedColor(color, 0.5);
+      segment.lightenedR = lightened.r;
+      segment.lightenedG = lightened.g;
+      segment.lightenedB = lightened.b;
+      
       segment.createdAt = performance.now();
       segment.active = true;
       nextIndexRef.current++;
@@ -127,8 +150,8 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
       if (!geometryRef.current || !materialRef.current) return;
       
       const now = performance.now();
-      const positions: number[] = [];
-      const colors: number[] = [];
+      let posIndex = 0;
+      let colIndex = 0;
       
       for (const segment of segmentsRef.current) {
         if (!segment.active) continue;
@@ -148,28 +171,34 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
           opacity = BASE_OPACITY * (1.0 - fadeProgress);
         }
         
-        // Lighten color 50% toward white for vapor effect
-        const lightenedColor = lightenColor(segment.color, 0.5);
-        
         // Add start position
-        positions.push(segment.startX, segment.startY, segment.startZ);
+        positionsArray[posIndex++] = segment.startX;
+        positionsArray[posIndex++] = segment.startY;
+        positionsArray[posIndex++] = segment.startZ;
         // Add end position  
-        positions.push(segment.endX, segment.endY, segment.endZ);
+        positionsArray[posIndex++] = segment.endX;
+        positionsArray[posIndex++] = segment.endY;
+        positionsArray[posIndex++] = segment.endZ;
         
-        // Add colors for both vertices (with opacity baked in via alpha)
-        // Note: LineMaterial uses RGB, opacity is global on material
-        // We'll adjust the color brightness based on opacity
-        const r = lightenedColor.r * (opacity / BASE_OPACITY);
-        const g = lightenedColor.g * (opacity / BASE_OPACITY);
-        const b = lightenedColor.b * (opacity / BASE_OPACITY);
-        colors.push(r, g, b);
-        colors.push(r, g, b);
+        // Use pre-computed lightened colors, apply opacity fade
+        const opacityScale = opacity / BASE_OPACITY;
+        const r = segment.lightenedR * opacityScale;
+        const g = segment.lightenedG * opacityScale;
+        const b = segment.lightenedB * opacityScale;
+        colorsArray[colIndex++] = r;
+        colorsArray[colIndex++] = g;
+        colorsArray[colIndex++] = b;
+        colorsArray[colIndex++] = r;
+        colorsArray[colIndex++] = g;
+        colorsArray[colIndex++] = b;
       }
       
       // Update geometry if we have segments
-      if (positions.length > 0) {
-        geometryRef.current.setPositions(positions);
-        geometryRef.current.setColors(colors);
+      if (posIndex > 0) {
+        // Slice to get only the filled portion - LineGeometry expects exact length
+        // Note: slice() creates a new array but this is unavoidable with LineGeometry API
+        geometryRef.current.setPositions(positionsArray.slice(0, posIndex));
+        geometryRef.current.setColors(colorsArray.slice(0, colIndex));
         if (lineRef.current) {
           lineRef.current.computeLineDistances();
           lineRef.current.visible = true;
@@ -182,7 +211,7 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
     },
   }), []);
 
-  return lineRef.current ? (
+  return lineReady && lineRef.current ? (
     <primitive object={lineRef.current} />
   ) : null;
 });
