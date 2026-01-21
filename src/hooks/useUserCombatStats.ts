@@ -9,12 +9,13 @@ export interface CombatStat {
   kills: number;
 }
 
-export interface ShwarmDefinition {
+export interface EnemyDefinition {
   id: string;
   tier: number;
   name: string;
   texture_url: string | null;
   rarity?: string;
+  enemyType: 'shwarm' | 'shnake'; // Distinguish between enemy types
 }
 
 // Rarity order for sorting (lowest to highest)
@@ -26,8 +27,8 @@ const RARITY_ORDER: Record<string, number> = {
   legendary: 4,
 };
 
-// Derive rarity from tier
-function getRarityFromTier(tier: number): string {
+// Derive rarity from tier (for shwarm - tiers 1-10)
+function getShwarmRarityFromTier(tier: number): string {
   if (tier <= 2) return 'common';
   if (tier <= 4) return 'uncommon';
   if (tier <= 6) return 'rare';
@@ -35,13 +36,22 @@ function getRarityFromTier(tier: number): string {
   return 'legendary';
 }
 
+// Derive rarity from tier (for shnake - tiers 1-30)
+function getShnakeRarityFromTier(tier: number): string {
+  if (tier <= 6) return 'common';
+  if (tier <= 12) return 'uncommon';
+  if (tier <= 18) return 'rare';
+  if (tier <= 24) return 'epic';
+  return 'legendary';
+}
+
 export function useUserCombatStats() {
   const { user } = useAuth();
   const [stats, setStats] = useState<CombatStat[]>([]);
-  const [definitions, setDefinitions] = useState<ShwarmDefinition[]>([]);
+  const [definitions, setDefinitions] = useState<EnemyDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load combat stats and definitions
+  // Load combat stats and definitions (both shwarm and shnake)
   useEffect(() => {
     if (!user?.id) {
       setStats([]);
@@ -52,7 +62,7 @@ export function useUserCombatStats() {
     const loadData = async () => {
       setIsLoading(true);
       
-      const [statsResult, defsResult] = await Promise.all([
+      const [statsResult, shwarmDefsResult, shnakeDefsResult] = await Promise.all([
         supabase
           .from('user_combat_stats')
           .select('*')
@@ -60,6 +70,10 @@ export function useUserCombatStats() {
         supabase
           .from('shwarm_definitions')
           .select('id, tier, name, texture_url')
+          .order('tier', { ascending: true }),
+        supabase
+          .from('shnake_definitions')
+          .select('id, tier, name, head_texture_url')
           .order('tier', { ascending: true })
       ]);
 
@@ -67,15 +81,35 @@ export function useUserCombatStats() {
         setStats(statsResult.data || []);
       }
       
-      if (!defsResult.error) {
-        // Add derived rarity to definitions
-        const defsWithRarity = (defsResult.data || []).map(d => ({
-          ...d,
-          rarity: getRarityFromTier(d.tier)
+      const allDefs: EnemyDefinition[] = [];
+      
+      // Add shwarm definitions
+      if (!shwarmDefsResult.error) {
+        const shwarmDefs = (shwarmDefsResult.data || []).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.texture_url,
+          rarity: getShwarmRarityFromTier(d.tier),
+          enemyType: 'shwarm' as const,
         }));
-        setDefinitions(defsWithRarity);
+        allDefs.push(...shwarmDefs);
       }
       
+      // Add shnake definitions
+      if (!shnakeDefsResult.error) {
+        const shnakeDefs = (shnakeDefsResult.data || []).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.head_texture_url, // Use head texture for display
+          rarity: getShnakeRarityFromTier(d.tier),
+          enemyType: 'shnake' as const,
+        }));
+        allDefs.push(...shnakeDefs);
+      }
+      
+      setDefinitions(allDefs);
       setIsLoading(false);
     };
 
@@ -145,7 +179,7 @@ export function useUserCombatStats() {
     }
   }, [user?.id, stats]);
 
-  // Get sorted stats with definitions
+  // Get sorted stats with definitions (includes both shwarm and shnake)
   const sortedStatsWithDefs = useCallback(() => {
     // Create a map of enemy_type to kills
     const killsMap = new Map(stats.map(s => [s.enemy_type, s.kills]));
@@ -166,7 +200,8 @@ export function useUserCombatStats() {
 
     return sorted.map(def => ({
       ...def,
-      kills: killsMap.get(`shwarm_t${def.tier}`) || 0
+      // Map kills based on enemy type prefix
+      kills: killsMap.get(`${def.enemyType}_t${def.tier}`) || 0
     }));
   }, [stats, definitions]);
 

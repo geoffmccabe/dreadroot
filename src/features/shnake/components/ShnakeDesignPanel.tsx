@@ -11,7 +11,9 @@ import { Upload, Save, Bug, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { convertAnimationToStrip, isAnimatedFile } from '@/lib/animationToStrip';
+import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import type { ShnakeDefinition } from '../types';
+
 interface ShnakeDesignPanelProps {
   className?: string;
 }

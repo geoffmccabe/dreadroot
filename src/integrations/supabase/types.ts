@@ -300,6 +300,36 @@ export type Database = {
           },
         ]
       }
+      enemy_sound_settings: {
+        Row: {
+          ambient_sound_url: string | null
+          created_at: string | null
+          death_sound_url: string | null
+          enemy_type: string
+          id: string
+          updated_at: string | null
+          volume: number
+        }
+        Insert: {
+          ambient_sound_url?: string | null
+          created_at?: string | null
+          death_sound_url?: string | null
+          enemy_type: string
+          id?: string
+          updated_at?: string | null
+          volume?: number
+        }
+        Update: {
+          ambient_sound_url?: string | null
+          created_at?: string | null
+          death_sound_url?: string | null
+          enemy_type?: string
+          id?: string
+          updated_at?: string | null
+          volume?: number
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           class: string

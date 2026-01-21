@@ -1151,6 +1151,8 @@ export function FortressScene({
                       // Track shnake kill if entire snake died
                       if (killedEntire && onShnakeKilled) {
                         onShnakeKilled(shnakeTier);
+                        // Play death sound
+                        shnakeRendererRef.current?.playDeathSound(hitPos, shnakeTier);
                       }
                       
                       // Spawn impact effect and add fire to segment

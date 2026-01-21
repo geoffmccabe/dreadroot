@@ -13,6 +13,7 @@ import { Upload, Save, Bug, Zap, Shield, Swords } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ShwarmDefinition } from '../types';
+import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9ca3af',
