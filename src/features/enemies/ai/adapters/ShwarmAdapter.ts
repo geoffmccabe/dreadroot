@@ -19,14 +19,13 @@ import { DEFAULT_AI_CONFIG } from '../types';
 
 /**
  * Extended shwarm instance with AI state
+ * Note: ai_config now comes from shwarm.definition.ai_config (database column)
  */
 export interface ShwarmWithAI extends ShwarmInstance {
   /** Timestamp of last damage taken */
   lastDamagedAt?: number;
   /** Last attack timestamp */
   lastAttackAt?: number;
-  /** AI configuration from definition */
-  aiConfig?: typeof DEFAULT_AI_CONFIG;
 }
 
 /**
@@ -87,7 +86,14 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
     const distToPlayer = Math.sqrt(dx * dx + dy * dy + dz * dz);
     
     const now = performance.now();
-    const config = shwarm.aiConfig ?? DEFAULT_AI_CONFIG;
+    
+    // Use ai_config from definition (database column), fallback to defaults
+    const defConfig = shwarm.definition.ai_config;
+    const detectionRange = defConfig?.detectionRange ?? DEFAULT_AI_CONFIG.detectionRange;
+    const attackRange = defConfig?.attackRange ?? DEFAULT_AI_CONFIG.attackRange;
+    const angryDurationMs = defConfig?.angryDurationMs ?? DEFAULT_AI_CONFIG.angryDurationMs;
+    const angrySpeedMultiplier = defConfig?.angrySpeedMultiplier ?? DEFAULT_AI_CONFIG.angrySpeedMultiplier;
+    const attackCooldownMs = defConfig?.attackCooldownMs ?? 500;
     
     // Calculate total health of alive blocks
     let totalHealth = 0;
@@ -127,14 +133,13 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
         tier: shwarm.definition.tier,
         aliveBlockCount: aliveCount,
         totalBlockCount: shwarm.blocks.length,
-        detectionRange: config.detectionRange,
-        attackRange: config.attackRange,
-        angryDurationMs: config.angryDurationMs,
-        angrySpeedMultiplier: config.angrySpeedMultiplier,
+        detectionRange,
+        attackRange,
+        angryDurationMs,
+        angrySpeedMultiplier,
+        attackCooldownMs,
         damage: shwarm.definition.damage_per_hit,
-        knockback: 1 + shwarm.definition.tier, // TODO: Add knockback column to definition
-        // TODO: Move to ai_config when Phase 3 adds DB column
-        attackCooldownMs: 500,
+        knockback: 1 + shwarm.definition.tier,
         xFactor: shwarm.definition.x_factor,
         speed: shwarm.definition.speed,
       },
@@ -154,7 +159,7 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
   },
   
   getBehaviors(shwarm: ShwarmWithAI): BehaviorModule[] {
-    const config = shwarm.aiConfig ?? DEFAULT_AI_CONFIG;
-    return getBehaviorsByIds(config.behaviors);
+    const behaviors = shwarm.definition.ai_config?.behaviors ?? DEFAULT_AI_CONFIG.behaviors;
+    return getBehaviorsByIds(behaviors);
   },
 };

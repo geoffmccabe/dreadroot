@@ -760,6 +760,7 @@ export type Database = {
       }
       shnake_definitions: {
         Row: {
+          ai_config: Json | null
           armor: number
           body_texture_url: string | null
           created_at: string | null
@@ -777,6 +778,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          ai_config?: Json | null
           armor?: number
           body_texture_url?: string | null
           created_at?: string | null
@@ -794,6 +796,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          ai_config?: Json | null
           armor?: number
           body_texture_url?: string | null
           created_at?: string | null
@@ -864,6 +867,7 @@ export type Database = {
       }
       shwarm_definitions: {
         Row: {
+          ai_config: Json | null
           created_at: string | null
           damage_per_hit: number
           health_per_block: number
@@ -879,6 +883,7 @@ export type Database = {
           x_factor: number
         }
         Insert: {
+          ai_config?: Json | null
           created_at?: string | null
           damage_per_hit?: number
           health_per_block?: number
@@ -894,6 +899,7 @@ export type Database = {
           x_factor?: number
         }
         Update: {
+          ai_config?: Json | null
           created_at?: string | null
           damage_per_hit?: number
           health_per_block?: number
