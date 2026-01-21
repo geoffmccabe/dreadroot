@@ -77,6 +77,8 @@ export function FirstPersonControls({
     previouslyCtrl: false, rightMouse: false,
     q: false, z: false
   });
+  // Glide mode: activated by pressing G while falling, auto-deactivates on landing
+  const glideActiveRef = useRef(false);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   
   // R-mode for bullet tier selection (admin only) - press R, then 1-0 to select tier
@@ -392,6 +394,12 @@ export function FirstPersonControls({
         break;
       case 'KeyZ':
         keys.current.z = true;
+        break;
+      case 'KeyG':
+        // Glide mode: only activates if currently falling (not on ground)
+        if (!onGround.current && velocity.current.y < 0) {
+          glideActiveRef.current = true;
+        }
         break;
     }
   }, [crosshairsEnabled, onModeChange, onOpenPanel, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
@@ -1133,9 +1141,15 @@ export function FirstPersonControls({
       const dt = Math.min(delta, MAX_PHYSICS_DELTA);
       const SURFACE_EPS = 0.002;
       
-      // Gliding: if falling (negative velocity) and holding right mouse, reduce gravity by half
-      const isGliding = keys.current.rightMouse && velocity.current.y < 0 && !onGround.current;
+      // Gliding: press G while falling to activate, auto-deactivates on landing
+      // Only glide if active AND still falling (not on ground)
+      const isGliding = glideActiveRef.current && velocity.current.y < 0 && !onGround.current;
       const effectiveGravity = isGliding ? 4.9 : 9.8; // Half gravity when gliding
+      
+      // Auto-deactivate glide when landing (on ground or positive velocity = hit something)
+      if (glideActiveRef.current && (onGround.current || velocity.current.y >= 0)) {
+        glideActiveRef.current = false;
+      }
       
       // Gravity and jumping
       velocity.current.y -= effectiveGravity * dt;
