@@ -1,8 +1,8 @@
 /**
  * ShwarmAdapter - Bridges Shwarm instances to the universal AI system
  * 
- * Phase 2: Wraps existing shwarm logic, will be called by EnemyManager
- * instead of the shwarm's own setInterval loop.
+ * Phase 3: Advisory mode - behaviors are evaluated but movement is still
+ * handled by useShwarmMovement. applyResult is a no-op.
  */
 
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
@@ -153,9 +153,9 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
     _result: BehaviorResult, 
     _deltaMs: number
   ): void {
-    // Phase 2: Results are purely advisory - NO MUTATIONS
+    // Phase 3: Results are purely advisory - NO MUTATIONS
     // Actual movement and attacks are handled by useShwarmMovement
-    // This will be used in Phase 3 when we migrate locomotion control
+    // Future: migrate locomotion control here to unify AI decision-making
   },
   
   getBehaviors(shwarm: ShwarmWithAI): BehaviorModule[] {

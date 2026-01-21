@@ -33,7 +33,7 @@ interface UseEnemyAIOptions {
 /**
  * Hook to integrate the universal AI system with the scene.
  * 
- * Phase 2: Runs in parallel with existing movement hooks.
+ * Phase 3: Runs in parallel with existing movement hooks (advisory mode).
  * Behaviors are evaluated but movement is still handled by legacy code.
  */
 export function useEnemyAI({
