@@ -36,6 +36,8 @@ let locomotionContext: {
   treeBlocksByTier: Map<number, Map<string, string>> | null;
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
   onHeadMoved?: (shnakeId: string) => void;
+  onIndignantRoar?: (shnakeId: string, volume: number) => void;
+  onTriggerWiggle?: (shnakeId: string) => void;
 } | null = null;
 
 // Track attacked state per shnake (for canGoToGround)
@@ -54,6 +56,60 @@ export function setShnakeLocomotionContext(ctx: typeof locomotionContext): void 
  */
 export function markShnakeAttacked(shnakeId: string): void {
   attackedStateMap.set(shnakeId, { wasAttacked: true, attackedAt: performance.now() });
+}
+
+/**
+ * Mark a shnake as indignant (body was hit, triggers wiggle animation).
+ * This is called from FortressScene when a bullet ricochets off shnake body.
+ */
+export function markShnakeIndignant(shnakeId: string): void {
+  const entry = EnemyManager.getEntry(shnakeId);
+  if (entry) {
+    entry.behaviorState.isIndignant = true;
+  }
+}
+
+/**
+ * Initialize revenge tracking for a shnake (called when head takes damage).
+ */
+export function initializeShnakeRevenge(shnakeId: string, damageReceived: number): void {
+  const entry = EnemyManager.getEntry(shnakeId);
+  if (!entry) return;
+  
+  const state = entry.behaviorState;
+  const existing = state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
+  
+  if (existing) {
+    // Add to existing revenge
+    state.revengeTarget = {
+      damageReceived: existing.damageReceived + damageReceived,
+      damageDealt: existing.damageDealt,
+    };
+  } else {
+    // Start new revenge
+    state.revengeTarget = {
+      damageReceived,
+      damageDealt: 0,
+    };
+  }
+}
+
+/**
+ * Record damage dealt by shnake during revenge (called when shnake hits player).
+ */
+export function recordShnakeRevengeDamage(shnakeId: string, damageDealt: number): void {
+  const entry = EnemyManager.getEntry(shnakeId);
+  if (!entry) return;
+  
+  const state = entry.behaviorState;
+  const existing = state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
+  
+  if (existing) {
+    state.revengeTarget = {
+      damageReceived: existing.damageReceived,
+      damageDealt: existing.damageDealt + damageDealt,
+    };
+  }
 }
 
 /**
@@ -110,6 +166,40 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
     const angrySpeedMultiplier = defConfig?.angrySpeedMultiplier ?? DEFAULT_AI_CONFIG.angrySpeedMultiplier;
     const attackCooldownMs = defConfig?.attackCooldownMs ?? 600;
     
+    // Get tree for this shnake to populate patrol positions
+    const tree = locomotionContext?.treeById.get(shnake.treeId);
+    const treeBlockPositions: Array<{ x: number; y: number; z: number }> = [];
+    
+    // Build list of tree block positions for patrol behavior
+    if (tree && locomotionContext?.treeBlocksByTier) {
+      const tierBlocks = locomotionContext.treeBlocksByTier.get(shnake.tier);
+      if (tierBlocks) {
+        for (const [posKey] of tierBlocks) {
+          const [px, py, pz] = posKey.split(',').map(Number);
+          treeBlockPositions.push({ x: px, y: py, z: pz });
+        }
+      }
+    }
+    
+    // Check if touching tree (for returnHome behavior)
+    let isTouchingTree = false;
+    if (locomotionContext?.treeBlocksByTier) {
+      const tierBlocks = locomotionContext.treeBlocksByTier.get(shnake.tier);
+      if (tierBlocks) {
+        for (const seg of shnake.segments) {
+          const neighbors = [
+            `${seg.x + 1},${seg.y},${seg.z}`, `${seg.x - 1},${seg.y},${seg.z}`,
+            `${seg.x},${seg.y + 1},${seg.z}`, `${seg.x},${seg.y - 1},${seg.z}`,
+            `${seg.x},${seg.y},${seg.z + 1}`, `${seg.x},${seg.y},${seg.z - 1}`,
+          ];
+          if (neighbors.some(n => tierBlocks.has(n))) {
+            isTouchingTree = true;
+            break;
+          }
+        }
+      }
+    }
+    
     return {
       entityId: shnake.id,
       entityType: 'shnake',
@@ -142,6 +232,19 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         attackCooldownMs,
         damage: shnake.definition.damage_per_hit,
         knockback: shnake.definition.knockback,
+        // Patrol behavior data
+        treeBlockPositions,
+        treeBaseX: tree?.base_x,
+        treeBaseY: tree?.base_y,
+        treeBaseZ: tree?.base_z,
+        isTouchingTree,
+        // Indignant behavior callbacks
+        onIndignantRoar: (volume: number) => {
+          locomotionContext?.onIndignantRoar?.(shnake.id, volume);
+        },
+        onTriggerWiggle: (shnakeId: string) => {
+          locomotionContext?.onTriggerWiggle?.(shnakeId);
+        },
       },
       
       state,

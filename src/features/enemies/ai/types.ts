@@ -51,6 +51,24 @@ export interface BehaviorState {
   isAngry?: boolean;
   angryUntil?: number;
   
+  // Patrol behavior state (replaces sleep/wander for shnakes)
+  patrolTargetX?: number;
+  patrolTargetY?: number;
+  patrolTargetZ?: number;
+  patrolPauseUntil?: number;
+  
+  // Revenge behavior state
+  revengeTarget?: { damageReceived: number; damageDealt: number } | null;
+  returningHome?: boolean;
+  homeTreeId?: string;
+  homeTreeBaseX?: number;
+  homeTreeBaseY?: number;
+  homeTreeBaseZ?: number;
+  
+  // Indignant behavior state (body hit reaction)
+  isIndignant?: boolean;
+  indignantStartTime?: number;
+  
   // Generic storage for custom behaviors
   [key: string]: unknown;
 }
@@ -226,7 +244,7 @@ export interface AIConfig {
 }
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
-  behaviors: ['sleep', 'wander', 'chase', 'attack'],
+  behaviors: ['patrol', 'chase', 'attack', 'revenge', 'returnHome', 'indignant'],
   detectionRange: 32,
   attackRange: 1.5,
   angrySpeedMultiplier: 1.5,

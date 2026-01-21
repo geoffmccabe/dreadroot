@@ -10,6 +10,10 @@ import { WanderBehavior } from './wander';
 import { ChaseBehavior } from './chase';
 import { AttackBehavior } from './attack';
 import { AngryBehavior } from './angry';
+import { PatrolBehavior } from './patrol';
+import { RevengeBehavior } from './revenge';
+import { ReturnHomeBehavior } from './returnHome';
+import { IndignantBehavior } from './indignant';
 
 // All available behaviors
 export const behaviors = {
@@ -18,6 +22,10 @@ export const behaviors = {
   chase: ChaseBehavior,
   attack: AttackBehavior,
   angry: AngryBehavior,
+  patrol: PatrolBehavior,
+  revenge: RevengeBehavior,
+  returnHome: ReturnHomeBehavior,
+  indignant: IndignantBehavior,
 } as const;
 
 export type BehaviorId = keyof typeof behaviors;
@@ -52,3 +60,7 @@ export { WanderBehavior } from './wander';
 export { ChaseBehavior } from './chase';
 export { AttackBehavior } from './attack';
 export { AngryBehavior } from './angry';
+export { PatrolBehavior } from './patrol';
+export { RevengeBehavior, initializeRevenge, recordRevengeDamageDealt } from './revenge';
+export { ReturnHomeBehavior } from './returnHome';
+export { IndignantBehavior, markIndignant } from './indignant';
