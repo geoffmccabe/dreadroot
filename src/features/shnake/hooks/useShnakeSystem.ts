@@ -340,6 +340,7 @@ export function useShnakeSystem({
     shnakesRef,
     removeShnake,
     damageHead,
+    spawnOnTree,
     getTreeBlockIndexRefs,
   };
 }
