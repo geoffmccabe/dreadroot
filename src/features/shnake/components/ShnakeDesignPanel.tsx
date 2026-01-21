@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Upload, Save, Bug } from 'lucide-react';
+import { Upload, Save, Bug, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { ShnakeDefinition } from '../types';
@@ -176,20 +176,28 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
     }
   };
 
-  // Convert any image file to webp format
+  // Convert any image to 512x512 webp format (center crop if not square)
   const convertToWebp = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
+        const TARGET_SIZE = 512;
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
+        canvas.width = TARGET_SIZE;
+        canvas.height = TARGET_SIZE;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           reject(new Error('Failed to get canvas context'));
           return;
         }
-        ctx.drawImage(img, 0, 0);
+        
+        // Center crop to square, then scale to 512x512
+        const size = Math.min(img.width, img.height);
+        const sx = (img.width - size) / 2;
+        const sy = (img.height - size) / 2;
+        
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, TARGET_SIZE, TARGET_SIZE);
+        
         canvas.toBlob(
           (blob) => {
             if (blob) {
@@ -205,6 +213,28 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
       img.onerror = () => reject(new Error('Failed to load image'));
       img.src = URL.createObjectURL(file);
     });
+  };
+
+  // Re-process a URL to 512x512 webp
+  const reprocessUrlToWebp = async (url: string, kind: 'head' | 'body' | 'face'): Promise<void> => {
+    try {
+      toast({ title: 'Converting...', description: `Re-processing ${kind} texture to 512x512 webp` });
+      
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const file = new File([blob], 'texture', { type: blob.type });
+      
+      await uploadTexture(file, kind);
+    } catch (err) {
+      console.error('[ShnakeDesignPanel] Reprocess error:', err);
+      toast({ title: 'Conversion failed', variant: 'destructive' });
+    }
+  };
+
+  // Check if URL needs reprocessing (not webp or wrong size)
+  const needsReprocessing = (url: string | null): boolean => {
+    if (!url) return false;
+    return !url.endsWith('.webp');
   };
 
   if (isLoading) {
@@ -331,12 +361,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
 
               <div className="grid grid-cols-3 gap-4 pt-2">
                 <div className="space-y-2">
-                  <Label>Head texture</Label>
+                  <Label className="flex items-center gap-2">
+                    Head texture
+                    {needsReprocessing(currentDef.head_texture_url) && (
+                      <span className="text-xs text-orange-500">(needs webp)</span>
+                    )}
+                  </Label>
                   <div className="flex gap-2">
-                    <Input value={currentDef.head_texture_url || ''} onChange={e => updateDef('head_texture_url', e.target.value)} placeholder="URL" />
-                    <Button size="icon" variant="outline" onClick={() => headInputRef.current?.click()}>
+                    <Input value={currentDef.head_texture_url || ''} onChange={e => updateDef('head_texture_url', e.target.value)} placeholder="URL" className="flex-1" />
+                    <Button size="icon" variant="outline" onClick={() => headInputRef.current?.click()} title="Upload new">
                       <Upload className="h-4 w-4" />
                     </Button>
+                    {needsReprocessing(currentDef.head_texture_url) && (
+                      <Button size="icon" variant="secondary" onClick={() => reprocessUrlToWebp(currentDef.head_texture_url!, 'head')} title="Convert to 512x512 webp">
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    )}
                     <input
                       ref={headInputRef}
                       type="file"
@@ -351,12 +391,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Body texture</Label>
+                  <Label className="flex items-center gap-2">
+                    Body texture
+                    {needsReprocessing(currentDef.body_texture_url) && (
+                      <span className="text-xs text-orange-500">(needs webp)</span>
+                    )}
+                  </Label>
                   <div className="flex gap-2">
-                    <Input value={currentDef.body_texture_url || ''} onChange={e => updateDef('body_texture_url', e.target.value)} placeholder="URL" />
-                    <Button size="icon" variant="outline" onClick={() => bodyInputRef.current?.click()}>
+                    <Input value={currentDef.body_texture_url || ''} onChange={e => updateDef('body_texture_url', e.target.value)} placeholder="URL" className="flex-1" />
+                    <Button size="icon" variant="outline" onClick={() => bodyInputRef.current?.click()} title="Upload new">
                       <Upload className="h-4 w-4" />
                     </Button>
+                    {needsReprocessing(currentDef.body_texture_url) && (
+                      <Button size="icon" variant="secondary" onClick={() => reprocessUrlToWebp(currentDef.body_texture_url!, 'body')} title="Convert to 512x512 webp">
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    )}
                     <input
                       ref={bodyInputRef}
                       type="file"
@@ -371,12 +421,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Face texture (GIF ok)</Label>
+                  <Label className="flex items-center gap-2">
+                    Face texture (GIF ok)
+                    {needsReprocessing(currentDef.face_texture_url) && (
+                      <span className="text-xs text-orange-500">(needs webp)</span>
+                    )}
+                  </Label>
                   <div className="flex gap-2">
-                    <Input value={currentDef.face_texture_url || ''} onChange={e => updateDef('face_texture_url', e.target.value)} placeholder="URL" />
-                    <Button size="icon" variant="outline" onClick={() => faceInputRef.current?.click()}>
+                    <Input value={currentDef.face_texture_url || ''} onChange={e => updateDef('face_texture_url', e.target.value)} placeholder="URL" className="flex-1" />
+                    <Button size="icon" variant="outline" onClick={() => faceInputRef.current?.click()} title="Upload new">
                       <Upload className="h-4 w-4" />
                     </Button>
+                    {needsReprocessing(currentDef.face_texture_url) && (
+                      <Button size="icon" variant="secondary" onClick={() => reprocessUrlToWebp(currentDef.face_texture_url!, 'face')} title="Convert to 512x512 webp">
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    )}
                     <input
                       ref={faceInputRef}
                       type="file"
