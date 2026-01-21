@@ -12,6 +12,7 @@ import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
 import { useBlocks } from '@/contexts/BlocksContext';
+import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
@@ -111,6 +112,10 @@ export function Fortress() {
   const [performanceMode, setPerformanceMode] = useState(false);
   const [selectedBulletTier, setSelectedBulletTier] = useState(1);
   const [pentabulletCharge, setPentabulletCharge] = useState(0);
+  
+  // Get bullet color for crosshair
+  const { getDefinition } = useBulletDefinitions();
+  const bulletColor = getDefinition(selectedBulletTier).colors[0] || '#FFFF00';
   
   // Tree chopping modal state
   const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
@@ -1158,6 +1163,7 @@ export function Fortress() {
       <PentabulletCrosshair 
         chargeProgress={pentabulletCharge}
         baseMode={blockPlacementMode ? 'building' : treePlacementMode ? 'planting' : crosshairsEnabled ? 'shooting' : 'inactive'}
+        bulletColor={bulletColor}
       />
       
       

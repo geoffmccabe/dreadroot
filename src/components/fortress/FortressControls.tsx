@@ -666,16 +666,21 @@ export function FirstPersonControls({
   }, [onPentabulletChargeChange]);
   
   // Calculate pentabullet directions with spread based on player level
+  // First bullet fires true, others spread ±5% minus 0.1% per level
   const calculatePentabulletDirections = useCallback((baseDirection: THREE.Vector3): THREE.Vector3[] => {
-    // Base spread: 1% angle (0.01 radians) minus 0.1% per level
-    const spreadAngle = Math.max(0.001, 0.01 - (playerLevelRef.current * 0.001));
+    // Base spread: 5% angle (0.05 radians) minus 0.1% per level
+    const spreadAngle = Math.max(0.005, 0.05 - (playerLevelRef.current * 0.001));
     
     const directions: THREE.Vector3[] = [];
     const up = new THREE.Vector3(0, 1, 0);
     const right = new THREE.Vector3().crossVectors(baseDirection, up).normalize();
     const realUp = new THREE.Vector3().crossVectors(right, baseDirection).normalize();
     
-    for (let i = 0; i < 5; i++) {
+    // First bullet fires true (straight)
+    directions.push(baseDirection.clone());
+    
+    // Remaining 4 bullets spread randomly from the base direction
+    for (let i = 1; i < 5; i++) {
       const dir = baseDirection.clone();
       
       // Random angular offset within spread cone
