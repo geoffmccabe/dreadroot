@@ -325,9 +325,11 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         newData.set(s.tier, { head, body, face });
       }
       
-      // Only update if changed
-      if (newData.size !== tierData.size || 
-          [...newData.keys()].some(t => !tierData.has(t))) {
+      // Deep compare - detect texture URL changes, not just tier presence
+      const serialize = (m: Map<number, { head: string | null; body: string | null; face: string | null }>) => 
+        JSON.stringify([...m.entries()].sort((a, b) => a[0] - b[0]));
+      
+      if (serialize(newData) !== serialize(tierData)) {
         setTierData(newData);
       }
     }, 500);

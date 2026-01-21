@@ -33,7 +33,7 @@ export function useShnakeDefinitions() {
       if (error) throw error;
       return (data as ShnakeDefinitionRow[]).map(rowToDefinition);
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000, // 30 seconds - faster updates when textures change
   });
 }
 
