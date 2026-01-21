@@ -271,7 +271,18 @@ export function applyShnakeMove(
     }
 
     // Score: Manhattan distance to target (lower = better)
-    const score = Math.abs(nx - targetX) + Math.abs(ny - targetY) + Math.abs(nz - targetZ);
+    // GRAVITY PENALTY: When in revenge mode and player is on ground, heavily penalize being elevated
+    // This forces shnakes to descend to ground level like real snakes
+    let score = Math.abs(nx - targetX) + Math.abs(ny - targetY) + Math.abs(nz - targetZ);
+    
+    if (ctx.canGoToGround && targetY <= 1) {
+      // Add heavy penalty for being above ground when chasing a grounded player
+      // This ensures shnakes go DOWN first before chasing horizontally
+      if (ny > 0) {
+        score += ny * 10; // Each block above ground adds 10 to score (very high penalty)
+      }
+    }
+    
     scored.push({ dx, dy, dz, score });
   }
 
@@ -409,7 +420,8 @@ export function applyShnakeAttack(
   // Access ai_config from definition (use type assertion for JSONB field)
   const defAiConfig = (shnake.definition as { ai_config?: { attackCooldownMs?: number; attackRange?: number } }).ai_config;
   const cooldownMs = defAiConfig?.attackCooldownMs ?? 600;
-  const attackRange = defAiConfig?.attackRange ?? 1.5;
+  // TIGHTER attack range - shnake must be very close (head touching player)
+  const attackRange = defAiConfig?.attackRange ?? 1.2;
 
   if (now - shnake.lastAttackAt < cooldownMs) {
     return; // Still in cooldown
@@ -435,14 +447,14 @@ export function applyShnakeAttack(
   shnake.lastAttackAt = now;
 
   if (onPlayerHit) {
-    // HORIZONTAL knockback - use XZ plane direction only
+    // PURELY HORIZONTAL knockback - NO vertical component at all
     // This prevents knocking player upward into the sky
     const horizDist = Math.sqrt(dx * dx + dz * dz);
     const dirX = horizDist > 0.1 ? dx / horizDist : 0;
-    const dirY = 0.1; // Minimal upward component
+    const dirY = 0; // ZERO vertical - pure horizontal knockback
     const dirZ = horizDist > 0.1 ? dz / horizDist : 1;
     
-    _attackDir.set(dirX, dirY, dirZ).normalize();
+    _attackDir.set(dirX, dirY, dirZ);
     // Pass shnakeId so FortressScene can track revenge damage
     onPlayerHit(result.damage, result.knockback, _attackDir, shnake.id);
   }
