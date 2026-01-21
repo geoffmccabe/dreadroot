@@ -268,22 +268,23 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
   }
 
   return (
-    <div className={`flex flex-col gap-4 ${className}`}>
-      {/* Global Sound Settings Panel */}
+    <Card className={`p-4 ${className}`}>
+      {/* Global Sound Settings Panel - at top of Shwarm section */}
       <EnemySoundSettings
         enemyType="shwarm"
         sounds={soundConfigs}
         volume={soundVolume}
         onSoundChange={handleSoundChange}
         onVolumeChange={handleVolumeChange}
+        className="mb-4"
       />
       
       <div className="grid grid-cols-12 gap-4">
         {/* Tier Selector - Left Column */}
         <div className="col-span-3">
-          <Card className="p-3">
-            <h3 className="font-semibold mb-3 text-sm">Select Tier</h3>
-            <ScrollArea className="h-[500px]">
+          <div className="border rounded-lg p-3 bg-muted/30">
+            <h3 className="font-semibold mb-3 text-sm">Shwarms</h3>
+            <ScrollArea className="h-[440px]">
             <div className="space-y-1 pr-2">
               {definitions.map(def => {
                 const isNew = def.id.startsWith('temp-');
@@ -313,7 +314,7 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
               })}
             </div>
           </ScrollArea>
-        </Card>
+          </div>
       </div>
 
       {/* Editor - Right Column */}
@@ -563,6 +564,6 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
         </Card>
       </div>
       </div>
-    </div>
+    </Card>
   );
 }
