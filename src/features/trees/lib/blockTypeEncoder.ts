@@ -212,10 +212,12 @@ export function getTextureUrlForTreeBlock(
     case 'shroom':
     case 'shroom_stem':
     case 'shroom_cap':
-      return branchTextureUrl;
+      // Fall back to trunk texture if branch texture is not set
+      return branchTextureUrl || trunkTextureUrl;
     case 'leaf':
     case 'fruit':
-      return fruitTextureUrl;
+      // Fall back to branch, then trunk texture
+      return fruitTextureUrl || branchTextureUrl || trunkTextureUrl;
     case 'invisiblock':
       return null; // Invisiblocks have no texture
     default:
