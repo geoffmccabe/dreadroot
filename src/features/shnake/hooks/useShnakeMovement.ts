@@ -4,8 +4,14 @@ import type { PlantedTree } from '@/features/trees/types';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import type { ShnakeInstance } from '../types';
 
+const CHUNK_SIZE = 16;
+
 function key(x: number, y: number, z: number) {
   return `${x},${y},${z}`;
+}
+
+function chunkKey(x: number, z: number) {
+  return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
 }
 
 function aabbForCell(x: number, y: number, z: number): THREE.Box3 {
@@ -32,6 +38,23 @@ function treeBounds(tree: PlantedTree) {
 
 function inside(b: ReturnType<typeof treeBounds>, x: number, y: number, z: number) {
   return x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ;
+}
+
+/** Get all chunk keys that a tree spans */
+function getTreeChunkKeys(tree: PlantedTree): Set<string> {
+  const b = treeBounds(tree);
+  const chunks = new Set<string>();
+  // Sample corners and center to get chunk coverage
+  const minCx = Math.floor(b.minX / CHUNK_SIZE);
+  const maxCx = Math.floor(b.maxX / CHUNK_SIZE);
+  const minCz = Math.floor(b.minZ / CHUNK_SIZE);
+  const maxCz = Math.floor(b.maxZ / CHUNK_SIZE);
+  for (let cx = minCx; cx <= maxCx; cx++) {
+    for (let cz = minCz; cz <= maxCz; cz++) {
+      chunks.add(`${cx},${cz}`);
+    }
+  }
+  return chunks;
 }
 
 interface UseShnakeMovementOptions {
@@ -130,6 +153,7 @@ export function useShnakeMovement({
       }
 
       tmpPlayer.current.copy(cameraRef.current.position);
+      const playerChunk = chunkKey(tmpPlayer.current.x, tmpPlayer.current.z);
 
       const trees = treesRef.current || [];
       if (!trees.length || shnakesRef.current.length === 0) {
@@ -145,12 +169,15 @@ export function useShnakeMovement({
         if (!tree) continue;
 
         const b = treeBounds(tree);
-        // Shnake always pursues player - no longer restricted to tree bounds
         const px = tmpPlayer.current.x;
         const py = tmpPlayer.current.y;
         const pz = tmpPlayer.current.z;
 
-        // Attack if adjacent
+        // Check if player is in any of the tree's chunks
+        const treeChunks = getTreeChunkKeys(tree);
+        const playerInTreeChunks = treeChunks.has(playerChunk);
+
+        // Attack if adjacent (regardless of chunk)
         const head = s.segments[0];
         const dxp = (head.x + 0.5) - px;
         const dyp = (head.y + 0.5) - py;
@@ -180,18 +207,14 @@ export function useShnakeMovement({
           // Allow moving into current tail cell because it vacates this step
           occupied.delete(key(tail.x, tail.y, tail.z));
 
-          const tx = Math.floor(px);
-          const ty = Math.floor(py);
-          const tz = Math.floor(pz);
-
           const candidates = [
             [1, 0, 0], [-1, 0, 0],
             [0, 0, 1], [0, 0, -1],
             [0, 1, 0], [0, -1, 0],
           ] as const;
 
-          // Sort by heuristic (distance reduction)
           const scored: Array<{ dx: number; dy: number; dz: number; score: number }> = [];
+          
           for (const [dx, dy, dz] of candidates) {
             const nx = headSeg.x + dx;
             const ny = headSeg.y + dy;
@@ -201,11 +224,28 @@ export function useShnakeMovement({
             if (occupied.has(k)) continue;
             if (isWorldOccupied(nx, ny, nz)) continue;
             if (!isClingable(s.tier, nx, ny, nz)) continue;
-            const dist = Math.abs(nx - tx) + Math.abs(ny - ty) + Math.abs(nz - tz);
-            scored.push({ dx, dy, dz, score: dist });
+            
+            let score: number;
+            if (playerInTreeChunks) {
+              // Move toward player
+              const tx = Math.floor(px);
+              const ty = Math.floor(py);
+              const tz = Math.floor(pz);
+              score = Math.abs(nx - tx) + Math.abs(ny - ty) + Math.abs(nz - tz);
+            } else {
+              // Random movement - use random score
+              score = Math.random() * 100;
+            }
+            
+            scored.push({ dx, dy, dz, score });
           }
 
-          scored.sort((a, b) => a.score - b.score);
+          // For player pursuit, sort ascending (closest first)
+          // For random, just pick any (random scores already shuffled)
+          if (playerInTreeChunks) {
+            scored.sort((a, b) => a.score - b.score);
+          }
+          
           const choice = scored[0] || null;
           if (!choice) break;
 
