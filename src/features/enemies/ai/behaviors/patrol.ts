@@ -1,0 +1,153 @@
+/**
+ * Patrol Behavior - Active movement around the tree
+ * 
+ * Shnakes pick a random tree block position as destination,
+ * travel to it, then either pause briefly or pick a new destination.
+ * Replaces Sleep/Wander for shnakes.
+ */
+
+import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
+
+// Patrol timing constants
+const PATROL_PAUSE_CHANCE = 0.3; // 30% chance to pause when reaching destination
+const PATROL_PAUSE_MIN_MS = 1000; // 1 second minimum pause
+const PATROL_PAUSE_MAX_MS = 3000; // 3 seconds maximum pause
+const PATROL_DESTINATION_REACHED_THRESHOLD = 1.5; // Within 1.5 units = arrived
+
+export const PatrolBehavior: BehaviorModule = {
+  id: 'patrol',
+  name: 'Patrol',
+  
+  evaluate(ctx: BehaviorContext): number {
+    // Check if currently pursuing revenge (revenge takes priority)
+    const revengeTarget = ctx.state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
+    if (revengeTarget && revengeTarget.damageDealt < revengeTarget.damageReceived) {
+      return 0; // Let revenge behavior take over
+    }
+    
+    // Check if returning home after revenge
+    if (ctx.state.returningHome) {
+      return 0; // Let returnHome behavior take over
+    }
+    
+    // Check if indignant (body was hit)
+    if (ctx.state.isIndignant) {
+      return 0; // Let indignant behavior take over
+    }
+    
+    // Attack takes priority when in range
+    const attackRange = (ctx.custom.attackRange as number) ?? 1.5;
+    if (ctx.distToPlayer <= attackRange) {
+      return 0.2; // Very low, let attack take over
+    }
+    
+    // Chase takes priority when player is close and visible
+    const detectionRange = (ctx.custom.detectionRange as number) ?? 32;
+    if (ctx.distToPlayer < detectionRange && ctx.hasLineOfSight) {
+      return 0.3; // Lower than chase (0.7-0.9)
+    }
+    
+    // Default behavior: actively patrol the tree
+    return 0.75;
+  },
+  
+  enter(ctx: BehaviorContext): void {
+    // Clear any existing patrol state and pick new destination
+    ctx.state.patrolTargetX = undefined;
+    ctx.state.patrolTargetY = undefined;
+    ctx.state.patrolTargetZ = undefined;
+    ctx.state.patrolPauseUntil = undefined;
+  },
+  
+  tick(ctx: BehaviorContext, _deltaMs: number): BehaviorResult {
+    const now = performance.now();
+    
+    // Check if pausing
+    const pauseUntil = ctx.state.patrolPauseUntil as number | undefined;
+    if (pauseUntil && now < pauseUntil) {
+      return { kind: 'idle' };
+    }
+    
+    // Clear pause if expired
+    if (pauseUntil) {
+      ctx.state.patrolPauseUntil = undefined;
+    }
+    
+    // Check if we have a destination
+    const hasDestination = 
+      ctx.state.patrolTargetX !== undefined &&
+      ctx.state.patrolTargetY !== undefined &&
+      ctx.state.patrolTargetZ !== undefined;
+    
+    // Check if we've reached our destination
+    if (hasDestination) {
+      const dx = (ctx.state.patrolTargetX as number) - ctx.ex;
+      const dy = (ctx.state.patrolTargetY as number) - ctx.ey;
+      const dz = (ctx.state.patrolTargetZ as number) - ctx.ez;
+      const distToTarget = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      
+      if (distToTarget < PATROL_DESTINATION_REACHED_THRESHOLD) {
+        // Arrived! Roll for pause or immediate new destination
+        if (Math.random() < PATROL_PAUSE_CHANCE) {
+          // Pause for a bit
+          const pauseTime = PATROL_PAUSE_MIN_MS + Math.random() * (PATROL_PAUSE_MAX_MS - PATROL_PAUSE_MIN_MS);
+          ctx.state.patrolPauseUntil = now + pauseTime;
+          ctx.state.patrolTargetX = undefined;
+          ctx.state.patrolTargetY = undefined;
+          ctx.state.patrolTargetZ = undefined;
+          return { kind: 'idle' };
+        }
+        
+        // Pick new destination immediately
+        ctx.state.patrolTargetX = undefined;
+        ctx.state.patrolTargetY = undefined;
+        ctx.state.patrolTargetZ = undefined;
+      }
+    }
+    
+    // Need to pick a new destination?
+    if (!hasDestination || ctx.state.patrolTargetX === undefined) {
+      // Get available tree block positions from custom context
+      // The adapter populates this from treeBlocksByTierRef
+      const treeBlockPositions = ctx.custom.treeBlockPositions as Array<{ x: number; y: number; z: number }> | undefined;
+      
+      if (treeBlockPositions && treeBlockPositions.length > 0) {
+        // Pick a random tree block position
+        const randomIndex = Math.floor(Math.random() * treeBlockPositions.length);
+        const target = treeBlockPositions[randomIndex];
+        
+        // Set destination to an adjacent cell (shnakes can't occupy tree blocks)
+        const offsets = [
+          [1, 0, 0], [-1, 0, 0],
+          [0, 1, 0], [0, -1, 0],
+          [0, 0, 1], [0, 0, -1],
+        ];
+        const [ox, oy, oz] = offsets[Math.floor(Math.random() * offsets.length)];
+        
+        ctx.state.patrolTargetX = target.x + ox;
+        ctx.state.patrolTargetY = target.y + oy;
+        ctx.state.patrolTargetZ = target.z + oz;
+      } else {
+        // No tree blocks available, just idle
+        return { kind: 'idle' };
+      }
+    }
+    
+    // Move toward destination
+    return {
+      kind: 'move',
+      tx: ctx.state.patrolTargetX as number,
+      ty: ctx.state.patrolTargetY as number,
+      tz: ctx.state.patrolTargetZ as number,
+      speedMultiplier: 0.7, // Patrol is slower than chase
+    };
+  },
+  
+  exit(ctx: BehaviorContext): void {
+    // Clear patrol state on exit
+    ctx.state.patrolTargetX = undefined;
+    ctx.state.patrolTargetY = undefined;
+    ctx.state.patrolTargetZ = undefined;
+    ctx.state.patrolPauseUntil = undefined;
+  },
+};

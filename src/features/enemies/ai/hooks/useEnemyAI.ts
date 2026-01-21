@@ -42,6 +42,8 @@ interface UseEnemyAIOptions {
   treeBlocksByTierRef?: React.RefObject<Map<number, Map<string, string>>>;
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
   onShnakeHeadMoved?: (shnakeId: string) => void;
+  onIndignantRoar?: (shnakeId: string, volume: number) => void;
+  onTriggerWiggle?: (shnakeId: string) => void;
 }
 
 /**
@@ -62,6 +64,8 @@ export function useEnemyAI({
   treeBlocksByTierRef,
   onPlayerHit,
   onShnakeHeadMoved,
+  onIndignantRoar,
+  onTriggerWiggle,
 }: UseEnemyAIOptions) {
   // Track registered enemy IDs to detect changes (reused, not reallocated)
   const registeredShnakesRef = useRef<Set<string>>(new Set());
@@ -89,13 +93,15 @@ export function useEnemyAI({
       treeBlocksByTier: treeBlocksByTierRef?.current ?? null,
       onPlayerHit,
       onHeadMoved: onShnakeHeadMoved,
+      onIndignantRoar,
+      onTriggerWiggle,
     });
     
     // Update shwarm locomotion context
     setShwarmLocomotionContext({
       onPlayerHit,
     });
-  }, [isEnabled, aiControlled, plantedTrees, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved]);
+  }, [isEnabled, aiControlled, plantedTrees, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved, onIndignantRoar, onTriggerWiggle]);
   
   // Stable sync function for shnakes (avoids stale closures)
   // OPTIMIZED: Reuses tempShnakeIds set instead of allocating new Set each call

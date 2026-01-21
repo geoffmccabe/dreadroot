@@ -154,6 +154,13 @@ class EnemyManagerClass {
   }
   
   /**
+   * Get a registered enemy entry by ID (for direct state access).
+   */
+  getEntry(enemyId: string): RegisteredEnemy | undefined {
+    return this.enemies.get(enemyId);
+  }
+  
+  /**
    * Get the spatial index for neighbor queries.
    */
   getSpatialIndex(): EnemySpatialIndex {
