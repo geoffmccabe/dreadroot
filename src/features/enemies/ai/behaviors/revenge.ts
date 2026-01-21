@@ -15,10 +15,11 @@ import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
 export const REVENGE_TIMEOUT_MS = 3 * 60 * 1000;
 
 export interface RevengeTarget {
-  damageReceived: number;
-  damageDealt: number;
+  damageReceived: number;      // Total damage received from ALL attackers
+  damageDealt: number;         // Total damage dealt to ANY player
   startedAt: number;
-  lastDamageAt: number; // Tracks when damage was last given/received
+  lastDamageAt: number;        // Tracks when damage was last given/received
+  currentTargetId: string | null; // ID of the player currently being chased
 }
 
 export const RevengeBehavior: BehaviorModule = {
@@ -152,20 +153,25 @@ export const RevengeBehavior: BehaviorModule = {
 };
 
 /**
- * Helper: Initialize revenge tracking for a shnake.
+ * Helper: Initialize or update revenge tracking for a shnake.
  * Call this when the shnake takes damage.
+ * 
+ * @param state - The behavior state object
+ * @param damageReceived - Amount of damage taken
+ * @param attackerId - ID of the player who dealt the damage (becomes new chase target)
  */
-export function initializeRevenge(state: Record<string, unknown>, damageReceived: number): void {
+export function initializeRevenge(state: Record<string, unknown>, damageReceived: number, attackerId?: string): void {
   const now = performance.now();
   const existing = state.revengeTarget as RevengeTarget | null;
   
   if (existing) {
-    // Add to existing revenge and reset timer
+    // Add to existing revenge, update target to newest attacker, and reset timer
     state.revengeTarget = {
       damageReceived: existing.damageReceived + damageReceived,
       damageDealt: existing.damageDealt,
       startedAt: existing.startedAt,
-      lastDamageAt: now, // Reset timeout
+      lastDamageAt: now,
+      currentTargetId: attackerId ?? existing.currentTargetId, // Switch to new attacker
     } as RevengeTarget;
   } else {
     // Start new revenge
@@ -174,13 +180,14 @@ export function initializeRevenge(state: Record<string, unknown>, damageReceived
       damageDealt: 0,
       startedAt: now,
       lastDamageAt: now,
+      currentTargetId: attackerId ?? null,
     } as RevengeTarget;
   }
 }
 
 /**
  * Helper: Record damage dealt by shnake during revenge.
- * Call this when the shnake successfully hits the player.
+ * Call this when the shnake successfully hits any player.
  */
 export function recordRevengeDamageDealt(state: Record<string, unknown>, damageDealt: number): void {
   const now = performance.now();
@@ -192,6 +199,7 @@ export function recordRevengeDamageDealt(state: Record<string, unknown>, damageD
       damageDealt: existing.damageDealt + damageDealt,
       startedAt: existing.startedAt,
       lastDamageAt: now, // Reset timeout on successful hit
+      currentTargetId: existing.currentTargetId,
     } as RevengeTarget;
   }
 }

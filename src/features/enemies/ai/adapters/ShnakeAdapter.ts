@@ -76,8 +76,12 @@ export function markShnakeIndignant(shnakeId: string): void {
 /**
  * Initialize revenge tracking for a shnake (called when head takes damage).
  * Also marks the shnake as attacked so it can descend to ground level.
+ * 
+ * @param shnakeId - The shnake's ID
+ * @param damageReceived - Amount of damage taken
+ * @param attackerId - ID of the player who dealt the damage (becomes new chase target)
  */
-export function initializeShnakeRevenge(shnakeId: string, damageReceived: number): void {
+export function initializeShnakeRevenge(shnakeId: string, damageReceived: number, attackerId?: string): void {
   const entry = EnemyManager.getEntry(shnakeId);
   if (!entry) {
     console.warn(`[ShnakeAdapter] initializeShnakeRevenge: No entry for ${shnakeId}`);
@@ -92,14 +96,15 @@ export function initializeShnakeRevenge(shnakeId: string, damageReceived: number
   const existing = state.revengeTarget as RevengeTarget | null;
   
   if (existing) {
-    // Add to existing revenge and reset timeout
+    // Add to existing revenge, switch target to newest attacker, and reset timeout
     state.revengeTarget = {
       damageReceived: existing.damageReceived + damageReceived,
       damageDealt: existing.damageDealt,
       startedAt: existing.startedAt,
-      lastDamageAt: now, // Reset the 3-minute timer
+      lastDamageAt: now,
+      currentTargetId: attackerId ?? existing.currentTargetId, // Switch to new attacker
     } as RevengeTarget;
-    console.log(`[ShnakeAdapter] Added ${damageReceived} to revenge (total: ${existing.damageReceived + damageReceived}), timer reset`);
+    console.log(`[ShnakeAdapter] Added ${damageReceived} to revenge (total: ${existing.damageReceived + damageReceived}), new target: ${attackerId ?? 'same'}`);
   } else {
     // Start new revenge
     state.revengeTarget = {
@@ -107,13 +112,15 @@ export function initializeShnakeRevenge(shnakeId: string, damageReceived: number
       damageDealt: 0,
       startedAt: now,
       lastDamageAt: now,
+      currentTargetId: attackerId ?? null,
     } as RevengeTarget;
-    console.log(`[ShnakeAdapter] Started revenge with ${damageReceived} damage`);
+    console.log(`[ShnakeAdapter] Started revenge with ${damageReceived} damage, target: ${attackerId ?? 'local'}`);
   }
 }
 
 /**
- * Record damage dealt by shnake during revenge (called when shnake hits player).
+ * Record damage dealt by shnake during revenge (called when shnake hits any player).
+ * Damage can be split across multiple players - shnake doesn't care who it hits.
  */
 export function recordShnakeRevengeDamage(shnakeId: string, damageDealt: number): void {
   const entry = EnemyManager.getEntry(shnakeId);
@@ -129,8 +136,12 @@ export function recordShnakeRevengeDamage(shnakeId: string, damageDealt: number)
       damageDealt: existing.damageDealt + damageDealt,
       startedAt: existing.startedAt,
       lastDamageAt: now, // Reset timeout on successful hit
+      currentTargetId: existing.currentTargetId,
     } as RevengeTarget;
-    console.log(`[ShnakeAdapter] Revenge damage dealt: ${damageDealt} (${existing.damageDealt + damageDealt}/${existing.damageReceived})`);
+    
+    const newTotal = existing.damageDealt + damageDealt;
+    const satisfied = newTotal >= existing.damageReceived;
+    console.log(`[ShnakeAdapter] Revenge damage dealt: ${damageDealt} (${newTotal}/${existing.damageReceived})${satisfied ? ' - SATISFIED!' : ''}`);
   }
 }
 
