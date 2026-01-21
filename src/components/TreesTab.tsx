@@ -62,10 +62,14 @@ export const TreesTab: React.FC<TreesTabProps> = ({
   seedDefinitions, 
   plantedTrees 
 }) => {
-  // Get seeds from inventory - match by item_id (seed_definition_id)
+  // Get seeds from inventory - match by item_id (seed_definition_id) or item_type fallback
   const seedsInInventory = seedDefinitions
     .map(sd => {
-      const invItem = inventory.find(i => i.item_id === sd.id);
+      // Primary: match by item_id (UUID match)
+      // Fallback: match by item_type string (e.g., "seed_tier_13")
+      const invItem = inventory.find(i => 
+        i.item_id === sd.id || i.item_type === `seed_tier_${sd.tier}`
+      );
       const quantity = invItem?.quantity || 0;
       return { ...sd, quantity };
     })
