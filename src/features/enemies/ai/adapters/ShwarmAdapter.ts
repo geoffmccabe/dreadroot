@@ -132,7 +132,8 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
         angryDurationMs: config.angryDurationMs,
         angrySpeedMultiplier: config.angrySpeedMultiplier,
         damage: shwarm.definition.damage_per_hit,
-        knockback: 1 + shwarm.definition.tier,
+        knockback: 1 + shwarm.definition.tier, // TODO: Add knockback column to definition
+        // TODO: Move to ai_config when Phase 3 adds DB column
         attackCooldownMs: 500,
         xFactor: shwarm.definition.x_factor,
         speed: shwarm.definition.speed,
@@ -143,20 +144,13 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
   },
   
   applyResult(
-    shwarm: ShwarmWithAI, 
-    result: BehaviorResult, 
+    _shwarm: ShwarmWithAI, 
+    _result: BehaviorResult, 
     _deltaMs: number
   ): void {
-    // Phase 2: Results are advisory - actual movement is still handled by useShwarmMovement
-    // This will be used for tracking intent and debugging
-    
-    if (result.kind === 'attack') {
-      // Attack intent is noted but actual attack handled by existing code
-      shwarm.lastAttackAt = performance.now();
-    }
-    
-    // Move intents will be used in Phase 3 when we refactor locomotion
-    // For now, the existing setInterval handles actual movement
+    // Phase 2: Results are purely advisory - NO MUTATIONS
+    // Actual movement and attacks are handled by useShwarmMovement
+    // This will be used in Phase 3 when we migrate locomotion control
   },
   
   getBehaviors(shwarm: ShwarmWithAI): BehaviorModule[] {
