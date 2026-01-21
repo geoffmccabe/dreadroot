@@ -34,6 +34,7 @@ import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/bloc
 import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
 import { useShnakeDefinitions } from '@/features/shnake';
+import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
@@ -386,6 +387,10 @@ export function Fortress() {
       // Auto-respawn after timer
       const spawnPos = respawn();
       setRespawnPosition(spawnPos);
+      
+      // Reset all enemy AI states (clears revenge, stun, etc.)
+      // This prevents invisible attacks from shnakes that were chasing the dead player
+      EnemyManager.clearAllRevengeStates();
     }
   }, [respawnTimer, isDead, respawn]);
 

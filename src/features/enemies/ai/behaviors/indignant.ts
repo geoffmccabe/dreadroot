@@ -21,6 +21,13 @@ export const IndignantBehavior: BehaviorModule = {
       return 0;
     }
     
+    // IMPORTANT: Don't interrupt revenge mode with indignant behavior
+    // This prevents players from exploiting body shots to pause the attack
+    if (ctx.state.revengeTarget) {
+      ctx.state.isIndignant = false; // Clear it since we're ignoring it
+      return 0;
+    }
+    
     // Check if we're still within the animation window
     const indignantStartTime = ctx.state.indignantStartTime as number | undefined;
     if (indignantStartTime) {

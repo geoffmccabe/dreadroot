@@ -192,6 +192,27 @@ class EnemyManagerClass {
   }
   
   /**
+   * Clear revenge state for all enemies.
+   * Call this when player dies/respawns to reset shnake AI state.
+   */
+  clearAllRevengeStates(): void {
+    for (const reg of this.enemies.values()) {
+      // Clear revenge-related state
+      reg.behaviorState.revengeTarget = null;
+      reg.behaviorState.returningHome = false;
+      reg.behaviorState.isIndignant = false;
+      reg.behaviorState.indignantStartTime = undefined;
+      reg.behaviorState.isStunned = false;
+      reg.behaviorState.stunnedUntil = undefined;
+      
+      // Reset current behavior so shnake re-evaluates from scratch
+      reg.currentBehaviorId = null;
+    }
+    
+    if (DEBUG_AI) console.log('[EnemyManager] Cleared all revenge states (player respawned)');
+  }
+  
+  /**
    * Main tick function - called every frame by frameLoop.
    */
   private tick(_delta: number, elapsedTime: number): void {
