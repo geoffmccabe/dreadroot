@@ -528,8 +528,12 @@ export function FortressScene({
   // Fog configuration
   const { visualDistance, fogEnabled, currentWorldId } = useBlocks();
   // Scope multiplayer by world - prevents cross-world player visibility
-  const { players, broadcastPosition, isConnected } = useMultiplayer(currentWorldId);
+  const { players, broadcastPosition, broadcastPlayerHit, isConnected, localPlayerOnFire, localFireBurnTimeMs, localFireColors, setLocalPlayerOnFire } = useMultiplayer(currentWorldId);
   const { user } = useAuth();
+  
+  // Refs for player collision detection
+  const playersRef = useRef(players);
+  playersRef.current = players;
   
   useEffect(() => {
     if (fogEnabled) {
@@ -670,24 +674,9 @@ export function FortressScene({
     // This gets modified by gravity each frame
     bullet.velocityY = normalizedDir.y * MUZZLE_VELOCITY;
     
-    // DEBUG: Log bullet physics
-    console.log('[Bullet] Fired with muzzle velocity:', MUZZLE_VELOCITY, 
-      'direction:', normalizedDir.x.toFixed(3), normalizedDir.y.toFixed(3), normalizedDir.z.toFixed(3),
-      'velocityY:', bullet.velocityY.toFixed(2));
-    
     bullet.life = 30.0; // Extended lifetime for faster bullets with longer trajectories
     bullet.tier = selectedBulletTier;
     bullet.color = tierDef.colors[0] || '#FFFF00'; // Use first color from tier definition
-    bullet.ricochetScale = 1.0; // Full size for first impact
-    
-    // DEBUG: Log bullet physics
-    console.log('[Bullet] Fired with muzzle velocity:', MUZZLE_VELOCITY, 
-      'direction:', normalizedDir.x.toFixed(3), normalizedDir.y.toFixed(3), normalizedDir.z.toFixed(3),
-      'velocityY:', bullet.velocityY.toFixed(2));
-    
-    bullet.life = 30.0; // Extended lifetime for faster bullets with longer trajectories
-    bullet.tier = selectedBulletTier;
-    bullet.color = '#FFFF00';
     bullet.ricochetScale = 1.0; // Full size for first impact
     
     // Only add if not already in active list

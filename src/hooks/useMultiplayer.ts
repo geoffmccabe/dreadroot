@@ -9,12 +9,23 @@ export interface PlayerState {
   rotation: { yaw: number; pitch: number };
   username?: string;
   color?: string;
+  // Fire effect state
+  isOnFire?: boolean;
+  fireStartTime?: number;
+  fireBurnTimeMs?: number;
+  fireColors?: string[];
 }
 
 export interface MultiplayerState {
   players: Map<string, PlayerState>;
   broadcastPosition: (position: THREE.Vector3, yaw: number, pitch: number) => void;
+  broadcastPlayerHit: (burnTimeMs: number, colors: string[]) => void;
   isConnected: boolean;
+  // Local player fire state
+  localPlayerOnFire: boolean;
+  localFireBurnTimeMs: number;
+  localFireColors: string[];
+  setLocalPlayerOnFire: (burnTimeMs: number, colors: string[]) => void;
 }
 
 // Movement broadcast config - send only on meaningful change
@@ -27,6 +38,12 @@ const ROT_EPS = 0.01;                   // ~0.6 degrees (tune)
 export function useMultiplayer(worldId: string | null): MultiplayerState {
   const [players, setPlayers] = useState<Map<string, PlayerState>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Local player fire state
+  const [localPlayerOnFire, setLocalPlayerOnFireState] = useState(false);
+  const [localFireBurnTimeMs, setLocalFireBurnTimeMs] = useState(0);
+  const [localFireColors, setLocalFireColors] = useState<string[]>([]);
+  const fireTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Use ref for channel to ensure proper cleanup - fixes channel leak bug
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -167,7 +184,41 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
         });
       });
 
-      // Subscribe and set initial presence (join event only, not movement)
+      // Listen for player hit events (fire effects on other players)
+      multiplayerChannel.on('broadcast', { event: 'player_hit' }, (msg: any) => {
+        const payload = msg?.payload;
+        if (!payload) return;
+
+        const { user_id, burnTimeMs, colors, hitTime } = payload;
+        if (!user_id || user_id === user?.id) return;
+
+        setPlayers((prev) => {
+          const next = new Map(prev);
+          const existing = next.get(user_id);
+          if (existing) {
+            existing.isOnFire = true;
+            existing.fireStartTime = hitTime;
+            existing.fireBurnTimeMs = burnTimeMs;
+            existing.fireColors = colors;
+            next.set(user_id, existing);
+            
+            // Auto-clear fire after burn time
+            setTimeout(() => {
+              setPlayers((p) => {
+                const n = new Map(p);
+                const e = n.get(user_id);
+                if (e) {
+                  e.isOnFire = false;
+                  n.set(user_id, e);
+                }
+                return n;
+              });
+            }, burnTimeMs);
+          }
+          return next;
+        });
+      });
+
       await multiplayerChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           setIsConnected(true);
@@ -260,9 +311,47 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
     });
   }, [isConnected]);
 
+  // Set local player on fire
+  const setLocalPlayerOnFire = useCallback((burnTimeMs: number, colors: string[]) => {
+    setLocalPlayerOnFireState(true);
+    setLocalFireBurnTimeMs(burnTimeMs);
+    setLocalFireColors(colors);
+    
+    // Clear previous timer
+    if (fireTimerRef.current) clearTimeout(fireTimerRef.current);
+    
+    // Auto-clear fire after burn time
+    fireTimerRef.current = setTimeout(() => {
+      setLocalPlayerOnFireState(false);
+    }, burnTimeMs);
+  }, []);
+  
+  // Broadcast player hit to others
+  const broadcastPlayerHit = useCallback((burnTimeMs: number, colors: string[]) => {
+    const ch = channelRef.current;
+    const user = userRef.current;
+    if (!ch || !user || !isConnected) return;
+    
+    ch.send({
+      type: 'broadcast',
+      event: 'player_hit',
+      payload: {
+        user_id: user.id,
+        burnTimeMs,
+        colors,
+        hitTime: Date.now(),
+      },
+    });
+  }, [isConnected]);
+
   return {
     players,
     broadcastPosition,
+    broadcastPlayerHit,
     isConnected,
+    localPlayerOnFire,
+    localFireBurnTimeMs,
+    localFireColors,
+    setLocalPlayerOnFire,
   };
 }
