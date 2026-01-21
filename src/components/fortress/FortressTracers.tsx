@@ -2,9 +2,9 @@ import { useRef, useImperativeHandle, forwardRef, useMemo } from 'react';
 import * as THREE from 'three';
 
 const MAX_TRACERS = 500; // Max tracer segments in pool
-const TRACER_VISIBLE_DURATION = 1.0; // Seconds at full opacity
-const TRACER_FADE_DURATION = 1.0; // Seconds to fade out
-const BASE_OPACITY = 0.5; // 50% base transparency
+const TRACER_VISIBLE_DURATION = 0.5; // Seconds at full opacity
+const TRACER_FADE_DURATION = 0.5; // Seconds to fade out
+const BASE_OPACITY = 0.25; // 75% base transparency (more vapor-like)
 
 interface TracerSegment {
   startX: number;
