@@ -11,6 +11,7 @@
 // Core types
 export type {
   BehaviorContext,
+  BehaviorState,
   SharedContext,
   BehaviorResult,
   BehaviorModule,
@@ -46,3 +47,10 @@ export {
   AttackBehavior,
   AngryBehavior,
 } from './behaviors';
+
+// Adapters
+export { ShnakeAdapter, ShwarmAdapter } from './adapters';
+export type { ShnakeWithAI, ShwarmWithAI } from './adapters';
+
+// Hooks
+export { useEnemyAI } from './hooks';
