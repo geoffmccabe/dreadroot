@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import type { ShwarmDefinition } from '@/features/shwarm/types';
+import type { ShnakeDefinition } from '@/features/shnake/types';
 // ============================================================
 // DEBUG CONFIGURATION
 // ============================================================
@@ -101,6 +102,9 @@ export interface SceneProps {
   // Shwarm system
   shwarmDefinitions?: ShwarmDefinition[];
   onShwarmDamage?: (shwarmId: string, blockId: string, damage: number) => boolean;
+  // Shnake system
+  shnakeDefinitions?: ShnakeDefinition[];
+  plantedTrees?: import('@/features/trees/types').PlantedTree[];
   // Points system callback
   onPointsEarned?: (points: number) => void;
   // Shwarm group killed callback (passes tier for kill tracking)
@@ -164,6 +168,8 @@ export interface FirstPersonControlsProps {
   // Pentabullet system
   playerLevel?: number;
   onPentabulletChargeChange?: (charge: number) => void;
+  // Admin spawn shortcut (!2# for shnakes)
+  onSpawnShnake?: (tier: number) => void;
 }
 
 // Bullet interface

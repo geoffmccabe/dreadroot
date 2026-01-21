@@ -64,7 +64,9 @@ export function FirstPersonControls({
   onBulletTierChange,
   // Pentabullet props
   playerLevel = 1,
-  onPentabulletChargeChange
+  onPentabulletChargeChange,
+  // Admin spawn shortcut
+  onSpawnShnake
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -145,6 +147,11 @@ export function FirstPersonControls({
   const pentabulletSteadyAudioRef = useRef<HTMLAudioElement | null>(null);
   const pentabulletPhaseRef = useRef<'idle' | 'powerup' | 'steady'>('idle');
   const playerLevelRef = useRef(playerLevel);
+  
+  // Admin spawn mode: !2# sequence for spawning enemies
+  // Stage: 0=idle, 1=waiting for monster type (after !), 2=waiting for tier digit (after !2)
+  const spawnModeStageRef = useRef<0 | 1 | 2>(0);
+  const spawnModeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Track previous crawl state for crouch height transition
   const wasCrawlingRef = useRef(false);
@@ -291,6 +298,7 @@ export function FirstPersonControls({
         }
         break;
       // Number keys 1-0 for bullet tier selection (admin only, after pressing R)
+      // Also handles spawn mode stage 2 (!2#)
       case 'Digit1':
       case 'Digit2':
       case 'Digit3':
@@ -301,6 +309,45 @@ export function FirstPersonControls({
       case 'Digit8':
       case 'Digit9':
       case 'Digit0':
+        // Check for ! key (Shift+1) to start spawn mode
+        if (event.shiftKey && event.code === 'Digit1' && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
+          event.preventDefault();
+          spawnModeStageRef.current = 1;
+          if (spawnModeTimeoutRef.current) clearTimeout(spawnModeTimeoutRef.current);
+          spawnModeTimeoutRef.current = setTimeout(() => {
+            spawnModeStageRef.current = 0;
+          }, 3000); // 3 second window to complete sequence
+          console.log('[SpawnMode] Stage 1: waiting for monster type (press 2 for shnake)');
+          break;
+        }
+        
+        // Check for spawn mode stage 1 (waiting for monster type after !)
+        if (spawnModeStageRef.current === 1 && event.code === 'Digit2' && !event.shiftKey) {
+          event.preventDefault();
+          spawnModeStageRef.current = 2;
+          if (spawnModeTimeoutRef.current) clearTimeout(spawnModeTimeoutRef.current);
+          spawnModeTimeoutRef.current = setTimeout(() => {
+            spawnModeStageRef.current = 0;
+          }, 3000);
+          console.log('[SpawnMode] Stage 2: waiting for tier (press 1-9 or 0 for tier 10)');
+          break;
+        }
+        
+        // Check for spawn mode stage 2 (waiting for tier digit after !2)
+        if (spawnModeStageRef.current === 2 && !event.shiftKey && onSpawnShnake) {
+          event.preventDefault();
+          const tier = event.code === 'Digit0' ? 10 : parseInt(event.code.replace('Digit', ''));
+          console.log(`[SpawnMode] Spawning shnake tier ${tier}`);
+          onSpawnShnake(tier);
+          spawnModeStageRef.current = 0;
+          if (spawnModeTimeoutRef.current) {
+            clearTimeout(spawnModeTimeoutRef.current);
+            spawnModeTimeoutRef.current = null;
+          }
+          break;
+        }
+        
+        // R-mode for bullet tier selection
         if (rModeActiveRef.current && onBulletTierChange && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           event.preventDefault();
           // Digit0 = tier 10, Digit1-9 = tier 1-9

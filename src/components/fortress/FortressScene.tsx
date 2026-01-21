@@ -333,7 +333,9 @@ export function FortressScene({
   selectedBulletTier = 1,
   onBulletTierChange,
   playerLevel = 1,
-  onPentabulletChargeChange
+  onPentabulletChargeChange,
+  shnakeDefinitions,
+  plantedTrees
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition } = useBlocks();
@@ -394,8 +396,105 @@ export function FortressScene({
     onPlayerHit: handleShwarmPlayerHit,
   });
   
-  // Shnake system - placeholder ref (system needs plantedTrees prop which isn't passed yet)
-  const shnakesRef = useRef<any[]>([]);
+  // Shnake system
+  const {
+    shnakes,
+    shnakesRef,
+    damageHead: damageShnakeHead,
+    spawnOnTree,
+    getTreeBlockIndexRefs,
+  } = useShnakeSystem({
+    definitions: shnakeDefinitions,
+    plantedTrees,
+    blocksRef,
+    isEnabled: true,
+  });
+
+  const { treeBlocksByTierRef, nonInvisTreeBlocksByTierRef } = getTreeBlockIndexRefs();
+
+  // Shnake player hit callback
+  const handleShnakePlayerHitRef = useRef<(damage: number, knockbackForce: number, direction: THREE.Vector3) => void>();
+  useEffect(() => {
+    handleShnakePlayerHitRef.current = (damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+      if (takeDamage) {
+        takeDamage(damage, direction, knockbackForce);
+      }
+      if (audioRefs.current.playerHit) {
+        audioRefs.current.playerHit.currentTime = 0;
+        audioRefs.current.playerHit.play().catch(() => {});
+      }
+    };
+  }, [takeDamage]);
+
+  const handleShnakePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+    handleShnakePlayerHitRef.current?.(damage, knockbackForce, direction);
+  }, []);
+
+  useShnakeMovement({
+    shnakesRef,
+    cameraRef,
+    plantedTrees,
+    blocksRef,
+    isEnabled: true,
+    treeBlocksByTierRef,
+    nonInvisTreeBlocksByTierRef,
+    onPlayerHit: handleShnakePlayerHit,
+  });
+
+  // Admin spawn callback: spawn shnake on nearest tree
+  const handleSpawnShnake = useCallback((tier: number) => {
+    if (!plantedTrees || plantedTrees.length === 0) {
+      console.log('[SpawnShnake] No trees available');
+      return;
+    }
+    
+    const camPos = cameraRef.current?.position;
+    if (!camPos) return;
+    
+    // Find nearest tree matching the requested tier (or any tree if none match)
+    let nearestTree: typeof plantedTrees[0] | null = null;
+    let nearestDist = Infinity;
+    
+    // First try to find a tree matching the exact tier
+    for (const tree of plantedTrees) {
+      const treeTier = (tree as any).seed_tier ?? tree.seed_definition?.tier ?? 1;
+      if (treeTier !== tier) continue;
+      
+      const dx = tree.base_x - camPos.x;
+      const dz = tree.base_z - camPos.z;
+      const dist = dx * dx + dz * dz;
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestTree = tree;
+      }
+    }
+    
+    // If no tree of exact tier found, find any nearest tree
+    if (!nearestTree) {
+      for (const tree of plantedTrees) {
+        const dx = tree.base_x - camPos.x;
+        const dz = tree.base_z - camPos.z;
+        const dist = dx * dx + dz * dz;
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestTree = tree;
+        }
+      }
+    }
+    
+    if (nearestTree) {
+      const treeTier = (nearestTree as any).seed_tier ?? nearestTree.seed_definition?.tier ?? 1;
+      console.log(`[SpawnShnake] Spawning shnake on T${treeTier} tree at (${nearestTree.base_x}, ${nearestTree.base_z})`);
+      const result = spawnOnTree(nearestTree);
+      if (result) {
+        console.log(`[SpawnShnake] Success! Shnake ${result.id} with ${result.segments.length} segments`);
+      } else {
+        console.log('[SpawnShnake] Failed - no valid spawn position');
+      }
+    } else {
+      console.log('[SpawnShnake] No trees found');
+    }
+  }, [plantedTrees, cameraRef, spawnOnTree]);
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
   
@@ -1216,6 +1315,7 @@ export function FortressScene({
         onBulletTierChange={onBulletTierChange}
         playerLevel={playerLevel}
         onPentabulletChargeChange={onPentabulletChargeChange}
+        onSpawnShnake={handleSpawnShnake}
       />
       
       <MultiplayerPlayers players={players} />

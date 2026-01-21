@@ -33,6 +33,7 @@ import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/bloc
 
 import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
+import { useShnakeDefinitions } from '@/features/shnake';
 
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
@@ -146,7 +147,9 @@ export function Fortress() {
   // Shwarm definitions
   const { data: shwarmDefinitions } = useShwarmDefinitions();
   
-  // Death/respawn state
+  // Shnake definitions
+  const { data: shnakeDefinitions } = useShnakeDefinitions();
+
   const [respawnTimer, setRespawnTimer] = useState(0);
   const [respawnPosition, setRespawnPosition] = useState<THREE.Vector3 | null>(null);
   
@@ -947,9 +950,11 @@ export function Fortress() {
           groundTextureUrl={currentWorld?.ground_texture_url}
           skyTextureUrl={currentWorld?.sky_texture_url}
           seedDefinitions={seedDefinitions}
+          plantedTrees={plantedTrees}
           healthRef={healthRef}
           takeDamage={takeDamage}
           shwarmDefinitions={shwarmDefinitions}
+          shnakeDefinitions={shnakeDefinitions}
           onPointsEarned={async (points) => {
             const { newLevel } = await addPoints(points);
             if (newLevel) {
