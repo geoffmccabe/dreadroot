@@ -5,6 +5,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
 import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE, MIN_SHWARM_SPACING, MOVEMENT_PHASE_MS, GRAVITY_FALL, GROUND_LEVEL } from '../constants';
+import { playSpatialSound, SHWARM_SOUNDS } from '@/lib/spatialAudio';
 
 // Maximum center pull multiplier (when far from center)
 const MAX_CENTER_PULL_MULTIPLIER = 3.0;
@@ -299,6 +300,16 @@ export function useShwarmMovement({
           
           // Schedule next move: 0.5 to 1.5 seconds from now
           target.nextMoveTime = now + 500 + Math.random() * 1000;
+          
+          // 1% chance to play a shwarm sound on movement
+          if (Math.random() < 0.01) {
+            const soundIndex = Math.floor(Math.random() * SHWARM_SOUNDS.length);
+            const distToPlayer = block.position.distanceTo(playerPos);
+            playSpatialSound(SHWARM_SOUNDS[soundIndex], distToPlayer, {
+              baseVolume: 0.6,
+              playbackRate: 0.9 + Math.random() * 0.2, // Slight pitch variation
+            });
+          }
           
           const currentTargetPos = target.targetPosition;
 
