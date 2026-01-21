@@ -229,7 +229,6 @@ export function useShnakeMovement({
             // CRITICAL: Check if this move would keep shnake connected to tree
             const newHead = { x: nx, y: ny, z: nz };
             if (!wouldStayConnected(s.tier, newHead, s.segments)) {
-              // This move would detach shnake from tree - not allowed
               continue;
             }
             
@@ -251,10 +250,60 @@ export function useShnakeMovement({
           // Sort by score (lower is better)
           scored.sort((a, b) => a.score - b.score);
           
-          const choice = scored[0] || null;
+          let choice: { dx: number; dy: number; dz: number } | null = scored[0] || null;
+          
+          // BACKTRACK LOGIC: If stuck, try to bend back towards second segment with offset
+          if (!choice && length >= 2) {
+            const secondSeg = s.segments[1];
+            // Try moving towards segment[1] position but offset by 1 on each axis
+            const backtrackCandidates: Array<{ dx: number; dy: number; dz: number }> = [];
+            
+            // Calculate direction from head to second segment
+            const toDx = secondSeg.x - headSeg.x;
+            const toDy = secondSeg.y - headSeg.y;
+            const toDz = secondSeg.z - headSeg.z;
+            
+            // Generate offset positions - move toward second segment but offset perpendicular
+            for (const [ox, oy, oz] of candidates) {
+              // Skip if this is the exact direction to second segment (would collide)
+              if (ox === toDx && oy === toDy && oz === toDz) continue;
+              
+              const nx = headSeg.x + ox;
+              const ny = headSeg.y + oy;
+              const nz = headSeg.z + oz;
+              const k = key(nx, ny, nz);
+              
+              // For backtracking, allow moving into any segment position except head
+              // This lets the snake "fold" back on itself temporarily
+              if (k === key(headSeg.x, headSeg.y, headSeg.z)) continue;
+              if (isWorldOccupied(nx, ny, nz)) continue;
+              
+              // Relaxed tree connection for backtracking - just need to touch tree OR be near body
+              const newHead = { x: nx, y: ny, z: nz };
+              const touchesTree = isTouchingTree(s.tier, nx, ny, nz);
+              const nearBody = s.segments.some((seg, idx) => {
+                if (idx === 0) return false; // skip head
+                const dist = Math.abs(seg.x - nx) + Math.abs(seg.y - ny) + Math.abs(seg.z - nz);
+                return dist <= 1;
+              });
+              
+              if (touchesTree || nearBody) {
+                backtrackCandidates.push({ dx: ox, dy: oy, dz: oz });
+              }
+            }
+            
+            if (backtrackCandidates.length > 0) {
+              // Pick random backtrack direction
+              choice = backtrackCandidates[Math.floor(Math.random() * backtrackCandidates.length)];
+              if (debugLogTimer > 2) {
+                console.log(`[Shnake Move] Backtracking: chose (${choice.dx}, ${choice.dy}, ${choice.dz})`);
+              }
+            }
+          }
+          
           if (!choice) {
             if (debugLogTimer > 2) {
-              console.log(`[Shnake Move] No valid move found for shnake at (${headSeg.x}, ${headSeg.y}, ${headSeg.z})`);
+              console.log(`[Shnake Move] No valid move found for shnake at (${headSeg.x}, ${headSeg.y}, ${headSeg.z}) - truly stuck`);
             }
             break;
           }
