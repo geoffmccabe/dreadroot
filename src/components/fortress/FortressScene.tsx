@@ -30,6 +30,7 @@ import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
 import { Bullets, BulletsHandle } from './FortressBullets';
 import { BulletImpacts, BulletImpactsHandle } from './FortressImpacts';
+import { Tracers, TracersHandle } from './FortressTracers';
 import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
@@ -491,6 +492,7 @@ export function FortressScene({
   const skyRef = useRef<SkyHandle>(null);
   const fpsCounterRef = useRef<FPSCounterHandle>(null);
   const bulletImpactsRef = useRef<BulletImpactsHandle>(null);
+  const tracersRef = useRef<TracersHandle>(null);
   
   // Track meshes by a unique ID (mesh reference) to allow multiple meshes per blockType
   // This is needed because tree blocks share the same type ("trunk") but have different textures
@@ -709,6 +711,7 @@ export function FortressScene({
     bulletsComponentRef.current?.update();
     wispParticlesMeshRef.current?.update();
     fpsCounterRef.current?.update();
+    tracersRef.current?.update();
     
     // Tick the centralized frame loop registry (runs all registered callbacks)
     frameLoop.tick(delta, state.clock.elapsedTime);
@@ -746,6 +749,13 @@ export function FortressScene({
         bullet.position.x += bullet.direction.x * bullet.speed * delta;
         bullet.position.z += bullet.direction.z * bullet.speed * delta;
         bullet.position.y += bullet.velocityY * delta;
+        
+        // Add tracer segment from previous to current position
+        tracersRef.current?.addSegment(
+          prevX, prevY, prevZ,
+          bullet.position.x, bullet.position.y, bullet.position.z,
+          bullet.color
+        );
         
         bullet.life -= delta;
         
@@ -1226,6 +1236,7 @@ export function FortressScene({
       />
       <Bullets ref={bulletsComponentRef} bullets={bulletsRef.current} />
       <BulletImpacts ref={bulletImpactsRef} />
+      <Tracers ref={tracersRef} />
       
       {wispState && (
         <WispBlock 
