@@ -338,14 +338,15 @@ export function FortressScene({
   plantedTrees
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
-  const { updatePlayerPosition } = useBlocks();
+  // IMPORTANT: Use full blocks array from context (all loaded chunks), not just visible blocks prop
+  const { updatePlayerPosition, blocks: allLoadedBlocks } = useBlocks();
   const { camera } = useThree();
   
-  // Shwarm system
+  // Shwarm/Shnake system - needs ALL loaded blocks, not just visible ones
   const cameraRef = useRef<THREE.Camera>(camera);
   cameraRef.current = camera;
-  const blocksRef = useRef(blocks);
-  blocksRef.current = blocks;
+  const blocksRef = useRef(allLoadedBlocks);
+  blocksRef.current = allLoadedBlocks;
   
   // Callback when entire shwarm group is killed - play yay sound and notify parent
   const handleShwarmGroupKilled = useCallback((tier: number) => {
