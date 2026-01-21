@@ -813,15 +813,16 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
       const wantedChunkKeys = new Set(chunksToFetchFromServer.map(c => `chunk_${c.x}_${c.z}`));
 
-      // Retry logic for network errors
-      const MAX_RETRIES = 3;
-      let blocks: PlacedBlock[] | null = null;
+      // Paginated fetch to handle Supabase's 1000 row limit
+      const PAGE_SIZE = 1000;
+      let blocks: PlacedBlock[] = [];
       let lastError: Error | null = null;
+      let offset = 0;
+      let hasMore = true;
       
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        // CRITICAL: Supabase default limit is 1000 rows - we need more for large structures
-        console.log(`[ChunkLoader DEBUG] Fetching chunks: worldId=${worldId}, bounds=(${minChunkX},${minChunkZ})-(${maxChunkX},${maxChunkZ}), wanted=${Array.from(wantedChunkKeys).join(',')}`);
-        
+      console.log(`[ChunkLoader DEBUG] Fetching chunks: worldId=${worldId}, bounds=(${minChunkX},${minChunkZ})-(${maxChunkX},${maxChunkZ}), wanted=${Array.from(wantedChunkKeys).join(',')}`);
+      
+      while (hasMore) {
         const { data, error, count } = await supabase
           .from('placed_blocks')
           .select('*', { count: 'exact' })
@@ -830,27 +831,40 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           .lte('chunk_x', maxChunkX)
           .gte('chunk_z', minChunkZ)
           .lte('chunk_z', maxChunkZ)
-          .limit(10000);
+          .range(offset, offset + PAGE_SIZE - 1);
 
-        console.log(`[ChunkLoader DEBUG] Query returned: ${data?.length} rows, count=${count}, error=${error?.message || 'none'}`);
-
-        if (!error) {
-          blocks = data;
+        if (error) {
+          lastError = new Error(error.message);
+          console.error(`[ChunkLoader DEBUG] Page fetch failed at offset ${offset}:`, error.message);
           break;
         }
 
-        lastError = new Error(error.message);
-        console.warn(`Chunk load attempt ${attempt}/${MAX_RETRIES} failed:`, error.message);
+        if (data && data.length > 0) {
+          blocks = blocks.concat(data);
+          offset += data.length;
+          
+          // Check if we got a full page (might be more)
+          hasMore = data.length === PAGE_SIZE;
+          
+          if (hasMore) {
+            console.log(`[ChunkLoader DEBUG] Fetched page: ${data.length} rows, total so far: ${blocks.length}, fetching more...`);
+          }
+        } else {
+          hasMore = false;
+        }
         
-        if (attempt < MAX_RETRIES) {
-          // Exponential backoff: 500ms, 1000ms, 2000ms
-          await new Promise(resolve => setTimeout(resolve, 250 * Math.pow(2, attempt)));
+        // Safety limit to prevent infinite loops
+        if (offset > 50000) {
+          console.warn('[ChunkLoader DEBUG] Safety limit reached at 50000 blocks');
+          hasMore = false;
         }
       }
+      
+      console.log(`[ChunkLoader DEBUG] Pagination complete: ${blocks.length} total blocks fetched`);
 
-      if (blocks === null) {
-        console.error('Error loading chunks from server after retries:', lastError);
-        initLogStep('useChunkLoader.ts', `Supabase error after ${MAX_RETRIES} retries: ${lastError?.message}`);
+      if (blocks.length === 0 && lastError) {
+        console.error('Error loading chunks from server:', lastError);
+        initLogStep('useChunkLoader.ts', `Supabase error: ${lastError?.message}`);
         // Still emit what we have from cache
         if (chunksFromCache.length > 0) {
           scheduleEmit();
