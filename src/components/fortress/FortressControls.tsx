@@ -786,7 +786,7 @@ export function FirstPersonControls({
           // Get current camera position and direction at fire time
           const origin = camera.position.clone();
           const direction = calculateSpreadDirection(isFirstInRound);
-          onShoot(origin, direction);
+          onShoot(origin, direction, true); // isPentabullet = true for 3x larger/longer impacts
         }, bulletDelay);
       }
     }
