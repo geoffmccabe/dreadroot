@@ -25,9 +25,9 @@ export function calculateSteadyFromLevel(level: number): number {
   return Math.floor(level / 2);
 }
 
-// Calculate knockback reduction from STEADY (each point = 1% reduction, cap at 75%)
+// Get flat knockback reduction from STEADY (each point = 1 block reduction)
 export function calculateKnockbackReduction(steady: number): number {
-  return Math.min(0.75, steady * 0.01);
+  return steady; // Flat subtraction, not percentage
 }
 
 // Default modifiers that always run in the pipeline
@@ -72,7 +72,7 @@ export const DEFAULT_MODIFIERS: DamageModifier[] = [
   },
   
   // STEADY knockback reduction (priority 30)
-  // Based on level/2 + any other STEADY modifiers
+  // Each point of STEADY = 1 block reduction (flat subtraction)
   {
     id: 'steady-knockback',
     priority: 30,
@@ -84,9 +84,8 @@ export const DEFAULT_MODIFIERS: DamageModifier[] = [
       const baseSteady = calculateSteadyFromLevel(ctx.playerLevel);
       const totalSteady = baseSteady + ctx.steady;
       
-      // Convert STEADY to knockback reduction (1% per point, cap 75%)
-      const reduction = calculateKnockbackReduction(totalSteady);
-      const reducedForce = event.knockback.baseForce * (1 - reduction);
+      // Flat reduction: each STEADY point reduces knockback by 1 block
+      const reducedForce = event.knockback.baseForce - totalSteady;
       
       return { 
         ...event, 
