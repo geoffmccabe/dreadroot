@@ -128,7 +128,7 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
       msSinceLastAttack: now - shnake.lastAttackAt,
       msSinceLastDamaged: shnake.lastDamagedAt ? now - shnake.lastDamagedAt : 999999,
       
-      nearbyAllies: 0, // Will be filled by EnemyManager
+      nearbyAllies: 0, // Not computed - no behaviors currently use it
       nearbyEnemies: 0,
       
       custom: {

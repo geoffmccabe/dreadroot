@@ -13,6 +13,11 @@ import type { BehaviorResult } from '../types';
 
 const CHUNK_SIZE = 16;
 
+// Pre-allocated Box3 for head collider creation (reused, then cloned only on assignment)
+const _tempBox = new THREE.Box3();
+const _tempMin = new THREE.Vector3();
+const _tempMax = new THREE.Vector3();
+
 function key(x: number, y: number, z: number) {
   return `${x},${y},${z}`;
 }
@@ -21,11 +26,14 @@ function chunkKey(x: number, z: number) {
   return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
 }
 
+/**
+ * Create an AABB for a cell position.
+ * Uses pre-allocated vectors but returns a NEW Box3 (colliders must be unique per segment).
+ */
 function aabbForCell(x: number, y: number, z: number): THREE.Box3 {
-  return new THREE.Box3(
-    new THREE.Vector3(x, y, z),
-    new THREE.Vector3(x + 1, y + 1, z + 1)
-  );
+  _tempMin.set(x, y, z);
+  _tempMax.set(x + 1, y + 1, z + 1);
+  return new THREE.Box3(_tempMin.clone(), _tempMax.clone());
 }
 
 function treeBounds(tree: PlantedTree) {
@@ -268,7 +276,9 @@ export function applyShnakeAttack(
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void
 ): void {
   const now = performance.now();
-  const cooldownMs = shnake.definition.ai_config?.attackCooldownMs ?? 600;
+  // Access ai_config from definition (type includes it but LSP may lag)
+  const defAiConfig = (shnake.definition as any).ai_config;
+  const cooldownMs = defAiConfig?.attackCooldownMs ?? 600;
 
   if (now - shnake.lastAttackAt < cooldownMs) {
     return; // Still in cooldown
