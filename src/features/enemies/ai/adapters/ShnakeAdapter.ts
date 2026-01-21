@@ -1,11 +1,12 @@
 /**
  * ShnakeAdapter - Bridges Shnake instances to the universal AI system
  * 
- * Phase 3: Advisory mode - behaviors are evaluated but movement is still
- * handled by useShnakeMovement. applyResult is a no-op.
+ * Phase 4: Full locomotion control - applyResult executes movement.
  */
 
+import * as THREE from 'three';
 import type { ShnakeInstance } from '@/features/shnake/types';
+import type { PlantedTree } from '@/features/trees/types';
 import type { 
   EnemyAdapter, 
   BehaviorContext, 
@@ -16,6 +17,8 @@ import type {
 } from '../types';
 import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
+import { applyShnakeMove, applyShnakeAttack, type ShnakeLocomotionContext } from '../locomotion/ShnakeLocomotion';
+import { EnemyManager } from '../EnemyManager';
 
 /**
  * Extended shnake instance with AI state
@@ -24,6 +27,23 @@ import { DEFAULT_AI_CONFIG } from '../types';
 export interface ShnakeWithAI extends ShnakeInstance {
   /** Timestamp of last damage taken */
   lastDamagedAt?: number;
+}
+
+// Module-level locomotion context (set by useEnemyAI hook)
+let locomotionContext: {
+  plantedTrees: PlantedTree[];
+  worldBlocks: { position_x: number; position_y: number; position_z: number }[];
+  treeBlocksByTier: Map<number, Map<string, string>> | null;
+  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
+  onHeadMoved?: (shnakeId: string) => void;
+} | null = null;
+
+/**
+ * Set locomotion context for shnake movement execution.
+ * Called by useEnemyAI hook when aiControlled=true.
+ */
+export function setShnakeLocomotionContext(ctx: typeof locomotionContext): void {
+  locomotionContext = ctx;
 }
 
 /**
@@ -112,13 +132,39 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
   },
   
   applyResult(
-    _shnake: ShnakeWithAI, 
-    _result: BehaviorResult, 
+    shnake: ShnakeWithAI, 
+    result: BehaviorResult, 
     _deltaMs: number
   ): void {
-    // Phase 3: Results are purely advisory - NO MUTATIONS
-    // Actual movement and attacks are handled by useShnakeMovement
-    // Future: migrate locomotion control here to unify AI decision-making
+    // Only execute if AI is in control and we have locomotion context
+    if (!EnemyManager.isAIControlled() || !locomotionContext) {
+      return;
+    }
+    
+    if (result.kind === 'idle') {
+      return;
+    }
+    
+    if (result.kind === 'move') {
+      // Find the tree for this shnake
+      const tree = locomotionContext.plantedTrees.find(t => t.id === shnake.treeId);
+      if (!tree) return;
+      
+      // Build locomotion context for this shnake
+      const ctx: ShnakeLocomotionContext = {
+        tree,
+        treeBlocksByTier: locomotionContext.treeBlocksByTier,
+        worldBlocks: locomotionContext.worldBlocks,
+        canGoToGround: false, // TODO: Track attacked state
+        onHeadMoved: locomotionContext.onHeadMoved,
+      };
+      
+      applyShnakeMove(shnake, result, ctx);
+    }
+    
+    if (result.kind === 'attack') {
+      applyShnakeAttack(shnake, result, locomotionContext.onPlayerHit);
+    }
   },
   
   getBehaviors(shnake: ShnakeWithAI): BehaviorModule[] {

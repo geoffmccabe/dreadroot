@@ -1,20 +1,24 @@
 /**
  * useEnemyAI - Integrates EnemyManager with React Three Fiber scene
  * 
+ * Phase 4: Full locomotion control - AI system drives enemy movement.
+ * 
  * Handles:
  * - EnemyManager initialization and shutdown
- * - Player position updates via frameLoop (not separate RAF)
+ * - Player position updates via frameLoop
  * - Enemy registration/unregistration
+ * - Locomotion context for movement execution
  */
 
 import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { EnemyManager } from '../EnemyManager';
-import { ShnakeAdapter, type ShnakeWithAI } from '../adapters/ShnakeAdapter';
-import { ShwarmAdapter, type ShwarmWithAI } from '../adapters/ShwarmAdapter';
+import { ShnakeAdapter, type ShnakeWithAI, setShnakeLocomotionContext } from '../adapters/ShnakeAdapter';
+import { ShwarmAdapter, type ShwarmWithAI, setShwarmLocomotionContext } from '../adapters/ShwarmAdapter';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShnakeInstance } from '@/features/shnake/types';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
+import type { PlantedTree } from '@/features/trees/types';
 
 interface UseEnemyAIOptions {
   /** Camera ref for player position updates */
@@ -28,23 +32,59 @@ interface UseEnemyAIOptions {
   
   /** Whether AI system is enabled */
   isEnabled: boolean;
+  
+  /** Whether AI controls movement (Phase 4) or runs in advisory mode (Phase 3) */
+  aiControlled?: boolean;
+  
+  // Shnake locomotion context
+  plantedTrees?: PlantedTree[];
+  blocksRef?: React.RefObject<{ position_x: number; position_y: number; position_z: number }[]>;
+  treeBlocksByTierRef?: React.RefObject<Map<number, Map<string, string>>>;
+  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
+  onShnakeHeadMoved?: (shnakeId: string) => void;
 }
 
 /**
  * Hook to integrate the universal AI system with the scene.
  * 
- * Phase 3: Runs in parallel with existing movement hooks (advisory mode).
- * Behaviors are evaluated but movement is still handled by legacy code.
+ * Phase 4: Full locomotion control mode.
+ * When aiControlled=true, adapters execute movement via locomotion layer.
+ * Legacy movement hooks should be disabled when aiControlled=true.
  */
 export function useEnemyAI({
   cameraRef,
   shnakesRef,
   shwarmsRef,
   isEnabled,
+  aiControlled = false,
+  plantedTrees,
+  blocksRef,
+  treeBlocksByTierRef,
+  onPlayerHit,
+  onShnakeHeadMoved,
 }: UseEnemyAIOptions) {
   // Track registered enemy IDs to detect changes
   const registeredShnakesRef = useRef<Set<string>>(new Set());
   const registeredShwarmsRef = useRef<Set<string>>(new Set());
+  
+  // Update locomotion context when deps change
+  useEffect(() => {
+    if (!isEnabled || !aiControlled) return;
+    
+    // Update shnake locomotion context
+    setShnakeLocomotionContext({
+      plantedTrees: plantedTrees ?? [],
+      worldBlocks: blocksRef?.current ?? [],
+      treeBlocksByTier: treeBlocksByTierRef?.current ?? null,
+      onPlayerHit,
+      onHeadMoved: onShnakeHeadMoved,
+    });
+    
+    // Update shwarm locomotion context
+    setShwarmLocomotionContext({
+      onPlayerHit,
+    });
+  }, [isEnabled, aiControlled, plantedTrees, blocksRef, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved]);
   
   // Stable sync function for shnakes (avoids stale closures)
   const syncShnakes = useCallback(() => {
@@ -96,6 +136,8 @@ export function useEnemyAI({
   useEffect(() => {
     if (!isEnabled) return;
     
+    // Set AI controlled mode on manager
+    EnemyManager.setAIControlled(aiControlled);
     EnemyManager.initialize();
     
     // Register player position updater with frameLoop (priority 35: before enemyAI at 40)
@@ -120,7 +162,7 @@ export function useEnemyAI({
       registeredShnakesRef.current.clear();
       registeredShwarmsRef.current.clear();
     };
-  }, [isEnabled, cameraRef]);
+  }, [isEnabled, aiControlled, cameraRef]);
   
   // Sync enemy registrations periodically
   useEffect(() => {
@@ -143,5 +185,8 @@ export function useEnemyAI({
     
     /** Get spatial index for queries */
     getSpatialIndex: () => EnemyManager.getSpatialIndex(),
+    
+    /** Whether AI is controlling movement */
+    isAIControlled: aiControlled,
   };
 }

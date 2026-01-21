@@ -41,6 +41,9 @@ class EnemyManagerClass {
   private lastFrameTime = 0;
   private isRegistered = false;
   
+  // Phase 4: Whether AI controls movement (true) or runs in advisory mode (false)
+  private aiControlled = false;
+  
   // Pre-allocated array for spatial entries (reused each frame)
   private spatialEntries: Array<{ id: string; type: string; x: number; y: number; z: number }> = [];
   
@@ -60,6 +63,21 @@ class EnemyManagerClass {
     scratchVec2: _scratchVec2,
     scratchVec3: _scratchVec3,
   };
+  
+  /**
+   * Set whether AI controls movement (Phase 4) or runs in advisory mode.
+   */
+  setAIControlled(controlled: boolean): void {
+    this.aiControlled = controlled;
+    console.log(`[EnemyManager] AI controlled mode: ${controlled}`);
+  }
+  
+  /**
+   * Check if AI is controlling movement.
+   */
+  isAIControlled(): boolean {
+    return this.aiControlled;
+  }
   
   /**
    * Initialize the manager and register with frameLoop.
