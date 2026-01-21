@@ -318,7 +318,9 @@ export function FirstPersonControls({
         }
         
         // Check for spawn mode stage 1 (waiting for monster type after !)
-        if (spawnModeStageRef.current === 1 && event.code === 'Digit2' && !event.shiftKey) {
+        // Defense-in-depth: also verify admin role here
+        if (spawnModeStageRef.current === 1 && event.code === 'Digit2' && !event.shiftKey && 
+            (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           event.preventDefault();
           spawnModeStageRef.current = 2;
           if (spawnModeTimeoutRef.current) clearTimeout(spawnModeTimeoutRef.current);
@@ -330,7 +332,9 @@ export function FirstPersonControls({
         }
         
         // Check for spawn mode stage 2 (waiting for tier digit after !2)
-        if (spawnModeStageRef.current === 2 && !event.shiftKey && onSpawnShnake) {
+        // Defense-in-depth: also verify admin role here
+        if (spawnModeStageRef.current === 2 && !event.shiftKey && onSpawnShnake &&
+            (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           event.preventDefault();
           const tier = event.code === 'Digit0' ? 10 : parseInt(event.code.replace('Digit', ''));
           console.log(`[SpawnMode] Spawning shnake tier ${tier}`);
