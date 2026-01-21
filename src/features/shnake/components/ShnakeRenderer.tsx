@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import type { ShnakeInstance } from '../types';
 import { playSpatialSound } from '@/lib/spatialAudio';
+import { parseStripMetadata } from '@/lib/animationToStrip';
 
 interface Props {
   shnakesRef: React.RefObject<ShnakeInstance[]>;
@@ -94,6 +95,10 @@ const TierRenderer: React.FC<TierRendererProps> = ({
   const headMeshRef = useRef<THREE.InstancedMesh>(null);
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
   const faceMeshRef = useRef<THREE.InstancedMesh>(null);
+  
+  // Track face texture for strip animation
+  const faceTextureRef = useRef<THREE.Texture | null>(null);
+  const faceStripInfo = useMemo(() => parseStripMetadata(faceTexUrl), [faceTexUrl]);
 
   // Geometry - memoized once
   const headGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
@@ -168,7 +173,7 @@ const TierRenderer: React.FC<TierRendererProps> = ({
       setBodyMaterial(new THREE.MeshLambertMaterial({ color: tierColor }));
     }
     
-    // Face texture
+    // Face texture - with strip animation support
     if (isValidTextureUrl(faceTexUrl)) {
       console.log(`[TierRenderer T${tier}] Loading face: ${faceTexUrl}`);
       loader.load(
@@ -177,18 +182,31 @@ const TierRenderer: React.FC<TierRendererProps> = ({
           tex.magFilter = THREE.NearestFilter;
           tex.minFilter = THREE.NearestFilter;
           tex.colorSpace = THREE.SRGBColorSpace;
+          
+          // Configure for strip animation if applicable
+          const stripInfo = parseStripMetadata(faceTexUrl);
+          if (stripInfo) {
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.repeat.set(1 / stripInfo.frames, 1);
+            tex.offset.set(0, 0);
+            console.log(`[TierRenderer T${tier}] Face is animated strip: ${stripInfo.frames} frames, ${stripInfo.delay}ms delay`);
+          }
+          
           tex.needsUpdate = true;
+          faceTextureRef.current = tex;
           setFaceMaterial(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
           console.log(`[TierRenderer T${tier}] Face texture loaded successfully`);
         },
         undefined,
         (err) => {
           console.warn(`[TierRenderer T${tier}] Face texture failed:`, err);
+          faceTextureRef.current = null;
           setFaceMaterial(new THREE.MeshLambertMaterial({ color: 0xff4444, side: THREE.DoubleSide }));
         }
       );
     } else {
       console.log(`[TierRenderer T${tier}] No valid face texture, using color: ${faceTexUrl}`);
+      faceTextureRef.current = null;
       setFaceMaterial(new THREE.MeshLambertMaterial({ color: 0xff4444, side: THREE.DoubleSide }));
     }
   }, [tier, headTexUrl, bodyTexUrl, faceTexUrl]);
@@ -273,6 +291,13 @@ const TierRenderer: React.FC<TierRendererProps> = ({
     if (headMesh.instanceColor) headMesh.instanceColor.needsUpdate = true;
     if (bodyMesh.instanceColor) bodyMesh.instanceColor.needsUpdate = true;
     if (faceMesh.instanceColor) faceMesh.instanceColor.needsUpdate = true;
+    
+    // Animate face strip texture (if applicable) - cheap UV offset, no needsUpdate needed
+    if (faceStripInfo && faceTextureRef.current) {
+      const elapsed = performance.now();
+      const frameIndex = Math.floor(elapsed / faceStripInfo.delay) % faceStripInfo.frames;
+      faceTextureRef.current.offset.x = frameIndex / faceStripInfo.frames;
+    }
   });
 
   const maxHeads = 32;
@@ -332,7 +357,7 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
       if (serialize(newData) !== serialize(tierData)) {
         setTierData(newData);
       }
-    }, 500);
+    }, 100); // Reduced from 500ms for faster texture updates
     
     return () => clearInterval(interval);
   }, [shnakesRef, tierData]);

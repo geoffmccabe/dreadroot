@@ -1,6 +1,7 @@
 // Shnake Design Panel - Admin UI for configuring shnake enemy tiers
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,8 +10,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Upload, Save, Bug, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { convertAnimationToStrip, isAnimatedFile } from '@/lib/animationToStrip';
 import type { ShnakeDefinition } from '../types';
-
 interface ShnakeDesignPanelProps {
   className?: string;
 }
@@ -24,6 +25,7 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const headInputRef = useRef<HTMLInputElement>(null);
   const bodyInputRef = useRef<HTMLInputElement>(null);
@@ -141,7 +143,9 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
         if (error) throw error;
       }
       setHasChanges(false);
-      toast({ title: 'Saved' });
+      // Invalidate query cache to trigger immediate texture updates in-game
+      queryClient.invalidateQueries({ queryKey: ['shnake-definitions'] });
+      toast({ title: 'Saved - textures will update immediately' });
     } catch (err) {
       console.error('[ShnakeDesignPanel] Save error:', err);
       toast({ title: 'Save failed', variant: 'destructive' });
@@ -152,13 +156,34 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
 
   const uploadTexture = async (file: File, kind: 'head' | 'body' | 'face') => {
     try {
-      // Convert image to webp for consistent browser support
-      const webpBlob = await convertToWebp(file);
-      const fileName = `shnake_${kind}_${selectedTier}_${Date.now()}.webp`;
+      let blob: Blob;
+      let fileName: string;
+      
+      if (isAnimatedFile(file)) {
+        // Convert animation (GIF/video) to horizontal strip
+        toast({ title: 'Converting animation...', description: 'Processing frames into strip texture' });
+        
+        const result = await convertAnimationToStrip(file, {
+          frameSize: 256,
+          maxFrames: 24,
+        });
+        
+        blob = result.stripBlob;
+        fileName = `shnake_${kind}_${selectedTier}_${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
+        
+        toast({ 
+          title: 'Animation converted', 
+          description: `${result.originalFrameCount} frames → ${result.frameCount} frame strip` 
+        });
+      } else {
+        // Static image - convert to 512x512 webp (head/body stay high-res)
+        blob = await convertToWebp(file);
+        fileName = `shnake_${kind}_${selectedTier}_${Date.now()}.webp`;
+      }
       
       const { error: uploadError } = await supabase.storage
         .from('block-textures')
-        .upload(fileName, webpBlob, { upsert: true, contentType: 'image/webp' });
+        .upload(fileName, blob, { upsert: true, contentType: 'image/webp' });
       if (uploadError) throw uploadError;
       
       const {
@@ -169,7 +194,7 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
       if (kind === 'body') updateDef('body_texture_url', publicUrl);
       if (kind === 'face') updateDef('face_texture_url', publicUrl);
 
-      toast({ title: 'Texture uploaded', description: `Shnake ${kind} texture converted to webp and saved` });
+      toast({ title: 'Texture uploaded', description: `Shnake ${kind} texture saved` });
     } catch (err) {
       console.error('[ShnakeDesignPanel] Upload error:', err);
       toast({ title: 'Upload failed', variant: 'destructive' });
