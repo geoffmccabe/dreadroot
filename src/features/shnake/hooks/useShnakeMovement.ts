@@ -67,6 +67,8 @@ interface UseShnakeMovementOptions {
   plantedTrees: PlantedTree[] | undefined;
   blocksRef: React.RefObject<{ position_x: number; position_y: number; position_z: number }[]>;
   isEnabled: boolean;
+  /** When true, AI system controls movement - legacy loop is disabled */
+  aiControlled?: boolean;
   treeBlocksByTierRef: React.RefObject<Map<number, Map<string, string>>>;
   nonInvisTreeBlocksByTierRef: React.RefObject<Map<number, Set<string>>>;
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
@@ -79,6 +81,7 @@ export function useShnakeMovement({
   plantedTrees,
   blocksRef,
   isEnabled,
+  aiControlled = false,
   treeBlocksByTierRef,
   nonInvisTreeBlocksByTierRef,
   onPlayerHit,
@@ -174,7 +177,8 @@ export function useShnakeMovement({
   (window as any).__markShnakeAttacked = markAttacked;
 
   useEffect(() => {
-    if (!isEnabled) return;
+    // When AI controls movement, legacy loop is disabled
+    if (!isEnabled || aiControlled) return;
 
     let raf: number;
     let lastTime = performance.now();
@@ -447,6 +451,7 @@ export function useShnakeMovement({
     return () => cancelAnimationFrame(raf);
   }, [
     isEnabled,
+    aiControlled,
     cameraRef,
     shnakesRef,
     blocksRef,

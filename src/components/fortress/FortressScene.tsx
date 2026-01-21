@@ -396,10 +396,16 @@ export function FortressScene({
     }, 0);
   }, [applyDamageWithKnockback, takeDamage]);
   
+  // Universal Enemy AI system control flag
+  // Phase 5: Set to true to enable AI-driven movement (disables legacy loops)
+  // Currently false - legacy movement hooks still control enemies
+  const AI_CONTROLLED = false;
+  
   useShwarmMovement({
     shwarmsRef,
     cameraRef,
     isEnabled: true,
+    aiControlled: AI_CONTROLLED,
     onPlayerHit: handleShwarmPlayerHit,
   });
   
@@ -455,6 +461,7 @@ export function FortressScene({
     plantedTrees,
     blocksRef,
     isEnabled: true,
+    aiControlled: AI_CONTROLLED,
     treeBlocksByTierRef,
     nonInvisTreeBlocksByTierRef,
     onPlayerHit: handleShnakePlayerHit,
@@ -516,13 +523,19 @@ export function FortressScene({
     }
   }, [plantedTrees, cameraRef, spawnOnTree]);
   
-  // Universal Enemy AI system - runs in parallel with legacy movement hooks
-  // Phase 3: Activated but advisory-only (applyResult doesn't control movement yet)
-  useEnemyAI({
+  // Universal Enemy AI system - initialized after legacy hooks with same control flag
+  // Phase 5: AI takes control when AI_CONTROLLED=true (legacy loops disabled above)
+  const { isAIControlled } = useEnemyAI({
     cameraRef,
     shnakesRef,
     shwarmsRef,
     isEnabled: true,
+    aiControlled: AI_CONTROLLED,
+    plantedTrees,
+    blocksRef,
+    treeBlocksByTierRef,
+    onPlayerHit: handleShnakePlayerHit, // Reuse shnake damage handler
+    onShnakeHeadMoved: handleShnakeHeadMoved,
   });
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
