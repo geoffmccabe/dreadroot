@@ -52,6 +52,15 @@ function getTreeChunkKeys(tree: PlantedTree): Set<string> {
   return chunks;
 }
 
+// Track shnake destinations and whether they've been attacked
+interface ShnakeNavState {
+  destinationX: number;
+  destinationY: number;
+  destinationZ: number;
+  wasAttacked: boolean;
+  attackedAt: number;
+}
+
 interface UseShnakeMovementOptions {
   shnakesRef: React.RefObject<ShnakeInstance[]>;
   cameraRef: React.RefObject<THREE.Camera>;
@@ -76,6 +85,9 @@ export function useShnakeMovement({
   const treesRef = useRef(plantedTrees);
   treesRef.current = plantedTrees;
 
+  // Navigation state per shnake
+  const navStateRef = useRef<Map<string, ShnakeNavState>>(new Map());
+
   // Shared temp vectors
   const tmpDir = useRef(new THREE.Vector3());
   const tmpPlayer = useRef(new THREE.Vector3());
@@ -90,13 +102,12 @@ export function useShnakeMovement({
   };
 
   /**
-   * Check if position is adjacent to a tree block (including invisiblocks).
+   * Check if position is adjacent to any tree block.
    */
   const isTouchingTree = (tier: number, x: number, y: number, z: number): boolean => {
     const tierMap = treeBlocksByTierRef.current?.get(tier);
     if (!tierMap) return false;
 
-    // Check 6 neighbors for ANY tree block (including invisiblocks)
     const neighbors = [
       key(x + 1, y, z), key(x - 1, y, z),
       key(x, y + 1, z), key(x, y - 1, z),
@@ -110,52 +121,36 @@ export function useShnakeMovement({
   };
 
   /**
-   * Check if position is close enough to any non-invisiblock tree block.
-   * Distance of 2 allows some freedom while staying near tree.
+   * Get a random position within tree bounds for navigation
    */
-  const isNearNonInvisTreeBlock = (tier: number, x: number, y: number, z: number): boolean => {
-    const nonInvisSet = nonInvisTreeBlocksByTierRef.current?.get(tier);
-    if (!nonInvisSet) return false;
-    
-    // Check within distance of 2 (Manhattan)
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dz = -2; dz <= 2; dz++) {
-          if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 2) continue;
-          if (nonInvisSet.has(key(x + dx, y + dy, z + dz))) return true;
-        }
-      }
-    }
-    return false;
+  const getRandomTreePosition = (tree: PlantedTree): { x: number; y: number; z: number } => {
+    const b = treeBounds(tree);
+    return {
+      x: Math.floor(Math.random() * (b.maxX - b.minX + 1)) + b.minX,
+      y: Math.floor(Math.random() * (b.maxY - b.minY + 1)) + b.minY,
+      z: Math.floor(Math.random() * (b.maxZ - b.minZ + 1)) + b.minZ,
+    };
   };
 
   /**
-   * Check if a position is valid for a shnake segment.
-   * Must either touch tree OR be near a non-invisiblock.
+   * Check if shnake has reached its destination (within 2 blocks)
    */
-  const isValidShnakePosition = (tier: number, x: number, y: number, z: number): boolean => {
-    return isTouchingTree(tier, x, y, z) || isNearNonInvisTreeBlock(tier, x, y, z);
+  const hasReachedDestination = (head: { x: number; y: number; z: number }, dest: ShnakeNavState): boolean => {
+    const dist = Math.abs(head.x - dest.destinationX) + Math.abs(head.y - dest.destinationY) + Math.abs(head.z - dest.destinationZ);
+    return dist <= 2;
   };
 
-  /**
-   * Check if at least one segment would be valid after move.
-   */
-  const wouldStayConnected = (
-    tier: number,
-    newHead: { x: number; y: number; z: number },
-    existingSegments: { x: number; y: number; z: number }[],
-  ): boolean => {
-    // Check new head position
-    if (isValidShnakePosition(tier, newHead.x, newHead.y, newHead.z)) return true;
-    
-    // Check remaining segments (excluding tail which will be removed)
-    for (let i = 0; i < existingSegments.length - 1; i++) {
-      const seg = existingSegments[i];
-      if (isValidShnakePosition(tier, seg.x, seg.y, seg.z)) return true;
+  /** Mark shnake as attacked (so it can leave tree to chase) */
+  const markAttacked = (shnakeId: string) => {
+    const state = navStateRef.current.get(shnakeId);
+    if (state) {
+      state.wasAttacked = true;
+      state.attackedAt = performance.now();
     }
-    
-    return false;
   };
+
+  // Expose markAttacked through a global (hacky but works for now)
+  (window as any).__markShnakeAttacked = markAttacked;
 
   useEffect(() => {
     if (!isEnabled) return;
@@ -194,20 +189,42 @@ export function useShnakeMovement({
         const px = tmpPlayer.current.x;
         const py = tmpPlayer.current.y;
         const pz = tmpPlayer.current.z;
-
-        // Check if player is in any of the tree's chunks
         const treeChunks = getTreeChunkKeys(tree);
         const playerInTreeChunks = treeChunks.has(playerChunk);
         
-        // Also check distance-based aggro - shnake always chases if player is within tier*16 blocks
+        // Get or create nav state
+        let navState = navStateRef.current.get(s.id);
+        if (!navState) {
+          const dest = getRandomTreePosition(tree);
+          navState = {
+            destinationX: dest.x,
+            destinationY: dest.y,
+            destinationZ: dest.z,
+            wasAttacked: false,
+            attackedAt: 0,
+          };
+          navStateRef.current.set(s.id, navState);
+        }
+
         const headSeg = s.segments[0];
         const distToPlayer = Math.sqrt(
           Math.pow(px - headSeg.x, 2) + 
           Math.pow(py - headSeg.y, 2) + 
           Math.pow(pz - headSeg.z, 2)
         );
+        
+        // Attack timeout - reset wasAttacked after 30 seconds
+        if (navState.wasAttacked && now - navState.attackedAt > 30000) {
+          navState.wasAttacked = false;
+        }
+
+        // Determine behavior:
+        // 1. If player in tree chunks OR within aggro range -> chase player
+        // 2. If attacked and player in tree chunks -> can go to ground to attack
+        // 3. Otherwise -> navigate to random tree destination
         const aggroRange = s.tier * 16;
         const shouldChase = playerInTreeChunks || distToPlayer < aggroRange;
+        const canGoToGround = navState.wasAttacked && playerInTreeChunks;
 
         // Attack if adjacent (regardless of chunk)
         const head = s.segments[0];
@@ -224,15 +241,24 @@ export function useShnakeMovement({
           }
         }
 
-        // Movement accumulator - ALWAYS accumulate, shnakes always move
+        // Movement accumulator
         s.moveAcc += dt * (s.definition.speed || 2);
         const steps = Math.floor(s.moveAcc);
         if (steps <= 0) continue;
         s.moveAcc -= steps;
 
+        // Check if reached destination - pick new one
+        if (!shouldChase && hasReachedDestination(headSeg, navState)) {
+          const dest = getRandomTreePosition(tree);
+          navState.destinationX = dest.x;
+          navState.destinationY = dest.y;
+          navState.destinationZ = dest.z;
+        }
+
         // Debug log every 2 seconds
         if (debugLogTimer > 2) {
-          console.log(`[Shnake Move] id=${s.id.slice(-6)} steps=${steps} segments=${s.segments.length} shouldChase=${shouldChase} dist=${distToPlayer.toFixed(1)}`);
+          const mode = shouldChase ? 'CHASE' : 'WANDER';
+          console.log(`[Shnake ${s.id.slice(-6)}] ${mode} segs=${s.segments.length} dist=${distToPlayer.toFixed(1)} canGround=${canGoToGround}`);
         }
 
         for (let si = 0; si < steps; si++) {
@@ -250,6 +276,18 @@ export function useShnakeMovement({
             [0, 1, 0], [0, -1, 0],
           ] as const;
 
+          // Determine target position
+          let targetX: number, targetY: number, targetZ: number;
+          if (shouldChase) {
+            targetX = Math.floor(px);
+            targetY = Math.floor(py);
+            targetZ = Math.floor(pz);
+          } else {
+            targetX = navState.destinationX;
+            targetY = navState.destinationY;
+            targetZ = navState.destinationZ;
+          }
+
           const scored: Array<{ dx: number; dy: number; dz: number; score: number }> = [];
           
           for (const [dx, dy, dz] of candidates) {
@@ -257,98 +295,56 @@ export function useShnakeMovement({
             const ny = headSeg.y + dy;
             const nz = headSeg.z + dz;
             
-            // GROUND CONSTRAINT: Shnakes cannot go below ground level (y < 0)
-            if (ny < 0) continue;
+            // GROUND CONSTRAINT: Only allowed below 0 if attacked and chasing in tree chunks
+            if (ny < 0 && !canGoToGround) continue;
+            if (ny < -1) continue; // Never below -1
             
             const k = key(nx, ny, nz);
             if (occupied.has(k)) continue;
             if (isWorldOccupied(nx, ny, nz)) continue;
             
-            // CRITICAL: Check if this move would keep shnake connected to tree
-            const newHead = { x: nx, y: ny, z: nz };
-            if (!wouldStayConnected(s.tier, newHead, s.segments)) {
-              continue;
+            // TREE CONNECTION: When wandering, must stay connected to tree
+            // When chasing after attack, can leave tree within chunks
+            if (!shouldChase || !canGoToGround) {
+              // Must have at least one segment touching tree after move
+              const wouldTouch = isTouchingTree(s.tier, nx, ny, nz);
+              const anyBodyTouches = s.segments.slice(0, -1).some(
+                seg => isTouchingTree(s.tier, seg.x, seg.y, seg.z)
+              );
+              if (!wouldTouch && !anyBodyTouches) continue;
             }
             
-            let score: number;
-            if (shouldChase) {
-              // Move toward player
-              const tx = Math.floor(px);
-              const ty = Math.floor(py);
-              const tz = Math.floor(pz);
-              score = Math.abs(nx - tx) + Math.abs(ny - ty) + Math.abs(nz - tz);
-            } else {
-              // Random movement when no player nearby
-              score = Math.random() * 100;
-            }
-            
+            // Score: Manhattan distance to target (lower = better)
+            const score = Math.abs(nx - targetX) + Math.abs(ny - targetY) + Math.abs(nz - targetZ);
             scored.push({ dx, dy, dz, score });
           }
 
-          // Sort by score (lower is better)
-          scored.sort((a, b) => a.score - b.score);
-          
-          let choice: { dx: number; dy: number; dz: number } | null = scored[0] || null;
-          
-          // BACKTRACK LOGIC: If stuck, try to bend back towards second segment with offset
-          if (!choice && length >= 2) {
-            const secondSeg = s.segments[1];
-            // Try moving towards segment[1] position but offset by 1 on each axis
-            const backtrackCandidates: Array<{ dx: number; dy: number; dz: number }> = [];
-            
-            // Calculate direction from head to second segment
-            const toDx = secondSeg.x - headSeg.x;
-            const toDy = secondSeg.y - headSeg.y;
-            const toDz = secondSeg.z - headSeg.z;
-            
-            // Generate offset positions - move toward second segment but offset perpendicular
-            for (const [ox, oy, oz] of candidates) {
-              // Skip if this is the exact direction to second segment (would collide)
-              if (ox === toDx && oy === toDy && oz === toDz) continue;
+          if (scored.length === 0) {
+            // Stuck - try any valid move
+            for (const [dx, dy, dz] of candidates) {
+              const nx = headSeg.x + dx;
+              const ny = headSeg.y + dy;
+              const nz = headSeg.z + dz;
               
-              const nx = headSeg.x + ox;
-              const ny = headSeg.y + oy;
-              const nz = headSeg.z + oz;
-              
-              // GROUND CONSTRAINT: Cannot backtrack below ground
               if (ny < 0) continue;
-              
               const k = key(nx, ny, nz);
-              
-              // For backtracking, allow moving into any segment position except head
-              // This lets the snake "fold" back on itself temporarily
-              if (k === key(headSeg.x, headSeg.y, headSeg.z)) continue;
+              if (occupied.has(k)) continue;
               if (isWorldOccupied(nx, ny, nz)) continue;
               
-              // Relaxed tree connection for backtracking - just need to touch tree OR be near body
-              const newHead = { x: nx, y: ny, z: nz };
-              const touchesTree = isTouchingTree(s.tier, nx, ny, nz);
-              const nearBody = s.segments.some((seg, idx) => {
-                if (idx === 0) return false; // skip head
-                const dist = Math.abs(seg.x - nx) + Math.abs(seg.y - ny) + Math.abs(seg.z - nz);
-                return dist <= 1;
-              });
-              
-              if (touchesTree || nearBody) {
-                backtrackCandidates.push({ dx: ox, dy: oy, dz: oz });
-              }
-            }
-            
-            if (backtrackCandidates.length > 0) {
-              // Pick random backtrack direction
-              choice = backtrackCandidates[Math.floor(Math.random() * backtrackCandidates.length)];
-              if (debugLogTimer > 2) {
-                console.log(`[Shnake Move] Backtracking: chose (${choice.dx}, ${choice.dy}, ${choice.dz})`);
-              }
+              scored.push({ dx, dy, dz, score: Math.random() * 100 });
             }
           }
+
+          if (scored.length === 0) {
+            break; // Truly stuck
+          }
+
+          // Sort by score (lower is better for chasing, random otherwise)
+          scored.sort((a, b) => a.score - b.score);
           
-          if (!choice) {
-            if (debugLogTimer > 2) {
-              console.log(`[Shnake Move] No valid move found for shnake at (${headSeg.x}, ${headSeg.y}, ${headSeg.z}) - truly stuck`);
-            }
-            break;
-          }
+          // Add some randomness to top choices to prevent linear movement
+          const topN = Math.min(3, scored.length);
+          const choice = scored[Math.floor(Math.random() * topN)];
 
           const newHead = { x: headSeg.x + choice.dx, y: headSeg.y + choice.dy, z: headSeg.z + choice.dz };
           s.headDir.set(choice.dx, choice.dy, choice.dz);

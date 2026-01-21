@@ -58,16 +58,12 @@ const TIER_COLORS: { [tier: number]: number } = {
 
 const getTierColor = (tier: number): number => TIER_COLORS[tier] || 0x22ff44;
 
-// Convert .psd URLs to .webp equivalent (fix legacy uploads)
-const fixTextureUrl = (url: string | null | undefined): string | null => {
-  if (!url) return null;
-  // If it's a .psd file, we can't use it - return null to use fallback color
+// Check if URL is a valid image format
+const isValidTextureUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
   const lower = url.toLowerCase();
-  if (lower.endsWith('.psd') || lower.endsWith('.ai') || lower.endsWith('.eps')) {
-    console.warn(`[ShnakeRenderer] Unsupported format, using fallback color: ${url}`);
-    return null;
-  }
-  return url;
+  // Only allow web-compatible formats
+  return lower.endsWith('.webp') || lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif');
 };
 
 // Shnake sound constants
@@ -93,15 +89,11 @@ const TierRenderer: React.FC<TierRendererProps> = ({
   bodyTexUrl,
   faceTexUrl,
 }) => {
-  const [headTex, setHeadTex] = useState<THREE.Texture | null>(null);
-  const [bodyTex, setBodyTex] = useState<THREE.Texture | null>(null);
-  const [faceTex, setFaceTex] = useState<THREE.Texture | null>(null);
-  
   const headMeshRef = useRef<THREE.InstancedMesh>(null);
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
   const faceMeshRef = useRef<THREE.InstancedMesh>(null);
 
-  // Geometry
+  // Geometry - memoized once
   const headGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const faceGeo = useMemo(() => {
@@ -110,68 +102,94 @@ const TierRenderer: React.FC<TierRendererProps> = ({
     return geo;
   }, []);
 
-  // Load textures
+  // Load textures with proper error handling - NO vertexColors
+  const [headMaterial, setHeadMaterial] = useState<THREE.Material>(() => 
+    new THREE.MeshLambertMaterial({ color: getTierColor(tier) })
+  );
+  const [bodyMaterial, setBodyMaterial] = useState<THREE.Material>(() => 
+    new THREE.MeshLambertMaterial({ color: getTierColor(tier) })
+  );
+  const [faceMaterial, setFaceMaterial] = useState<THREE.Material>(() => 
+    new THREE.MeshLambertMaterial({ color: 0xff4444, side: THREE.DoubleSide })
+  );
+
+  // Load textures on mount and when URLs change
   useEffect(() => {
     const loader = new THREE.TextureLoader();
+    const tierColor = getTierColor(tier);
     
-    const loadTex = (url: string | null, setter: (t: THREE.Texture | null) => void) => {
-      if (!url) {
-        setter(null);
-        return;
-      }
-      // Skip unsupported formats
-      const lower = url.toLowerCase();
-      if (lower.endsWith('.psd') || lower.endsWith('.ai') || lower.endsWith('.eps')) {
-        console.warn(`[TierRenderer T${tier}] Unsupported format: ${url}`);
-        setter(null);
-        return;
-      }
-      
+    // Head texture
+    if (isValidTextureUrl(headTexUrl)) {
+      console.log(`[TierRenderer T${tier}] Loading head: ${headTexUrl}`);
       loader.load(
-        url,
+        headTexUrl!,
         (tex) => {
           tex.magFilter = THREE.NearestFilter;
           tex.minFilter = THREE.NearestFilter;
           tex.colorSpace = THREE.SRGBColorSpace;
-          console.log(`[TierRenderer T${tier}] Loaded texture: ${url}`);
-          setter(tex);
+          tex.needsUpdate = true;
+          setHeadMaterial(new THREE.MeshLambertMaterial({ map: tex }));
+          console.log(`[TierRenderer T${tier}] Head texture loaded successfully`);
         },
         undefined,
         (err) => {
-          console.warn(`[TierRenderer T${tier}] Failed to load: ${url}`, err);
-          setter(null);
+          console.warn(`[TierRenderer T${tier}] Head texture failed:`, err);
+          setHeadMaterial(new THREE.MeshLambertMaterial({ color: tierColor }));
         }
       );
-    };
+    } else {
+      console.log(`[TierRenderer T${tier}] No valid head texture, using color: ${headTexUrl}`);
+      setHeadMaterial(new THREE.MeshLambertMaterial({ color: tierColor }));
+    }
     
-    loadTex(headTexUrl, setHeadTex);
-    loadTex(bodyTexUrl, setBodyTex);
-    loadTex(faceTexUrl, setFaceTex);
+    // Body texture
+    if (isValidTextureUrl(bodyTexUrl)) {
+      console.log(`[TierRenderer T${tier}] Loading body: ${bodyTexUrl}`);
+      loader.load(
+        bodyTexUrl!,
+        (tex) => {
+          tex.magFilter = THREE.NearestFilter;
+          tex.minFilter = THREE.NearestFilter;
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.needsUpdate = true;
+          setBodyMaterial(new THREE.MeshLambertMaterial({ map: tex }));
+          console.log(`[TierRenderer T${tier}] Body texture loaded successfully`);
+        },
+        undefined,
+        (err) => {
+          console.warn(`[TierRenderer T${tier}] Body texture failed:`, err);
+          setBodyMaterial(new THREE.MeshLambertMaterial({ color: tierColor }));
+        }
+      );
+    } else {
+      console.log(`[TierRenderer T${tier}] No valid body texture, using color: ${bodyTexUrl}`);
+      setBodyMaterial(new THREE.MeshLambertMaterial({ color: tierColor }));
+    }
+    
+    // Face texture
+    if (isValidTextureUrl(faceTexUrl)) {
+      console.log(`[TierRenderer T${tier}] Loading face: ${faceTexUrl}`);
+      loader.load(
+        faceTexUrl!,
+        (tex) => {
+          tex.magFilter = THREE.NearestFilter;
+          tex.minFilter = THREE.NearestFilter;
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.needsUpdate = true;
+          setFaceMaterial(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, transparent: true }));
+          console.log(`[TierRenderer T${tier}] Face texture loaded successfully`);
+        },
+        undefined,
+        (err) => {
+          console.warn(`[TierRenderer T${tier}] Face texture failed:`, err);
+          setFaceMaterial(new THREE.MeshLambertMaterial({ color: 0xff4444, side: THREE.DoubleSide }));
+        }
+      );
+    } else {
+      console.log(`[TierRenderer T${tier}] No valid face texture, using color: ${faceTexUrl}`);
+      setFaceMaterial(new THREE.MeshLambertMaterial({ color: 0xff4444, side: THREE.DoubleSide }));
+    }
   }, [tier, headTexUrl, bodyTexUrl, faceTexUrl]);
-
-  // Materials with textures or fallback colors
-  const tierColor = getTierColor(tier);
-  
-  const headMaterial = useMemo(() => {
-    if (headTex) {
-      return new THREE.MeshLambertMaterial({ map: headTex, vertexColors: true });
-    }
-    return new THREE.MeshLambertMaterial({ color: tierColor, vertexColors: true });
-  }, [headTex, tierColor]);
-
-  const bodyMaterial = useMemo(() => {
-    if (bodyTex) {
-      return new THREE.MeshLambertMaterial({ map: bodyTex, vertexColors: true });
-    }
-    return new THREE.MeshLambertMaterial({ color: tierColor, vertexColors: true });
-  }, [bodyTex, tierColor]);
-
-  const faceMaterial = useMemo(() => {
-    if (faceTex) {
-      return new THREE.MeshLambertMaterial({ map: faceTex, vertexColors: true, side: THREE.DoubleSide, transparent: true });
-    }
-    return new THREE.MeshLambertMaterial({ color: 0xff4444, vertexColors: true, side: THREE.DoubleSide });
-  }, [faceTex]);
 
   // Check flash state
   const isFlashing = (shnakeId: string, now: number): boolean => {
@@ -199,19 +217,19 @@ const TierRenderer: React.FC<TierRendererProps> = ({
 
     const m = new THREE.Matrix4();
     const white = new THREE.Color(0xffffff);
-    const flash = new THREE.Color(0xff00ff);
-    const flashCyan = new THREE.Color(0x00ffff);
+    const flashColor = new THREE.Color(0xff00ff);
 
     for (const s of tierShnakes) {
       if (s.segments.length === 0) continue;
       
       const flashing = isFlashing(s.id, now);
+      const instanceColor = flashing ? flashColor : white;
 
       // Head
       const h = s.segments[0];
       m.makeTranslation(h.x + 0.5, h.y + 0.5, h.z + 0.5);
       headMesh.setMatrixAt(headCount, m);
-      headMesh.setColorAt(headCount, flashing ? flash : white);
+      headMesh.setColorAt(headCount, instanceColor);
       headCount++;
 
       // Face on head
@@ -229,7 +247,7 @@ const TierRenderer: React.FC<TierRendererProps> = ({
       }
       
       faceMesh.setMatrixAt(faceCount, faceMatrix);
-      faceMesh.setColorAt(faceCount, flashing ? flashCyan : white);
+      faceMesh.setColorAt(faceCount, instanceColor);
       faceCount++;
 
       // Body segments
@@ -237,7 +255,7 @@ const TierRenderer: React.FC<TierRendererProps> = ({
         const seg = s.segments[i];
         m.makeTranslation(seg.x + 0.5, seg.y + 0.5, seg.z + 0.5);
         bodyMesh.setMatrixAt(bodyCount, m);
-        bodyMesh.setColorAt(bodyCount, flashing ? flash : white);
+        bodyMesh.setColorAt(bodyCount, instanceColor);
         bodyCount++;
       }
     }
@@ -287,7 +305,7 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
   // Track which tiers have active shnakes and their texture URLs
   const [tierData, setTierData] = useState<Map<number, { head: string | null; body: string | null; face: string | null }>>(new Map());
   
-  // Update tier data when shnakes change - apply texture URL fixes
+  // Update tier data when shnakes change
   useEffect(() => {
     const interval = setInterval(() => {
       const shnakes = shnakesRef.current || [];
@@ -297,12 +315,12 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         if (!s.isActive) continue;
         if (newData.has(s.tier)) continue;
         
-        // Fix texture URLs - convert .psd to null so fallback colors are used
-        newData.set(s.tier, {
-          head: fixTextureUrl(s.definition.head_texture_url),
-          body: fixTextureUrl(s.definition.body_texture_url),
-          face: fixTextureUrl(s.definition.face_texture_url),
-        });
+        // Get texture URLs - only use valid formats
+        const head = isValidTextureUrl(s.definition.head_texture_url) ? s.definition.head_texture_url : null;
+        const body = isValidTextureUrl(s.definition.body_texture_url) ? s.definition.body_texture_url : null;
+        const face = isValidTextureUrl(s.definition.face_texture_url) ? s.definition.face_texture_url : null;
+        
+        newData.set(s.tier, { head, body, face });
       }
       
       // Only update if changed
@@ -336,7 +354,6 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         
         // Lower pitch by 2.5% per tier above 1
-        // Tier 1 = 1.0, Tier 2 = 0.975, Tier 3 = 0.95, etc.
         const pitchMultiplier = 1.0 - ((s.tier - 1) * 0.025);
         
         playSpatialSound(SHNAKE_SOUND_URL, distance, {
@@ -413,6 +430,11 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
     },
     
     triggerDamageFlash: (shnakeId: string) => {
+      // Mark shnake as attacked for ground-attack behavior
+      if (typeof (window as any).__markShnakeAttacked === 'function') {
+        (window as any).__markShnakeAttacked(shnakeId);
+      }
+      
       flashesRef.current = flashesRef.current.filter(f => f.shnakeId !== shnakeId);
       flashesRef.current.push({
         shnakeId,
