@@ -634,7 +634,7 @@ export function FortressScene({
       'direction:', normalizedDir.x.toFixed(3), normalizedDir.y.toFixed(3), normalizedDir.z.toFixed(3),
       'velocityY:', bullet.velocityY.toFixed(2));
     
-    bullet.life = 5.0;
+    bullet.life = 30.0; // Extended lifetime for faster bullets with longer trajectories
     bullet.tier = selectedBulletTier;
     bullet.color = '#FFFF00';
     
