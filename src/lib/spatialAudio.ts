@@ -127,5 +127,8 @@ export const SHWARM_SOUNDS = [
   '/shwarm_sound_3.mp3',
 ];
 
-// Preload shwarm sounds on module load
-preloadSpatialSounds(SHWARM_SOUNDS);
+// Shnake sound URL
+export const SHNAKE_SOUND = '/shnake_sound_1.mp3';
+
+// Preload sounds on module load
+preloadSpatialSounds([...SHWARM_SOUNDS, SHNAKE_SOUND]);
