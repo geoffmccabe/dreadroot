@@ -60,7 +60,8 @@ export function FirstPersonControls({
   onRespawnComplete,
   isOwnedTreeAtPosition,
   onTreeChopComplete,
-  onTreeChopProgress
+  onTreeChopProgress,
+  onBulletTierChange
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -74,6 +75,10 @@ export function FirstPersonControls({
     q: false, z: false
   });
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
+  
+  // R-mode for bullet tier selection (admin only) - press R, then 1-0 to select tier
+  const rModeActiveRef = useRef(false);
+  const rModeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // God Mode state (fly + noclip for admins/superadmins)
   const godModeRef = useRef(false);
@@ -244,9 +249,50 @@ export function FirstPersonControls({
           onModeChange(newCrosshairsState ? 'shooting' : null);
           const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
           playAudio(audio);
+          
+          // For admins: activate R-mode for bullet tier selection (2 second window)
+          if (newCrosshairsState && (userRoles.includes('admin') || userRoles.includes('superadmin')) && onBulletTierChange) {
+            rModeActiveRef.current = true;
+            if (rModeTimeoutRef.current) clearTimeout(rModeTimeoutRef.current);
+            rModeTimeoutRef.current = setTimeout(() => {
+              rModeActiveRef.current = false;
+            }, 2000);
+          }
         } else if (!event.shiftKey) {
           onModeChange('shooting');
           playAudio(audioRefs.pistolCocking);
+          
+          // For admins: activate R-mode for bullet tier selection (2 second window)
+          if ((userRoles.includes('admin') || userRoles.includes('superadmin')) && onBulletTierChange) {
+            rModeActiveRef.current = true;
+            if (rModeTimeoutRef.current) clearTimeout(rModeTimeoutRef.current);
+            rModeTimeoutRef.current = setTimeout(() => {
+              rModeActiveRef.current = false;
+            }, 2000);
+          }
+        }
+        break;
+      // Number keys 1-0 for bullet tier selection (admin only, after pressing R)
+      case 'Digit1':
+      case 'Digit2':
+      case 'Digit3':
+      case 'Digit4':
+      case 'Digit5':
+      case 'Digit6':
+      case 'Digit7':
+      case 'Digit8':
+      case 'Digit9':
+      case 'Digit0':
+        if (rModeActiveRef.current && onBulletTierChange && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
+          event.preventDefault();
+          // Digit0 = tier 10, Digit1-9 = tier 1-9
+          const tier = event.code === 'Digit0' ? 10 : parseInt(event.code.replace('Digit', ''));
+          onBulletTierChange(tier);
+          rModeActiveRef.current = false;
+          if (rModeTimeoutRef.current) {
+            clearTimeout(rModeTimeoutRef.current);
+            rModeTimeoutRef.current = null;
+          }
         }
         break;
       case 'KeyB':

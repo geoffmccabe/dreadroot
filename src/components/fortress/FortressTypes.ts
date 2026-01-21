@@ -78,6 +78,9 @@ export interface SceneProps {
   waterfallEnabled?: boolean;
   onGodModeChange?: (enabled: boolean) => void;
   performanceMode?: boolean;
+  // Bullet tier selection (admin only)
+  selectedBulletTier?: number;
+  onBulletTierChange?: (tier: number) => void;
   // World texture URLs
   fortressTextureUrl?: string | null;
   groundTextureUrl?: string | null;
@@ -148,6 +151,8 @@ export interface FirstPersonControlsProps {
   isOwnedTreeAtPosition?: (x: number, y: number, z: number) => boolean;
   onTreeChopComplete?: (x: number, y: number, z: number) => Promise<void>;
   onTreeChopProgress?: (chopCount: number, maxChops: number) => void;
+  // Bullet tier selection (admin only)
+  onBulletTierChange?: (tier: number) => void;
 }
 
 // Bullet interface
