@@ -7,7 +7,7 @@ import { useWorlds, World } from '@/hooks/useWorlds';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous } from 'lucide-react';
+import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DEFAULT_TEXTURES } from '@/hooks/useCurrentWorldId';
 import { cn } from '@/lib/utils';
@@ -34,6 +34,7 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
     name: ''
   });
   const [isCleaningGhostTrees, setIsCleaningGhostTrees] = useState(false);
+  const [isClearingCache, setIsClearingCache] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -129,6 +130,45 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       });
     } finally {
       setIsCleaningGhostTrees(false);
+    }
+  };
+
+  // Clear IndexedDB cache for current world and reload
+  const handleClearCache = async () => {
+    if (!currentWorldId) {
+      toast({ title: 'No world selected', description: 'Please select a world first', variant: 'destructive' });
+      return;
+    }
+    
+    setIsClearingCache(true);
+    try {
+      console.log('[CacheClear] Clearing IndexedDB cache for world:', currentWorldId);
+      
+      // Clear chunk cache for current world
+      await blockDB.clearCachedChunksForWorld(currentWorldId);
+      console.log('[CacheClear] ✓ Cleared chunk cache for world');
+      
+      // Also clear the main blocks store to ensure fresh data
+      await blockDB.clearAllBlocks();
+      console.log('[CacheClear] ✓ Cleared blocks store');
+      
+      toast({
+        title: 'Cache cleared',
+        description: 'Reloading to fetch fresh data from server...'
+      });
+      
+      // Force page reload after short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err) {
+      console.error('[CacheClear] Error:', err);
+      toast({
+        title: 'Cache clear failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive'
+      });
+      setIsClearingCache(false);
     }
   };
 
@@ -256,6 +296,15 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Worlds</h3>
         <div className="flex gap-2">
+          <Button 
+            onClick={handleClearCache} 
+            size="sm" 
+            variant="outline"
+            disabled={isClearingCache}
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-1", isClearingCache && "animate-spin")} /> 
+            {isClearingCache ? 'Clearing...' : 'Clear Cache'}
+          </Button>
           <Button 
             onClick={handleClearGhostTrees} 
             size="sm" 
