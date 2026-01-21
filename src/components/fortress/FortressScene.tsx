@@ -414,13 +414,23 @@ export function FortressScene({
 
   const { treeBlocksByTierRef, nonInvisTreeBlocksByTierRef } = getTreeBlockIndexRefs();
 
-  // Shnake player hit callback
+  // Shnake player hit callback - applies damage AND knockback
   const handleShnakePlayerHitRef = useRef<(damage: number, knockbackForce: number, direction: THREE.Vector3) => void>();
   useEffect(() => {
     handleShnakePlayerHitRef.current = (damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+      // Clone direction to avoid reference issues from shared Vector3
+      const knockbackDir = direction.clone();
+      
       if (takeDamage) {
-        takeDamage(damage, direction, knockbackForce);
+        takeDamage(damage, knockbackDir, knockbackForce);
       }
+      
+      // Apply knockback via global hook (FortressControls exposes this)
+      const applyKnockback = (window as any).__applyPlayerKnockback;
+      if (applyKnockback && typeof applyKnockback === 'function') {
+        applyKnockback(knockbackDir, knockbackForce);
+      }
+      
       if (audioRefs.current.playerHit) {
         audioRefs.current.playerHit.currentTime = 0;
         audioRefs.current.playerHit.play().catch(() => {});
@@ -429,7 +439,11 @@ export function FortressScene({
   }, [takeDamage]);
 
   const handleShnakePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
-    handleShnakePlayerHitRef.current?.(damage, knockbackForce, direction);
+    // Use setTimeout to defer state changes out of the render loop
+    // This prevents React re-render cascades during useFrame
+    setTimeout(() => {
+      handleShnakePlayerHitRef.current?.(damage, knockbackForce, direction);
+    }, 0);
   }, []);
 
   // Fire propagation callback - when shnake head moves, propagate fire toward head
