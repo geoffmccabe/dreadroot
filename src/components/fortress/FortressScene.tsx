@@ -234,7 +234,39 @@ function CameraTrackedBlocks({
   );
 }
 
-export function FortressScene({ 
+// Calculate which face of the block was hit based on hit position
+function calculateHitNormal(
+  hitX: number, hitY: number, hitZ: number,
+  blockX: number, blockY: number, blockZ: number
+): { x: number; y: number; z: number } {
+  const EPSILON = 0.001;
+  
+  // Check each face
+  if (Math.abs(hitX - blockX) < EPSILON) return { x: -1, y: 0, z: 0 };
+  if (Math.abs(hitX - (blockX + 1)) < EPSILON) return { x: 1, y: 0, z: 0 };
+  if (Math.abs(hitY - blockY) < EPSILON) return { x: 0, y: -1, z: 0 };
+  if (Math.abs(hitY - (blockY + 1)) < EPSILON) return { x: 0, y: 1, z: 0 };
+  if (Math.abs(hitZ - blockZ) < EPSILON) return { x: 0, y: 0, z: -1 };
+  if (Math.abs(hitZ - (blockZ + 1)) < EPSILON) return { x: 0, y: 0, z: 1 };
+  
+  // Fallback: use closest face
+  const dx1 = Math.abs(hitX - blockX);
+  const dx2 = Math.abs(hitX - (blockX + 1));
+  const dy1 = Math.abs(hitY - blockY);
+  const dy2 = Math.abs(hitY - (blockY + 1));
+  const dz1 = Math.abs(hitZ - blockZ);
+  const dz2 = Math.abs(hitZ - (blockZ + 1));
+  
+  const minD = Math.min(dx1, dx2, dy1, dy2, dz1, dz2);
+  if (minD === dx1) return { x: -1, y: 0, z: 0 };
+  if (minD === dx2) return { x: 1, y: 0, z: 0 };
+  if (minD === dy1) return { x: 0, y: -1, z: 0 };
+  if (minD === dy2) return { x: 0, y: 1, z: 0 };
+  if (minD === dz1) return { x: 0, y: 0, z: -1 };
+  return { x: 0, y: 0, z: 1 };
+}
+
+export function FortressScene({
   settings, 
   onCoinHit, 
   wallPositions, 
@@ -365,6 +397,7 @@ export function FortressScene({
     life: number;
     tier: number;
     color: string;
+    ricochetScale: number;
   };
   
   // Pre-allocate bullet pool to avoid per-shot allocations
@@ -376,7 +409,8 @@ export function FortressScene({
       speed: 100,
       life: 0,
       tier: 1,
-      color: '#FFFF00'
+      color: '#FFFF00',
+      ricochetScale: 1.0
     }))
   );
   const activeBulletCount = useRef(0);
@@ -430,11 +464,14 @@ export function FortressScene({
   const blocksByTypeAndUser = useRef<Map<string, PlacedBlock[]>>(new Map());
   
   // Wisp block system
-  const { blocks: allBlocks } = useBlocksData();
+  const { blocks: allBlocks, blocksMap } = useBlocksData();
   const basicBlocks = useMemo(() => 
     allBlocks.filter(block => block.class === 'basic'),
     [allBlocks]
   );
+  // Store blocksMap in ref to access in useFrame without stale closures
+  const blocksMapRef = useRef(blocksMap);
+  blocksMapRef.current = blocksMap;
   const { wispState, wispPositionRef, collectWisp } = useWispBlock(basicBlocks, blocks);
   const wispMeshRef = useRef<THREE.Mesh | null>(null);
   
@@ -637,6 +674,7 @@ export function FortressScene({
     bullet.life = 30.0; // Extended lifetime for faster bullets with longer trajectories
     bullet.tier = selectedBulletTier;
     bullet.color = '#FFFF00';
+    bullet.ricochetScale = 1.0; // Full size for first impact
     
     // Only add if not already in active list
     if (!bulletsRef.current.includes(bullet)) {
@@ -930,25 +968,87 @@ export function FortressScene({
               
               // If tMin <= tMax, ray intersects the block
               if (tMin <= tMax) {
-                hit = true;
-                needsBulletRender = true;
-                
                 // Calculate hit position
                 const hitX = prevX + ndx * tMin;
                 const hitY = prevY + ndy * tMin;
                 const hitZ = prevZ + ndz * tMin;
                 
-                // Spawn impact effect at hit position with bullet tier settings from context
-                if (bulletImpactsRef.current) {
-                  const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
-                  const tierDef = getDefinitionRef.current(bullet.tier);
-                  bulletImpactsRef.current.spawnImpact(hitPos, {
-                    colors: tierDef.colors,
-                    size: tierDef.burn_width,
-                    height: tierDef.burn_height,
-                    duration: tierDef.burn_time,
-                    tier: bullet.tier,
-                  });
+                // Check if this block is a "building" category for ricochet
+                const blockDef = blocksMapRef.current?.get(block.block_type);
+                const isBuilding = blockDef?.category === 'building';
+                
+                // Ricochet off building blocks if scale is still meaningful
+                if (isBuilding && bullet.ricochetScale > 0.1) {
+                  // Play ricochet sound immediately
+                  const ricochetSound = audioRefs.current.ricochet;
+                  if (ricochetSound) {
+                    ricochetSound.currentTime = 0;
+                    ricochetSound.play().catch(() => {});
+                  }
+                  
+                  // Calculate which face was hit for reflection normal
+                  const normal = calculateHitNormal(
+                    hitX, hitY, hitZ,
+                    block.position_x, block.position_y, block.position_z
+                  );
+                  
+                  // Spawn scaled impact effect
+                  if (bulletImpactsRef.current) {
+                    const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                    const tierDef = getDefinitionRef.current(bullet.tier);
+                    bulletImpactsRef.current.spawnImpact(hitPos, {
+                      colors: tierDef.colors,
+                      size: tierDef.burn_width * bullet.ricochetScale,
+                      height: tierDef.burn_height * bullet.ricochetScale,
+                      duration: tierDef.burn_time,
+                      tier: bullet.tier,
+                    });
+                  }
+                  
+                  // Apply reflection physics: R = D - 2(D·N)N
+                  const dot = ndx * normal.x + ndy * normal.y + ndz * normal.z;
+                  bullet.direction.set(
+                    ndx - 2 * dot * normal.x,
+                    0, // Y handled via velocityY
+                    ndz - 2 * dot * normal.z
+                  ).normalize();
+                  
+                  // Reflect Y velocity component
+                  bullet.velocityY = bullet.velocityY - 2 * dot * normal.y * bullet.speed;
+                  
+                  // Reduce velocity by 25%
+                  bullet.speed *= 0.75;
+                  bullet.velocityY *= 0.75;
+                  
+                  // Reduce impact scale by 25% for next ricochet
+                  bullet.ricochetScale *= 0.75;
+                  
+                  // Reposition bullet slightly outside block to prevent re-collision
+                  bullet.position.set(
+                    hitX + normal.x * 0.05,
+                    hitY + normal.y * 0.05,
+                    hitZ + normal.z * 0.05
+                  );
+                  
+                  needsBulletRender = true;
+                  // Don't remove bullet - continue to next frame
+                } else {
+                  // Non-building block or too weak: destroy bullet with impact
+                  hit = true;
+                  needsBulletRender = true;
+                  
+                  // Spawn impact effect at hit position with bullet tier settings from context
+                  if (bulletImpactsRef.current) {
+                    const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                    const tierDef = getDefinitionRef.current(bullet.tier);
+                    bulletImpactsRef.current.spawnImpact(hitPos, {
+                      colors: tierDef.colors,
+                      size: tierDef.burn_width * bullet.ricochetScale,
+                      height: tierDef.burn_height * bullet.ricochetScale,
+                      duration: tierDef.burn_time,
+                      tier: bullet.tier,
+                    });
+                  }
                 }
                 break;
               }

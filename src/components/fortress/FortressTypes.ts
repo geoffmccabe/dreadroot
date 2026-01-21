@@ -164,6 +164,7 @@ export interface Bullet {
   life: number;
   tier: number;       // Bullet tier for impact scaling
   color: string;      // Hex color for impact effect
+  ricochetScale: number; // Starts at 1.0, multiplied by 0.75 each ricochet
 }
 
 // Flying coin interface
