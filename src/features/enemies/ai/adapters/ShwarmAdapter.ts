@@ -53,8 +53,9 @@ let locomotionContext: {
 // Per-shwarm RNG generators (cleaned up when shwarm unregisters)
 const rngMap = new Map<string, () => number>();
 
-// Block target data storage (cleaned up when shwarm unregisters)
-const blockTargets = new Map<string, ShwarmBlockTarget>();
+// Block target data storage - shared with interpolation loop when AI controls
+// Exported so useShwarmMovement can use it when aiControlled=true
+export const shwarmBlockTargets = new Map<string, ShwarmBlockTarget>();
 
 /**
  * Set locomotion context for shwarm movement execution.
@@ -71,11 +72,11 @@ export function setShwarmLocomotionContext(ctx: typeof locomotionContext): void 
 export function cleanupShwarmResources(shwarmId: string, blocks: { id: string }[]): void {
   rngMap.delete(shwarmId);
   for (const block of blocks) {
-    const target = blockTargets.get(block.id);
+    const target = shwarmBlockTargets.get(block.id);
     if (target?.collider) {
       collisionGrid.remove(target.collider);
     }
-    blockTargets.delete(block.id);
+    shwarmBlockTargets.delete(block.id);
   }
 }
 
@@ -239,7 +240,7 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
         playerX: result.tx,
         playerY: result.ty,
         playerZ: result.tz,
-        blockTargets,
+        blockTargets: shwarmBlockTargets,
         rng,
         tier: shwarm.definition.tier,
       };
