@@ -4,7 +4,7 @@ import * as THREE from 'three';
 const MAX_TRACERS = 500; // Max tracer segments in pool
 const TRACER_VISIBLE_DURATION = 0.5; // Seconds at full opacity
 const TRACER_FADE_DURATION = 0.5; // Seconds to fade out
-const BASE_OPACITY = 0.25; // 75% base transparency (more vapor-like)
+const BASE_OPACITY = 0.125; // 87.5% transparent (half of previous)
 
 interface TracerSegment {
   startX: number;
