@@ -100,7 +100,7 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
     
     const line = new Line2(geometry, material);
     line.frustumCulled = false;
-    line.computeLineDistances();
+    line.visible = false; // Start hidden, update() will show when segments exist
     
     geometryRef.current = geometry;
     materialRef.current = material;
