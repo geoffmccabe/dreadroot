@@ -141,11 +141,13 @@ export function useShnakeMovement({
 
     let raf: number;
     let lastTime = performance.now();
+    let debugLogTimer = 0;
 
     const step = () => {
       const now = performance.now();
       const dt = (now - lastTime) / 1000;
       lastTime = now;
+      debugLogTimer += dt;
 
       if (!cameraRef.current) {
         raf = requestAnimationFrame(step);
@@ -192,11 +194,16 @@ export function useShnakeMovement({
           }
         }
 
-        // Movement accumulator
-        s.moveAcc += dt * (s.definition.speed || 1);
+        // Movement accumulator - ALWAYS accumulate, shnakes always move
+        s.moveAcc += dt * (s.definition.speed || 2);
         const steps = Math.floor(s.moveAcc);
         if (steps <= 0) continue;
         s.moveAcc -= steps;
+
+        // Debug log every 2 seconds
+        if (debugLogTimer > 2) {
+          console.log(`[Shnake Move] id=${s.id.slice(-6)} steps=${steps} segments=${s.segments.length} playerInChunks=${playerInTreeChunks}`);
+        }
 
         for (let si = 0; si < steps; si++) {
           const headSeg = s.segments[0];
@@ -219,11 +226,26 @@ export function useShnakeMovement({
             const nx = headSeg.x + dx;
             const ny = headSeg.y + dy;
             const nz = headSeg.z + dz;
-            if (!inside(b, nx, ny, nz)) continue;
+            
+            // Relaxed bounds check - allow movement slightly outside tree bounds
+            const expandedBounds = {
+              minX: b.minX - 2,
+              maxX: b.maxX + 2,
+              minY: b.minY - 1,
+              maxY: b.maxY + 5,
+              minZ: b.minZ - 2,
+              maxZ: b.maxZ + 2,
+            };
+            if (nx < expandedBounds.minX || nx > expandedBounds.maxX ||
+                ny < expandedBounds.minY || ny > expandedBounds.maxY ||
+                nz < expandedBounds.minZ || nz > expandedBounds.maxZ) continue;
+            
             const k = key(nx, ny, nz);
             if (occupied.has(k)) continue;
             if (isWorldOccupied(nx, ny, nz)) continue;
-            if (!isClingable(s.tier, nx, ny, nz)) continue;
+            
+            // Relaxed cling check - if no clingable found, still allow with penalty
+            const clingable = isClingable(s.tier, nx, ny, nz);
             
             let score: number;
             if (playerInTreeChunks) {
@@ -232,22 +254,27 @@ export function useShnakeMovement({
               const ty = Math.floor(py);
               const tz = Math.floor(pz);
               score = Math.abs(nx - tx) + Math.abs(ny - ty) + Math.abs(nz - tz);
+              // Penalize non-clingable positions heavily but allow them
+              if (!clingable) score += 50;
             } else {
-              // Random movement - use random score
+              // Random movement
               score = Math.random() * 100;
+              if (!clingable) score += 50;
             }
             
             scored.push({ dx, dy, dz, score });
           }
 
-          // For player pursuit, sort ascending (closest first)
-          // For random, just pick any (random scores already shuffled)
-          if (playerInTreeChunks) {
-            scored.sort((a, b) => a.score - b.score);
-          }
+          // Sort by score (lower is better)
+          scored.sort((a, b) => a.score - b.score);
           
           const choice = scored[0] || null;
-          if (!choice) break;
+          if (!choice) {
+            if (debugLogTimer > 2) {
+              console.log(`[Shnake Move] No valid move found for shnake at (${headSeg.x}, ${headSeg.y}, ${headSeg.z})`);
+            }
+            break;
+          }
 
           const newHead = { x: headSeg.x + choice.dx, y: headSeg.y + choice.dy, z: headSeg.z + choice.dz };
           s.headDir.set(choice.dx, choice.dy, choice.dz);
@@ -265,6 +292,9 @@ export function useShnakeMovement({
           s.colliders = newColliders;
         }
       }
+
+      // Reset debug timer
+      if (debugLogTimer > 2) debugLogTimer = 0;
 
       raf = requestAnimationFrame(step);
     };
