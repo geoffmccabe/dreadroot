@@ -99,6 +99,8 @@ export interface ShnakeLocomotionContext {
   tree: PlantedTree;
   treeBlocksByTier: Map<number, Map<string, string>> | null;
   canGoToGround: boolean;
+  /** Tier of the shnake - used for extended range calculation */
+  tier: number;
   onHeadMoved?: (shnakeId: string) => void;
 }
 
@@ -135,6 +137,31 @@ function isInTreeChunks(tree: PlantedTree, x: number, z: number): boolean {
   const treeChunks = getCachedTreeChunks(tree);
   const ck = chunkKey(x, z);
   return treeChunks.has(ck);
+}
+
+/**
+ * Check if position is within extended revenge range from tree.
+ * Extended range = tree chunks + 0.5 chunks per tier (rounded up).
+ * E.g., tier 1 = +1 chunk, tier 2 = +1 chunk, tier 3 = +2 chunks
+ */
+function isInExtendedRange(tree: PlantedTree, x: number, z: number, tier: number): boolean {
+  // First check normal tree chunks
+  if (isInTreeChunks(tree, x, z)) return true;
+  
+  // Calculate extended chunk range: ceil(0.5 * tier)
+  const extraChunks = Math.ceil(0.5 * tier);
+  
+  // Get tree bounds and expand by extra chunks
+  const b = treeBounds(tree);
+  const minCx = Math.floor(b.minX / CHUNK_SIZE) - extraChunks;
+  const maxCx = Math.floor(b.maxX / CHUNK_SIZE) + extraChunks;
+  const minCz = Math.floor(b.minZ / CHUNK_SIZE) - extraChunks;
+  const maxCz = Math.floor(b.maxZ / CHUNK_SIZE) + extraChunks;
+  
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cz = Math.floor(z / CHUNK_SIZE);
+  
+  return cx >= minCx && cx <= maxCx && cz >= minCz && cz <= maxCz;
 }
 
 /**
@@ -200,12 +227,23 @@ export function applyShnakeMove(
     const ny = headSeg.y + dy;
     const nz = headSeg.z + dz;
 
-    // CHUNK CONSTRAINT: Must stay within tree's chunks UNLESS in revenge mode (canGoToGround)
-    if (!ctx.canGoToGround && !isInTreeChunks(ctx.tree, nx, nz)) continue;
+    // RANGE CONSTRAINT: 
+    // - Normal mode: Stay within tree's chunks
+    // - Revenge mode: Can go to extended range (tree chunks + 0.5 chunks per tier)
+    if (ctx.canGoToGround) {
+      // In revenge mode, use extended range based on tier
+      if (!isInExtendedRange(ctx.tree, nx, nz, ctx.tier)) continue;
+    } else {
+      // Normal mode: stay within tree chunks only
+      if (!isInTreeChunks(ctx.tree, nx, nz)) continue;
+    }
 
-    // GROUND CONSTRAINT: Only allowed at y=0 or below if attacked and chasing
+    // GROUND CONSTRAINT: Only allowed at y=0 or below if in revenge mode
     if (ny < 0 && !ctx.canGoToGround) continue;
     if (ny < -1) continue; // Never below -1 (ground level)
+    
+    // HEIGHT CONSTRAINT: Allow climbing up to any height to reach player in trees
+    // No upper Y limit - shnakes can climb trees during revenge
 
     // Check self-collision with numeric key
     if (_occupiedSet.has(posKey(nx, ny, nz))) continue;
@@ -244,29 +282,38 @@ export function applyShnakeMove(
       const ny = headSeg.y + dy;
       const nz = headSeg.z + dz;
 
-      if (!isInTreeChunks(ctx.tree, nx, nz)) continue;
-      if (ny < 0) continue;
+      // Apply range constraint based on mode
+      if (ctx.canGoToGround) {
+        if (!isInExtendedRange(ctx.tree, nx, nz, ctx.tier)) continue;
+      } else {
+        if (!isInTreeChunks(ctx.tree, nx, nz)) continue;
+      }
+      if (ny < 0 && !ctx.canGoToGround) continue;
+      if (ny < -1) continue;
 
       if (_occupiedSet.has(posKey(nx, ny, nz))) continue;
       if (isCellOccupiedByWorld(nx, ny, nz)) continue;
 
-      const newHeadTouchesTree = isTouchingTree(shnake.tier, nx, ny, nz, ctx.treeBlocksByTier);
-      let anyBodyTouchesTree = false;
-      for (let i = 0; i < length - 1; i++) {
-        const seg = segs[i];
-        if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
-          anyBodyTouchesTree = true;
-          break;
+      // Tree connection only required when NOT in revenge mode
+      if (!ctx.canGoToGround) {
+        const newHeadTouchesTree = isTouchingTree(shnake.tier, nx, ny, nz, ctx.treeBlocksByTier);
+        let anyBodyTouchesTree = false;
+        for (let i = 0; i < length - 1; i++) {
+          const seg = segs[i];
+          if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
+            anyBodyTouchesTree = true;
+            break;
+          }
         }
+        if (!newHeadTouchesTree && !anyBodyTouchesTree) continue;
       }
-      if (!newHeadTouchesTree && !anyBodyTouchesTree) continue;
 
       scored.push({ dx, dy, dz, score: Math.random() * 100 });
     }
   }
 
-  // BACKTRACK: If still stuck, allow head to fold back
-  if (scored.length === 0 && length > 2) {
+  // BACKTRACK: If still stuck, allow head to fold back (only in normal mode)
+  if (scored.length === 0 && length > 2 && !ctx.canGoToGround) {
     const seg1 = segs[1];
     for (const [dx, dy, dz] of candidates) {
       const nx = headSeg.x + dx;
@@ -311,8 +358,10 @@ export function applyShnakeMove(
   const oldTailCollider = cols[length - 1];
   if (oldTailCollider) collisionGrid.remove(oldTailCollider);
 
-  // Create new head collider
+  // Create new head collider - tag it so player can stand on it
   const newHeadCollider = aabbForCell(newHead.x, newHead.y, newHead.z);
+  (newHeadCollider as any).isShnakeSegment = true;
+  (newHeadCollider as any).shnakeId = shnake.id;
   collisionGrid.insert(newHeadCollider);
 
   // In-place segment/collider shifting (zero array allocation)

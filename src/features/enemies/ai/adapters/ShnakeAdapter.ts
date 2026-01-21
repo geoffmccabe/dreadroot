@@ -314,6 +314,7 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         tree,
         treeBlocksByTier: locomotionContext.treeBlocksByTier,
         canGoToGround,
+        tier: shnake.tier,
         onHeadMoved: locomotionContext.onHeadMoved,
       };
       
