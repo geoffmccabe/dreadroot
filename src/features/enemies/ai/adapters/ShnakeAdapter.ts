@@ -34,7 +34,7 @@ let locomotionContext: {
   plantedTrees: PlantedTree[];
   treeById: Map<string, PlantedTree>;
   treeBlocksByTier: Map<number, Map<string, string>> | null;
-  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
+  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3, shnakeId?: string) => void;
   onHeadMoved?: (shnakeId: string) => void;
   onIndignantRoar?: (shnakeId: string, volume: number) => void;
   onTriggerWiggle?: (shnakeId: string) => void;
@@ -171,12 +171,28 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
     const treeBlockPositions: Array<{ x: number; y: number; z: number }> = [];
     
     // Build list of tree block positions for patrol behavior
+    // Filter to only include blocks within THIS tree's approximate bounds
     if (tree && locomotionContext?.treeBlocksByTier) {
       const tierBlocks = locomotionContext.treeBlocksByTier.get(shnake.tier);
       if (tierBlocks) {
+        // Calculate tree bounds based on target size
+        const baseX = tree.base_x;
+        const baseY = tree.base_y;
+        const baseZ = tree.base_z;
+        const treeHeight = Math.min(tree.target_block_count, 100);
+        const treeRadius = Math.max(15, Math.ceil(treeHeight / 2));
+        
         for (const [posKey] of tierBlocks) {
           const [px, py, pz] = posKey.split(',').map(Number);
-          treeBlockPositions.push({ x: px, y: py, z: pz });
+          
+          // Only include blocks near this tree's base
+          const dx = px - baseX;
+          const dz = pz - baseZ;
+          const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+          
+          if (horizontalDist <= treeRadius && py >= baseY && py <= baseY + treeHeight) {
+            treeBlockPositions.push({ x: px, y: py, z: pz });
+          }
         }
       }
     }

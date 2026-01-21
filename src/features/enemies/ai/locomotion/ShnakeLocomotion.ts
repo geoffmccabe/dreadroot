@@ -334,7 +334,7 @@ export function applyShnakeMove(
 export function applyShnakeAttack(
   shnake: ShnakeInstance,
   result: Extract<BehaviorResult, { kind: 'attack' }>,
-  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void
+  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3, shnakeId?: string) => void
 ): void {
   const now = performance.now();
   // Access ai_config from definition (use type assertion for JSONB field)
@@ -349,7 +349,8 @@ export function applyShnakeAttack(
 
   if (onPlayerHit) {
     _attackDir.set(result.dirX, result.dirY, result.dirZ);
-    onPlayerHit(result.damage, result.knockback, _attackDir);
+    // Pass shnakeId so FortressScene can track revenge damage
+    onPlayerHit(result.damage, result.knockback, _attackDir, shnake.id);
   }
 }
 

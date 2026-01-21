@@ -40,7 +40,7 @@ interface UseEnemyAIOptions {
   plantedTrees?: PlantedTree[];
   blocksRef?: React.RefObject<{ position_x: number; position_y: number; position_z: number }[]>;
   treeBlocksByTierRef?: React.RefObject<Map<number, Map<string, string>>>;
-  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
+  onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3, shnakeId?: string) => void;
   onShnakeHeadMoved?: (shnakeId: string) => void;
   onIndignantRoar?: (shnakeId: string, volume: number) => void;
   onTriggerWiggle?: (shnakeId: string) => void;

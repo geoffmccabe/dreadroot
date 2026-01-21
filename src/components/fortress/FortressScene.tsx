@@ -44,6 +44,7 @@ import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandl
 
 // Universal Enemy AI system (Phase 3)
 import { useEnemyAI } from '@/features/enemies/ai';
+import { initializeShnakeRevenge, markShnakeIndignant, recordShnakeRevengeDamage } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 
 // Debug flag - disable in production for FPS
 const DEBUG_RENDER = false;
@@ -431,7 +432,8 @@ export function FortressScene({
   const { treeBlocksByTierRef, nonInvisTreeBlocksByTierRef } = getTreeBlockIndexRefs();
 
   // Shnake player hit callback - uses universal damage system
-  const handleShnakePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+  // shnakeId is optional for compatibility with legacy system
+  const handleShnakePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3, shnakeId?: string) => {
     // Defer to avoid render loop issues
     setTimeout(() => {
       // Use universal damage system if available (includes STEADY, armor, i-frames)
@@ -447,6 +449,12 @@ export function FortressScene({
         takeDamage(damage, direction.clone(), knockbackForce);
       }
       
+      // Record revenge damage dealt by this shnake
+      if (shnakeId) {
+        recordShnakeRevengeDamage(shnakeId, damage);
+        console.log(`[Shnake Attack] Shnake ${shnakeId} dealt ${damage} revenge damage`);
+      }
+      
       // Play player hit sound
       if (audioRefs.current.playerHit) {
         audioRefs.current.playerHit.currentTime = 0;
@@ -458,6 +466,18 @@ export function FortressScene({
   // Fire propagation callback - when shnake head moves, propagate fire toward head
   const handleShnakeHeadMoved = useCallback((shnakeId: string) => {
     shnakeRendererRef.current?.propagateFire(shnakeId);
+  }, []);
+  
+  // Indignant callbacks - when shnake body is hit (no damage), play roar and wiggle
+  const handleIndignantRoar = useCallback((shnakeId: string, volume: number) => {
+    // Play roar sound at specified volume multiplier (2x for indignant)
+    playSpatialSound('/shnake_sound_1.mp3', 10, { baseVolume: 0.5 * volume });
+    console.log(`[Shnake] Indignant roar from ${shnakeId} at ${volume}x volume`);
+  }, []);
+  
+  const handleTriggerWiggle = useCallback((shnakeId: string) => {
+    // TODO: Trigger S-formation wiggle animation in ShnakeRenderer
+    console.log(`[Shnake] Trigger wiggle for ${shnakeId}`);
   }, []);
 
   useShnakeMovement({
@@ -541,6 +561,8 @@ export function FortressScene({
     treeBlocksByTierRef,
     onPlayerHit: handleShnakePlayerHit,
     onShnakeHeadMoved: handleShnakeHeadMoved,
+    onIndignantRoar: handleIndignantRoar,
+    onTriggerWiggle: handleTriggerWiggle,
   });
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
@@ -1191,6 +1213,9 @@ export function FortressScene({
                       
                       const { killedHead, killedEntire, tier: shnakeTier } = damageShnakeHead(shnake.id, scaledDamage);
                       
+                      // Initialize revenge tracking - shnake will chase player until it deals this damage back
+                      initializeShnakeRevenge(shnake.id, scaledDamage);
+                      
                       // Trigger damage flash (3 flashes over 1 second)
                       shnakeRendererRef.current?.triggerDamageFlash(shnake.id);
                       
@@ -1223,7 +1248,7 @@ export function FortressScene({
                         shnake.id, 0, tierDef.burn_time * 1000, tierDef.colors
                       );
                       
-                      console.log(`[Shnake Hit] Head hit! damage=${scaledDamage} killed=${killedHead}`);
+                      console.log(`[Shnake Hit] Head hit! damage=${scaledDamage} killed=${killedHead} revenge=${scaledDamage}`);
                     } else {
                       // BODY: ricochet like building block
                       if (bullet.ricochetScale > 0.1) {
@@ -1270,7 +1295,9 @@ export function FortressScene({
                         );
                         
                         needsBulletRender = true;
-                        console.log(`[Shnake Hit] Body ricochet at segment ${segIdx}`);
+                        // Mark shnake as indignant - will trigger wiggle animation and 2x volume roar
+                        markShnakeIndignant(shnake.id);
+                        console.log(`[Shnake Hit] Body ricochet at segment ${segIdx} - shnake indignant!`);
                       } else {
                         // Too weak to ricochet, just destroy bullet
                         hit = true;

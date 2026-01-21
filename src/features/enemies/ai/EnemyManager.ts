@@ -261,11 +261,17 @@ class EnemyManagerClass {
       
       // Track behavior transitions
       if (newBehaviorId !== reg.currentBehaviorId) {
+        if (DEBUG_AI) {
+          console.log(`[AI] ${id} behavior: ${reg.currentBehaviorId} -> ${newBehaviorId} | result: ${result.kind}`);
+        }
         reg.currentBehaviorId = newBehaviorId;
       }
       
       // Apply result via adapter
       if (result.kind !== 'idle') {
+        if (DEBUG_AI && result.kind === 'move') {
+          console.log(`[AI] ${id} moving to (${result.tx.toFixed(1)}, ${result.ty.toFixed(1)}, ${result.tz.toFixed(1)})`);
+        }
         reg.adapter.applyResult(reg.enemy, result, deltaMs);
       }
     }
