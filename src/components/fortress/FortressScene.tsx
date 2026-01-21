@@ -922,24 +922,34 @@ export function FortressScene({
         bullet.position.z += bullet.direction.z * bullet.speed * delta;
         bullet.position.y += bullet.velocityY * delta;
         
-        // Add tracer segment from previous to current position
-        tracersRef.current?.addSegment(
-          prevX, prevY, prevZ,
-          bullet.position.x, bullet.position.y, bullet.position.z,
-          bullet.color
-        );
+        // Add tracer segment only if bullet moved at least 2 meters since last segment
+        const lastTracerPos = (bullet as any).lastTracerPos;
+        if (!lastTracerPos) {
+          (bullet as any).lastTracerPos = { x: prevX, y: prevY, z: prevZ };
+          tracersRef.current?.addSegment(
+            prevX, prevY, prevZ,
+            bullet.position.x, bullet.position.y, bullet.position.z,
+            bullet.color
+          );
+        } else {
+          const dx = bullet.position.x - lastTracerPos.x;
+          const dy = bullet.position.y - lastTracerPos.y;
+          const dz = bullet.position.z - lastTracerPos.z;
+          const distSq = dx * dx + dy * dy + dz * dz;
+          
+          if (distSq >= 4.0) { // 2 meters squared
+            tracersRef.current?.addSegment(
+              lastTracerPos.x, lastTracerPos.y, lastTracerPos.z,
+              bullet.position.x, bullet.position.y, bullet.position.z,
+              bullet.color
+            );
+            lastTracerPos.x = bullet.position.x;
+            lastTracerPos.y = bullet.position.y;
+            lastTracerPos.z = bullet.position.z;
+          }
+        }
         
         bullet.life -= delta;
-        
-        // DEBUG: Track bullet trajectory (log every ~1 second based on life)
-        const bulletAge = 30.0 - bullet.life;
-        if (Math.floor(bulletAge) !== Math.floor(bulletAge - delta) && bulletAge < 25) {
-          console.log('[Bullet Track]', 
-            'age:', bulletAge.toFixed(1) + 's',
-            'pos:', bullet.position.x.toFixed(1), bullet.position.y.toFixed(1), bullet.position.z.toFixed(1),
-            'velY:', bullet.velocityY.toFixed(2),
-            'life:', bullet.life.toFixed(1));
-        }
         
         // Store previous pos in bullet for collision check later
         (bullet as any).prevX = prevX;
