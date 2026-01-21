@@ -121,6 +121,16 @@ export const Tracers = forwardRef<TracersHandle>((_, ref) => {
       const geo = geometryRef.current;
       if (!positions || !colors || !geo) return;
       
+      // Early-out: check if any segments are active
+      let hasActive = false;
+      for (const seg of segmentsRef.current) {
+        if (seg.active) { hasActive = true; break; }
+      }
+      if (!hasActive) {
+        geo.setDrawRange(0, 0);
+        return;
+      }
+      
       const now = performance.now();
       let vertexIndex = 0;
       
