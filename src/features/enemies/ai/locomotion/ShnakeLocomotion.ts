@@ -200,8 +200,8 @@ export function applyShnakeMove(
     const ny = headSeg.y + dy;
     const nz = headSeg.z + dz;
 
-    // CHUNK CONSTRAINT: Must stay within tree's chunks
-    if (!isInTreeChunks(ctx.tree, nx, nz)) continue;
+    // CHUNK CONSTRAINT: Must stay within tree's chunks UNLESS in revenge mode (canGoToGround)
+    if (!ctx.canGoToGround && !isInTreeChunks(ctx.tree, nx, nz)) continue;
 
     // GROUND CONSTRAINT: Only allowed at y=0 or below if attacked and chasing
     if (ny < 0 && !ctx.canGoToGround) continue;
@@ -214,21 +214,21 @@ export function applyShnakeMove(
     if (isCellOccupiedByWorld(nx, ny, nz)) continue;
 
     // TREE CONNECTION CONSTRAINT: At least one segment must touch tree after move
-    const newHeadTouchesTree = isTouchingTree(shnake.tier, nx, ny, nz, ctx.treeBlocksByTier);
-    
-    // Check body segments with loop (no slice allocation)
-    let anyBodyTouchesTree = false;
-    for (let i = 0; i < length - 1; i++) {
-      const seg = segs[i];
-      if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
-        anyBodyTouchesTree = true;
-        break;
-      }
-    }
-
-    // When wandering: must always stay connected to tree
-    // When chasing on ground after attack: can temporarily leave tree vicinity
+    // SKIP this constraint when in revenge mode (canGoToGround) - shnake can leave tree
     if (!ctx.canGoToGround) {
+      const newHeadTouchesTree = isTouchingTree(shnake.tier, nx, ny, nz, ctx.treeBlocksByTier);
+      
+      // Check body segments with loop (no slice allocation)
+      let anyBodyTouchesTree = false;
+      for (let i = 0; i < length - 1; i++) {
+        const seg = segs[i];
+        if (isTouchingTree(shnake.tier, seg.x, seg.y, seg.z, ctx.treeBlocksByTier)) {
+          anyBodyTouchesTree = true;
+          break;
+        }
+      }
+
+      // When not in revenge: must always stay connected to tree
       if (!newHeadTouchesTree && !anyBodyTouchesTree) continue;
     }
 

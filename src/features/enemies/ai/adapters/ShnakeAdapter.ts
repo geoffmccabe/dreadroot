@@ -267,8 +267,8 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         onIndignantRoar: (volume: number) => {
           locomotionContext?.onIndignantRoar?.(shnake.id, volume);
         },
-        onTriggerWiggle: (shnakeId: string) => {
-          locomotionContext?.onTriggerWiggle?.(shnakeId);
+        onTriggerWiggle: () => {
+          locomotionContext?.onTriggerWiggle?.(shnake.id);
         },
       },
       

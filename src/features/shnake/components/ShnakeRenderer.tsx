@@ -90,7 +90,7 @@ const SHNAKE_SOUND_VOLUME_PER_TIER = 0.056; // +5.6% per tier (2x original 2.8%)
 // Wiggle animation constants
 const WIGGLE_DURATION = 2000; // 2 seconds
 const WIGGLE_FREQUENCY = 3; // 3 full oscillations
-const WIGGLE_AMPLITUDE = 0.4; // Max offset in world units
+const WIGGLE_AMPLITUDE = 1.2; // Max offset in world units (3x larger undulations)
 
 // Per-tier rendering component
 interface TierRendererProps {
