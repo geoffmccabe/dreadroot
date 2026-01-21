@@ -152,12 +152,15 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
 
   const uploadTexture = async (file: File, kind: 'head' | 'body' | 'face') => {
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `shnake_${kind}_${selectedTier}_${Date.now()}.${fileExt}`;
+      // Convert image to webp for consistent browser support
+      const webpBlob = await convertToWebp(file);
+      const fileName = `shnake_${kind}_${selectedTier}_${Date.now()}.webp`;
+      
       const { error: uploadError } = await supabase.storage
         .from('block-textures')
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, webpBlob, { upsert: true, contentType: 'image/webp' });
       if (uploadError) throw uploadError;
+      
       const {
         data: { publicUrl },
       } = supabase.storage.from('block-textures').getPublicUrl(fileName);
@@ -166,11 +169,42 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
       if (kind === 'body') updateDef('body_texture_url', publicUrl);
       if (kind === 'face') updateDef('face_texture_url', publicUrl);
 
-      toast({ title: 'Texture uploaded', description: `Shnake ${kind} texture updated` });
+      toast({ title: 'Texture uploaded', description: `Shnake ${kind} texture converted to webp and saved` });
     } catch (err) {
       console.error('[ShnakeDesignPanel] Upload error:', err);
       toast({ title: 'Upload failed', variant: 'destructive' });
     }
+  };
+
+  // Convert any image file to webp format
+  const convertToWebp = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to convert to webp'));
+            }
+          },
+          'image/webp',
+          0.9
+        );
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = URL.createObjectURL(file);
+    });
   };
 
   if (isLoading) {
