@@ -346,10 +346,20 @@ export function applyShnakeMove(
     return;
   }
 
-  // Sort by score and pick from top choices with some randomness
+  // Sort by score - lower is better (closer to target)
   scored.sort((a, b) => a.score - b.score);
-  const topN = Math.min(3, scored.length);
-  const choice = scored[Math.floor(Math.random() * topN)];
+  
+  // In revenge mode (canGoToGround), ALWAYS take the best move - no randomness
+  // In normal mode, pick randomly from top 3 for more organic movement
+  let choice;
+  if (ctx.canGoToGround) {
+    // Direct pursuit - always pick the optimal move toward player
+    choice = scored[0];
+  } else {
+    // Normal patrol - some randomness for organic movement
+    const topN = Math.min(3, scored.length);
+    choice = scored[Math.floor(Math.random() * topN)];
+  }
 
   const newHead = { x: headSeg.x + choice.dx, y: headSeg.y + choice.dy, z: headSeg.z + choice.dz };
   shnake.headDir.set(choice.dx, choice.dy, choice.dz);
