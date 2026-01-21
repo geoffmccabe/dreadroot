@@ -1,8 +1,15 @@
 import React, { useRef, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
+import { useFrame } from '@react-three/fiber';
 import { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, type ShombieInstance } from '../types';
-import { DEFAULT_SHOMBIE_COLOR, MAX_TOTAL_SHOMBIES } from '../constants';
-import { frameLoop } from '@/lib/frameLoop';
+import { 
+  DEFAULT_SHOMBIE_COLOR, 
+  MAX_TOTAL_SHOMBIES, 
+  TIER_COLORS,
+  HEAD_FIRE_SIZE,
+  HEAD_FIRE_HEIGHT,
+} from '../constants';
+import Fire from 'three-particle-fire';
 
 // Pre-allocated objects
 const tmpMatrix = new THREE.Matrix4();
@@ -21,6 +28,21 @@ const MAX_INSTANCES = MAX_TOTAL_SHOMBIES * PARTS_PER_SHOMBIE;
 // Texture cache
 const textureCache = new Map<string, THREE.Texture>();
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+
+// Convert hex color to THREE.Color
+function hexToColor(hex: string): THREE.Color {
+  return new THREE.Color(hex);
+}
+
+// Get tier color as hex
+function getTierPrimaryColor(tier: number): string {
+  return TIER_COLORS[tier]?.[0] || '#FFFF00';
+}
+
+// Get tier colors array
+function getTierColors(tier: number): string[] {
+  return TIER_COLORS[tier] || ['#FFFF00'];
+}
 
 function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMaterial {
   const cacheKey = textureUrl || 'default';
@@ -48,8 +70,15 @@ function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMater
   return mat;
 }
 
+interface HeadFire {
+  shombieId: string;
+  fire: Fire;
+  tier: number;
+}
+
 export interface ShombieRendererHandle {
   update: (cameraPosition: THREE.Vector3, deltaTime: number) => void;
+  getHeadPosition: (shombieId: string) => THREE.Vector3 | null;
 }
 
 interface ShombieRendererProps {
@@ -58,10 +87,14 @@ interface ShombieRendererProps {
 
 /**
  * Renders shombies as block-based humanoids with shambling animation
+ * and tier-colored head fires
  */
 export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRendererProps>(
   ({ shombies }, ref) => {
     const meshRefsMap = useRef<Map<string, THREE.InstancedMesh>>(new Map());
+    const groupRef = useRef<THREE.Group>(null);
+    const headFiresRef = useRef<Map<string, HeadFire>>(new Map());
+    const cameraRef = useRef<THREE.Camera | null>(null);
 
     // Group shombies by texture
     const textureUrls = useMemo(() => {
@@ -81,6 +114,30 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       return mats;
     }, [textureUrls]);
 
+    // Clean up fires when shombies are removed
+    useEffect(() => {
+      const activeIds = new Set(shombies.filter(s => s.isActive).map(s => s.id));
+      
+      for (const [id, headFire] of headFiresRef.current.entries()) {
+        if (!activeIds.has(id)) {
+          // Remove fire from scene
+          if (groupRef.current) {
+            groupRef.current.remove(headFire.fire);
+          }
+          headFiresRef.current.delete(id);
+        }
+      }
+    }, [shombies]);
+
+    // Update fires every frame
+    useFrame(({ camera }) => {
+      cameraRef.current = camera;
+      
+      for (const headFire of headFiresRef.current.values()) {
+        headFire.fire.update(camera);
+      }
+    });
+
     useImperativeHandle(ref, () => ({
       update: (cameraPosition: THREE.Vector3, deltaTime: number) => {
         // Group by texture
@@ -95,6 +152,9 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           shombiesByTexture.get(url)!.push(shombie);
         }
 
+        // Track head positions for fire updates
+        const headPositions = new Map<string, THREE.Vector3>();
+
         // Update each instanced mesh
         for (const [textureUrl, textureShombies] of shombiesByTexture) {
           const mesh = meshRefsMap.current.get(textureUrl);
@@ -108,12 +168,13 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             
             const phase = shombie.animationPhase;
             const wobble = Math.sin(phase) * 0.1;
-            const armSwing = Math.sin(phase) * 0.4;
-            const legSwing = Math.sin(phase) * 0.3;
             
             // Set rotation quaternion for this shombie
             tmpEuler.set(0, shombie.rotation, 0);
             tmpQuaternion.setFromEuler(tmpEuler);
+
+            // Get tier color for this shombie
+            const tierColor = hexToColor(getTierPrimaryColor(shombie.definition.tier));
 
             for (let partIdx = 0; partIdx < PARTS_PER_SHOMBIE; partIdx++) {
               const part = SHOMBIE_BODY_PARTS[partIdx];
@@ -152,14 +213,19 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
                 shombie.position.z + rotatedZ
               );
               
+              // Store head position for fire placement
+              if (part.name === 'head') {
+                headPositions.set(shombie.id, tmpPosition.clone());
+              }
+              
               tmpScale.set(part.scaleX, part.scaleY, part.scaleZ);
               tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
               mesh.setMatrixAt(instanceIndex, tmpMatrix);
 
-              // Color based on health
+              // Apply tier color with health-based brightness
               const healthPercent = shombie.currentHealth / shombie.maxHealth;
               const brightness = 0.5 + healthPercent * 0.5;
-              tmpColor.setRGB(brightness, brightness * 0.9, brightness * 0.8);
+              tmpColor.copy(tierColor).multiplyScalar(brightness);
               mesh.setColorAt(instanceIndex, tmpColor);
 
               instanceIndex++;
@@ -181,6 +247,70 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             mesh.count = 0;
           }
         }
+
+        // Update head fires
+        for (const shombie of shombies) {
+          if (!shombie.isActive) continue;
+          
+          const headPos = headPositions.get(shombie.id);
+          if (!headPos) continue;
+
+          let headFire = headFiresRef.current.get(shombie.id);
+          
+          // Create fire if it doesn't exist
+          if (!headFire && groupRef.current) {
+            const tierColors = getTierColors(shombie.definition.tier);
+            const color1 = new THREE.Color(tierColors[0] || '#FFFF00');
+            const color2 = new THREE.Color(tierColors[1] || tierColors[0] || '#FF8800');
+            const color3 = new THREE.Color(tierColors[2] || tierColors[0] || '#FF4400');
+            
+            Fire.init();
+            const fire = new Fire({
+              color1,
+              color2,
+              color3,
+              fireRadius: HEAD_FIRE_SIZE,
+              fireHeight: HEAD_FIRE_HEIGHT,
+              particleCount: 100,
+              windStrength: 0.2,
+            });
+            
+            groupRef.current.add(fire);
+            headFire = { shombieId: shombie.id, fire, tier: shombie.definition.tier };
+            headFiresRef.current.set(shombie.id, headFire);
+          }
+          
+          // Update fire position (on top of head)
+          if (headFire) {
+            headFire.fire.position.set(
+              headPos.x,
+              headPos.y + 0.3, // Above the head
+              headPos.z
+            );
+          }
+        }
+      },
+      
+      getHeadPosition: (shombieId: string) => {
+        const shombie = shombies.find(s => s.id === shombieId && s.isActive);
+        if (!shombie) return null;
+        
+        const headPart = SHOMBIE_BODY_PARTS[0]; // Head is first part
+        const phase = shombie.animationPhase;
+        const wobble = Math.sin(phase) * 0.1;
+        
+        let offsetX = headPart.offsetX + wobble;
+        let offsetY = headPart.offsetY + Math.sin(phase * 2) * 0.02;
+        let offsetZ = headPart.offsetZ;
+        
+        const rotatedX = offsetX * Math.cos(shombie.rotation) - offsetZ * Math.sin(shombie.rotation);
+        const rotatedZ = offsetX * Math.sin(shombie.rotation) + offsetZ * Math.cos(shombie.rotation);
+        
+        return new THREE.Vector3(
+          shombie.position.x + rotatedX,
+          shombie.position.y + offsetY,
+          shombie.position.z + rotatedZ
+        );
       },
     }), [shombies]);
 
@@ -193,7 +323,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
     };
 
     return (
-      <>
+      <group ref={groupRef}>
         {textureUrls.map((url) => (
           <instancedMesh
             key={url}
@@ -204,7 +334,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             receiveShadow
           />
         ))}
-      </>
+      </group>
     );
   }
 );

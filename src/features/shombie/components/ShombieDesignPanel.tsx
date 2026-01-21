@@ -39,14 +39,28 @@ const RARITY_COLORS: Record<string, string> = {
   rare: '#3b82f6',
   epic: '#a855f7',
   legendary: '#f59e0b',
+  divine: '#ffffff',
+  mystic: '#ec4899',
+  rainbow: '#ff0000',
+  apocalyptic: '#1a1a1a',
+  cosmic: '#ffd700',
+};
+
+const RARITY_NAMES: Record<number, string> = {
+  1: 'common',
+  2: 'uncommon',
+  3: 'rare',
+  4: 'epic',
+  5: 'legendary',
+  6: 'divine',
+  7: 'mystic',
+  8: 'rainbow',
+  9: 'apocalyptic',
+  10: 'cosmic',
 };
 
 function getRarityForTier(tier: number): string {
-  if (tier <= 2) return 'common';
-  if (tier <= 4) return 'uncommon';
-  if (tier <= 6) return 'rare';
-  if (tier <= 8) return 'epic';
-  return 'legendary';
+  return RARITY_NAMES[tier] || 'common';
 }
 
 export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
