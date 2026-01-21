@@ -22,7 +22,14 @@ export interface BulletDefinition {
   burn_time: number;
   burn_width: number;
   burn_height: number;
+  velocity: number;
 }
+
+// Default velocities per tier
+const DEFAULT_VELOCITIES: Record<number, number> = {
+  1: 100, 2: 150, 3: 200, 4: 250, 5: 300,
+  6: 350, 7: 400, 8: 450, 9: 500, 10: 550,
+};
 
 // Get default bullet definition for a tier
 export const getDefaultBullet = (tier: number): BulletDefinition => ({
@@ -31,6 +38,7 @@ export const getDefaultBullet = (tier: number): BulletDefinition => ({
   burn_time: 0.5 + (tier - 1) * 0.05,
   burn_width: 0.25 + (tier - 1) * 0.025,
   burn_height: 0.5 + (tier - 1) * 0.05,
+  velocity: DEFAULT_VELOCITIES[tier] || 100,
 });
 
 interface BulletDefinitionsContextType {
@@ -76,12 +84,13 @@ export const BulletDefinitionsProvider: React.FC<{ children: ReactNode }> = ({ c
       if (data && data.length > 0) {
         const newMap = new Map<number, BulletDefinition>();
         for (const row of data) {
-          newMap.set(row.tier, {
+        newMap.set(row.tier, {
             tier: row.tier,
             colors: row.colors || ['#FFFFFF'],
             burn_time: row.burn_time,
             burn_width: row.burn_width,
             burn_height: row.burn_height,
+            velocity: row.velocity || DEFAULT_VELOCITIES[row.tier] || 100,
           });
         }
         setDefinitions(newMap);
@@ -123,6 +132,7 @@ export const BulletDefinitionsProvider: React.FC<{ children: ReactNode }> = ({ c
         burn_time: def.burn_time,
         burn_width: def.burn_width,
         burn_height: def.burn_height,
+        velocity: def.velocity,
       }));
 
       // Upsert all definitions
@@ -134,6 +144,7 @@ export const BulletDefinitionsProvider: React.FC<{ children: ReactNode }> = ({ c
             burn_time: update.burn_time,
             burn_width: update.burn_width,
             burn_height: update.burn_height,
+            velocity: update.velocity,
           })
           .eq('tier', update.tier);
 

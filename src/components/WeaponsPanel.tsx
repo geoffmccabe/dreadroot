@@ -121,7 +121,21 @@ function BulletTierPanel({ tier, definition, onChange }: BulletTierPanelProps) {
         </div>
       </div>
 
-      {/* Row 2: Burn sliders */}
+      {/* Row 2: Velocity input */}
+      <div className="flex items-center gap-2 mb-2">
+        <Label className="text-xs w-16 shrink-0">Velocity</Label>
+        <Input
+          type="number"
+          value={definition.velocity}
+          onChange={(e) => updateField('velocity', Math.max(50, Math.min(1000, Number(e.target.value) || 100)))}
+          className="w-24 h-7 text-xs"
+          min={50}
+          max={1000}
+        />
+        <span className="text-xs text-muted-foreground">m/s</span>
+      </div>
+
+      {/* Row 3: Burn sliders */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 flex-1">
           <Label className="text-xs w-16 shrink-0">Time</Label>

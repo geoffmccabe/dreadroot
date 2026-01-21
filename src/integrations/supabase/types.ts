@@ -242,6 +242,7 @@ export type Database = {
           id: number
           tier: number
           updated_at: string
+          velocity: number
         }
         Insert: {
           burn_height?: number
@@ -252,6 +253,7 @@ export type Database = {
           id?: number
           tier: number
           updated_at?: string
+          velocity?: number
         }
         Update: {
           burn_height?: number
@@ -262,6 +264,7 @@ export type Database = {
           id?: number
           tier?: number
           updated_at?: string
+          velocity?: number
         }
         Relationships: []
       }

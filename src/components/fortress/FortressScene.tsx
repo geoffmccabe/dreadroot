@@ -645,6 +645,9 @@ export function FortressScene({
     const bullet = pool[activeBulletCount.current % MAX_BULLETS];
     activeBulletCount.current++;
     
+    // Get tier definition for velocity and color
+    const tierDef = getDefinitionRef.current(selectedBulletTier);
+    
     // Normalize direction for consistent speed
     const normalizedDir = direction.clone().normalize();
     
@@ -652,9 +655,8 @@ export function FortressScene({
     // Bullet starts exactly at camera position
     bullet.position.copy(origin);
     
-    // MUZZLE VELOCITY: 100 m/s in the exact direction the player is aiming
-    // The bullet travels as a projectile with gravity applied to Y velocity
-    const MUZZLE_VELOCITY = 100; // meters per second
+    // Use velocity from tier definition instead of hardcoded value
+    const MUZZLE_VELOCITY = tierDef.velocity;
     
     // Store the FULL normalized direction for movement
     bullet.direction.copy(normalizedDir);
@@ -665,6 +667,16 @@ export function FortressScene({
     // Initial Y velocity = muzzle velocity * vertical component of direction
     // This gets modified by gravity each frame
     bullet.velocityY = normalizedDir.y * MUZZLE_VELOCITY;
+    
+    // DEBUG: Log bullet physics
+    console.log('[Bullet] Fired with muzzle velocity:', MUZZLE_VELOCITY, 
+      'direction:', normalizedDir.x.toFixed(3), normalizedDir.y.toFixed(3), normalizedDir.z.toFixed(3),
+      'velocityY:', bullet.velocityY.toFixed(2));
+    
+    bullet.life = 30.0; // Extended lifetime for faster bullets with longer trajectories
+    bullet.tier = selectedBulletTier;
+    bullet.color = tierDef.colors[0] || '#FFFF00'; // Use first color from tier definition
+    bullet.ricochetScale = 1.0; // Full size for first impact
     
     // DEBUG: Log bullet physics
     console.log('[Bullet] Fired with muzzle velocity:', MUZZLE_VELOCITY, 
@@ -785,7 +797,9 @@ export function FortressScene({
             // Check the bullet's travel path this frame, not just its current position
             const SHWARM_HALF_SIZE = 0.35; // Slightly larger for forgiving hit detection
             const BASE_BULLET_DAMAGE = 25;
-            const MUZZLE_VELOCITY = 100; // Original bullet speed for damage scaling
+            // Get the tier's original muzzle velocity for damage scaling
+            const tierDef = getDefinitionRef.current(bullet.tier);
+            const originalMuzzleVelocity = tierDef.velocity;
             
             // Calculate bullet's actual displacement this frame (not direction-based)
             const moveDistanceXZ = bullet.speed * delta;
@@ -868,9 +882,9 @@ export function FortressScene({
                   hit = true;
                   needsBulletRender = true;
                   
-                  // Calculate damage based on current velocity vs muzzle velocity
+                  // Calculate damage based on current velocity vs original muzzle velocity
                   // If bullet has slowed from ricochets, damage is proportionally reduced
-                  const velocityRatio = bullet.speed / MUZZLE_VELOCITY;
+                  const velocityRatio = bullet.speed / originalMuzzleVelocity;
                   const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
                   
                   // Apply damage and get actual damage dealt (capped at remaining health)
