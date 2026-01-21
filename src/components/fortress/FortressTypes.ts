@@ -164,7 +164,6 @@ export interface FirstPersonControlsProps {
   // Pentabullet system
   playerLevel?: number;
   onPentabulletChargeChange?: (charge: number) => void;
-  onPentabulletShoot?: (origin: THREE.Vector3, directions: THREE.Vector3[]) => void;
 }
 
 // Bullet interface
