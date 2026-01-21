@@ -142,25 +142,29 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
     
     setIsClearingCache(true);
     try {
-      console.log('[CacheClear] Clearing IndexedDB cache for world:', currentWorldId);
+      console.log('[CacheClear] Starting NUCLEAR cache clear...');
       
-      // Clear chunk cache for current world
-      await blockDB.clearCachedChunksForWorld(currentWorldId);
-      console.log('[CacheClear] ✓ Cleared chunk cache for world');
+      // NUCLEAR: Clear ALL chunk cache (not just current world)
+      // This fixes issues where worldId in cache doesn't match expected worldId
+      await blockDB.clearAllChunkCache();
+      console.log('[CacheClear] ✓ Cleared ALL chunk cache (nuclear)');
       
       // Also clear the main blocks store to ensure fresh data
       await blockDB.clearAllBlocks();
       console.log('[CacheClear] ✓ Cleared blocks store');
+      
+      // Wait for IndexedDB writes to complete before reload
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       toast({
         title: 'Cache cleared',
         description: 'Reloading to fetch fresh data from server...'
       });
       
-      // Force page reload after short delay
+      // Force page reload after delay (ensure toast is visible)
       setTimeout(() => {
         window.location.reload();
-      }, 1000);
+      }, 500);
     } catch (err) {
       console.error('[CacheClear] Error:', err);
       toast({
