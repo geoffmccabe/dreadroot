@@ -52,6 +52,8 @@ interface UseShwarmMovementOptions {
   shwarmsRef: React.RefObject<ShwarmInstance[]>;
   cameraRef: React.RefObject<THREE.Camera>;
   isEnabled: boolean;
+  /** When true, AI system controls movement - legacy loop is disabled */
+  aiControlled?: boolean;
   onPlayerHit?: (damage: number, knockbackForce: number, direction: THREE.Vector3) => void;
 }
 
@@ -63,6 +65,7 @@ export function useShwarmMovement({
   shwarmsRef,
   cameraRef,
   isEnabled,
+  aiControlled = false,
   onPlayerHit,
 }: UseShwarmMovementOptions) {
   // Per-shwarm random generators (keyed by shwarm id)
@@ -163,6 +166,8 @@ export function useShwarmMovement({
 
   // Frame loop for smooth interpolation AND continuous player hit detection
   useEffect(() => {
+    // When AI controls movement, legacy interpolation still runs (for smooth rendering)
+    // but movement decisions come from AI
     if (!isEnabled) return;
 
     const unregister = frameLoop.register('shwarmInterpolation', (delta) => {
@@ -244,7 +249,8 @@ export function useShwarmMovement({
 
   // Movement phase - check every 100ms, each block has its own timer (0.5-1.5s)
   useEffect(() => {
-    if (!isEnabled) return;
+    // When AI controls movement, this legacy movement loop is disabled
+    if (!isEnabled || aiControlled) return;
 
     const intervalId = setInterval(() => {
       const shwarms = shwarmsRef.current;
@@ -424,7 +430,7 @@ export function useShwarmMovement({
     }, 100); // Check every 100ms for per-block timers
 
     return () => clearInterval(intervalId);
-  }, [isEnabled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
+  }, [isEnabled, aiControlled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
 
   // Cleanup maps and colliders when shwarms/blocks are removed
   useEffect(() => {
