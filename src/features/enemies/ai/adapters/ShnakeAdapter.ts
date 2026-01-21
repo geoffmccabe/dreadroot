@@ -38,12 +38,29 @@ let locomotionContext: {
   onHeadMoved?: (shnakeId: string) => void;
 } | null = null;
 
+// Track attacked state per shnake (for canGoToGround)
+const attackedStateMap = new Map<string, { wasAttacked: boolean; attackedAt: number }>();
+
 /**
  * Set locomotion context for shnake movement execution.
  * Called by useEnemyAI hook when aiControlled=true.
  */
 export function setShnakeLocomotionContext(ctx: typeof locomotionContext): void {
   locomotionContext = ctx;
+}
+
+/**
+ * Mark a shnake as attacked (allows ground descent for 30s).
+ */
+export function markShnakeAttacked(shnakeId: string): void {
+  attackedStateMap.set(shnakeId, { wasAttacked: true, attackedAt: performance.now() });
+}
+
+/**
+ * Cleanup shnake resources when unregistered.
+ */
+export function cleanupShnakeResources(shnakeId: string): void {
+  attackedStateMap.delete(shnakeId);
 }
 
 /**
@@ -150,12 +167,26 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
       const tree = locomotionContext.plantedTrees.find(t => t.id === shnake.treeId);
       if (!tree) return;
       
+      // Check attacked state for canGoToGround
+      const attackedState = attackedStateMap.get(shnake.id);
+      const now = performance.now();
+      let canGoToGround = false;
+      
+      if (attackedState?.wasAttacked) {
+        // 30 second window after being attacked
+        if (now - attackedState.attackedAt < 30000) {
+          canGoToGround = true;
+        } else {
+          attackedState.wasAttacked = false;
+        }
+      }
+      
       // Build locomotion context for this shnake
       const ctx: ShnakeLocomotionContext = {
         tree,
         treeBlocksByTier: locomotionContext.treeBlocksByTier,
         worldBlocks: locomotionContext.worldBlocks,
-        canGoToGround: false, // TODO: Track attacked state
+        canGoToGround,
         onHeadMoved: locomotionContext.onHeadMoved,
       };
       
