@@ -40,7 +40,7 @@ import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
-import { useShnakeSystem, useShnakeMovement, ShnakeRenderer } from '@/features/shnake';
+import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
 
 // Wisp particles using InstancedMesh for performance (no React re-renders per particle)
 const MAX_WISP_PARTICLES = 50;
@@ -498,6 +498,7 @@ export function FortressScene({
   }, [plantedTrees, cameraRef, spawnOnTree]);
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
+  const shnakeRendererRef = useRef<ShnakeRendererHandle>(null);
   
   // Shared cycle state ref for weather/sky/lighting
   const cycleStateRef = useRef({
@@ -1038,6 +1039,173 @@ export function FortressScene({
             }
           }
           
+          // Check SHNAKE collisions (if not already hit something)
+          // Head takes damage, body ricochets like building blocks
+          if (!hit && shnakeRendererRef.current) {
+            const SHNAKE_HALF_SIZE = 0.5;
+            const BASE_BULLET_DAMAGE = 25;
+            const tierDef = getDefinitionRef.current(bullet.tier);
+            const originalMuzzleVelocity = tierDef.velocity;
+            
+            // Use stored previous position
+            const prevX = (bullet as any).prevX ?? bullet.position.x;
+            const prevY = (bullet as any).prevY ?? bullet.position.y;
+            const prevZ = (bullet as any).prevZ ?? bullet.position.z;
+            
+            const dispX = bullet.position.x - prevX;
+            const dispY = bullet.position.y - prevY;
+            const dispZ = bullet.position.z - prevZ;
+            const dispLen = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
+            
+            if (dispLen > 0.001) {
+              const ndx = dispX / dispLen;
+              const ndy = dispY / dispLen;
+              const ndz = dispZ / dispLen;
+              
+              // Check all shnakes' segments
+              const shnakes = shnakesRef.current || [];
+              for (const shnake of shnakes) {
+                if (!shnake.isActive || hit) break;
+                
+                for (let segIdx = 0; segIdx < shnake.segments.length; segIdx++) {
+                  const seg = shnake.segments[segIdx];
+                  const isHead = segIdx === 0;
+                  
+                  // AABB for this segment
+                  const minX = seg.x;
+                  const maxX = seg.x + 1;
+                  const minY = seg.y;
+                  const maxY = seg.y + 1;
+                  const minZ = seg.z;
+                  const maxZ = seg.z + 1;
+                  
+                  // Ray-AABB intersection (slab method)
+                  let tMin = 0;
+                  let tMax = dispLen;
+                  
+                  // X slab
+                  if (Math.abs(ndx) > 0.0001) {
+                    const t1 = (minX - prevX) / ndx;
+                    const t2 = (maxX - prevX) / ndx;
+                    tMin = Math.max(tMin, Math.min(t1, t2));
+                    tMax = Math.min(tMax, Math.max(t1, t2));
+                  } else if (prevX < minX || prevX > maxX) continue;
+                  
+                  // Y slab
+                  if (Math.abs(ndy) > 0.0001) {
+                    const t1 = (minY - prevY) / ndy;
+                    const t2 = (maxY - prevY) / ndy;
+                    tMin = Math.max(tMin, Math.min(t1, t2));
+                    tMax = Math.min(tMax, Math.max(t1, t2));
+                  } else if (prevY < minY || prevY > maxY) continue;
+                  
+                  // Z slab
+                  if (Math.abs(ndz) > 0.0001) {
+                    const t1 = (minZ - prevZ) / ndz;
+                    const t2 = (maxZ - prevZ) / ndz;
+                    tMin = Math.max(tMin, Math.min(t1, t2));
+                    tMax = Math.min(tMax, Math.max(t1, t2));
+                  } else if (prevZ < minZ || prevZ > maxZ) continue;
+                  
+                  if (tMin <= tMax) {
+                    // HIT a shnake segment!
+                    const hitX = prevX + ndx * tMin;
+                    const hitY = prevY + ndy * tMin;
+                    const hitZ = prevZ + ndz * tMin;
+                    const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                    
+                    if (isHead) {
+                      // HEAD: takes damage, bullet destroyed
+                      hit = true;
+                      needsBulletRender = true;
+                      
+                      const velocityRatio = bullet.speed / originalMuzzleVelocity;
+                      const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
+                      
+                      const { killedHead, killedEntire } = damageShnakeHead(shnake.id, scaledDamage);
+                      
+                      // Award points for damage
+                      if (onPointsEarned) {
+                        onPointsEarned(scaledDamage);
+                      }
+                      
+                      // Spawn impact effect and add fire to segment
+                      if (bulletImpactsRef.current) {
+                        bulletImpactsRef.current.spawnImpact(hitPos, {
+                          colors: tierDef.colors,
+                          size: tierDef.burn_width * bullet.ricochetScale,
+                          height: tierDef.burn_height * bullet.ricochetScale,
+                          duration: tierDef.burn_time,
+                          tier: bullet.tier,
+                        });
+                      }
+                      
+                      // Add fire to the new head (segment 0 after damage)
+                      shnakeRendererRef.current?.addFireToSegment(
+                        shnake.id, 0, tierDef.burn_time * 1000, tierDef.colors
+                      );
+                      
+                      console.log(`[Shnake Hit] Head hit! damage=${scaledDamage} killed=${killedHead}`);
+                    } else {
+                      // BODY: ricochet like building block
+                      if (bullet.ricochetScale > 0.1) {
+                        // Play ricochet sound
+                        const distToCamera = hitPos.distanceTo(camera.position);
+                        playSpatialSound('/ricochet_sound.mp3', distToCamera, { baseVolume: 0.6 });
+                        
+                        // Calculate hit normal
+                        const normal = calculateHitNormal(hitX, hitY, hitZ, seg.x, seg.y, seg.z);
+                        
+                        // Spawn impact effect
+                        if (bulletImpactsRef.current) {
+                          bulletImpactsRef.current.spawnImpact(hitPos, {
+                            colors: tierDef.colors,
+                            size: tierDef.burn_width * bullet.ricochetScale,
+                            height: tierDef.burn_height * bullet.ricochetScale,
+                            duration: tierDef.burn_time,
+                            tier: bullet.tier,
+                          });
+                        }
+                        
+                        // Add fire to this segment (propagates as shnake moves)
+                        shnakeRendererRef.current?.addFireToSegment(
+                          shnake.id, segIdx, tierDef.burn_time * 1000, tierDef.colors
+                        );
+                        
+                        // Apply reflection physics: R = D - 2(D·N)N
+                        const dot = ndx * normal.x + ndy * normal.y + ndz * normal.z;
+                        bullet.direction.set(
+                          ndx - 2 * dot * normal.x,
+                          0,
+                          ndz - 2 * dot * normal.z
+                        ).normalize();
+                        
+                        bullet.velocityY = bullet.velocityY - 2 * dot * normal.y * bullet.speed;
+                        bullet.speed *= 0.75;
+                        bullet.velocityY *= 0.75;
+                        bullet.ricochetScale *= 0.5;
+                        
+                        bullet.position.set(
+                          hitX + normal.x * 0.05,
+                          hitY + normal.y * 0.05,
+                          hitZ + normal.z * 0.05
+                        );
+                        
+                        needsBulletRender = true;
+                        console.log(`[Shnake Hit] Body ricochet at segment ${segIdx}`);
+                      } else {
+                        // Too weak to ricochet, just destroy bullet
+                        hit = true;
+                        needsBulletRender = true;
+                      }
+                    }
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          
           // Check block collisions (if not already hit something)
           if (!hit) {
             // Use stored previous position for accurate ray collision
@@ -1370,7 +1538,7 @@ export function FortressScene({
       <ShwarmRenderer ref={shwarmRendererRef} shwarms={shwarms} />
 
       {/* Shnake Renderer */}
-      <ShnakeRenderer shnakesRef={shnakesRef} />
+      <ShnakeRenderer ref={shnakeRendererRef} shnakesRef={shnakesRef} />
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>
