@@ -31,6 +31,29 @@ export const TICK_INTERVALS_MS = {
 } as const;
 
 // =============================================================================
+// Behavior State (declared before BehaviorContext which uses it)
+// =============================================================================
+
+/**
+ * Persistent state for behaviors, stored per-enemy.
+ * Behaviors can read/write to this object and it persists across ticks.
+ */
+export interface BehaviorState {
+  // Wander behavior state
+  wanderTargetX?: number;
+  wanderTargetY?: number;
+  wanderTargetZ?: number;
+  wanderPauseUntil?: number;
+  
+  // Angry behavior state
+  isAngry?: boolean;
+  angryUntil?: number;
+  
+  // Generic storage for custom behaviors
+  [key: string]: unknown;
+}
+
+// =============================================================================
 // Behavior Context (Zero-Allocation)
 // =============================================================================
 
@@ -90,25 +113,6 @@ export interface SharedContext {
   scratchVec1: THREE.Vector3;
   scratchVec2: THREE.Vector3;
   scratchVec3: THREE.Vector3;
-}
-
-/**
- * Persistent state for behaviors, stored per-enemy.
- * Behaviors can read/write to this object and it persists across ticks.
- */
-export interface BehaviorState {
-  // Wander behavior state
-  wanderTargetX?: number;
-  wanderTargetY?: number;
-  wanderTargetZ?: number;
-  wanderPauseUntil?: number;
-  
-  // Angry behavior state
-  isAngry?: boolean;
-  angryUntil?: number;
-  
-  // Generic storage for custom behaviors
-  [key: string]: unknown;
 }
 
 // =============================================================================
