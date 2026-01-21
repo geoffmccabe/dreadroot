@@ -756,9 +756,9 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           );
           
           // HEURISTIC: Detect potentially truncated cache
-          // If cache has exactly 87-1000 blocks, it might be from before .limit() fix
-          // Force refetch for chunk (3,1) which we know has 1536+ blocks
-          const possiblyTruncated = (x === 3 && z === 1 && activeBlocks.length < 1000);
+          // If cache has exactly 1000 blocks (Supabase default limit), it was likely truncated
+          // Force refetch for any chunk with exactly 1000 blocks
+          const possiblyTruncated = activeBlocks.length === 1000;
           
           if (possiblyTruncated) {
             console.log(`[ChunkLoader DEBUG] Chunk (${x},${z}) cache looks truncated (${activeBlocks.length} blocks), forcing refetch`);
