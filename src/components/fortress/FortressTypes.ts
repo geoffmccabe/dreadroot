@@ -35,6 +35,11 @@ export interface AudioRefs {
   // Shwarm combat sounds
   shwarmHit: HTMLAudioElement;
   playerHit: HTMLAudioElement;
+  // Pentabullet sounds
+  pentabulletFire: HTMLAudioElement;
+  pentabulletPowerup: HTMLAudioElement;
+  pentabulletSteady: HTMLAudioElement;
+  pentabulletPowerdown: HTMLAudioElement;
 }
 
 // Cycle state for weather/sky/lighting
@@ -107,6 +112,9 @@ export interface SceneProps {
   isOwnedTreeAtPosition?: (x: number, y: number, z: number) => boolean;
   onTreeChopComplete?: (x: number, y: number, z: number) => Promise<void>;
   onTreeChopProgress?: (chopCount: number, maxChops: number) => void;
+  // Pentabullet system
+  playerLevel?: number;
+  onPentabulletChargeChange?: (charge: number) => void;
 }
 
 // First person controls props
@@ -153,6 +161,10 @@ export interface FirstPersonControlsProps {
   onTreeChopProgress?: (chopCount: number, maxChops: number) => void;
   // Bullet tier selection (admin only)
   onBulletTierChange?: (tier: number) => void;
+  // Pentabullet system
+  playerLevel?: number;
+  onPentabulletChargeChange?: (charge: number) => void;
+  onPentabulletShoot?: (origin: THREE.Vector3, directions: THREE.Vector3[]) => void;
 }
 
 // Bullet interface

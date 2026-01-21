@@ -36,6 +36,7 @@ import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '
 import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { FlyingCoin, GameSettings, WeatherSettings } from './FortressTypes';
+import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 
 
@@ -109,6 +110,7 @@ export function Fortress() {
   const [godMode, setGodMode] = useState(false);
   const [performanceMode, setPerformanceMode] = useState(false);
   const [selectedBulletTier, setSelectedBulletTier] = useState(1);
+  const [pentabulletCharge, setPentabulletCharge] = useState(0);
   
   // Tree chopping modal state
   const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
@@ -1002,6 +1004,8 @@ export function Fortress() {
           onTreeChopProgress={handleTreeChopProgress}
           selectedBulletTier={selectedBulletTier}
           onBulletTierChange={setSelectedBulletTier}
+          playerLevel={profile?.current_level ?? 1}
+          onPentabulletChargeChange={setPentabulletCharge}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
@@ -1150,11 +1154,11 @@ export function Fortress() {
       {/* User Panel */}
       <UserPanel onBlockPurchased={handleBlockPurchased} />
       
-      {/* Crosshair */}
-      <div className={`waterfall-crosshair ${
-        blockPlacementMode ? 'block-mode' : 
-        crosshairsEnabled ? 'active' : ''
-      }`} />
+      {/* Crosshair - Pentabullet-enabled */}
+      <PentabulletCrosshair 
+        chargeProgress={pentabulletCharge}
+        baseMode={blockPlacementMode ? 'building' : treePlacementMode ? 'planting' : crosshairsEnabled ? 'shooting' : 'inactive'}
+      />
       
       
       {/* Death Overlay */}
