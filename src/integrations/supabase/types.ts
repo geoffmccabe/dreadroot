@@ -728,6 +728,60 @@ export type Database = {
         }
         Relationships: []
       }
+      shnake_definitions: {
+        Row: {
+          armor: number
+          body_texture_url: string | null
+          created_at: string | null
+          damage_per_hit: number
+          face_texture_url: string | null
+          head_texture_url: string | null
+          health_per_segment: number
+          id: string
+          knockback: number
+          max_spawn_per_tree: number
+          name: string
+          spawn_chance_per_minute: number
+          speed: number
+          tier: number
+          updated_at: string | null
+        }
+        Insert: {
+          armor?: number
+          body_texture_url?: string | null
+          created_at?: string | null
+          damage_per_hit?: number
+          face_texture_url?: string | null
+          head_texture_url?: string | null
+          health_per_segment?: number
+          id?: string
+          knockback?: number
+          max_spawn_per_tree?: number
+          name: string
+          spawn_chance_per_minute?: number
+          speed?: number
+          tier: number
+          updated_at?: string | null
+        }
+        Update: {
+          armor?: number
+          body_texture_url?: string | null
+          created_at?: string | null
+          damage_per_hit?: number
+          face_texture_url?: string | null
+          head_texture_url?: string | null
+          health_per_segment?: number
+          id?: string
+          knockback?: number
+          max_spawn_per_tree?: number
+          name?: string
+          spawn_chance_per_minute?: number
+          speed?: number
+          tier?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       shwarm_blocks: {
         Row: {
           block_index: number
