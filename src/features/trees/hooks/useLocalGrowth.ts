@@ -107,6 +107,7 @@ export function useLocalGrowth({
   const growingTreesRef = useRef<Map<string, GrowingTree>>(new Map());
   const placeBlocksBatchRef = useRef(placeBlocksBatch);
   const isGrowingRef = useRef(false);
+  const prevWorldIdRef = useRef<string | null>(null);
 
   // Keep placeBlocksBatch ref in sync AND set global reference (once)
   useEffect(() => {
@@ -114,6 +115,21 @@ export function useLocalGrowth({
     // Set the global reference for external clearing
     growingTreesRefGlobal = growingTreesRef;
   }, [placeBlocksBatch]);
+  
+  // CRITICAL: Clear all growing trees when worldId changes to prevent cross-world ghosts
+  useEffect(() => {
+    if (worldId !== prevWorldIdRef.current) {
+      if (prevWorldIdRef.current !== null && growingTreesRef.current.size > 0) {
+        console.warn(`[LocalGrowth] World changed from ${prevWorldIdRef.current} to ${worldId} - clearing ${growingTreesRef.current.size} growing trees`);
+        // Mark all current trees as deleted before clearing
+        for (const treeId of growingTreesRef.current.keys()) {
+          deletedTreeIds.add(treeId);
+        }
+        growingTreesRef.current.clear();
+      }
+      prevWorldIdRef.current = worldId;
+    }
+  }, [worldId]);
 
   /**
    * Start growing a new tree locally
@@ -218,14 +234,25 @@ export function useLocalGrowth({
           // Handle temp trees specially - they need timeout protection
           if (id.startsWith('temp_')) {
             const tempAge = now - (tree.createdAt || tree.lastGrowthTime);
-            const TEMP_TREE_TIMEOUT = 30000; // 30 seconds max for temp trees
+            const TEMP_TREE_TIMEOUT = 10000; // 10 seconds max for temp trees (reduced from 30)
             
             // If temp tree is too old, it's orphaned - stop it
             if (tempAge > TEMP_TREE_TIMEOUT) {
+              console.warn(`[LocalGrowth] Removing orphaned temp tree: ${id}`);
               growingTreesRef.current.delete(id);
               deletedTreeIds.add(id);
             }
             // Skip growth tick for temp trees - wait for DB ID assignment
+            continue;
+          }
+          
+          // GHOST TREE CHECK: Verify tree has a valid UUID format (not temp)
+          // Real DB IDs are UUIDs, temp IDs start with "temp_"
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (!uuidRegex.test(id)) {
+            console.warn(`[LocalGrowth] Removing ghost tree with invalid ID format: ${id}`);
+            growingTreesRef.current.delete(id);
+            deletedTreeIds.add(id);
             continue;
           }
 
@@ -252,22 +279,19 @@ export function useLocalGrowth({
             continue;
           }
 
-          // Periodic parent check
-          const lastCheck = lastParentCheck.get(id) ?? 0;
-          if (now - lastCheck > PARENT_CHECK_INTERVAL) {
-            const { data: parentExists, error: existsError } = await supabase
-              .from('planted_trees')
-              .select('id')
-              .eq('id', tree.id)
-              .maybeSingle();
+          // MANDATORY parent check on EVERY growth tick (not periodic)
+          // This prevents ghost trees from continuing to grow after deletion
+          const { data: parentExists, error: existsError } = await supabase
+            .from('planted_trees')
+            .select('id')
+            .eq('id', tree.id)
+            .maybeSingle();
 
-            lastParentCheck.set(id, now);
-
-            if (existsError || !parentExists) {
-              growingTreesRef.current.delete(id);
-              lastParentCheck.delete(id);
-              continue;
-            }
+          if (existsError || !parentExists) {
+            console.warn(`[LocalGrowth] Removing ghost tree - no parent in DB: ${id}`);
+            growingTreesRef.current.delete(id);
+            deletedTreeIds.add(id);
+            continue;
           }
 
           treesToGrow.push(tree);
