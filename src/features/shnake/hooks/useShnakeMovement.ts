@@ -96,6 +96,9 @@ export function useShnakeMovement({
   // Shared temp vectors
   const tmpDir = useRef(new THREE.Vector3());
   const tmpPlayer = useRef(new THREE.Vector3());
+  
+  // Cache tree chunk keys to avoid recomputing Sets in hot loops
+  const treeChunksCacheRef = useRef<Map<string, Set<string>>>(new Map());
 
   const isWorldOccupied = (x: number, y: number, z: number) => {
     const blocks = blocksRef.current || [];
@@ -126,10 +129,22 @@ export function useShnakeMovement({
   };
 
   /**
+   * Get cached tree chunk keys (avoids recomputing Set in hot loops)
+   */
+  const getCachedTreeChunks = (tree: PlantedTree): Set<string> => {
+    let chunks = treeChunksCacheRef.current.get(tree.id);
+    if (!chunks) {
+      chunks = getTreeChunkKeys(tree);
+      treeChunksCacheRef.current.set(tree.id, chunks);
+    }
+    return chunks;
+  };
+
+  /**
    * Check if position is within tree's chunk bounds
    */
   const isInTreeChunks = (tree: PlantedTree, x: number, z: number): boolean => {
-    const treeChunks = getTreeChunkKeys(tree);
+    const treeChunks = getCachedTreeChunks(tree);
     const ck = chunkKey(x, z);
     return treeChunks.has(ck);
   };
@@ -214,7 +229,7 @@ export function useShnakeMovement({
         const px = tmpPlayer.current.x;
         const py = tmpPlayer.current.y;
         const pz = tmpPlayer.current.z;
-        const treeChunks = getTreeChunkKeys(tree);
+        const treeChunks = getCachedTreeChunks(tree);
         const playerInTreeChunks = treeChunks.has(playerChunk);
         
         // Get or create nav state

@@ -13,7 +13,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { EnemyManager } from '../EnemyManager';
-import { ShnakeAdapter, type ShnakeWithAI, setShnakeLocomotionContext, cleanupShnakeResources } from '../adapters/ShnakeAdapter';
+import { ShnakeAdapter, type ShnakeWithAI, setShnakeLocomotionContext, cleanupShnakeResources, markShnakeAttacked } from '../adapters/ShnakeAdapter';
 import { ShwarmAdapter, type ShwarmWithAI, setShwarmLocomotionContext, cleanupShwarmResources } from '../adapters/ShwarmAdapter';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShnakeInstance } from '@/features/shnake/types';
@@ -191,17 +191,38 @@ export function useEnemyAI({
     };
   }, [isEnabled, aiControlled, cameraRef]);
   
-  // Sync enemy registrations periodically
+  // Sync enemy registrations via throttled frameLoop (less timer contention than setInterval)
   useEffect(() => {
     if (!isEnabled) return;
     
-    const syncInterval = setInterval(() => {
+    let accMs = 0;
+    
+    const unregister = frameLoop.register('enemyAI-sync', (delta) => {
+      accMs += delta * 1000;
+      if (accMs < 500) return;
+      accMs = 0;
+      
       syncShnakes();
       syncShwarms();
-    }, 500); // Check every 500ms
+    }, 34); // Near the playerPos updater priority
     
-    return () => clearInterval(syncInterval);
+    return unregister;
   }, [isEnabled, syncShnakes, syncShwarms]);
+  
+  // Wire markShnakeAttacked global to AI system when AI controls
+  useEffect(() => {
+    if (!isEnabled || !aiControlled) return;
+    
+    // Override the global to use AI's attacked state tracking
+    (window as any).__markShnakeAttacked = markShnakeAttacked;
+    
+    return () => {
+      // Only cleanup if we're still the owner
+      if ((window as any).__markShnakeAttacked === markShnakeAttacked) {
+        delete (window as any).__markShnakeAttacked;
+      }
+    };
+  }, [isEnabled, aiControlled]);
   
   return {
     /** Get LOD distribution for debugging */
