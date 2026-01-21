@@ -63,9 +63,12 @@ export function useEnemyAI({
   onPlayerHit,
   onShnakeHeadMoved,
 }: UseEnemyAIOptions) {
-  // Track registered enemy IDs to detect changes
+  // Track registered enemy IDs to detect changes (reused, not reallocated)
   const registeredShnakesRef = useRef<Set<string>>(new Set());
   const registeredShwarmsRef = useRef<Set<string>>(new Set());
+  
+  // Reusable set for sync operations (avoids new Set() allocation each sync)
+  const tempIdsRef = useRef<Set<string>>(new Set());
   
   // Update locomotion context when deps change
   useEffect(() => {
@@ -87,9 +90,17 @@ export function useEnemyAI({
   }, [isEnabled, aiControlled, plantedTrees, blocksRef, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved]);
   
   // Stable sync function for shnakes (avoids stale closures)
+  // OPTIMIZED: Reuses tempIds set instead of allocating new Set each call
   const syncShnakes = useCallback(() => {
     const shnakes = shnakesRef.current ?? [];
-    const currentIds = new Set(shnakes.map(s => s.id));
+    const tempIds = tempIdsRef.current;
+    tempIds.clear();
+    
+    // Build current IDs without allocation
+    for (const s of shnakes) {
+      tempIds.add(s.id);
+    }
+    
     const registered = registeredShnakesRef.current;
     
     // Register new shnakes
@@ -102,7 +113,7 @@ export function useEnemyAI({
     
     // Unregister removed shnakes
     for (const id of registered) {
-      if (!currentIds.has(id)) {
+      if (!tempIds.has(id)) {
         EnemyManager.unregister(id);
         registered.delete(id);
       }
@@ -110,9 +121,17 @@ export function useEnemyAI({
   }, [shnakesRef]);
   
   // Stable sync function for shwarms (avoids stale closures)
+  // OPTIMIZED: Reuses tempIds set instead of allocating new Set each call
   const syncShwarms = useCallback(() => {
     const shwarms = shwarmsRef.current ?? [];
-    const currentIds = new Set(shwarms.map(s => s.id));
+    const tempIds = tempIdsRef.current;
+    tempIds.clear();
+    
+    // Build current IDs without allocation
+    for (const s of shwarms) {
+      tempIds.add(s.id);
+    }
+    
     const registered = registeredShwarmsRef.current;
     
     // Register new shwarms
@@ -125,7 +144,7 @@ export function useEnemyAI({
     
     // Unregister removed shwarms
     for (const id of registered) {
-      if (!currentIds.has(id)) {
+      if (!tempIds.has(id)) {
         EnemyManager.unregister(id);
         registered.delete(id);
       }

@@ -104,6 +104,39 @@ class SpatialHashGrid {
   }
   
   /**
+   * Update a collider's position in the grid.
+   * OPTIMIZATION: Only reinserts when cell occupancy changes.
+   * Use this instead of remove+insert when moving a collider.
+   */
+  update(collider: THREE.Box3): void {
+    const old = this.colliderCells.get(collider);
+    if (!old) {
+      this.insert(collider);
+      return;
+    }
+    
+    const minCellX = this.cellCoord(collider.min.x);
+    const maxCellX = this.cellCoord(collider.max.x);
+    const minCellZ = this.cellCoord(collider.min.z);
+    const maxCellZ = this.cellCoord(collider.max.z);
+    
+    // Fast path: single-cell occupancy unchanged (common for 0.5m blocks with CELL_SIZE=2)
+    if (
+      old.length === 2 &&
+      old[0] === minCellX &&
+      old[1] === minCellZ &&
+      minCellX === maxCellX &&
+      minCellZ === maxCellZ
+    ) {
+      return; // No cell change, skip expensive remove+insert
+    }
+    
+    // Otherwise, reinsert
+    this.remove(collider);
+    this.insert(collider);
+  }
+  
+  /**
    * Remove a collider by its block position (x, y, z)
    * Searches nearby colliders and removes the one containing this position
    */

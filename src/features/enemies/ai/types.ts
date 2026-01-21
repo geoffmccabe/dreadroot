@@ -27,8 +27,8 @@ export const LOD_CONFIG = {
 } as const;
 
 export const TICK_INTERVALS_MS = {
-  [AILodLevel.FULL]: 0,        // Every frame
-  [AILodLevel.THROTTLED]: 150, // Every 150ms
+  [AILodLevel.FULL]: 100,       // Every 100ms (was 0 - every frame is unnecessary)
+  [AILodLevel.THROTTLED]: 250,  // Every 250ms (was 150)
   [AILodLevel.FROZEN]: Infinity,
 } as const;
 
@@ -257,4 +257,6 @@ export interface RegisteredEnemy<TEnemy = unknown> {
   currentBehaviorId: string | null;
   /** Persistent state for behaviors - survives across ticks */
   behaviorState: BehaviorState;
+  /** Pre-allocated spatial entry for zero-allocation updates */
+  spatialEntry: EnemyEntry;
 }
