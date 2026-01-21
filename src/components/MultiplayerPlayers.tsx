@@ -1,79 +1,8 @@
 import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
 import { PlayerState } from '@/hooks/useMultiplayer';
 import { Text, useFBX } from '@react-three/drei';
 import { frameLoop } from '@/lib/frameLoop';
-
-// Simple fire effect for other players
-function PlayerOnFireEffect({ burnTimeMs, colors }: { burnTimeMs: number; colors: string[] }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const startTimeRef = useRef(performance.now());
-  const particlesRef = useRef<THREE.Mesh[]>([]);
-  
-  // Create fire particles on mount
-  useEffect(() => {
-    if (!groupRef.current) return;
-    startTimeRef.current = performance.now();
-    
-    const geometry = new THREE.PlaneGeometry(0.15, 0.3);
-    const particles: THREE.Mesh[] = [];
-    
-    for (let i = 0; i < 8; i++) {
-      const colorIndex = i % colors.length;
-      const material = new THREE.MeshBasicMaterial({
-        color: colors[colorIndex],
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      
-      const mesh = new THREE.Mesh(geometry, material);
-      const angle = (i / 8) * Math.PI * 2;
-      const radius = 0.25 + Math.random() * 0.15;
-      mesh.position.x = Math.cos(angle) * radius;
-      mesh.position.z = Math.sin(angle) * radius;
-      mesh.position.y = 0.2 + Math.random() * 0.6;
-      
-      groupRef.current.add(mesh);
-      particles.push(mesh);
-    }
-    
-    particlesRef.current = particles;
-    
-    return () => {
-      particles.forEach(p => {
-        p.geometry.dispose();
-        (p.material as THREE.Material).dispose();
-      });
-    };
-  }, [colors]);
-  
-  // Animate fire
-  useFrame(() => {
-    const elapsed = performance.now() - startTimeRef.current;
-    const progress = Math.min(elapsed / burnTimeMs, 1);
-    const fadeOut = progress > 0.7 ? 1 - ((progress - 0.7) / 0.3) : 1;
-    const time = elapsed * 0.001;
-    
-    particlesRef.current.forEach((mesh, i) => {
-      const phase = i * 0.7;
-      const flicker = Math.sin(time * 8 + phase) * 0.5 + 0.5;
-      mesh.position.y = 0.2 + Math.sin(time * 4 + phase) * 0.1 + (i % 3) * 0.2;
-      
-      const scale = (0.5 + flicker * 0.5) * fadeOut;
-      mesh.scale.set(scale, scale * 1.5, scale);
-      
-      const material = mesh.material as THREE.MeshBasicMaterial;
-      material.opacity = (0.3 + flicker * 0.4) * fadeOut;
-    });
-  });
-  
-  return <group ref={groupRef} position={[0, 0, 0]} />;
-}
-
 
 interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
@@ -243,14 +172,6 @@ function OtherPlayer({
       >
         {player.username || 'Player'}
       </Text>
-      
-      {/* Fire effect when player is on fire */}
-      {player.isOnFire && (
-        <PlayerOnFireEffect 
-          burnTimeMs={player.fireBurnTimeMs || 1000} 
-          colors={player.fireColors || ['#ff4400', '#ff8800', '#ffcc00']}
-        />
-      )}
     </group>
   );
 }

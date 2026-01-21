@@ -30,7 +30,6 @@ import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
 import { Bullets, BulletsHandle } from './FortressBullets';
 import { BulletImpacts, BulletImpactsHandle } from './FortressImpacts';
-import { PlayerFireEffect } from './PlayerFireEffect';
 import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
@@ -236,77 +235,11 @@ function CameraTrackedBlocks({
 }
 
 // Calculate which face of the block was hit based on hit position
-// Calculate the exact face normal based on which slab the ray entered
-// This uses the ray direction and t-values to determine the entry face
-function calculateHitNormalFromRay(
-  prevX: number, prevY: number, prevZ: number,
-  ndx: number, ndy: number, ndz: number,
-  minX: number, minY: number, minZ: number,
-  maxX: number, maxY: number, maxZ: number
-): { x: number; y: number; z: number; tEntry: number } {
-  // Calculate t values for each slab entry
-  let tMinX = -Infinity, tMaxX = Infinity;
-  let tMinY = -Infinity, tMaxY = Infinity;
-  let tMinZ = -Infinity, tMaxZ = Infinity;
-  
-  let entryFace = { x: 0, y: 0, z: 0 };
-  
-  if (Math.abs(ndx) > 0.0001) {
-    const t1 = (minX - prevX) / ndx;
-    const t2 = (maxX - prevX) / ndx;
-    if (t1 < t2) {
-      tMinX = t1; tMaxX = t2;
-      if (t1 > tMinY && t1 > tMinZ) entryFace = { x: -1, y: 0, z: 0 };
-    } else {
-      tMinX = t2; tMaxX = t1;
-      if (t2 > tMinY && t2 > tMinZ) entryFace = { x: 1, y: 0, z: 0 };
-    }
-  }
-  
-  if (Math.abs(ndy) > 0.0001) {
-    const t1 = (minY - prevY) / ndy;
-    const t2 = (maxY - prevY) / ndy;
-    if (t1 < t2) {
-      tMinY = t1; tMaxY = t2;
-      if (t1 > tMinX && t1 > tMinZ) entryFace = { x: 0, y: -1, z: 0 };
-    } else {
-      tMinY = t2; tMaxY = t1;
-      if (t2 > tMinX && t2 > tMinZ) entryFace = { x: 0, y: 1, z: 0 };
-    }
-  }
-  
-  if (Math.abs(ndz) > 0.0001) {
-    const t1 = (minZ - prevZ) / ndz;
-    const t2 = (maxZ - prevZ) / ndz;
-    if (t1 < t2) {
-      tMinZ = t1; tMaxZ = t2;
-      if (t1 > tMinX && t1 > tMinY) entryFace = { x: 0, y: 0, z: -1 };
-    } else {
-      tMinZ = t2; tMaxZ = t1;
-      if (t2 > tMinX && t2 > tMinY) entryFace = { x: 0, y: 0, z: 1 };
-    }
-  }
-  
-  const tEntry = Math.max(tMinX, tMinY, tMinZ);
-  
-  // Determine entry face from the largest tMin
-  if (tMinX >= tMinY && tMinX >= tMinZ) {
-    entryFace = ndx > 0 ? { x: -1, y: 0, z: 0 } : { x: 1, y: 0, z: 0 };
-  } else if (tMinY >= tMinX && tMinY >= tMinZ) {
-    entryFace = ndy > 0 ? { x: 0, y: -1, z: 0 } : { x: 0, y: 1, z: 0 };
-  } else {
-    entryFace = ndz > 0 ? { x: 0, y: 0, z: -1 } : { x: 0, y: 0, z: 1 };
-  }
-  
-  return { ...entryFace, tEntry };
-}
-
-// Legacy function for backwards compatibility
 function calculateHitNormal(
   hitX: number, hitY: number, hitZ: number,
   blockX: number, blockY: number, blockZ: number
 ): { x: number; y: number; z: number } {
-  const EPSILON = 0.01; // Increased epsilon for better face detection
+  const EPSILON = 0.001;
   
   // Check each face
   if (Math.abs(hitX - blockX) < EPSILON) return { x: -1, y: 0, z: 0 };
@@ -331,92 +264,6 @@ function calculateHitNormal(
   if (minD === dy2) return { x: 0, y: 1, z: 0 };
   if (minD === dz1) return { x: 0, y: 0, z: -1 };
   return { x: 0, y: 0, z: 1 };
-}
-
-// Ray-cylinder intersection for player hitbox (capsule approximated as cylinder)
-// Returns t value of intersection or -1 if no hit
-function rayCylinderIntersect(
-  rayOriginX: number, rayOriginY: number, rayOriginZ: number,
-  rayDirX: number, rayDirY: number, rayDirZ: number,
-  rayLen: number,
-  cylCenterX: number, cylBaseY: number, cylCenterZ: number,
-  cylRadius: number, cylHeight: number
-): { t: number; normal: { x: number; y: number; z: number } } | null {
-  // Check infinite cylinder first (XZ plane)
-  const dx = rayOriginX - cylCenterX;
-  const dz = rayOriginZ - cylCenterZ;
-  
-  const a = rayDirX * rayDirX + rayDirZ * rayDirZ;
-  const b = 2 * (dx * rayDirX + dz * rayDirZ);
-  const c = dx * dx + dz * dz - cylRadius * cylRadius;
-  
-  const discriminant = b * b - 4 * a * c;
-  
-  if (discriminant < 0 && a > 0.0001) return null; // No intersection with infinite cylinder
-  
-  let tCyl = -1;
-  let normal = { x: 0, y: 0, z: 0 };
-  
-  if (a > 0.0001) {
-    const sqrtDisc = Math.sqrt(discriminant);
-    const t1 = (-b - sqrtDisc) / (2 * a);
-    const t2 = (-b + sqrtDisc) / (2 * a);
-    
-    // Check if t1 is valid (within ray length and cylinder height)
-    if (t1 >= 0 && t1 <= rayLen) {
-      const hitY = rayOriginY + rayDirY * t1;
-      if (hitY >= cylBaseY && hitY <= cylBaseY + cylHeight) {
-        tCyl = t1;
-        // Normal points outward from cylinder axis
-        const hitX = rayOriginX + rayDirX * t1;
-        const hitZ = rayOriginZ + rayDirZ * t1;
-        const len = Math.sqrt((hitX - cylCenterX) ** 2 + (hitZ - cylCenterZ) ** 2);
-        normal = { x: (hitX - cylCenterX) / len, y: 0, z: (hitZ - cylCenterZ) / len };
-      }
-    }
-    
-    // Check t2 if t1 wasn't valid
-    if (tCyl < 0 && t2 >= 0 && t2 <= rayLen) {
-      const hitY = rayOriginY + rayDirY * t2;
-      if (hitY >= cylBaseY && hitY <= cylBaseY + cylHeight) {
-        tCyl = t2;
-        const hitX = rayOriginX + rayDirX * t2;
-        const hitZ = rayOriginZ + rayDirZ * t2;
-        const len = Math.sqrt((hitX - cylCenterX) ** 2 + (hitZ - cylCenterZ) ** 2);
-        normal = { x: (hitX - cylCenterX) / len, y: 0, z: (hitZ - cylCenterZ) / len };
-      }
-    }
-  }
-  
-  // Check top and bottom caps
-  if (Math.abs(rayDirY) > 0.0001) {
-    // Bottom cap
-    const tBottom = (cylBaseY - rayOriginY) / rayDirY;
-    if (tBottom >= 0 && tBottom <= rayLen && (tCyl < 0 || tBottom < tCyl)) {
-      const hitX = rayOriginX + rayDirX * tBottom;
-      const hitZ = rayOriginZ + rayDirZ * tBottom;
-      const distSq = (hitX - cylCenterX) ** 2 + (hitZ - cylCenterZ) ** 2;
-      if (distSq <= cylRadius * cylRadius) {
-        tCyl = tBottom;
-        normal = { x: 0, y: -1, z: 0 };
-      }
-    }
-    
-    // Top cap
-    const tTop = (cylBaseY + cylHeight - rayOriginY) / rayDirY;
-    if (tTop >= 0 && tTop <= rayLen && (tCyl < 0 || tTop < tCyl)) {
-      const hitX = rayOriginX + rayDirX * tTop;
-      const hitZ = rayOriginZ + rayDirZ * tTop;
-      const distSq = (hitX - cylCenterX) ** 2 + (hitZ - cylCenterZ) ** 2;
-      if (distSq <= cylRadius * cylRadius) {
-        tCyl = tTop;
-        normal = { x: 0, y: 1, z: 0 };
-      }
-    }
-  }
-  
-  if (tCyl < 0) return null;
-  return { t: tCyl, normal };
 }
 
 export function FortressScene({
@@ -1060,153 +907,6 @@ export function FortressScene({
             }
           }
           
-          // Check multiplayer player collisions (if not already hit something)
-          // Player hitbox: cylinder 0.3m radius, 1.8m tall, positioned at feet
-          if (!hit) {
-            const PLAYER_RADIUS = 0.3;
-            const PLAYER_HEIGHT = 1.8;
-            
-            // Use stored previous position for ray collision
-            const prevX = (bullet as any).prevX ?? bullet.position.x;
-            const prevY = (bullet as any).prevY ?? bullet.position.y;
-            const prevZ = (bullet as any).prevZ ?? bullet.position.z;
-            
-            const dispX = bullet.position.x - prevX;
-            const dispY = bullet.position.y - prevY;
-            const dispZ = bullet.position.z - prevZ;
-            const dispLen = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
-            
-            if (dispLen > 0.001) {
-              const ndx = dispX / dispLen;
-              const ndy = dispY / dispLen;
-              const ndz = dispZ / dispLen;
-              
-              // Check against all other players
-              for (const [playerId, player] of playersRef.current) {
-                // Player position is at eye level, feet are at position.y - ~0.9
-                const playerFeetY = player.position.y - 0.9;
-                
-                const cylHit = rayCylinderIntersect(
-                  prevX, prevY, prevZ,
-                  ndx, ndy, ndz,
-                  dispLen,
-                  player.position.x, playerFeetY, player.position.z,
-                  PLAYER_RADIUS, PLAYER_HEIGHT
-                );
-                
-                if (cylHit) {
-                  // Player was hit!
-                  hit = true;
-                  needsBulletRender = true;
-                  
-                  // Calculate knockback: 1m per 100m/s, rounded up
-                  const currentSpeed = Math.sqrt(
-                    bullet.speed * bullet.speed + bullet.velocityY * bullet.velocityY
-                  );
-                  const knockbackDistance = Math.ceil(currentSpeed / 100);
-                  
-                  // Knockback direction is bullet travel direction (XZ only)
-                  const knockbackDirLen = Math.sqrt(ndx * ndx + ndz * ndz);
-                  const knockbackDir = knockbackDirLen > 0.001 
-                    ? { x: ndx / knockbackDirLen, z: ndz / knockbackDirLen }
-                    : { x: 0, z: 1 };
-                  
-                  // Get burn time from tier definition
-                  const tierDef = getDefinitionRef.current(bullet.tier);
-                  const burnTimeMs = tierDef.burn_time;
-                  
-                  // Broadcast that this player was hit (fire effect)
-                  // This is handled via multiplayer state
-                  console.log(`[Player Hit] ${playerId} hit with knockback ${knockbackDistance}m, burn ${burnTimeMs}ms`);
-                  
-                  // Spawn fire impact at hit position
-                  if (bulletImpactsRef.current) {
-                    const hitPos = new THREE.Vector3(
-                      prevX + ndx * cylHit.t,
-                      prevY + ndy * cylHit.t,
-                      prevZ + ndz * cylHit.t
-                    );
-                    bulletImpactsRef.current.spawnImpact(hitPos, {
-                      colors: tierDef.colors,
-                      size: tierDef.burn_width * 0.5, // Smaller for player hits
-                      height: tierDef.burn_height * 0.5,
-                      duration: burnTimeMs,
-                      tier: bullet.tier,
-                    });
-                  }
-                  
-                  break;
-                }
-              }
-              
-              // Also check if bullet hit LOCAL player (self-damage from ricochets)
-              if (!hit) {
-                const localPlayerX = camera.position.x;
-                const localPlayerY = camera.position.y;
-                const localPlayerZ = camera.position.z;
-                const localFeetY = localPlayerY - 0.9; // Eye level to feet
-                
-                const selfHit = rayCylinderIntersect(
-                  prevX, prevY, prevZ,
-                  ndx, ndy, ndz,
-                  dispLen,
-                  localPlayerX, localFeetY, localPlayerZ,
-                  PLAYER_RADIUS, PLAYER_HEIGHT
-                );
-                
-                if (selfHit) {
-                  hit = true;
-                  needsBulletRender = true;
-                  
-                  // Calculate knockback
-                  const currentSpeed = Math.sqrt(
-                    bullet.speed * bullet.speed + bullet.velocityY * bullet.velocityY
-                  );
-                  const knockbackDistance = Math.ceil(currentSpeed / 100);
-                  
-                  // Knockback direction
-                  const knockbackDirLen = Math.sqrt(ndx * ndx + ndz * ndz);
-                  const knockbackDirX = knockbackDirLen > 0.001 ? ndx / knockbackDirLen : 0;
-                  const knockbackDirZ = knockbackDirLen > 0.001 ? ndz / knockbackDirLen : 1;
-                  
-                  // Get burn time and apply fire effect to self
-                  const tierDef = getDefinitionRef.current(bullet.tier);
-                  const burnTimeMs = tierDef.burn_time;
-                  
-                  console.log(`[Self Hit] Knockback ${knockbackDistance}m, burn ${burnTimeMs}ms`);
-                  
-                  // Apply knockback to local player
-                  if ((window as any).__applyPlayerKnockback) {
-                    const knockbackVec = new THREE.Vector3(knockbackDirX, 0, knockbackDirZ);
-                    (window as any).__applyPlayerKnockback(knockbackVec, knockbackDistance);
-                  }
-                  
-                  // Set local player on fire
-                  setLocalPlayerOnFire(burnTimeMs, tierDef.colors);
-                  
-                  // Broadcast to others that we're on fire
-                  broadcastPlayerHit(burnTimeMs, tierDef.colors);
-                  
-                  // Spawn fire impact at hit position
-                  if (bulletImpactsRef.current) {
-                    const hitPos = new THREE.Vector3(
-                      prevX + ndx * selfHit.t,
-                      prevY + ndy * selfHit.t,
-                      prevZ + ndz * selfHit.t
-                    );
-                    bulletImpactsRef.current.spawnImpact(hitPos, {
-                      colors: tierDef.colors,
-                      size: tierDef.burn_width * 0.5,
-                      height: tierDef.burn_height * 0.5,
-                      duration: burnTimeMs,
-                      tier: bullet.tier,
-                    });
-                  }
-                }
-              }
-            }
-          }
-          
           // Check block collisions (if not already hit something)
           if (!hit) {
             // Use stored previous position for accurate ray collision
@@ -1295,22 +995,15 @@ export function FortressScene({
                   ricochetSound.volume = 0.4;
                   ricochetSound.play().catch(() => {});
                   
-                  // Calculate which face was hit for reflection normal using improved method
-                  const normalResult = calculateHitNormalFromRay(
-                    prevX, prevY, prevZ,
-                    ndx, ndy, ndz,
-                    minX, minY, minZ,
-                    maxX, maxY, maxZ
+                  // Calculate which face was hit for reflection normal
+                  const normal = calculateHitNormal(
+                    hitX, hitY, hitZ,
+                    block.position_x, block.position_y, block.position_z
                   );
-                  const normal = { x: normalResult.x, y: normalResult.y, z: normalResult.z };
                   
-                  // Spawn scaled impact effect - offset from block face to prevent z-fighting
+                  // Spawn scaled impact effect
                   if (bulletImpactsRef.current) {
-                    const hitPos = new THREE.Vector3(
-                      hitX + normal.x * 0.05,
-                      hitY + normal.y * 0.05,
-                      hitZ + normal.z * 0.05
-                    );
+                    const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
                     const tierDef = getDefinitionRef.current(bullet.tier);
                     bulletImpactsRef.current.spawnImpact(hitPos, {
                       colors: tierDef.colors,
@@ -1353,20 +1046,9 @@ export function FortressScene({
                   hit = true;
                   needsBulletRender = true;
                   
-                  // Spawn impact effect at hit position with offset to prevent z-fighting
+                  // Spawn impact effect at hit position with bullet tier settings from context
                   if (bulletImpactsRef.current) {
-                    // Calculate normal for offset
-                    const impactNormal = calculateHitNormalFromRay(
-                      prevX, prevY, prevZ,
-                      ndx, ndy, ndz,
-                      minX, minY, minZ,
-                      maxX, maxY, maxZ
-                    );
-                    const hitPos = new THREE.Vector3(
-                      hitX + impactNormal.x * 0.05,
-                      hitY + impactNormal.y * 0.05,
-                      hitZ + impactNormal.z * 0.05
-                    );
+                    const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
                     const tierDef = getDefinitionRef.current(bullet.tier);
                     bulletImpactsRef.current.spawnImpact(hitPos, {
                       colors: tierDef.colors,
