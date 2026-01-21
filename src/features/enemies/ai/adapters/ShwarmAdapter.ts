@@ -23,6 +23,7 @@ import {
   type ShwarmLocomotionContext,
 } from '../locomotion/ShwarmLocomotion';
 import { EnemyManager } from '../EnemyManager';
+import { collisionGrid } from '@/lib/spatialHashGrid';
 
 // Seeded random number generator for deterministic movement
 function seededRandom(seed: number): () => number {
@@ -49,10 +50,10 @@ let locomotionContext: {
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
 } | null = null;
 
-// Per-shwarm RNG generators
+// Per-shwarm RNG generators (cleaned up when shwarm unregisters)
 const rngMap = new Map<string, () => number>();
 
-// Block target data storage
+// Block target data storage (cleaned up when shwarm unregisters)
 const blockTargets = new Map<string, ShwarmBlockTarget>();
 
 /**
@@ -61,6 +62,21 @@ const blockTargets = new Map<string, ShwarmBlockTarget>();
  */
 export function setShwarmLocomotionContext(ctx: typeof locomotionContext): void {
   locomotionContext = ctx;
+}
+
+/**
+ * Cleanup shwarm resources when unregistered.
+ * Called by EnemyManager when a shwarm is removed.
+ */
+export function cleanupShwarmResources(shwarmId: string, blocks: { id: string }[]): void {
+  rngMap.delete(shwarmId);
+  for (const block of blocks) {
+    const target = blockTargets.get(block.id);
+    if (target?.collider) {
+      collisionGrid.remove(target.collider);
+    }
+    blockTargets.delete(block.id);
+  }
 }
 
 /**
