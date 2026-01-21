@@ -808,15 +808,19 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         // CRITICAL: Supabase default limit is 1000 rows - we need more for large structures
-        const { data, error } = await supabase
+        console.log(`[ChunkLoader DEBUG] Fetching chunks: worldId=${worldId}, bounds=(${minChunkX},${minChunkZ})-(${maxChunkX},${maxChunkZ}), wanted=${Array.from(wantedChunkKeys).join(',')}`);
+        
+        const { data, error, count } = await supabase
           .from('placed_blocks')
-          .select('*')
+          .select('*', { count: 'exact' })
           .eq('world_id', worldId)
           .gte('chunk_x', minChunkX)
           .lte('chunk_x', maxChunkX)
           .gte('chunk_z', minChunkZ)
           .lte('chunk_z', maxChunkZ)
           .limit(10000);
+
+        console.log(`[ChunkLoader DEBUG] Query returned: ${data?.length} rows, count=${count}, error=${error?.message || 'none'}`);
 
         if (!error) {
           blocks = data;
