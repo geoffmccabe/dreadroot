@@ -33,6 +33,7 @@ export interface ShnakeRendererHandle {
   getActiveFires: () => Array<{ position: THREE.Vector3; colors: string[]; progress: number }>;
   triggerDamageFlash: (shnakeId: string) => void;
   propagateFire: (shnakeId: string) => void; // Called when shnake head moves
+  playDeathSound: (position: THREE.Vector3, tier: number) => void; // Play death sound at position
 }
 
 // Fallback colors for tiers without textures
@@ -71,10 +72,12 @@ const isValidTextureUrl = (url: string | null | undefined): boolean => {
 
 // Shnake sound constants
 const SHNAKE_SOUND_URL = '/shnake_sound_1.mp3';
+const SHNAKE_DEATH_SOUND_URL = '/shnake_death.mp3';
 const SHNAKE_SOUND_CHANCE = 0.00333; // ~0.33% chance per second (1/3 of previous 1%)
 const SHNAKE_SOUND_INTERVAL = 1000; // Check every 1 second
-const SHNAKE_SOUND_BASE_VOLUME = 0.16; // 16% base volume
-const SHNAKE_SOUND_VOLUME_PER_TIER = 0.028; // +2.8% per tier
+// Volume doubled: base 32% + 5.6% per tier (tier 1 = 37.6%, tier 30 = 200%)
+const SHNAKE_SOUND_BASE_VOLUME = 0.32; // 32% base volume (2x original 16%)
+const SHNAKE_SOUND_VOLUME_PER_TIER = 0.056; // +5.6% per tier (2x original 2.8%)
 
 // Per-tier rendering component
 interface TierRendererProps {
@@ -494,7 +497,30 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         return { ...fire, segmentIndex: newIndex };
       }).filter(fire => fire.segmentIndex >= 0);
     },
-  }), [shnakesRef]);
+    
+    // Play death sound at a specific position
+    playDeathSound: (position: THREE.Vector3, tier: number) => {
+      const camera = cameraRef?.current;
+      if (!camera) return;
+      
+      const dx = position.x - camera.position.x;
+      const dy = position.y - camera.position.y;
+      const dz = position.z - camera.position.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      
+      // Volume: same formula as ambient sounds but for death
+      const tierVolume = SHNAKE_SOUND_BASE_VOLUME + (tier * SHNAKE_SOUND_VOLUME_PER_TIER);
+      const clampedVolume = Math.min(2.0, tierVolume); // Allow up to 200%
+      
+      // Lower pitch for higher tiers
+      const pitchMultiplier = 1.0 - ((tier - 1) * 0.025);
+      
+      playSpatialSound(SHNAKE_DEATH_SOUND_URL, distance, {
+        baseVolume: clampedVolume,
+        playbackRate: pitchMultiplier,
+      });
+    },
+  }), [shnakesRef, cameraRef]);
 
   // Render a TierRenderer for each active tier
   const tiers = [...tierData.entries()];
