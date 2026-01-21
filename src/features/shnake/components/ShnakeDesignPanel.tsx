@@ -361,20 +361,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
 
               <div className="grid grid-cols-3 gap-4 pt-2">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Head texture
-                    {needsReprocessing(currentDef.head_texture_url) && (
-                      <span className="text-xs text-orange-500">(needs webp)</span>
-                    )}
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input value={currentDef.head_texture_url || ''} onChange={e => updateDef('head_texture_url', e.target.value)} placeholder="URL" className="flex-1" />
-                    <Button size="icon" variant="outline" onClick={() => headInputRef.current?.click()} title="Upload new">
-                      <Upload className="h-4 w-4" />
-                    </Button>
-                    {needsReprocessing(currentDef.head_texture_url) && (
-                      <Button size="icon" variant="secondary" onClick={() => reprocessUrlToWebp(currentDef.head_texture_url!, 'head')} title="Convert to 512x512 webp">
-                        <RefreshCw className="h-4 w-4" />
+                  <Label>Head</Label>
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-16 h-16 rounded border border-border bg-muted flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary"
+                      onClick={() => headInputRef.current?.click()}
+                      title="Click to upload"
+                    >
+                      {currentDef.head_texture_url ? (
+                        <img src={currentDef.head_texture_url} alt="Head" className="w-full h-full object-cover" />
+                      ) : (
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    {currentDef.head_texture_url && (
+                      <Button size="sm" variant="ghost" onClick={() => updateDef('head_texture_url', null)} className="text-xs text-destructive">
+                        Clear
                       </Button>
                     )}
                     <input
@@ -391,20 +393,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Body texture
-                    {needsReprocessing(currentDef.body_texture_url) && (
-                      <span className="text-xs text-orange-500">(needs webp)</span>
-                    )}
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input value={currentDef.body_texture_url || ''} onChange={e => updateDef('body_texture_url', e.target.value)} placeholder="URL" className="flex-1" />
-                    <Button size="icon" variant="outline" onClick={() => bodyInputRef.current?.click()} title="Upload new">
-                      <Upload className="h-4 w-4" />
-                    </Button>
-                    {needsReprocessing(currentDef.body_texture_url) && (
-                      <Button size="icon" variant="secondary" onClick={() => reprocessUrlToWebp(currentDef.body_texture_url!, 'body')} title="Convert to 512x512 webp">
-                        <RefreshCw className="h-4 w-4" />
+                  <Label>Body</Label>
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-16 h-16 rounded border border-border bg-muted flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary"
+                      onClick={() => bodyInputRef.current?.click()}
+                      title="Click to upload"
+                    >
+                      {currentDef.body_texture_url ? (
+                        <img src={currentDef.body_texture_url} alt="Body" className="w-full h-full object-cover" />
+                      ) : (
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    {currentDef.body_texture_url && (
+                      <Button size="sm" variant="ghost" onClick={() => updateDef('body_texture_url', null)} className="text-xs text-destructive">
+                        Clear
                       </Button>
                     )}
                     <input
@@ -421,20 +425,22 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Face texture (GIF ok)
-                    {needsReprocessing(currentDef.face_texture_url) && (
-                      <span className="text-xs text-orange-500">(needs webp)</span>
-                    )}
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input value={currentDef.face_texture_url || ''} onChange={e => updateDef('face_texture_url', e.target.value)} placeholder="URL" className="flex-1" />
-                    <Button size="icon" variant="outline" onClick={() => faceInputRef.current?.click()} title="Upload new">
-                      <Upload className="h-4 w-4" />
-                    </Button>
-                    {needsReprocessing(currentDef.face_texture_url) && (
-                      <Button size="icon" variant="secondary" onClick={() => reprocessUrlToWebp(currentDef.face_texture_url!, 'face')} title="Convert to 512x512 webp">
-                        <RefreshCw className="h-4 w-4" />
+                  <Label>Face</Label>
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-16 h-16 rounded border border-border bg-muted flex items-center justify-center overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary"
+                      onClick={() => faceInputRef.current?.click()}
+                      title="Click to upload"
+                    >
+                      {currentDef.face_texture_url ? (
+                        <img src={currentDef.face_texture_url} alt="Face" className="w-full h-full object-cover" />
+                      ) : (
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    {currentDef.face_texture_url && (
+                      <Button size="sm" variant="ghost" onClick={() => updateDef('face_texture_url', null)} className="text-xs text-destructive">
+                        Clear
                       </Button>
                     )}
                     <input
