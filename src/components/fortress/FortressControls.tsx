@@ -169,10 +169,15 @@ export function FirstPersonControls({
   const gridInitialized = useRef(false);
   
   // Apply knockback function - can be called externally via prop or internally
+  // IMPORTANT: Only applies horizontal knockback (X/Z) - vertical is ignored to prevent sky launches
   const applyKnockback = useCallback((direction: THREE.Vector3, distance: number) => {
     // Calculate velocity needed to travel 'distance' over ~0.2 seconds
     const secondsToApply = 0.2;
-    knockbackVelRef.current.addScaledVector(direction, distance / secondsToApply);
+    // Only apply horizontal knockback - set Y to 0 to prevent accumulation
+    knockbackVelRef.current.x += direction.x * (distance / secondsToApply);
+    knockbackVelRef.current.z += direction.z * (distance / secondsToApply);
+    // Explicitly keep Y at 0 - no vertical knockback
+    knockbackVelRef.current.y = 0;
   }, []);
   
   // Expose applyKnockback globally for the universal damage system
