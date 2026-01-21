@@ -17,7 +17,7 @@ export interface SoundConfig {
 }
 
 interface EnemySoundSettingsProps {
-  enemyType: 'shwarm' | 'shnake';
+  enemyType: 'shwarm' | 'shnake' | 'shombie';
   sounds: SoundConfig[];
   volume: number; // 0-200
   onSoundChange: (key: string, url: string | null) => void;
