@@ -571,6 +571,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const maxChunkZ = centerChunkZ + radius;
 
     // Single bounding query for all chunks in radius
+    // CRITICAL: Supabase default limit is 1000 rows - we need more for large structures
     const { data: blocks, error } = await supabase
       .from('placed_blocks')
       .select('*')
@@ -578,7 +579,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       .gte('chunk_x', minChunkX)
       .lte('chunk_x', maxChunkX)
       .gte('chunk_z', minChunkZ)
-      .lte('chunk_z', maxChunkZ);
+      .lte('chunk_z', maxChunkZ)
+      .limit(10000);
 
     if (error) {
       console.error('Error loading chunks:', error);
@@ -805,6 +807,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       let lastError: Error | null = null;
       
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        // CRITICAL: Supabase default limit is 1000 rows - we need more for large structures
         const { data, error } = await supabase
           .from('placed_blocks')
           .select('*')
@@ -812,7 +815,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           .gte('chunk_x', minChunkX)
           .lte('chunk_x', maxChunkX)
           .gte('chunk_z', minChunkZ)
-          .lte('chunk_z', maxChunkZ);
+          .lte('chunk_z', maxChunkZ)
+          .limit(10000);
 
         if (!error) {
           blocks = data;
@@ -1265,12 +1269,14 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       return;
     }
 
+    // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
     const { data: serverBlocks, error } = await supabase
       .from('placed_blocks')
       .select('*')
       .eq('world_id', worldId)
       .eq('chunk_x', chunkX)
-      .eq('chunk_z', chunkZ);
+      .eq('chunk_z', chunkZ)
+      .limit(5000);
 
     if (error) {
       console.error('Error refetching chunk:', error);

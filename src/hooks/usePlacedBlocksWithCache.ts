@@ -301,12 +301,14 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     
     try {
       // Fetch current blocks for this chunk
+      // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
       const { data: blocks, error } = await supabase
         .from('placed_blocks')
         .select('*')
         .eq('world_id', worldId)
         .eq('chunk_x', chunkX)
-        .eq('chunk_z', chunkZ);
+        .eq('chunk_z', chunkZ)
+        .limit(5000);
       
       if (error) {
         console.error('Error syncing chunk to IndexedDB:', error);

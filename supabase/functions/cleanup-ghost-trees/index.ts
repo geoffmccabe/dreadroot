@@ -195,9 +195,11 @@ Deno.serve(async (req) => {
     if (validTreeIds.size === 0) {
       console.log('No valid trees found - cleaning ALL tree-type placed_blocks')
       
+      // CRITICAL: Supabase default limit is 1000 rows - need higher for world-wide cleanup
       const { data: allPlacedBlocks, error: placedBlocksError } = await supabaseAdmin
         .from('placed_blocks')
         .select('id, block_type')
+        .limit(50000)
 
       if (placedBlocksError) {
         console.error('Error fetching placed_blocks:', placedBlocksError)
