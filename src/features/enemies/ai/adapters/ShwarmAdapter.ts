@@ -219,7 +219,8 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
   applyResult(
     shwarm: ShwarmWithAI, 
     result: BehaviorResult, 
-    _deltaMs: number
+    _deltaMs: number,
+    _shared?: SharedContext
   ): void {
     // Only execute if AI is in control
     if (!EnemyManager.isAIControlled()) {

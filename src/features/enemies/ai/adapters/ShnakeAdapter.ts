@@ -279,7 +279,8 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
   applyResult(
     shnake: ShnakeWithAI, 
     result: BehaviorResult, 
-    _deltaMs: number
+    _deltaMs: number,
+    shared?: SharedContext
   ): void {
     // Only execute if AI is in control and we have locomotion context
     if (!EnemyManager.isAIControlled() || !locomotionContext) {
@@ -322,7 +323,11 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
     }
     
     if (result.kind === 'attack') {
-      applyShnakeAttack(shnake, result, locomotionContext.onPlayerHit);
+      // Need player position to verify attack range
+      const playerX = shared?.playerX ?? 0;
+      const playerY = shared?.playerY ?? 0;
+      const playerZ = shared?.playerZ ?? 0;
+      applyShnakeAttack(shnake, result, playerX, playerY, playerZ, locomotionContext.onPlayerHit);
     }
   },
   

@@ -210,7 +210,7 @@ export interface EnemyAdapter<TEnemy> {
   buildContext(enemy: TEnemy, shared: SharedContext, state: BehaviorState): BehaviorContext;
   
   /** Apply behavior result to enemy (movement, attack, etc.) */
-  applyResult(enemy: TEnemy, result: BehaviorResult, deltaMs: number): void;
+  applyResult(enemy: TEnemy, result: BehaviorResult, deltaMs: number, shared?: SharedContext): void;
   
   /** Optional: get position for LOD anchor (defaults to getPosition) */
   getLodAnchor?(enemy: TEnemy): { x: number; y: number; z: number };
