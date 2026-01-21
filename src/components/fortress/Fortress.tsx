@@ -1007,6 +1007,48 @@ export function Fortress() {
               }
             }
           }}
+          onShnakeKilled={async (tier) => {
+            console.log(`[Fortress] Shnake killed - tier ${tier}, user: ${user?.id}`);
+            if (!user?.id) {
+              console.error('[Fortress] Cannot track shnake kill - no user ID');
+              return;
+            }
+            
+            // Play kill sound
+            const audio = new Audio('/yay_sound.mp3');
+            audio.volume = 0.3;
+            audio.play().catch(() => {});
+            
+            // Increment kill count in database
+            const { data: existing, error: fetchError } = await supabase
+              .from('user_combat_stats')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('enemy_type', `shnake_t${tier}`)
+              .maybeSingle();
+            
+            if (fetchError) {
+              console.error('[Fortress] Error fetching shnake combat stats:', fetchError);
+              return;
+            }
+            
+            if (existing) {
+              const { error: updateError } = await supabase
+                .from('user_combat_stats')
+                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+              if (updateError) {
+                console.error('[Fortress] Error updating shnake kill count:', updateError);
+              }
+            } else {
+              const { error: insertError } = await supabase
+                .from('user_combat_stats')
+                .insert({ user_id: user.id, enemy_type: `shnake_t${tier}`, kills: 1 });
+              if (insertError) {
+                console.error('[Fortress] Error inserting shnake kill count:', insertError);
+              }
+            }
+          }}
           respawnPosition={respawnPosition}
           onRespawnComplete={() => setRespawnPosition(null)}
           isOwnedTreeAtPosition={isOwnedTreeAtPosition}

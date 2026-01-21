@@ -325,6 +325,7 @@ export function FortressScene({
   onShwarmDamage,
   onPointsEarned,
   onShwarmGroupKilled,
+  onShnakeKilled,
   respawnPosition,
   onRespawnComplete,
   isOwnedTreeAtPosition,
@@ -431,6 +432,11 @@ export function FortressScene({
     handleShnakePlayerHitRef.current?.(damage, knockbackForce, direction);
   }, []);
 
+  // Fire propagation callback - when shnake head moves, propagate fire toward head
+  const handleShnakeHeadMoved = useCallback((shnakeId: string) => {
+    shnakeRendererRef.current?.propagateFire(shnakeId);
+  }, []);
+
   useShnakeMovement({
     shnakesRef,
     cameraRef,
@@ -440,6 +446,7 @@ export function FortressScene({
     treeBlocksByTierRef,
     nonInvisTreeBlocksByTierRef,
     onPlayerHit: handleShnakePlayerHit,
+    onHeadMoved: handleShnakeHeadMoved,
   });
 
   // Admin spawn callback: spawn shnake on nearest tree
@@ -1122,7 +1129,7 @@ export function FortressScene({
                       const velocityRatio = bullet.speed / originalMuzzleVelocity;
                       const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
                       
-                      const { killedHead, killedEntire } = damageShnakeHead(shnake.id, scaledDamage);
+                      const { killedHead, killedEntire, tier: shnakeTier } = damageShnakeHead(shnake.id, scaledDamage);
                       
                       // Trigger damage flash (3 flashes over 1 second)
                       shnakeRendererRef.current?.triggerDamageFlash(shnake.id);
@@ -1130,6 +1137,11 @@ export function FortressScene({
                       // Award points for damage
                       if (onPointsEarned) {
                         onPointsEarned(scaledDamage);
+                      }
+                      
+                      // Track shnake kill if entire snake died
+                      if (killedEntire && onShnakeKilled) {
+                        onShnakeKilled(shnakeTier);
                       }
                       
                       // Spawn impact effect and add fire to segment

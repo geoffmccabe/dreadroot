@@ -70,6 +70,7 @@ interface UseShnakeMovementOptions {
   treeBlocksByTierRef: React.RefObject<Map<number, Map<string, string>>>;
   nonInvisTreeBlocksByTierRef: React.RefObject<Map<number, Set<string>>>;
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
+  onHeadMoved?: (shnakeId: string) => void; // For fire propagation
 }
 
 export function useShnakeMovement({
@@ -81,6 +82,7 @@ export function useShnakeMovement({
   treeBlocksByTierRef,
   nonInvisTreeBlocksByTierRef,
   onPlayerHit,
+  onHeadMoved,
 }: UseShnakeMovementOptions) {
   const treesRef = useRef(plantedTrees);
   treesRef.current = plantedTrees;
@@ -102,7 +104,7 @@ export function useShnakeMovement({
   };
 
   /**
-   * Check if position is adjacent to any tree block.
+   * Check if position is adjacent to any tree block of this tier.
    */
   const isTouchingTree = (tier: number, x: number, y: number, z: number): boolean => {
     const tierMap = treeBlocksByTierRef.current?.get(tier);
@@ -121,9 +123,28 @@ export function useShnakeMovement({
   };
 
   /**
-   * Get a random position within tree bounds for navigation
+   * Check if position is within tree's chunk bounds
    */
-  const getRandomTreePosition = (tree: PlantedTree): { x: number; y: number; z: number } => {
+  const isInTreeChunks = (tree: PlantedTree, x: number, z: number): boolean => {
+    const treeChunks = getTreeChunkKeys(tree);
+    const ck = chunkKey(x, z);
+    return treeChunks.has(ck);
+  };
+
+  /**
+   * Get a random position within tree bounds for navigation (targeting tree blocks)
+   */
+  const getRandomTreePosition = (tree: PlantedTree, tier: number): { x: number; y: number; z: number } => {
+    const tierMap = treeBlocksByTierRef.current?.get(tier);
+    if (tierMap && tierMap.size > 0) {
+      // Pick a random tree block position as destination
+      const keys = [...tierMap.keys()];
+      const randomKey = keys[Math.floor(Math.random() * keys.length)];
+      const [x, y, z] = randomKey.split(',').map(Number);
+      return { x, y, z };
+    }
+    
+    // Fallback to random bounds position
     const b = treeBounds(tree);
     return {
       x: Math.floor(Math.random() * (b.maxX - b.minX + 1)) + b.minX,
@@ -140,7 +161,7 @@ export function useShnakeMovement({
     return dist <= 2;
   };
 
-  /** Mark shnake as attacked (so it can leave tree to chase) */
+  /** Mark shnake as attacked (so it can descend to ground to chase) */
   const markAttacked = (shnakeId: string) => {
     const state = navStateRef.current.get(shnakeId);
     if (state) {
@@ -195,7 +216,7 @@ export function useShnakeMovement({
         // Get or create nav state
         let navState = navStateRef.current.get(s.id);
         if (!navState) {
-          const dest = getRandomTreePosition(tree);
+          const dest = getRandomTreePosition(tree, s.tier);
           navState = {
             destinationX: dest.x,
             destinationY: dest.y,
@@ -219,20 +240,19 @@ export function useShnakeMovement({
         }
 
         // Determine behavior:
-        // 1. If player in tree chunks OR within aggro range -> chase player
-        // 2. If attacked and player in tree chunks -> can go to ground to attack
-        // 3. Otherwise -> navigate to random tree destination
-        const aggroRange = s.tier * 16;
-        const shouldChase = playerInTreeChunks || distToPlayer < aggroRange;
+        // - If player in tree chunks -> chase player
+        // - If attacked and player in tree chunks -> can descend to ground
+        // - Always must stay within tree's chunks
+        const shouldChase = playerInTreeChunks;
         const canGoToGround = navState.wasAttacked && playerInTreeChunks;
 
-        // Attack if adjacent (regardless of chunk)
+        // Attack if adjacent (within tree chunks only)
         const head = s.segments[0];
         const dxp = (head.x + 0.5) - px;
         const dyp = (head.y + 0.5) - py;
         const dzp = (head.z + 0.5) - pz;
         const distSq = dxp * dxp + dyp * dyp + dzp * dzp;
-        if (distSq < 1.2 * 1.2) {
+        if (distSq < 1.5 * 1.5 && playerInTreeChunks) {
           const cooldown = 600; // ms
           if (now - s.lastAttackAt > cooldown) {
             s.lastAttackAt = now;
@@ -249,7 +269,7 @@ export function useShnakeMovement({
 
         // Check if reached destination - pick new one
         if (!shouldChase && hasReachedDestination(headSeg, navState)) {
-          const dest = getRandomTreePosition(tree);
+          const dest = getRandomTreePosition(tree, s.tier);
           navState.destinationX = dest.x;
           navState.destinationY = dest.y;
           navState.destinationZ = dest.z;
@@ -295,23 +315,28 @@ export function useShnakeMovement({
             const ny = headSeg.y + dy;
             const nz = headSeg.z + dz;
             
-            // GROUND CONSTRAINT: Only allowed below 0 if attacked and chasing in tree chunks
+            // CHUNK CONSTRAINT: Must stay within tree's chunks
+            if (!isInTreeChunks(tree, nx, nz)) continue;
+            
+            // GROUND CONSTRAINT: Only allowed at y=0 or below if attacked and chasing
             if (ny < 0 && !canGoToGround) continue;
-            if (ny < -1) continue; // Never below -1
+            if (ny < -1) continue; // Never below -1 (ground level)
             
             const k = key(nx, ny, nz);
             if (occupied.has(k)) continue;
             if (isWorldOccupied(nx, ny, nz)) continue;
             
-            // TREE CONNECTION: When wandering, must stay connected to tree
-            // When chasing after attack, can leave tree within chunks
-            if (!shouldChase || !canGoToGround) {
-              // Must have at least one segment touching tree after move
-              const wouldTouch = isTouchingTree(s.tier, nx, ny, nz);
-              const anyBodyTouches = s.segments.slice(0, -1).some(
-                seg => isTouchingTree(s.tier, seg.x, seg.y, seg.z)
-              );
-              if (!wouldTouch && !anyBodyTouches) continue;
+            // TREE CONNECTION CONSTRAINT: At least one segment must touch tree after move
+            // Check if new head would touch, or if any remaining body segment touches
+            const newHeadTouchesTree = isTouchingTree(s.tier, nx, ny, nz);
+            const anyBodyTouchesTree = s.segments.slice(0, -1).some(
+              seg => isTouchingTree(s.tier, seg.x, seg.y, seg.z)
+            );
+            
+            // When wandering: must always stay connected to tree
+            // When chasing on ground after attack: can temporarily leave tree vicinity
+            if (!canGoToGround) {
+              if (!newHeadTouchesTree && !anyBodyTouchesTree) continue;
             }
             
             // Score: Manhattan distance to target (lower = better)
@@ -320,23 +345,38 @@ export function useShnakeMovement({
           }
 
           if (scored.length === 0) {
-            // Stuck - try any valid move
+            // Stuck - try to find any valid move that maintains tree connection
             for (const [dx, dy, dz] of candidates) {
               const nx = headSeg.x + dx;
               const ny = headSeg.y + dy;
               const nz = headSeg.z + dz;
               
+              // Must stay in chunks
+              if (!isInTreeChunks(tree, nx, nz)) continue;
               if (ny < 0) continue;
+              
               const k = key(nx, ny, nz);
               if (occupied.has(k)) continue;
               if (isWorldOccupied(nx, ny, nz)) continue;
+              
+              // Must touch tree
+              const newHeadTouchesTree = isTouchingTree(s.tier, nx, ny, nz);
+              const anyBodyTouchesTree = s.segments.slice(0, -1).some(
+                seg => isTouchingTree(s.tier, seg.x, seg.y, seg.z)
+              );
+              if (!newHeadTouchesTree && !anyBodyTouchesTree) continue;
               
               scored.push({ dx, dy, dz, score: Math.random() * 100 });
             }
           }
 
           if (scored.length === 0) {
-            break; // Truly stuck
+            // Truly stuck - pick new destination next tick
+            const dest = getRandomTreePosition(tree, s.tier);
+            navState.destinationX = dest.x;
+            navState.destinationY = dest.y;
+            navState.destinationZ = dest.z;
+            break;
           }
 
           // Sort by score (lower is better for chasing, random otherwise)
@@ -360,6 +400,9 @@ export function useShnakeMovement({
           const newColliders = [newHeadCollider, ...s.colliders.slice(0, -1)];
           s.segments = newSegments;
           s.colliders = newColliders;
+          
+          // Notify that head moved (for fire propagation)
+          onHeadMoved?.(s.id);
         }
       }
 
@@ -379,5 +422,6 @@ export function useShnakeMovement({
     treeBlocksByTierRef,
     nonInvisTreeBlocksByTierRef,
     onPlayerHit,
+    onHeadMoved,
   ]);
 }

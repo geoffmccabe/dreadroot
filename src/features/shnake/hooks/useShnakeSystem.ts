@@ -357,20 +357,33 @@ export function useShnakeSystem({
    * Damage head only.
    * Returns { killedHead, killedEntire }
    */
+  /**
+   * Damage head only.
+   * Returns { killedHead, killedEntire, tier, definitionName }
+   */
   const damageHead = useCallback((shnakeId: string, damage: number) => {
     let killedHead = false;
     let killedEntire = false;
+    let tier = 0;
+    let definitionName = '';
 
     const updated = shnakesRef.current.map(s => {
       if (s.id !== shnakeId || !s.isActive) return s;
+      
+      tier = s.tier;
+      definitionName = s.definition.name || `Shnake T${s.tier}`;
+      
       const armor = s.definition.armor ?? 0;
       const actual = Math.max(0, damage - armor);
       const newHealth = s.headHealth - actual;
+      
+      console.log(`[Shnake Damage] id=${shnakeId.slice(-6)} dmg=${damage} armor=${armor} actual=${actual} health=${s.headHealth}->${newHealth}`);
+      
       if (newHealth > 0) {
         return { ...s, headHealth: newHealth };
       }
 
-      // head killed: remove segment[0]
+      // Head killed: remove segment[0], promote segment[1] to new head
       killedHead = true;
       const newSegments = s.segments.slice(1);
       const newColliders = s.colliders.slice(1);
@@ -380,10 +393,13 @@ export function useShnakeSystem({
 
       if (newSegments.length === 0) {
         killedEntire = true;
+        console.log(`[Shnake Kill] Shnake ${shnakeId.slice(-6)} killed entirely! tier=${tier}`);
         // Remove remaining colliders too
         newColliders.forEach(c => collisionGrid.remove(c));
         return { ...s, isActive: false, segments: [], colliders: [], headHealth: 0 };
       }
+
+      console.log(`[Shnake Head Lost] Shnake ${shnakeId.slice(-6)} lost head, ${newSegments.length} segments remain`);
 
       return {
         ...s,
@@ -399,7 +415,7 @@ export function useShnakeSystem({
       // hard remove after state update so renderer can play 1-frame death if needed
       setTimeout(() => removeShnake(shnakeId), 0);
     }
-    return { killedHead, killedEntire };
+    return { killedHead, killedEntire, tier, definitionName };
   }, [removeShnake]);
 
   const getTreeBlockIndexRefs = useCallback(() => {
