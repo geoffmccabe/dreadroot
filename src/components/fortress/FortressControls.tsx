@@ -55,7 +55,6 @@ export function FirstPersonControls({
   blocksByTypeAndUser,
   onGodModeChange,
   updatePlayerPosition,
-  applyKnockback: externalApplyKnockback,
   respawnPosition,
   onRespawnComplete,
   isOwnedTreeAtPosition,
@@ -176,17 +175,14 @@ export function FirstPersonControls({
     knockbackVelRef.current.addScaledVector(direction, distance / secondsToApply);
   }, []);
   
-  // Expose applyKnockback to parent via ref pattern
+  // Expose applyKnockback globally for the universal damage system
+  // This is always set - the damage pipeline in usePlayerHealth uses it
   useEffect(() => {
-    if (externalApplyKnockback) {
-      // Parent provided a callback - they can call our internal function
-      // For now, we expose via a global for shwarm system to access
-      (window as any).__applyPlayerKnockback = applyKnockback;
-    }
+    (window as any).__applyPlayerKnockback = applyKnockback;
     return () => {
       delete (window as any).__applyPlayerKnockback;
     };
-  }, [applyKnockback, externalApplyKnockback]);
+  }, [applyKnockback]);
   
   // Initialize fortress colliders on mount
   // NOTE: We no longer clear the grid here because block colliders from useChunkLoader

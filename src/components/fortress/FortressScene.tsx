@@ -1499,7 +1499,6 @@ export function FortressScene({
         blocksByTypeAndUser={blocksByTypeAndUser}
         onGodModeChange={onGodModeChange}
         updatePlayerPosition={updatePlayerPosition}
-        applyKnockback={undefined}
         respawnPosition={respawnPosition}
         onRespawnComplete={onRespawnComplete}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
