@@ -36,7 +36,12 @@ export function createAudioRefs() {
     // Tree sounds
     axeChop: new Audio('/axe_chop.mp3'),
     // Bullet ricochet sound
-    ricochet: new Audio('/ricochet_sound.mp3')
+    ricochet: new Audio('/ricochet_sound.mp3'),
+    // Pentabullet sounds
+    pentabulletFire: new Audio('/pentabullet_sound.mp3'),
+    pentabulletPowerup: new Audio('/pentabullet_powerup.mp3'),
+    pentabulletSteady: new Audio('/pentabullet_power_steady.mp3'),
+    pentabulletPowerdown: new Audio('/pentabullet_powerdown.mp3')
   };
 }
 

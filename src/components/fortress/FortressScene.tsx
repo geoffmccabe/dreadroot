@@ -1188,6 +1188,8 @@ export function FortressScene({
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}
         onBulletTierChange={onBulletTierChange}
+        playerLevel={playerLevel}
+        onPentabulletChargeChange={onPentabulletChargeChange}
       />
       
       <MultiplayerPlayers players={players} />

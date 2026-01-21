@@ -61,7 +61,11 @@ export function FirstPersonControls({
   isOwnedTreeAtPosition,
   onTreeChopComplete,
   onTreeChopProgress,
-  onBulletTierChange
+  onBulletTierChange,
+  // Pentabullet props
+  playerLevel = 1,
+  onPentabulletChargeChange,
+  onPentabulletShoot
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -133,6 +137,14 @@ export function FirstPersonControls({
   const lastChopSoundTimeRef = useRef(0);
   const axeChopAudioRef = useRef<HTMLAudioElement | null>(null);
   
+  // Pentabullet charging state
+  const pentabulletChargeStartRef = useRef<number | null>(null);
+  const pentabulletChargeRef = useRef(0);
+  const pentabulletPowerupAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pentabulletSteadyAudioRef = useRef<HTMLAudioElement | null>(null);
+  const pentabulletPhaseRef = useRef<'idle' | 'powerup' | 'steady'>('idle');
+  const playerLevelRef = useRef(playerLevel);
+  
   // Track previous crawl state for crouch height transition
   const wasCrawlingRef = useRef(false);
   
@@ -141,6 +153,11 @@ export function FirstPersonControls({
     axeChopAudioRef.current = new Audio('/axe_chop.mp3');
     axeChopAudioRef.current.volume = 0.5;
   }, []);
+  
+  // Keep player level ref updated
+  useEffect(() => {
+    playerLevelRef.current = playerLevel;
+  }, [playerLevel]);
 
   const gridInitialized = useRef(false);
   
@@ -592,6 +609,11 @@ export function FirstPersonControls({
         onTreePlace(position);
       }
     } else if (showCrosshairs && onShoot) {
+      // Skip normal shot if pentabullet is charging (>1s hold)
+      if (pentabulletChargeRef.current >= 1.0) {
+        return; // Will fire pentabullet or cancel on mouseup
+      }
+      
       const now = Date.now();
       if (now - lastFireTime.current < FIRE_RATE_LIMIT) return;
       lastFireTime.current = now;
@@ -620,10 +642,108 @@ export function FirstPersonControls({
   
   handleClickRef.current = handleClick;
 
+  // Cancel pentabullet charge helper
+  const cancelPentabulletCharge = useCallback(() => {
+    if (pentabulletPhaseRef.current !== 'idle') {
+      // Play powerdown sound
+      const powerdownAudio = new Audio('/pentabullet_powerdown.mp3');
+      powerdownAudio.volume = 0.5;
+      powerdownAudio.play().catch(() => {});
+      
+      // Stop any playing charge sounds
+      if (pentabulletPowerupAudioRef.current) {
+        pentabulletPowerupAudioRef.current.pause();
+        pentabulletPowerupAudioRef.current.currentTime = 0;
+      }
+      if (pentabulletSteadyAudioRef.current) {
+        pentabulletSteadyAudioRef.current.pause();
+        pentabulletSteadyAudioRef.current.currentTime = 0;
+      }
+    }
+    pentabulletChargeStartRef.current = null;
+    pentabulletChargeRef.current = 0;
+    pentabulletPhaseRef.current = 'idle';
+    onPentabulletChargeChange?.(0);
+  }, [onPentabulletChargeChange]);
+  
+  // Calculate pentabullet directions with spread based on player level
+  const calculatePentabulletDirections = useCallback((baseDirection: THREE.Vector3): THREE.Vector3[] => {
+    // Base spread: 1% angle (0.01 radians) minus 0.1% per level
+    const spreadAngle = Math.max(0.001, 0.01 - (playerLevelRef.current * 0.001));
+    
+    const directions: THREE.Vector3[] = [];
+    const up = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(baseDirection, up).normalize();
+    const realUp = new THREE.Vector3().crossVectors(right, baseDirection).normalize();
+    
+    for (let i = 0; i < 5; i++) {
+      const dir = baseDirection.clone();
+      
+      // Random angular offset within spread cone
+      const theta = Math.random() * Math.PI * 2; // Random angle around cone
+      const phi = Math.random() * spreadAngle; // Random distance from center
+      
+      // Apply rotation to direction
+      dir.addScaledVector(right, Math.cos(theta) * Math.sin(phi));
+      dir.addScaledVector(realUp, Math.sin(theta) * Math.sin(phi));
+      dir.normalize();
+      
+      directions.push(dir);
+    }
+    return directions;
+  }, []);
+  
+  // Fire pentabullet (5 bullets with spread, 0.1s apart)
+  const firePentabullet = useCallback(() => {
+    if (!onPentabulletShoot) return;
+    
+    // Stop charging sounds
+    if (pentabulletPowerupAudioRef.current) {
+      pentabulletPowerupAudioRef.current.pause();
+      pentabulletPowerupAudioRef.current.currentTime = 0;
+    }
+    if (pentabulletSteadyAudioRef.current) {
+      pentabulletSteadyAudioRef.current.pause();
+      pentabulletSteadyAudioRef.current.currentTime = 0;
+    }
+    
+    // Calculate base direction from camera
+    const baseDirection = new THREE.Vector3(0, 0, -1);
+    baseDirection.applyQuaternion(camera.quaternion);
+    baseDirection.normalize();
+    
+    // Get all 5 bullet directions
+    const directions = calculatePentabulletDirections(baseDirection);
+    
+    // Play pentabullet fire sound
+    const fireAudio = new Audio('/pentabullet_sound.mp3');
+    fireAudio.volume = 0.6;
+    fireAudio.play().catch(() => {});
+    
+    // Fire bullets 0.1 seconds apart
+    const origin = camera.position.clone();
+    onPentabulletShoot(origin, directions);
+    
+    // Reset state
+    pentabulletChargeStartRef.current = null;
+    pentabulletChargeRef.current = 0;
+    pentabulletPhaseRef.current = 'idle';
+    onPentabulletChargeChange?.(0);
+  }, [camera, calculatePentabulletDirections, onPentabulletShoot, onPentabulletChargeChange]);
+  
   const handleRightClick = useCallback((event: MouseEvent) => {
-    if (!isLocked.current || !blockPlacementMode || !showOwnershipOutline) return;
+    if (!isLocked.current) return;
+    
+    // Cancel pentabullet charge on right-click
+    if (pentabulletPhaseRef.current !== 'idle') {
+      event.preventDefault();
+      cancelPentabulletCharge();
+      return;
+    }
+    
+    if (!blockPlacementMode || !showOwnershipOutline) return;
     event.preventDefault();
-  }, [blockPlacementMode, showOwnershipOutline]);
+  }, [blockPlacementMode, showOwnershipOutline, cancelPentabulletCharge]);
   
   handleRightClickRef.current = handleRightClick;
 
@@ -635,8 +755,13 @@ export function FirstPersonControls({
       chopStartTimeRef.current = performance.now();
       chopCountRef.current = 0;
       choppingPositionRef.current = null;
+      
+      // Start pentabullet charge if in shooting mode
+      if (showCrosshairs && !blockPlacementMode && !treePlacementMode) {
+        pentabulletChargeStartRef.current = performance.now();
+      }
     }
-  }, []);
+  }, [showCrosshairs, blockPlacementMode, treePlacementMode]);
   
   handleMouseDownRef.current = handleMouseDown;
 
@@ -646,19 +771,32 @@ export function FirstPersonControls({
       setHoveredBlockId(null);
     }
     if (event.button === 0) {
+      // Check for pentabullet release
+      if (pentabulletChargeRef.current >= 5.0 && showCrosshairs) {
+        firePentabullet();
+      } else if (pentabulletPhaseRef.current !== 'idle') {
+        // Incomplete charge - cancel and fire normal shot
+        cancelPentabulletCharge();
+      }
+      
       leftMouseDownRef.current = false;
       chopCountRef.current = 0;
       choppingPositionRef.current = null;
+      pentabulletChargeStartRef.current = null;
       // Reset progress when releasing
       onTreeChopProgress?.(0, CHOPS_REQUIRED);
     }
-  }, [setHoveredBlockId, onTreeChopProgress]);
+  }, [setHoveredBlockId, onTreeChopProgress, showCrosshairs, firePentabullet, cancelPentabulletCharge]);
   
   handleMouseUpRef.current = handleMouseUp;
 
   const handlePointerLockChange = useCallback(() => {
     isLocked.current = document.pointerLockElement === gl.domElement;
-  }, [gl]);
+    // Cancel pentabullet if pointer lock is lost
+    if (!isLocked.current && pentabulletPhaseRef.current !== 'idle') {
+      cancelPentabulletCharge();
+    }
+  }, [gl, cancelPentabulletCharge]);
   
   handlePointerLockChangeRef.current = handlePointerLockChange;
 
@@ -725,6 +863,10 @@ export function FirstPersonControls({
   const onTreeChopCompleteRef = useRef(onTreeChopComplete);
   const onTreeChopProgressRef = useRef(onTreeChopProgress);
   
+  // Pentabullet refs
+  const onPentabulletChargeChangeRef = useRef(onPentabulletChargeChange);
+  const showCrosshairsRef = useRef(showCrosshairs);
+  
   // Phase 2B: Throttle for chunk loading updates (separate from broadcast)
   const lastChunkUpdateRef = useRef(0);
   const CHUNK_UPDATE_INTERVAL = 500; // ms - less frequent than broadcast
@@ -740,6 +882,8 @@ export function FirstPersonControls({
   useEffect(() => { isOwnedTreeAtPositionRef.current = isOwnedTreeAtPosition; }, [isOwnedTreeAtPosition]);
   useEffect(() => { onTreeChopCompleteRef.current = onTreeChopComplete; }, [onTreeChopComplete]);
   useEffect(() => { onTreeChopProgressRef.current = onTreeChopProgress; }, [onTreeChopProgress]);
+  useEffect(() => { onPentabulletChargeChangeRef.current = onPentabulletChargeChange; }, [onPentabulletChargeChange]);
+  useEffect(() => { showCrosshairsRef.current = showCrosshairs; }, [showCrosshairs]);
 
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
@@ -879,6 +1023,37 @@ export function FirstPersonControls({
         // Mouse released - reset chopping
         choppingPositionRef.current = null;
         chopCountRef.current = 0;
+      }
+      
+      // Pentabullet charging logic (only in shooting mode with mouse held)
+      if (leftMouseDownRef.current && showCrosshairsRef.current && pentabulletChargeStartRef.current) {
+        const chargeTime = (now - pentabulletChargeStartRef.current) / 1000;
+        pentabulletChargeRef.current = chargeTime;
+        
+        // Update charge UI
+        onPentabulletChargeChangeRef.current?.(chargeTime);
+        
+        // At 1 second, start powerup sound (plays for ~4 seconds)
+        if (chargeTime >= 1.0 && pentabulletPhaseRef.current === 'idle') {
+          pentabulletPhaseRef.current = 'powerup';
+          pentabulletPowerupAudioRef.current = new Audio('/pentabullet_powerup.mp3');
+          pentabulletPowerupAudioRef.current.volume = 0.5;
+          pentabulletPowerupAudioRef.current.play().catch(() => {});
+        }
+        
+        // At 5 seconds, switch to steady sound (looping)
+        if (chargeTime >= 5.0 && pentabulletPhaseRef.current === 'powerup') {
+          pentabulletPhaseRef.current = 'steady';
+          // Stop powerup
+          if (pentabulletPowerupAudioRef.current) {
+            pentabulletPowerupAudioRef.current.pause();
+          }
+          // Start steady (looping)
+          pentabulletSteadyAudioRef.current = new Audio('/pentabullet_power_steady.mp3');
+          pentabulletSteadyAudioRef.current.volume = 0.5;
+          pentabulletSteadyAudioRef.current.loop = true;
+          pentabulletSteadyAudioRef.current.play().catch(() => {});
+        }
       }
       
       // Movement input
