@@ -10,9 +10,10 @@ interface Props {
 }
 
 // Fire effect tracking per shnake segment
+// segmentIndex moves with the snake: when head moves, fire propagates toward head
 interface SegmentFire {
   shnakeId: string;
-  segmentIndex: number;
+  segmentIndex: number; // Current segment index (decrements as head moves)
   startTime: number;
   duration: number;
   colors: string[];
@@ -30,6 +31,7 @@ export interface ShnakeRendererHandle {
   addFireToSegment: (shnakeId: string, segmentIndex: number, duration: number, colors: string[]) => void;
   getActiveFires: () => Array<{ position: THREE.Vector3; colors: string[]; progress: number }>;
   triggerDamageFlash: (shnakeId: string) => void;
+  propagateFire: (shnakeId: string) => void; // Called when shnake head moves
 }
 
 // Fallback colors for tiers without textures
@@ -441,6 +443,23 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
         startTime: performance.now(),
         duration: 1000,
       });
+    },
+    
+    // Called when shnake head moves - propagate fire toward head by decrementing indices
+    propagateFire: (shnakeId: string) => {
+      firesRef.current = firesRef.current.map(fire => {
+        if (fire.shnakeId !== shnakeId) return fire;
+        
+        // Decrement segment index (fire moves toward head as body follows)
+        const newIndex = fire.segmentIndex - 1;
+        
+        // If fire reaches index -1, it has passed through the head and should be removed
+        if (newIndex < 0) {
+          return { ...fire, segmentIndex: -999 }; // Mark for removal
+        }
+        
+        return { ...fire, segmentIndex: newIndex };
+      }).filter(fire => fire.segmentIndex >= 0);
     },
   }), [shnakesRef]);
 
