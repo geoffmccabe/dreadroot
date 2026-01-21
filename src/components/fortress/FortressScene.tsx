@@ -1124,6 +1124,9 @@ export function FortressScene({
                       
                       const { killedHead, killedEntire } = damageShnakeHead(shnake.id, scaledDamage);
                       
+                      // Trigger damage flash (3 flashes over 1 second)
+                      shnakeRendererRef.current?.triggerDamageFlash(shnake.id);
+                      
                       // Award points for damage
                       if (onPointsEarned) {
                         onPointsEarned(scaledDamage);

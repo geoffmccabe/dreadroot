@@ -36,15 +36,10 @@ function treeBounds(tree: PlantedTree) {
   };
 }
 
-function inside(b: ReturnType<typeof treeBounds>, x: number, y: number, z: number) {
-  return x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ;
-}
-
 /** Get all chunk keys that a tree spans */
 function getTreeChunkKeys(tree: PlantedTree): Set<string> {
   const b = treeBounds(tree);
   const chunks = new Set<string>();
-  // Sample corners and center to get chunk coverage
   const minCx = Math.floor(b.minX / CHUNK_SIZE);
   const maxCx = Math.floor(b.maxX / CHUNK_SIZE);
   const minCz = Math.floor(b.minZ / CHUNK_SIZE);
@@ -94,45 +89,46 @@ export function useShnakeMovement({
     return false;
   };
 
-  const isClingable = (tier: number, x: number, y: number, z: number) => {
+  /**
+   * Check if position is adjacent to a tree block (including invisiblocks).
+   * This is the PRIMARY constraint - shnake must always touch tree.
+   */
+  const isTouchingTree = (tier: number, x: number, y: number, z: number): boolean => {
     const tierMap = treeBlocksByTierRef.current?.get(tier);
     if (!tierMap) return false;
 
-    // Check 6 neighbors
+    // Check 6 neighbors for ANY tree block (including invisiblocks)
     const neighbors = [
       key(x + 1, y, z), key(x - 1, y, z),
       key(x, y + 1, z), key(x, y - 1, z),
       key(x, y, z + 1), key(x, y, z - 1),
     ];
 
-    let hasNeighbor = false;
-    let hasNonInvisNearby = false;
-    const nonInvis = nonInvisTreeBlocksByTierRef.current?.get(tier);
-
     for (const nk of neighbors) {
-      if (tierMap.has(nk)) {
-        hasNeighbor = true;
-        const bt = tierMap.get(nk);
-        if (bt !== 'invisiblock') {
-          hasNonInvisNearby = true;
-          break;
-        }
-      }
+      if (tierMap.has(nk)) return true;
     }
+    return false;
+  };
 
-    if (!hasNeighbor) return false;
-    if (hasNonInvisNearby) return true;
-
-    // Adjacent only to invisiblocks => check if there's a non-invis within 2 Manhattan
-    if (!nonInvis) return false;
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dz = -2; dz <= 2; dz++) {
-          if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 2) continue;
-          if (nonInvis.has(key(x + dx, y + dy, z + dz))) return true;
-        }
-      }
+  /**
+   * Check if at least one segment in the array would still be touching tree
+   * after a potential move. This ensures shnake never completely detaches.
+   */
+  const wouldStayConnected = (
+    tier: number,
+    newHead: { x: number; y: number; z: number },
+    existingSegments: { x: number; y: number; z: number }[],
+  ): boolean => {
+    // Check new head position
+    if (isTouchingTree(tier, newHead.x, newHead.y, newHead.z)) return true;
+    
+    // Check all remaining segments (excluding tail which will be removed)
+    // After move: [newHead, ...existingSegments.slice(0, -1)]
+    for (let i = 0; i < existingSegments.length - 1; i++) {
+      const seg = existingSegments[i];
+      if (isTouchingTree(tier, seg.x, seg.y, seg.z)) return true;
     }
+    
     return false;
   };
 
@@ -170,7 +166,6 @@ export function useShnakeMovement({
         const tree = treeById.get(s.treeId);
         if (!tree) continue;
 
-        const b = treeBounds(tree);
         const px = tmpPlayer.current.x;
         const py = tmpPlayer.current.y;
         const pz = tmpPlayer.current.z;
@@ -227,25 +222,16 @@ export function useShnakeMovement({
             const ny = headSeg.y + dy;
             const nz = headSeg.z + dz;
             
-            // Relaxed bounds check - allow movement slightly outside tree bounds
-            const expandedBounds = {
-              minX: b.minX - 2,
-              maxX: b.maxX + 2,
-              minY: b.minY - 1,
-              maxY: b.maxY + 5,
-              minZ: b.minZ - 2,
-              maxZ: b.maxZ + 2,
-            };
-            if (nx < expandedBounds.minX || nx > expandedBounds.maxX ||
-                ny < expandedBounds.minY || ny > expandedBounds.maxY ||
-                nz < expandedBounds.minZ || nz > expandedBounds.maxZ) continue;
-            
             const k = key(nx, ny, nz);
             if (occupied.has(k)) continue;
             if (isWorldOccupied(nx, ny, nz)) continue;
             
-            // Relaxed cling check - if no clingable found, still allow with penalty
-            const clingable = isClingable(s.tier, nx, ny, nz);
+            // CRITICAL: Check if this move would keep shnake connected to tree
+            const newHead = { x: nx, y: ny, z: nz };
+            if (!wouldStayConnected(s.tier, newHead, s.segments)) {
+              // This move would detach shnake from tree - not allowed
+              continue;
+            }
             
             let score: number;
             if (playerInTreeChunks) {
@@ -254,12 +240,9 @@ export function useShnakeMovement({
               const ty = Math.floor(py);
               const tz = Math.floor(pz);
               score = Math.abs(nx - tx) + Math.abs(ny - ty) + Math.abs(nz - tz);
-              // Penalize non-clingable positions heavily but allow them
-              if (!clingable) score += 50;
             } else {
-              // Random movement
+              // Random movement when no player nearby
               score = Math.random() * 100;
-              if (!clingable) score += 50;
             }
             
             scored.push({ dx, dy, dz, score });
