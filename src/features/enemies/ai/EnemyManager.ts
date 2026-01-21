@@ -41,6 +41,14 @@ class EnemyManagerClass {
   private lastFrameTime = 0;
   private isRegistered = false;
   
+  // Pre-allocated array for spatial entries (reused each frame)
+  private spatialEntries: Array<{ id: string; type: string; x: number; y: number; z: number }> = [];
+  
+  // Squared LOD distances for faster comparison (no sqrt needed)
+  private readonly LOD_FULL_DIST_SQ = LOD_CONFIG.FULL_DISTANCE * LOD_CONFIG.FULL_DISTANCE;
+  private readonly LOD_THROTTLED_DIST_SQ = LOD_CONFIG.THROTTLED_DISTANCE * LOD_CONFIG.THROTTLED_DISTANCE;
+  private readonly LOD_WAKE_DIST_SQ = LOD_CONFIG.WAKE_DISTANCE * LOD_CONFIG.WAKE_DISTANCE;
+  
   // Shared context (reused each frame)
   private sharedContext: SharedContext = {
     playerX: 0,
@@ -167,21 +175,21 @@ class EnemyManagerClass {
     this.sharedContext.deltaMs = deltaMs;
     this.sharedContext.elapsedMs = elapsedTime * 1000;
     
-    // Collect entries for spatial index update
-    const spatialEntries: Array<{ id: string; type: string; x: number; y: number; z: number }> = [];
+    // Reuse pre-allocated array (clear without reallocating)
+    this.spatialEntries.length = 0;
     
     // Process each enemy
     for (const [id, reg] of this.enemies) {
       const pos = reg.adapter.getPosition(reg.enemy);
       
-      // Calculate distance to player
+      // Calculate squared distance to player (avoid sqrt for LOD checks)
       const dx = pos.x - this.playerX;
       const dy = pos.y - this.playerY;
       const dz = pos.z - this.playerZ;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const distSq = dx * dx + dy * dy + dz * dz;
       
-      // Determine LOD level with hysteresis
-      const newLod = this.calculateLod(dist, reg.lodLevel);
+      // Determine LOD level with hysteresis (using squared distances)
+      const newLod = this.calculateLodSq(distSq, reg.lodLevel);
       reg.lodLevel = newLod;
       
       // Skip frozen enemies entirely
@@ -190,7 +198,7 @@ class EnemyManagerClass {
       }
       
       // Add to spatial index for neighbor queries
-      spatialEntries.push({
+      this.spatialEntries.push({
         id,
         type: reg.adapter.getType(),
         x: pos.x,
@@ -233,26 +241,26 @@ class EnemyManagerClass {
     }
     
     // Batch update spatial index
-    this.spatialIndex.update(spatialEntries);
+    this.spatialIndex.update(this.spatialEntries);
   }
   
   /**
-   * Calculate LOD level with hysteresis to prevent thrashing.
+   * Calculate LOD level using squared distances (avoid sqrt).
    */
-  private calculateLod(distance: number, currentLod: AILodLevel): AILodLevel {
+  private calculateLodSq(distSq: number, currentLod: AILodLevel): AILodLevel {
     // If currently frozen, use wake distance (hysteresis)
     if (currentLod === AILodLevel.FROZEN) {
-      if (distance < LOD_CONFIG.WAKE_DISTANCE) {
-        return distance < LOD_CONFIG.FULL_DISTANCE ? AILodLevel.FULL : AILodLevel.THROTTLED;
+      if (distSq < this.LOD_WAKE_DIST_SQ) {
+        return distSq < this.LOD_FULL_DIST_SQ ? AILodLevel.FULL : AILodLevel.THROTTLED;
       }
       return AILodLevel.FROZEN;
     }
     
     // Normal LOD calculation
-    if (distance < LOD_CONFIG.FULL_DISTANCE) {
+    if (distSq < this.LOD_FULL_DIST_SQ) {
       return AILodLevel.FULL;
     }
-    if (distance < LOD_CONFIG.THROTTLED_DISTANCE) {
+    if (distSq < this.LOD_THROTTLED_DIST_SQ) {
       return AILodLevel.THROTTLED;
     }
     return AILodLevel.FROZEN;
