@@ -42,6 +42,9 @@ import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
 import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
 
+// Universal Enemy AI system (Phase 3)
+import { useEnemyAI } from '@/features/enemies/ai';
+
 // Wisp particles using InstancedMesh for performance (no React re-renders per particle)
 const MAX_WISP_PARTICLES = 50;
 const wispParticleGeometry = new THREE.SphereGeometry(0.1, 8, 8);
@@ -512,6 +515,15 @@ export function FortressScene({
       console.log('[SpawnShnake] No trees found');
     }
   }, [plantedTrees, cameraRef, spawnOnTree]);
+  
+  // Universal Enemy AI system - runs in parallel with legacy movement hooks
+  // Phase 3: Activated but advisory-only (applyResult doesn't control movement yet)
+  useEnemyAI({
+    cameraRef,
+    shnakesRef,
+    shwarmsRef,
+    isEnabled: true,
+  });
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
   const shnakeRendererRef = useRef<ShnakeRendererHandle>(null);

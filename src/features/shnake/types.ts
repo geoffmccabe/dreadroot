@@ -17,6 +17,16 @@ export interface ShnakeDefinitionRow {
   max_spawn_per_tree: number;
   created_at: string | null;
   updated_at: string | null;
+  /** AI behavior configuration (from database) */
+  ai_config?: {
+    behaviors?: string[];
+    detectionRange?: number;
+    attackRange?: number;
+    angrySpeedMultiplier?: number;
+    angryDurationMs?: number;
+    attackCooldownMs?: number;
+    custom?: Record<string, unknown>;
+  } | null;
 }
 
 export interface ShnakeDefinition {
@@ -35,6 +45,16 @@ export interface ShnakeDefinition {
   max_spawn_per_tree: number;
   created_at: string;
   updated_at: string;
+  /** AI behavior configuration (from database) */
+  ai_config?: {
+    behaviors?: string[];
+    detectionRange?: number;
+    attackRange?: number;
+    angrySpeedMultiplier?: number;
+    angryDurationMs?: number;
+    attackCooldownMs?: number;
+    custom?: Record<string, unknown>;
+  } | null;
 }
 
 export interface ShnakeSegment {

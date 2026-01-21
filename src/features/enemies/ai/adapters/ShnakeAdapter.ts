@@ -19,12 +19,11 @@ import { DEFAULT_AI_CONFIG } from '../types';
 
 /**
  * Extended shnake instance with AI state
+ * Note: ai_config now comes from shnake.definition.ai_config (database column)
  */
 export interface ShnakeWithAI extends ShnakeInstance {
   /** Timestamp of last damage taken */
   lastDamagedAt?: number;
-  /** AI configuration from definition */
-  aiConfig?: typeof DEFAULT_AI_CONFIG;
 }
 
 /**
@@ -65,7 +64,14 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
     const distToPlayer = Math.sqrt(dx * dx + dy * dy + dz * dz);
     
     const now = performance.now();
-    const config = shnake.aiConfig ?? DEFAULT_AI_CONFIG;
+    
+    // Use ai_config from definition (database column), fallback to defaults
+    const defConfig = shnake.definition.ai_config;
+    const detectionRange = defConfig?.detectionRange ?? DEFAULT_AI_CONFIG.detectionRange;
+    const attackRange = defConfig?.attackRange ?? DEFAULT_AI_CONFIG.attackRange;
+    const angryDurationMs = defConfig?.angryDurationMs ?? DEFAULT_AI_CONFIG.angryDurationMs;
+    const angrySpeedMultiplier = defConfig?.angrySpeedMultiplier ?? DEFAULT_AI_CONFIG.angrySpeedMultiplier;
+    const attackCooldownMs = defConfig?.attackCooldownMs ?? 600;
     
     return {
       entityId: shnake.id,
@@ -92,14 +98,13 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         treeId: shnake.treeId,
         tier: shnake.tier,
         segmentCount: shnake.segments.length,
-        detectionRange: config.detectionRange,
-        attackRange: config.attackRange,
-        angryDurationMs: config.angryDurationMs,
-        angrySpeedMultiplier: config.angrySpeedMultiplier,
+        detectionRange,
+        attackRange,
+        angryDurationMs,
+        angrySpeedMultiplier,
+        attackCooldownMs,
         damage: shnake.definition.damage_per_hit,
         knockback: shnake.definition.knockback,
-        // TODO: Move to ai_config when Phase 3 adds DB column
-        attackCooldownMs: 600,
       },
       
       state,
@@ -117,7 +122,7 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
   },
   
   getBehaviors(shnake: ShnakeWithAI): BehaviorModule[] {
-    const config = shnake.aiConfig ?? DEFAULT_AI_CONFIG;
-    return getBehaviorsByIds(config.behaviors);
+    const behaviors = shnake.definition.ai_config?.behaviors ?? DEFAULT_AI_CONFIG.behaviors;
+    return getBehaviorsByIds(behaviors);
   },
 };

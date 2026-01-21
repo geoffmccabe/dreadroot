@@ -17,6 +17,16 @@ export interface ShwarmDefinition {
   x_factor: number; // random movement variance (1-10)
   created_at: string;
   updated_at: string;
+  /** AI behavior configuration (from database) */
+  ai_config?: {
+    behaviors?: string[];
+    detectionRange?: number;
+    attackRange?: number;
+    angrySpeedMultiplier?: number;
+    angryDurationMs?: number;
+    attackCooldownMs?: number;
+    custom?: Record<string, unknown>;
+  } | null;
 }
 
 /**
@@ -65,6 +75,16 @@ export interface ShwarmDefinitionRow {
   x_factor: number;
   created_at: string;
   updated_at: string;
+  /** AI behavior configuration (from database) */
+  ai_config?: {
+    behaviors?: string[];
+    detectionRange?: number;
+    attackRange?: number;
+    angrySpeedMultiplier?: number;
+    angryDurationMs?: number;
+    attackCooldownMs?: number;
+    custom?: Record<string, unknown>;
+  } | null;
 }
 
 export interface ActiveShwarmRow {
