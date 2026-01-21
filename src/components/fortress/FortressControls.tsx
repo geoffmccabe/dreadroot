@@ -1133,8 +1133,12 @@ export function FirstPersonControls({
       const dt = Math.min(delta, MAX_PHYSICS_DELTA);
       const SURFACE_EPS = 0.002;
       
+      // Gliding: if falling (negative velocity) and holding right mouse, reduce gravity by half
+      const isGliding = keys.current.rightMouse && velocity.current.y < 0 && !onGround.current;
+      const effectiveGravity = isGliding ? 4.9 : 9.8; // Half gravity when gliding
+      
       // Gravity and jumping
-      velocity.current.y -= 9.8 * dt;
+      velocity.current.y -= effectiveGravity * dt;
 
       // Player dimensions
       const playerRadius = 0.3;

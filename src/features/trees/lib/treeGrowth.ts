@@ -524,7 +524,8 @@ function addSpikeWithSymmetry(
     
     for (const pos of positions) {
       const key = `${pos.x},${actualY},${pos.z}`;
-      // Always add spike blocks - mark occupied but don't skip (allows visual overlap)
+      // Skip if position is already occupied by another block
+      if (occupied.has(key)) continue;
       occupied.add(key);
       blocks.push({
         x: pos.x,
@@ -588,7 +589,8 @@ function addNobWithSymmetry(
         const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
         for (const pos of positions) {
           const key = `${pos.x},${y},${pos.z}`;
-          // Always add nob blocks - mark occupied but don't skip (allows visual overlap)
+          // Skip if position is already occupied by another block
+          if (occupied.has(key)) continue;
           occupied.add(key);
           blocks.push({ x: pos.x, y, z: pos.z, type: 'nob', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
         }
@@ -627,7 +629,8 @@ function addCrossWithSymmetry(
     const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
       const key = `${pos.x},${centerY},${pos.z}`;
-      // Always add cross blocks - mark occupied but don't skip (allows visual overlap)
+      // Skip if position is already occupied by another block
+      if (occupied.has(key)) continue;
       occupied.add(key);
       blocks.push({ x: pos.x, y: centerY, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
     }
@@ -639,7 +642,8 @@ function addCrossWithSymmetry(
     if (i === 0) continue;
     for (const pos of centerPositions) {
       const key = `${pos.x},${centerY + i},${pos.z}`;
-      // Always add cross blocks - mark occupied but don't skip (allows visual overlap)
+      // Skip if position is already occupied by another block
+      if (occupied.has(key)) continue;
       occupied.add(key);
       blocks.push({ x: pos.x, y: centerY + i, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
     }
@@ -677,7 +681,8 @@ function addShroomWithSymmetry(
     const positions = applySymmetry(shroomBaseX, shroomBaseZ, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
       const key = `${pos.x},${shroomBaseY + i},${pos.z}`;
-      // Always add shroom blocks - mark occupied but don't skip (allows visual overlap)
+      // Skip if position is already occupied by another block
+      if (occupied.has(key)) continue;
       occupied.add(key);
       blocks.push({ x: pos.x, y: shroomBaseY + i, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
     }
@@ -694,7 +699,8 @@ function addShroomWithSymmetry(
       const positions = applySymmetry(shroomBaseX + dx, shroomBaseZ + dz, baseX, baseZ, symmetryMode);
       for (const pos of positions) {
         const key = `${pos.x},${capY},${pos.z}`;
-        // Always add shroom blocks - mark occupied but don't skip (allows visual overlap)
+        // Skip if position is already occupied by another block
+        if (occupied.has(key)) continue;
         occupied.add(key);
         blocks.push({ x: pos.x, y: capY, z: pos.z, type: 'shroom_cap', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
       }
