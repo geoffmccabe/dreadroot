@@ -35,6 +35,7 @@ import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } 
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
+import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
@@ -559,6 +560,9 @@ export function FortressScene({
     }
 
     initializeAudioElements(audioRefs.current as unknown as Record<string, HTMLAudioElement>);
+    
+    // Preload spatial audio sounds
+    preloadSpatialSounds(['/ricochet_sound.mp3']);
 
     return () => {
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
@@ -990,10 +994,14 @@ export function FortressScene({
                 
                 // Ricochet off building blocks if scale is still meaningful
                 if (isBuilding && bullet.ricochetScale > 0.1) {
-                  // Play ricochet sound immediately - create new Audio to allow overlapping
-                  const ricochetSound = new Audio('/ricochet_sound.mp3');
-                  ricochetSound.volume = 0.4;
-                  ricochetSound.play().catch(() => {});
+                  // Calculate distance from camera for spatial audio
+                  const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                  const distToCamera = hitPos.distanceTo(camera.position);
+                  
+                  // Play ricochet sound with distance-based falloff
+                  playSpatialSound('/ricochet_sound.mp3', distToCamera, {
+                    baseVolume: 0.6,
+                  });
                   
                   // Calculate which face was hit for reflection normal
                   const normal = calculateHitNormal(
