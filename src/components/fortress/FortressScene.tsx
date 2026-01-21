@@ -704,6 +704,16 @@ export function FortressScene({
         
         bullet.life -= delta;
         
+        // DEBUG: Track bullet trajectory (log every ~1 second based on life)
+        const bulletAge = 30.0 - bullet.life;
+        if (Math.floor(bulletAge) !== Math.floor(bulletAge - delta) && bulletAge < 25) {
+          console.log('[Bullet Track]', 
+            'age:', bulletAge.toFixed(1) + 's',
+            'pos:', bullet.position.x.toFixed(1), bullet.position.y.toFixed(1), bullet.position.z.toFixed(1),
+            'velY:', bullet.velocityY.toFixed(2),
+            'life:', bullet.life.toFixed(1));
+        }
+        
         // Store previous pos in bullet for collision check later
         (bullet as any).prevX = prevX;
         (bullet as any).prevY = prevY;
