@@ -2,22 +2,44 @@
  * Revenge Behavior - Chase and attack player until damage is repaid
  * 
  * When damaged, shnakes pursue the player relentlessly until they deal
- * equal or greater damage back. They ignore tree constraints and move
- * at 2x speed with angry undulations. Once satisfied, they transition to returnHome behavior.
+ * equal or greater damage back. They climb down from trees, fall to ground,
+ * and chase on foot. Once satisfied, they transition to returnHome behavior.
+ * 
+ * Timeout: Revenge expires after 3 minutes if no damage dealt or received.
+ * Damage resets the timer.
  */
 
 import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
+
+/** How long revenge lasts without damage exchange (3 minutes) */
+export const REVENGE_TIMEOUT_MS = 3 * 60 * 1000;
+
+export interface RevengeTarget {
+  damageReceived: number;
+  damageDealt: number;
+  startedAt: number;
+  lastDamageAt: number; // Tracks when damage was last given/received
+}
 
 export const RevengeBehavior: BehaviorModule = {
   id: 'revenge',
   name: 'Revenge',
   
   evaluate(ctx: BehaviorContext): number {
-    // Check if we have an active revenge target
-    const revengeTarget = ctx.state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
+    const revengeTarget = ctx.state.revengeTarget as RevengeTarget | null;
     
     if (!revengeTarget) {
       return 0; // No revenge needed
+    }
+    
+    const now = performance.now();
+    
+    // Check timeout - give up after 3 minutes without damage exchange
+    if (now - revengeTarget.lastDamageAt > REVENGE_TIMEOUT_MS) {
+      // Timeout expired - clear revenge and return home
+      ctx.state.revengeTarget = null;
+      ctx.state.returningHome = true;
+      return 0;
     }
     
     // Still seeking revenge (haven't dealt enough damage back)
@@ -26,6 +48,8 @@ export const RevengeBehavior: BehaviorModule = {
     }
     
     // Revenge is satisfied, let returnHome take over
+    ctx.state.revengeTarget = null;
+    ctx.state.returningHome = true;
     return 0;
   },
   
@@ -45,10 +69,18 @@ export const RevengeBehavior: BehaviorModule = {
   },
   
   tick(ctx: BehaviorContext, _deltaMs: number): BehaviorResult {
-    const revengeTarget = ctx.state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
+    const revengeTarget = ctx.state.revengeTarget as RevengeTarget | null;
     
     if (!revengeTarget || revengeTarget.damageDealt >= revengeTarget.damageReceived) {
       // Revenge satisfied! Mark for return home
+      ctx.state.returningHome = true;
+      return { kind: 'idle' };
+    }
+    
+    // Check timeout
+    const now = performance.now();
+    if (now - revengeTarget.lastDamageAt > REVENGE_TIMEOUT_MS) {
+      ctx.state.revengeTarget = null;
       ctx.state.returningHome = true;
       return { kind: 'idle' };
     }
@@ -62,15 +94,15 @@ export const RevengeBehavior: BehaviorModule = {
       const damage = (ctx.custom.damage as number) ?? 10;
       const knockback = (ctx.custom.knockback as number) ?? 5;
       
-      // Calculate direction to player
+      // Calculate direction to player (primarily HORIZONTAL for knockback)
       const dx = ctx.px - ctx.ex;
-      const dy = ctx.py - ctx.ey;
       const dz = ctx.pz - ctx.ez;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const horizDist = Math.sqrt(dx * dx + dz * dz);
       
-      const dirX = dist > 0.1 ? dx / dist : 0;
-      const dirY = dist > 0.1 ? dy / dist : 0;
-      const dirZ = dist > 0.1 ? dz / dist : 1;
+      // Horizontal knockback with minimal vertical component
+      const dirX = horizDist > 0.1 ? dx / horizDist : 0;
+      const dirY = 0.1; // Small upward component only
+      const dirZ = horizDist > 0.1 ? dz / horizDist : 1;
       
       return {
         kind: 'attack',
@@ -82,7 +114,11 @@ export const RevengeBehavior: BehaviorModule = {
       };
     }
     
-    // Chase the player at 2x speed with angry undulations
+    // MOVEMENT STRATEGY:
+    // 1. If shnake is above ground (ey > 0), climb DOWN first
+    // 2. Once at ground level, chase player horizontally
+    // 3. If player is elevated, climb UP toward them
+    
     const angrySpeedMultiplier = (ctx.custom.angrySpeedMultiplier as number) ?? 2.0;
     
     // Trigger continuous angry undulations during chase
@@ -90,16 +126,26 @@ export const RevengeBehavior: BehaviorModule = {
       (ctx.custom.onTriggerWiggle as () => void)();
     }
     
+    // Calculate target position based on current height
+    let targetY = ctx.py;
+    
+    // If we're high up (above ground), prioritize getting to ground level first
+    // Then pursue player. This prevents flying through the sky.
+    if (ctx.ey > 1 && ctx.py <= 1) {
+      // Player is on ground but we're up high - descend first
+      targetY = 0;
+    }
+    
     return {
       kind: 'move',
       tx: ctx.px,
-      ty: ctx.py,
+      ty: targetY,
       tz: ctx.pz,
       speedMultiplier: angrySpeedMultiplier,
     };
   },
   
-  exit(ctx: BehaviorContext): void {
+  exit(_ctx: BehaviorContext): void {
     // Keep revenge state - it gets cleared when returning home completes
     // or when shnake dies
   },
@@ -110,20 +156,25 @@ export const RevengeBehavior: BehaviorModule = {
  * Call this when the shnake takes damage.
  */
 export function initializeRevenge(state: Record<string, unknown>, damageReceived: number): void {
-  const existing = state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
+  const now = performance.now();
+  const existing = state.revengeTarget as RevengeTarget | null;
   
   if (existing) {
-    // Add to existing revenge
+    // Add to existing revenge and reset timer
     state.revengeTarget = {
       damageReceived: existing.damageReceived + damageReceived,
       damageDealt: existing.damageDealt,
-    };
+      startedAt: existing.startedAt,
+      lastDamageAt: now, // Reset timeout
+    } as RevengeTarget;
   } else {
     // Start new revenge
     state.revengeTarget = {
       damageReceived,
       damageDealt: 0,
-    };
+      startedAt: now,
+      lastDamageAt: now,
+    } as RevengeTarget;
   }
 }
 
@@ -132,12 +183,15 @@ export function initializeRevenge(state: Record<string, unknown>, damageReceived
  * Call this when the shnake successfully hits the player.
  */
 export function recordRevengeDamageDealt(state: Record<string, unknown>, damageDealt: number): void {
-  const existing = state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
+  const now = performance.now();
+  const existing = state.revengeTarget as RevengeTarget | null;
   
   if (existing) {
     state.revengeTarget = {
       damageReceived: existing.damageReceived,
       damageDealt: existing.damageDealt + damageDealt,
-    };
+      startedAt: existing.startedAt,
+      lastDamageAt: now, // Reset timeout on successful hit
+    } as RevengeTarget;
   }
 }
