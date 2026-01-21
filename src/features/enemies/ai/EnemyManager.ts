@@ -129,6 +129,7 @@ class EnemyManagerClass {
       return;
     }
     
+    const type = adapter.getType();
     this.enemies.set(id, {
       enemy,
       adapter: adapter as EnemyAdapter<unknown>,
@@ -136,6 +137,8 @@ class EnemyManagerClass {
       lastTickTime: performance.now(),
       currentBehaviorId: null,
       behaviorState: {}, // Persistent state for behaviors
+      // Pre-allocated spatial entry - reused each frame (no object allocation)
+      spatialEntry: { id, type, x: 0, y: 0, z: 0 },
     });
   }
   
@@ -215,14 +218,12 @@ class EnemyManagerClass {
         continue;
       }
       
-      // Add to spatial index for neighbor queries
-      this.spatialEntries.push({
-        id,
-        type: reg.adapter.getType(),
-        x: pos.x,
-        y: pos.y,
-        z: pos.z,
-      });
+      // Update pre-allocated spatial entry (zero allocation) and add to array
+      const entry = reg.spatialEntry;
+      entry.x = pos.x;
+      entry.y = pos.y;
+      entry.z = pos.z;
+      this.spatialEntries.push(entry);
       
       // Check if enough time has passed for this LOD level
       const interval = TICK_INTERVALS_MS[newLod];
@@ -237,7 +238,8 @@ class EnemyManagerClass {
       
       // Build context and run brain (pass persistent behaviorState)
       const ctx = reg.adapter.buildContext(reg.enemy, this.sharedContext, reg.behaviorState);
-      ctx.nearbyAllies = this.spatialIndex.countNearby(pos.x, pos.z, 16, ctx.entityType);
+      // NOTE: nearbyAllies computation removed - no behaviors currently use it.
+      // When flocking is added, compute lazily only for behaviors that need it.
       
       const behaviors = reg.adapter.getBehaviors(reg.enemy);
       const { result, newBehaviorId } = this.brain.tick(

@@ -102,7 +102,14 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
   },
   
   getPosition(shwarm: ShwarmWithAI): { x: number; y: number; z: number } {
-    // Calculate center of mass of alive blocks
+    // OPTIMIZATION: Use cached center if available (set by useShwarmMovement)
+    // This avoids O(blockCount) iteration every frame for LOD checks
+    const cached = (shwarm as any).__aiCenter;
+    if (cached && typeof cached.x === 'number') {
+      return cached;
+    }
+    
+    // Fallback: calculate center of mass (only if cache not present)
     let cx = 0, cy = 0, cz = 0, count = 0;
     
     for (const block of shwarm.blocks) {
@@ -115,7 +122,6 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
     }
     
     if (count === 0) {
-      // Fallback to first block position
       const first = shwarm.blocks[0];
       return {
         x: first?.position.x ?? 0,

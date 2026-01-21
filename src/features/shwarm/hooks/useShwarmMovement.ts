@@ -212,10 +212,9 @@ export function useShwarmMovement({
               block.position.y + halfSize,
               block.position.z + halfSize
             );
-            // Remove and re-insert to update spatial grid position
-            collisionGrid.remove(target.collider);
+            // OPTIMIZATION: Use update() which skips remove+insert if cell unchanged
             target.collider.set(_colliderMin, _colliderMax);
-            collisionGrid.insert(target.collider);
+            collisionGrid.update(target.collider);
           }
 
           // Continuous player collision check (not just during phases)
@@ -289,6 +288,15 @@ export function useShwarmMovement({
         if (aliveCount > 0) {
           _centerOfMass.divideScalar(aliveCount);
         }
+        
+        // Cache center of mass for ShwarmAdapter.getPosition() O(1) lookup
+        // This avoids O(blockCount) iteration every frame for LOD checks
+        if (!(shwarm as any).__aiCenter) {
+          (shwarm as any).__aiCenter = { x: 0, y: 0, z: 0 };
+        }
+        (shwarm as any).__aiCenter.x = _centerOfMass.x;
+        (shwarm as any).__aiCenter.y = _centerOfMass.y;
+        (shwarm as any).__aiCenter.z = _centerOfMass.z;
 
         for (const block of blocks) {
           if (!block.isAlive) continue;
