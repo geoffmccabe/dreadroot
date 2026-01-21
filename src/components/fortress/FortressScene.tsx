@@ -784,7 +784,8 @@ export function FortressScene({
             // Use ray-AABB intersection to prevent bullets tunneling through targets
             // Check the bullet's travel path this frame, not just its current position
             const SHWARM_HALF_SIZE = 0.35; // Slightly larger for forgiving hit detection
-            const BULLET_DAMAGE = 25;
+            const BASE_BULLET_DAMAGE = 25;
+            const MUZZLE_VELOCITY = 100; // Original bullet speed for damage scaling
             
             // Calculate bullet's actual displacement this frame (not direction-based)
             const moveDistanceXZ = bullet.speed * delta;
@@ -867,8 +868,13 @@ export function FortressScene({
                   hit = true;
                   needsBulletRender = true;
                   
+                  // Calculate damage based on current velocity vs muzzle velocity
+                  // If bullet has slowed from ricochets, damage is proportionally reduced
+                  const velocityRatio = bullet.speed / MUZZLE_VELOCITY;
+                  const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
+                  
                   // Apply damage and get actual damage dealt (capped at remaining health)
-                  const { actualDamage } = damageBlock(shwarm.id, block.id, BULLET_DAMAGE);
+                  const { actualDamage } = damageBlock(shwarm.id, block.id, scaledDamage);
                   
                   // Award points based on actual damage dealt
                   if (actualDamage > 0 && onPointsEarned) {
@@ -979,12 +985,10 @@ export function FortressScene({
                 
                 // Ricochet off building blocks if scale is still meaningful
                 if (isBuilding && bullet.ricochetScale > 0.1) {
-                  // Play ricochet sound immediately
-                  const ricochetSound = audioRefs.current.ricochet;
-                  if (ricochetSound) {
-                    ricochetSound.currentTime = 0;
-                    ricochetSound.play().catch(() => {});
-                  }
+                  // Play ricochet sound immediately - create new Audio to allow overlapping
+                  const ricochetSound = new Audio('/ricochet_sound.mp3');
+                  ricochetSound.volume = 0.4;
+                  ricochetSound.play().catch(() => {});
                   
                   // Calculate which face was hit for reflection normal
                   const normal = calculateHitNormal(
@@ -1020,8 +1024,8 @@ export function FortressScene({
                   bullet.speed *= 0.75;
                   bullet.velocityY *= 0.75;
                   
-                  // Reduce impact scale by 25% for next ricochet
-                  bullet.ricochetScale *= 0.75;
+                  // Reduce impact scale by 50% for next ricochet
+                  bullet.ricochetScale *= 0.5;
                   
                   // Reposition bullet slightly outside block to prevent re-collision
                   bullet.position.set(
