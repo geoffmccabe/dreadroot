@@ -131,7 +131,7 @@ export interface SceneProps {
 
 // First person controls props
 export interface FirstPersonControlsProps {
-  onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3) => void;
+  onShoot?: (origin: THREE.Vector3, direction: THREE.Vector3, isPentabullet?: boolean) => void;
   showCrosshairs: boolean;
   audioRefs: Omit<AudioRefs, 'woodenThud' | 'wispBoom' | 'wispCheer'>;
   playAudio: (audio: HTMLAudioElement) => Promise<void>;
@@ -188,6 +188,7 @@ export interface Bullet {
   tier: number;       // Bullet tier for impact scaling
   color: string;      // Hex color for impact effect
   ricochetScale: number; // Starts at 1.0, multiplied by 0.75 each ricochet
+  isPentabullet: boolean; // Pentabullet shots have 3x larger/longer impacts
 }
 
 // Flying coin interface

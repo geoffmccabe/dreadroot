@@ -566,6 +566,7 @@ export function FortressScene({
     tier: number;
     color: string;
     ricochetScale: number;
+    isPentabullet: boolean;
   };
   
   // Pre-allocate bullet pool to avoid per-shot allocations
@@ -578,7 +579,8 @@ export function FortressScene({
       life: 0,
       tier: 1,
       color: '#FFFF00',
-      ricochetScale: 1.0
+      ricochetScale: 1.0,
+      isPentabullet: false
     }))
   );
   const activeBulletCount = useRef(0);
@@ -813,7 +815,7 @@ export function FortressScene({
   const getDefinitionRef = useRef(getDefinition);
   getDefinitionRef.current = getDefinition;
   
-  const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3) => {
+  const handleShoot = useCallback(async (origin: THREE.Vector3, direction: THREE.Vector3, isPentabullet: boolean = false) => {
     if (await checkWispHit()) return;
     
     // Simple bullet pool: reuse from pool by index, cycling through
@@ -848,6 +850,7 @@ export function FortressScene({
     bullet.tier = selectedBulletTier;
     bullet.color = tierDef.colors[0] || '#FFFF00'; // Use first color from tier definition
     bullet.ricochetScale = 1.0; // Full size for first impact
+    bullet.isPentabullet = isPentabullet; // Pentabullet shots have 3x larger/longer impacts
     
     // Add immediate muzzle tracer segment (0.5m forward) for real-time feedback
     const muzzleEnd = origin.clone().add(normalizedDir.clone().multiplyScalar(0.5));
@@ -1205,11 +1208,12 @@ export function FortressScene({
                       
                       // Spawn impact effect and add fire to segment
                       if (bulletImpactsRef.current) {
+                        const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
                         bulletImpactsRef.current.spawnImpact(hitPos, {
                           colors: tierDef.colors,
-                          size: tierDef.burn_width * bullet.ricochetScale,
-                          height: tierDef.burn_height * bullet.ricochetScale,
-                          duration: tierDef.burn_time,
+                          size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
+                          height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
+                          duration: tierDef.burn_time * pentaMultiplier,
                           tier: bullet.tier,
                         });
                       }
@@ -1382,11 +1386,12 @@ export function FortressScene({
                   if (bulletImpactsRef.current) {
                     const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
                     const tierDef = getDefinitionRef.current(bullet.tier);
+                    const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
                     bulletImpactsRef.current.spawnImpact(hitPos, {
                       colors: tierDef.colors,
-                      size: tierDef.burn_width * bullet.ricochetScale,
-                      height: tierDef.burn_height * bullet.ricochetScale,
-                      duration: tierDef.burn_time,
+                      size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
+                      height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
+                      duration: tierDef.burn_time * pentaMultiplier,
                       tier: bullet.tier,
                     });
                   }
@@ -1450,11 +1455,12 @@ export function FortressScene({
                 const groundPos = bullet.position.clone();
                 groundPos.y = 0.1; // Slightly above ground
                 const tierDef = getDefinitionRef.current(bullet.tier);
+                const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
                 bulletImpactsRef.current.spawnImpact(groundPos, {
                   colors: tierDef.colors,
-                  size: tierDef.burn_width,
-                  height: tierDef.burn_height,
-                  duration: tierDef.burn_time,
+                  size: tierDef.burn_width * pentaMultiplier,
+                  height: tierDef.burn_height * pentaMultiplier,
+                  duration: tierDef.burn_time * pentaMultiplier,
                   tier: bullet.tier,
                 });
               }
