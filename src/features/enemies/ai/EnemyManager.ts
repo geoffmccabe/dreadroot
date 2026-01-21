@@ -13,7 +13,6 @@ import {
   type EnemyAdapter,
   type RegisteredEnemy,
   type SharedContext,
-  type BehaviorResult,
   AILodLevel,
   LOD_CONFIG,
   TICK_INTERVALS_MS,
@@ -110,6 +109,7 @@ class EnemyManagerClass {
       lodLevel: AILodLevel.FULL,
       lastTickTime: performance.now(),
       currentBehaviorId: null,
+      behaviorState: {}, // Persistent state for behaviors
     });
   }
   
@@ -155,7 +155,7 @@ class EnemyManagerClass {
   /**
    * Main tick function - called every frame by frameLoop.
    */
-  private tick(delta: number, elapsedTime: number): void {
+  private tick(_delta: number, elapsedTime: number): void {
     const now = performance.now();
     const deltaMs = (now - this.lastFrameTime);
     this.lastFrameTime = now;
@@ -209,8 +209,8 @@ class EnemyManagerClass {
       // Update last tick time
       reg.lastTickTime = now;
       
-      // Build context and run brain
-      const ctx = reg.adapter.buildContext(reg.enemy, this.sharedContext);
+      // Build context and run brain (pass persistent behaviorState)
+      const ctx = reg.adapter.buildContext(reg.enemy, this.sharedContext, reg.behaviorState);
       ctx.nearbyAllies = this.spatialIndex.countNearby(pos.x, pos.z, 16, ctx.entityType);
       
       const behaviors = reg.adapter.getBehaviors(reg.enemy);

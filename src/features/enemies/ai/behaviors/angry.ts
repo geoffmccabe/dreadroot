@@ -2,6 +2,7 @@
  * Angry Behavior - Aggressive pursuit after being damaged
  * 
  * Time-limited state with increased speed and aggression.
+ * State is stored in ctx.state (persistent across ticks).
  */
 
 import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
@@ -36,8 +37,8 @@ export const AngryBehavior: BehaviorModule = {
       (ctx.custom.onBehaviorChange as (behavior: string) => void)('angry');
     }
     
-    // Mark angry state for adapters that need it
-    ctx.custom.isAngry = true;
+    // Mark angry state in persistent state
+    ctx.state.isAngry = true;
   },
   
   tick(ctx: BehaviorContext, _deltaMs: number): BehaviorResult {
@@ -60,6 +61,6 @@ export const AngryBehavior: BehaviorModule = {
   },
   
   exit(ctx: BehaviorContext): void {
-    ctx.custom.isAngry = false;
+    ctx.state.isAngry = false;
   },
 };

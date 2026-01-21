@@ -68,8 +68,11 @@ export interface BehaviorContext {
   nearbyAllies: number;
   nearbyEnemies: number;
   
-  // Enemy-specific data (avoids interface explosion)
+  // Enemy-specific config data (read-only, from adapter)
   custom: Record<string, unknown>;
+  
+  // Persistent behavior state (read/write, survives across ticks)
+  state: BehaviorState;
 }
 
 /**
@@ -87,6 +90,25 @@ export interface SharedContext {
   scratchVec1: THREE.Vector3;
   scratchVec2: THREE.Vector3;
   scratchVec3: THREE.Vector3;
+}
+
+/**
+ * Persistent state for behaviors, stored per-enemy.
+ * Behaviors can read/write to this object and it persists across ticks.
+ */
+export interface BehaviorState {
+  // Wander behavior state
+  wanderTargetX?: number;
+  wanderTargetY?: number;
+  wanderTargetZ?: number;
+  wanderPauseUntil?: number;
+  
+  // Angry behavior state
+  isAngry?: boolean;
+  angryUntil?: number;
+  
+  // Generic storage for custom behaviors
+  [key: string]: unknown;
 }
 
 // =============================================================================
@@ -160,8 +182,8 @@ export interface EnemyAdapter<TEnemy> {
   /** Get current position for LOD calculations */
   getPosition(enemy: TEnemy): { x: number; y: number; z: number };
   
-  /** Build behavior context from enemy state */
-  buildContext(enemy: TEnemy, shared: SharedContext): BehaviorContext;
+  /** Build behavior context from enemy state (state is passed in for persistence) */
+  buildContext(enemy: TEnemy, shared: SharedContext, state: BehaviorState): BehaviorContext;
   
   /** Apply behavior result to enemy (movement, attack, etc.) */
   applyResult(enemy: TEnemy, result: BehaviorResult, deltaMs: number): void;
@@ -227,4 +249,6 @@ export interface RegisteredEnemy<TEnemy = unknown> {
   lodLevel: AILodLevel;
   lastTickTime: number;
   currentBehaviorId: string | null;
+  /** Persistent state for behaviors - survives across ticks */
+  behaviorState: BehaviorState;
 }

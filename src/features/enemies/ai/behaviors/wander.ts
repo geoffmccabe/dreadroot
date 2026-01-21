@@ -2,18 +2,11 @@
  * Wander Behavior - Random movement within bounds
  * 
  * Used when player is not nearby and enemy isn't threatened.
+ * State is stored in ctx.state (persistent across ticks).
  */
 
 import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
 import { LOD_CONFIG } from '../types';
-
-// Wander state stored in ctx.custom
-interface WanderState {
-  targetX?: number;
-  targetY?: number;
-  targetZ?: number;
-  pauseUntil?: number;
-}
 
 export const WanderBehavior: BehaviorModule = {
   id: 'wander',
@@ -35,29 +28,27 @@ export const WanderBehavior: BehaviorModule = {
   },
   
   enter(ctx: BehaviorContext): void {
-    // Initialize wander state
-    const state = ctx.custom as WanderState;
-    state.targetX = undefined;
-    state.targetY = undefined;
-    state.targetZ = undefined;
-    state.pauseUntil = undefined;
+    // Clear wander state on entry
+    ctx.state.wanderTargetX = undefined;
+    ctx.state.wanderTargetY = undefined;
+    ctx.state.wanderTargetZ = undefined;
+    ctx.state.wanderPauseUntil = undefined;
   },
   
   tick(ctx: BehaviorContext, _deltaMs: number): BehaviorResult {
-    const state = ctx.custom as WanderState;
     const now = performance.now();
     
     // Check if pausing
-    if (state.pauseUntil && now < state.pauseUntil) {
+    if (ctx.state.wanderPauseUntil && now < ctx.state.wanderPauseUntil) {
       return { kind: 'idle' };
     }
     
     // Check if we need a new target
     const needsNewTarget = 
-      state.targetX === undefined ||
-      state.targetY === undefined ||
-      state.targetZ === undefined ||
-      isNearTarget(ctx, state);
+      ctx.state.wanderTargetX === undefined ||
+      ctx.state.wanderTargetY === undefined ||
+      ctx.state.wanderTargetZ === undefined ||
+      isNearTarget(ctx);
     
     if (needsNewTarget) {
       // Pick random destination within wander radius
@@ -65,40 +56,39 @@ export const WanderBehavior: BehaviorModule = {
       const angle = Math.random() * Math.PI * 2;
       const dist = 2 + Math.random() * (wanderRadius - 2);
       
-      state.targetX = ctx.ex + Math.cos(angle) * dist;
-      state.targetZ = ctx.ez + Math.sin(angle) * dist;
-      state.targetY = ctx.ey; // Stay at same height (adapters may override)
+      ctx.state.wanderTargetX = ctx.ex + Math.cos(angle) * dist;
+      ctx.state.wanderTargetZ = ctx.ez + Math.sin(angle) * dist;
+      ctx.state.wanderTargetY = ctx.ey; // Stay at same height (adapters may override)
       
       // Random pause between movements
       if (Math.random() < 0.3) {
-        state.pauseUntil = now + 1000 + Math.random() * 2000;
+        ctx.state.wanderPauseUntil = now + 1000 + Math.random() * 2000;
         return { kind: 'idle' };
       }
     }
     
     return {
       kind: 'move',
-      tx: state.targetX!,
-      ty: state.targetY!,
-      tz: state.targetZ!,
+      tx: ctx.state.wanderTargetX!,
+      ty: ctx.state.wanderTargetY!,
+      tz: ctx.state.wanderTargetZ!,
       speedMultiplier: 0.5, // Wander slowly
     };
   },
   
   exit(ctx: BehaviorContext): void {
     // Clear wander state
-    const state = ctx.custom as WanderState;
-    state.targetX = undefined;
-    state.targetY = undefined;
-    state.targetZ = undefined;
-    state.pauseUntil = undefined;
+    ctx.state.wanderTargetX = undefined;
+    ctx.state.wanderTargetY = undefined;
+    ctx.state.wanderTargetZ = undefined;
+    ctx.state.wanderPauseUntil = undefined;
   },
 };
 
-function isNearTarget(ctx: BehaviorContext, state: WanderState): boolean {
-  if (state.targetX === undefined) return true;
+function isNearTarget(ctx: BehaviorContext): boolean {
+  if (ctx.state.wanderTargetX === undefined) return true;
   
-  const dx = ctx.ex - state.targetX;
-  const dz = ctx.ez - state.targetZ!;
+  const dx = ctx.ex - ctx.state.wanderTargetX;
+  const dz = ctx.ez - (ctx.state.wanderTargetZ ?? ctx.ez);
   return dx * dx + dz * dz < 1; // Within 1 block
 }
