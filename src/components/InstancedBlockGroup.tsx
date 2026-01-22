@@ -6,8 +6,10 @@ import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
+import { canonicalizeTextureUrl } from '@/lib/renderKeys';
 
 // Global texture cache - shared across all instanced groups
+// C3: Cache keyed by CANONICAL texture URL to prevent signed URL churn
 const textureCache = new Map<string, { 
   texture: THREE.Texture; 
   isAnimated: boolean;
@@ -61,7 +63,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
 }) => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.Material | null>(null);
-  const hasIncrementedRef = useRef(false);
+  // C3: Track last texture cache key for proper ref counting on texture changes
+  const lastTextureCacheKeyRef = useRef<string>('');
   const { camera } = useThree();
   const outlineMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
   const hoveredMaterialRef = useRef<THREE.Material | null>(null);
@@ -89,16 +92,16 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const textureUrl = textureOverride || blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, isAnimated } = useAnimatedTexture(textureUrl);
   
-  // Get or cache the texture
+  // C3: Canonical texture cache key - prevents signed URL query param churn
+  const textureCacheKey = canonicalizeTextureUrl(textureUrl) || textureUrl;
+  
+  // Get or cache the texture using canonical key
   const cachedTextureData = useMemo(() => {
     if (!loadedTexture) return null;
     
-    if (textureCache.has(textureUrl)) {
-      const cached = textureCache.get(textureUrl)!;
-      if (!hasIncrementedRef.current) {
-        cached.refCount++;
-        hasIncrementedRef.current = true;
-      }
+    if (textureCache.has(textureCacheKey)) {
+      const cached = textureCache.get(textureCacheKey)!;
+      // Don't increment ref here - we handle it in the effect below
       return cached;
     }
     
@@ -110,33 +113,45 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     const cached = { 
       texture: loadedTexture, 
       isAnimated,
-      refCount: 1 
+      refCount: 0  // Start at 0, effect will increment
     };
-    textureCache.set(textureUrl, cached);
-    hasIncrementedRef.current = true;
+    textureCache.set(textureCacheKey, cached);
     
     return cached;
-  }, [loadedTexture, textureUrl, isAnimated]);
+  }, [loadedTexture, textureCacheKey, isAnimated]);
   
   const texture = cachedTextureData?.texture || null;
   const cachedIsAnimated = cachedTextureData?.isAnimated || false;
   
-  // Cleanup: Decrement ref count when component unmounts
+  // C3: Proper ref counting that handles texture URL changes safely
   useEffect(() => {
+    if (!textureCacheKey) return;
+    
+    const cached = textureCache.get(textureCacheKey);
+    if (cached) {
+      // Increment ref for new/current texture
+      cached.refCount++;
+      lastTextureCacheKeyRef.current = textureCacheKey;
+    }
+    
     return () => {
-      if (!textureUrl) return;
+      // Decrement ref for this texture on cleanup or texture change
+      const keyToDecrement = lastTextureCacheKeyRef.current;
+      if (!keyToDecrement) return;
       
-      const cached = textureCache.get(textureUrl);
-      if (cached) {
-        cached.refCount--;
+      const cachedToDecrement = textureCache.get(keyToDecrement);
+      if (cachedToDecrement) {
+        cachedToDecrement.refCount--;
         
-        if (cached.refCount <= 0) {
-          cached.texture.dispose();
-          textureCache.delete(textureUrl);
+        if (cachedToDecrement.refCount <= 0) {
+          cachedToDecrement.texture.dispose();
+          textureCache.delete(keyToDecrement);
         }
       }
+      
+      lastTextureCacheKeyRef.current = '';
     };
-  }, [textureUrl]);
+  }, [textureCacheKey]);
   
   // Create material based on block properties
   const material = useMemo(() => {

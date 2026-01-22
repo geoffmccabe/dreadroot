@@ -1,7 +1,21 @@
 import React, { useCallback } from 'react';
-import { useInitialization } from '@/contexts/InitializationContext';
+import { useInitialization, InitStepStatus } from '@/contexts/InitializationContext';
 import { Copy, Check } from 'lucide-react';
 import fortressImage from '@/assets/fortress_loading_screen.webp';
+
+// Status indicator component
+const StatusIndicator: React.FC<{ status: InitStepStatus }> = ({ status }) => {
+  switch (status) {
+    case 'done':
+      return <span className="text-emerald-400">✓</span>;
+    case 'running':
+      return <span className="text-yellow-400 animate-pulse">…</span>;
+    case 'error':
+      return <span className="text-red-400">✗</span>;
+    default:
+      return null;
+  }
+};
 
 export function InitializationOverlay() {
   const {
@@ -29,7 +43,9 @@ export function InitializationOverlay() {
     
     const lines = steps.map(step => {
       const countStr = step.count !== undefined ? ` ${step.count}` : '';
-      return `[${step.file}] ${step.message}${countStr} t[${formatTime(step.durationSecs)} secs]`;
+      const statusStr = step.status === 'done' ? '✓' : step.status === 'running' ? '…' : '✗';
+      const errorStr = step.errorMessage ? ` [${step.errorMessage}]` : '';
+      return `${statusStr} [${step.file}] ${step.message}${countStr}${errorStr} t[${formatTime(step.durationSecs)} secs]`;
     });
     
     if (!isInitializing && totalDurationSecs > 0) {
@@ -94,14 +110,22 @@ export function InitializationOverlay() {
               <p className="text-white/60 text-center py-4">Starting initialization...</p>
             ) : (
               <div className="space-y-1.5 font-mono text-xs md:text-sm">
-                {steps.map((step, index) => (
-                  <div key={index} className="text-white/90">
-                    <span className="text-cyan-400">[{step.file}]</span>{' '}
-                    <span className="text-white">{step.message}</span>
-                    {step.count !== undefined && (
-                      <span className="text-emerald-400 font-bold"> {step.count}</span>
-                    )}
-                    <span className="text-yellow-400/80 ml-2">t[{formatTime(step.durationSecs)} secs]</span>
+                {steps.map((step) => (
+                  <div key={step.id} className="text-white/90 flex items-start gap-2">
+                    <span className="w-4 flex-shrink-0">
+                      <StatusIndicator status={step.status} />
+                    </span>
+                    <span className="flex-1">
+                      <span className="text-cyan-400">[{step.file}]</span>{' '}
+                      <span className="text-white">{step.message}</span>
+                      {step.count !== undefined && (
+                        <span className="text-emerald-400 font-bold"> {step.count}</span>
+                      )}
+                      {step.errorMessage && (
+                        <span className="text-red-400"> [{step.errorMessage}]</span>
+                      )}
+                      <span className="text-yellow-400/80 ml-2">t[{formatTime(step.durationSecs)} secs]</span>
+                    </span>
                   </div>
                 ))}
               </div>

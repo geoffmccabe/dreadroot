@@ -7,6 +7,7 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import { isInvisiblock, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { getMaterialVariantId, fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
 // Use white color so textures render at full brightness without tinting
@@ -41,6 +42,23 @@ export const fallingBlocksState = new Map<string, { currentY: number; velocity: 
 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
+
+// C2: Visual signature helpers - order-insensitive, ID-independent
+function blockSig(b: PlacedBlock): string {
+  const tx = canonicalizeTextureUrl(b.texture_url || '');
+  return `${b.position_x},${b.position_y},${b.position_z}|${b.block_type}|${tx}|${(b as any).branch_depth ?? ''}`;
+}
+
+function computeGroupSignature(arr: PlacedBlock[]): string {
+  let xor = 0;
+  let sum = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const h = parseInt(fnv1a32(blockSig(arr[i])), 16) >>> 0;
+    xor ^= h;
+    sum = (sum + h) >>> 0;
+  }
+  return `${arr.length}:${xor.toString(16)}:${sum.toString(16)}`;
+}
 
 // Shared geometry for invisiblock outlines (reused across all invisiblocks)
 const invisiblockEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
@@ -223,13 +241,13 @@ export const PlacedBlocks: React.FC<{
       deduped.push(block);
     }
     
-    // Count texture variants per block_type
+    // Count texture variants per block_type - use CANONICAL URLs
     const variantsByType = new Map<string, Set<string>>();
     for (const b of deduped) {
       if (!b.texture_url) continue;
       let s = variantsByType.get(b.block_type);
       if (!s) variantsByType.set(b.block_type, (s = new Set()));
-      s.add(b.texture_url);
+      s.add(canonicalizeTextureUrl(b.texture_url));
     }
     
     // Temporary grouping to build signatures
@@ -247,29 +265,30 @@ export const PlacedBlocks: React.FC<{
       const variantCount = variantsByType.get(block.block_type)?.size ?? 0;
       const allowOverride = variantCount > 0 && variantCount <= MAX_TEXTURE_VARIANTS_PER_TYPE;
       
-      // Create group key - cap variants to prevent excessive InstancedBlockGroup components
-      const groupKey = allowOverride && block.texture_url 
-        ? `${block.block_type}|${block.texture_url}` 
-        : block.block_type;
+      // C2: Create stable group key using canonical texture URL hash
+      const groupKey = allowOverride && block.texture_url
+        ? getMaterialVariantId(block.block_type, block.texture_url)
+        : `${block.block_type}:default`;
       
       const arr = tempGroups.get(groupKey) || [];
       arr.push(block);
       tempGroups.set(groupKey, arr);
     }
     
-    // B2.4: Build stable arrays - only create new array if signature changed
+    // B2.4 + C2: Build stable arrays - only create new array if VISUAL signature changed
     const cache = groupCacheRef.current;
     const usedKeys = new Set<string>();
     
     for (const [groupKey, blocksArr] of tempGroups) {
       usedKeys.add(groupKey);
       
-      // Build cheap signature: count + first/last block IDs
-      const sig = blocksArr.length === 0 ? 'empty' : 
-        `${blocksArr.length}:${blocksArr[0].id}:${blocksArr[blocksArr.length - 1].id}`;
+      // C2: Visual, order-insensitive signature (XOR + sum of hashes)
+      const sig = blocksArr.length === 0 ? 'empty' : computeGroupSignature(blocksArr);
       
       const cached = cache.get(groupKey);
-      const textureOverride = (variantsByType.get(groupKey.split('|')[0])?.size ?? 0) <= MAX_TEXTURE_VARIANTS_PER_TYPE
+      // C2: Extract block type from new groupKey format (blockType:default or blockType:tx:hash)
+      const blockType = groupKey.split(':')[0];
+      const textureOverride = (variantsByType.get(blockType)?.size ?? 0) <= MAX_TEXTURE_VARIANTS_PER_TYPE
         ? (blocksArr[0]?.texture_url || undefined)
         : undefined;
       
@@ -290,9 +309,8 @@ export const PlacedBlocks: React.FC<{
       }
     }
     
-    // B2.4: Stable invisiblocks array
-    const invisiSig = invisibleBlocks.length === 0 ? 'empty' :
-      `${invisibleBlocks.length}:${invisibleBlocks[0].id}:${invisibleBlocks[invisibleBlocks.length - 1].id}`;
+    // B2.4 + C2: Stable invisiblocks array with visual signature
+    const invisiSig = invisibleBlocks.length === 0 ? 'empty' : computeGroupSignature(invisibleBlocks);
     
     let stableInvisiblocks: PlacedBlock[];
     if (invisiblocksCacheRef.current.signature === invisiSig) {
@@ -316,8 +334,8 @@ export const PlacedBlocks: React.FC<{
   return (
     <>
       {Array.from(groupedBlocks.entries()).map(([groupKey, { blocks: blocksOfType, textureOverride }]) => {
-        // Extract block_type from groupKey (before the | if present)
-        const blockType = groupKey.includes('|') ? groupKey.split('|')[0] : groupKey;
+        // C2: Extract block_type from new groupKey format (blockType:default or blockType:tx:hash)
+        const blockType = groupKey.split(':')[0];
         
         // For tree blocks (textureOverride OR encoded tree type), ALWAYS use fallback
         // This prevents color tinting from the blocks table (e.g., brown "trunk" block)

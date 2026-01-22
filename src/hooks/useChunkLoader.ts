@@ -4,7 +4,8 @@ import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { initLogStep } from '@/contexts/InitializationContext';
+import { initLogStep, initLogStartStep, initLogFinishStep } from '@/contexts/InitializationContext';
+import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 import * as THREE from 'three';
 
 // Configuration for chunk loading
@@ -219,16 +220,26 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   const lastDirRef = useRef<{ dx: number; dz: number } | null>(null);
 
   /**
-   * Generate a fast signature for block array comparison
-   * Uses block count + sample of IDs for O(1) quick check
+   * C4: Generate a stable visual signature for block array comparison
+   * Uses XOR + sum of per-block hashes for order-insensitivity
+   * Includes position, block_type, canonical texture_url, and branch_depth
    */
   const generateBlockSignature = useCallback((blocks: PlacedBlock[]): string => {
-    if (blocks.length === 0) return '0:';
-    // Sample first, middle, and last block IDs for a quick signature
-    const first = blocks[0]?.id || '';
-    const mid = blocks[Math.floor(blocks.length / 2)]?.id || '';
-    const last = blocks[blocks.length - 1]?.id || '';
-    return `${blocks.length}:${first}:${mid}:${last}`;
+    if (blocks.length === 0) return '0';
+
+    let xor = 0;
+    let sum = 0;
+
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      const tx = canonicalizeTextureUrl(b.texture_url || '');
+      const s = `${b.position_x},${b.position_y},${b.position_z}|${b.block_type}|${tx}|${(b as any).branch_depth ?? ''}`;
+      const h = parseInt(fnv1a32(s), 16) >>> 0;
+      xor ^= h;
+      sum = (sum + h) >>> 0;
+    }
+
+    return `${blocks.length}:${xor.toString(16)}:${sum.toString(16)}`;
   }, []);
 
   /**
@@ -1532,8 +1543,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     
     initLogStep('useChunkLoader.ts', 'Beginning chunk loader initialization...');
     
-    // CRITICAL: Remove all block colliders before clearing chunks
-    initLogStep('useChunkLoader.ts', 'Removing existing block colliders...');
+    // C7: Use start/finish for collider removal
+    const colliderStepId = initLogStartStep('useChunkLoader.ts', 'Removing existing block colliders...');
     let removedColliders = 0;
     for (const [, chunkData] of loadedChunksRef.current) {
       for (const block of chunkData.blocks) {
@@ -1541,7 +1552,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         removedColliders++;
       }
     }
-    initLogStep('useChunkLoader.ts', 'Block colliders removed', removedColliders);
+    if (colliderStepId) initLogFinishStep(colliderStepId, removedColliders);
     
     loadedChunksRef.current.clear();
     initLogStep('useChunkLoader.ts', 'Chunk cache cleared');
@@ -1562,11 +1573,12 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
     initLogStep('useChunkLoader.ts', `Loading ${totalChunks} chunks (radius ${LOAD_RADIUS})...`);
     
+    // C7: Track overall ring loading with start/finish
     for (let ring = 0; ring <= LOAD_RADIUS; ring++) {
       const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
-      initLogStep('useChunkLoader.ts', `Loading ring ${ring} (${ringChunks.length} chunks)...`);
+      const ringStepId = initLogStartStep('useChunkLoader.ts', `Loading ring ${ring} (${ringChunks.length} chunks)...`);
       await loadSpecificChunks(ringChunks);
-      initLogStep('useChunkLoader.ts', `Ring ${ring} complete`, ringChunks.length);
+      if (ringStepId) initLogFinishStep(ringStepId, ringChunks.length);
     }
     
     initLogStep('useChunkLoader.ts', 'All chunk rings loaded', totalChunks);
