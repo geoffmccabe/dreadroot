@@ -60,6 +60,10 @@ export interface ShombieInstance {
   /** Chunk coordinates where spawned */
   spawnChunkX: number;
   spawnChunkZ: number;
+  /** Scale factor (0.8 to 1.2 for ±20% variation) */
+  scale: number;
+  /** Emergence progress (0 = underground, 1 = fully emerged) */
+  emergenceProgress: number;
 }
 
 /**

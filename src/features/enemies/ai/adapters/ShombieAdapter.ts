@@ -150,7 +150,11 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
       return;
     }
     
-    if (result.kind === 'move') {
+    // Skip movement during emergence (first 3 seconds)
+    const timeSinceSpawn = performance.now() - shombie.spawnedAt;
+    const isEmerging = timeSinceSpawn < 3000;
+    
+    if (result.kind === 'move' && !isEmerging) {
       // Calculate direction to target
       _direction.set(
         result.tx - shombie.position.x,

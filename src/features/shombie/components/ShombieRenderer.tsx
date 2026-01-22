@@ -8,6 +8,7 @@ import {
   TIER_COLORS,
   HEAD_FIRE_SIZE,
   HEAD_FIRE_HEIGHT,
+  SHOMBIE_EMERGENCE_DURATION_MS,
 } from '../constants';
 import Fire from 'three-particle-fire';
 
@@ -24,6 +25,9 @@ const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
 
 // Max instances = max shombies * parts per shombie
 const MAX_INSTANCES = MAX_TOTAL_SHOMBIES * PARTS_PER_SHOMBIE;
+
+// Emergence depth (how far underground they start)
+const EMERGENCE_DEPTH = 2.0;
 
 // Texture cache
 const textureCache = new Map<string, THREE.Texture>();
@@ -163,6 +167,13 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           let instanceIndex = 0;
 
           for (const shombie of textureShombies) {
+            // Update emergence progress (0 to 1 over EMERGENCE_DURATION_MS)
+            const timeSinceSpawn = Date.now() - shombie.spawnedAt;
+            shombie.emergenceProgress = Math.min(1, timeSinceSpawn / SHOMBIE_EMERGENCE_DURATION_MS);
+            
+            // Calculate emergence offset (starts underground, rises to surface)
+            const emergenceOffset = (1 - shombie.emergenceProgress) * -EMERGENCE_DEPTH;
+            
             // Update animation phase for shambling
             shombie.animationPhase += deltaTime * 4 * (shombie.velocity.length() > 0.1 ? 1.5 : 0.5);
             
@@ -175,32 +186,34 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
 
             // Get tier color for this shombie
             const tierColor = hexToColor(getTierPrimaryColor(shombie.definition.tier));
+            
+            // Apply scale variation to all parts
+            const scale = shombie.scale;
 
             for (let partIdx = 0; partIdx < PARTS_PER_SHOMBIE; partIdx++) {
               const part = SHOMBIE_BODY_PARTS[partIdx];
               
-              // Calculate world position with animation offsets
-              let offsetX = part.offsetX;
-              let offsetY = part.offsetY;
-              let offsetZ = part.offsetZ;
+              // Calculate world position with animation offsets (scaled)
+              let offsetX = part.offsetX * scale;
+              let offsetY = part.offsetY * scale;
+              let offsetZ = part.offsetZ * scale;
               
               // Apply shambling animation per part
               if (part.name === 'head') {
-                offsetY += Math.sin(phase * 2) * 0.02;
-                offsetX += wobble;
+                offsetY += Math.sin(phase * 2) * 0.02 * scale;
+                offsetX += wobble * scale;
               } else if (part.name === 'leftArm') {
-                // Arms reach forward (zombie pose)
-                offsetZ -= 0.3;
-                offsetY += Math.sin(phase) * 0.05;
+                offsetZ -= 0.3 * scale;
+                offsetY += Math.sin(phase) * 0.05 * scale;
               } else if (part.name === 'rightArm') {
-                offsetZ -= 0.3;
-                offsetY += Math.sin(phase + Math.PI) * 0.05;
+                offsetZ -= 0.3 * scale;
+                offsetY += Math.sin(phase + Math.PI) * 0.05 * scale;
               } else if (part.name === 'leftLeg') {
-                offsetZ += Math.sin(phase) * 0.15;
+                offsetZ += Math.sin(phase) * 0.15 * scale;
               } else if (part.name === 'rightLeg') {
-                offsetZ += Math.sin(phase + Math.PI) * 0.15;
+                offsetZ += Math.sin(phase + Math.PI) * 0.15 * scale;
               } else if (part.name === 'torso') {
-                offsetX += wobble * 0.5;
+                offsetX += wobble * 0.5 * scale;
               }
 
               // Rotate offset by shombie rotation
@@ -209,7 +222,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
               
               tmpPosition.set(
                 shombie.position.x + rotatedX,
-                shombie.position.y + offsetY,
+                shombie.position.y + offsetY + emergenceOffset,
                 shombie.position.z + rotatedZ
               );
               
@@ -218,7 +231,8 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
                 headPositions.set(shombie.id, tmpPosition.clone());
               }
               
-              tmpScale.set(part.scaleX, part.scaleY, part.scaleZ);
+              // Scale all parts by the shombie's scale factor
+              tmpScale.set(part.scaleX * scale, part.scaleY * scale, part.scaleZ * scale);
               tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
               mesh.setMatrixAt(instanceIndex, tmpMatrix);
 
