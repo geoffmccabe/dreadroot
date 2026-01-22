@@ -88,3 +88,11 @@ export const RARITY_COLORS: Record<string, string> = {
 export const HEAD_FIRE_SIZE = 0.15;
 export const HEAD_FIRE_HEIGHT = 0.3;
 export const HEAD_FIRE_DURATION = 999999; // Permanent while alive
+
+// Spawn variation settings
+export const SHOMBIE_SCALE_VARIATION = 0.2; // ±20% size variation
+export const SHOMBIE_EMERGENCE_DURATION_MS = 3000; // 3 seconds to rise from ground
+export const SHOMBIE_GROUP_SPREAD_RADIUS = 3; // Blocks radius for group spawns
+
+// Keyboard spawn sequence timeout
+export const SPAWN_SEQUENCE_TIMEOUT_MS = 3000;
