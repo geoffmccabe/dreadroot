@@ -475,6 +475,7 @@ export function FortressScene({
     cameraRef,
     isEnabled: true,
     userRoles,
+    onPlayerHit: handleShombiePlayerHit,
   });
   // Shnake player hit callback - uses universal damage system
   // shnakeId is optional for compatibility with legacy system
