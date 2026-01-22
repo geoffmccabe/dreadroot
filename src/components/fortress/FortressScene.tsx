@@ -797,6 +797,14 @@ export function FortressScene({
   const playersRef = useRef(players);
   playersRef.current = players;
   
+  // Set solid black background to fix particle halo against sky
+  useEffect(() => {
+    scene.background = new THREE.Color(0x000000);
+    return () => {
+      scene.background = null;
+    };
+  }, [scene]);
+
   useEffect(() => {
     if (fogEnabled) {
       const fogStart = (visualDistance * 0.75) * CHUNK_SIZE;
