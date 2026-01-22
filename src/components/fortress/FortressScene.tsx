@@ -1460,13 +1460,16 @@ export function FortressScene({
                       const isHeadshot = hitY > headThreshold;
                       const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
                       
-                      // Calculate knockback direction (horizontal only)
-                      const dx = hitPosX - shombie.position.x;
-                      const dz = hitPosZ - shombie.position.z;
-                      const knockbackDir = new THREE.Vector3(dx, 0, dz).normalize();
+                      // Calculate knockback direction (horizontal only) - from hit toward shombie center
+                      const kbDx = shombie.position.x - hitPosX;
+                      const kbDz = shombie.position.z - hitPosZ;
+                      const knockbackDir = new THREE.Vector3(kbDx, 0, kbDz).normalize();
                       
-                      // Apply damage
-                      const killed = damageShombie(shombie.id, finalDamage, knockbackDir);
+                      // Bullet travel direction for headshot knockdown
+                      const bulletDir = new THREE.Vector3(ndx, 0, ndz).normalize();
+                      
+                      // Apply damage with headshot flag and bullet direction
+                      const killed = damageShombie(shombie.id, finalDamage, knockbackDir, isHeadshot, bulletDir);
                       
                       // Award points
                       if (onPointsEarned) {

@@ -20,6 +20,7 @@ import {
   ARM_SWING_AMPLITUDE,
   ARM_SWING_UP_DOWN,
   ELBOW_BEND_MAX,
+  KNOCKDOWN_DURATION_MS,
 } from '../constants';
 import particleFire from 'three-particle-fire';
 
@@ -40,17 +41,30 @@ const MAX_INSTANCES = MAX_TOTAL_SHOMBIES * PARTS_PER_SHOMBIE;
 // Emergence depth (how far underground they start)
 const EMERGENCE_DEPTH = 2.0;
 
-// Texture cache
+// Texture cache - keyed by URL
 const textureLoader = new THREE.TextureLoader();
-let fortressTexture: THREE.Texture | null = null;
+const textureCache = new Map<string, THREE.Texture>();
 
-// Load fortress texture
-textureLoader.load(DEFAULT_SHOMBIE_TEXTURE_URL, (texture) => {
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  fortressTexture = texture;
-});
+// Load and cache a texture
+function getOrLoadTexture(url: string): THREE.Texture | null {
+  if (!url) return null;
+  
+  if (textureCache.has(url)) {
+    return textureCache.get(url)!;
+  }
+  
+  // Start loading
+  textureLoader.load(url, (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    textureCache.set(url, texture);
+  }, undefined, (err) => {
+    console.warn('[ShombieRenderer] Failed to load texture:', url, err);
+  });
+  
+  return null; // Not loaded yet
+}
 
 // Get tier color hex string
 function getTierColorHex(tier: number): string {
@@ -170,32 +184,48 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       }
     }, []);
 
-    // Create material with fortress texture
+    // Track loaded textures per tier
+    const tierTexturesRef = useRef<Map<number, THREE.Texture | null>>(new Map());
+    
+    // Create material - textures applied per-instance via instanceColor (no texture atlas needed)
+    // We'll use white material and let the texture be applied dynamically
     const material = useMemo(() => {
       const mat = new THREE.MeshStandardMaterial({
-        color: 0xffffff, // White base - tier tint applied per instance
+        color: 0xffffff, // White base
         roughness: 0.8,
         metalness: 0.1,
       });
-      
-      // Apply texture when loaded
-      if (fortressTexture) {
-        mat.map = fortressTexture;
-        mat.needsUpdate = true;
-      } else {
-        // Retry when texture loads
-        const checkTexture = setInterval(() => {
-          if (fortressTexture) {
-            mat.map = fortressTexture;
-            mat.needsUpdate = true;
-            clearInterval(checkTexture);
-          }
-        }, 100);
-      }
-      
       materialRef.current = mat;
       return mat;
     }, []);
+    
+    // Update material texture based on first active shombie's definition
+    // (all shombies use same texture if uploaded, or fallback to default)
+    useEffect(() => {
+      if (shombies.length === 0) return;
+      
+      // Find first shombie with a texture_url
+      const shombieWithTexture = shombies.find(s => s.isActive && s.definition.texture_url);
+      const textureUrl = shombieWithTexture?.definition.texture_url || DEFAULT_SHOMBIE_TEXTURE_URL;
+      
+      const texture = getOrLoadTexture(textureUrl);
+      if (texture && materialRef.current) {
+        materialRef.current.map = texture;
+        materialRef.current.needsUpdate = true;
+      } else if (!texture) {
+        // Retry when texture loads
+        const checkInterval = setInterval(() => {
+          const loadedTexture = getOrLoadTexture(textureUrl);
+          if (loadedTexture && materialRef.current) {
+            materialRef.current.map = loadedTexture;
+            materialRef.current.needsUpdate = true;
+            clearInterval(checkInterval);
+          }
+        }, 100);
+        
+        return () => clearInterval(checkInterval);
+      }
+    }, [shombies]);
 
     // Create head fire for a shombie using three-particle-fire
     const createHeadFire = useCallback((shombieId: string, tier: number): HeadFire | null => {
@@ -333,12 +363,29 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             : 0;
           
           // Set rotation quaternion for this shombie
-          tmpEuler.set(0, shombie.rotation, 0);
-          tmpQuaternion.setFromEuler(tmpEuler);
+          // If knocked down, rotate to lie flat on back
+          if (shombie.isKnockedDown) {
+            // Calculate rotation to face knockdown direction and tilt backward
+            const knockdownAngle = shombie.knockdownDirection 
+              ? Math.atan2(shombie.knockdownDirection.x, shombie.knockdownDirection.z)
+              : shombie.rotation;
+            
+            // Smoothly interpolate tilt based on knockdown progress
+            const tiltProgress = Math.min(1, shombie.knockdownProgress * 2); // Tilt faster than slide
+            const tiltAngle = tiltProgress * (Math.PI / 2); // 90 degrees back
+            
+            tmpEuler.set(-tiltAngle, knockdownAngle, 0); // Tilt backward
+            tmpQuaternion.setFromEuler(tmpEuler);
+          } else {
+            tmpEuler.set(0, shombie.rotation, 0);
+            tmpQuaternion.setFromEuler(tmpEuler);
+          }
 
-          // Get tier color for this shombie
-          const tierColorHex = getTierColorHex(shombie.definition.tier);
-          const tierColor = new THREE.Color(tierColorHex);
+          // Don't apply tint - use textures as-is (user uploaded custom textures)
+          // Just apply a slight health-based brightness variation
+          const healthPercent = shombie.currentHealth / shombie.maxHealth;
+          const brightness = 0.7 + healthPercent * 0.3;
+          tmpColor.setRGB(brightness, brightness, brightness);
           
           // Apply scale variation to all parts
           const scale = shombie.scale;
@@ -435,10 +482,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
             mesh.setMatrixAt(instanceIndex, tmpMatrix);
 
-            // Apply tier color with health-based brightness
-            const healthPercent = shombie.currentHealth / shombie.maxHealth;
-            const brightness = 0.5 + healthPercent * 0.5;
-            tmpColor.copy(tierColor).multiplyScalar(brightness);
+            // Apply brightness-only coloring (no tier tint - use texture as-is)
             mesh.setColorAt(instanceIndex, tmpColor);
 
             instanceIndex++;
