@@ -799,13 +799,7 @@ export function FortressScene({
   const playersRef = useRef(players);
   playersRef.current = players;
   
-  // Set solid black background to fix particle halo against sky
-  useEffect(() => {
-    scene.background = new THREE.Color(0x000000);
-    return () => {
-      scene.background = null;
-    };
-  }, [scene]);
+  // Removed black background - was causing sky issues
 
   useEffect(() => {
     if (fogEnabled) {
