@@ -442,16 +442,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       optimisticBlock.expires_at = expiresAt;
     }
 
-    // IMMEDIATE COLLISION: Add collider to spatial grid RIGHT NOW (no waiting for React render)
-    // This prevents the player from falling through newly placed blocks
-    const collider = new THREE.Box3(
-      new THREE.Vector3(x, y, z),
-      new THREE.Vector3(x + 1, y + 1, z + 1)
-    );
-    (optimisticBlock as any).__collider = collider; // Store reference for cache reuse
-    collisionGrid.insert(collider);
-
     // INSTANT: Add to chunk loader (single source of truth) for immediate UI
+    // Collider insertion is handled by ensureBlockCollider in chunk loader
     chunkLoader.addBlockOptimistically(optimisticBlock);
     
     // Mark this chunk as recently modified locally to skip redundant realtime refetch
@@ -508,14 +500,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         branch_depth: pos.branchDepth,
       };
       
-      // IMMEDIATE COLLISION: Add collider to spatial grid RIGHT NOW
-      const collider = new THREE.Box3(
-        new THREE.Vector3(pos.x, pos.y, pos.z),
-        new THREE.Vector3(pos.x + 1, pos.y + 1, pos.z + 1)
-      );
-      block.__collider = collider;
-      collisionGrid.insert(collider);
-      
+      // Collider insertion is handled by ensureBlockCollider in chunk loader
       blocksToAdd.push(block);
     }
     

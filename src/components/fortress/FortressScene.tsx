@@ -408,12 +408,15 @@ export function FortressScene({
     }, 0);
   }, [applyDamageWithKnockback, takeDamage]);
   
-  // Universal Enemy AI system control flag
-  // Phase 6: AI controls enemy movement
-  const AI_CONTROLLED = true;
-  
-  // Only enable AI system when AI_CONTROLLED is true to avoid double-overhead
-  const ENABLE_ENEMY_AI = AI_CONTROLLED;
+// Universal Enemy AI system control flag
+// Phase A: AI system should do zero work unless explicitly enabled.
+const ENABLE_ENEMY_AI = false;
+
+// Legacy movement hooks use aiControlled to disable their internal loops.
+const AI_CONTROLLED = ENABLE_ENEMY_AI;
+
+// Debug flag for bullet tracking logs - disable in production for FPS
+const DEBUG_BULLETS = false;
   
   useShwarmMovement({
     shwarmsRef,
