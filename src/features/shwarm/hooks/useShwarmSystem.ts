@@ -258,7 +258,7 @@ export function useShwarmSystem({
           seq.step = 1;
           seq.startTime = now;
           console.log('[Shwarm] Spawn sequence started - press 1 for enemy type');
-          return;
+          // Don't return - let other enemy systems also see the ! key
         }
       }
 
@@ -270,10 +270,11 @@ export function useShwarmSystem({
           console.log('[Shwarm] Enemy type selected: shwarm - press 1-0 for tier');
           return;
         }
-        // Invalid key resets
+        // Not our type (e.g., 2=shnake, 3=shombie) - reset but DON'T return
+        // so other enemy system listeners can process their type
         seq.step = 0;
         seq.type = null;
-        return;
+        // Don't return - let other listeners handle this key
       }
 
       // Step 2: Wait for tier (1-9, 0=10)

@@ -275,11 +275,11 @@ export function useShombieSystem({
 
       // Step 0: Wait for "!" (when Shift+1 is pressed, e.key === '!')
       if (seq.step === 0) {
-        if (e.key === '!') {
+        if (e.key === '!' || (e.shiftKey && e.key === '1')) {
           seq.step = 1;
           seq.startTime = now;
           console.log('[Shombie] Spawn sequence started (!) - press 3 for shombie type');
-          return;
+          // Don't return - let other enemy systems also see the ! key
         }
         return; // Don't process other keys at step 0
       }
@@ -297,11 +297,11 @@ export function useShombieSystem({
           console.log('[Shombie] Enemy type: shombie - press 1-9 (0=10) for tier');
           return;
         }
-        // Any other key resets
-        console.log('[Shombie] Invalid type key, resetting:', e.key);
+        // Not our type (1=shwarm, 2=shnake) - reset but DON'T return
+        // so other enemy system listeners can process their type
         seq.step = 0;
         seq.tier = null;
-        return;
+        // Don't return - let other listeners handle this key
       }
 
       // Step 2: Wait for tier (1-9, 0=10)
