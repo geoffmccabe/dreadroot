@@ -81,6 +81,8 @@ const WispParticlesMesh = React.forwardRef<WispParticlesMeshHandle, { particles:
         for (const particle of particles) {
           if (count >= MAX_WISP_PARTICLES) break;
           
+          const scale = particle.scale ?? 1.0;
+          tempMatrix.makeScale(scale, scale, scale);
           tempMatrix.setPosition(particle.position.x, particle.position.y, particle.position.z);
           meshRef.current.setMatrixAt(count, tempMatrix);
           
@@ -878,14 +880,24 @@ export function FortressScene({
         if (success) {
           const explosionPos = wispPositionRef.current.clone();
           const newParticles: WispParticle[] = [];
-          for (let i = 0; i < 20; i++) {
-            const angle = (Math.PI * 2 * i) / 20;
-            const speed = 3 + Math.random() * 2;
+          const particleCount = 24;
+          
+          // Use coin-style explosion algorithm with random 3D directions
+          for (let i = 0; i < particleCount; i++) {
+            const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.3;
+            const elevation = (Math.random() - 0.3) * Math.PI * 0.8; // More upward bias
+            const speed = 4 + Math.random() * 6;
+            
             newParticles.push({
               position: explosionPos.clone(),
-              velocity: new THREE.Vector3(Math.cos(angle) * speed, Math.random() * 2 + 1, Math.sin(angle) * speed),
+              velocity: new THREE.Vector3(
+                Math.cos(angle) * Math.cos(elevation) * speed,
+                Math.sin(elevation) * speed + 2, // Extra upward boost
+                Math.sin(angle) * Math.cos(elevation) * speed
+              ),
               life: 1,
-              color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+              color: collectedBlock.properties?.color || '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+              scale: 0.25 // 1/4 diameter of normal wisp
             });
           }
           wispParticlesRef.current.push(...newParticles);

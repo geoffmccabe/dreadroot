@@ -241,4 +241,5 @@ export interface WispParticle {
   velocity: THREE.Vector3;
   life: number;
   color: string;
+  scale?: number; // Optional scale for explosion particles (default 1.0)
 }
