@@ -916,6 +916,20 @@ export function FirstPersonControls({
   useEffect(() => { onPentabulletChargeChangeRef.current = onPentabulletChargeChange; }, [onPentabulletChargeChange]);
   useEffect(() => { showCrosshairsRef.current = showCrosshairs; }, [showCrosshairs]);
 
+  // TEMPORARY: Grid size diagnostic - remove after verifying leak is fixed
+  useEffect(() => {
+    let acc = 0;
+    const unregister = frameLoop.register('grid-sizes', (dt) => {
+      acc += dt;
+      if (acc < 1) return;
+      acc = 0;
+      console.log(
+        `[GridSizes] world=${worldCollisionGrid.size} entity=${entityCollisionGrid.size}`
+      );
+    }, 1); // Low priority
+    return unregister;
+  }, []);
+
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
     const unregister = frameLoop.register('controls', (delta) => {

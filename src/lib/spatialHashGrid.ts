@@ -26,8 +26,11 @@ class SpatialHashGrid {
   // Track which cells each collider occupies for O(1) removal
   private colliderCells: Map<THREE.Box3, number[]> = new Map();
   
-  // Generation counter for deduplication (avoids Set allocation per query)
+  // Generation counter for cache invalidation - increments ONLY on mutations (insert/remove/update/clear)
   private generation = 1;
+  
+  // Per-query stamp for deduplication (avoids Set allocation per query)
+  private _queryStamp = 1;
   
   // Pre-allocated result array for zero-allocation queries
   public nearbyResult: THREE.Box3[] = new Array(MAX_NEARBY_RESULTS);
@@ -82,7 +85,11 @@ class SpatialHashGrid {
     }
     
     this.colliderCells.set(collider, indices);
-    (collider as any).__gen = 0;
+    (collider as any).__q = 0; // Query stamp for dedup
+    
+    // Increment generation to invalidate caches
+    this.generation++;
+    this.invalidateCache();
   }
   
   remove(collider: THREE.Box3): void {
@@ -112,6 +119,10 @@ class SpatialHashGrid {
     }
     
     this.colliderCells.delete(collider);
+    
+    // Increment generation to invalidate caches
+    this.generation++;
+    this.invalidateCache();
   }
   
   /**
@@ -139,10 +150,13 @@ class SpatialHashGrid {
       minCellX === maxCellX &&
       minCellZ === maxCellZ
     ) {
-      return; // No cell change, skip expensive remove+insert
+      // Bounds changed but cell didn't - still invalidate cache
+      this.generation++;
+      this.invalidateCache();
+      return;
     }
     
-    // Otherwise, reinsert
+    // Otherwise, reinsert (remove+insert already handle generation/cache)
     this.remove(collider);
     this.insert(collider);
   }
@@ -206,7 +220,8 @@ class SpatialHashGrid {
    * Returns count; caller reads grid.nearbyResult[0..count-1]
    */
   getNearby(x: number, z: number, radius: number = 2): number {
-    const gen = ++this.generation;
+    // Use query stamp for dedup (does NOT increment generation - that's for mutations only)
+    const stamp = ++this._queryStamp;
     let count = 0;
     
     const minCX = this.cellCoord(x - radius);
@@ -224,8 +239,8 @@ class SpatialHashGrid {
         
         for (let i = 0; i < cell.length; i++) {
           const collider = cell[i] as any;
-          if (collider.__gen === gen) continue;
-          collider.__gen = gen;
+          if (collider.__q === stamp) continue;
+          collider.__q = stamp;
           
           if (count < MAX_NEARBY_RESULTS) {
             this.nearbyResult[count++] = collider;
@@ -253,13 +268,14 @@ class SpatialHashGrid {
     minY: number,
     maxY: number
   ): number {
-    // Check if we can reuse cached results (same position, same Y range, same frame)
+    // Check if we can reuse cached results (same position, same Y range, no mutations since)
     // Round to 0.1 precision to catch nearly-identical queries
     const qx = Math.round(x * 10);
     const qz = Math.round(z * 10);
     const qMinY = Math.round(minY * 10);
     const qMaxY = Math.round(maxY * 10);
     
+    // Cache check BEFORE any modifications - generation only changes on mutations
     if (
       qx === this._cachedQueryX &&
       qz === this._cachedQueryZ &&
@@ -271,7 +287,8 @@ class SpatialHashGrid {
       return this._cachedQueryCount;
     }
     
-    const gen = ++this.generation;
+    // Use query stamp for dedup (does NOT increment generation - that's for mutations only)
+    const stamp = ++this._queryStamp;
     let count = 0;
     
     const minCX = this.cellCoord(x - radius);
@@ -290,8 +307,8 @@ class SpatialHashGrid {
         for (let i = 0; i < cell.length; i++) {
           const collider = cell[i] as any;
           
-          if (collider.__gen === gen) continue;
-          collider.__gen = gen;
+          if (collider.__q === stamp) continue;
+          collider.__q = stamp;
           
           // Vertical filter FIRST (cheap) — prevents huge candidate sets
           if (collider.max.y < minY || collider.min.y > maxY) continue;

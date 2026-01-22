@@ -88,11 +88,13 @@ export function useShwarmMovement({
 
   // Get or create target data for a block (including collider for player standing)
   // When AI controls, use the shared AI block targets; otherwise use local ref
+  // CRITICAL: Reuse same Box3 instance per block - never create new ones per tick
   const getBlockTarget = useCallback((block: ShwarmBlock): BlockTargetData => {
     // When AI controls, use shared AI targets
     const targetMap = aiControlled ? aiBlockTargets : blockTargetsRef.current;
     
-    if (!targetMap.has(block.id)) {
+    let target = targetMap.get(block.id);
+    if (!target) {
       // Initialize with random visual offset within buffer
       const offset = new THREE.Vector3(
         (Math.random() - 0.5) * 0.3, // +/- 0.15m
@@ -100,7 +102,8 @@ export function useShwarmMovement({
         (Math.random() - 0.5) * 0.3
       );
       
-      // Create collider for player standing (0.5m cube)
+      // Create collider ONCE for player standing (0.5m cube)
+      // This Box3 is reused for the lifetime of this block
       const halfSize = SHWARM_BLOCK_SIZE / 2;
       const collider = new THREE.Box3(
         new THREE.Vector3(
@@ -114,20 +117,21 @@ export function useShwarmMovement({
           block.position.z + halfSize
         )
       );
-      // Add to entity collision grid so player can stand on it
+      // Add to entity collision grid ONCE
       entityCollisionGrid.insert(collider);
       
       // Stagger initial move: random time within first 0.5-1.5s window
       const nextMoveTime = Date.now() + 500 + Math.random() * 1000;
       
-      targetMap.set(block.id, {
+      target = {
         targetPosition: block.position.clone(),
         visualOffset: offset,
         collider,
         nextMoveTime,
-      });
+      };
+      targetMap.set(block.id, target);
     }
-    return targetMap.get(block.id)!;
+    return target;
   }, [aiControlled]);
 
   // Check if a position is too close to other shwarm blocks
@@ -445,6 +449,20 @@ export function useShwarmMovement({
 
     return () => clearInterval(intervalId);
   }, [isEnabled, aiControlled, shwarmsRef, cameraRef, getRng, checkWorldCollision, isTooCloseToOthers, getBlockTarget]);
+
+  // Cleanup all colliders on unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      // Remove all block colliders from entity grid on unmount
+      for (const target of blockTargetsRef.current.values()) {
+        if (target.collider) {
+          entityCollisionGrid.remove(target.collider);
+        }
+      }
+      blockTargetsRef.current.clear();
+      rngMapRef.current.clear();
+    };
+  }, []);
 
   // Cleanup maps and colliders when shwarms/blocks are removed
   // When AI controls, cleanup is handled by cleanupShwarmResources in adapter
