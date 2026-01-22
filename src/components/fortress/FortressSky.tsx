@@ -96,7 +96,8 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
         transparent: true,
         opacity: 1,
         fog: false,
-        blending: THREE.AdditiveBlending
+        blending: THREE.NormalBlending,  // Changed from AdditiveBlending - fixes particle halo issue
+        depthWrite: false,
       });
 
       const starMesh = new THREE.Mesh(starGeo, starMat);
