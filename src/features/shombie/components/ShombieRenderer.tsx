@@ -1,7 +1,7 @@
 import { useRef, useImperativeHandle, forwardRef, useMemo, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
-import { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, type ShombieInstance, type PartTwitch, type HeadMovementType } from '../types';
+import { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, type ShombieInstance, type PartTwitch, type HeadMovementType, type ShombieBodyFire } from '../types';
 import { 
   MAX_TOTAL_SHOMBIES, 
   TIER_COLORS,
@@ -20,7 +20,11 @@ import {
   ARM_SWING_AMPLITUDE,
   ARM_SWING_UP_DOWN,
   ELBOW_BEND_MAX,
-  KNOCKDOWN_DURATION_MS,
+  KNOCKDOWN_TILT_DURATION_MS,
+  KNOCKDOWN_SLIDE_DURATION_MS,
+  KNOCKDOWN_TOTAL_DURATION_MS,
+  BODY_FIRE_SIZE,
+  BODY_FIRE_HEIGHT,
 } from '../constants';
 import particleFire from 'three-particle-fire';
 
@@ -81,9 +85,20 @@ function hexToNumber(hex: string): number {
   return parseInt(hex.replace('#', ''), 16);
 }
 
-// Head fire tracking
+// Head fire tracking (legacy - fires on head for all shombies)
 interface HeadFire {
   shombieId: string;
+  points: THREE.Points;
+  material: any;
+  geometry: any;
+}
+
+// Body fire tracking (pinned to body parts when hit)
+interface BodyFire {
+  shombieId: string;
+  partName: string;
+  startTime: number;
+  duration: number;
   points: THREE.Points;
   material: any;
   geometry: any;
@@ -96,6 +111,8 @@ export interface ShombieRendererHandle {
   update: (cameraPosition: THREE.Vector3, deltaTime: number) => void;
   getHeadPosition: (shombieId: string) => THREE.Vector3 | null;
   getHitbox: (shombieId: string) => { center: THREE.Vector3; radius: number; height: number } | null;
+  /** Add fire to a specific body part that moves with the shombie */
+  addFireToBodyPart: (shombieId: string, partName: string, duration: number, colors: string[]) => void;
 }
 
 interface ShombieRendererProps {
@@ -170,6 +187,8 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
     const groupRef = useRef<THREE.Group>(null);
     const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
     const headFiresRef = useRef<Map<string, HeadFire>>(new Map());
+    const bodyFiresRef = useRef<BodyFire[]>([]);
+    const partPositionsRef = useRef<Map<string, Map<string, THREE.Vector3>>>(new Map()); // shombieId -> partName -> position
     const { scene, camera } = useThree();
 
     // Lazy init particleFire - only when first needed
@@ -269,19 +288,75 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       }
     }, [camera, scene, ensureParticleFireInstalled]);
 
+    // Create body fire for a specific body part
+    const createBodyFire = useCallback((shombieId: string, partName: string, duration: number, colors: string[]): BodyFire | null => {
+      ensureParticleFireInstalled();
+      
+      try {
+        // Use first color from array
+        const colorHex = colors[0] || '#FFFF00';
+        
+        const fireGeometry = new particleFire.Geometry(
+          BODY_FIRE_SIZE / 2,
+          BODY_FIRE_HEIGHT,
+          40 // particle count
+        );
+        const fireMaterial = new particleFire.Material({ 
+          color: hexToNumber(colorHex) 
+        });
+        
+        (fireMaterial as THREE.Material).blending = THREE.AdditiveBlending;
+        (fireMaterial as THREE.ShaderMaterial).depthWrite = false;
+        (fireMaterial as THREE.Material).transparent = true;
+        
+        const cam = camera as THREE.PerspectiveCamera;
+        if (cam.fov) {
+          fireMaterial.setPerspective(cam.fov, window.innerHeight);
+        }
+        
+        const firePoints = new THREE.Points(fireGeometry, fireMaterial);
+        firePoints.renderOrder = 999;
+        scene.add(firePoints);
+        
+        return { 
+          shombieId, 
+          partName,
+          startTime: Date.now(),
+          duration,
+          points: firePoints, 
+          material: fireMaterial,
+          geometry: fireGeometry,
+        };
+      } catch (e) {
+        console.warn('[ShombieRenderer] Failed to create body fire:', e);
+        return null;
+      }
+    }, [camera, scene, ensureParticleFireInstalled]);
+
     // Clean up fires when shombies are removed
     useEffect(() => {
       const activeIds = new Set(shombies.filter(s => s.isActive).map(s => s.id));
       
+      // Clean up head fires
       for (const [id, headFire] of headFiresRef.current.entries()) {
         if (!activeIds.has(id)) {
-          // Remove fire from scene
           scene.remove(headFire.points);
           headFire.geometry.dispose();
           headFire.material.dispose();
           headFiresRef.current.delete(id);
         }
       }
+      
+      // Clean up body fires for removed shombies
+      bodyFiresRef.current = bodyFiresRef.current.filter(fire => {
+        if (!activeIds.has(fire.shombieId)) {
+          scene.remove(fire.points);
+          fire.geometry.dispose();
+          fire.material.dispose();
+          return false;
+        }
+        return true;
+      });
     }, [shombies, scene]);
 
     // Cleanup all fires on unmount
@@ -293,17 +368,60 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           headFire.material.dispose();
         }
         headFiresRef.current.clear();
+        
+        for (const bodyFire of bodyFiresRef.current) {
+          scene.remove(bodyFire.points);
+          bodyFire.geometry.dispose();
+          bodyFire.material.dispose();
+        }
+        bodyFiresRef.current = [];
       };
     }, [scene]);
 
-    // Update fires every frame
+    // Update fires every frame - including body fires expiration and position updates
     useFrame((_, delta) => {
+      const now = Date.now();
+      
+      // Update head fires
       for (const headFire of headFiresRef.current.values()) {
         try {
           headFire.material.update(delta);
         } catch (e) {
           // Ignore update errors
         }
+      }
+      
+      // Update body fires - remove expired ones, update positions
+      const expiredFires: BodyFire[] = [];
+      for (const bodyFire of bodyFiresRef.current) {
+        try {
+          bodyFire.material.update(delta);
+          
+          // Check expiration
+          if (now - bodyFire.startTime > bodyFire.duration) {
+            expiredFires.push(bodyFire);
+            continue;
+          }
+          
+          // Update position from partPositionsRef
+          const shombiePartPositions = partPositionsRef.current.get(bodyFire.shombieId);
+          const partPos = shombiePartPositions?.get(bodyFire.partName);
+          if (partPos) {
+            bodyFire.points.position.copy(partPos);
+          }
+        } catch (e) {
+          // Ignore update errors
+        }
+      }
+      
+      // Remove expired body fires
+      for (const fire of expiredFires) {
+        scene.remove(fire.points);
+        fire.geometry.dispose();
+        fire.material.dispose();
+      }
+      if (expiredFires.length > 0) {
+        bodyFiresRef.current = bodyFiresRef.current.filter(f => !expiredFires.includes(f));
       }
     });
 
@@ -363,16 +481,38 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             : 0;
           
           // Set rotation quaternion for this shombie
-          // If knocked down, rotate to lie flat on back
+          // If knocked down, use 3-phase animation: tilt → lie flat → recover
           if (shombie.isKnockedDown) {
-            // Calculate rotation to face knockdown direction and tilt backward
+            // Calculate rotation to face knockdown direction
             const knockdownAngle = shombie.knockdownDirection 
               ? Math.atan2(shombie.knockdownDirection.x, shombie.knockdownDirection.z)
               : shombie.rotation;
             
-            // Smoothly interpolate tilt based on knockdown progress
-            const tiltProgress = Math.min(1, shombie.knockdownProgress * 2); // Tilt faster than slide
-            const tiltAngle = tiltProgress * (Math.PI / 2); // 90 degrees back
+            // 3-phase knockdown animation
+            const tiltDuration = KNOCKDOWN_TILT_DURATION_MS;
+            const slideDuration = KNOCKDOWN_SLIDE_DURATION_MS;
+            const totalDuration = KNOCKDOWN_TOTAL_DURATION_MS;
+            const elapsed = (Date.now() - shombie.knockdownStartTime);
+            
+            let tiltAngle = 0;
+            
+            if (elapsed < tiltDuration) {
+              // Phase 1: Tilt backward (0 → 90 degrees)
+              const tiltProgress = elapsed / tiltDuration;
+              // Ease-out for dramatic fall
+              tiltAngle = Math.sin(tiltProgress * Math.PI / 2) * (Math.PI / 2);
+            } else if (elapsed < tiltDuration + slideDuration) {
+              // Phase 2: Lie flat (90 degrees) while sliding
+              tiltAngle = Math.PI / 2;
+            } else if (elapsed < totalDuration) {
+              // Phase 3: Recover (90 → 0 degrees)
+              const recoveryProgress = (elapsed - tiltDuration - slideDuration) / (totalDuration - tiltDuration - slideDuration);
+              // Ease-in for standing up
+              tiltAngle = (1 - recoveryProgress) * (Math.PI / 2);
+            } else {
+              // Fully recovered
+              tiltAngle = 0;
+            }
             
             tmpEuler.set(-tiltAngle, knockdownAngle, 0); // Tilt backward
             tmpQuaternion.setFromEuler(tmpEuler);
@@ -473,6 +613,12 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
               headPositions.set(shombie.id, tmpPosition.clone());
             }
             
+            // Store ALL part positions for body fire tracking
+            if (!partPositionsRef.current.has(shombie.id)) {
+              partPositionsRef.current.set(shombie.id, new Map());
+            }
+            partPositionsRef.current.get(shombie.id)!.set(part.name, tmpPosition.clone());
+            
             // Scale all parts by the shombie's scale factor plus twitchiness
             tmpScale.set(
               part.scaleX * scale * twitchResult.dScaleX,
@@ -486,6 +632,13 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             mesh.setColorAt(instanceIndex, tmpColor);
 
             instanceIndex++;
+          }
+        }
+        
+        // Clean up part positions for inactive shombies
+        for (const shombieId of partPositionsRef.current.keys()) {
+          if (!shombies.find(s => s.id === shombieId && s.isActive)) {
+            partPositionsRef.current.delete(shombieId);
           }
         }
 
@@ -582,7 +735,32 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           height: SHOMBIE_HITBOX_HEIGHT * shombie.scale,
         };
       },
-    }), [shombies, createHeadFire]);
+      
+      addFireToBodyPart: (shombieId: string, partName: string, duration: number, colors: string[]) => {
+        // Don't add duplicate fires to the same part
+        const existingFire = bodyFiresRef.current.find(
+          f => f.shombieId === shombieId && f.partName === partName
+        );
+        if (existingFire) {
+          // Refresh duration
+          existingFire.startTime = Date.now();
+          existingFire.duration = duration;
+          return;
+        }
+        
+        // Create new body fire
+        const bodyFire = createBodyFire(shombieId, partName, duration, colors);
+        if (bodyFire) {
+          bodyFiresRef.current.push(bodyFire);
+          
+          // Set initial position if available
+          const partPos = partPositionsRef.current.get(shombieId)?.get(partName);
+          if (partPos) {
+            bodyFire.points.position.copy(partPos);
+          }
+        }
+      },
+    }), [shombies, createHeadFire, createBodyFire]);
 
     return (
       <group ref={groupRef}>
