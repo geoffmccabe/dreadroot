@@ -27,6 +27,12 @@ const getBaseColor = (blockDef: BlockType): THREE.Color => {
     : new THREE.Color(0xcccccc);
 };
 
+// B2.1: Shared EdgesGeometry for ownership outlines - prevents creating new geometry per block
+const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+
+// B2.2: Threshold for auto-enabling performance mode per group
+const AUTO_PERFORMANCE_MODE_THRESHOLD = 1000;
+
 interface InstancedBlockGroupProps {
   blocks: PlacedBlock[];
   blockDef: BlockType;
@@ -62,7 +68,9 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const timeRef = useRef(0);
   const hoverTimeRef = useRef(0);
 
-  const fxEnabled = !performanceMode;
+  // B2.2: Auto-disable expensive FX when block count is high
+  const effectivePerformanceMode = performanceMode || blocks.length > AUTO_PERFORMANCE_MODE_THRESHOLD;
+  const fxEnabled = !effectivePerformanceMode;
   const effectiveShowOwnershipOutline = fxEnabled && showOwnershipOutline;
   const effectiveHoveredBlockId = fxEnabled ? hoveredBlockId : null;
   
@@ -425,10 +433,46 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [blockIdsForCollision, onCollision]);
   
   // Filter blocks owned by current user for outline rendering (must be before early returns)
+  // B2.1: Cap outlines to prevent performance death with many owned blocks (trees)
+  const MAX_OWNERSHIP_OUTLINES = 200;
+  
   const ownedBlocks = useMemo(() => {
     if (!effectiveShowOwnershipOutline || !currentUserId) return [];
-    return blocks.filter(block => block.user_id === currentUserId);
-  }, [blocks, effectiveShowOwnershipOutline, currentUserId]);
+    
+    const owned = blocks.filter(block => block.user_id === currentUserId);
+    
+    // If too many owned blocks, only show nearest to camera for performance
+    if (owned.length > MAX_OWNERSHIP_OUTLINES) {
+      const cam = camera.position;
+      
+      // Single-pass top-K selection (same pattern as glow)
+      const best: { b: PlacedBlock; d2: number }[] = [];
+      
+      for (const block of owned) {
+        const dx = block.position_x + 0.5 - cam.x;
+        const dy = block.position_y + 0.5 - cam.y;
+        const dz = block.position_z + 0.5 - cam.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        
+        if (best.length < MAX_OWNERSHIP_OUTLINES) {
+          best.push({ b: block, d2 });
+          continue;
+        }
+        
+        // Find worst and replace if better
+        let worstIdx = 0;
+        let worstD2 = best[0].d2;
+        for (let j = 1; j < best.length; j++) {
+          if (best[j].d2 > worstD2) { worstD2 = best[j].d2; worstIdx = j; }
+        }
+        if (d2 < worstD2) best[worstIdx] = { b: block, d2 };
+      }
+      
+      return best.map(x => x.b);
+    }
+    
+    return owned;
+  }, [blocks, effectiveShowOwnershipOutline, currentUserId, camera]);
   
   // Find the hovered block
   const hoveredBlock = useMemo(() => {
@@ -501,10 +545,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [shouldGlow, glowLoopId, camera]);
   
-  // Limit point lights to nearest MAX_GLOW_BLOCKS blocks for performance
+  // B2.3: Limit point lights to nearest MAX_GLOW_LIGHTS blocks for performance
   // OPTIMIZATION: Single-pass "top K" selection instead of sort (O(n) vs O(n log n))
   // Safety cap: Skip glow entirely for very large groups
-  const MAX_GLOW_BLOCKS = 10;
+  const MAX_GLOW_LIGHTS = 8; // B2.3: Cap dynamic lights
   const MAX_GLOW_DISTANCE = 50;
   const GLOW_BLOCK_LIMIT = 2000; // Skip glow for groups larger than this
   
@@ -527,7 +571,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       
       if (d2 > maxDistSq) continue;
       
-      if (best.length < MAX_GLOW_BLOCKS) {
+      if (best.length < MAX_GLOW_LIGHTS) {
         best.push({ b, d2 });
         continue;
       }
@@ -583,7 +627,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
           receiveShadow
         />
       )}
-      {/* Render animated outlines for owned blocks */}
+      {/* Render animated outlines for owned blocks - B2.1: use shared EdgesGeometry */}
       {effectiveShowOwnershipOutline && outlineMaterialRef.current && ownedBlocks.map((block) => {
         const fallState = fallingBlocksState.get(block.id);
         const x = block.position_x + 0.5;
@@ -592,7 +636,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         
         return (
           <lineSegments key={`outline-${block.id}`} position={[x, y, z]}>
-            <edgesGeometry args={[geometry]} />
+            <primitive object={sharedEdgesGeometry} attach="geometry" />
             <primitive object={outlineMaterialRef.current} attach="material" />
           </lineSegments>
         );

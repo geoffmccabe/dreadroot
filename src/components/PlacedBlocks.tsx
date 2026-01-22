@@ -51,6 +51,9 @@ const invisiblockOutlineMaterial = new THREE.LineBasicMaterial({
   opacity: 0.5
 });
 
+// B2.2: Global threshold for auto-enabling performance mode
+const GLOBAL_VISIBLE_BLOCKS_THRESHOLD = 3000;
+
 // Component to render all placed blocks with collision detection using instanced rendering
 export const PlacedBlocks: React.FC<{ 
   blocks: PlacedBlock[]; 
@@ -61,6 +64,8 @@ export const PlacedBlocks: React.FC<{
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
 }> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId, hoveredBlockId = null, onMeshReady, performanceMode = false }) => {
+  // B2.2: Auto-enable performance mode when total visible blocks exceed threshold
+  const effectivePerformanceMode = performanceMode || blocks.length > GLOBAL_VISIBLE_BLOCKS_THRESHOLD;
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -288,7 +293,7 @@ export const PlacedBlocks: React.FC<{
             currentUserId={currentUserId}
             hoveredBlockId={hoveredBlockId}
             onMeshReady={onMeshReady ? (mesh) => onMeshReady(blockType, mesh) : undefined}
-            performanceMode={performanceMode}
+            performanceMode={effectivePerformanceMode}
             textureOverride={textureOverride}
           />
         );
