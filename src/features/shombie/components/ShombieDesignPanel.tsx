@@ -163,24 +163,34 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
       ai_config: ai_config ? JSON.parse(JSON.stringify(ai_config)) : null,
     };
 
+    console.log('[ShombieDesign] Saving:', { isNew, tier: baseData.tier, saveData });
+
     try {
       if (isNew) {
-        const { error } = await supabase
+        // Insert new definition - use upsert on tier for safety
+        const { data, error } = await supabase
           .from('shombie_definitions')
-          .insert([saveData]);
+          .upsert([saveData], { onConflict: 'tier' })
+          .select()
+          .single();
         if (error) throw error;
+        console.log('[ShombieDesign] Inserted/Upserted:', data);
       } else {
-        const { error } = await supabase
+        // Update existing definition by id
+        const { data, error } = await supabase
           .from('shombie_definitions')
           .update(saveData)
-          .eq('id', id);
+          .eq('id', id)
+          .select()
+          .single();
         if (error) throw error;
+        console.log('[ShombieDesign] Updated:', data);
       }
 
       toast.success(`Tier ${currentDef.tier} saved!`);
       setHasChanges(false);
       queryClient.invalidateQueries({ queryKey: ['shombie-definitions'] });
-      fetchDefinitions();
+      await fetchDefinitions(); // Re-fetch to get updated data
     } catch (err: any) {
       console.error('[ShombieDesign] Save error:', err);
       toast.error(`Failed to save: ${err.message}`);

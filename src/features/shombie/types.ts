@@ -54,6 +54,11 @@ export interface PartTwitch {
 }
 
 /**
+ * Head movement type for varied animations
+ */
+export type HeadMovementType = 'slide' | 'bob' | 'circle';
+
+/**
  * Runtime state for an active shombie instance
  */
 export interface ShombieInstance {
@@ -86,6 +91,8 @@ export interface ShombieInstance {
   targetPosition?: THREE.Vector3;
   /** Is currently chasing player */
   isChasing: boolean;
+  /** Head movement type (1/3 slide, 1/3 bob, 1/3 circle) */
+  headMovementType: HeadMovementType;
 }
 
 /**

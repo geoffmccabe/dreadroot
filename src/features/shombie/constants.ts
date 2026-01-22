@@ -101,17 +101,26 @@ export const SPAWN_SEQUENCE_TIMEOUT_MS = 3000;
 export const SHOMBIE_CHASE_SPEED_MULTIPLIER = 1.0; // Base chase speed
 export const SHOMBIE_LEG_ANIMATION_MULTIPLIER = 2.0; // Double leg animation when walking
 
-// Hitbox settings
-export const SHOMBIE_HITBOX_RADIUS = 0.5; // Larger hitbox for easier hits
-export const SHOMBIE_HITBOX_HEIGHT = 2.0;
+// Hitbox settings - larger for reliable hit detection
+export const SHOMBIE_HITBOX_RADIUS = 0.6; // Generous hitbox radius
+export const SHOMBIE_HITBOX_HEIGHT = 2.2;
 
-// Head sliding animation
-export const HEAD_SLIDE_AMPLITUDE = 0.5; // 0.5m side to side
+// Head animation settings
+export const HEAD_SLIDE_AMPLITUDE = 0.4; // 0.4m side to side (reduced from 0.5)
 export const HEAD_SLIDE_SPEED = 2.0; // Cycles per walk phase
+export const HEAD_BOB_AMPLITUDE = 0.3; // 0.3m up and down
+export const HEAD_CIRCLE_RADIUS = 0.125; // 0.25m diameter circle (radius = 0.125)
 
-// Elbow/knee bending
+// Head movement types - each shombie gets one randomly at spawn
+export type HeadMovementType = 'slide' | 'bob' | 'circle';
+
+// Arm swing settings - more dramatic zombie arms
+export const ARM_SWING_AMPLITUDE = 0.5; // Larger forward/back swing
+export const ARM_SWING_UP_DOWN = 0.15; // Up/down motion during swing
+
+// Elbow/knee bending - 90+ degree bends
 export const ELBOW_BEND_MIN = 0; // Straight (180deg displayed as 0 offset)
-export const ELBOW_BEND_MAX = 0.4; // Max bend offset (simulates 90deg)
+export const ELBOW_BEND_MAX = 0.6; // Increased max bend offset (simulates 90+ deg)
 
 // Default fortress texture for shombie body
 export const DEFAULT_SHOMBIE_TEXTURE_URL = '/grass_texture_seamless.webp';
