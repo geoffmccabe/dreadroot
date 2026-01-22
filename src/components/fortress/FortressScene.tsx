@@ -241,7 +241,8 @@ function CameraTrackedBlocks({
       console.log(`[Render DEBUG] Chunk (3,1) is VISIBLE: ${chunk31Count} blocks in chunk, ${filtered.length} total visible`);
     }
     
-    diagnostics.visibleBlocks = filtered.length;
+    // D1: Don't overwrite here - let InstancedBlockGroup accumulate via +=
+    // diagnostics.visibleBlocks = filtered.length;
     return filtered;
   }, [renderTrigger, blocksByChunk, visibleChunksRef]);
 
