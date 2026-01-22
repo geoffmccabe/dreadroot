@@ -70,6 +70,7 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
       opacity: 0
     });
     const skyColorMesh = new THREE.Mesh(skyGeo.clone(), skyColorMat);
+    skyColorMesh.renderOrder = -100; // Render sky FIRST so particles layer on top
     skyMeshRef.current = skyColorMesh;
     scene.add(skyColorMesh);
 
@@ -100,6 +101,7 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
       });
 
       const starMesh = new THREE.Mesh(starGeo, starMat);
+      starMesh.renderOrder = -99; // Render stars after sky color but before everything else
       starMeshRef.current = starMesh;
       scene.add(starMesh);
 
