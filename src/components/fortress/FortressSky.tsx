@@ -59,7 +59,9 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
     }
 
     const textureLoader = new THREE.TextureLoader();
-    const skyGeo = new THREE.SphereGeometry(320, 64, 32);
+    // Use full sphere geometry - extends well below horizon
+    // phiStart=0, phiLength=2*PI (full circle), thetaStart=0, thetaLength=PI (full sphere)
+    const skyGeo = new THREE.SphereGeometry(320, 64, 32, 0, Math.PI * 2, 0, Math.PI);
 
     // Layer 1: Solid color sky sphere
     const skyColorMat = new THREE.MeshBasicMaterial({
@@ -70,6 +72,8 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
       opacity: 0
     });
     const skyColorMesh = new THREE.Mesh(skyGeo.clone(), skyColorMat);
+    // Position sphere so it extends below ground level
+    skyColorMesh.position.y = -50;
     skyMeshRef.current = skyColorMesh;
     scene.add(skyColorMesh);
 
@@ -89,18 +93,20 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
 
       textureRef.current = loadedTexture;
 
-      const starGeo = new THREE.SphereGeometry(319, 64, 32);
+      const starGeo = new THREE.SphereGeometry(319, 64, 32, 0, Math.PI * 2, 0, Math.PI);
       const starMat = new THREE.MeshBasicMaterial({
         side: THREE.BackSide,
         map: loadedTexture,
         transparent: true,
         opacity: 1,
         fog: false,
-        blending: THREE.AdditiveBlending, // Restored - original sky blending
+        blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
 
       const starMesh = new THREE.Mesh(starGeo, starMat);
+      // Match sky sphere position
+      starMesh.position.y = -50;
       starMeshRef.current = starMesh;
       scene.add(starMesh);
 
