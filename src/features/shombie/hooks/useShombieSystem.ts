@@ -231,9 +231,12 @@ export function useShombieSystem({
 
   /**
    * Keyboard handler for Ctrl+Z toggle and !3## spawn command (admin only)
+   * !3[tier][count] - e.g., !315 spawns 5 tier-1 shombies
    */
   useEffect(() => {
     if (!isEnabled) return;
+    
+    console.log('[Shombie] Keyboard listener mounted, isAdmin:', isAdmin, 'definitions:', definitions?.length ?? 0);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if in input fields
@@ -242,7 +245,7 @@ export function useShombieSystem({
         return;
       }
 
-      // Ctrl+Z for zombie toggle
+      // Ctrl+Z for zombie toggle (natural spawning)
       if (e.ctrlKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         
@@ -253,7 +256,7 @@ export function useShombieSystem({
 
         setSpawningEnabled(prev => {
           const newState = !prev;
-          console.log(`[Shombie] Spawning ${newState ? 'ENABLED' : 'DISABLED'}`);
+          console.log(`[Shombie] Natural spawning ${newState ? 'ENABLED' : 'DISABLED'}`);
           return newState;
         });
         return;
@@ -263,77 +266,85 @@ export function useShombieSystem({
       const now = Date.now();
       const seq = sequenceRef.current;
 
-      // Check for timeout
+      // Check for timeout - reset if too long since last keypress
       if (seq.step > 0 && now - seq.startTime > SPAWN_SEQUENCE_TIMEOUT_MS) {
+        console.log('[Shombie] Sequence timeout, resetting');
         seq.step = 0;
         seq.tier = null;
       }
 
-      // Step 0: Wait for "!" (Shift+1)
+      // Step 0: Wait for "!" (when Shift+1 is pressed, e.key === '!')
       if (seq.step === 0) {
-        if (e.key === '!' || (e.shiftKey && e.key === '1')) {
+        if (e.key === '!') {
           seq.step = 1;
           seq.startTime = now;
-          console.log('[Shombie] Spawn sequence started - press 3 for shombie');
+          console.log('[Shombie] Spawn sequence started (!) - press 3 for shombie type');
           return;
         }
+        return; // Don't process other keys at step 0
       }
 
       // Step 1: Wait for enemy type (3 = shombie)
       if (seq.step === 1) {
-        if (e.key === '3' && !e.shiftKey) {
+        if (e.key === '3') {
           if (!isAdmin) {
             console.log('[Shombie] Spawn denied - admin only');
             seq.step = 0;
             return;
           }
           seq.step = 2;
-          console.log('[Shombie] Enemy type: shombie - press 1-0 for tier');
+          seq.startTime = now; // Reset timeout
+          console.log('[Shombie] Enemy type: shombie - press 1-9 (0=10) for tier');
           return;
         }
-        // Not our sequence, reset
-        if (!e.shiftKey && /[0-9]/.test(e.key)) {
-          seq.step = 0;
-          seq.tier = null;
-        }
-        return;
-      }
-
-      // Step 2: Wait for tier (1-9, 0=10)
-      if (seq.step === 2) {
-        const tier = parseInt(e.key, 10);
-        if (!isNaN(tier) && tier >= 0 && tier <= 9 && !e.shiftKey) {
-          seq.tier = tier;
-          seq.step = 3;
-          console.log(`[Shombie] Tier ${tier === 0 ? 10 : tier} selected - press 1-9/0 for count or wait to spawn 1`);
-          
-          // Set a delayed spawn if no count is provided
-          setTimeout(() => {
-            if (seq.step === 3 && seq.tier === tier) {
-              // Spawn 1 shombie
-              const def = getDefinitionByTier(tier);
-              if (def) {
-                spawnShombieGroup(def, 1);
-              }
-              seq.step = 0;
-              seq.tier = null;
-            }
-          }, 500); // Half second to wait for count
-          return;
-        }
-        // Invalid key resets
+        // Any other key resets
+        console.log('[Shombie] Invalid type key, resetting:', e.key);
         seq.step = 0;
         seq.tier = null;
         return;
       }
 
-      // Step 3: Wait for count (optional, 1-9, 0=10)
+      // Step 2: Wait for tier (1-9, 0=10)
+      if (seq.step === 2) {
+        if (/^[0-9]$/.test(e.key)) {
+          const tier = parseInt(e.key, 10);
+          seq.tier = tier;
+          seq.step = 3;
+          seq.startTime = now; // Reset timeout
+          console.log(`[Shombie] Tier ${tier === 0 ? 10 : tier} selected - press 1-9 (0=10) for count, or any key to spawn 1`);
+          
+          // Set a delayed spawn if no count is provided within 800ms
+          setTimeout(() => {
+            if (seq.step === 3 && seq.tier === tier) {
+              // Spawn 1 shombie (no count was entered)
+              const def = getDefinitionByTier(tier);
+              if (def) {
+                console.log(`[Shombie] Timeout - spawning 1 tier ${tier === 0 ? 10 : tier}`);
+                spawnShombieGroup(def, 1);
+              } else {
+                console.warn(`[Shombie] No definition for tier ${tier === 0 ? 10 : tier}`);
+              }
+              seq.step = 0;
+              seq.tier = null;
+            }
+          }, 800);
+          return;
+        }
+        // Invalid key resets
+        console.log('[Shombie] Invalid tier key, resetting:', e.key);
+        seq.step = 0;
+        seq.tier = null;
+        return;
+      }
+
+      // Step 3: Wait for count (1-9, 0=10)
       if (seq.step === 3) {
-        const count = parseInt(e.key, 10);
-        if (!isNaN(count) && count >= 0 && count <= 9 && !e.shiftKey) {
+        if (/^[0-9]$/.test(e.key)) {
+          const count = parseInt(e.key, 10);
           const actualCount = count === 0 ? 10 : count;
           const def = getDefinitionByTier(seq.tier!);
           if (def) {
+            console.log(`[Shombie] Spawning ${actualCount} tier ${seq.tier === 0 ? 10 : seq.tier}`);
             spawnShombieGroup(def, actualCount);
           } else {
             console.warn(`[Shombie] No definition for tier ${seq.tier === 0 ? 10 : seq.tier}`);
@@ -345,6 +356,7 @@ export function useShombieSystem({
         // Any other key spawns 1 and resets
         const def = getDefinitionByTier(seq.tier!);
         if (def) {
+          console.log(`[Shombie] Non-digit pressed - spawning 1 tier ${seq.tier === 0 ? 10 : seq.tier}`);
           spawnShombieGroup(def, 1);
         }
         seq.step = 0;
@@ -355,7 +367,7 @@ export function useShombieSystem({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isEnabled, isAdmin, getDefinitionByTier, spawnShombieGroup]);
+  }, [isEnabled, isAdmin, definitions, getDefinitionByTier, spawnShombieGroup]);
 
   /**
    * Damage a shombie
