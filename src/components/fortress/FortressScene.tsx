@@ -1383,26 +1383,28 @@ export function FortressScene({
           }
           
           // Check SHOMBIE collisions (if not already hit something)
-          // Cylinder hitbox - head shots do more damage
+          // Ray-Cylinder intersection for accurate hit detection (prevents tunneling)
           if (!hit && shombieRendererRef.current) {
             const BASE_BULLET_DAMAGE = 25;
             const tierDef = getDefinitionRef.current(bullet.tier);
             const originalMuzzleVelocity = tierDef.velocity;
             
-            // Use stored previous position
+            // Use stored previous position for ray intersection
             const prevX = (bullet as any).prevX ?? bullet.position.x;
             const prevY = (bullet as any).prevY ?? bullet.position.y;
             const prevZ = (bullet as any).prevZ ?? bullet.position.z;
             
-            const dispX = bullet.position.x - prevX;
-            const dispY = bullet.position.y - prevY;
-            const dispZ = bullet.position.z - prevZ;
-            const dispLen = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
+            // Ray direction and length
+            const rayDirX = bullet.position.x - prevX;
+            const rayDirY = bullet.position.y - prevY;
+            const rayDirZ = bullet.position.z - prevZ;
+            const rayLen = Math.sqrt(rayDirX * rayDirX + rayDirY * rayDirY + rayDirZ * rayDirZ);
             
-            if (dispLen > 0.001) {
-              const ndx = dispX / dispLen;
-              const ndy = dispY / dispLen;
-              const ndz = dispZ / dispLen;
+            if (rayLen > 0.001) {
+              // Normalized ray direction
+              const ndx = rayDirX / rayLen;
+              const ndy = rayDirY / rayLen;
+              const ndz = rayDirZ / rayLen;
               
               // Check all shombies
               const shombieList = shombiesRef.current || [];
@@ -1413,65 +1415,86 @@ export function FortressScene({
                 const hitbox = shombieRendererRef.current?.getHitbox(shombie.id);
                 if (!hitbox) continue;
                 
-                // Cylinder intersection test
-                // First check XZ plane (circle)
-                const dx = bullet.position.x - shombie.position.x;
-                const dz = bullet.position.z - shombie.position.z;
-                const distXZ = Math.sqrt(dx * dx + dz * dz);
+                // Ray-Cylinder intersection
+                // Project ray onto XZ plane for infinite cylinder test
+                const ocX = prevX - shombie.position.x;
+                const ocZ = prevZ - shombie.position.z;
                 
-                // Then check Y bounds
-                const bulletY = bullet.position.y;
-                const shombieMinY = shombie.position.y;
-                const shombieMaxY = shombie.position.y + hitbox.height;
+                // Quadratic coefficients for 2D circle intersection in XZ plane
+                const a = ndx * ndx + ndz * ndz;
+                const b = 2 * (ocX * ndx + ocZ * ndz);
+                const c = ocX * ocX + ocZ * ocZ - hitbox.radius * hitbox.radius;
                 
-                if (distXZ < hitbox.radius && bulletY >= shombieMinY && bulletY <= shombieMaxY) {
-                  // HIT a shombie!
-                  hit = true;
-                  needsBulletRender = true;
+                const discriminant = b * b - 4 * a * c;
+                
+                if (discriminant >= 0 && a > 0.0001) {
+                  const sqrtD = Math.sqrt(discriminant);
+                  const t1 = (-b - sqrtD) / (2 * a);
+                  const t2 = (-b + sqrtD) / (2 * a);
                   
-                  const velocityRatio = bullet.speed / originalMuzzleVelocity;
-                  const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
+                  // Check if either intersection is within ray length
+                  let hitT = -1;
+                  if (t1 >= 0 && t1 <= rayLen) hitT = t1;
+                  else if (t2 >= 0 && t2 <= rayLen) hitT = t2;
                   
-                  // Headshot bonus (upper 25% of body)
-                  const headThreshold = shombieMinY + hitbox.height * 0.75;
-                  const isHeadshot = bulletY > headThreshold;
-                  const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
-                  
-                  // Calculate knockback direction (horizontal only)
-                  const knockbackDir = new THREE.Vector3(dx, 0, dz).normalize();
-                  
-                  // Apply damage
-                  const killed = damageShombie(shombie.id, finalDamage, knockbackDir);
-                  
-                  // Award points
-                  if (onPointsEarned) {
-                    onPointsEarned(finalDamage);
+                  if (hitT >= 0) {
+                    // Check Y bounds at hit point
+                    const hitY = prevY + ndy * hitT;
+                    const shombieMinY = shombie.position.y;
+                    const shombieMaxY = shombie.position.y + hitbox.height;
+                    
+                    if (hitY >= shombieMinY && hitY <= shombieMaxY) {
+                      // HIT a shombie!
+                      hit = true;
+                      needsBulletRender = true;
+                      
+                      // Calculate hit position for effects
+                      const hitPosX = prevX + ndx * hitT;
+                      const hitPosZ = prevZ + ndz * hitT;
+                      
+                      const velocityRatio = bullet.speed / originalMuzzleVelocity;
+                      const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
+                      
+                      // Headshot bonus (upper 25% of body)
+                      const headThreshold = shombieMinY + hitbox.height * 0.75;
+                      const isHeadshot = hitY > headThreshold;
+                      const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
+                      
+                      // Calculate knockback direction (horizontal only)
+                      const dx = hitPosX - shombie.position.x;
+                      const dz = hitPosZ - shombie.position.z;
+                      const knockbackDir = new THREE.Vector3(dx, 0, dz).normalize();
+                      
+                      // Apply damage
+                      const killed = damageShombie(shombie.id, finalDamage, knockbackDir);
+                      
+                      // Award points
+                      if (onPointsEarned) {
+                        onPointsEarned(finalDamage);
+                      }
+                      
+                      // Spawn impact effect at hit position
+                      if (bulletImpactsRef.current) {
+                        const hitPos = new THREE.Vector3(hitPosX, hitY, hitPosZ);
+                        const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
+                        bulletImpactsRef.current.spawnImpact(hitPos, {
+                          colors: tierDef.colors,
+                          size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
+                          height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
+                          duration: tierDef.burn_time * pentaMultiplier,
+                          tier: bullet.tier,
+                        });
+                      }
+                      
+                      if (isHeadshot) {
+                        console.log(`[Shombie Hit] HEADSHOT! damage=${finalDamage} killed=${killed}`);
+                      } else {
+                        console.log(`[Shombie Hit] Body hit, damage=${finalDamage} killed=${killed}`);
+                      }
+                      
+                      break;
+                    }
                   }
-                  
-                  // Spawn impact effect at hit position
-                  if (bulletImpactsRef.current) {
-                    const hitPos = new THREE.Vector3(
-                      bullet.position.x,
-                      bullet.position.y,
-                      bullet.position.z
-                    );
-                    const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
-                    bulletImpactsRef.current.spawnImpact(hitPos, {
-                      colors: tierDef.colors,
-                      size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
-                      height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
-                      duration: tierDef.burn_time * pentaMultiplier,
-                      tier: bullet.tier,
-                    });
-                  }
-                  
-                  if (isHeadshot) {
-                    console.log(`[Shombie Hit] HEADSHOT! damage=${finalDamage} killed=${killed}`);
-                  } else {
-                    console.log(`[Shombie Hit] Body hit, damage=${finalDamage} killed=${killed}`);
-                  }
-                  
-                  break;
                 }
               }
             }

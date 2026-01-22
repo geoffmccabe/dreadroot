@@ -12,7 +12,9 @@ import {
   DEFAULT_SHOMBIE_TEXTURE_URL,
   HEAD_FIRE_SIZE,
   HEAD_FIRE_HEIGHT,
-  HEAD_FIRE_PARTICLE_COUNT,
+  HEAD_SLIDE_AMPLITUDE,
+  HEAD_SLIDE_SPEED,
+  ELBOW_BEND_MAX,
 } from '../constants';
 import particleFire from 'three-particle-fire';
 
@@ -45,22 +47,31 @@ textureLoader.load(DEFAULT_SHOMBIE_TEXTURE_URL, (texture) => {
   fortressTexture = texture;
 });
 
-// Get tier color as hex
-function getTierPrimaryColor(tier: number): string {
+// Get tier color hex string
+function getTierColorHex(tier: number): string {
   return TIER_COLORS[tier]?.[0] || '#FFFF00';
 }
 
-// Convert hex to number for particleFire
+// Get tier colors array
+function getTierColors(tier: number): string[] {
+  return TIER_COLORS[tier] || ['#FFFF00'];
+}
+
+// Convert hex to number
 function hexToNumber(hex: string): number {
   return parseInt(hex.replace('#', ''), 16);
 }
 
+// Head fire tracking
 interface HeadFire {
   shombieId: string;
   points: THREE.Points;
   material: any;
   geometry: any;
 }
+
+// Particle fire install flag
+let particleFireInstalled = false;
 
 export interface ShombieRendererHandle {
   update: (cameraPosition: THREE.Vector3, deltaTime: number) => void;
@@ -74,50 +85,65 @@ interface ShombieRendererProps {
 
 /**
  * Apply twitchiness to a body part offset
+ * Enhanced with more aggressive random vibrations
  */
 function applyTwitch(
   twitch: PartTwitch,
   time: number,
   scale: number
-): { dx: number; dy: number; dz: number; dScaleX: number; dScaleY: number; dScaleZ: number } {
+): { dx: number; dy: number; dz: number; dScaleX: number; dScaleY: number; dScaleZ: number; rotation: number } {
   const t = time * twitch.frequency + twitch.phaseOffset;
   const amp = twitch.amplitude * scale;
   
   let dx = 0, dy = 0, dz = 0;
   let dScaleX = 1, dScaleY = 1, dScaleZ = 1;
+  let rotation = 0;
+  
+  // Add secondary fast vibration layer for extra jitteriness
+  const fastT = time * twitch.frequency * 3.5 + twitch.phaseOffset * 2;
+  const fastAmp = amp * 0.4;
+  
+  // Add tertiary ultra-fast micro-vibration
+  const microT = time * twitch.frequency * 8 + twitch.phaseOffset * 3;
+  const microAmp = amp * 0.15;
   
   switch (twitch.twitchType) {
     case 'vertical':
-      dy = Math.sin(t) * amp;
+      dy = Math.sin(t) * amp + Math.sin(fastT * 2.3) * fastAmp + Math.sin(microT * 3.7) * microAmp;
+      dx = Math.sin(fastT * 1.7) * fastAmp * 0.3 + Math.cos(microT * 4.1) * microAmp;
       break;
     case 'horizontal':
-      dx = Math.sin(t) * amp;
+      dx = Math.sin(t) * amp + Math.cos(fastT * 1.9) * fastAmp + Math.sin(microT * 5.3) * microAmp;
+      dz = Math.sin(fastT * 2.1) * fastAmp * 0.5 + Math.cos(microT * 3.9) * microAmp;
       break;
     case 'rotate':
-      // Apply as slight position shift simulating rotation
-      dx = Math.sin(t) * amp * 0.5;
-      dz = Math.cos(t) * amp * 0.5;
+      rotation = Math.sin(t) * amp * 0.5 + Math.sin(fastT * 2.7) * fastAmp * 0.3;
+      dx = Math.sin(fastT * 2.5) * fastAmp * 0.3 + Math.sin(microT * 6) * microAmp;
+      dy = Math.cos(fastT * 1.8) * fastAmp * 0.2 + Math.cos(microT * 5) * microAmp;
       break;
     case 'scale':
       const scalePulse = 1 + Math.sin(t) * amp * 0.3;
-      dScaleX = scalePulse;
-      dScaleY = scalePulse;
-      dScaleZ = scalePulse;
+      const fastPulse = 1 + Math.sin(fastT * 2) * fastAmp * 0.15;
+      const microPulse = 1 + Math.sin(microT * 4) * microAmp * 0.1;
+      dScaleX = scalePulse * fastPulse * microPulse;
+      dScaleY = scalePulse * (1 + Math.sin(fastT * 1.5) * fastAmp * 0.1) * microPulse;
+      dScaleZ = scalePulse * fastPulse * microPulse;
       break;
     case 'shake':
-      // Rapid small movements
-      dx = Math.sin(t * 3) * amp * 0.5;
-      dy = Math.cos(t * 2.7) * amp * 0.3;
-      dz = Math.sin(t * 2.3) * amp * 0.4;
+      // Rapid erratic movements - most aggressive
+      dx = Math.sin(t * 3) * amp * 0.5 + Math.sin(fastT * 4.1) * fastAmp + Math.sin(microT * 7) * microAmp * 1.5;
+      dy = Math.cos(t * 2.7) * amp * 0.3 + Math.cos(fastT * 3.3) * fastAmp * 0.7 + Math.cos(microT * 6.3) * microAmp;
+      dz = Math.sin(t * 2.3) * amp * 0.4 + Math.sin(fastT * 2.9) * fastAmp * 0.8 + Math.sin(microT * 8) * microAmp * 1.2;
+      rotation = Math.sin(fastT * 5) * amp * 0.2 + Math.sin(microT * 9) * microAmp * 0.5;
       break;
   }
   
-  return { dx, dy, dz, dScaleX, dScaleY, dScaleZ };
+  return { dx, dy, dz, dScaleX, dScaleY, dScaleZ, rotation };
 }
 
 /**
  * Renders shombies as block-based humanoids with twitchy animation
- * and tier-colored head fires (same effect as bullet impacts)
+ * and tier-colored head fires using three-particle-fire
  */
 export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRendererProps>(
   ({ shombies }, ref) => {
@@ -125,21 +151,24 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
     const groupRef = useRef<THREE.Group>(null);
     const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
     const headFiresRef = useRef<Map<string, HeadFire>>(new Map());
-    const particleFireInstalledRef = useRef(false);
     const { scene, camera } = useThree();
 
     // Lazy init particleFire - only when first needed
     const ensureParticleFireInstalled = useCallback(() => {
-      if (!particleFireInstalledRef.current) {
-        particleFire.install({ THREE });
-        particleFireInstalledRef.current = true;
+      if (!particleFireInstalled) {
+        try {
+          particleFire.install({ THREE });
+          particleFireInstalled = true;
+        } catch (e) {
+          // Already installed or error
+        }
       }
     }, []);
 
-    // Create material with fortress texture and tier tint
+    // Create material with fortress texture
     const material = useMemo(() => {
       const mat = new THREE.MeshStandardMaterial({
-        color: 0xffff00, // Yellow tint for T1
+        color: 0xffffff, // White base - tier tint applied per instance
         roughness: 0.8,
         metalness: 0.1,
       });
@@ -163,17 +192,17 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       return mat;
     }, []);
 
-    // Create head fire for a shombie
+    // Create head fire for a shombie using three-particle-fire
     const createHeadFire = useCallback((shombieId: string, tier: number): HeadFire | null => {
       ensureParticleFireInstalled();
       
       try {
-        const tierColorHex = getTierPrimaryColor(tier);
+        const tierColorHex = getTierColorHex(tier);
         
         const fireGeometry = new particleFire.Geometry(
           HEAD_FIRE_SIZE / 2, // radius
           HEAD_FIRE_HEIGHT,
-          HEAD_FIRE_PARTICLE_COUNT
+          60 // particle count
         );
         const fireMaterial = new particleFire.Material({ 
           color: hexToNumber(tierColorHex) 
@@ -271,12 +300,15 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           const phase = shombie.animationPhase;
           const wobble = Math.sin(phase) * 0.1;
           
+          // Head slide: shoulder to shoulder (0.5m side to side)
+          const headSlide = Math.sin(phase * HEAD_SLIDE_SPEED) * HEAD_SLIDE_AMPLITUDE;
+          
           // Set rotation quaternion for this shombie
           tmpEuler.set(0, shombie.rotation, 0);
           tmpQuaternion.setFromEuler(tmpEuler);
 
           // Get tier color for this shombie
-          const tierColorHex = getTierPrimaryColor(shombie.definition.tier);
+          const tierColorHex = getTierColorHex(shombie.definition.tier);
           const tierColor = new THREE.Color(tierColorHex);
           
           // Apply scale variation to all parts
@@ -289,7 +321,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             const twitch = shombie.partTwitches[part.name];
             const twitchResult = twitch 
               ? applyTwitch(twitch, now, scale) 
-              : { dx: 0, dy: 0, dz: 0, dScaleX: 1, dScaleY: 1, dScaleZ: 1 };
+              : { dx: 0, dy: 0, dz: 0, dScaleX: 1, dScaleY: 1, dScaleZ: 1, rotation: 0 };
             
             // Calculate world position with animation offsets (scaled)
             let offsetX = part.offsetX * scale + twitchResult.dx;
@@ -298,27 +330,39 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             
             // Apply walking animation per part
             if (part.name === 'head') {
+              // Head bobs and slides side to side
               offsetY += Math.sin(phase * 2) * 0.02 * scale;
-              offsetX += wobble * scale;
+              offsetX += headSlide * scale; // Slide shoulder to shoulder
             } else if (part.name.includes('UpperArm')) {
               // Arms swing forward in zombie pose
               offsetZ -= 0.3 * scale;
               const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
               offsetY += Math.sin(armPhase) * 0.05 * scale;
             } else if (part.name.includes('LowerArm')) {
-              // Follow upper arm with bend
-              offsetZ -= 0.25 * scale;
+              // Elbow bending: 180 to 90 degrees as arm swings
+              // When arm is forward (sin=1), elbow is bent (90 deg)
+              // When arm is back (sin=-1), elbow is straight (180 deg)
               const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
+              const bendAmount = (1 + Math.sin(armPhase)) * 0.5; // 0 to 1
+              const elbowBend = bendAmount * ELBOW_BEND_MAX;
+              
+              // Bent position: arm goes back and up relative to upper arm
+              offsetZ -= 0.25 * scale + elbowBend * scale * 0.5; // Pull back
+              offsetY -= elbowBend * scale * 0.3; // And down (simulates rotation)
               offsetY += Math.sin(armPhase * 1.2) * 0.03 * scale;
             } else if (part.name.includes('UpperLeg')) {
               const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
               offsetZ += Math.sin(legPhase) * 0.15 * scale;
             } else if (part.name.includes('LowerLeg')) {
-              // Follow upper leg with knee bend
+              // Knee bending: when leg is back, knee bends more
               const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
+              const legBackAmount = Math.max(0, -Math.sin(legPhase)); // 0 to 1 when leg is back
+              const kneeBend = legBackAmount * ELBOW_BEND_MAX;
+              
               offsetZ += Math.sin(legPhase) * 0.1 * scale;
-              // Knee bends more when leg is back
-              offsetY += Math.abs(Math.sin(legPhase)) * -0.05 * scale;
+              // Knee bends when leg swings back
+              offsetY -= kneeBend * scale * 0.4;
+              offsetZ += kneeBend * scale * 0.2; // Pull forward when bent
             } else if (part.name === 'torso') {
               offsetX += wobble * 0.5 * scale;
             }
@@ -402,9 +446,9 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         
         const headPart = SHOMBIE_BODY_PARTS[0]; // Head is first part
         const phase = shombie.animationPhase;
-        const wobble = Math.sin(phase) * 0.1;
+        const headSlide = Math.sin(phase * HEAD_SLIDE_SPEED) * HEAD_SLIDE_AMPLITUDE;
         
-        let offsetX = headPart.offsetX * shombie.scale + wobble * shombie.scale;
+        let offsetX = headPart.offsetX * shombie.scale + headSlide * shombie.scale;
         let offsetY = headPart.offsetY * shombie.scale + Math.sin(phase * 2) * 0.02 * shombie.scale;
         let offsetZ = headPart.offsetZ * shombie.scale;
         

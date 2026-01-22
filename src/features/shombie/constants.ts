@@ -85,8 +85,8 @@ export const RARITY_COLORS: Record<string, string> = {
 };
 
 // Head fire effect settings (same as bullet impacts)
-export const HEAD_FIRE_SIZE = 0.3;
-export const HEAD_FIRE_HEIGHT = 0.4;
+export const HEAD_FIRE_SIZE = 0.4;
+export const HEAD_FIRE_HEIGHT = 0.5;
 export const HEAD_FIRE_PARTICLE_COUNT = 60;
 
 // Spawn variation settings
@@ -102,8 +102,16 @@ export const SHOMBIE_CHASE_SPEED_MULTIPLIER = 1.0; // Base chase speed
 export const SHOMBIE_LEG_ANIMATION_MULTIPLIER = 2.0; // Double leg animation when walking
 
 // Hitbox settings
-export const SHOMBIE_HITBOX_RADIUS = 0.4;
+export const SHOMBIE_HITBOX_RADIUS = 0.5; // Larger hitbox for easier hits
 export const SHOMBIE_HITBOX_HEIGHT = 2.0;
+
+// Head sliding animation
+export const HEAD_SLIDE_AMPLITUDE = 0.5; // 0.5m side to side
+export const HEAD_SLIDE_SPEED = 2.0; // Cycles per walk phase
+
+// Elbow/knee bending
+export const ELBOW_BEND_MIN = 0; // Straight (180deg displayed as 0 offset)
+export const ELBOW_BEND_MAX = 0.4; // Max bend offset (simulates 90deg)
 
 // Default fortress texture for shombie body
 export const DEFAULT_SHOMBIE_TEXTURE_URL = '/grass_texture_seamless.webp';
