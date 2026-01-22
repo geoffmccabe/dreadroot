@@ -47,15 +47,6 @@ export function useShwarmSystem({
     shwarmsRef.current = shwarms;
   }, [shwarms]);
 
-  // Keyboard sequence state
-  const sequenceRef = useRef<{
-    step: number; // 0 = waiting for !, 1 = waiting for type, 2 = waiting for tier
-    startTime: number;
-    type: number | null;
-  }>({ step: 0, startTime: 0, type: null });
-
-  const SEQUENCE_TIMEOUT_MS = 3000;
-
   /**
    * Generate spawn position in front of player using raycast direction
    */
@@ -232,78 +223,17 @@ export function useShwarmSystem({
     return definitions.find(d => d.tier === actualTier) ?? null;
   }, [definitions]);
 
-  // Keyboard sequence listener
-  useEffect(() => {
-    if (!isEnabled) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if in input fields
-      if (document.activeElement?.tagName === 'INPUT' || 
-          document.activeElement?.tagName === 'TEXTAREA') {
-        return;
-      }
-
-      const now = Date.now();
-      const seq = sequenceRef.current;
-
-      // Check for timeout
-      if (seq.step > 0 && now - seq.startTime > SEQUENCE_TIMEOUT_MS) {
-        seq.step = 0;
-        seq.type = null;
-      }
-
-      // Step 0: Wait for "!" (Shift+1)
-      if (seq.step === 0) {
-        if (e.key === '!' || (e.shiftKey && e.key === '1')) {
-          seq.step = 1;
-          seq.startTime = now;
-          console.log('[Shwarm] Spawn sequence started - press 1 for enemy type');
-          // Don't return - let other enemy systems also see the ! key
-        }
-      }
-
-      // Step 1: Wait for enemy type (1 = shwarm)
-      if (seq.step === 1) {
-        if (e.key === '1' && !e.shiftKey) {
-          seq.step = 2;
-          seq.type = 1; // shwarm
-          console.log('[Shwarm] Enemy type selected: shwarm - press 1-0 for tier');
-          return;
-        }
-        // Not our type (e.g., 2=shnake, 3=shombie) - reset but DON'T return
-        // so other enemy system listeners can process their type
-        seq.step = 0;
-        seq.type = null;
-        // Don't return - let other listeners handle this key
-      }
-
-      // Step 2: Wait for tier (1-9, 0=10)
-      if (seq.step === 2) {
-        const tier = parseInt(e.key, 10);
-        if (!isNaN(tier) && tier >= 0 && tier <= 9 && !e.shiftKey) {
-          // Spawn shwarm!
-          const definition = getDefinitionByTier(tier);
-          if (definition) {
-            spawnShwarm(definition);
-          } else {
-            console.warn(`[Shwarm] No definition found for tier ${tier === 0 ? 10 : tier}`);
-          }
-          
-          // Reset sequence
-          seq.step = 0;
-          seq.type = null;
-          return;
-        }
-        // Invalid key resets
-        seq.step = 0;
-        seq.type = null;
-        return;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isEnabled, getDefinitionByTier, spawnShwarm]);
+  /**
+   * Spawn a shwarm by tier (for universal spawn command)
+   */
+  const spawnShwarmByTier = useCallback((tier: number): ShwarmInstance | null => {
+    const definition = getDefinitionByTier(tier);
+    if (!definition) {
+      console.warn(`[Shwarm] No definition found for tier ${tier}`);
+      return null;
+    }
+    return spawnShwarm(definition);
+  }, [getDefinitionByTier, spawnShwarm]);
 
   // Cleanup dead shwarms - no delay, remove immediately
   useEffect(() => {
@@ -325,7 +255,9 @@ export function useShwarmSystem({
     shwarms,
     shwarmsRef,
     spawnShwarm,
+    spawnShwarmByTier,
     removeShwarm,
     damageBlock,
+    getDefinitionByTier,
   };
 }

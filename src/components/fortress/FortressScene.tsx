@@ -47,6 +47,9 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle } from '@/feat
 import { useEnemyAI } from '@/features/enemies/ai';
 import { initializeShnakeRevenge, markShnakeIndignant, recordShnakeRevengeDamage } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 
+// Universal spawn command system
+import { useSpawnCommands } from '@/features/enemies/hooks/useSpawnCommands';
+
 // Debug flag - disable in production for FPS
 const DEBUG_RENDER = false;
 
@@ -369,7 +372,7 @@ export function FortressScene({
     onShwarmGroupKilled?.(tier);
   }, [onShwarmGroupKilled]);
   
-  const { shwarms, shwarmsRef, damageBlock } = useShwarmSystem({
+  const { shwarms, shwarmsRef, damageBlock, spawnShwarmByTier } = useShwarmSystem({
     definitions: shwarmDefinitions,
     cameraRef,
     blocksRef,
@@ -464,6 +467,7 @@ export function FortressScene({
     shombies,
     shombiesRef,
     damageShombie,
+    spawnShombieGroup,
     spawningEnabled: shombieSpawningEnabled,
   } = useShombieSystem({
     definitions: shombieDefinitions,
@@ -471,7 +475,6 @@ export function FortressScene({
     isEnabled: true,
     userRoles,
   });
-
   // Shnake player hit callback - uses universal damage system
   // shnakeId is optional for compatibility with legacy system
   const handleShnakePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3, shnakeId?: string) => {
@@ -589,6 +592,30 @@ export function FortressScene({
       console.log('[SpawnShnake] No trees found');
     }
   }, [plantedTrees, cameraRef, spawnOnTree]);
+  
+  // Universal spawn command system - handles !1##, !2##, !3##
+  const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
+  
+  const spawnCallbacks = useMemo(() => ({
+    onSpawnShwarm: (tier: number) => {
+      console.log(`[SpawnCommands] Spawning shwarm tier ${tier}`);
+      spawnShwarmByTier(tier);
+    },
+    onSpawnShnake: (tier: number) => {
+      console.log(`[SpawnCommands] Spawning shnake tier ${tier}`);
+      handleSpawnShnake(tier);
+    },
+    onSpawnShombie: (tier: number, count: number) => {
+      console.log(`[SpawnCommands] Spawning ${count} shombie(s) tier ${tier}`);
+      spawnShombieGroup(tier, count);
+    },
+  }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup]);
+  
+  useSpawnCommands({
+    isEnabled: true,
+    isAdmin,
+    callbacks: spawnCallbacks,
+  });
   
   // Universal Enemy AI system - only enabled when AI_CONTROLLED is true
   // When false, legacy movement hooks handle everything (no double-overhead)
