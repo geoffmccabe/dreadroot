@@ -132,12 +132,18 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       const geometry = new particleFire.Geometry(radius, height, particleCount);
       const material = new particleFire.Material({ color: hexToNumber(color) });
       
-      // Fix grey fringe: configure material BEFORE creating Points
-      // AdditiveBlending makes particles add light rather than obscure background
+      // Fix dark fringe against sky:
+      // - AdditiveBlending: particles add light, don't obscure background
+      // - depthWrite false: don't occlude things behind
+      // - depthTest false: always render, even against skybox
+      // - alphaTest 0: let blending handle transparency naturally
+      // - premultipliedAlpha: reduces dark halos at transparent edges
       (material as any).blending = THREE.AdditiveBlending;
       (material as any).depthWrite = false;
+      (material as any).depthTest = false; // Ignore depth buffer - fixes sky fringe
       (material as any).transparent = true;
-      (material as any).alphaTest = 0.001; // Discard nearly-transparent fragments
+      (material as any).alphaTest = 0; // Don't cull fragments, let additive blending handle it
+      (material as any).premultipliedAlpha = true; // Pre-multiply to avoid dark edges
       
       if (camera instanceof THREE.PerspectiveCamera) {
         material.setPerspective(camera.fov, window.innerHeight);
@@ -145,6 +151,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
 
       const firePoints = new THREE.Points(geometry, material);
       firePoints.position.copy(pos);
+      firePoints.frustumCulled = false; // Ensure always rendered
       firePoints.renderOrder = 999; // Render on top
       scene.add(firePoints);
 
