@@ -5,6 +5,7 @@ import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { frameLoop } from '@/lib/frameLoop';
 
 // Global texture cache - shared across all instanced groups
 const textureCache = new Map<string, { 
@@ -467,20 +468,38 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   const lastGlowCameraPos = useRef(new THREE.Vector3());
   const [glowUpdateTrigger, setGlowUpdateTrigger] = useState(0);
   
-  // Check camera movement in useFrame - only trigger glow recalc when moved 5+ units
+  // Stable loop id for this instanced group - uses blockDef.key and textureOverride
+  const glowLoopId = useMemo(
+    () => `glow-check:${blockDef.key}:${textureOverride ?? ''}`,
+    [blockDef.key, textureOverride]
+  );
+
+  // Check camera movement via frameLoop - only trigger glow recalc when moved 5+ units
   useEffect(() => {
     if (!shouldGlow) return;
-    
-    const checkInterval = setInterval(() => {
-      const distMoved = camera.position.distanceToSquared(lastGlowCameraPos.current);
-      if (distMoved > 25) { // 5 units squared
-        lastGlowCameraPos.current.copy(camera.position);
-        setGlowUpdateTrigger(prev => prev + 1);
-      }
-    }, 500); // Check every 500ms, not every frame
-    
-    return () => clearInterval(checkInterval);
-  }, [shouldGlow, camera]);
+
+    let accMs = 0;
+
+    const unregister = frameLoop.register(
+      glowLoopId,
+      (delta) => {
+        accMs += delta * 1000;
+        if (accMs < 500) return;
+        accMs = 0;
+
+        const distMoved = camera.position.distanceToSquared(lastGlowCameraPos.current);
+        if (distMoved > 25) {
+          lastGlowCameraPos.current.copy(camera.position);
+          setGlowUpdateTrigger(v => v + 1);
+        }
+      },
+      80
+    );
+
+    return () => {
+      unregister();
+    };
+  }, [shouldGlow, glowLoopId, camera]);
   
   // Limit point lights to nearest 10 blocks for performance
   // With 100+ blocks, too many point lights destroy FPS

@@ -226,27 +226,8 @@ export const PlacedBlocks: React.FC<{
     return { groupedBlocks: groups, invisiblocks: invisibleBlocks };
   }, [blocks]);
   
-  // Register invisiblock colliders directly (no visual mesh needed)
-  useEffect(() => {
-    // Create collision boxes for invisiblocks and add to collision grid
-    const invisiColliders: THREE.Box3[] = [];
-    
-    for (const block of invisiblocks) {
-      const box = new THREE.Box3(
-        new THREE.Vector3(block.position_x, block.position_y, block.position_z),
-        new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
-      );
-      collisionGrid.insert(box);
-      invisiColliders.push(box);
-    }
-    
-    // Cleanup: remove invisiblock colliders when blocks change
-    return () => {
-      for (const box of invisiColliders) {
-        collisionGrid.remove(box);
-      }
-    };
-  }, [invisiblocks]);
+  // NOTE: Invisiblock colliders are now handled by chunk loader (ensureBlockCollider)
+  // This removes duplicate collider authority that was causing grid inflation
 
   // Don't render blocks until block definitions are loaded
   if (blockDefsLoading || blocks.length === 0) {
