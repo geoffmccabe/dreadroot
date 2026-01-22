@@ -43,7 +43,21 @@ export const fallingBlocksState = new Map<string, { currentY: number; velocity: 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
 
-// C2: Visual signature helpers - order-insensitive, ID-independent
+// D2: Cheap O(1) group key for fast cache hit detection
+// Only compute expensive visual signature when cheap key differs
+function cheapGroupKey(arr: PlacedBlock[]): string {
+  const n = arr.length;
+  if (n === 0) return '0';
+  const a = arr[0];
+  const b = arr[n - 1];
+  const atx = canonicalizeTextureUrl(a.texture_url || '');
+  const btx = canonicalizeTextureUrl(b.texture_url || '');
+  const abd = (a as any).branch_depth ?? '';
+  const bbd = (b as any).branch_depth ?? '';
+  return `${n}|${a.position_x},${a.position_y},${a.position_z},${a.block_type},${atx},${abd}|${b.position_x},${b.position_y},${b.position_z},${b.block_type},${btx},${bbd}`;
+}
+
+// C2: Visual signature helpers - order-insensitive, ID-independent (EXPENSIVE - only call when needed)
 function blockSig(b: PlacedBlock): string {
   const tx = canonicalizeTextureUrl(b.texture_url || '');
   return `${b.position_x},${b.position_y},${b.position_z}|${b.block_type}|${tx}|${(b as any).branch_depth ?? ''}`;
@@ -220,13 +234,15 @@ export const PlacedBlocks: React.FC<{
   // OPTIMIZATION: Cap texture variants per block_type to prevent excessive InstancedBlockGroup components
   const MAX_TEXTURE_VARIANTS_PER_TYPE = 8;
   
-  // B2.4: Cache for stable array references - prevents prop churn to InstancedBlockGroup
+  // D2: Cache for stable array references with cheap key + expensive signature
+  // Cheap key (O(1)) is checked first, expensive signature only when cheap differs
   const groupCacheRef = useRef<Map<string, { 
     blocks: PlacedBlock[]; 
     textureOverride?: string;
     signature: string;
+    cheapKey: string;
   }>>(new Map());
-  const invisiblocksCacheRef = useRef<{ blocks: PlacedBlock[]; signature: string }>({ blocks: [], signature: '' });
+  const invisiblocksCacheRef = useRef<{ blocks: PlacedBlock[]; signature: string; cheapKey: string }>({ blocks: [], signature: '', cheapKey: '' });
   
   const { groupedBlocks, invisiblocks } = useMemo(() => {
     const groups = new Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>();
@@ -275,29 +291,40 @@ export const PlacedBlocks: React.FC<{
       tempGroups.set(groupKey, arr);
     }
     
-    // B2.4 + C2: Build stable arrays - only create new array if VISUAL signature changed
+    // D2: Build stable arrays with CHEAP precheck + expensive signature fallback
+    // Cheap key O(1) catches 99% of "no change" cases; expensive signature only when needed
     const cache = groupCacheRef.current;
     const usedKeys = new Set<string>();
     
     for (const [groupKey, blocksArr] of tempGroups) {
       usedKeys.add(groupKey);
       
-      // C2: Visual, order-insensitive signature (XOR + sum of hashes)
-      const sig = blocksArr.length === 0 ? 'empty' : computeGroupSignature(blocksArr);
-      
+      // D2: Compute cheap O(1) key first
+      const cheap = cheapGroupKey(blocksArr);
       const cached = cache.get(groupKey);
+      
       // C2: Extract block type from new groupKey format (blockType:default or blockType:tx:hash)
       const blockType = groupKey.split(':')[0];
       const textureOverride = (variantsByType.get(blockType)?.size ?? 0) <= MAX_TEXTURE_VARIANTS_PER_TYPE
         ? (blocksArr[0]?.texture_url || undefined)
         : undefined;
       
+      // D2: FAST PATH - cheap key matches, reuse cached array immediately
+      if (cached && cached.cheapKey === cheap) {
+        groups.set(groupKey, { blocks: cached.blocks, textureOverride: cached.textureOverride });
+        continue; // Skip expensive signature computation!
+      }
+      
+      // D2: SLOW PATH - cheap key differs, compute expensive signature
+      const sig = blocksArr.length === 0 ? 'empty' : computeGroupSignature(blocksArr);
+      
       if (cached && cached.signature === sig) {
-        // Reuse cached array reference
+        // Visual signature matches (order changed but content same) - update cheap key and reuse
+        cached.cheapKey = cheap;
         groups.set(groupKey, { blocks: cached.blocks, textureOverride: cached.textureOverride });
       } else {
-        // Content changed - use new array and update cache
-        cache.set(groupKey, { blocks: blocksArr, textureOverride, signature: sig });
+        // Content actually changed - use new array and update cache
+        cache.set(groupKey, { blocks: blocksArr, textureOverride, signature: sig, cheapKey: cheap });
         groups.set(groupKey, { blocks: blocksArr, textureOverride });
       }
     }
@@ -309,15 +336,23 @@ export const PlacedBlocks: React.FC<{
       }
     }
     
-    // B2.4 + C2: Stable invisiblocks array with visual signature
-    const invisiSig = invisibleBlocks.length === 0 ? 'empty' : computeGroupSignature(invisibleBlocks);
+    // D2: Stable invisiblocks array with cheap precheck
+    const invisiCheap = cheapGroupKey(invisibleBlocks);
     
     let stableInvisiblocks: PlacedBlock[];
-    if (invisiblocksCacheRef.current.signature === invisiSig) {
+    if (invisiblocksCacheRef.current.cheapKey === invisiCheap) {
       stableInvisiblocks = invisiblocksCacheRef.current.blocks;
     } else {
-      invisiblocksCacheRef.current = { blocks: invisibleBlocks, signature: invisiSig };
-      stableInvisiblocks = invisibleBlocks;
+      // Cheap key differs - compute expensive signature
+      const invisiSig = invisibleBlocks.length === 0 ? 'empty' : computeGroupSignature(invisibleBlocks);
+      if (invisiblocksCacheRef.current.signature === invisiSig) {
+        // Content same, just update cheap key
+        invisiblocksCacheRef.current.cheapKey = invisiCheap;
+        stableInvisiblocks = invisiblocksCacheRef.current.blocks;
+      } else {
+        invisiblocksCacheRef.current = { blocks: invisibleBlocks, signature: invisiSig, cheapKey: invisiCheap };
+        stableInvisiblocks = invisibleBlocks;
+      }
     }
     
     return { groupedBlocks: groups, invisiblocks: stableInvisiblocks };

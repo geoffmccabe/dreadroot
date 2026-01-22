@@ -358,8 +358,9 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     
     if (!meshRef.current) return;
     
-    // Update visible blocks count for diagnostics
-    diagnostics.visibleBlocks = blocks.length;
+    // D1A: ACCUMULATE visible blocks count (not overwrite)
+    // Reset happens once per frame in FortressScene master loop
+    diagnostics.visibleBlocks += blocks.length;
     
     let needsUpdate = false;
     const matrix = matrixRef.current;
