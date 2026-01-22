@@ -8,9 +8,7 @@ import {
   SPAWN_CHECK_INTERVAL_MS,
   SHOMBIE_SPAWN_BOUNDS,
   SHOMBIE_SCALE_VARIATION,
-  SHOMBIE_EMERGENCE_DURATION_MS,
   SHOMBIE_GROUP_SPREAD_RADIUS,
-  SPAWN_SEQUENCE_TIMEOUT_MS,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
@@ -37,7 +35,7 @@ preloadSpatialSounds([MOAN_SOUND_URL]);
 
 /**
  * Hook to manage active shombies with chunk-based spawning
- * Ctrl+Z toggles spawning on/off (admin/superadmin only)
+ * Ctrl+Z toggles natural spawning on/off (admin/superadmin only)
  */
 export function useShombieSystem({
   definitions,
@@ -49,13 +47,6 @@ export function useShombieSystem({
   const [shombies, setShombies] = useState<ShombieInstance[]>([]);
   const [spawningEnabled, setSpawningEnabled] = useState(false);
   const shombiesRef = useRef<ShombieInstance[]>([]);
-  
-  // Keyboard sequence state for !3## spawn command
-  const sequenceRef = useRef<{
-    step: number; // 0 = waiting for !, 1 = waiting for type, 2 = waiting for tier, 3 = waiting for count (optional)
-    startTime: number;
-    tier: number | null;
-  }>({ step: 0, startTime: 0, tier: null });
   
   // Keep ref in sync
   useEffect(() => {
@@ -74,17 +65,17 @@ export function useShombieSystem({
     return definitions?.find(d => d.tier === actualTier) ?? null;
   }, [definitions]);
 
-  
-
   /**
    * Ambient moan sounds - 10% chance per zombie every 5 seconds
    */
   useEffect(() => {
-    if (!isEnabled || !spawningEnabled) return;
+    if (!isEnabled) return;
+    // Play moans even when natural spawning is disabled (for manually spawned shombies)
 
     const moanCheck = () => {
       const camera = cameraRef.current;
       if (!camera) return;
+      if (shombiesRef.current.length === 0) return;
 
       for (const shombie of shombiesRef.current) {
         if (!shombie.isActive) continue;
@@ -105,7 +96,7 @@ export function useShombieSystem({
 
     const interval = setInterval(moanCheck, MOAN_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isEnabled, spawningEnabled, cameraRef]);
+  }, [isEnabled, cameraRef]);
 
   /**
    * Get player's current chunk
@@ -137,6 +128,7 @@ export function useShombieSystem({
     worldZ: number,
   ): ShombieInstance | null => {
     if (shombiesRef.current.length >= MAX_TOTAL_SHOMBIES) {
+      console.warn('[Shombie] Max total shombies reached');
       return null;
     }
 
@@ -194,12 +186,15 @@ export function useShombieSystem({
   }, [spawnShombieAt]);
 
   /**
-   * Spawn a group of shombies around player position
+   * Spawn a group of shombies around player position (for admin spawn commands)
    */
-  const spawnShombieGroup = useCallback((
-    definition: ShombieDefinition,
-    count: number
-  ) => {
+  const spawnShombieGroup = useCallback((tier: number, count: number) => {
+    const definition = getDefinitionByTier(tier);
+    if (!definition) {
+      console.warn(`[Shombie] No definition for tier ${tier}`);
+      return;
+    }
+
     const camera = cameraRef.current;
     if (!camera) {
       console.warn('[Shombie] Cannot spawn group - no camera');
@@ -226,17 +221,14 @@ export function useShombieSystem({
       spawnShombieAt(definition, baseX + offsetX, baseZ + offsetZ);
     }
     
-    console.log(`[Shombie] Spawned group of ${count} tier ${definition.tier} shombies`);
-  }, [cameraRef, spawnShombieAt]);
+    console.log(`[Shombie] Spawned group of ${count} tier ${tier} shombies`);
+  }, [cameraRef, getDefinitionByTier, spawnShombieAt]);
 
   /**
-   * Keyboard handler for Ctrl+Z toggle and !3## spawn command (admin only)
-   * !3[tier][count] - e.g., !315 spawns 5 tier-1 shombies
+   * Ctrl+Z toggle for natural spawning (admin only)
    */
   useEffect(() => {
     if (!isEnabled) return;
-    
-    console.log('[Shombie] Keyboard listener mounted, isAdmin:', isAdmin, 'definitions:', definitions?.length ?? 0);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if in input fields
@@ -245,7 +237,7 @@ export function useShombieSystem({
         return;
       }
 
-      // Ctrl+Z for zombie toggle (natural spawning)
+      // Ctrl+Z for zombie toggle
       if (e.ctrlKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         
@@ -259,115 +251,12 @@ export function useShombieSystem({
           console.log(`[Shombie] Natural spawning ${newState ? 'ENABLED' : 'DISABLED'}`);
           return newState;
         });
-        return;
-      }
-
-      // Handle !3## spawn sequence
-      const now = Date.now();
-      const seq = sequenceRef.current;
-
-      // Check for timeout - reset if too long since last keypress
-      if (seq.step > 0 && now - seq.startTime > SPAWN_SEQUENCE_TIMEOUT_MS) {
-        console.log('[Shombie] Sequence timeout, resetting');
-        seq.step = 0;
-        seq.tier = null;
-      }
-
-      // Step 0: Wait for "!" (when Shift+1 is pressed, e.key === '!')
-      if (seq.step === 0) {
-        if (e.key === '!' || (e.shiftKey && e.key === '1')) {
-          seq.step = 1;
-          seq.startTime = now;
-          console.log('[Shombie] Spawn sequence started (!) - press 3 for shombie type');
-          // Don't return - let other enemy systems also see the ! key
-        }
-        return; // Don't process other keys at step 0
-      }
-
-      // Step 1: Wait for enemy type (3 = shombie)
-      if (seq.step === 1) {
-        if (e.key === '3') {
-          if (!isAdmin) {
-            console.log('[Shombie] Spawn denied - admin only');
-            seq.step = 0;
-            return;
-          }
-          seq.step = 2;
-          seq.startTime = now; // Reset timeout
-          console.log('[Shombie] Enemy type: shombie - press 1-9 (0=10) for tier');
-          return;
-        }
-        // Not our type (1=shwarm, 2=shnake) - reset but DON'T return
-        // so other enemy system listeners can process their type
-        seq.step = 0;
-        seq.tier = null;
-        // Don't return - let other listeners handle this key
-      }
-
-      // Step 2: Wait for tier (1-9, 0=10)
-      if (seq.step === 2) {
-        if (/^[0-9]$/.test(e.key)) {
-          const tier = parseInt(e.key, 10);
-          seq.tier = tier;
-          seq.step = 3;
-          seq.startTime = now; // Reset timeout
-          console.log(`[Shombie] Tier ${tier === 0 ? 10 : tier} selected - press 1-9 (0=10) for count, or any key to spawn 1`);
-          
-          // Set a delayed spawn if no count is provided within 800ms
-          setTimeout(() => {
-            if (seq.step === 3 && seq.tier === tier) {
-              // Spawn 1 shombie (no count was entered)
-              const def = getDefinitionByTier(tier);
-              if (def) {
-                console.log(`[Shombie] Timeout - spawning 1 tier ${tier === 0 ? 10 : tier}`);
-                spawnShombieGroup(def, 1);
-              } else {
-                console.warn(`[Shombie] No definition for tier ${tier === 0 ? 10 : tier}`);
-              }
-              seq.step = 0;
-              seq.tier = null;
-            }
-          }, 800);
-          return;
-        }
-        // Invalid key resets
-        console.log('[Shombie] Invalid tier key, resetting:', e.key);
-        seq.step = 0;
-        seq.tier = null;
-        return;
-      }
-
-      // Step 3: Wait for count (1-9, 0=10)
-      if (seq.step === 3) {
-        if (/^[0-9]$/.test(e.key)) {
-          const count = parseInt(e.key, 10);
-          const actualCount = count === 0 ? 10 : count;
-          const def = getDefinitionByTier(seq.tier!);
-          if (def) {
-            console.log(`[Shombie] Spawning ${actualCount} tier ${seq.tier === 0 ? 10 : seq.tier}`);
-            spawnShombieGroup(def, actualCount);
-          } else {
-            console.warn(`[Shombie] No definition for tier ${seq.tier === 0 ? 10 : seq.tier}`);
-          }
-          seq.step = 0;
-          seq.tier = null;
-          return;
-        }
-        // Any other key spawns 1 and resets
-        const def = getDefinitionByTier(seq.tier!);
-        if (def) {
-          console.log(`[Shombie] Non-digit pressed - spawning 1 tier ${seq.tier === 0 ? 10 : seq.tier}`);
-          spawnShombieGroup(def, 1);
-        }
-        seq.step = 0;
-        seq.tier = null;
-        return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isEnabled, isAdmin, definitions, getDefinitionByTier, spawnShombieGroup]);
+  }, [isEnabled, isAdmin]);
 
   /**
    * Damage a shombie
@@ -417,14 +306,26 @@ export function useShombieSystem({
   }, []);
 
   /**
-   * Chunk-based spawn loop
+   * Chunk-based natural spawn loop
    * Spawns from all chunks within range, rate halves per chunk distance
    */
   useEffect(() => {
-    if (!isEnabled || !spawningEnabled || !definitions || definitions.length === 0) return;
+    if (!isEnabled || !spawningEnabled) {
+      return;
+    }
+    
+    if (!definitions || definitions.length === 0) {
+      console.log('[Shombie] Natural spawning enabled but no definitions loaded');
+      return;
+    }
 
     const tier1Def = definitions.find(d => d.tier === 1);
-    if (!tier1Def) return;
+    if (!tier1Def) {
+      console.log('[Shombie] No tier 1 definition found');
+      return;
+    }
+
+    console.log(`[Shombie] Natural spawning loop started, tier1 spawn_chance=${tier1Def.spawn_chance_per_minute}/min`);
 
     const spawnCheck = () => {
       const playerChunk = getPlayerChunk();
@@ -475,6 +376,8 @@ export function useShombieSystem({
     shombiesRef,
     spawningEnabled,
     spawnShombie,
+    spawnShombieGroup,
+    getDefinitionByTier,
     damageShombie,
     clearAllShombies,
   };
