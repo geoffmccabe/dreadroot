@@ -14,6 +14,8 @@ import {
   KNOCKBACK_DECAY_RATE,
   SHOMBIE_GRAVITY,
   SHOMBIE_ATTACK_RANGE,
+  SHOMBIE_ATTACK_VERTICAL_REACH,
+  PLAYER_HEIGHT,
   SHOMBIE_ATTACK_COOLDOWN_MS,
   KNOCKDOWN_SLIDE_DISTANCE,
   KNOCKDOWN_TOTAL_DURATION_MS,
@@ -21,6 +23,7 @@ import {
   KNOCKDOWN_SLIDE_DURATION_MS,
   SHOMBIE_COLLISION_RADIUS,
   SHOMBIE_SEPARATION_FORCE,
+  SHOMBIE_HITBOX_HEIGHT,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
@@ -428,6 +431,15 @@ export function useShombieSystem({
       shombie.position.x += separationX;
       shombie.position.z += separationZ;
       
+      // Calculate vertical reach check
+      // Player feet position (camera is at eye level)
+      const playerFeetY = camera.position.y - PLAYER_HEIGHT;
+      // Shombie max reach (top of head + arm reach)
+      const shombieScale = shombie.scale || 1;
+      const shombieMaxReachY = shombie.position.y + (SHOMBIE_HITBOX_HEIGHT * shombieScale) + SHOMBIE_ATTACK_VERTICAL_REACH;
+      // Can the shombie reach the player vertically?
+      const canReachVertically = playerFeetY <= shombieMaxReachY;
+      
       // Chase the player
       if (dist > SHOMBIE_ATTACK_RANGE) {
         shombie.isChasing = true;
@@ -451,26 +463,28 @@ export function useShombieSystem({
         shombie.velocity.x *= 0.8;
         shombie.velocity.z *= 0.8;
         
-        // Attack check
-        const now = Date.now();
-        if (now - shombie.lastAttackAt > SHOMBIE_ATTACK_COOLDOWN_MS) {
-          shombie.lastAttackAt = now;
-          
-          // Attack player!
-          if (onPlayerHit) {
-            const damage = shombie.definition.damage_per_hit;
-            // Knockback direction from shombie toward player (normalized)
-            const knockbackDir = new THREE.Vector3(
-              camera.position.x - shombie.position.x,
-              0,
-              camera.position.z - shombie.position.z
-            ).normalize();
+        // Attack check - must be in horizontal AND vertical range
+        if (canReachVertically) {
+          const now = Date.now();
+          if (now - shombie.lastAttackAt > SHOMBIE_ATTACK_COOLDOWN_MS) {
+            shombie.lastAttackAt = now;
             
-            // Knockback force based on definition (default 3)
-            const knockbackForce = 3;
-            onPlayerHit(damage, knockbackForce, knockbackDir);
-            
-            console.log(`[Shombie] Attack! Dealt ${damage} damage`);
+            // Attack player!
+            if (onPlayerHit) {
+              const damage = shombie.definition.damage_per_hit;
+              // Knockback direction from shombie toward player (normalized)
+              const knockbackDir = new THREE.Vector3(
+                camera.position.x - shombie.position.x,
+                0,
+                camera.position.z - shombie.position.z
+              ).normalize();
+              
+              // Knockback force based on definition (default 3)
+              const knockbackForce = 3;
+              onPlayerHit(damage, knockbackForce, knockbackDir);
+              
+              console.log(`[Shombie] Attack! Dealt ${damage} damage`);
+            }
           }
         }
       }

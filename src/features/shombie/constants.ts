@@ -17,8 +17,14 @@ export const SPAWN_CHECK_INTERVAL_MS = 5000;
 // Default color when no texture
 export const DEFAULT_SHOMBIE_COLOR = 0x4a7c59; // Zombie green
 
-// Attack range in blocks
+// Attack range in blocks (horizontal)
 export const SHOMBIE_ATTACK_RANGE = 1.2;
+
+// Attack vertical reach - shombie can only hit targets within this height above their head
+export const SHOMBIE_ATTACK_VERTICAL_REACH = 0.5; // 0.5m above their head max
+
+// Player height (camera is at eye level, feet are below)
+export const PLAYER_HEIGHT = 1.6;
 
 // Attack cooldown
 export const SHOMBIE_ATTACK_COOLDOWN_MS = 1000;
