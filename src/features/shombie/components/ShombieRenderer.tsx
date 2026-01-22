@@ -1,7 +1,7 @@
 import { useRef, useImperativeHandle, forwardRef, useMemo, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
-import { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, type ShombieInstance, type PartTwitch } from '../types';
+import { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, type ShombieInstance, type PartTwitch, type HeadMovementType } from '../types';
 import { 
   MAX_TOTAL_SHOMBIES, 
   TIER_COLORS,
@@ -12,8 +12,13 @@ import {
   DEFAULT_SHOMBIE_TEXTURE_URL,
   HEAD_FIRE_SIZE,
   HEAD_FIRE_HEIGHT,
+  HEAD_FIRE_PARTICLE_COUNT,
   HEAD_SLIDE_AMPLITUDE,
   HEAD_SLIDE_SPEED,
+  HEAD_BOB_AMPLITUDE,
+  HEAD_CIRCLE_RADIUS,
+  ARM_SWING_AMPLITUDE,
+  ARM_SWING_UP_DOWN,
   ELBOW_BEND_MAX,
 } from '../constants';
 import particleFire from 'three-particle-fire';
@@ -300,8 +305,32 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           const phase = shombie.animationPhase;
           const wobble = Math.sin(phase) * 0.1;
           
-          // Head slide: shoulder to shoulder (0.5m side to side)
-          const headSlide = Math.sin(phase * HEAD_SLIDE_SPEED) * HEAD_SLIDE_AMPLITUDE;
+          // Head movement based on type (1/3 slide, 1/3 bob, 1/3 circle)
+          let headOffsetX = 0;
+          let headOffsetY = 0;
+          const headPhase = phase * HEAD_SLIDE_SPEED;
+          
+          switch (shombie.headMovementType) {
+            case 'slide':
+              // Shoulder to shoulder slide (0.4m)
+              headOffsetX = Math.sin(headPhase) * HEAD_SLIDE_AMPLITUDE;
+              break;
+            case 'bob':
+              // Up and down bob (0.3m)
+              headOffsetY = Math.sin(headPhase) * HEAD_BOB_AMPLITUDE;
+              break;
+            case 'circle':
+              // Circular motion parallel to ground (0.25m diameter)
+              headOffsetX = Math.sin(headPhase) * HEAD_CIRCLE_RADIUS;
+              headOffsetY = 0; // Parallel to ground, so no Y change from circle
+              // Add a forward/back motion instead for the circle effect
+              break;
+          }
+          
+          // Circle motion uses Z offset instead of Y for parallel to ground
+          const headOffsetZ = shombie.headMovementType === 'circle' 
+            ? Math.cos(headPhase) * HEAD_CIRCLE_RADIUS 
+            : 0;
           
           // Set rotation quaternion for this shombie
           tmpEuler.set(0, shombie.rotation, 0);
@@ -330,25 +359,41 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             
             // Apply walking animation per part
             if (part.name === 'head') {
-              // Head bobs and slides side to side
+              // Apply head movement based on type
+              offsetX += headOffsetX * scale;
+              offsetY += headOffsetY * scale;
+              offsetZ += headOffsetZ * scale;
+              // Small additional bob for all types
               offsetY += Math.sin(phase * 2) * 0.02 * scale;
-              offsetX += headSlide * scale; // Slide shoulder to shoulder
             } else if (part.name.includes('UpperArm')) {
-              // Arms swing forward in zombie pose
-              offsetZ -= 0.3 * scale;
+              // Arms swing dramatically forward/back - zombie pose reaching forward
               const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
-              offsetY += Math.sin(armPhase) * 0.05 * scale;
+              const armSwing = Math.sin(armPhase);
+              
+              // Forward/back swing (increased amplitude)
+              offsetZ -= 0.2 * scale; // Base forward position
+              offsetZ += armSwing * ARM_SWING_AMPLITUDE * scale;
+              
+              // Up/down motion during swing
+              offsetY += Math.abs(armSwing) * ARM_SWING_UP_DOWN * scale;
+              
+              // Slight inward rotation when forward
+              offsetX += armSwing * 0.05 * scale * (part.name.includes('left') ? 1 : -1);
             } else if (part.name.includes('LowerArm')) {
-              // Elbow bending: 180 to 90 degrees as arm swings
-              // When arm is forward (sin=1), elbow is bent (90 deg)
-              // When arm is back (sin=-1), elbow is straight (180 deg)
+              // Elbow bending: 180 to 90+ degrees as arm swings
               const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
-              const bendAmount = (1 + Math.sin(armPhase)) * 0.5; // 0 to 1
+              const armSwing = Math.sin(armPhase);
+              const bendAmount = (1 + armSwing) * 0.5; // 0 to 1
               const elbowBend = bendAmount * ELBOW_BEND_MAX;
               
-              // Bent position: arm goes back and up relative to upper arm
-              offsetZ -= 0.25 * scale + elbowBend * scale * 0.5; // Pull back
-              offsetY -= elbowBend * scale * 0.3; // And down (simulates rotation)
+              // Lower arm follows upper arm swing
+              offsetZ -= 0.2 * scale + armSwing * ARM_SWING_AMPLITUDE * 0.8 * scale;
+              
+              // Bent position: arm folds back
+              offsetZ += elbowBend * scale * 0.4;
+              offsetY -= elbowBend * scale * 0.35;
+              
+              // Additional jitter
               offsetY += Math.sin(armPhase * 1.2) * 0.03 * scale;
             } else if (part.name.includes('UpperLeg')) {
               const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
@@ -356,13 +401,12 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             } else if (part.name.includes('LowerLeg')) {
               // Knee bending: when leg is back, knee bends more
               const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
-              const legBackAmount = Math.max(0, -Math.sin(legPhase)); // 0 to 1 when leg is back
+              const legBackAmount = Math.max(0, -Math.sin(legPhase));
               const kneeBend = legBackAmount * ELBOW_BEND_MAX;
               
               offsetZ += Math.sin(legPhase) * 0.1 * scale;
-              // Knee bends when leg swings back
               offsetY -= kneeBend * scale * 0.4;
-              offsetZ += kneeBend * scale * 0.2; // Pull forward when bent
+              offsetZ += kneeBend * scale * 0.2;
             } else if (part.name === 'torso') {
               offsetX += wobble * 0.5 * scale;
             }
@@ -446,11 +490,29 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         
         const headPart = SHOMBIE_BODY_PARTS[0]; // Head is first part
         const phase = shombie.animationPhase;
-        const headSlide = Math.sin(phase * HEAD_SLIDE_SPEED) * HEAD_SLIDE_AMPLITUDE;
+        const headPhase = phase * HEAD_SLIDE_SPEED;
         
-        let offsetX = headPart.offsetX * shombie.scale + headSlide * shombie.scale;
-        let offsetY = headPart.offsetY * shombie.scale + Math.sin(phase * 2) * 0.02 * shombie.scale;
-        let offsetZ = headPart.offsetZ * shombie.scale;
+        // Calculate head offset based on movement type
+        let headOffsetX = 0;
+        let headOffsetY = 0;
+        let headOffsetZ = 0;
+        
+        switch (shombie.headMovementType) {
+          case 'slide':
+            headOffsetX = Math.sin(headPhase) * HEAD_SLIDE_AMPLITUDE;
+            break;
+          case 'bob':
+            headOffsetY = Math.sin(headPhase) * HEAD_BOB_AMPLITUDE;
+            break;
+          case 'circle':
+            headOffsetX = Math.sin(headPhase) * HEAD_CIRCLE_RADIUS;
+            headOffsetZ = Math.cos(headPhase) * HEAD_CIRCLE_RADIUS;
+            break;
+        }
+        
+        let offsetX = headPart.offsetX * shombie.scale + headOffsetX * shombie.scale;
+        let offsetY = headPart.offsetY * shombie.scale + headOffsetY * shombie.scale + Math.sin(phase * 2) * 0.02 * shombie.scale;
+        let offsetZ = headPart.offsetZ * shombie.scale + headOffsetZ * shombie.scale;
         
         const rotatedX = offsetX * Math.cos(shombie.rotation) - offsetZ * Math.sin(shombie.rotation);
         const rotatedZ = offsetX * Math.sin(shombie.rotation) + offsetZ * Math.cos(shombie.rotation);

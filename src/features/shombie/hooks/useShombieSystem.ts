@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
-import type { ShombieDefinition, ShombieInstance } from '../types';
+import type { ShombieDefinition, ShombieInstance, HeadMovementType } from '../types';
 import { generatePartTwitches } from '../types';
 import {
   CHUNK_SIZE,
@@ -17,6 +17,14 @@ import {
   SHOMBIE_ATTACK_COOLDOWN_MS,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+
+// Head movement type randomizer - 1/3 each
+function randomHeadMovementType(): HeadMovementType {
+  const rand = Math.random();
+  if (rand < 0.333) return 'slide';
+  if (rand < 0.666) return 'bob';
+  return 'circle';
+}
 
 interface UseShombieSystemOptions {
   definitions: ShombieDefinition[] | undefined;
@@ -172,6 +180,7 @@ export function useShombieSystem({
       emergenceProgress: 0, // Start underground
       partTwitches: generatePartTwitches(),
       isChasing: false,
+      headMovementType: randomHeadMovementType(), // Random 1/3 slide, 1/3 bob, 1/3 circle
     };
 
     shombiesRef.current = [...shombiesRef.current, instance];
