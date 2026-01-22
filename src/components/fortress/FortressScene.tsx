@@ -30,6 +30,7 @@ import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
 import { Bullets, BulletsHandle } from './FortressBullets';
 import { BulletImpacts, BulletImpactsHandle } from './FortressImpacts';
+import { NebulaImpacts, NebulaImpactsHandle } from './FortressNebulaImpacts';
 import { Tracers, TracersHandle } from './FortressTracers';
 import { SceneProps, WispParticle } from './FortressTypes';
 import { createAudioRefs, initializeAudioElements, createThrottledAudioPlayer } from './FortressAudio';
@@ -751,6 +752,7 @@ export function FortressScene({
   const skyRef = useRef<SkyHandle>(null);
   const fpsCounterRef = useRef<FPSCounterHandle>(null);
   const bulletImpactsRef = useRef<BulletImpactsHandle>(null);
+  const nebulaImpactsRef = useRef<NebulaImpactsHandle>(null);
   const tracersRef = useRef<TracersHandle>(null);
   
   // Track meshes by a unique ID (mesh reference) to allow multiple meshes per blockType
@@ -1865,6 +1867,7 @@ export function FortressScene({
       />
       <Bullets ref={bulletsComponentRef} bullets={bulletsRef.current} />
       <BulletImpacts ref={bulletImpactsRef} />
+      <NebulaImpacts ref={nebulaImpactsRef} />
       <Tracers ref={tracersRef} />
       
       {wispState && (

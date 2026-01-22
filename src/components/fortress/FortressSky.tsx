@@ -96,7 +96,7 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
         transparent: true,
         opacity: 1,
         fog: false,
-        blending: THREE.NormalBlending,  // Changed from AdditiveBlending - fixes particle halo issue
+        blending: THREE.AdditiveBlending, // Restored - original sky blending
         depthWrite: false,
       });
 

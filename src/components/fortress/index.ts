@@ -7,6 +7,8 @@ export { FortressStructure } from './FortressStructure';
 export { ProceduralGround } from './ProceduralGround';
 export { Coins } from './FortressCoins';
 export { Bullets } from './FortressBullets';
+export { BulletImpacts } from './FortressImpacts';
+export { NebulaImpacts } from './FortressNebulaImpacts';
 export { ControlPanel } from './FortressControlPanel';
 export { FirstPersonControls } from './FortressControls';
 export { FortressScene } from './FortressScene';
