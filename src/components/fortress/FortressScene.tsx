@@ -469,6 +469,7 @@ export function FortressScene({
     damageShombie,
     spawnShombieGroup,
     spawningEnabled: shombieSpawningEnabled,
+    updateMovement: updateShombieMovement,
   } = useShombieSystem({
     definitions: shombieDefinitions,
     cameraRef,
@@ -1380,6 +1381,101 @@ export function FortressScene({
             }
           }
           
+          // Check SHOMBIE collisions (if not already hit something)
+          // Cylinder hitbox - head shots do more damage
+          if (!hit && shombieRendererRef.current) {
+            const BASE_BULLET_DAMAGE = 25;
+            const tierDef = getDefinitionRef.current(bullet.tier);
+            const originalMuzzleVelocity = tierDef.velocity;
+            
+            // Use stored previous position
+            const prevX = (bullet as any).prevX ?? bullet.position.x;
+            const prevY = (bullet as any).prevY ?? bullet.position.y;
+            const prevZ = (bullet as any).prevZ ?? bullet.position.z;
+            
+            const dispX = bullet.position.x - prevX;
+            const dispY = bullet.position.y - prevY;
+            const dispZ = bullet.position.z - prevZ;
+            const dispLen = Math.sqrt(dispX * dispX + dispY * dispY + dispZ * dispZ);
+            
+            if (dispLen > 0.001) {
+              const ndx = dispX / dispLen;
+              const ndy = dispY / dispLen;
+              const ndz = dispZ / dispLen;
+              
+              // Check all shombies
+              const shombieList = shombiesRef.current || [];
+              for (const shombie of shombieList) {
+                if (!shombie.isActive || hit) break;
+                
+                // Get hitbox from renderer
+                const hitbox = shombieRendererRef.current?.getHitbox(shombie.id);
+                if (!hitbox) continue;
+                
+                // Cylinder intersection test
+                // First check XZ plane (circle)
+                const dx = bullet.position.x - shombie.position.x;
+                const dz = bullet.position.z - shombie.position.z;
+                const distXZ = Math.sqrt(dx * dx + dz * dz);
+                
+                // Then check Y bounds
+                const bulletY = bullet.position.y;
+                const shombieMinY = shombie.position.y;
+                const shombieMaxY = shombie.position.y + hitbox.height;
+                
+                if (distXZ < hitbox.radius && bulletY >= shombieMinY && bulletY <= shombieMaxY) {
+                  // HIT a shombie!
+                  hit = true;
+                  needsBulletRender = true;
+                  
+                  const velocityRatio = bullet.speed / originalMuzzleVelocity;
+                  const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
+                  
+                  // Headshot bonus (upper 25% of body)
+                  const headThreshold = shombieMinY + hitbox.height * 0.75;
+                  const isHeadshot = bulletY > headThreshold;
+                  const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
+                  
+                  // Calculate knockback direction (horizontal only)
+                  const knockbackDir = new THREE.Vector3(dx, 0, dz).normalize();
+                  
+                  // Apply damage
+                  const killed = damageShombie(shombie.id, finalDamage, knockbackDir);
+                  
+                  // Award points
+                  if (onPointsEarned) {
+                    onPointsEarned(finalDamage);
+                  }
+                  
+                  // Spawn impact effect at hit position
+                  if (bulletImpactsRef.current) {
+                    const hitPos = new THREE.Vector3(
+                      bullet.position.x,
+                      bullet.position.y,
+                      bullet.position.z
+                    );
+                    const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
+                    bulletImpactsRef.current.spawnImpact(hitPos, {
+                      colors: tierDef.colors,
+                      size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
+                      height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
+                      duration: tierDef.burn_time * pentaMultiplier,
+                      tier: bullet.tier,
+                    });
+                  }
+                  
+                  if (isHeadshot) {
+                    console.log(`[Shombie Hit] HEADSHOT! damage=${finalDamage} killed=${killed}`);
+                  } else {
+                    console.log(`[Shombie Hit] Body hit, damage=${finalDamage} killed=${killed}`);
+                  }
+                  
+                  break;
+                }
+              }
+            }
+          }
+          
           // Check block collisions (if not already hit something)
           if (!hit) {
             // Use stored previous position for accurate ray collision
@@ -1615,6 +1711,9 @@ export function FortressScene({
     
     // Update shwarm renderer (always, since movement is continuous)
     shwarmRendererRef.current?.update();
+    
+    // Update shombie movement (pathfinding to player)
+    updateShombieMovement(delta);
     
     // Update shombie renderer
     shombieRendererRef.current?.update(camera.position, delta);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import type { ShombieDefinition, ShombieInstance } from '../types';
+import { generatePartTwitches } from '../types';
 import {
   CHUNK_SIZE,
   MAX_SHOMBIES_PER_CHUNK,
@@ -9,6 +10,11 @@ import {
   SHOMBIE_SPAWN_BOUNDS,
   SHOMBIE_SCALE_VARIATION,
   SHOMBIE_GROUP_SPREAD_RADIUS,
+  SHOMBIE_CHASE_SPEED_MULTIPLIER,
+  KNOCKBACK_DECAY_RATE,
+  SHOMBIE_GRAVITY,
+  SHOMBIE_ATTACK_RANGE,
+  SHOMBIE_ATTACK_COOLDOWN_MS,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
@@ -161,6 +167,8 @@ export function useShombieSystem({
       spawnChunkZ: chunkZ,
       scale,
       emergenceProgress: 0, // Start underground
+      partTwitches: generatePartTwitches(),
+      isChasing: false,
     };
 
     shombiesRef.current = [...shombiesRef.current, instance];
@@ -306,6 +314,88 @@ export function useShombieSystem({
   }, []);
 
   /**
+   * Movement update - pathfind to player and apply physics
+   * Called from frame loop
+   */
+  const updateMovement = useCallback((deltaTime: number) => {
+    const camera = cameraRef.current;
+    if (!camera) return;
+    
+    let needsUpdate = false;
+    
+    for (const shombie of shombiesRef.current) {
+      if (!shombie.isActive) continue;
+      
+      // Don't move until fully emerged
+      if (shombie.emergenceProgress < 1) continue;
+      
+      // Calculate direction to player
+      const dx = camera.position.x - shombie.position.x;
+      const dz = camera.position.z - shombie.position.z;
+      const distSq = dx * dx + dz * dz;
+      const dist = Math.sqrt(distSq);
+      
+      // Chase the player
+      if (dist > SHOMBIE_ATTACK_RANGE) {
+        shombie.isChasing = true;
+        
+        // Normalize direction
+        const invDist = 1 / dist;
+        const dirX = dx * invDist;
+        const dirZ = dz * invDist;
+        
+        // Move toward player at definition speed
+        const speed = shombie.definition.speed * SHOMBIE_CHASE_SPEED_MULTIPLIER;
+        shombie.velocity.x = dirX * speed;
+        shombie.velocity.z = dirZ * speed;
+        
+        // Face the player
+        shombie.rotation = Math.atan2(dirX, dirZ);
+      } else {
+        shombie.isChasing = false;
+        
+        // In attack range - stop moving horizontally
+        shombie.velocity.x *= 0.8;
+        shombie.velocity.z *= 0.8;
+        
+        // Attack check
+        const now = Date.now();
+        if (now - shombie.lastAttackAt > SHOMBIE_ATTACK_COOLDOWN_MS) {
+          shombie.lastAttackAt = now;
+          // Attack will be handled by FortressScene callbacks
+        }
+      }
+      
+      // Apply knockback decay
+      const decayFactor = Math.exp(-KNOCKBACK_DECAY_RATE * deltaTime);
+      // Don't decay chase velocity, only knockback component would be decayed separately
+      
+      // Apply gravity
+      if (shombie.position.y > 0) {
+        shombie.velocity.y -= SHOMBIE_GRAVITY * deltaTime;
+      } else {
+        shombie.velocity.y = 0;
+        shombie.position.y = 0;
+      }
+      
+      // Apply velocity to position
+      shombie.position.x += shombie.velocity.x * deltaTime;
+      shombie.position.y += shombie.velocity.y * deltaTime;
+      shombie.position.z += shombie.velocity.z * deltaTime;
+      
+      // Clamp to ground
+      if (shombie.position.y < 0) {
+        shombie.position.y = 0;
+        shombie.velocity.y = 0;
+      }
+      
+      needsUpdate = true;
+    }
+    
+    // Only trigger React update if needed (not every frame - refs handle visual updates)
+  }, [cameraRef]);
+
+  /**
    * Chunk-based natural spawn loop
    * Spawns from all chunks within range, rate halves per chunk distance
    */
@@ -380,5 +470,6 @@ export function useShombieSystem({
     getDefinitionByTier,
     damageShombie,
     clearAllShombies,
+    updateMovement,
   };
 }
