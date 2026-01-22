@@ -5,9 +5,9 @@ import { useIndexedDB } from './useIndexedDB';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
-import { collisionGrid } from '@/lib/spatialHashGrid';
-import { initLogStep, initLogStart, initLogFinish } from '@/contexts/InitializationContext';
+import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { canonicalizeTextureUrl } from '@/lib/renderKeys';
 import * as THREE from 'three';
 interface DBBlock extends PlacedBlock {
   synced: boolean;
@@ -19,6 +19,7 @@ interface DBBlock extends PlacedBlock {
 
 // Helper to check if blocks arrays are shallowly equal
 // OPTIMIZED: Early exits to avoid expensive Map creation when possible
+// C7 FIX: Include canonical texture identity and branch_depth for visual equivalence
 const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
   // FAST: Same reference = same array
   if (a === b) return true;
@@ -39,7 +40,9 @@ const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
       if (blockA.position_x !== blockB.position_x ||
           blockA.position_y !== blockB.position_y ||
           blockA.position_z !== blockB.position_z ||
-          blockA.block_type !== blockB.block_type) {
+          blockA.block_type !== blockB.block_type ||
+          canonicalizeTextureUrl(blockA.texture_url) !== canonicalizeTextureUrl(blockB.texture_url) ||
+          (blockA as any).branch_depth !== (blockB as any).branch_depth) {
         return false;
       }
     }
@@ -51,7 +54,9 @@ const arraysShallowEqual = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
       if (blockA.position_x !== blockB.position_x ||
           blockA.position_y !== blockB.position_y ||
           blockA.position_z !== blockB.position_z ||
-          blockA.block_type !== blockB.block_type) {
+          blockA.block_type !== blockB.block_type ||
+          canonicalizeTextureUrl(blockA.texture_url) !== canonicalizeTextureUrl(blockB.texture_url) ||
+          (blockA as any).branch_depth !== (blockB as any).branch_depth) {
         return false;
       }
     }
@@ -154,8 +159,6 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   // Phase 2B: Initialize with chunk loading instead of full world load
   // Use ref to avoid chunkLoader dependency causing re-initialization
   const initializeCache = useCallback(async () => {
-    // REMOVED: console.log spam - use initLogStep instead for init-only logging
-    
     if (!userId || !worldId) {
       setIsLoading(false);
       return;
@@ -167,30 +170,35 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     }
     initializedWorldRef.current = worldId;
     
+    // Start initialization overlay
+    initLogStart();
+    
+    const initStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Starting world initialization...');
+    
     try {
       setIsLoading(true);
       
-      // Start initialization overlay
-      initLogStart();
-      initLogStep('usePlacedBlocksWithCache.ts', 'Starting world initialization...');
       initLogStep('usePlacedBlocksWithCache.ts', `User authenticated, world: ${worldId.slice(0, 8)}...`);
       
-      initLogStep('usePlacedBlocksWithCache.ts', 'Initializing IndexedDB...');
+      // C7: IndexedDB initialization with start/finish
+      const dbStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing IndexedDB...');
       await initDB();
-      initLogStep('usePlacedBlocksWithCache.ts', 'IndexedDB ready');
+      initLogFinishStep(dbStepId!);
       
-      // Phase 2B: Use chunk loader for initial load from camera starting position
-      initLogStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
+      // C7: Chunk loader initialization with start/finish
+      const chunkStepId = initLogStartStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
       await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
+      initLogFinishStep(chunkStepId!);
       
-      // NEW ARCHITECTURE: Tree blocks are now in placed_blocks, loaded by chunk loader
-      // No separate tree block loading needed
-      
-      // Set up realtime subscription
-      initLogStep('usePlacedBlocksWithCache.ts', 'Setting up realtime subscription...');
+      // C7: Realtime subscription setup
+      const realtimeStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Setting up realtime subscription...');
+      initLogFinishStep(realtimeStepId!);
       
       // Signal that React rendering will begin
       initLogStep('usePlacedBlocksWithCache.ts', 'Queuing React re-render...');
+      
+      // Complete the main init step
+      if (initStepId) initLogFinishStep(initStepId);
       
       // Finish initialization overlay
       initLogStep('usePlacedBlocksWithCache.ts', 'World initialization complete!');
@@ -198,7 +206,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     } catch (error) {
       console.error('Error initializing:', error);
       initializedWorldRef.current = null; // Allow retry on error
-      initLogStep('usePlacedBlocksWithCache.ts', `Error: ${error}`);
+      if (initStepId) initLogErrorStep(initStepId, String(error));
       initLogFinish();
     } finally {
       setIsLoading(false);
