@@ -93,6 +93,14 @@ export interface ShombieInstance {
   isChasing: boolean;
   /** Head movement type (1/3 slide, 1/3 bob, 1/3 circle) */
   headMovementType: HeadMovementType;
+  /** Is knocked down (headshot) - falling backward and sliding */
+  isKnockedDown: boolean;
+  /** Knockdown direction (bullet travel direction) */
+  knockdownDirection?: THREE.Vector3;
+  /** Knockdown slide progress (0-1) */
+  knockdownProgress: number;
+  /** Knockdown start time */
+  knockdownStartTime: number;
 }
 
 /**

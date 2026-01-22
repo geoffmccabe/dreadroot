@@ -122,5 +122,13 @@ export const ARM_SWING_UP_DOWN = 0.15; // Up/down motion during swing
 export const ELBOW_BEND_MIN = 0; // Straight (180deg displayed as 0 offset)
 export const ELBOW_BEND_MAX = 0.6; // Increased max bend offset (simulates 90+ deg)
 
-// Default fortress texture for shombie body
+// Default fortress texture for shombie body (fallback only)
 export const DEFAULT_SHOMBIE_TEXTURE_URL = '/grass_texture_seamless.webp';
+
+// Knockdown settings (headshot)
+export const KNOCKDOWN_SLIDE_DISTANCE = 3.0; // Slide 3 meters when headshot
+export const KNOCKDOWN_DURATION_MS = 1000; // 1 second knockdown animation
+
+// Shombie-to-shombie collision avoidance
+export const SHOMBIE_COLLISION_RADIUS = 0.8; // Radius for shombie-shombie collisions
+export const SHOMBIE_SEPARATION_FORCE = 5.0; // Force to push shombies apart
