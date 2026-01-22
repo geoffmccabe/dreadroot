@@ -6,18 +6,15 @@ import {
   MAX_TOTAL_SHOMBIES, 
   TIER_COLORS,
   SHOMBIE_EMERGENCE_DURATION_MS,
-  HEAD_FIRE_SIZE,
-  HEAD_FIRE_HEIGHT,
-  HEAD_FIRE_PARTICLE_COUNT,
   SHOMBIE_LEG_ANIMATION_MULTIPLIER,
   SHOMBIE_HITBOX_RADIUS,
   SHOMBIE_HITBOX_HEIGHT,
   DEFAULT_SHOMBIE_TEXTURE_URL,
 } from '../constants';
-import particleFire from 'three-particle-fire';
 
-// Install with our THREE instance
-particleFire.install({ THREE });
+// HEAD FIRE DISABLED - particleFire.install() crashes at module load
+// TODO: Re-enable using the same pattern as FortressImpacts (lazy init inside component)
+const HEAD_FIRE_ENABLED = false;
 
 // Pre-allocated objects
 const tmpMatrix = new THREE.Matrix4();
@@ -36,9 +33,6 @@ const MAX_INSTANCES = MAX_TOTAL_SHOMBIES * PARTS_PER_SHOMBIE;
 // Emergence depth (how far underground they start)
 const EMERGENCE_DEPTH = 2.0;
 
-// Max head fires
-const MAX_HEAD_FIRES = MAX_TOTAL_SHOMBIES;
-
 // Texture cache
 const textureLoader = new THREE.TextureLoader();
 let fortressTexture: THREE.Texture | null = null;
@@ -54,17 +48,6 @@ textureLoader.load(DEFAULT_SHOMBIE_TEXTURE_URL, (texture) => {
 // Get tier color as hex
 function getTierPrimaryColor(tier: number): string {
   return TIER_COLORS[tier]?.[0] || '#FFFF00';
-}
-
-// Convert hex to number for particleFire
-function hexToNumber(hex: string): number {
-  return parseInt(hex.replace('#', ''), 16);
-}
-
-interface HeadFire {
-  shombieId: string;
-  points: THREE.Points;
-  material: ReturnType<typeof particleFire.Material>;
 }
 
 export interface ShombieRendererHandle {
@@ -128,10 +111,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
   ({ shombies }, ref) => {
     const meshRef = useRef<THREE.InstancedMesh>(null);
     const groupRef = useRef<THREE.Group>(null);
-    const headFiresRef = useRef<Map<string, HeadFire>>(new Map());
-    const cameraRef = useRef<THREE.Camera | null>(null);
     const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
-    const { scene, camera } = useThree();
 
     // Create material with fortress texture and tier tint
     const material = useMemo(() => {
@@ -159,30 +139,6 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       materialRef.current = mat;
       return mat;
     }, []);
-
-    // Clean up fires when shombies are removed
-    useEffect(() => {
-      const activeIds = new Set(shombies.filter(s => s.isActive).map(s => s.id));
-      
-      for (const [id, headFire] of headFiresRef.current.entries()) {
-        if (!activeIds.has(id)) {
-          // Remove fire from scene
-          scene.remove(headFire.points);
-          headFire.points.geometry.dispose();
-          headFire.material.dispose();
-          headFiresRef.current.delete(id);
-        }
-      }
-    }, [shombies, scene]);
-
-    // Update fires every frame
-    useFrame(({ camera: cam }, delta) => {
-      cameraRef.current = cam;
-      
-      for (const headFire of headFiresRef.current.values()) {
-        headFire.material.update(delta);
-      }
-    });
 
     useImperativeHandle(ref, () => ({
       update: (cameraPosition: THREE.Vector3, deltaTime: number) => {
@@ -306,55 +262,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           }
         }
 
-        // Update head fires (same effect as bullet impacts)
-        for (const shombie of shombies) {
-          if (!shombie.isActive) continue;
-          
-          const headPos = headPositions.get(shombie.id);
-          if (!headPos) continue;
-
-          let headFire = headFiresRef.current.get(shombie.id);
-          
-          // Create fire if it doesn't exist
-          if (!headFire && cameraRef.current) {
-            const tierColorHex = getTierPrimaryColor(shombie.definition.tier);
-            
-            const fireGeometry = new particleFire.Geometry(
-              HEAD_FIRE_SIZE / 2, // radius
-              HEAD_FIRE_HEIGHT,
-              HEAD_FIRE_PARTICLE_COUNT
-            );
-            const fireMaterial = new particleFire.Material({ 
-              color: hexToNumber(tierColorHex) 
-            });
-            
-            // Configure material like bullet impacts
-            (fireMaterial as THREE.Material).blending = THREE.AdditiveBlending;
-            (fireMaterial as THREE.ShaderMaterial).depthWrite = false;
-            (fireMaterial as THREE.Material).transparent = true;
-            
-            const cam = cameraRef.current as THREE.PerspectiveCamera;
-            if (cam.fov) {
-              fireMaterial.setPerspective(cam.fov, window.innerHeight);
-            }
-            
-            const firePoints = new THREE.Points(fireGeometry, fireMaterial);
-            firePoints.renderOrder = 999;
-            scene.add(firePoints);
-            
-            headFire = { shombieId: shombie.id, points: firePoints, material: fireMaterial };
-            headFiresRef.current.set(shombie.id, headFire);
-          }
-          
-          // Update fire position (on top of head)
-          if (headFire) {
-            headFire.points.position.set(
-              headPos.x,
-              headPos.y + 0.25, // Above the head
-              headPos.z
-            );
-          }
-        }
+        // HEAD FIRE DISABLED - TODO: re-enable with lazy init pattern from FortressImpacts
       },
       
       getHeadPosition: (shombieId: string) => {
@@ -393,7 +301,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           height: SHOMBIE_HITBOX_HEIGHT * shombie.scale,
         };
       },
-    }), [shombies, scene]);
+    }), [shombies]);
 
     return (
       <group ref={groupRef}>
