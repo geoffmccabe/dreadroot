@@ -35,6 +35,22 @@ export interface ShombiePart {
   scaleX: number;
   scaleY: number;
   scaleZ: number;
+  /** Parent part for joint connections */
+  parent?: string;
+}
+
+/**
+ * Twitchiness state for a single body part
+ */
+export interface PartTwitch {
+  /** Frequency multiplier for oscillation */
+  frequency: number;
+  /** Amplitude of movement */
+  amplitude: number;
+  /** Phase offset */
+  phaseOffset: number;
+  /** Type of twitch movement */
+  twitchType: 'vertical' | 'horizontal' | 'rotate' | 'scale' | 'shake';
 }
 
 /**
@@ -64,26 +80,64 @@ export interface ShombieInstance {
   scale: number;
   /** Emergence progress (0 = underground, 1 = fully emerged) */
   emergenceProgress: number;
+  /** Per-part twitchiness settings (randomized on spawn) */
+  partTwitches: Record<string, PartTwitch>;
+  /** Target position for pathfinding */
+  targetPosition?: THREE.Vector3;
+  /** Is currently chasing player */
+  isChasing: boolean;
 }
 
 /**
- * Shombie body structure - humanoid made of blocks
+ * Shombie body structure - humanoid made of blocks with joints
  * All offsets are relative to the base position (feet)
+ * Now includes elbows and knees for more articulated limbs
  */
 export const SHOMBIE_BODY_PARTS: ShombiePart[] = [
   // Head (1x1x1)
   { name: 'head', offsetX: 0, offsetY: 1.7, offsetZ: 0, scaleX: 0.5, scaleY: 0.5, scaleZ: 0.5 },
   // Torso (wider, taller)
   { name: 'torso', offsetX: 0, offsetY: 1.0, offsetZ: 0, scaleX: 0.6, scaleY: 0.7, scaleZ: 0.4 },
-  // Left arm
-  { name: 'leftArm', offsetX: -0.45, offsetY: 1.1, offsetZ: 0, scaleX: 0.2, scaleY: 0.6, scaleZ: 0.2 },
-  // Right arm
-  { name: 'rightArm', offsetX: 0.45, offsetY: 1.1, offsetZ: 0, scaleX: 0.2, scaleY: 0.6, scaleZ: 0.2 },
-  // Left leg
-  { name: 'leftLeg', offsetX: -0.15, offsetY: 0.35, offsetZ: 0, scaleX: 0.25, scaleY: 0.7, scaleZ: 0.25 },
-  // Right leg
-  { name: 'rightLeg', offsetX: 0.15, offsetY: 0.35, offsetZ: 0, scaleX: 0.25, scaleY: 0.7, scaleZ: 0.25 },
+  
+  // Left arm - upper (shoulder to elbow)
+  { name: 'leftUpperArm', offsetX: -0.45, offsetY: 1.25, offsetZ: 0, scaleX: 0.18, scaleY: 0.35, scaleZ: 0.18, parent: 'torso' },
+  // Left arm - lower (elbow to hand)
+  { name: 'leftLowerArm', offsetX: -0.45, offsetY: 0.9, offsetZ: 0, scaleX: 0.15, scaleY: 0.35, scaleZ: 0.15, parent: 'leftUpperArm' },
+  
+  // Right arm - upper (shoulder to elbow)
+  { name: 'rightUpperArm', offsetX: 0.45, offsetY: 1.25, offsetZ: 0, scaleX: 0.18, scaleY: 0.35, scaleZ: 0.18, parent: 'torso' },
+  // Right arm - lower (elbow to hand)
+  { name: 'rightLowerArm', offsetX: 0.45, offsetY: 0.9, offsetZ: 0, scaleX: 0.15, scaleY: 0.35, scaleZ: 0.15, parent: 'rightUpperArm' },
+  
+  // Left leg - upper (hip to knee)
+  { name: 'leftUpperLeg', offsetX: -0.15, offsetY: 0.5, offsetZ: 0, scaleX: 0.22, scaleY: 0.4, scaleZ: 0.22, parent: 'torso' },
+  // Left leg - lower (knee to foot)
+  { name: 'leftLowerLeg', offsetX: -0.15, offsetY: 0.15, offsetZ: 0, scaleX: 0.2, scaleY: 0.35, scaleZ: 0.2, parent: 'leftUpperLeg' },
+  
+  // Right leg - upper (hip to knee)
+  { name: 'rightUpperLeg', offsetX: 0.15, offsetY: 0.5, offsetZ: 0, scaleX: 0.22, scaleY: 0.4, scaleZ: 0.22, parent: 'torso' },
+  // Right leg - lower (knee to foot)
+  { name: 'rightLowerLeg', offsetX: 0.15, offsetY: 0.15, offsetZ: 0, scaleX: 0.2, scaleY: 0.35, scaleZ: 0.2, parent: 'rightUpperLeg' },
 ];
 
 // Number of parts per shombie for instanced rendering
 export const PARTS_PER_SHOMBIE = SHOMBIE_BODY_PARTS.length;
+
+/**
+ * Generate random twitchiness for a new shombie
+ */
+export function generatePartTwitches(): Record<string, PartTwitch> {
+  const twitchTypes: PartTwitch['twitchType'][] = ['vertical', 'horizontal', 'rotate', 'scale', 'shake'];
+  const twitches: Record<string, PartTwitch> = {};
+  
+  for (const part of SHOMBIE_BODY_PARTS) {
+    twitches[part.name] = {
+      frequency: 0.5 + Math.random() * 3, // 0.5 to 3.5 Hz
+      amplitude: 0.02 + Math.random() * 0.08, // 0.02 to 0.1 intensity
+      phaseOffset: Math.random() * Math.PI * 2, // Random phase
+      twitchType: twitchTypes[Math.floor(Math.random() * twitchTypes.length)],
+    };
+  }
+  
+  return twitches;
+}

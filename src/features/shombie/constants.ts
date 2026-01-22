@@ -84,10 +84,10 @@ export const RARITY_COLORS: Record<string, string> = {
   cosmic: '#ffd700',
 };
 
-// Head fire effect settings
-export const HEAD_FIRE_SIZE = 0.15;
-export const HEAD_FIRE_HEIGHT = 0.3;
-export const HEAD_FIRE_DURATION = 999999; // Permanent while alive
+// Head fire effect settings (same as bullet impacts)
+export const HEAD_FIRE_SIZE = 0.3;
+export const HEAD_FIRE_HEIGHT = 0.4;
+export const HEAD_FIRE_PARTICLE_COUNT = 60;
 
 // Spawn variation settings
 export const SHOMBIE_SCALE_VARIATION = 0.2; // ±20% size variation
@@ -96,3 +96,14 @@ export const SHOMBIE_GROUP_SPREAD_RADIUS = 3; // Blocks radius for group spawns
 
 // Keyboard spawn sequence timeout
 export const SPAWN_SEQUENCE_TIMEOUT_MS = 3000;
+
+// Movement settings
+export const SHOMBIE_CHASE_SPEED_MULTIPLIER = 1.0; // Base chase speed
+export const SHOMBIE_LEG_ANIMATION_MULTIPLIER = 2.0; // Double leg animation when walking
+
+// Hitbox settings
+export const SHOMBIE_HITBOX_RADIUS = 0.4;
+export const SHOMBIE_HITBOX_HEIGHT = 2.0;
+
+// Default fortress texture for shombie body
+export const DEFAULT_SHOMBIE_TEXTURE_URL = '/grass_texture_seamless.webp';
