@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
@@ -114,8 +114,8 @@ export function useShwarmMovement({
           block.position.z + halfSize
         )
       );
-      // Add to collision grid so player can stand on it
-      collisionGrid.insert(collider);
+      // Add to entity collision grid so player can stand on it
+      entityCollisionGrid.insert(collider);
       
       // Stagger initial move: random time within first 0.5-1.5s window
       const nextMoveTime = Date.now() + 500 + Math.random() * 1000;
@@ -165,9 +165,9 @@ export function useShwarmMovement({
     _testMax.set(pos.x + halfSize, pos.y + halfSize, pos.z + halfSize);
     _testBox.set(_testMin, _testMax);
 
-    const nearbyCount = collisionGrid.getNearby(pos.x, pos.z, 2);
+    const nearbyCount = worldCollisionGrid.getNearby(pos.x, pos.z, 2);
     for (let i = 0; i < nearbyCount; i++) {
-      const collider = collisionGrid.nearbyResult[i] as THREE.Box3;
+      const collider = worldCollisionGrid.nearbyResult[i] as THREE.Box3;
       if (_testBox.intersectsBox(collider)) {
         return true;
       }
@@ -200,7 +200,7 @@ export function useShwarmMovement({
           if (!block.isAlive || !shwarm.isActive) {
             const target = blockTargetsRef.current.get(block.id);
             if (target?.collider) {
-              collisionGrid.remove(target.collider);
+              entityCollisionGrid.remove(target.collider);
               target.collider = null;
               blockTargetsRef.current.delete(block.id);
             }
@@ -230,7 +230,7 @@ export function useShwarmMovement({
             );
             // OPTIMIZATION: Use update() which skips remove+insert if cell unchanged
             target.collider.set(_colliderMin, _colliderMax);
-            collisionGrid.update(target.collider);
+            entityCollisionGrid.update(target.collider);
           }
 
           // Continuous player collision check (squared distance - no sqrt)
@@ -478,9 +478,9 @@ export function useShwarmMovement({
       // Cleanup target positions and remove colliders from grid
       for (const [id, target] of blockTargetsRef.current.entries()) {
         if (!activeBlockIds.has(id)) {
-          // Remove collider from collision grid so player doesn't collide with dead blocks
+          // Remove collider from entity collision grid so player doesn't collide with dead blocks
           if (target.collider) {
-            collisionGrid.remove(target.collider);
+            entityCollisionGrid.remove(target.collider);
           }
           blockTargetsRef.current.delete(id);
         }

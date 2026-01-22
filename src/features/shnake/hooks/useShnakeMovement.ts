@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { PlantedTree } from '@/features/trees/types';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import type { ShnakeInstance } from '../types';
 
 // Debug flag - disable in production for FPS
@@ -442,11 +442,11 @@ export function useShnakeMovement({
           const newHead = { x: headSeg.x + choice.dx, y: headSeg.y + choice.dy, z: headSeg.z + choice.dz };
           s.headDir.set(choice.dx, choice.dy, choice.dz);
 
-          // Update collision grid: remove tail collider, insert new head collider
+          // Update entity collision grid: remove tail collider, insert new head collider
           const oldTailCollider = s.colliders[s.colliders.length - 1];
-          if (oldTailCollider) collisionGrid.remove(oldTailCollider);
+          if (oldTailCollider) entityCollisionGrid.remove(oldTailCollider);
           const newHeadCollider = aabbForCell(newHead.x, newHead.y, newHead.z);
-          collisionGrid.insert(newHeadCollider);
+          entityCollisionGrid.insert(newHeadCollider);
 
           // Shift arrays (worm)
           const newSegments = [newHead, ...s.segments.slice(0, -1)];

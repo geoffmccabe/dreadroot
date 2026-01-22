@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { PlantedTree } from '@/features/trees/types';
 import { decodeBlockType, getBaseTreeBlockType, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { entityCollisionGrid } from '@/lib/spatialHashGrid';
 import type { ShnakeDefinition, ShnakeInstance, ShnakeSegment } from '../types';
 
 const LENGTH_BASE = 10; // length = 10 + tier
@@ -313,7 +313,7 @@ export function useShnakeSystem({
       (box as any).shnakeId = id;
       return box;
     });
-    colliders.forEach(c => collisionGrid.insert(c));
+    colliders.forEach(c => entityCollisionGrid.insert(c));
 
     const inst: ShnakeInstance = {
       id,
@@ -368,7 +368,7 @@ export function useShnakeSystem({
     const current = shnakesRef.current;
     const target = current.find(s => s.id === id);
     if (target) {
-      target.colliders.forEach(c => collisionGrid.remove(c));
+      target.colliders.forEach(c => entityCollisionGrid.remove(c));
     }
     shnakesRef.current = current.filter(s => s.id !== id);
     setShnakes(shnakesRef.current);
@@ -379,7 +379,7 @@ export function useShnakeSystem({
     return () => {
       const current = shnakesRef.current;
       for (const s of current) {
-        for (const c of s.colliders) collisionGrid.remove(c);
+        for (const c of s.colliders) entityCollisionGrid.remove(c);
       }
       shnakesRef.current = [];
       setShnakes([]);
@@ -421,14 +421,14 @@ export function useShnakeSystem({
       const newSegments = s.segments.slice(1);
       const newColliders = s.colliders.slice(1);
 
-      // Remove old head collider from collision grid
-      if (s.colliders[0]) collisionGrid.remove(s.colliders[0]);
+      // Remove old head collider from entity collision grid
+      if (s.colliders[0]) entityCollisionGrid.remove(s.colliders[0]);
 
       if (newSegments.length === 0) {
         killedEntire = true;
         console.log(`[Shnake Kill] Shnake ${shnakeId.slice(-6)} killed entirely! tier=${tier}`);
         // Remove remaining colliders too
-        newColliders.forEach(c => collisionGrid.remove(c));
+        newColliders.forEach(c => entityCollisionGrid.remove(c));
         return { ...s, isActive: false, segments: [], colliders: [], headHealth: 0 };
       }
 

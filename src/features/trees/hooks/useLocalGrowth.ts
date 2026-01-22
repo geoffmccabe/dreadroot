@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SeedDefinition, PlantedTree, TreeBlueprint, TreeGrowthOptions } from '../types';
 import { generateTreeBlueprint, getBlocksAtOrder, getMaxGrowthOrder } from '../lib/treeGrowth';
 import { TREE_CONFIG, getGrowthInterval } from '../constants';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { encodeBlockType, getTextureUrlForTreeBlock } from '../lib/blockTypeEncoder';
 
 // Check interval - 1 second max for FPS optimization
@@ -464,7 +464,7 @@ export async function deleteTree(
     } else {
       // Fallback: manual collider removal
       for (const block of blocksToDelete) {
-        collisionGrid.removeByPosition(block.x, block.y, block.z);
+        worldCollisionGrid.removeByPosition(block.x, block.y, block.z);
       }
     }
 

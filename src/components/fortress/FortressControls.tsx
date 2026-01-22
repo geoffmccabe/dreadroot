@@ -20,7 +20,7 @@ import {
   findPushOutDirection
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 
 export function FirstPersonControls({
@@ -374,8 +374,8 @@ export function FirstPersonControls({
         if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
           event.preventDefault();
           console.log(`[Debug] Camera at: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
-          console.log(`[Debug] Total colliders in grid: ${collisionGrid.size}`);
-          (collisionGrid as any).debugNearby?.(camera.position.x, camera.position.z, 5);
+          console.log(`[Debug] World Colliders: ${worldCollisionGrid.size}, Entity Colliders: ${entityCollisionGrid.size}`);
+          (worldCollisionGrid as any).debugNearby?.(camera.position.x, camera.position.z, 5);
         }
         break;
       case 'F10': // Emergency: clear entire collision grid and rebuild
@@ -383,19 +383,21 @@ export function FirstPersonControls({
         if (event.code === 'Digit0' && !event.shiftKey) break; // Only Shift+0 triggers clear
         if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
           event.preventDefault();
-          const oldSize = collisionGrid.size;
-          console.log('[Debug] EMERGENCY: Clearing entire collision grid!');
-          collisionGrid.clear();
+          const oldWorldSize = worldCollisionGrid.size;
+          const oldEntitySize = entityCollisionGrid.size;
+          console.log('[Debug] EMERGENCY: Clearing both collision grids!');
+          worldCollisionGrid.clear();
+          entityCollisionGrid.clear();
 
           // Immediately reinsert fortress colliders (block colliders are reinserted by the chunk loader listener).
           resetFortressGridState();
           createFortressColliders();
 
-          const newSize = collisionGrid.size;
-          console.log(`[Debug] Grid cleared. Was ${oldSize}, now ${newSize} (fortress). Blocks will rebuild via collisionGridCleared event.`);
+          const newWorldSize = worldCollisionGrid.size;
+          console.log(`[Debug] Grids cleared. World was ${oldWorldSize}, now ${newWorldSize}. Entity was ${oldEntitySize}, now 0.`);
           
           // Show toast so user knows it worked
-          alert(`Collision grid cleared! Was: ${oldSize} → Now: ${newSize} colliders`);
+          alert(`Collision grids cleared! World: ${oldWorldSize} → ${newWorldSize}, Entity: ${oldEntitySize} → 0`);
         }
         break;
       case 'KeyQ':
@@ -1192,14 +1194,14 @@ export function FirstPersonControls({
           
           // Check for ceiling collision
           let canStandUp = true;
-          const nearbyCount = collisionGrid.getNearbyFiltered(
+          const nearbyCount = worldCollisionGrid.getNearbyFiltered(
             camera.position.x,
             camera.position.z,
             2.0,
             camera.position.y - crawlingHeight,
             testStandY + 1.0
           );
-          const nearbyColliders = collisionGrid.nearbyResult;
+          const nearbyColliders = worldCollisionGrid.nearbyResult;
           for (let i = 0; i < nearbyCount; i++) {
             if (testPlayerBox.intersectsBox(nearbyColliders[i])) {
               canStandUp = false;
@@ -1227,7 +1229,7 @@ export function FirstPersonControls({
       const candidateMaxY = camera.position.y + stepUpHeight + 2.0;
 
       diagnostics.e1++;
-      const candidateCount = collisionGrid.getNearbyFiltered(
+      const candidateCount = worldCollisionGrid.getNearbyFiltered(
         camera.position.x,
         camera.position.z,
         2.0,
@@ -1237,7 +1239,7 @@ export function FirstPersonControls({
 
       const currentColliders = collidersRef.current;
       currentColliders.length = candidateCount;
-      const nearby = collisionGrid.nearbyResult;
+      const nearby = worldCollisionGrid.nearbyResult;
       for (let i = 0; i < candidateCount; i++) {
         currentColliders[i] = nearby[i];
       }

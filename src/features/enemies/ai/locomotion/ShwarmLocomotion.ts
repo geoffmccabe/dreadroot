@@ -6,7 +6,7 @@
  */
 
 import * as THREE from 'three';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
 import type { ShwarmBlock } from '@/features/shwarm/types';
 import type { BehaviorResult } from '../types';
@@ -53,9 +53,9 @@ function checkWorldCollision(pos: THREE.Vector3): boolean {
   _testMax.set(pos.x + halfSize, pos.y + halfSize, pos.z + halfSize);
   _testBox.set(_testMin, _testMax);
 
-  const nearbyCount = collisionGrid.getNearby(pos.x, pos.z, 2);
+  const nearbyCount = worldCollisionGrid.getNearby(pos.x, pos.z, 2);
   for (let i = 0; i < nearbyCount; i++) {
-    const collider = collisionGrid.nearbyResult[i] as THREE.Box3;
+    const collider = worldCollisionGrid.nearbyResult[i] as THREE.Box3;
     if (_testBox.intersectsBox(collider)) {
       return true;
     }
@@ -118,7 +118,7 @@ export function getOrCreateBlockTarget(
         block.position.z + halfSize
       )
     );
-    collisionGrid.insert(collider);
+    entityCollisionGrid.insert(collider);
 
     const nextMoveTime = Date.now() + 500 + Math.random() * 1000;
 

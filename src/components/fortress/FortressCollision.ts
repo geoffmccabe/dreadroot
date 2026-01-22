@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 
 // ============================================================
 // FORTRESS COLLISION UTILITIES
@@ -37,8 +37,8 @@ export function resetFortressGridState(): void {
 
   if (_fortressColliders) {
     for (const fc of _fortressColliders) {
-      if (!collisionGrid.has(fc)) {
-        collisionGrid.insert(fc);
+      if (!worldCollisionGrid.has(fc)) {
+        worldCollisionGrid.insert(fc);
       }
     }
     _fortressCollidersInGrid = true;
@@ -55,8 +55,8 @@ export function createFortressColliders(): THREE.Box3[] {
   if (_fortressColliders) {
     if (!_fortressCollidersInGrid) {
       for (const fc of _fortressColliders) {
-        if (!collisionGrid.has(fc)) {
-          collisionGrid.insert(fc);
+        if (!worldCollisionGrid.has(fc)) {
+          worldCollisionGrid.insert(fc);
         }
       }
       _fortressCollidersInGrid = true;
@@ -94,7 +94,7 @@ export function createFortressColliders(): THREE.Box3[] {
   // Add fortress colliders to spatial grid once
   if (!_fortressCollidersInGrid) {
     for (const fc of _fortressColliders) {
-      collisionGrid.insert(fc);
+      worldCollisionGrid.insert(fc);
     }
     _fortressCollidersInGrid = true;
   }
@@ -149,14 +149,14 @@ export function createBlockColliders(
           new THREE.Vector3(block.position_x, block.position_y, block.position_z),
           new THREE.Vector3(block.position_x + 1, block.position_y + 1, block.position_z + 1)
         );
-        collisionGrid.insert(box);
+        worldCollisionGrid.insert(box);
         // Store collider reference on block for future cache hits
         (block as any).__collider = box;
       } else {
         // Verify the pre-registered collider is actually in the grid
         // If not (e.g. grid was cleared), re-insert it
-        if (!collisionGrid.has(box)) {
-          collisionGrid.insert(box);
+        if (!worldCollisionGrid.has(box)) {
+          worldCollisionGrid.insert(box);
         }
       }
       
@@ -182,7 +182,7 @@ export function createBlockColliders(
     }
     for (const id of keysToRemove) {
       const box = cache.get(id);
-      if (box) collisionGrid.remove(box);
+      if (box) worldCollisionGrid.remove(box);
       cache.delete(id);
     }
   }
@@ -428,11 +428,11 @@ export function checkAxisCollision(
   const minY = playerBox.min.y - 0.5;
   const maxY = playerBox.max.y + 0.5;
   
-  const count = collisionGrid.getNearbyFiltered(pos.x, pos.z, 1.5, minY, maxY);
-  const nearbyColliders = collisionGrid.nearbyResult;
+  const count = worldCollisionGrid.getNearbyFiltered(pos.x, pos.z, 1.5, minY, maxY);
+  const nearbyColliders = worldCollisionGrid.nearbyResult;
   
   // Fallback: if grid is empty but we have colliders passed in
-  if (count === 0 && colliders.length > 0 && collisionGrid.size === 0) {
+  if (count === 0 && colliders.length > 0 && worldCollisionGrid.size === 0) {
     for (let i = 0; i < colliders.length; i++) {
       const collider = colliders[i];
       diagnostics.e5++;
@@ -508,8 +508,8 @@ export function findStepUpTarget(
   const maxY = currentFootY + stepUpHeight + playerHeight + 0.5;
   
   // Use Y-filtered spatial hash grid - radius 1.5 is sufficient
-  const count = collisionGrid.getNearbyFiltered(camera.position.x, camera.position.z, 1.5, minY, maxY);
-  const nearbyColliders = collisionGrid.nearbyResult;
+  const count = worldCollisionGrid.getNearbyFiltered(camera.position.x, camera.position.z, 1.5, minY, maxY);
+  const nearbyColliders = worldCollisionGrid.nearbyResult;
   
   for (let i = 0; i < count; i++) {
     const collider = nearbyColliders[i];

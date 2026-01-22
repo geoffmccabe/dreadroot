@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep } from '@/contexts/InitializationContext';
 import * as THREE from 'three';
 
@@ -112,15 +112,15 @@ const ensureBlockCollider = (block: PlacedBlock): void => {
     }
   } else if (existing && existing !== collider) {
     // Block has a different collider than cached - remove the orphan
-    collisionGrid.remove(existing);
+    worldCollisionGrid.remove(existing);
   }
 
   // Update bounds (in case position changed, though blocks don't move)
   updateBlockColliderBounds(block, collider);
 
   // Ensure collider is in the grid (may have been cleared by hot reload/world switch)
-  if (!collisionGrid.has(collider)) {
-    collisionGrid.insert(collider);
+  if (!worldCollisionGrid.has(collider)) {
+    worldCollisionGrid.insert(collider);
   }
 
   (block as any).__collider = collider;
@@ -134,7 +134,7 @@ const removeBlockCollider = (block: PlacedBlock): void => {
   const collider = cached ?? ((block as any).__collider as THREE.Box3 | null | undefined);
 
   if (collider) {
-    collisionGrid.remove(collider);
+    worldCollisionGrid.remove(collider);
   }
 
   colliderByBlockId.delete(block.id);
@@ -1546,7 +1546,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     loadedChunksRef.current.clear();
     initLogStep('useChunkLoader.ts', 'Chunk cache cleared');
     
-    initLogStep('useChunkLoader.ts', 'Collision grid size after clear', collisionGrid.size);
+    initLogStep('useChunkLoader.ts', 'Collision grid size after clear', worldCollisionGrid.size);
     
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
     const startChunkZ = Math.floor(startZ / CHUNK_SIZE);
@@ -1593,7 +1593,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       initLogStep('useChunkLoader.ts', `...and ${sortedTypes.length - 5} more block types`);
     }
     
-    initLogStep('useChunkLoader.ts', 'Collision grid populated', collisionGrid.size);
+    initLogStep('useChunkLoader.ts', 'Collision grid populated', worldCollisionGrid.size);
     
     initialLoadDone.current = true;
     setIsLoading(false);
