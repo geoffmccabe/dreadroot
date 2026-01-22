@@ -194,35 +194,56 @@ export const PlacedBlocks: React.FC<{
 
   // Separate invisiblocks from visible blocks
   // Invisiblocks need collision registration but no visual rendering
+  // OPTIMIZATION: Cap texture variants per block_type to prevent excessive InstancedBlockGroup components
+  const MAX_TEXTURE_VARIANTS_PER_TYPE = 8;
+  
   const { groupedBlocks, invisiblocks } = useMemo(() => {
     const groups = new Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>();
     const invisibleBlocks: PlacedBlock[] = [];
     const seenIds = new Set<string>();
     
-    blocks.forEach(block => {
-      // Skip duplicate IDs (happens during temp->real block transitions)
-      if (seenIds.has(block.id)) {
-        console.warn('Duplicate block ID detected:', block.id);
-        return;
-      }
+    // First pass: dedupe blocks silently
+    const deduped: PlacedBlock[] = [];
+    for (const block of blocks) {
+      if (seenIds.has(block.id)) continue;
       seenIds.add(block.id);
-      
+      deduped.push(block);
+    }
+    
+    // Count texture variants per block_type
+    const variantsByType = new Map<string, Set<string>>();
+    for (const b of deduped) {
+      if (!b.texture_url) continue;
+      let s = variantsByType.get(b.block_type);
+      if (!s) variantsByType.set(b.block_type, (s = new Set()));
+      s.add(b.texture_url);
+    }
+    
+    // Second pass: group with cap
+    for (const block of deduped) {
       // Invisiblocks go to separate array for collision-only handling
-      // Uses helper to catch both 'invisiblock' and encoded 'invisiblock_0_5'
       if (isInvisiblock(block.block_type)) {
         invisibleBlocks.push(block);
-        return;
+        continue;
       }
       
-      // Create group key based on block_type and optional texture_url
-      const groupKey = block.texture_url 
+      // Check if this block_type has too many texture variants
+      const variantCount = variantsByType.get(block.block_type)?.size ?? 0;
+      const allowOverride = variantCount > 0 && variantCount <= MAX_TEXTURE_VARIANTS_PER_TYPE;
+      
+      // Create group key - cap variants to prevent excessive InstancedBlockGroup components
+      const groupKey = allowOverride && block.texture_url 
         ? `${block.block_type}|${block.texture_url}` 
         : block.block_type;
       
-      const existing = groups.get(groupKey) || { blocks: [], textureOverride: block.texture_url || undefined };
+      const existing = groups.get(groupKey) || { 
+        blocks: [], 
+        textureOverride: allowOverride ? (block.texture_url || undefined) : undefined 
+      };
       existing.blocks.push(block);
       groups.set(groupKey, existing);
-    });
+    }
+    
     return { groupedBlocks: groups, invisiblocks: invisibleBlocks };
   }, [blocks]);
   
