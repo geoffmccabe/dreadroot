@@ -1615,6 +1615,9 @@ export function FortressScene({
     
     // Update shwarm renderer (always, since movement is continuous)
     shwarmRendererRef.current?.update();
+    
+    // Update shombie renderer
+    shombieRendererRef.current?.update(camera.position, delta);
   });
 
   return (
