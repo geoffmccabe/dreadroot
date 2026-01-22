@@ -501,35 +501,47 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [shouldGlow, glowLoopId, camera]);
   
-  // Limit point lights to nearest 10 blocks for performance
-  // With 100+ blocks, too many point lights destroy FPS
-  // FIXED: No longer depends on camera.position (Vector3 changes every frame!)
+  // Limit point lights to nearest MAX_GLOW_BLOCKS blocks for performance
+  // OPTIMIZATION: Single-pass "top K" selection instead of sort (O(n) vs O(n log n))
+  // Safety cap: Skip glow entirely for very large groups
+  const MAX_GLOW_BLOCKS = 10;
+  const MAX_GLOW_DISTANCE = 50;
+  const GLOW_BLOCK_LIMIT = 2000; // Skip glow for groups larger than this
+  
   const glowingBlocks = useMemo(() => {
     if (!shouldGlow) return [];
-    const seenIds = new Set<string>();
-    const uniqueBlocks = blocks.filter(block => {
-      if (seenIds.has(block.id)) return false;
-      seenIds.add(block.id);
-      return true;
-    });
+    if (blocks.length > GLOW_BLOCK_LIMIT) return []; // Safety cap for large groups
     
-    // Get current camera position for distance calc
-    const camPos = lastGlowCameraPos.current;
+    const cam = lastGlowCameraPos.current;
+    const maxDistSq = MAX_GLOW_DISTANCE * MAX_GLOW_DISTANCE;
     
-    // Calculate distance from camera to each block's center
-    const blocksWithDistance = uniqueBlocks.map(block => {
-      const dx = block.position_x + 0.5 - camPos.x;
-      const dy = block.position_y + 0.5 - camPos.y;
-      const dz = block.position_z + 0.5 - camPos.z;
-      const distanceSq = dx * dx + dy * dy + dz * dz;
-      return { block, distanceSq };
-    });
+    // Single-pass top-K selection (no sort, no allocations per block)
+    const best: { b: PlacedBlock; d2: number }[] = [];
     
-    // Sort by distance (nearest first) and take the 10 closest
-    return blocksWithDistance
-      .sort((a, b) => a.distanceSq - b.distanceSq)
-      .slice(0, 10)
-      .map(item => item.block);
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      const dx = b.position_x + 0.5 - cam.x;
+      const dy = b.position_y + 0.5 - cam.y;
+      const dz = b.position_z + 0.5 - cam.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      
+      if (d2 > maxDistSq) continue;
+      
+      if (best.length < MAX_GLOW_BLOCKS) {
+        best.push({ b, d2 });
+        continue;
+      }
+      
+      // Find worst in best array and replace if current is better
+      let worstIdx = 0;
+      let worstD2 = best[0].d2;
+      for (let j = 1; j < best.length; j++) {
+        if (best[j].d2 > worstD2) { worstD2 = best[j].d2; worstIdx = j; }
+      }
+      if (d2 < worstD2) best[worstIdx] = { b, d2 };
+    }
+    
+    return best.map(x => x.b);
   }, [blocks, shouldGlow, glowUpdateTrigger]);
   
   if (!material) return null;

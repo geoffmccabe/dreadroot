@@ -417,6 +417,10 @@ const AI_CONTROLLED = ENABLE_ENEMY_AI;
 
 // Debug flag for bullet tracking logs - disable in production for FPS
 const DEBUG_BULLETS = false;
+
+// Use Nebula particle system for bullet impacts (sky-friendly alpha transparency)
+// Set to false to use three-particle-fire (has dark halo artifacts against sky)
+const USE_NEBULA_FOR_BULLET_IMPACTS = true;
   
   useShwarmMovement({
     shwarmsRef,
@@ -1322,15 +1326,19 @@ const DEBUG_BULLETS = false;
                       }
                       
                       // Spawn impact effect and add fire to segment
-                      if (bulletImpactsRef.current) {
-                        const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
-                        bulletImpactsRef.current.spawnImpact(hitPos, {
-                          colors: tierDef.colors,
-                          size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
-                          height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
-                          duration: tierDef.burn_time * pentaMultiplier,
-                          tier: bullet.tier,
-                        });
+                      // Spawn impact effect - use Nebula for sky-friendly alpha blending
+                      const shnakePentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
+                      const impactConfig = {
+                        colors: tierDef.colors,
+                        size: tierDef.burn_width * bullet.ricochetScale * shnakePentaMultiplier,
+                        height: tierDef.burn_height * bullet.ricochetScale * shnakePentaMultiplier,
+                        duration: tierDef.burn_time * shnakePentaMultiplier,
+                        tier: bullet.tier,
+                      };
+                      if (USE_NEBULA_FOR_BULLET_IMPACTS && nebulaImpactsRef.current) {
+                        nebulaImpactsRef.current.spawnImpact(hitPos, impactConfig);
+                      } else if (bulletImpactsRef.current) {
+                        bulletImpactsRef.current.spawnImpact(hitPos, impactConfig);
                       }
                       
                       // Add fire to the new head (segment 0 after damage)
@@ -1350,14 +1358,18 @@ const DEBUG_BULLETS = false;
                         const normal = calculateHitNormal(hitX, hitY, hitZ, seg.x, seg.y, seg.z);
                         
                         // Spawn impact effect
-                        if (bulletImpactsRef.current) {
-                          bulletImpactsRef.current.spawnImpact(hitPos, {
-                            colors: tierDef.colors,
-                            size: tierDef.burn_width * bullet.ricochetScale,
-                            height: tierDef.burn_height * bullet.ricochetScale,
-                            duration: tierDef.burn_time,
-                            tier: bullet.tier,
-                          });
+                        // Spawn impact effect - use Nebula for sky-friendly alpha blending
+                        const ricochetConfig = {
+                          colors: tierDef.colors,
+                          size: tierDef.burn_width * bullet.ricochetScale,
+                          height: tierDef.burn_height * bullet.ricochetScale,
+                          duration: tierDef.burn_time,
+                          tier: bullet.tier,
+                        };
+                        if (USE_NEBULA_FOR_BULLET_IMPACTS && nebulaImpactsRef.current) {
+                          nebulaImpactsRef.current.spawnImpact(hitPos, ricochetConfig);
+                        } else if (bulletImpactsRef.current) {
+                          bulletImpactsRef.current.spawnImpact(hitPos, ricochetConfig);
                         }
                         
                         // Add fire to this segment (propagates as shnake moves)
@@ -1652,17 +1664,21 @@ const DEBUG_BULLETS = false;
                   );
                   
                   // Spawn scaled impact effect
-                  if (bulletImpactsRef.current) {
-                    const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
-                    const tierDef = getDefinitionRef.current(bullet.tier);
-                    const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
-                    bulletImpactsRef.current.spawnImpact(hitPos, {
-                      colors: tierDef.colors,
-                      size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
-                      height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
-                      duration: tierDef.burn_time * pentaMultiplier,
-                      tier: bullet.tier,
-                    });
+                  // Spawn scaled impact effect - use Nebula for sky-friendly alpha blending
+                  const ricochetHitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                  const tierDefRicochet = getDefinitionRef.current(bullet.tier);
+                  const pentaMultiplierRicochet = bullet.isPentabullet ? 3.0 : 1.0;
+                  const ricochetBlockConfig = {
+                    colors: tierDefRicochet.colors,
+                    size: tierDefRicochet.burn_width * bullet.ricochetScale * pentaMultiplierRicochet,
+                    height: tierDefRicochet.burn_height * bullet.ricochetScale * pentaMultiplierRicochet,
+                    duration: tierDefRicochet.burn_time * pentaMultiplierRicochet,
+                    tier: bullet.tier,
+                  };
+                  if (USE_NEBULA_FOR_BULLET_IMPACTS && nebulaImpactsRef.current) {
+                    nebulaImpactsRef.current.spawnImpact(ricochetHitPos, ricochetBlockConfig);
+                  } else if (bulletImpactsRef.current) {
+                    bulletImpactsRef.current.spawnImpact(ricochetHitPos, ricochetBlockConfig);
                   }
                   
                   // Apply reflection physics: R = D - 2(D·N)N
@@ -1698,16 +1714,20 @@ const DEBUG_BULLETS = false;
                   needsBulletRender = true;
                   
                   // Spawn impact effect at hit position with bullet tier settings from context
-                  if (bulletImpactsRef.current) {
-                    const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
-                    const tierDef = getDefinitionRef.current(bullet.tier);
-                    bulletImpactsRef.current.spawnImpact(hitPos, {
-                      colors: tierDef.colors,
-                      size: tierDef.burn_width * bullet.ricochetScale,
-                      height: tierDef.burn_height * bullet.ricochetScale,
-                      duration: tierDef.burn_time,
-                      tier: bullet.tier,
-                    });
+                  // Spawn impact effect at hit position - use Nebula for sky-friendly alpha blending
+                  const destroyHitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                  const tierDefDestroy = getDefinitionRef.current(bullet.tier);
+                  const destroyBlockConfig = {
+                    colors: tierDefDestroy.colors,
+                    size: tierDefDestroy.burn_width * bullet.ricochetScale,
+                    height: tierDefDestroy.burn_height * bullet.ricochetScale,
+                    duration: tierDefDestroy.burn_time,
+                    tier: bullet.tier,
+                  };
+                  if (USE_NEBULA_FOR_BULLET_IMPACTS && nebulaImpactsRef.current) {
+                    nebulaImpactsRef.current.spawnImpact(destroyHitPos, destroyBlockConfig);
+                  } else if (bulletImpactsRef.current) {
+                    bulletImpactsRef.current.spawnImpact(destroyHitPos, destroyBlockConfig);
                   }
                 }
                 break;
@@ -1720,18 +1740,22 @@ const DEBUG_BULLETS = false;
               needsBulletRender = true;
               
               // Spawn impact effect at ground level with bullet tier settings from context
-              if (bulletImpactsRef.current) {
-                const groundPos = bullet.position.clone();
-                groundPos.y = 0.1; // Slightly above ground
-                const tierDef = getDefinitionRef.current(bullet.tier);
-                const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
-                bulletImpactsRef.current.spawnImpact(groundPos, {
-                  colors: tierDef.colors,
-                  size: tierDef.burn_width * pentaMultiplier,
-                  height: tierDef.burn_height * pentaMultiplier,
-                  duration: tierDef.burn_time * pentaMultiplier,
-                  tier: bullet.tier,
-                });
+              // Spawn impact effect at ground level - use Nebula for sky-friendly alpha blending
+              const groundPos = bullet.position.clone();
+              groundPos.y = 0.1; // Slightly above ground
+              const tierDefGround = getDefinitionRef.current(bullet.tier);
+              const pentaMultiplierGround = bullet.isPentabullet ? 3.0 : 1.0;
+              const groundConfig = {
+                colors: tierDefGround.colors,
+                size: tierDefGround.burn_width * pentaMultiplierGround,
+                height: tierDefGround.burn_height * pentaMultiplierGround,
+                duration: tierDefGround.burn_time * pentaMultiplierGround,
+                tier: bullet.tier,
+              };
+              if (USE_NEBULA_FOR_BULLET_IMPACTS && nebulaImpactsRef.current) {
+                nebulaImpactsRef.current.spawnImpact(groundPos, groundConfig);
+              } else if (bulletImpactsRef.current) {
+                bulletImpactsRef.current.spawnImpact(groundPos, groundConfig);
               }
             }
           }

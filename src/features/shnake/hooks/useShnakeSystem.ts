@@ -5,8 +5,13 @@ import { decodeBlockType, getBaseTreeBlockType, isTreeBlockType } from '@/featur
 import { entityCollisionGrid } from '@/lib/spatialHashGrid';
 import type { ShnakeDefinition, ShnakeInstance, ShnakeSegment } from '../types';
 
+// Debug flag - disable in production for FPS
+const DEBUG_SHNAKE = false;
+
 const LENGTH_BASE = 10; // length = 10 + tier
 const CHUNK_SIZE = 16;
+const SPAWN_COOLDOWN_MS = 30000; // 30 second cooldown after failed spawn
+const REBUILD_INTERVAL_MS = 5000; // Rebuild index every 5 seconds (was 1s)
 
 function key(x: number, y: number, z: number) {
   return `${x},${y},${z}`;
@@ -119,20 +124,37 @@ export function useShnakeSystem({
   const nonInvisTreeBlocksByTierRef = useRef<Map<number, Set<string>>>(new Map());
   /** All tree block positions by tier for spawn adjacency check */
   const allTreeBlockPositionsByTierRef = useRef<Map<number, Set<string>>>(new Map());
+  /** O(1) world occupancy check - rebuilt with tree block indices */
+  const worldOccupiedSetRef = useRef<Set<string>>(new Set());
+  /** Failed spawn tracking for cooldown */
+  const failedSpawnAttemptsRef = useRef<Map<string, number>>(new Map());
+  /** Last block count for change detection */
+  const lastBlockCountRef = useRef(0);
 
   // Rebuild global tree-block position indices periodically
+  // OPTIMIZATION: 5 second interval with change detection
   useEffect(() => {
     if (!isEnabled) return;
     let timer: number | null = null;
 
     const rebuild = () => {
       const blocks = blocksRef.current || [];
+      
+      // Skip rebuild if block count unchanged
+      if (blocks.length === lastBlockCountRef.current) return;
+      lastBlockCountRef.current = blocks.length;
+      
       const byTier = new Map<number, Map<string, string>>();
       const nonInvisByTier = new Map<number, Set<string>>();
       const allPosByTier = new Map<number, Set<string>>();
+      const occupied = new Set<string>();
 
       for (let i = 0; i < blocks.length; i++) {
         const b = blocks[i] as any;
+        
+        // Add ALL blocks to occupancy set for O(1) lookups
+        occupied.add(key(b.position_x, b.position_y, b.position_z));
+        
         const bt = b.block_type as string | undefined;
         if (!bt || !isTreeBlockType(bt)) continue;
         const decoded = decodeBlockType(bt);
@@ -169,10 +191,11 @@ export function useShnakeSystem({
       treeBlocksByTierRef.current = byTier;
       nonInvisTreeBlocksByTierRef.current = nonInvisByTier;
       allTreeBlockPositionsByTierRef.current = allPosByTier;
+      worldOccupiedSetRef.current = occupied;
     };
 
     rebuild();
-    timer = window.setInterval(rebuild, 1000);
+    timer = window.setInterval(rebuild, REBUILD_INTERVAL_MS);
     return () => {
       if (timer) window.clearInterval(timer);
     };
@@ -182,14 +205,10 @@ export function useShnakeSystem({
     return shnakesRef.current.filter(s => s.isActive && s.treeId === treeId).length;
   }, []);
 
+  // O(1) occupancy check using prebuilt Set
   const isCellOccupiedByWorld = useCallback((x: number, y: number, z: number) => {
-    const blocks = blocksRef.current || [];
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      if (b.position_x === x && b.position_y === y && b.position_z === z) return true;
-    }
-    return false;
-  }, [blocksRef]);
+    return worldOccupiedSetRef.current.has(key(x, y, z));
+  }, []);
 
   /** Check if a cell is adjacent to any tree block of this tier */
   const isAdjacentToTreeBlock = useCallback((tier: number, x: number, y: number, z: number) => {
@@ -210,28 +229,32 @@ export function useShnakeSystem({
     const def = defsByTier.get(tier);
     
     if (!def) {
-      console.log(`[Shnake Spawn] No definition found for tier ${tier}`);
+      if (DEBUG_SHNAKE) console.log(`[Shnake Spawn] No definition found for tier ${tier}`);
+      return null;
+    }
+    
+    // EARLY EXIT: Check if tier has any tree blocks before expensive iteration
+    const tierPositions = allTreeBlockPositionsByTierRef.current.get(tier);
+    if (!tierPositions || tierPositions.size === 0) {
+      // Don't log - this is a normal case during loading
       return null;
     }
 
     const len = LENGTH_BASE + tier;
     const b = treeBounds(tree);
-    const blocks = blocksRef.current || [];
 
-    // Find all tree blocks of this tier within bounds
+    // Use the prebuilt tier positions instead of scanning all blocks
+    // Filter to positions within tree bounds
     const treeBlockPositions: Array<{ x: number; y: number; z: number }> = [];
-    for (let i = 0; i < blocks.length; i++) {
-      const bl: any = blocks[i];
-      if (!insideBounds(b, bl.position_x, bl.position_y, bl.position_z)) continue;
-      const bt: string | undefined = bl.block_type;
-      if (!bt || !isTreeBlockType(bt)) continue;
-      const decoded = decodeBlockType(bt);
-      if (!decoded || decoded.tier !== tier) continue;
-      treeBlockPositions.push({ x: bl.position_x, y: bl.position_y, z: bl.position_z });
+    for (const posKey of tierPositions) {
+      const [x, y, z] = posKey.split(',').map(Number);
+      if (insideBounds(b, x, y, z)) {
+        treeBlockPositions.push({ x, y, z });
+      }
     }
 
     if (treeBlockPositions.length === 0) {
-      console.log(`[Shnake Spawn] No tree blocks found for tier ${tier}`);
+      if (DEBUG_SHNAKE) console.log(`[Shnake Spawn] No tree blocks in bounds for tier ${tier}`);
       return null;
     }
 
@@ -263,7 +286,7 @@ export function useShnakeSystem({
     }
 
     if (!head) {
-      console.log(`[Shnake Spawn] No empty adjacent cell found`);
+      if (DEBUG_SHNAKE) console.log(`[Shnake Spawn] No empty adjacent cell found`);
       return null;
     }
 
@@ -299,11 +322,11 @@ export function useShnakeSystem({
 
     // Need at least 3 segments
     if (segments.length < 3) {
-      console.log(`[Shnake Spawn] Only ${segments.length} segments placed, need at least 3`);
+      if (DEBUG_SHNAKE) console.log(`[Shnake Spawn] Only ${segments.length} segments placed, need at least 3`);
       return null;
     }
 
-    console.log(`[Shnake Spawn] Success! ${segments.length} segments at (${head.x}, ${head.y}, ${head.z})`);
+    if (DEBUG_SHNAKE) console.log(`[Shnake Spawn] Success! ${segments.length} segments at (${head.x}, ${head.y}, ${head.z})`);
 
     const id = `shnake_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const colliders = segments.map(s => {
@@ -333,9 +356,11 @@ export function useShnakeSystem({
     shnakesRef.current = [...shnakesRef.current, inst];
     setShnakes(shnakesRef.current);
     return inst;
-  }, [blocksRef, defsByTier, isCellOccupiedByWorld]);
+  // Note: blocksRef and isTreeBlockType/decodeBlockType removed from deps - now uses prebuilt indices
+  }, [defsByTier, isCellOccupiedByWorld]);
 
   // GUARANTEED SPAWN: Ensure every tree always has exactly one shnake
+  // OPTIMIZATION: Respects cooldown for failed spawns to prevent infinite retry loops
   useEffect(() => {
     if (!isEnabled) return;
     if (!plantedTrees || plantedTrees.length === 0) return;
@@ -343,11 +368,27 @@ export function useShnakeSystem({
 
     const ensureOneShnakePerTree = () => {
       const trees = treesRef.current || [];
+      const now = Date.now();
+      
       for (const tree of trees) {
         const count = countShnakesOnTree(tree.id);
         if (count === 0) {
-          console.log(`[Shnake Ensure] Tree ${tree.id} has no shnake, spawning...`);
-          spawnOnTree(tree);
+          // Check cooldown for this tree
+          const lastFail = failedSpawnAttemptsRef.current.get(tree.id) || 0;
+          if (now - lastFail < SPAWN_COOLDOWN_MS) {
+            continue; // Still in cooldown, skip
+          }
+          
+          if (DEBUG_SHNAKE) console.log(`[Shnake Ensure] Tree ${tree.id} has no shnake, spawning...`);
+          const result = spawnOnTree(tree);
+          
+          if (!result) {
+            // Spawn failed, set cooldown
+            failedSpawnAttemptsRef.current.set(tree.id, now);
+          } else {
+            // Spawn succeeded, clear cooldown
+            failedSpawnAttemptsRef.current.delete(tree.id);
+          }
         }
       }
     };
@@ -410,7 +451,7 @@ export function useShnakeSystem({
       const actual = Math.max(0, damage - armor);
       const newHealth = s.headHealth - actual;
       
-      console.log(`[Shnake Damage] id=${shnakeId.slice(-6)} dmg=${damage} armor=${armor} actual=${actual} health=${s.headHealth}->${newHealth}`);
+      if (DEBUG_SHNAKE) console.log(`[Shnake Damage] id=${shnakeId.slice(-6)} dmg=${damage} armor=${armor} actual=${actual} health=${s.headHealth}->${newHealth}`);
       
       if (newHealth > 0) {
         return { ...s, headHealth: newHealth };
@@ -426,13 +467,13 @@ export function useShnakeSystem({
 
       if (newSegments.length === 0) {
         killedEntire = true;
-        console.log(`[Shnake Kill] Shnake ${shnakeId.slice(-6)} killed entirely! tier=${tier}`);
+        if (DEBUG_SHNAKE) console.log(`[Shnake Kill] Shnake ${shnakeId.slice(-6)} killed entirely! tier=${tier}`);
         // Remove remaining colliders too
         newColliders.forEach(c => entityCollisionGrid.remove(c));
         return { ...s, isActive: false, segments: [], colliders: [], headHealth: 0 };
       }
 
-      console.log(`[Shnake Head Lost] Shnake ${shnakeId.slice(-6)} lost head, ${newSegments.length} segments remain`);
+      if (DEBUG_SHNAKE) console.log(`[Shnake Head Lost] Shnake ${shnakeId.slice(-6)} lost head, ${newSegments.length} segments remain`);
 
       return {
         ...s,

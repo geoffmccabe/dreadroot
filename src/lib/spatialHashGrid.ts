@@ -242,9 +242,9 @@ class SpatialHashGrid {
           if (collider.__q === stamp) continue;
           collider.__q = stamp;
           
-          if (count < MAX_NEARBY_RESULTS) {
-            this.nearbyResult[count++] = collider;
-          }
+          this.nearbyResult[count++] = collider;
+          // Early exit when result buffer is full
+          if (count >= MAX_NEARBY_RESULTS) return count;
         }
       }
     }
@@ -313,8 +313,17 @@ class SpatialHashGrid {
           // Vertical filter FIRST (cheap) — prevents huge candidate sets
           if (collider.max.y < minY || collider.min.y > maxY) continue;
           
-          if (count < MAX_NEARBY_RESULTS) {
-            this.nearbyResult[count++] = collider;
+          this.nearbyResult[count++] = collider;
+          // Early exit when result buffer is full
+          if (count >= MAX_NEARBY_RESULTS) {
+            // Still cache even on early exit
+            this._cachedQueryX = qx;
+            this._cachedQueryZ = qz;
+            this._cachedQueryMinY = qMinY;
+            this._cachedQueryMaxY = qMaxY;
+            this._cachedQueryCount = count;
+            this._cachedQueryGeneration = this.generation;
+            return count;
           }
         }
       }
