@@ -34,6 +34,7 @@ import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/bloc
 import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
 import { useShnakeDefinitions } from '@/features/shnake';
+import { useShombieDefinitions } from '@/features/shombie';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 
 import { FortressScene } from './FortressScene';
@@ -163,6 +164,9 @@ export function Fortress() {
 
   // Shnake definitions
   const { data: shnakeDefinitions } = useShnakeDefinitions();
+
+  // Shombie definitions
+  const { data: shombieDefinitions } = useShombieDefinitions();
 
   const [respawnTimer, setRespawnTimer] = useState(0);
   const [respawnPosition, setRespawnPosition] = useState<THREE.Vector3 | null>(null);
@@ -974,6 +978,7 @@ export function Fortress() {
           takeDamage={takeDamage}
           shwarmDefinitions={shwarmDefinitions}
           shnakeDefinitions={shnakeDefinitions}
+          shombieDefinitions={shombieDefinitions}
           onPointsEarned={async (points) => {
             const { newLevel } = await addPoints(points);
             if (newLevel) {
