@@ -10,7 +10,10 @@ import {
   HEAD_FIRE_HEIGHT,
   SHOMBIE_EMERGENCE_DURATION_MS,
 } from '../constants';
-import Fire from 'three-particle-fire';
+import particleFire from 'three-particle-fire';
+
+// Initialize the particle fire library with THREE
+particleFire.install({ THREE });
 
 // Pre-allocated objects
 const tmpMatrix = new THREE.Matrix4();
@@ -76,7 +79,8 @@ function getOrCreateMaterial(textureUrl: string | null): THREE.MeshStandardMater
 
 interface HeadFire {
   shombieId: string;
-  fire: Fire;
+  points: THREE.Points;
+  material: ReturnType<typeof particleFire.Material>;
   tier: number;
 }
 
@@ -126,19 +130,25 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         if (!activeIds.has(id)) {
           // Remove fire from scene
           if (groupRef.current) {
-            groupRef.current.remove(headFire.fire);
+            groupRef.current.remove(headFire.points);
           }
+          // Dispose of geometry and material
+          headFire.points.geometry.dispose();
+          if (headFire.material.dispose) headFire.material.dispose();
           headFiresRef.current.delete(id);
         }
       }
     }, [shombies]);
 
-    // Update fires every frame
+    // Update fires every frame - store delta for material updates
+    const clockRef = useRef(new THREE.Clock());
     useFrame(({ camera }) => {
       cameraRef.current = camera;
+      const delta = clockRef.current.getDelta();
       
       for (const headFire of headFiresRef.current.values()) {
-        headFire.fire.update(camera);
+        // Update material animation
+        headFire.material.update(delta);
       }
     });
 
@@ -272,31 +282,30 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           let headFire = headFiresRef.current.get(shombie.id);
           
           // Create fire if it doesn't exist
-          if (!headFire && groupRef.current) {
+          if (!headFire && groupRef.current && cameraRef.current) {
             const tierColors = getTierColors(shombie.definition.tier);
-            const color1 = new THREE.Color(tierColors[0] || '#FFFF00');
-            const color2 = new THREE.Color(tierColors[1] || tierColors[0] || '#FF8800');
-            const color3 = new THREE.Color(tierColors[2] || tierColors[0] || '#FF4400');
+            const primaryColor = new THREE.Color(tierColors[0] || '#FFFF00');
             
-            Fire.init();
-            const fire = new Fire({
-              color1,
-              color2,
-              color3,
-              fireRadius: HEAD_FIRE_SIZE,
-              fireHeight: HEAD_FIRE_HEIGHT,
-              particleCount: 100,
-              windStrength: 0.2,
-            });
+            // Create fire geometry and material using three-particle-fire API
+            const fireGeometry = new particleFire.Geometry(HEAD_FIRE_SIZE, HEAD_FIRE_HEIGHT, 100);
+            const fireMaterial = new particleFire.Material({ color: primaryColor.getHex() });
             
-            groupRef.current.add(fire);
-            headFire = { shombieId: shombie.id, fire, tier: shombie.definition.tier };
+            // Set perspective for proper rendering
+            const camera = cameraRef.current as THREE.PerspectiveCamera;
+            if (camera.fov) {
+              fireMaterial.setPerspective(camera.fov, window.innerHeight);
+            }
+            
+            const firePoints = new THREE.Points(fireGeometry, fireMaterial);
+            
+            groupRef.current.add(firePoints);
+            headFire = { shombieId: shombie.id, points: firePoints, material: fireMaterial, tier: shombie.definition.tier };
             headFiresRef.current.set(shombie.id, headFire);
           }
           
           // Update fire position (on top of head)
           if (headFire) {
-            headFire.fire.position.set(
+            headFire.points.position.set(
               headPos.x,
               headPos.y + 0.3, // Above the head
               headPos.z
