@@ -341,6 +341,7 @@ export function FortressScene({
   onPointsEarned,
   onShwarmGroupKilled,
   onShnakeKilled,
+  onShombieKilled,
   respawnPosition,
   onRespawnComplete,
   isOwnedTreeAtPosition,
@@ -486,6 +487,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
     isEnabled: true,
     userRoles,
     onPlayerHit: handleShombiePlayerHit,
+    onShombieKilled,
   });
   // Shnake player hit callback - uses universal damage system
   // shnakeId is optional for compatibility with legacy system

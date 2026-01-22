@@ -202,6 +202,14 @@ export const PlacedBlocks: React.FC<{
   // OPTIMIZATION: Cap texture variants per block_type to prevent excessive InstancedBlockGroup components
   const MAX_TEXTURE_VARIANTS_PER_TYPE = 8;
   
+  // B2.4: Cache for stable array references - prevents prop churn to InstancedBlockGroup
+  const groupCacheRef = useRef<Map<string, { 
+    blocks: PlacedBlock[]; 
+    textureOverride?: string;
+    signature: string;
+  }>>(new Map());
+  const invisiblocksCacheRef = useRef<{ blocks: PlacedBlock[]; signature: string }>({ blocks: [], signature: '' });
+  
   const { groupedBlocks, invisiblocks } = useMemo(() => {
     const groups = new Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>();
     const invisibleBlocks: PlacedBlock[] = [];
@@ -224,6 +232,9 @@ export const PlacedBlocks: React.FC<{
       s.add(b.texture_url);
     }
     
+    // Temporary grouping to build signatures
+    const tempGroups = new Map<string, PlacedBlock[]>();
+    
     // Second pass: group with cap
     for (const block of deduped) {
       // Invisiblocks go to separate array for collision-only handling
@@ -241,15 +252,57 @@ export const PlacedBlocks: React.FC<{
         ? `${block.block_type}|${block.texture_url}` 
         : block.block_type;
       
-      const existing = groups.get(groupKey) || { 
-        blocks: [], 
-        textureOverride: allowOverride ? (block.texture_url || undefined) : undefined 
-      };
-      existing.blocks.push(block);
-      groups.set(groupKey, existing);
+      const arr = tempGroups.get(groupKey) || [];
+      arr.push(block);
+      tempGroups.set(groupKey, arr);
     }
     
-    return { groupedBlocks: groups, invisiblocks: invisibleBlocks };
+    // B2.4: Build stable arrays - only create new array if signature changed
+    const cache = groupCacheRef.current;
+    const usedKeys = new Set<string>();
+    
+    for (const [groupKey, blocksArr] of tempGroups) {
+      usedKeys.add(groupKey);
+      
+      // Build cheap signature: count + first/last block IDs
+      const sig = blocksArr.length === 0 ? 'empty' : 
+        `${blocksArr.length}:${blocksArr[0].id}:${blocksArr[blocksArr.length - 1].id}`;
+      
+      const cached = cache.get(groupKey);
+      const textureOverride = (variantsByType.get(groupKey.split('|')[0])?.size ?? 0) <= MAX_TEXTURE_VARIANTS_PER_TYPE
+        ? (blocksArr[0]?.texture_url || undefined)
+        : undefined;
+      
+      if (cached && cached.signature === sig) {
+        // Reuse cached array reference
+        groups.set(groupKey, { blocks: cached.blocks, textureOverride: cached.textureOverride });
+      } else {
+        // Content changed - use new array and update cache
+        cache.set(groupKey, { blocks: blocksArr, textureOverride, signature: sig });
+        groups.set(groupKey, { blocks: blocksArr, textureOverride });
+      }
+    }
+    
+    // Clean up stale cache entries
+    for (const key of cache.keys()) {
+      if (!usedKeys.has(key)) {
+        cache.delete(key);
+      }
+    }
+    
+    // B2.4: Stable invisiblocks array
+    const invisiSig = invisibleBlocks.length === 0 ? 'empty' :
+      `${invisibleBlocks.length}:${invisibleBlocks[0].id}:${invisibleBlocks[invisibleBlocks.length - 1].id}`;
+    
+    let stableInvisiblocks: PlacedBlock[];
+    if (invisiblocksCacheRef.current.signature === invisiSig) {
+      stableInvisiblocks = invisiblocksCacheRef.current.blocks;
+    } else {
+      invisiblocksCacheRef.current = { blocks: invisibleBlocks, signature: invisiSig };
+      stableInvisiblocks = invisibleBlocks;
+    }
+    
+    return { groupedBlocks: groups, invisiblocks: stableInvisiblocks };
   }, [blocks]);
   
   // NOTE: Invisiblock colliders are now handled by chunk loader (ensureBlockCollider)
