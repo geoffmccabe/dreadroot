@@ -120,6 +120,8 @@ export interface SceneProps {
   onShwarmGroupKilled?: (tier: number) => void;
   // Shnake killed callback (passes tier for kill tracking)
   onShnakeKilled?: (tier: number) => void;
+  // Shombie killed callback (passes tier for kill tracking)
+  onShombieKilled?: (tier: number) => void;
   // Respawn position for teleporting player
   respawnPosition?: THREE.Vector3 | null;
   onRespawnComplete?: () => void;
