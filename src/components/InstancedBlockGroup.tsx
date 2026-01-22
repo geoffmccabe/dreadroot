@@ -225,15 +225,34 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [onMeshReady]);
   
+  // B2.4: Track last processed signature to skip redundant matrix rebuilds
+  const lastProcessedSignatureRef = useRef<string>('');
+  
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
     
+    // B2.4: Build cheap signature to detect actual content changes
+    // Uses count + first/last block IDs + positions as a fast fingerprint
+    let sig: string;
+    if (blocks.length === 0) {
+      sig = 'empty';
+    } else {
+      const first = blocks[0];
+      const last = blocks[blocks.length - 1];
+      sig = `${blocks.length}:${first.id}:${first.position_x},${first.position_y},${first.position_z}:${last.id}:${last.position_x},${last.position_y},${last.position_z}`;
+    }
+    
+    // Skip rebuild if signature unchanged (array reference changed but content same)
+    if (sig === lastProcessedSignatureRef.current) {
+      // Still update mesh count in case it's out of sync
+      mesh.count = blocks.length;
+      return;
+    }
+    lastProcessedSignatureRef.current = sig;
+    
     // IMPORTANT: Always update the mesh count to match blocks array
     mesh.count = blocks.length;
-    
-    // REMOVED: O(n log n) sort + join for ID key - was expensive and unnecessary
-    // The effect already runs when blocks array reference changes
     
     const matrix = matrixRef.current;
     
