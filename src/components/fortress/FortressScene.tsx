@@ -41,7 +41,7 @@ import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
 import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
-import { useShombieSystem, ShombieRenderer, ShombieRendererHandle } from '@/features/shombie';
+import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '@/features/shombie';
 
 // Universal Enemy AI system (Phase 3)
 import { useEnemyAI } from '@/features/enemies/ai';
@@ -1411,9 +1411,10 @@ export function FortressScene({
               for (const shombie of shombieList) {
                 if (!shombie.isActive || hit) break;
                 
-                // Get hitbox from renderer
-                const hitbox = shombieRendererRef.current?.getHitbox(shombie.id);
-                if (!hitbox) continue;
+                // Calculate hitbox directly from shombie object (avoids stale React state in getHitbox)
+                const scale = shombie.scale || 1;
+                const hitboxRadius = SHOMBIE_HITBOX_RADIUS * scale;
+                const hitboxHeight = SHOMBIE_HITBOX_HEIGHT * scale;
                 
                 // Ray-Cylinder intersection
                 // Project ray onto XZ plane for infinite cylinder test
@@ -1423,7 +1424,7 @@ export function FortressScene({
                 // Quadratic coefficients for 2D circle intersection in XZ plane
                 const a = ndx * ndx + ndz * ndz;
                 const b = 2 * (ocX * ndx + ocZ * ndz);
-                const c = ocX * ocX + ocZ * ocZ - hitbox.radius * hitbox.radius;
+                const c = ocX * ocX + ocZ * ocZ - hitboxRadius * hitboxRadius;
                 
                 const discriminant = b * b - 4 * a * c;
                 
@@ -1441,7 +1442,7 @@ export function FortressScene({
                     // Check Y bounds at hit point
                     const hitY = prevY + ndy * hitT;
                     const shombieMinY = shombie.position.y;
-                    const shombieMaxY = shombie.position.y + hitbox.height;
+                    const shombieMaxY = shombie.position.y + hitboxHeight;
                     
                     if (hitY >= shombieMinY && hitY <= shombieMaxY) {
                       // HIT a shombie!
@@ -1456,7 +1457,7 @@ export function FortressScene({
                       const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
                       
                       // Headshot bonus (upper 25% of body)
-                      const headThreshold = shombieMinY + hitbox.height * 0.75;
+                      const headThreshold = shombieMinY + hitboxHeight * 0.75;
                       const isHeadshot = hitY > headThreshold;
                       const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
                       
