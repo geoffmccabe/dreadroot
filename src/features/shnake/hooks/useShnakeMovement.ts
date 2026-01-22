@@ -17,7 +17,17 @@ function chunkKey(x: number, z: number) {
   return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
 }
 
-function aabbForCell(x: number, y: number, z: number): THREE.Box3 {
+// Reusable vectors for aabbForCell to avoid allocations
+const _aabbMin = new THREE.Vector3();
+const _aabbMax = new THREE.Vector3();
+
+/** Create or update a Box3 for a cell. If existing is provided, reuse it. */
+function aabbForCell(x: number, y: number, z: number, existing?: THREE.Box3): THREE.Box3 {
+  if (existing) {
+    existing.min.set(x, y, z);
+    existing.max.set(x + 1, y + 1, z + 1);
+    return existing;
+  }
   return new THREE.Box3(
     new THREE.Vector3(x, y, z),
     new THREE.Vector3(x + 1, y + 1, z + 1)
@@ -442,15 +452,20 @@ export function useShnakeMovement({
           const newHead = { x: headSeg.x + choice.dx, y: headSeg.y + choice.dy, z: headSeg.z + choice.dz };
           s.headDir.set(choice.dx, choice.dy, choice.dz);
 
-          // Update entity collision grid: remove tail collider, insert new head collider
+          // Update entity collision grid: reuse tail collider as new head collider
+          // This prevents Box3 churn - same object, just updated position
           const oldTailCollider = s.colliders[s.colliders.length - 1];
-          if (oldTailCollider) entityCollisionGrid.remove(oldTailCollider);
-          const newHeadCollider = aabbForCell(newHead.x, newHead.y, newHead.z);
-          entityCollisionGrid.insert(newHeadCollider);
+          if (oldTailCollider) {
+            // Reuse the tail collider as the new head collider
+            aabbForCell(newHead.x, newHead.y, newHead.z, oldTailCollider);
+            entityCollisionGrid.update(oldTailCollider);
+          }
 
-          // Shift arrays (worm)
+          // Shift arrays (worm) - reuse the tail collider at the front
           const newSegments = [newHead, ...s.segments.slice(0, -1)];
-          const newColliders = [newHeadCollider, ...s.colliders.slice(0, -1)];
+          const newColliders = oldTailCollider 
+            ? [oldTailCollider, ...s.colliders.slice(0, -1)]
+            : s.colliders;
           s.segments = newSegments;
           s.colliders = newColliders;
           
