@@ -990,7 +990,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
   // Frame loop for bullets and particles - NO setState inside!
   // Uses in-place array filtering (swap-delete) to avoid GC pressure
   useFrame((state, delta) => {
-    // Master frame loop - tick() increments masterFrameCount
+    // D1B: Reset per-frame diagnostic counters ONCE at start of frame
+    // This allows InstancedBlockGroup to ACCUMULATE visibleBlocks
+    diagnostics.visibleBlocks = 0;
+    diagnostics.particleCount = 0;
+    diagnostics.coinCount = 0;
     
     // Update diagnostics metrics
     diagnostics.cameraX = camera.position.x;

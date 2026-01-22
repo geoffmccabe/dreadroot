@@ -204,6 +204,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   // Only emit a new array if contents actually changed (prevents React re-renders)
   const lastEmittedBlocksRef = useRef<PlacedBlock[]>([]);
   const lastEmittedSignatureRef = useRef<string>('');
+  // D2: Cheap key for fast precheck (length + first/last positions)
+  const lastEmittedCheapKeyRef = useRef<string>('');
 
   // Phase 3E: Velocity tracking with ring buffer
   const posHistRef = useRef({
@@ -220,7 +222,19 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   const lastDirRef = useRef<{ dx: number; dz: number } | null>(null);
 
   /**
-   * C4: Generate a stable visual signature for block array comparison
+   * D2: Cheap O(1) world key for fast cache hit detection
+   * Only compute expensive visual signature when cheap key differs
+   */
+  const generateCheapWorldKey = useCallback((allBlocks: PlacedBlock[]): string => {
+    const n = allBlocks.length;
+    if (n === 0) return '0';
+    const a = allBlocks[0];
+    const b = allBlocks[n - 1];
+    return `${n}|${a.id}|${b.id}|${a.position_x},${a.position_z}|${b.position_x},${b.position_z}`;
+  }, []);
+
+  /**
+   * C4: Generate a stable visual signature for block array comparison (EXPENSIVE - O(n))
    * Uses XOR + sum of per-block hashes for order-insensitivity
    * Includes position, block_type, canonical texture_url, and branch_depth
    */
@@ -246,9 +260,8 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Phase 3.0: Schedule a single emission per animation frame
    * This prevents multiple React updates from rapid chunk operations
    * 
-   * Phase 4 OPTIMIZATION: Only emit if block array contents actually changed.
-   * Compares signature (count + sample IDs) before emitting to prevent
-   * redundant React re-renders that cause flashing during tree growth.
+   * D2 OPTIMIZATION: Uses cheap O(1) precheck before expensive O(n) signature.
+   * Cheap key catches 99% of "no change" cases.
    */
   const scheduleEmit = useCallback(() => {
     if (emitScheduledRef.current) return;
@@ -270,18 +283,28 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         }
       }
       
-      // Phase 4: Only emit if contents changed
-      const newSignature = generateBlockSignature(allBlocks);
-      if (newSignature === lastEmittedSignatureRef.current) {
-        // Contents haven't changed, skip the React update
+      // D2: CHEAP precheck first (O(1)) - catches 99% of "no change" cases
+      const cheapKey = generateCheapWorldKey(allBlocks);
+      if (cheapKey === lastEmittedCheapKeyRef.current) {
+        // Cheap key matches - very likely same content, skip expensive signature
         return;
       }
       
+      // D2: SLOW PATH - cheap key differs, compute expensive O(n) signature
+      const newSignature = generateBlockSignature(allBlocks);
+      if (newSignature === lastEmittedSignatureRef.current) {
+        // Visual signature matches (order/IDs changed but content same) - update cheap key and skip emit
+        lastEmittedCheapKeyRef.current = cheapKey;
+        return;
+      }
+      
+      // Content actually changed - emit
+      lastEmittedCheapKeyRef.current = cheapKey;
       lastEmittedSignatureRef.current = newSignature;
       lastEmittedBlocksRef.current = allBlocks;
       onBlocksChanged(allBlocks);
     });
-  }, [onBlocksChanged, generateBlockSignature]);
+  }, [onBlocksChanged, generateCheapWorldKey, generateBlockSignature]);
 
   /**
    * Flatten all loaded chunks into a single blocks array
