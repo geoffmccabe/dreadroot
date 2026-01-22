@@ -1,4 +1,4 @@
-import { useRef, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
+import { useRef, useImperativeHandle, forwardRef, useMemo, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, type ShombieInstance, type PartTwitch } from '../types';
@@ -10,11 +10,11 @@ import {
   SHOMBIE_HITBOX_RADIUS,
   SHOMBIE_HITBOX_HEIGHT,
   DEFAULT_SHOMBIE_TEXTURE_URL,
+  HEAD_FIRE_SIZE,
+  HEAD_FIRE_HEIGHT,
+  HEAD_FIRE_PARTICLE_COUNT,
 } from '../constants';
-
-// HEAD FIRE DISABLED - particleFire.install() crashes at module load
-// TODO: Re-enable using the same pattern as FortressImpacts (lazy init inside component)
-const HEAD_FIRE_ENABLED = false;
+import particleFire from 'three-particle-fire';
 
 // Pre-allocated objects
 const tmpMatrix = new THREE.Matrix4();
@@ -48,6 +48,18 @@ textureLoader.load(DEFAULT_SHOMBIE_TEXTURE_URL, (texture) => {
 // Get tier color as hex
 function getTierPrimaryColor(tier: number): string {
   return TIER_COLORS[tier]?.[0] || '#FFFF00';
+}
+
+// Convert hex to number for particleFire
+function hexToNumber(hex: string): number {
+  return parseInt(hex.replace('#', ''), 16);
+}
+
+interface HeadFire {
+  shombieId: string;
+  points: THREE.Points;
+  material: any;
+  geometry: any;
 }
 
 export interface ShombieRendererHandle {
@@ -112,6 +124,17 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
     const meshRef = useRef<THREE.InstancedMesh>(null);
     const groupRef = useRef<THREE.Group>(null);
     const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
+    const headFiresRef = useRef<Map<string, HeadFire>>(new Map());
+    const particleFireInstalledRef = useRef(false);
+    const { scene, camera } = useThree();
+
+    // Lazy init particleFire - only when first needed
+    const ensureParticleFireInstalled = useCallback(() => {
+      if (!particleFireInstalledRef.current) {
+        particleFire.install({ THREE });
+        particleFireInstalledRef.current = true;
+      }
+    }, []);
 
     // Create material with fortress texture and tier tint
     const material = useMemo(() => {
@@ -139,6 +162,86 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       materialRef.current = mat;
       return mat;
     }, []);
+
+    // Create head fire for a shombie
+    const createHeadFire = useCallback((shombieId: string, tier: number): HeadFire | null => {
+      ensureParticleFireInstalled();
+      
+      try {
+        const tierColorHex = getTierPrimaryColor(tier);
+        
+        const fireGeometry = new particleFire.Geometry(
+          HEAD_FIRE_SIZE / 2, // radius
+          HEAD_FIRE_HEIGHT,
+          HEAD_FIRE_PARTICLE_COUNT
+        );
+        const fireMaterial = new particleFire.Material({ 
+          color: hexToNumber(tierColorHex) 
+        });
+        
+        // Configure material like bullet impacts
+        (fireMaterial as THREE.Material).blending = THREE.AdditiveBlending;
+        (fireMaterial as THREE.ShaderMaterial).depthWrite = false;
+        (fireMaterial as THREE.Material).transparent = true;
+        
+        const cam = camera as THREE.PerspectiveCamera;
+        if (cam.fov) {
+          fireMaterial.setPerspective(cam.fov, window.innerHeight);
+        }
+        
+        const firePoints = new THREE.Points(fireGeometry, fireMaterial);
+        firePoints.renderOrder = 999;
+        scene.add(firePoints);
+        
+        return { 
+          shombieId, 
+          points: firePoints, 
+          material: fireMaterial,
+          geometry: fireGeometry,
+        };
+      } catch (e) {
+        console.warn('[ShombieRenderer] Failed to create head fire:', e);
+        return null;
+      }
+    }, [camera, scene, ensureParticleFireInstalled]);
+
+    // Clean up fires when shombies are removed
+    useEffect(() => {
+      const activeIds = new Set(shombies.filter(s => s.isActive).map(s => s.id));
+      
+      for (const [id, headFire] of headFiresRef.current.entries()) {
+        if (!activeIds.has(id)) {
+          // Remove fire from scene
+          scene.remove(headFire.points);
+          headFire.geometry.dispose();
+          headFire.material.dispose();
+          headFiresRef.current.delete(id);
+        }
+      }
+    }, [shombies, scene]);
+
+    // Cleanup all fires on unmount
+    useEffect(() => {
+      return () => {
+        for (const headFire of headFiresRef.current.values()) {
+          scene.remove(headFire.points);
+          headFire.geometry.dispose();
+          headFire.material.dispose();
+        }
+        headFiresRef.current.clear();
+      };
+    }, [scene]);
+
+    // Update fires every frame
+    useFrame((_, delta) => {
+      for (const headFire of headFiresRef.current.values()) {
+        try {
+          headFire.material.update(delta);
+        } catch (e) {
+          // Ignore update errors
+        }
+      }
+    });
 
     useImperativeHandle(ref, () => ({
       update: (cameraPosition: THREE.Vector3, deltaTime: number) => {
@@ -262,7 +365,35 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           }
         }
 
-        // HEAD FIRE DISABLED - TODO: re-enable with lazy init pattern from FortressImpacts
+        // Update head fires - create if missing, update position
+        for (const shombie of shombies) {
+          if (!shombie.isActive) continue;
+          
+          // Only show fire after emergence is complete
+          if (shombie.emergenceProgress < 1) continue;
+          
+          const headPos = headPositions.get(shombie.id);
+          if (!headPos) continue;
+
+          let headFire = headFiresRef.current.get(shombie.id);
+          
+          // Create fire if it doesn't exist
+          if (!headFire) {
+            headFire = createHeadFire(shombie.id, shombie.definition.tier);
+            if (headFire) {
+              headFiresRef.current.set(shombie.id, headFire);
+            }
+          }
+          
+          // Update fire position (on top of head)
+          if (headFire) {
+            headFire.points.position.set(
+              headPos.x,
+              headPos.y + 0.3, // Above the head
+              headPos.z
+            );
+          }
+        }
       },
       
       getHeadPosition: (shombieId: string) => {
@@ -301,7 +432,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           height: SHOMBIE_HITBOX_HEIGHT * shombie.scale,
         };
       },
-    }), [shombies]);
+    }), [shombies, createHeadFire]);
 
     return (
       <group ref={groupRef}>

@@ -25,6 +25,8 @@ interface UseShombieSystemOptions {
   /** User roles for admin hotkey access */
   userRoles: string[];
   onShombieKilled?: (tier: number) => void;
+  /** Callback when shombie attacks player */
+  onPlayerHit?: (damage: number, knockbackForce: number, direction: THREE.Vector3) => void;
 }
 
 // Pre-allocated vectors
@@ -49,6 +51,7 @@ export function useShombieSystem({
   isEnabled,
   userRoles,
   onShombieKilled,
+  onPlayerHit,
 }: UseShombieSystemOptions) {
   const [shombies, setShombies] = useState<ShombieInstance[]>([]);
   const [spawningEnabled, setSpawningEnabled] = useState(false);
@@ -362,7 +365,23 @@ export function useShombieSystem({
         const now = Date.now();
         if (now - shombie.lastAttackAt > SHOMBIE_ATTACK_COOLDOWN_MS) {
           shombie.lastAttackAt = now;
-          // Attack will be handled by FortressScene callbacks
+          
+          // Attack player!
+          if (onPlayerHit) {
+            const damage = shombie.definition.damage_per_hit;
+            // Knockback direction from shombie toward player (normalized)
+            const knockbackDir = new THREE.Vector3(
+              camera.position.x - shombie.position.x,
+              0,
+              camera.position.z - shombie.position.z
+            ).normalize();
+            
+            // Knockback force based on definition (default 3)
+            const knockbackForce = 3;
+            onPlayerHit(damage, knockbackForce, knockbackDir);
+            
+            console.log(`[Shombie] Attack! Dealt ${damage} damage`);
+          }
         }
       }
       
