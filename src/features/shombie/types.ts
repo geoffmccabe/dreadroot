@@ -61,6 +61,19 @@ export type HeadMovementType = 'slide' | 'bob' | 'circle';
 /**
  * Runtime state for an active shombie instance
  */
+/**
+ * Fire effect attached to a body part
+ */
+export interface ShombieBodyFire {
+  partName: string;
+  startTime: number;
+  duration: number; // ms
+  colors: string[];
+}
+
+/**
+ * Runtime state for an active shombie instance
+ */
 export interface ShombieInstance {
   id: string;
   definition: ShombieDefinition;
@@ -101,6 +114,8 @@ export interface ShombieInstance {
   knockdownProgress: number;
   /** Knockdown start time */
   knockdownStartTime: number;
+  /** Active fires on body parts */
+  bodyFires: ShombieBodyFire[];
 }
 
 /**

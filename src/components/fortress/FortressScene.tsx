@@ -1476,17 +1476,47 @@ export function FortressScene({
                         onPointsEarned(finalDamage);
                       }
                       
-                      // Spawn impact effect at hit position
-                      if (bulletImpactsRef.current) {
-                        const hitPos = new THREE.Vector3(hitPosX, hitY, hitPosZ);
+                      // Determine which body part was hit and attach fire to it
+                      // Body part mapping based on hit height relative to shombie base
+                      const relativeHitHeight = hitY - shombie.position.y;
+                      const scale = shombie.scale || 1;
+                      
+                      // Map hit height to body part (scaled heights from types.ts)
+                      let hitPartName = 'torso'; // default
+                      if (relativeHitHeight > 1.5 * scale) {
+                        hitPartName = 'head';
+                      } else if (relativeHitHeight > 1.0 * scale) {
+                        // Upper body - could be torso or arms
+                        if (Math.abs(hitPosX - shombie.position.x) > 0.3 * scale) {
+                          hitPartName = hitPosX > shombie.position.x ? 'rightUpperArm' : 'leftUpperArm';
+                        } else {
+                          hitPartName = 'torso';
+                        }
+                      } else if (relativeHitHeight > 0.5 * scale) {
+                        // Mid body - torso or lower arms
+                        if (Math.abs(hitPosX - shombie.position.x) > 0.3 * scale) {
+                          hitPartName = hitPosX > shombie.position.x ? 'rightLowerArm' : 'leftLowerArm';
+                        } else {
+                          hitPartName = 'torso';
+                        }
+                      } else if (relativeHitHeight > 0.3 * scale) {
+                        // Upper legs
+                        hitPartName = hitPosX > shombie.position.x ? 'rightUpperLeg' : 'leftUpperLeg';
+                      } else {
+                        // Lower legs
+                        hitPartName = hitPosX > shombie.position.x ? 'rightLowerLeg' : 'leftLowerLeg';
+                      }
+                      
+                      // Attach fire to the body part that moves with the shombie
+                      if (shombieRendererRef.current) {
                         const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
-                        bulletImpactsRef.current.spawnImpact(hitPos, {
-                          colors: tierDef.colors,
-                          size: tierDef.burn_width * bullet.ricochetScale * pentaMultiplier,
-                          height: tierDef.burn_height * bullet.ricochetScale * pentaMultiplier,
-                          duration: tierDef.burn_time * pentaMultiplier,
-                          tier: bullet.tier,
-                        });
+                        const fireDuration = tierDef.burn_time * pentaMultiplier * 1000; // Convert to ms
+                        shombieRendererRef.current.addFireToBodyPart(
+                          shombie.id,
+                          hitPartName,
+                          fireDuration,
+                          tierDef.colors
+                        );
                       }
                       
                       if (isHeadshot) {

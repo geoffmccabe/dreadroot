@@ -4,7 +4,8 @@ export type {
   ShombiePart, 
   PartTwitch, 
   ShombieInstance,
-  HeadMovementType 
+  HeadMovementType,
+  ShombieBodyFire
 } from './types';
 export { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, generatePartTwitches } from './types';
 

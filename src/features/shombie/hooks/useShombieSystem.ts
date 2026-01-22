@@ -16,7 +16,9 @@ import {
   SHOMBIE_ATTACK_RANGE,
   SHOMBIE_ATTACK_COOLDOWN_MS,
   KNOCKDOWN_SLIDE_DISTANCE,
-  KNOCKDOWN_DURATION_MS,
+  KNOCKDOWN_TOTAL_DURATION_MS,
+  KNOCKDOWN_TILT_DURATION_MS,
+  KNOCKDOWN_SLIDE_DURATION_MS,
   SHOMBIE_COLLISION_RADIUS,
   SHOMBIE_SEPARATION_FORCE,
 } from '../constants';
@@ -188,6 +190,7 @@ export function useShombieSystem({
       isKnockedDown: false,
       knockdownProgress: 0,
       knockdownStartTime: 0,
+      bodyFires: [], // No fires initially
     };
 
     shombiesRef.current = [...shombiesRef.current, instance];
@@ -362,18 +365,28 @@ export function useShombieSystem({
       // Don't move until fully emerged
       if (shombie.emergenceProgress < 1) continue;
       
-      // Handle knockdown animation
+      // Handle knockdown animation (3 phases: tilt, slide, recovery)
       if (shombie.isKnockedDown) {
         const now = Date.now();
         const elapsed = now - shombie.knockdownStartTime;
-        const progress = Math.min(1, elapsed / KNOCKDOWN_DURATION_MS);
+        const progress = Math.min(1, elapsed / KNOCKDOWN_TOTAL_DURATION_MS);
         shombie.knockdownProgress = progress;
         
-        // Slide in knockdown direction (decelerate over time)
-        if (shombie.knockdownDirection && progress < 1) {
-          const slideSpeed = KNOCKDOWN_SLIDE_DISTANCE * (1 - progress) * (deltaTime / (KNOCKDOWN_DURATION_MS / 1000));
-          shombie.position.x += shombie.knockdownDirection.x * slideSpeed * 3; // 3x speed initially
-          shombie.position.z += shombie.knockdownDirection.z * slideSpeed * 3;
+        // Phase 1: Tilt backward (0 to KNOCKDOWN_TILT_DURATION_MS)
+        // Phase 2: Slide (KNOCKDOWN_TILT_DURATION_MS to KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS)
+        // Phase 3: Recovery (rest of time)
+        
+        const tiltEndTime = KNOCKDOWN_TILT_DURATION_MS;
+        const slideEndTime = KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS;
+        
+        // Slide during phase 2
+        if (elapsed > tiltEndTime && elapsed < slideEndTime && shombie.knockdownDirection) {
+          const slideElapsed = elapsed - tiltEndTime;
+          const slideProgress = slideElapsed / KNOCKDOWN_SLIDE_DURATION_MS;
+          // Decelerate: more speed at start, less at end
+          const slideSpeed = KNOCKDOWN_SLIDE_DISTANCE * (1 - slideProgress) * 4 * deltaTime;
+          shombie.position.x += shombie.knockdownDirection.x * slideSpeed;
+          shombie.position.z += shombie.knockdownDirection.z * slideSpeed;
         }
         
         // End knockdown when complete

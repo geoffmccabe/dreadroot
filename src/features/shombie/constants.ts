@@ -127,8 +127,15 @@ export const DEFAULT_SHOMBIE_TEXTURE_URL = '/grass_texture_seamless.webp';
 
 // Knockdown settings (headshot)
 export const KNOCKDOWN_SLIDE_DISTANCE = 3.0; // Slide 3 meters when headshot
-export const KNOCKDOWN_DURATION_MS = 1000; // 1 second knockdown animation
+export const KNOCKDOWN_TILT_DURATION_MS = 400; // Time to tilt backward (fast)
+export const KNOCKDOWN_SLIDE_DURATION_MS = 600; // Time to slide after tilting
+export const KNOCKDOWN_RECOVERY_DURATION_MS = 500; // Time to get back up
+export const KNOCKDOWN_TOTAL_DURATION_MS = KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS + KNOCKDOWN_RECOVERY_DURATION_MS;
 
 // Shombie-to-shombie collision avoidance
 export const SHOMBIE_COLLISION_RADIUS = 0.8; // Radius for shombie-shombie collisions
 export const SHOMBIE_SEPARATION_FORCE = 5.0; // Force to push shombies apart
+
+// Body fire settings (pinned to body parts when hit)
+export const BODY_FIRE_SIZE = 0.3;
+export const BODY_FIRE_HEIGHT = 0.4;
