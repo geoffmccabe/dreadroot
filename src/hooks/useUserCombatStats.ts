@@ -15,7 +15,7 @@ export interface EnemyDefinition {
   name: string;
   texture_url: string | null;
   rarity?: string;
-  enemyType: 'shwarm' | 'shnake'; // Distinguish between enemy types
+  enemyType: 'shwarm' | 'shnake' | 'shombie'; // Distinguish between enemy types
 }
 
 // Rarity order for sorting (lowest to highest)
@@ -45,6 +45,15 @@ function getShnakeRarityFromTier(tier: number): string {
   return 'legendary';
 }
 
+// Derive rarity from tier (for shombie - tiers 1-10)
+function getShombieRarityFromTier(tier: number): string {
+  if (tier <= 2) return 'common';
+  if (tier <= 4) return 'uncommon';
+  if (tier <= 6) return 'rare';
+  if (tier <= 8) return 'epic';
+  return 'legendary';
+}
+
 export function useUserCombatStats() {
   const { user } = useAuth();
   const [stats, setStats] = useState<CombatStat[]>([]);
@@ -62,7 +71,7 @@ export function useUserCombatStats() {
     const loadData = async () => {
       setIsLoading(true);
       
-      const [statsResult, shwarmDefsResult, shnakeDefsResult] = await Promise.all([
+      const [statsResult, shwarmDefsResult, shnakeDefsResult, shombieDefsResult] = await Promise.all([
         supabase
           .from('user_combat_stats')
           .select('*')
@@ -74,6 +83,10 @@ export function useUserCombatStats() {
         supabase
           .from('shnake_definitions')
           .select('id, tier, name, head_texture_url')
+          .order('tier', { ascending: true }),
+        supabase
+          .from('shombie_definitions')
+          .select('id, tier, name, texture_url')
           .order('tier', { ascending: true })
       ]);
 
@@ -107,6 +120,19 @@ export function useUserCombatStats() {
           enemyType: 'shnake' as const,
         }));
         allDefs.push(...shnakeDefs);
+      }
+      
+      // Add shombie definitions
+      if (!shombieDefsResult.error) {
+        const shombieDefs = (shombieDefsResult.data || []).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.texture_url,
+          rarity: getShombieRarityFromTier(d.tier),
+          enemyType: 'shombie' as const,
+        }));
+        allDefs.push(...shombieDefs);
       }
       
       setDefinitions(allDefs);
