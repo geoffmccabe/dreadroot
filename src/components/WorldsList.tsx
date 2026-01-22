@@ -82,8 +82,9 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       console.log(`[GhostTreeCleanup] ✓ Removed ${cacheCount} tree blocks from chunk cache`);
       
       // STEP 4: Clear collision grid to remove ghost colliders
-      const { collisionGrid } = await import('@/lib/spatialHashGrid');
-      collisionGrid.clear();
+      const { worldCollisionGrid, entityCollisionGrid } = await import('@/lib/spatialHashGrid');
+      worldCollisionGrid.clear();
+      entityCollisionGrid.clear();
       console.log('[GhostTreeCleanup] ✓ Cleared collision grid');
       
       // STEP 5: Call edge function to delete from DB (bypasses RLS with service role)

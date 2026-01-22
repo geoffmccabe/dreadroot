@@ -23,7 +23,7 @@ import {
   type ShwarmLocomotionContext,
 } from '../locomotion/ShwarmLocomotion';
 import { EnemyManager } from '../EnemyManager';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { entityCollisionGrid } from '@/lib/spatialHashGrid';
 
 // Seeded random number generator for deterministic movement
 function seededRandom(seed: number): () => number {
@@ -74,7 +74,7 @@ export function cleanupShwarmResources(shwarmId: string, blocks: { id: string }[
   for (const block of blocks) {
     const target = shwarmBlockTargets.get(block.id);
     if (target?.collider) {
-      collisionGrid.remove(target.collider);
+      entityCollisionGrid.remove(target.collider);
     }
     shwarmBlockTargets.delete(block.id);
   }

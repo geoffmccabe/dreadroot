@@ -4,13 +4,14 @@ import * as THREE from 'three';
 const CELL_SIZE = 2;
 const MAX_NEARBY_RESULTS = 128;
 
-// Frame-local cache for nearby query results (avoids re-querying same position)
-let _cachedQueryX = NaN;
-let _cachedQueryZ = NaN;
-let _cachedQueryMinY = NaN;
-let _cachedQueryMaxY = NaN;
-let _cachedQueryCount = 0;
-let _cachedQueryGeneration = 0;
+// NOTE: Cache variables are now PER-INSTANCE (see private fields in class)
+// This is critical when using multiple grids to prevent cross-grid cache pollution.
+
+interface SpatialHashGridOptions {
+  name?: string;
+  emitClearEvent?: boolean;
+  clearEventName?: string;
+}
 
 /**
  * Sparse, unbounded spatial hash grid.
@@ -30,6 +31,16 @@ class SpatialHashGrid {
   
   // Pre-allocated result array for zero-allocation queries
   public nearbyResult: THREE.Box3[] = new Array(MAX_NEARBY_RESULTS);
+  
+  // Per-instance frame-local cache for nearby query results
+  private _cachedQueryX = NaN;
+  private _cachedQueryZ = NaN;
+  private _cachedQueryMinY = NaN;
+  private _cachedQueryMaxY = NaN;
+  private _cachedQueryCount = 0;
+  private _cachedQueryGeneration = 0;
+  
+  constructor(private opts?: SpatialHashGridOptions) {}
   
   private cellCoord(v: number): number {
     return Math.floor(v / CELL_SIZE);
@@ -158,16 +169,18 @@ class SpatialHashGrid {
   }
   
   clear(): void {
-    console.log(`[CollisionGrid] Clearing ${this.colliderCells.size} colliders`);
+    const name = this.opts?.name ?? 'CollisionGrid';
+    console.log(`[${name}] Clearing ${this.colliderCells.size} colliders`);
     this.cells.clear();
     this.colliderCells.clear();
     this.generation++;
+    this.invalidateCache();
 
-    // Notify listeners (e.g., chunk loader) to reinsert cached colliders.
-    // This prevents "no collision" states after an emergency clear or hot reload.
-    if (typeof window !== 'undefined') {
+    // Only emit clear event if configured (WorldGrid emits, EntityGrid does not)
+    if (this.opts?.emitClearEvent && typeof window !== 'undefined') {
+      const evName = this.opts?.clearEventName ?? 'collisionGridCleared';
       try {
-        window.dispatchEvent(new Event('collisionGridCleared'));
+        window.dispatchEvent(new Event(evName));
       } catch {
         // ignore
       }
@@ -179,7 +192,8 @@ class SpatialHashGrid {
    */
   debugNearby(x: number, z: number, radius: number = 5): void {
     const count = this.getNearby(x, z, radius);
-    console.log(`[CollisionGrid] ${count} colliders near (${x.toFixed(1)}, ${z.toFixed(1)}):`);
+    const name = this.opts?.name ?? 'CollisionGrid';
+    console.log(`[${name}] ${count} colliders near (${x.toFixed(1)}, ${z.toFixed(1)}):`);
     for (let i = 0; i < Math.min(count, 10); i++) {
       const c = this.nearbyResult[i];
       console.log(`  ${i}: (${c.min.x.toFixed(1)},${c.min.y.toFixed(1)},${c.min.z.toFixed(1)}) to (${c.max.x.toFixed(1)},${c.max.y.toFixed(1)},${c.max.z.toFixed(1)})`);
@@ -247,14 +261,14 @@ class SpatialHashGrid {
     const qMaxY = Math.round(maxY * 10);
     
     if (
-      qx === _cachedQueryX &&
-      qz === _cachedQueryZ &&
-      qMinY === _cachedQueryMinY &&
-      qMaxY === _cachedQueryMaxY &&
-      _cachedQueryGeneration === this.generation
+      qx === this._cachedQueryX &&
+      qz === this._cachedQueryZ &&
+      qMinY === this._cachedQueryMinY &&
+      qMaxY === this._cachedQueryMaxY &&
+      this._cachedQueryGeneration === this.generation
     ) {
       // Cache hit - return previously computed count (nearbyResult already populated)
-      return _cachedQueryCount;
+      return this._cachedQueryCount;
     }
     
     const gen = ++this.generation;
@@ -290,12 +304,12 @@ class SpatialHashGrid {
     }
     
     // Cache the results for subsequent queries at same position
-    _cachedQueryX = qx;
-    _cachedQueryZ = qz;
-    _cachedQueryMinY = qMinY;
-    _cachedQueryMaxY = qMaxY;
-    _cachedQueryCount = count;
-    _cachedQueryGeneration = this.generation;
+    this._cachedQueryX = qx;
+    this._cachedQueryZ = qz;
+    this._cachedQueryMinY = qMinY;
+    this._cachedQueryMaxY = qMaxY;
+    this._cachedQueryCount = count;
+    this._cachedQueryGeneration = this.generation;
     
     return count;
   }
@@ -305,8 +319,12 @@ class SpatialHashGrid {
    * to ensure fresh queries after position changes
    */
   invalidateCache(): void {
-    _cachedQueryX = NaN;
-    _cachedQueryZ = NaN;
+    this._cachedQueryX = NaN;
+    this._cachedQueryZ = NaN;
+    this._cachedQueryMinY = NaN;
+    this._cachedQueryMaxY = NaN;
+    this._cachedQueryGeneration = 0;
+    this._cachedQueryCount = 0;
   }
   
   get size(): number {
@@ -318,4 +336,20 @@ class SpatialHashGrid {
   }
 }
 
-export const collisionGrid = new SpatialHashGrid();
+// World collision grid: fortress + placed blocks + trees + invisiblocks
+// Emits 'collisionGridCleared' event for chunk loader reinsertion
+export const worldCollisionGrid = new SpatialHashGrid({
+  name: 'WorldCollisionGrid',
+  emitClearEvent: true,
+  clearEventName: 'collisionGridCleared',
+});
+
+// Entity collision grid: enemies (shwarms, shnakes) and later players
+// Does NOT emit clear event - entities handle their own cleanup
+export const entityCollisionGrid = new SpatialHashGrid({
+  name: 'EntityCollisionGrid',
+  emitClearEvent: false,
+});
+
+// Temporary back-compat alias (remove later after full migration)
+export const collisionGrid = worldCollisionGrid;
