@@ -41,6 +41,7 @@ import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
 import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
+import { useShombieSystem, ShombieRenderer, ShombieRendererHandle } from '@/features/shombie';
 
 // Universal Enemy AI system (Phase 3)
 import { useEnemyAI } from '@/features/enemies/ai';
@@ -344,7 +345,8 @@ export function FortressScene({
   playerLevel = 1,
   onPentabulletChargeChange,
   shnakeDefinitions,
-  plantedTrees
+  plantedTrees,
+  shombieDefinitions,
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   // IMPORTANT: Use full blocks array from context (all loaded chunks), not just visible blocks prop
@@ -430,6 +432,45 @@ export function FortressScene({
   });
 
   const { treeBlocksByTierRef, nonInvisTreeBlocksByTierRef } = getTreeBlockIndexRefs();
+  
+  // Shombie system
+  const shombieRendererRef = useRef<ShombieRendererHandle>(null);
+  
+  const handleShombiePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+    // Defer to avoid render loop issues
+    setTimeout(() => {
+      // Use universal damage system if available (includes STEADY, armor, i-frames)
+      if (applyDamageWithKnockback) {
+        applyDamageWithKnockback(
+          damage,
+          direction.clone(),
+          knockbackForce,
+          { type: 'enemy', entityName: 'Shombie' }
+        );
+      } else if (takeDamage) {
+        // Fallback to legacy function
+        takeDamage(damage, direction.clone(), knockbackForce);
+      }
+      
+      // Play player hit sound
+      if (audioRefs.current.playerHit) {
+        audioRefs.current.playerHit.currentTime = 0;
+        audioRefs.current.playerHit.play().catch(() => {});
+      }
+    }, 0);
+  }, [applyDamageWithKnockback, takeDamage]);
+  
+  const {
+    shombies,
+    shombiesRef,
+    damageShombie,
+    spawningEnabled: shombieSpawningEnabled,
+  } = useShombieSystem({
+    definitions: shombieDefinitions,
+    cameraRef,
+    isEnabled: true,
+    userRoles,
+  });
 
   // Shnake player hit callback - uses universal damage system
   // shnakeId is optional for compatibility with legacy system
@@ -1646,6 +1687,9 @@ export function FortressScene({
 
       {/* Shnake Renderer */}
       <ShnakeRenderer ref={shnakeRendererRef} shnakesRef={shnakesRef} cameraRef={cameraRef} />
+      
+      {/* Shombie Renderer */}
+      <ShombieRenderer ref={shombieRendererRef} shombies={shombies} />
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>

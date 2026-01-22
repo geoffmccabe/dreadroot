@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import type { ShwarmDefinition } from '@/features/shwarm/types';
 import type { ShnakeDefinition } from '@/features/shnake/types';
+import type { ShombieDefinition } from '@/features/shombie/types';
 // ============================================================
 // DEBUG CONFIGURATION
 // ============================================================
@@ -111,6 +112,8 @@ export interface SceneProps {
   // Shnake system
   shnakeDefinitions?: ShnakeDefinition[];
   plantedTrees?: import('@/features/trees/types').PlantedTree[];
+  // Shombie system
+  shombieDefinitions?: ShombieDefinition[];
   // Points system callback
   onPointsEarned?: (points: number) => void;
   // Shwarm group killed callback (passes tier for kill tracking)
