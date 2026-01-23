@@ -4,7 +4,21 @@
 import { forwardRef, useImperativeHandle, useRef, useCallback, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone } from 'three-nebula';
+import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone, Initializer } from 'three-nebula';
+
+// Custom Body initializer class that properly extends three-nebula's Initializer
+class BodySpriteInitializer extends Initializer {
+  private sprite: THREE.Sprite;
+  
+  constructor(sprite: THREE.Sprite) {
+    super();
+    this.sprite = sprite;
+  }
+  
+  initialize(particle: any) {
+    particle.body = this.sprite.clone();
+  }
+}
 
 // Debug flag
 const DEBUG_NEBULA_IMPACTS = false;
@@ -139,23 +153,10 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
       // Create emitter with one-shot burst
       const emitter = new Emitter();
       
-      // Custom Body initializer with init() method for three-nebula compatibility
-      const bodyInitializer = {
-        type: 'Body',
-        isEnabled: true,
-        reset() {},
-        init(emitter: any, particle: any) {
-          particle.body = sharedSprite.clone();
-        },
-        initialize(particle: any) {
-          particle.body = sharedSprite.clone();
-        }
-      };
-      
       emitter
         .setRate(new Rate(new Span(15, 25), new Span(0.001, 0.001))) // One-shot burst
         .setInitializers([
-          bodyInitializer as any,
+          new BodySpriteInitializer(sharedSprite),
           new Mass(0.5, 1),
           new Life(0.15 * (duration / 500), 0.4 * (duration / 500)),
           new Radius(size * 0.06, size * 0.15),
