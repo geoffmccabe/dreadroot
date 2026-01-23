@@ -4,16 +4,13 @@
 import { forwardRef, useImperativeHandle, useRef, useCallback, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone, BodySprite } from 'three-nebula';
+import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone } from 'three-nebula';
 
-// Debug flag - TEMPORARILY ENABLED to diagnose missing impacts
-const DEBUG_NEBULA_IMPACTS = true;
+// Debug flag
+const DEBUG_NEBULA_IMPACTS = false;
 
 // Maximum concurrent impact effects
 const MAX_IMPACTS = 20;
-
-// Soft circle particle texture with proper alpha (32x32 radial gradient)
-const PARTICLE_TEXTURE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAABhElEQVRYhe2XMU7DQBBF3yxJgUQBHIAChyAFR+AIdJQcgTJH4AiUFBQcgQo4AFQUSHSAEE9hs9mNvWs7WSt8aSXH8s78P7OzHsMSIYRO+3mC0EEfUEZZ4AR4AO6AZeBU0p2kK0lXkm4k9SXdSrqU1JXUkXQhqS3pVNJJ+v6ppPbY+fOkAXQD9QQ+gDfgFbgGPiW9J5f3AG8I4QhYAjaAFWAT2ALWgXVgDegBC8ACMAcMgAHwDvSBt+SDEQEuJaX/bwBngCPgEPgBnoDH+G0DeDYzAYaBzd8HzA+QdA7MAJ9AV1IP+AAeg1APYAD0g9ADsA9sA9vx6raBDeC7xGS2FPgBnkfEFfAN3AMPIb6dgILXDCH0U+vQJFZ5BXwAzwN8l4TQ97j2gGP+/zJLMCk+TwJrgIVhO/H5JbACZJZlrBBCr4lwlkUYSf8bDWAROGRYc1Q4LwCWGW4zXWCO4d7xJnAS4usB+yGE/hjfJL+LawC1B2B5FPgVxw+B5VL/Pxd/AVKPNJWYuG0QAAAAAElFTkSuQmCC';
 
 export interface NebulaImpactConfig {
   colors?: string[];      // Up to 3 colors for the effect
@@ -38,34 +35,50 @@ function hexToThreeColor(hex: string): THREE.Color {
   return new THREE.Color(hex);
 }
 
+// Create a shared sprite for all particles (more efficient)
+function createParticleSprite(): THREE.Sprite {
+  // Create a simple radial gradient texture programmatically
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  
+  // Radial gradient from white center to transparent edge
+  const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.8)');
+  gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.3)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  
+  return new THREE.Sprite(material);
+}
+
 export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
   const { scene } = useThree();
   const systemRef = useRef<System | null>(null);
   const rendererRef = useRef<SpriteRenderer | null>(null);
   const activeImpactsRef = useRef<ActiveImpact[]>([]);
-  const textureRef = useRef<THREE.Texture | null>(null);
-  const textureReadyRef = useRef<boolean>(false);
+  const sharedSpriteRef = useRef<THREE.Sprite | null>(null);
 
   // Initialize system
   useEffect(() => {
-    // Load texture synchronously from base64 (no async needed)
-    const loader = new THREE.TextureLoader();
-    loader.load(
-      PARTICLE_TEXTURE, 
-      (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace;
-        textureRef.current = texture;
-        textureReadyRef.current = true;
-        if (DEBUG_NEBULA_IMPACTS) {
-          console.log('[NebulaImpacts] Texture loaded successfully');
-        }
-      },
-      undefined,
-      (error) => {
-        console.error('[NebulaImpacts] Failed to load texture:', error);
-      }
-    );
-
+    // Create shared sprite once
+    sharedSpriteRef.current = createParticleSprite();
+    
     // Create system with custom renderer for proper blending
     const system = new System();
     const renderer = new SpriteRenderer(scene, THREE);
@@ -75,27 +88,28 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
     rendererRef.current = renderer;
     
     if (DEBUG_NEBULA_IMPACTS) {
-      console.log('[NebulaImpacts] System initialized');
+      console.log('[NebulaImpacts] System initialized with shared sprite');
     }
 
     return () => {
       system.destroy();
-      textureRef.current?.dispose();
+      if (sharedSpriteRef.current) {
+        sharedSpriteRef.current.material.dispose();
+        if ((sharedSpriteRef.current.material as THREE.SpriteMaterial).map) {
+          (sharedSpriteRef.current.material as THREE.SpriteMaterial).map!.dispose();
+        }
+      }
     };
   }, [scene]);
 
   const spawnImpact = useCallback((position: THREE.Vector3, config?: NebulaImpactConfig) => {
-    console.log('[NebulaImpacts] spawnImpact called, system exists:', !!systemRef.current, 'texture ready:', textureReadyRef.current);
     const system = systemRef.current;
-    const texture = textureRef.current;
+    const sharedSprite = sharedSpriteRef.current;
     
-    if (!system) {
-      console.error('[NebulaImpacts] System not initialized!');
-      return;
-    }
-    
-    if (!texture || !textureReadyRef.current) {
-      console.warn('[NebulaImpacts] Texture not ready yet, skipping impact');
+    if (!system || !sharedSprite) {
+      if (DEBUG_NEBULA_IMPACTS) {
+        console.warn('[NebulaImpacts] System or sprite not ready');
+      }
       return;
     }
 
@@ -121,29 +135,39 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
       console.log('[NebulaImpacts] Spawning at', position.toArray(), { size, height, duration, colors });
     }
 
-    // Create emitter with one-shot burst
-    const emitter = new Emitter();
-    
     try {
+      // Create emitter with one-shot burst
+      const emitter = new Emitter();
+      
+      // Custom Body initializer that uses our shared sprite
+      const bodyInitializer = {
+        type: 'Body',
+        isEnabled: true,
+        reset() {},
+        initialize(particle: any) {
+          particle.body = sharedSprite.clone();
+        }
+      };
+      
       emitter
         .setRate(new Rate(new Span(15, 25), new Span(0.001, 0.001))) // One-shot burst
         .setInitializers([
+          bodyInitializer as any,
           new Mass(0.5, 1),
           new Life(0.15 * (duration / 500), 0.4 * (duration / 500)),
-          new BodySprite(THREE, texture),
           new Radius(size * 0.06, size * 0.15),
           new Position(new PointZone(0, 0, 0)),
           new RadialVelocity(height * 2, new Vector3D(0, 1, 0), 60),
         ])
-      .setBehaviours([
-        new Alpha(1, 0),
-        new Scale(1.2, 0.1),
-        new Color(hexToThreeColor(color1), hexToThreeColor(color2)),
-        new Force(0, height * 1.5, 0),
-        new RandomDrift(size * 0.6, size * 0.3, size * 0.6, 0.02),
-      ])
-      .setPosition({ x: position.x, y: position.y, z: position.z })
-      .emit(1); // Emit once
+        .setBehaviours([
+          new Alpha(1, 0),
+          new Scale(1.2, 0.1),
+          new Color(hexToThreeColor(color1), hexToThreeColor(color2)),
+          new Force(0, height * 1.5, 0),
+          new RandomDrift(size * 0.6, size * 0.3, size * 0.6, 0.02),
+        ])
+        .setPosition({ x: position.x, y: position.y, z: position.z })
+        .emit(1); // Emit once
 
       system.addEmitter(emitter);
 
