@@ -6,8 +6,8 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone } from 'three-nebula';
 
-// Debug flag
-const DEBUG_NEBULA_IMPACTS = false;
+// Debug flag - TEMPORARILY ENABLED to diagnose missing impacts
+const DEBUG_NEBULA_IMPACTS = true;
 
 // Maximum concurrent impact effects
 const MAX_IMPACTS = 20;
@@ -72,8 +72,12 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
   }, [scene]);
 
   const spawnImpact = useCallback((position: THREE.Vector3, config?: NebulaImpactConfig) => {
+    console.log('[NebulaImpacts] spawnImpact called, system exists:', !!systemRef.current);
     const system = systemRef.current;
-    if (!system) return;
+    if (!system) {
+      console.error('[NebulaImpacts] System not initialized!');
+      return;
+    }
 
     // Remove oldest if at limit
     if (activeImpactsRef.current.length >= MAX_IMPACTS) {
