@@ -45,6 +45,10 @@ import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandl
 import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
 import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '@/features/shombie';
 
+// Tree system imports
+import { TreeInfoLabels } from '@/features/trees/components/TreeInfoLabels';
+import { useTreePlanterNames } from '@/features/trees/hooks/useTreePlanterNames';
+
 // Universal Enemy AI system (Phase 3)
 import { useEnemyAI } from '@/features/enemies/ai';
 import { initializeShnakeRevenge, markShnakeIndignant, recordShnakeRevengeDamage } from '@/features/enemies/ai/adapters/ShnakeAdapter';
@@ -336,7 +340,7 @@ export function FortressScene({
   fortressTextureUrl,
   groundTextureUrl,
   skyTextureUrl,
-  seedDefinitions,
+  seedDefinitions = [],
   healthRef,
   applyDamageWithKnockback,
   takeDamage,
@@ -356,13 +360,16 @@ export function FortressScene({
   playerLevel = 1,
   onPentabulletChargeChange,
   shnakeDefinitions,
-  plantedTrees,
+  plantedTrees = [],
   shombieDefinitions,
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   // IMPORTANT: Use full blocks array from context (all loaded chunks), not just visible blocks prop
   const { updatePlayerPosition, blocks: allLoadedBlocks } = useBlocks();
   const { camera } = useThree();
+  
+  // Fetch usernames for tree labels
+  const { usernamesMap } = useTreePlanterNames(plantedTrees);
   
   // Shwarm/Shnake system - needs ALL loaded blocks, not just visible ones
   const cameraRef = useRef<THREE.Camera>(camera);
@@ -1962,6 +1969,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
       
       {/* Shombie Renderer */}
       <ShombieRenderer ref={shombieRendererRef} shombies={shombies} />
+      
+      {/* Tree Info Labels */}
+      <TreeInfoLabels 
+        trees={plantedTrees} 
+        seedDefinitions={seedDefinitions} 
+        usernames={usernamesMap} 
+      />
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
     </>
