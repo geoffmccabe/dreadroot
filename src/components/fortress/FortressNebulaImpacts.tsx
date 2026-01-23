@@ -4,7 +4,7 @@
 import { forwardRef, useImperativeHandle, useRef, useCallback, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D } from 'three-nebula';
+import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone } from 'three-nebula';
 
 // Debug flag
 const DEBUG_NEBULA_IMPACTS = false;
@@ -106,7 +106,7 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
         new Mass(0.5, 1),
         new Life(0.15 * (duration / 500), 0.4 * (duration / 500)),
         new Radius(size * 0.06, size * 0.15),
-        new Position(new Vector3D(0, 0, 0)),
+        new Position(new PointZone(0, 0, 0)),
         new RadialVelocity(height * 2, new Vector3D(0, 1, 0), 60),
       ])
       .setBehaviours([
