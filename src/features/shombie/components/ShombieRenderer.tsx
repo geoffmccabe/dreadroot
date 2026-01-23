@@ -262,8 +262,11 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           color: hexToNumber(tierColorHex) 
         });
         
-        // Configure material like bullet impacts
-        (fireMaterial as THREE.Material).blending = THREE.AdditiveBlending;
+        // Configure material with custom blending to avoid dark fringe against sky
+        (fireMaterial as THREE.Material).blending = THREE.CustomBlending;
+        (fireMaterial as any).blendSrc = THREE.OneFactor;
+        (fireMaterial as any).blendDst = THREE.OneMinusSrcAlphaFactor;
+        (fireMaterial as any).blendEquation = THREE.AddEquation;
         (fireMaterial as THREE.ShaderMaterial).depthWrite = false;
         (fireMaterial as THREE.Material).transparent = true;
         
@@ -305,7 +308,11 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           color: hexToNumber(colorHex) 
         });
         
-        (fireMaterial as THREE.Material).blending = THREE.AdditiveBlending;
+        // Configure material with custom blending to avoid dark fringe against sky
+        (fireMaterial as THREE.Material).blending = THREE.CustomBlending;
+        (fireMaterial as any).blendSrc = THREE.OneFactor;
+        (fireMaterial as any).blendDst = THREE.OneMinusSrcAlphaFactor;
+        (fireMaterial as any).blendEquation = THREE.AddEquation;
         (fireMaterial as THREE.ShaderMaterial).depthWrite = false;
         (fireMaterial as THREE.Material).transparent = true;
         
