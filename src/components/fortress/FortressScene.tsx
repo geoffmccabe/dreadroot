@@ -426,7 +426,8 @@ const DEBUG_BULLETS = false;
 
 // Use Nebula particle system for bullet impacts (sky-friendly alpha transparency)
 // Set to false to use three-particle-fire (has dark halo artifacts against sky)
-const USE_NEBULA_FOR_BULLET_IMPACTS = true;
+// NOTE: Nebula disabled due to init() interface incompatibility causing freezes
+const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   
   useShwarmMovement({
     shwarmsRef,
