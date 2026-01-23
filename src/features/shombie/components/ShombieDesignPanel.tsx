@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
+import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import type { ShombieDefinition } from '../types';
 
 interface ShombieDesignPanelProps {
@@ -147,6 +148,12 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
   const updateDef = (field: keyof ShombieDefinition, value: any) => {
     if (!currentDef) return;
     setCurrentDef({ ...currentDef, [field]: value });
+    setHasChanges(true);
+  };
+
+  const updateAiConfig = (config: AIConfig) => {
+    if (!currentDef) return;
+    setCurrentDef({ ...currentDef, ai_config: config });
     setHasChanges(true);
   };
 
@@ -303,6 +310,15 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
           onSoundChange={handleSoundChange}
           onVolumeChange={handleVolumeChange}
         />
+        
+        {/* AI Behavior Settings Panel - collapsible */}
+        {currentDef && (
+          <EnemyBehaviorSettings
+            enemyType="shombie"
+            aiConfig={currentDef.ai_config as AIConfig | null}
+            onConfigChange={updateAiConfig}
+          />
+        )}
         
         {/* Tier Editor Card */}
         <Card className="p-4 flex-1">

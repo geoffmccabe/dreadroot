@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { convertAnimationToStrip, isAnimatedFile } from '@/lib/animationToStrip';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
+import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import type { ShnakeDefinition } from '../types';
 
 interface ShnakeDesignPanelProps {
@@ -412,6 +413,21 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
             onSoundChange={handleSoundChange}
             onVolumeChange={handleVolumeChange}
           />
+          
+          {/* AI Behavior Settings Panel - collapsible */}
+          {currentDef && (
+            <EnemyBehaviorSettings
+              enemyType="shnake"
+              aiConfig={currentDef.ai_config as AIConfig | null}
+              onConfigChange={(config) => {
+                // Update all ai_config fields at once
+                setDefinitions(prev =>
+                  prev.map(d => d.tier === selectedTier ? { ...d, ai_config: config } : d)
+                );
+                setHasChanges(true);
+              }}
+            />
+          )}
           
           <Card className="p-4 flex-1">
             {currentDef ? (
