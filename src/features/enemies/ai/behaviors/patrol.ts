@@ -107,28 +107,28 @@ export const PatrolBehavior: BehaviorModule = {
     
     // Need to pick a new destination?
     if (!hasDestination || ctx.state.patrolTargetX === undefined) {
-      // Get available tree block positions from custom context
-      // The adapter populates this from treeBlocksByTierRef
-      const treeBlockPositions = ctx.custom.treeBlockPositions as Array<{ x: number; y: number; z: number }> | undefined;
+      // OPTIMIZATION: Pick random position near tree base instead of iterating all blocks
+      // This avoids O(n) iteration over thousands of tree blocks every patrol tick
+      const treeBaseX = ctx.custom.treeBaseX as number | undefined;
+      const treeBaseY = ctx.custom.treeBaseY as number | undefined;
+      const treeBaseZ = ctx.custom.treeBaseZ as number | undefined;
       
-      if (treeBlockPositions && treeBlockPositions.length > 0) {
-        // Pick a random tree block position
-        const randomIndex = Math.floor(Math.random() * treeBlockPositions.length);
-        const target = treeBlockPositions[randomIndex];
+      if (treeBaseX !== undefined && treeBaseY !== undefined && treeBaseZ !== undefined) {
+        // Pick a random position within tree bounds
+        const tier = ctx.custom.tier as number ?? 1;
+        const treeRadius = 5 + tier * 2; // Larger trees for higher tiers
+        const treeHeight = 10 + tier * 5;
         
-        // Set destination to an adjacent cell (shnakes can't occupy tree blocks)
-        const offsets = [
-          [1, 0, 0], [-1, 0, 0],
-          [0, 1, 0], [0, -1, 0],
-          [0, 0, 1], [0, 0, -1],
-        ];
-        const [ox, oy, oz] = offsets[Math.floor(Math.random() * offsets.length)];
+        // Random offset from tree base
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * treeRadius;
+        const height = Math.random() * treeHeight;
         
-        ctx.state.patrolTargetX = target.x + ox;
-        ctx.state.patrolTargetY = target.y + oy;
-        ctx.state.patrolTargetZ = target.z + oz;
+        ctx.state.patrolTargetX = treeBaseX + Math.cos(angle) * radius;
+        ctx.state.patrolTargetY = treeBaseY + height;
+        ctx.state.patrolTargetZ = treeBaseZ + Math.sin(angle) * radius;
       } else {
-        // No tree blocks available, just idle
+        // No tree data available, just idle
         return { kind: 'idle' };
       }
     }
