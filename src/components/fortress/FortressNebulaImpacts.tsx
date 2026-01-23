@@ -44,14 +44,27 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
   const rendererRef = useRef<SpriteRenderer | null>(null);
   const activeImpactsRef = useRef<ActiveImpact[]>([]);
   const textureRef = useRef<THREE.Texture | null>(null);
+  const textureReadyRef = useRef<boolean>(false);
 
   // Initialize system
   useEffect(() => {
-    // Load texture
+    // Load texture synchronously from base64 (no async needed)
     const loader = new THREE.TextureLoader();
-    loader.load(PARTICLE_TEXTURE, (texture) => {
-      textureRef.current = texture;
-    });
+    loader.load(
+      PARTICLE_TEXTURE, 
+      (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        textureRef.current = texture;
+        textureReadyRef.current = true;
+        if (DEBUG_NEBULA_IMPACTS) {
+          console.log('[NebulaImpacts] Texture loaded successfully');
+        }
+      },
+      undefined,
+      (error) => {
+        console.error('[NebulaImpacts] Failed to load texture:', error);
+      }
+    );
 
     // Create system with custom renderer for proper blending
     const system = new System();
@@ -72,10 +85,17 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
   }, [scene]);
 
   const spawnImpact = useCallback((position: THREE.Vector3, config?: NebulaImpactConfig) => {
-    console.log('[NebulaImpacts] spawnImpact called, system exists:', !!systemRef.current);
+    console.log('[NebulaImpacts] spawnImpact called, system exists:', !!systemRef.current, 'texture ready:', textureReadyRef.current);
     const system = systemRef.current;
+    const texture = textureRef.current;
+    
     if (!system) {
       console.error('[NebulaImpacts] System not initialized!');
+      return;
+    }
+    
+    if (!texture || !textureReadyRef.current) {
+      console.warn('[NebulaImpacts] Texture not ready yet, skipping impact');
       return;
     }
 
@@ -110,7 +130,7 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
         .setInitializers([
           new Mass(0.5, 1),
           new Life(0.15 * (duration / 500), 0.4 * (duration / 500)),
-          new BodySprite(THREE, PARTICLE_TEXTURE),
+          new BodySprite(THREE, texture),
           new Radius(size * 0.06, size * 0.15),
           new Position(new PointZone(0, 0, 0)),
           new RadialVelocity(height * 2, new Vector3D(0, 1, 0), 60),
