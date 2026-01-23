@@ -413,8 +413,9 @@ export function FortressScene({
   }, [applyDamageWithKnockback, takeDamage]);
   
 // Universal Enemy AI system control flag
-// Phase A: AI system should do zero work unless explicitly enabled.
-const ENABLE_ENEMY_AI = false;
+// Phase G: AI system enabled - controls all enemy behaviors via EnemyManager.
+// Legacy movement hooks are disabled when this is true.
+const ENABLE_ENEMY_AI = true;
 
 // Legacy movement hooks use aiControlled to disable their internal loops.
 const AI_CONTROLLED = ENABLE_ENEMY_AI;
@@ -640,6 +641,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
     cameraRef,
     shnakesRef,
     shwarmsRef,
+    shombiesRef,
     isEnabled: ENABLE_ENEMY_AI,
     aiControlled: AI_CONTROLLED,
     plantedTrees,
@@ -649,6 +651,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
     onShnakeHeadMoved: handleShnakeHeadMoved,
     onIndignantRoar: handleIndignantRoar,
     onTriggerWiggle: handleTriggerWiggle,
+    onShombiePlayerHit: handleShombiePlayerHit,
   });
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
@@ -1822,8 +1825,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
     // Update shwarm renderer (always, since movement is continuous)
     shwarmRendererRef.current?.update();
     
-    // Update shombie movement (pathfinding to player)
-    updateShombieMovement(delta);
+    // Update shombie movement (pathfinding to player) - skip if AI controls
+    if (!isAIControlled) {
+      updateShombieMovement(delta);
+    }
     
     // Update shombie renderer
     shombieRendererRef.current?.update(camera.position, delta);

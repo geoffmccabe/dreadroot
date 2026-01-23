@@ -15,9 +15,11 @@ import * as THREE from 'three';
 import { EnemyManager } from '../EnemyManager';
 import { ShnakeAdapter, type ShnakeWithAI, setShnakeLocomotionContext, cleanupShnakeResources, markShnakeAttacked } from '../adapters/ShnakeAdapter';
 import { ShwarmAdapter, type ShwarmWithAI, setShwarmLocomotionContext, cleanupShwarmResources } from '../adapters/ShwarmAdapter';
+import { ShombieAdapter, type ShombieWithAI, setShombieLocomotionContext } from '../adapters/ShombieAdapter';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShnakeInstance } from '@/features/shnake/types';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
+import type { ShombieInstance } from '@/features/shombie/types';
 import type { PlantedTree } from '@/features/trees/types';
 
 interface UseEnemyAIOptions {
@@ -29,6 +31,9 @@ interface UseEnemyAIOptions {
   
   /** Shwarm instances ref */
   shwarmsRef: React.RefObject<ShwarmInstance[]>;
+  
+  /** Shombie instances ref */
+  shombiesRef: React.RefObject<ShombieInstance[]>;
   
   /** Whether AI system is enabled */
   isEnabled: boolean;
@@ -44,6 +49,9 @@ interface UseEnemyAIOptions {
   onShnakeHeadMoved?: (shnakeId: string) => void;
   onIndignantRoar?: (shnakeId: string, volume: number) => void;
   onTriggerWiggle?: (shnakeId: string) => void;
+  
+  // Shombie locomotion context
+  onShombiePlayerHit?: (damage: number, knockbackForce: number, direction: THREE.Vector3) => void;
 }
 
 /**
@@ -57,6 +65,7 @@ export function useEnemyAI({
   cameraRef,
   shnakesRef,
   shwarmsRef,
+  shombiesRef,
   isEnabled,
   aiControlled = false,
   plantedTrees,
@@ -66,15 +75,18 @@ export function useEnemyAI({
   onShnakeHeadMoved,
   onIndignantRoar,
   onTriggerWiggle,
+  onShombiePlayerHit,
 }: UseEnemyAIOptions) {
   // Track registered enemy IDs to detect changes (reused, not reallocated)
   const registeredShnakesRef = useRef<Set<string>>(new Set());
   const registeredShwarmsRef = useRef<Set<string>>(new Set());
+  const registeredShombiesRef = useRef<Set<string>>(new Set());
   
   // Separate reusable sets for sync operations (avoids new Set() allocation each sync)
   // Using separate sets prevents race condition when both sync at same interval
   const tempShnakeIdsRef = useRef<Set<string>>(new Set());
   const tempShwarmIdsRef = useRef<Set<string>>(new Set());
+  const tempShombieIdsRef = useRef<Set<string>>(new Set());
   
   // Update locomotion context when deps change
   useEffect(() => {
@@ -101,7 +113,12 @@ export function useEnemyAI({
     setShwarmLocomotionContext({
       onPlayerHit,
     });
-  }, [isEnabled, aiControlled, plantedTrees, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved, onIndignantRoar, onTriggerWiggle]);
+    
+    // Update shombie locomotion context
+    setShombieLocomotionContext({
+      onPlayerHit: onShombiePlayerHit,
+    });
+  }, [isEnabled, aiControlled, plantedTrees, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved, onIndignantRoar, onTriggerWiggle, onShombiePlayerHit]);
   
   // Stable sync function for shnakes (avoids stale closures)
   // OPTIMIZED: Reuses tempShnakeIds set instead of allocating new Set each call
@@ -171,6 +188,36 @@ export function useEnemyAI({
     }
   }, [shwarmsRef]);
   
+  // Stable sync function for shombies
+  const syncShombies = useCallback(() => {
+    const shombies = shombiesRef.current ?? [];
+    const tempIds = tempShombieIdsRef.current;
+    tempIds.clear();
+    
+    // Build current IDs without allocation
+    for (const s of shombies) {
+      tempIds.add(s.id);
+    }
+    
+    const registered = registeredShombiesRef.current;
+    
+    // Register new shombies
+    for (const shombie of shombies) {
+      if (!registered.has(shombie.id) && shombie.isActive) {
+        EnemyManager.register(shombie as ShombieWithAI, ShombieAdapter);
+        registered.add(shombie.id);
+      }
+    }
+    
+    // Unregister removed shombies
+    for (const id of registered) {
+      if (!tempIds.has(id)) {
+        EnemyManager.unregister(id);
+        registered.delete(id);
+      }
+    }
+  }, [shombiesRef]);
+  
   // Initialize EnemyManager on mount
   useEffect(() => {
     if (!isEnabled) return;
@@ -200,6 +247,7 @@ export function useEnemyAI({
       EnemyManager.shutdown();
       registeredShnakesRef.current.clear();
       registeredShwarmsRef.current.clear();
+      registeredShombiesRef.current.clear();
     };
   }, [isEnabled, aiControlled, cameraRef]);
   
@@ -216,10 +264,11 @@ export function useEnemyAI({
       
       syncShnakes();
       syncShwarms();
+      syncShombies();
     }, 34); // Near the playerPos updater priority
     
     return unregister;
-  }, [isEnabled, syncShnakes, syncShwarms]);
+  }, [isEnabled, syncShnakes, syncShwarms, syncShombies]);
   
   // Wire markShnakeAttacked global to AI system when AI controls
   useEffect(() => {
