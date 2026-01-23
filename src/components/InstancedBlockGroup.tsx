@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useEffect, useState, useId } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
@@ -355,11 +355,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [blocks]);
   
   // E1: Migrate from useFrame to centralized frameLoop to eliminate per-group fan-out
-  // F4.1: Use DETERMINISTIC loop ID - random suffix caused callback leaks on re-mount
-  // The key is unique per block type + texture combo, which is sufficient
+  // F4.1: Use DETERMINISTIC loop ID with unique instance ID
+  // React's useId() provides stable, unique ID per component instance
+  const instanceId = useId();
   const loopId = useMemo(
-    () => `instanced-blocks:${blockDef.key}:${textureOverride ?? 'default'}`,
-    [blockDef.key, textureOverride]
+    () => `instanced-blocks:${instanceId}`,
+    [instanceId]
   );
   
   // Store refs for access in frameLoop callback (avoids stale closures)
