@@ -1,6 +1,6 @@
-// Real-time Performance Overlay
-// Shows live FPS, frame timing breakdown, and system health
-// Toggle with Shift+P
+// Unified D-Flow Performance Panel
+// Shows live stats + accumulated D-Flow report data
+// Toggle with Shift+3 (#)
 
 import { useEffect, useState, useRef } from 'react';
 import { diagnostics } from '@/lib/diagnosticsLogger';
@@ -24,6 +24,16 @@ interface PerformanceData {
   shombieCount: number;
   memory?: number;
   gridCacheHitRate: number;
+  // D-Flow accumulated stats
+  sampleCount: number;
+  duration: number;
+  avgFps: number;
+  minFps: number;
+  maxFps: number;
+  below30Pct: number;
+  maxDrawCalls: number;
+  maxWorldGrid: number;
+  maxEntityGrid: number;
 }
 
 export function PerformanceOverlay() {
@@ -46,6 +56,15 @@ export function PerformanceOverlay() {
     shnakeSegmentCount: 0,
     shombieCount: 0,
     gridCacheHitRate: 0,
+    sampleCount: 0,
+    duration: 0,
+    avgFps: 0,
+    minFps: 0,
+    maxFps: 0,
+    below30Pct: 0,
+    maxDrawCalls: 0,
+    maxWorldGrid: 0,
+    maxEntityGrid: 0,
   });
   
   const frameCountRef = useRef(0);
@@ -54,14 +73,23 @@ export function PerformanceOverlay() {
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key === 'P') {
-        setVisible(v => !v);
+      // Shift+3 (#) toggles this panel AND D-Flow recording
+      if (e.shiftKey && e.key === '#') {
+        const willBeVisible = !visible;
+        setVisible(willBeVisible);
+        
+        // Also toggle D-Flow recording
+        if (willBeVisible && !diagnostics.enabled) {
+          diagnostics.toggle(); // Start recording
+        } else if (!willBeVisible && diagnostics.enabled) {
+          diagnostics.toggle(); // Stop and print
+        }
       }
     };
     
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [visible]);
   
   useEffect(() => {
     if (!visible) return;
@@ -93,6 +121,25 @@ export function PerformanceOverlay() {
         const totalQueries = d.gridCacheHits + d.gridCacheMisses;
         const hitRate = totalQueries > 0 ? (d.gridCacheHits / totalQueries) * 100 : 0;
         
+        // Calculate D-Flow accumulated stats from buffer
+        const n = Math.min(d.ticker, 600);
+        let fpsSum = 0, fpsMin = Infinity, fpsMax = 0;
+        let below30Count = 0;
+        let maxDrawCalls = 0;
+        let maxWorldGrid = 0, maxEntityGrid = 0;
+        
+        for (let s = 0; s < n; s++) {
+          const i = s * 50;
+          const sampleFps = d.buffer[i + 1];
+          fpsSum += sampleFps;
+          if (sampleFps < fpsMin) fpsMin = sampleFps;
+          if (sampleFps > fpsMax) fpsMax = sampleFps;
+          if (sampleFps < 30) below30Count++;
+          if (d.buffer[i + 32] > maxDrawCalls) maxDrawCalls = d.buffer[i + 32];
+          if (d.buffer[i + 44] > maxWorldGrid) maxWorldGrid = d.buffer[i + 44];
+          if (d.buffer[i + 45] > maxEntityGrid) maxEntityGrid = d.buffer[i + 45];
+        }
+        
         setData({
           fps: Math.round(fps),
           frameTime: avgFrameTime,
@@ -112,6 +159,15 @@ export function PerformanceOverlay() {
           shombieCount: d.shombieCount,
           memory: d.jsHeapUsed || undefined,
           gridCacheHitRate: hitRate,
+          sampleCount: n,
+          duration: d.elapsedSeconds,
+          avgFps: n > 0 ? fpsSum / n : 0,
+          minFps: n > 0 ? fpsMin : 0,
+          maxFps: n > 0 ? fpsMax : 0,
+          below30Pct: n > 0 ? (below30Count / n) * 100 : 0,
+          maxDrawCalls,
+          maxWorldGrid,
+          maxEntityGrid,
         });
         
         // Reset counters
@@ -129,11 +185,21 @@ export function PerformanceOverlay() {
   if (!visible) return null;
   
   const fpsColor = data.fps >= 55 ? 'text-green-400' : data.fps >= 30 ? 'text-yellow-400' : 'text-red-400';
+  const avgFpsColor = data.avgFps >= 55 ? 'text-green-400' : data.avgFps >= 30 ? 'text-yellow-400' : 'text-red-400';
   const gridColor = data.worldGrid > 5000 ? 'text-red-400' : data.worldGrid > 2000 ? 'text-yellow-400' : 'text-gray-400';
   
   const handleCopy = () => {
-    const text = `=== Live Performance Snapshot ===
-FPS: ${data.fps} | Frame: ${data.frameTime.toFixed(1)}ms
+    const text = `=== D-Flow Performance Report ===
+Duration: ${data.duration}s (${data.sampleCount} samples)
+
+FPS Summary:
+  Current: ${data.fps} FPS
+  Average: ${data.avgFps.toFixed(1)} FPS
+  Min: ${data.minFps.toFixed(0)} FPS
+  Max: ${data.maxFps.toFixed(0)} FPS
+  Below 30 FPS: ${data.below30Pct.toFixed(1)}%
+
+Frame Time: ${data.frameTime.toFixed(1)}ms
 
 TIMING (ms/100ms):
   Controls: ${data.controls.toFixed(1)}ms
@@ -142,12 +208,12 @@ TIMING (ms/100ms):
   Render: ${data.render.toFixed(1)}ms
 
 GPU:
-  Draw Calls: ${data.drawCalls}
+  Draw Calls: ${data.drawCalls} (max: ${data.maxDrawCalls})
   Triangles: ${(data.triangles / 1000).toFixed(1)}K
 
 COLLISION:
-  World Grid: ${data.worldGrid}
-  Entity Grid: ${data.entityGrid}
+  World Grid: ${data.worldGrid} (max: ${data.maxWorldGrid})
+  Entity Grid: ${data.entityGrid} (max: ${data.maxEntityGrid})
   Cache Hit: ${data.gridCacheHitRate.toFixed(0)}%
 
 ENEMIES:
@@ -161,7 +227,7 @@ ${data.memory !== undefined ? `\nMemory: ${data.memory.toFixed(0)}MB` : ''}`;
   };
   
   return (
-    <div className="fixed top-2 left-2 z-50 bg-black/80 text-white font-mono text-xs p-2 rounded select-none min-w-[180px]">
+    <div className="fixed top-[17px] left-2 z-50 bg-black/20 text-white font-mono text-xs p-2 rounded select-none min-w-[200px]">
       <div className="flex justify-between items-center">
         <div className={`text-lg font-bold ${fpsColor}`}>
           {data.fps} FPS
@@ -177,6 +243,16 @@ ${data.memory !== undefined ? `\nMemory: ${data.memory.toFixed(0)}MB` : ''}`;
         Frame: {data.frameTime.toFixed(1)}ms
       </div>
       
+      {/* D-Flow Session Stats */}
+      <div className="mt-1 border-t border-gray-600 pt-1">
+        <div className="text-gray-500 text-[10px] mb-0.5">SESSION ({data.duration}s, {data.sampleCount} samples)</div>
+        <div className={avgFpsColor}>Avg: {data.avgFps.toFixed(1)} FPS</div>
+        <div>Min: {data.minFps.toFixed(0)} | Max: {data.maxFps.toFixed(0)}</div>
+        <div className={data.below30Pct > 50 ? 'text-red-400' : 'text-gray-400'}>
+          Below 30: {data.below30Pct.toFixed(1)}%
+        </div>
+      </div>
+      
       <div className="mt-1 border-t border-gray-600 pt-1">
         <div className="text-gray-500 text-[10px] mb-0.5">TIMING (ms/100ms)</div>
         <div>Controls: {data.controls.toFixed(1)}</div>
@@ -187,14 +263,14 @@ ${data.memory !== undefined ? `\nMemory: ${data.memory.toFixed(0)}MB` : ''}`;
       
       <div className="mt-1 border-t border-gray-600 pt-1">
         <div className="text-gray-500 text-[10px] mb-0.5">GPU</div>
-        <div>Draw Calls: {data.drawCalls}</div>
+        <div>Draw Calls: {data.drawCalls} (max: {data.maxDrawCalls})</div>
         <div>Triangles: {(data.triangles / 1000).toFixed(1)}K</div>
       </div>
       
       <div className="mt-1 border-t border-gray-600 pt-1">
         <div className="text-gray-500 text-[10px] mb-0.5">COLLISION</div>
-        <div className={gridColor}>World Grid: {data.worldGrid}</div>
-        <div>Entity Grid: {data.entityGrid}</div>
+        <div className={gridColor}>World: {data.worldGrid} (max: {data.maxWorldGrid})</div>
+        <div>Entity: {data.entityGrid} (max: {data.maxEntityGrid})</div>
         <div>Cache Hit: {data.gridCacheHitRate.toFixed(0)}%</div>
       </div>
       
@@ -213,7 +289,7 @@ ${data.memory !== undefined ? `\nMemory: ${data.memory.toFixed(0)}MB` : ''}`;
       )}
       
       <div className="mt-1 text-gray-500 text-[10px]">
-        Shift+P to hide
+        Shift+3 to close
       </div>
     </div>
   );
