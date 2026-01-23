@@ -206,53 +206,24 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
     const angrySpeedMultiplier = defConfig?.angrySpeedMultiplier ?? DEFAULT_AI_CONFIG.angrySpeedMultiplier;
     const attackCooldownMs = defConfig?.attackCooldownMs ?? 600;
     
-    // Get tree for this shnake to populate patrol positions
+    // OPTIMIZATION: Use pre-computed home position from behavior state or tree base
+    // Instead of iterating all tier blocks every tick (was O(n) = thousands of iterations)
+    // Patrol targets are set lazily by the patrol behavior itself
     const tree = locomotionContext?.treeById.get(shnake.treeId);
-    const treeBlockPositions: Array<{ x: number; y: number; z: number }> = [];
     
-    // Build list of tree block positions for patrol behavior
-    // Filter to only include blocks within THIS tree's approximate bounds
-    if (tree && locomotionContext?.treeBlocksByTier) {
-      const tierBlocks = locomotionContext.treeBlocksByTier.get(shnake.tier);
-      if (tierBlocks) {
-        // Calculate tree bounds based on target size
-        const baseX = tree.base_x;
-        const baseY = tree.base_y;
-        const baseZ = tree.base_z;
-        const treeHeight = Math.min(tree.target_block_count, 100);
-        const treeRadius = Math.max(15, Math.ceil(treeHeight / 2));
-        
-        for (const [posKey] of tierBlocks) {
-          const [px, py, pz] = posKey.split(',').map(Number);
-          
-          // Only include blocks near this tree's base
-          const dx = px - baseX;
-          const dz = pz - baseZ;
-          const horizontalDist = Math.sqrt(dx * dx + dz * dz);
-          
-          if (horizontalDist <= treeRadius && py >= baseY && py <= baseY + treeHeight) {
-            treeBlockPositions.push({ x: px, y: py, z: pz });
-          }
-        }
-      }
-    }
-    
-    // Check if touching tree (for returnHome behavior)
+    // Check if touching tree: O(6) neighbor check instead of O(n) full scan
+    // Only check head segment - if head is touching tree, shnake is "home"
     let isTouchingTree = false;
     if (locomotionContext?.treeBlocksByTier) {
       const tierBlocks = locomotionContext.treeBlocksByTier.get(shnake.tier);
       if (tierBlocks) {
-        for (const seg of shnake.segments) {
-          const neighbors = [
-            `${seg.x + 1},${seg.y},${seg.z}`, `${seg.x - 1},${seg.y},${seg.z}`,
-            `${seg.x},${seg.y + 1},${seg.z}`, `${seg.x},${seg.y - 1},${seg.z}`,
-            `${seg.x},${seg.y},${seg.z + 1}`, `${seg.x},${seg.y},${seg.z - 1}`,
-          ];
-          if (neighbors.some(n => tierBlocks.has(n))) {
-            isTouchingTree = true;
-            break;
-          }
-        }
+        const head = shnake.segments[0];
+        const neighbors = [
+          `${head.x + 1},${head.y},${head.z}`, `${head.x - 1},${head.y},${head.z}`,
+          `${head.x},${head.y + 1},${head.z}`, `${head.x},${head.y - 1},${head.z}`,
+          `${head.x},${head.y},${head.z + 1}`, `${head.x},${head.y},${head.z - 1}`,
+        ];
+        isTouchingTree = neighbors.some(n => tierBlocks.has(n));
       }
     }
     
@@ -288,12 +259,13 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
         attackCooldownMs,
         damage: shnake.definition.damage_per_hit,
         knockback: shnake.definition.knockback,
-        // Patrol behavior data
-        treeBlockPositions,
+        // Tree data for patrol/returnHome behaviors - base position only, not all blocks
         treeBaseX: tree?.base_x,
         treeBaseY: tree?.base_y,
         treeBaseZ: tree?.base_z,
         isTouchingTree,
+        // Pass tier blocks ref for O(1) lookups by patrol behavior (not iteration)
+        treeBlocksByTier: locomotionContext?.treeBlocksByTier,
         // Indignant behavior callbacks
         onIndignantRoar: (volume: number) => {
           locomotionContext?.onIndignantRoar?.(shnake.id, volume);
