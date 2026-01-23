@@ -38,6 +38,7 @@ import { getVisibleChunkKeys } from '@/lib/chunkManager';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
@@ -1007,6 +1008,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
     diagnostics.cameraY = camera.position.y;
     diagnostics.cameraZ = camera.position.z;
     diagnostics.particleCount = wispParticlesRef.current.length;
+    
+    // Capture renderer stats for GPU metrics (draw calls, triangles, memory)
+    diagnostics.captureRendererStats(state.gl);
+    
+    // Capture grid stats for collision system monitoring
+    diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
     
     // Call consolidated component updates (eliminates 5 separate useFrame hooks)
     skyRef.current?.update();

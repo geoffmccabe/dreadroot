@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { frameLoop } from '@/lib/frameLoop';
 import { BehaviorBrain } from './BehaviorBrain';
 import { EnemySpatialIndex } from './EnemySpatialIndex';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 import {
   type EnemyAdapter,
   type RegisteredEnemy,
@@ -216,6 +217,8 @@ class EnemyManagerClass {
    * Main tick function - called every frame by frameLoop.
    */
   private tick(_delta: number, elapsedTime: number): void {
+    diagnostics.startTiming('enemyAI');
+    
     const now = performance.now();
     const deltaMs = (now - this.lastFrameTime);
     this.lastFrameTime = now;
@@ -282,6 +285,7 @@ class EnemyManagerClass {
       
       // Track behavior transitions
       if (newBehaviorId !== reg.currentBehaviorId) {
+        diagnostics.behaviorTransitions++;
         if (DEBUG_AI) {
           console.log(`[AI] ${id} behavior: ${reg.currentBehaviorId} -> ${newBehaviorId} | result: ${result.kind}`);
         }
@@ -299,6 +303,12 @@ class EnemyManagerClass {
     
     // Batch update spatial index
     this.spatialIndex.update(this.spatialEntries);
+    
+    // Capture enemy AI stats for diagnostics
+    const stats = this.getLodStats();
+    diagnostics.captureEnemyStats(this.count, stats.full, stats.throttled, stats.frozen);
+    
+    diagnostics.recordTiming('enemyAI');
   }
   
   /**
