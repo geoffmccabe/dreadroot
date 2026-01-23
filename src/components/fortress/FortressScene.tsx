@@ -25,7 +25,6 @@ import { FirstPersonControls } from './FortressControls';
 import { DynamicSky, SkyHandle } from './FortressSky';
 import { DynamicLighting, LightingHandle } from './FortressLighting';
 import { FortressStructure } from './FortressStructure';
-import { WaterPool } from './WaterPool';
 // import { FortressParticles } from './FortressParticles'; // Disabled for performance
 import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
@@ -1896,7 +1895,6 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
       <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} />
 
       <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
-      <WaterPool />
       {/* <FortressParticles /> */}
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
       <CameraTrackedBlocks 

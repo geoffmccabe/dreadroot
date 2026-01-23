@@ -22,7 +22,6 @@ import {
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
-import { isInPool, POOL_CONFIG } from './WaterPool';
 
 export function FirstPersonControls({
   onShoot, 
@@ -152,11 +151,6 @@ export function FirstPersonControls({
   
   // Track previous crawl state for crouch height transition
   const wasCrawlingRef = useRef(false);
-  
-  // Water/pool state refs
-  const isSubmergedRef = useRef(false);
-  const oxygenRef = useRef(POOL_CONFIG.maxOxygen);
-  const lastOxygenDamageRef = useRef(0);
   
   // Initialize axe chop audio once
   useEffect(() => {
@@ -1130,10 +1124,8 @@ export function FirstPersonControls({
       const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
       // Use clamped delta for movement to prevent tunneling
       const moveDt = Math.min(delta, 1/30);
-      // Apply water drag if submerged
-      const waterDrag = isSubmergedRef.current ? POOL_CONFIG.swimDrag : 1.0;
-      deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * moveDt * waterDrag);
-      deltaMovement.addScaledVector(right, direction.current.x * runSpeed * moveDt * waterDrag);
+      deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * moveDt);
+      deltaMovement.addScaledVector(right, direction.current.x * runSpeed * moveDt);
       
       // Apply knockback velocity (decays over time)
       if (knockbackVelRef.current.lengthSq() > 0.0001) {
@@ -1188,6 +1180,9 @@ export function FirstPersonControls({
         glideActiveRef.current = false;
       }
       
+      // Gravity and jumping
+      velocity.current.y -= effectiveGravity * dt;
+
       // Player dimensions
       const playerRadius = 0.3;
       const isCrawling = keys.current.ctrl;
@@ -1195,72 +1190,6 @@ export function FirstPersonControls({
       const crawlingHeight = 0.8;
       const playerHeight = isCrawling ? crawlingHeight : standingHeight;
       const heightDiff = standingHeight - crawlingHeight; // 0.8m
-      
-      // Water/pool physics check
-      const playerFeetY = camera.position.y - playerHeight;
-      const wasSubmerged = isSubmergedRef.current;
-      const isNowSubmerged = isInPool(camera.position.x, playerFeetY, camera.position.z);
-      
-      if (isNowSubmerged !== wasSubmerged) {
-        isSubmergedRef.current = isNowSubmerged;
-        // Dispatch event for UI updates (oxygen meter)
-        window.dispatchEvent(new CustomEvent('waterStateChange', { 
-          detail: { isSubmerged: isNowSubmerged, oxygen: oxygenRef.current, maxOxygen: POOL_CONFIG.maxOxygen } 
-        }));
-      }
-      
-      if (isNowSubmerged) {
-        // Underwater physics: slow sink, can jump to swim up slowly
-        if (keys.current.space) {
-          // Swimming up - slow upward propulsion
-          velocity.current.y = POOL_CONFIG.jumpBoost;
-        } else {
-          // Sinking when not jumping
-          velocity.current.y = -POOL_CONFIG.sinkSpeed;
-        }
-        
-        // Clamp to pool floor
-        const poolFloorY = -POOL_CONFIG.depth + playerHeight;
-        if (camera.position.y + velocity.current.y * dt < poolFloorY) {
-          velocity.current.y = 0;
-          camera.position.y = poolFloorY;
-        }
-        
-        // Oxygen depletion
-        oxygenRef.current -= dt;
-        
-        // Damage when out of oxygen (every second)
-        if (oxygenRef.current <= 0) {
-          oxygenRef.current = 0;
-          const now = performance.now();
-          if (now - lastOxygenDamageRef.current > 1000) {
-            // Dispatch damage event for the damage system
-            window.dispatchEvent(new CustomEvent('playerDrowning', { 
-              detail: { damage: POOL_CONFIG.oxygenDamageRate } 
-            }));
-            lastOxygenDamageRef.current = now;
-          }
-        }
-        
-        // Notify UI of oxygen change
-        window.dispatchEvent(new CustomEvent('waterStateChange', { 
-          detail: { isSubmerged: true, oxygen: oxygenRef.current, maxOxygen: POOL_CONFIG.maxOxygen } 
-        }));
-      } else {
-        // Above water - normal gravity
-        velocity.current.y -= effectiveGravity * dt;
-        
-        // Recover oxygen when above water
-        if (oxygenRef.current < POOL_CONFIG.maxOxygen) {
-          const recoveryRate = POOL_CONFIG.maxOxygen / POOL_CONFIG.oxygenRecoveryRate;
-          oxygenRef.current = Math.min(POOL_CONFIG.maxOxygen, oxygenRef.current + recoveryRate * dt);
-          
-          // Notify UI of oxygen recovery
-          window.dispatchEvent(new CustomEvent('waterStateChange', { 
-            detail: { isSubmerged: false, oxygen: oxygenRef.current, maxOxygen: POOL_CONFIG.maxOxygen } 
-          }));
-        }
-      }
 
       // Handle crouch transition - keep FEET position constant, move camera (head)
       if (isCrawling !== wasCrawlingRef.current) {

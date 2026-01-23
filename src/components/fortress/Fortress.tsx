@@ -41,7 +41,6 @@ import { FortressScene } from './FortressScene';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { FlyingCoin, GameSettings, WeatherSettings } from './FortressTypes';
 import { PentabulletCrosshair } from './PentabulletCrosshair';
-import { OxygenMeter } from './OxygenMeter';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
 
@@ -119,9 +118,6 @@ export function Fortress() {
   const [adminTierOverride, setAdminTierOverride] = useState<number | null>(null);
   const [pentabulletCharge, setPentabulletCharge] = useState(0);
   
-  // Water/pool state for OxygenMeter
-  const [waterState, setWaterState] = useState({ isSubmerged: false, oxygen: 10, maxOxygen: 10 });
-  
   // Tree chopping modal state
   const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
   const [pendingChopPosition, setPendingChopPosition] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -174,18 +170,6 @@ export function Fortress() {
 
   const [respawnTimer, setRespawnTimer] = useState(0);
   const [respawnPosition, setRespawnPosition] = useState<THREE.Vector3 | null>(null);
-  
-  // Listen for water state changes from FortressControls
-  useEffect(() => {
-    const handleWaterState = (e: CustomEvent) => setWaterState(e.detail);
-    const handleDrowning = (e: CustomEvent) => takeDamage(e.detail.damage);
-    window.addEventListener('waterStateChange', handleWaterState as EventListener);
-    window.addEventListener('playerDrowning', handleDrowning as EventListener);
-    return () => {
-      window.removeEventListener('waterStateChange', handleWaterState as EventListener);
-      window.removeEventListener('playerDrowning', handleDrowning as EventListener);
-    };
-  }, [takeDamage]);
   
   // Clear block cache once on mount to ensure new block types (wood, fruit) are loaded
   useEffect(() => {
@@ -1293,13 +1277,6 @@ export function Fortress() {
         chargeProgress={pentabulletCharge}
         baseMode={blockPlacementMode ? 'building' : treePlacementMode ? 'planting' : crosshairsEnabled ? 'shooting' : 'inactive'}
         bulletColor={bulletColor}
-      />
-      
-      {/* Oxygen Meter - shown when underwater or recovering */}
-      <OxygenMeter 
-        oxygen={waterState.oxygen} 
-        maxOxygen={waterState.maxOxygen} 
-        visible={waterState.isSubmerged || waterState.oxygen < waterState.maxOxygen} 
       />
       
       
