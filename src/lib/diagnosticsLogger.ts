@@ -72,6 +72,16 @@ class DiagnosticsLogger {
   behaviorTransitions = 0;
   spatialQueries = 0;
   
+  // === Per-enemy-type metrics ===
+  shwarmCount = 0;
+  shwarmBlockCount = 0;
+  shwarmTickTime = 0;
+  shnakeCount = 0;
+  shnakeSegmentCount = 0;
+  shnakeTickTime = 0;
+  shombieCount = 0;
+  shombieTickTime = 0;
+  
   // === Collision grid metrics ===
   worldGridSize = 0;
   entityGridSize = 0;
@@ -151,6 +161,39 @@ class DiagnosticsLogger {
     this.enemiesFrozen = frozen;
   }
   
+  captureShwarmStats(shwarmCount: number, blockCount: number): void {
+    if (!this.enabled) return;
+    this.shwarmCount = shwarmCount;
+    this.shwarmBlockCount = blockCount;
+  }
+  
+  captureShnakeStats(shnakeCount: number, segmentCount: number): void {
+    if (!this.enabled) return;
+    this.shnakeCount = shnakeCount;
+    this.shnakeSegmentCount = segmentCount;
+  }
+  
+  captureShombieStats(shombieCount: number): void {
+    if (!this.enabled) return;
+    this.shombieCount = shombieCount;
+  }
+  
+  startEnemyTiming(type: 'shwarm' | 'shnake' | 'shombie'): void {
+    if (this.enabled) this.timingStarts[`enemy_${type}`] = performance.now();
+  }
+  
+  recordEnemyTiming(type: 'shwarm' | 'shnake' | 'shombie'): void {
+    if (!this.enabled) return;
+    const start = this.timingStarts[`enemy_${type}`];
+    if (start === undefined) return;
+    const elapsed = performance.now() - start;
+    switch (type) {
+      case 'shwarm': this.shwarmTickTime += elapsed; break;
+      case 'shnake': this.shnakeTickTime += elapsed; break;
+      case 'shombie': this.shombieTickTime += elapsed; break;
+    }
+  }
+  
   toggle(): void {
     this.enabled = !this.enabled;
     if (this.enabled) {
@@ -181,6 +224,9 @@ class DiagnosticsLogger {
     this.gridCacheMisses = 0;
     this.behaviorTransitions = 0;
     this.spatialQueries = 0;
+    this.shwarmTickTime = 0;
+    this.shnakeTickTime = 0;
+    this.shombieTickTime = 0;
   }
   
   private resetTimingCounters(): void {
@@ -337,6 +383,11 @@ class DiagnosticsLogger {
     lines.push(`  EnemyAI:   ${(tAISum/n).toFixed(2)}ms`);
     lines.push(`  Blocks:    ${(tBlocksSum/n).toFixed(2)}ms`);
     lines.push(`  Render:    ${(tRenderSum/n).toFixed(2)}ms`);
+    lines.push('');
+    lines.push('Enemy Stats (current):');
+    lines.push(`  Shwarms: ${this.shwarmCount} (${this.shwarmBlockCount} blocks)`);
+    lines.push(`  Shnakes: ${this.shnakeCount} (${this.shnakeSegmentCount} segments)`);
+    lines.push(`  Shombies: ${this.shombieCount}`);
     lines.push('');
     lines.push('GPU/Memory:');
     lines.push(`  Draw Calls: avg ${(drawCallsSum/n).toFixed(0)}, max ${maxDrawCalls}`);

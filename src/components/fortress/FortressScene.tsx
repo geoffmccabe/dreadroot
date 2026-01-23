@@ -1015,6 +1015,26 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
     // Capture grid stats for collision system monitoring
     diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
     
+    // Capture per-enemy-type stats for detailed performance tracking
+    const activeShwarms = shwarmsRef.current;
+    let shwarmBlockCount = 0;
+    for (let i = 0; i < activeShwarms.length; i++) {
+      const shwarm = activeShwarms[i];
+      for (let j = 0; j < shwarm.blocks.length; j++) {
+        if (shwarm.blocks[j].isAlive) shwarmBlockCount++;
+      }
+    }
+    diagnostics.captureShwarmStats(activeShwarms.length, shwarmBlockCount);
+    
+    const activeShnakes = shnakesRef.current;
+    let shnakeSegmentCount = 0;
+    for (let i = 0; i < activeShnakes.length; i++) {
+      shnakeSegmentCount += activeShnakes[i].segments.length;
+    }
+    diagnostics.captureShnakeStats(activeShnakes.length, shnakeSegmentCount);
+    
+    diagnostics.captureShombieStats(shombiesRef.current.length);
+    
     // Call consolidated component updates (eliminates 5 separate useFrame hooks)
     skyRef.current?.update();
     lightingRef.current?.update();
