@@ -17,6 +17,11 @@ interface PerformanceData {
   worldGrid: number;
   entityGrid: number;
   enemyCount: number;
+  shwarmCount: number;
+  shwarmBlockCount: number;
+  shnakeCount: number;
+  shnakeSegmentCount: number;
+  shombieCount: number;
   memory?: number;
   gridCacheHitRate: number;
 }
@@ -35,6 +40,11 @@ export function PerformanceOverlay() {
     worldGrid: 0,
     entityGrid: 0,
     enemyCount: 0,
+    shwarmCount: 0,
+    shwarmBlockCount: 0,
+    shnakeCount: 0,
+    shnakeSegmentCount: 0,
+    shombieCount: 0,
     gridCacheHitRate: 0,
   });
   
@@ -95,6 +105,11 @@ export function PerformanceOverlay() {
           worldGrid: d.worldGridSize,
           entityGrid: d.entityGridSize,
           enemyCount: d.enemyCount,
+          shwarmCount: d.shwarmCount,
+          shwarmBlockCount: d.shwarmBlockCount,
+          shnakeCount: d.shnakeCount,
+          shnakeSegmentCount: d.shnakeSegmentCount,
+          shombieCount: d.shombieCount,
           memory: d.jsHeapUsed || undefined,
           gridCacheHitRate: hitRate,
         });
@@ -146,10 +161,13 @@ export function PerformanceOverlay() {
         <div>Cache Hit: {data.gridCacheHitRate.toFixed(0)}%</div>
       </div>
       
-      {data.enemyCount > 0 && (
+      {(data.enemyCount > 0 || data.shwarmCount > 0 || data.shnakeCount > 0 || data.shombieCount > 0) && (
         <div className="mt-1 border-t border-gray-600 pt-1">
-          <div className="text-gray-500 text-[10px] mb-0.5">AI</div>
-          <div>Enemies: {data.enemyCount}</div>
+          <div className="text-gray-500 text-[10px] mb-0.5">ENEMIES</div>
+          <div>Total: {data.enemyCount}</div>
+          {data.shwarmCount > 0 && <div>Shwarms: {data.shwarmCount} ({data.shwarmBlockCount} blocks)</div>}
+          {data.shnakeCount > 0 && <div>Shnakes: {data.shnakeCount} ({data.shnakeSegmentCount} segs)</div>}
+          {data.shombieCount > 0 && <div>Shombies: {data.shombieCount}</div>}
         </div>
       )}
       

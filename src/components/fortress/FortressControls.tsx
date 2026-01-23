@@ -263,11 +263,12 @@ export function FirstPersonControls({
         keys.current.ctrl = true;
         break;
       case 'KeyR':
-        // Block rain: Shift+R but NOT if Command/Meta is held (allows Cmd+Shift+R for browser refresh)
-        if (event.shiftKey && !event.metaKey && !event.ctrlKey) {
-          event.preventDefault();
-          onBlockRain();
-        } else if (!event.shiftKey && !blockPlacementMode) {
+        // Block rain: DISABLED - keeping code for future use
+        // if (event.shiftKey && !event.metaKey && !event.ctrlKey) {
+        //   event.preventDefault();
+        //   onBlockRain();
+        // } else
+        if (!event.shiftKey && !blockPlacementMode) {
           const newCrosshairsState = !showCrosshairs;
           onModeChange(newCrosshairsState ? 'shooting' : null);
           const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
