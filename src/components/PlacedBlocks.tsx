@@ -86,8 +86,7 @@ const invisiblockOutlineMaterial = new THREE.LineBasicMaterial({
 // B2.2: Global threshold for auto-enabling performance mode
 const GLOBAL_VISIBLE_BLOCKS_THRESHOLD = 3000;
 
-// Component to render all placed blocks with collision detection using instanced rendering
-export const PlacedBlocks: React.FC<{ 
+interface PlacedBlocksProps {
   blocks: PlacedBlock[]; 
   onCollision?: (boxes: THREE.Box3[]) => void;
   showOwnershipOutline?: boolean;
@@ -95,7 +94,19 @@ export const PlacedBlocks: React.FC<{
   hoveredBlockId?: string | null;
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
-}> = ({ blocks, onCollision, showOwnershipOutline = false, currentUserId, hoveredBlockId = null, onMeshReady, performanceMode = false }) => {
+}
+
+// F2.1: Wrap in React.memo with custom comparison to prevent cascade re-renders
+// Only re-render when blocks array ref changes or hover/outline state changes
+const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({ 
+  blocks, 
+  onCollision, 
+  showOwnershipOutline = false, 
+  currentUserId, 
+  hoveredBlockId = null, 
+  onMeshReady, 
+  performanceMode = false 
+}) => {
   // B2.2: Auto-enable performance mode when total visible blocks exceed threshold
   const effectivePerformanceMode = performanceMode || blocks.length > GLOBAL_VISIBLE_BLOCKS_THRESHOLD;
   const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
@@ -418,3 +429,16 @@ export const PlacedBlocks: React.FC<{
     </>
   );
 };
+
+// F2.1: Export memoized version to prevent unnecessary re-renders
+// Custom comparison only re-renders when blocks ref or key props change
+export const PlacedBlocks = React.memo(PlacedBlocksInner, (prev, next) => {
+  // Return true if props are EQUAL (no re-render needed)
+  return (
+    prev.blocks === next.blocks &&
+    prev.hoveredBlockId === next.hoveredBlockId &&
+    prev.showOwnershipOutline === next.showOwnershipOutline &&
+    prev.currentUserId === next.currentUserId &&
+    prev.performanceMode === next.performanceMode
+  );
+});

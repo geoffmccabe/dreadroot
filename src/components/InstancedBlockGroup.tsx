@@ -355,9 +355,10 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   }, [blocks]);
   
   // E1: Migrate from useFrame to centralized frameLoop to eliminate per-group fan-out
-  // Generate stable loop ID based on block definition and texture
+  // F4.1: Use DETERMINISTIC loop ID - random suffix caused callback leaks on re-mount
+  // The key is unique per block type + texture combo, which is sufficient
   const loopId = useMemo(
-    () => `instanced-blocks:${blockDef.key}:${textureOverride ?? 'default'}:${Math.random().toString(36).slice(2, 8)}`,
+    () => `instanced-blocks:${blockDef.key}:${textureOverride ?? 'default'}`,
     [blockDef.key, textureOverride]
   );
   
