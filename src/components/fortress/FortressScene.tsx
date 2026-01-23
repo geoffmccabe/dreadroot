@@ -48,6 +48,7 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBO
 // Tree system imports
 import { TreeInfoLabels } from '@/features/trees/components/TreeInfoLabels';
 import { useTreePlanterNames } from '@/features/trees/hooks/useTreePlanterNames';
+import { PulsingSeedBlocks } from '@/features/trees/components/PulsingSeedBlocks';
 
 // Universal Enemy AI system (Phase 3)
 import { useEnemyAI } from '@/features/enemies/ai';
@@ -370,6 +371,17 @@ export function FortressScene({
   
   // Fetch usernames for tree labels
   const { usernamesMap } = useTreePlanterNames(plantedTrees);
+  
+  // Create seed textures map for pulsing seed blocks
+  const seedTexturesByTier = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const sd of seedDefinitions) {
+      if (sd.fruit_texture_url) {
+        map.set(sd.tier, sd.fruit_texture_url);
+      }
+    }
+    return map;
+  }, [seedDefinitions]);
   
   // Shwarm/Shnake system - needs ALL loaded blocks, not just visible ones
   const cameraRef = useRef<THREE.Camera>(camera);
@@ -1975,6 +1987,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = true;
         trees={plantedTrees} 
         seedDefinitions={seedDefinitions} 
         usernames={usernamesMap} 
+      />
+      
+      {/* Pulsing Seed Blocks - renders fruit blocks with animated glow */}
+      <PulsingSeedBlocks 
+        blocks={allLoadedBlocks} 
+        seedTexturesByTier={seedTexturesByTier} 
       />
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
