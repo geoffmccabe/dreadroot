@@ -116,7 +116,7 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
         new Force(0, height * 1.5, 0),
         new RandomDrift(size * 0.6, size * 0.3, size * 0.6, 0.02),
       ])
-      .setPosition(position)
+      .setPosition(new Vector3D(position.x, position.y, position.z))
       .emit(1); // Emit once
 
     system.addEmitter(emitter);
