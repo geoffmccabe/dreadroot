@@ -131,10 +131,47 @@ export function PerformanceOverlay() {
   const fpsColor = data.fps >= 55 ? 'text-green-400' : data.fps >= 30 ? 'text-yellow-400' : 'text-red-400';
   const gridColor = data.worldGrid > 5000 ? 'text-red-400' : data.worldGrid > 2000 ? 'text-yellow-400' : 'text-gray-400';
   
+  const handleCopy = () => {
+    const text = `=== Live Performance Snapshot ===
+FPS: ${data.fps} | Frame: ${data.frameTime.toFixed(1)}ms
+
+TIMING (ms/100ms):
+  Controls: ${data.controls.toFixed(1)}ms
+  EnemyAI: ${data.enemyAI.toFixed(1)}ms
+  Blocks: ${data.blocks.toFixed(1)}ms
+  Render: ${data.render.toFixed(1)}ms
+
+GPU:
+  Draw Calls: ${data.drawCalls}
+  Triangles: ${(data.triangles / 1000).toFixed(1)}K
+
+COLLISION:
+  World Grid: ${data.worldGrid}
+  Entity Grid: ${data.entityGrid}
+  Cache Hit: ${data.gridCacheHitRate.toFixed(0)}%
+
+ENEMIES:
+  Total: ${data.enemyCount}
+  Shwarms: ${data.shwarmCount} (${data.shwarmBlockCount} blocks)
+  Shnakes: ${data.shnakeCount} (${data.shnakeSegmentCount} segments)
+  Shombies: ${data.shombieCount}
+${data.memory !== undefined ? `\nMemory: ${data.memory.toFixed(0)}MB` : ''}`;
+    
+    navigator.clipboard.writeText(text);
+  };
+  
   return (
-    <div className="fixed top-2 left-2 z-50 bg-black/80 text-white font-mono text-xs p-2 rounded pointer-events-none select-none min-w-[180px]">
-      <div className={`text-lg font-bold ${fpsColor}`}>
-        {data.fps} FPS
+    <div className="fixed top-2 left-2 z-50 bg-black/80 text-white font-mono text-xs p-2 rounded select-none min-w-[180px]">
+      <div className="flex justify-between items-center">
+        <div className={`text-lg font-bold ${fpsColor}`}>
+          {data.fps} FPS
+        </div>
+        <button 
+          onClick={handleCopy}
+          className="pointer-events-auto text-[10px] bg-gray-700 hover:bg-gray-600 px-1.5 py-0.5 rounded"
+        >
+          Copy
+        </button>
       </div>
       <div className="text-gray-400">
         Frame: {data.frameTime.toFixed(1)}ms
@@ -161,15 +198,13 @@ export function PerformanceOverlay() {
         <div>Cache Hit: {data.gridCacheHitRate.toFixed(0)}%</div>
       </div>
       
-      {(data.enemyCount > 0 || data.shwarmCount > 0 || data.shnakeCount > 0 || data.shombieCount > 0) && (
-        <div className="mt-1 border-t border-gray-600 pt-1">
-          <div className="text-gray-500 text-[10px] mb-0.5">ENEMIES</div>
-          <div>Total: {data.enemyCount}</div>
-          {data.shwarmCount > 0 && <div>Shwarms: {data.shwarmCount} ({data.shwarmBlockCount} blocks)</div>}
-          {data.shnakeCount > 0 && <div>Shnakes: {data.shnakeCount} ({data.shnakeSegmentCount} segs)</div>}
-          {data.shombieCount > 0 && <div>Shombies: {data.shombieCount}</div>}
-        </div>
-      )}
+      <div className="mt-1 border-t border-gray-600 pt-1">
+        <div className="text-gray-500 text-[10px] mb-0.5">ENEMIES</div>
+        <div>Total: {data.enemyCount}</div>
+        <div>Shwarms: {data.shwarmCount} ({data.shwarmBlockCount} blocks)</div>
+        <div>Shnakes: {data.shnakeCount} ({data.shnakeSegmentCount} segs)</div>
+        <div>Shombies: {data.shombieCount}</div>
+      </div>
       
       {data.memory !== undefined && (
         <div className="mt-1 border-t border-gray-600 pt-1 text-gray-400">
