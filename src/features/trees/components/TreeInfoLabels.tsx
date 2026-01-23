@@ -36,8 +36,8 @@ function SideLabelGroup({
   position: [number, number, number];
   rotation: [number, number, number];
 }) {
-  const baseFontSize = 0.08;
-  const tierFontSize = 0.10; // 2pts larger
+  const baseFontSize = 0.07;
+  const tierFontSize = 0.09; // 2pts larger
   
   return (
     <group position={position} rotation={rotation}>
@@ -49,22 +49,22 @@ function SideLabelGroup({
         anchorY="middle"
         outlineWidth={0.015}
         outlineColor="white"
-        position={[0, 0.18, 0]}
+        position={[0, 0.22, 0]}
       >
         {`T${tier}`}
       </Text>
       
-      {/* Other info - white text, black outline */}
+      {/* Other info - white text, black outline, positioned below tier with gap */}
       <Text
         fontSize={baseFontSize}
         color="white"
         anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.012}
+        anchorY="top"
+        outlineWidth={0.010}
         outlineColor="black"
         textAlign="center"
         lineHeight={1.3}
-        position={[0, -0.02, 0]}
+        position={[0, 0.10, 0]}
       >
         {`${locationText}\n${username}\n${ageText}\n${blockText}`}
       </Text>
@@ -79,8 +79,8 @@ function SingleTreeLabels({ tree, seedDef, username, ageInDays }: TreeLabelData)
   const targetBlocks = tree.target_block_count;
   const isGrowing = !tree.is_fully_grown;
   
-  // Format text
-  const locationText = `${tree.base_x}, ${tree.base_y}, ${tree.base_z}`;
+  // Format text with parentheses around coordinates
+  const locationText = `(${tree.base_x}, ${tree.base_y}, ${tree.base_z})`;
   const ageText = `${Math.max(1, ageInDays)} Days`; // Round up (at least 1 day)
   const blockText = isGrowing ? `${blockCount}/${targetBlocks}` : `${blockCount} blocks`;
   

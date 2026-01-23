@@ -93,7 +93,7 @@ export interface SceneProps {
   groundTextureUrl?: string | null;
   skyTextureUrl?: string | null;
   // Seed definitions for tree planting
-  seedDefinitions?: Array<{ id: string; tier: number; trunk_texture_url: string | null }>;
+  seedDefinitions?: Array<{ id: string; tier: number; trunk_texture_url: string | null; fruit_texture_url?: string | null }>;
   // Player health ref for combat
   healthRef?: React.MutableRefObject<{ currentHealth: number; maxHealth: number; isDead: boolean }>;
   // Universal damage function (processes through damage pipeline with STEADY, armor, etc.)
