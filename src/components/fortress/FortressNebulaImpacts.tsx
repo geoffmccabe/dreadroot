@@ -139,11 +139,14 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
       // Create emitter with one-shot burst
       const emitter = new Emitter();
       
-      // Custom Body initializer that uses our shared sprite
+      // Custom Body initializer with init() method for three-nebula compatibility
       const bodyInitializer = {
         type: 'Body',
         isEnabled: true,
         reset() {},
+        init(emitter: any, particle: any) {
+          particle.body = sharedSprite.clone();
+        },
         initialize(particle: any) {
           particle.body = sharedSprite.clone();
         }
