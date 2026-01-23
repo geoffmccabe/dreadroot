@@ -4,7 +4,7 @@
 import { forwardRef, useImperativeHandle, useRef, useCallback, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone } from 'three-nebula';
+import System, { SpriteRenderer, Emitter, Rate, Span, Position, Mass, Life, Radius, RadialVelocity, Alpha, Scale, Color, Force, RandomDrift, Vector3D, PointZone, BodySprite } from 'three-nebula';
 
 // Debug flag - TEMPORARILY ENABLED to diagnose missing impacts
 const DEBUG_NEBULA_IMPACTS = true;
@@ -104,15 +104,17 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
     // Create emitter with one-shot burst
     const emitter = new Emitter();
     
-    emitter
-      .setRate(new Rate(new Span(15, 25), new Span(0.001, 0.001))) // One-shot burst
-      .setInitializers([
-        new Mass(0.5, 1),
-        new Life(0.15 * (duration / 500), 0.4 * (duration / 500)),
-        new Radius(size * 0.06, size * 0.15),
-        new Position(new PointZone(0, 0, 0)),
-        new RadialVelocity(height * 2, new Vector3D(0, 1, 0), 60),
-      ])
+    try {
+      emitter
+        .setRate(new Rate(new Span(15, 25), new Span(0.001, 0.001))) // One-shot burst
+        .setInitializers([
+          new Mass(0.5, 1),
+          new Life(0.15 * (duration / 500), 0.4 * (duration / 500)),
+          new BodySprite(THREE, PARTICLE_TEXTURE),
+          new Radius(size * 0.06, size * 0.15),
+          new Position(new PointZone(0, 0, 0)),
+          new RadialVelocity(height * 2, new Vector3D(0, 1, 0), 60),
+        ])
       .setBehaviours([
         new Alpha(1, 0),
         new Scale(1.2, 0.1),
@@ -123,13 +125,16 @@ export const NebulaImpacts = forwardRef<NebulaImpactsHandle, {}>((_, ref) => {
       .setPosition({ x: position.x, y: position.y, z: position.z })
       .emit(1); // Emit once
 
-    system.addEmitter(emitter);
+      system.addEmitter(emitter);
 
-    activeImpactsRef.current.push({
-      emitter,
-      startTime: performance.now(),
-      duration,
-    });
+      activeImpactsRef.current.push({
+        emitter,
+        startTime: performance.now(),
+        duration,
+      });
+    } catch (error) {
+      console.error('[NebulaImpacts] Failed to create emitter:', error);
+    }
   }, []);
 
   useImperativeHandle(ref, () => ({ spawnImpact }), [spawnImpact]);
