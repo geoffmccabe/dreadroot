@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ShwarmDefinition } from '../types';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
+import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9ca3af',
@@ -158,6 +159,14 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
     setHasChanges(true);
   };
 
+  // Update AI config
+  const updateAiConfig = (config: AIConfig) => {
+    setDefinitions(prev => prev.map(d => 
+      d.tier === selectedTier ? { ...d, ai_config: config } : d
+    ));
+    setHasChanges(true);
+  };
+
   // Save current definition to database
   const saveDef = async () => {
     if (!currentDef) return;
@@ -165,6 +174,11 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
     setIsSaving(true);
     try {
       const isNew = currentDef.id.startsWith('temp-');
+      
+      // Cast ai_config to JSON-compatible format for Supabase
+      const aiConfigForDb = currentDef.ai_config 
+        ? JSON.parse(JSON.stringify(currentDef.ai_config))
+        : null;
       
       const defData = {
         tier: currentDef.tier,
@@ -177,6 +191,7 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
         damage_per_hit: currentDef.damage_per_hit,
         spawn_chance_per_minute: currentDef.spawn_chance_per_minute,
         x_factor: currentDef.x_factor,
+        ai_config: aiConfigForDb,
       };
 
       if (isNew) {
@@ -317,6 +332,15 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
             onSoundChange={handleSoundChange}
             onVolumeChange={handleVolumeChange}
           />
+          
+          {/* AI Behavior Settings Panel - collapsible */}
+          {currentDef && (
+            <EnemyBehaviorSettings
+              enemyType="shwarm"
+              aiConfig={currentDef.ai_config as AIConfig | null}
+              onConfigChange={updateAiConfig}
+            />
+          )}
           
           <Card className="p-4 flex-1">
             {currentDef ? (
