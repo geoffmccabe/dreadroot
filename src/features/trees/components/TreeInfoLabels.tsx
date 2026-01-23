@@ -18,6 +18,60 @@ interface TreeLabelData {
   ageInDays: number;
 }
 
+// Single side label component - renders tier separately with different styling
+function SideLabelGroup({ 
+  tier, 
+  locationText, 
+  username, 
+  ageText, 
+  blockText,
+  position,
+  rotation
+}: {
+  tier: number;
+  locationText: string;
+  username: string;
+  ageText: string;
+  blockText: string;
+  position: [number, number, number];
+  rotation: [number, number, number];
+}) {
+  const baseFontSize = 0.08;
+  const tierFontSize = 0.10; // 2pts larger
+  
+  return (
+    <group position={position} rotation={rotation}>
+      {/* Tier label - black text, white outline, larger */}
+      <Text
+        fontSize={tierFontSize}
+        color="black"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.015}
+        outlineColor="white"
+        position={[0, 0.18, 0]}
+      >
+        {`T${tier}`}
+      </Text>
+      
+      {/* Other info - white text, black outline */}
+      <Text
+        fontSize={baseFontSize}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.012}
+        outlineColor="black"
+        textAlign="center"
+        lineHeight={1.3}
+        position={[0, -0.02, 0]}
+      >
+        {`${locationText}\n${username}\n${ageText}\n${blockText}`}
+      </Text>
+    </group>
+  );
+}
+
 // Single tree's labels on all 4 sides
 function SingleTreeLabels({ tree, seedDef, username, ageInDays }: TreeLabelData) {
   const tier = seedDef?.tier ?? 0;
@@ -25,70 +79,61 @@ function SingleTreeLabels({ tree, seedDef, username, ageInDays }: TreeLabelData)
   const targetBlocks = tree.target_block_count;
   const isGrowing = !tree.is_fully_grown;
   
-  // Format the label text
-  const labelLines = [
-    `T${tier}`,
-    `${tree.base_x}, ${tree.base_y}, ${tree.base_z}`,
-    username || 'Unknown',
-    `${ageInDays}d old`,
-    isGrowing ? `${blockCount}/${targetBlocks}` : `${blockCount} blocks`
-  ];
-  const labelText = labelLines.join('\n');
+  // Format text
+  const locationText = `${tree.base_x}, ${tree.base_y}, ${tree.base_z}`;
+  const ageText = `${Math.max(1, ageInDays)} Days`; // Round up (at least 1 day)
+  const blockText = isGrowing ? `${blockCount}/${targetBlocks}` : `${blockCount} blocks`;
   
   // Position at the base of the tree, slightly above ground
   const baseX = tree.base_x + 0.5;
   const baseY = tree.base_y + 0.8;
   const baseZ = tree.base_z + 0.5;
   
-  // Text properties for visibility
-  const textProps = {
-    fontSize: 0.15,
-    color: 'white',
-    anchorX: 'center' as const,
-    anchorY: 'middle' as const,
-    outlineWidth: 0.02,
-    outlineColor: 'black',
-    textAlign: 'center' as const,
-    lineHeight: 1.2,
-  };
-  
   return (
     <group position={[baseX, baseY, baseZ]}>
-      {/* Front (facing +Z) */}
-      <Text
-        {...textProps}
+      {/* Front (facing +Z) - viewer at +Z looking toward -Z */}
+      <SideLabelGroup
+        tier={tier}
+        locationText={locationText}
+        username={username}
+        ageText={ageText}
+        blockText={blockText}
         position={[0, 0, 0.52]}
         rotation={[0, 0, 0]}
-      >
-        {labelText}
-      </Text>
+      />
       
-      {/* Back (facing -Z) */}
-      <Text
-        {...textProps}
+      {/* Back (facing -Z) - viewer at -Z looking toward +Z */}
+      <SideLabelGroup
+        tier={tier}
+        locationText={locationText}
+        username={username}
+        ageText={ageText}
+        blockText={blockText}
         position={[0, 0, -0.52]}
         rotation={[0, Math.PI, 0]}
-      >
-        {labelText}
-      </Text>
+      />
       
-      {/* Left (facing -X) */}
-      <Text
-        {...textProps}
+      {/* Left (facing -X) - viewer at -X looking toward +X */}
+      <SideLabelGroup
+        tier={tier}
+        locationText={locationText}
+        username={username}
+        ageText={ageText}
+        blockText={blockText}
         position={[-0.52, 0, 0]}
         rotation={[0, Math.PI / 2, 0]}
-      >
-        {labelText}
-      </Text>
+      />
       
-      {/* Right (facing +X) */}
-      <Text
-        {...textProps}
+      {/* Right (facing +X) - viewer at +X looking toward -X */}
+      <SideLabelGroup
+        tier={tier}
+        locationText={locationText}
+        username={username}
+        ageText={ageText}
+        blockText={blockText}
         position={[0.52, 0, 0]}
         rotation={[0, -Math.PI / 2, 0]}
-      >
-        {labelText}
-      </Text>
+      />
     </group>
   );
 }
@@ -102,7 +147,7 @@ export function TreeInfoLabels({ trees, seedDefinitions, usernames }: TreeInfoLa
     return trees.map(tree => {
       const seedDef = seedDefMap.get(tree.seed_definition_id);
       const plantedAt = new Date(tree.planted_at).getTime();
-      const ageInDays = Math.floor((now - plantedAt) / (1000 * 60 * 60 * 24));
+      const ageInDays = Math.ceil((now - plantedAt) / (1000 * 60 * 60 * 24)); // Round up
       const username = usernames.get(tree.planted_by) || 'Unknown';
       
       return {
