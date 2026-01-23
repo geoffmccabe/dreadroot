@@ -1,17 +1,24 @@
 // Real-time Performance Overlay
-// Shows live FPS and frame timing breakdown
+// Shows live FPS, frame timing breakdown, and system health
 // Toggle with Shift+P
 
 import { useEffect, useState, useRef } from 'react';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface PerformanceData {
   fps: number;
   frameTime: number;
   controls: number;
-  coins: number;
-  waterfall: number;
+  enemyAI: number;
   blocks: number;
+  render: number;
+  drawCalls: number;
+  triangles: number;
+  worldGrid: number;
+  entityGrid: number;
+  enemyCount: number;
   memory?: number;
+  gridCacheHitRate: number;
 }
 
 export function PerformanceOverlay() {
@@ -20,9 +27,15 @@ export function PerformanceOverlay() {
     fps: 0,
     frameTime: 0,
     controls: 0,
-    coins: 0,
-    waterfall: 0,
+    enemyAI: 0,
     blocks: 0,
+    render: 0,
+    drawCalls: 0,
+    triangles: 0,
+    worldGrid: 0,
+    entityGrid: 0,
+    enemyCount: 0,
+    gridCacheHitRate: 0,
   });
   
   const frameCountRef = useRef(0);
@@ -63,30 +76,32 @@ export function PerformanceOverlay() {
         const fps = (frameCountRef.current / elapsed) * 1000;
         const avgFrameTime = frameTimesRef.current.reduce((a, b) => a + b, 0) / frameTimesRef.current.length;
         
-        // Get diagnostics data if available
-        const d = (window as any).__d;
+        // Get diagnostics data
+        const d = diagnostics;
+        
+        // Calculate cache hit rate
+        const totalQueries = d.gridCacheHits + d.gridCacheMisses;
+        const hitRate = totalQueries > 0 ? (d.gridCacheHits / totalQueries) * 100 : 0;
         
         setData({
           fps: Math.round(fps),
           frameTime: avgFrameTime,
-          controls: d?.timeControls || 0,
-          coins: d?.timeCoins || 0,
-          waterfall: d?.timeWaterfall || 0,
-          blocks: d?.timeBlocks || 0,
-          memory: (performance as any).memory?.usedJSHeapSize / 1048576,
+          controls: d.timeControls,
+          enemyAI: d.timeEnemyAI,
+          blocks: d.timeBlocks,
+          render: d.timeRender,
+          drawCalls: d.drawCalls,
+          triangles: d.triangles,
+          worldGrid: d.worldGridSize,
+          entityGrid: d.entityGridSize,
+          enemyCount: d.enemyCount,
+          memory: d.jsHeapUsed || undefined,
+          gridCacheHitRate: hitRate,
         });
         
         // Reset counters
         frameCountRef.current = 0;
         lastTimeRef.current = now;
-        
-        // Reset diagnostics accumulators
-        if (d) {
-          d.timeControls = 0;
-          d.timeCoins = 0;
-          d.timeWaterfall = 0;
-          d.timeBlocks = 0;
-        }
       }
       
       animationId = requestAnimationFrame(measure);
@@ -99,26 +114,51 @@ export function PerformanceOverlay() {
   if (!visible) return null;
   
   const fpsColor = data.fps >= 55 ? 'text-green-400' : data.fps >= 30 ? 'text-yellow-400' : 'text-red-400';
+  const gridColor = data.worldGrid > 5000 ? 'text-red-400' : data.worldGrid > 2000 ? 'text-yellow-400' : 'text-gray-400';
   
   return (
-    <div className="fixed top-2 left-2 z-50 bg-black/80 text-white font-mono text-xs p-2 rounded pointer-events-none select-none">
+    <div className="fixed top-2 left-2 z-50 bg-black/80 text-white font-mono text-xs p-2 rounded pointer-events-none select-none min-w-[180px]">
       <div className={`text-lg font-bold ${fpsColor}`}>
         {data.fps} FPS
       </div>
       <div className="text-gray-400">
         Frame: {data.frameTime.toFixed(1)}ms
       </div>
+      
       <div className="mt-1 border-t border-gray-600 pt-1">
-        <div>Controls: {data.controls.toFixed(1)}ms</div>
-        <div>Coins: {data.coins.toFixed(1)}ms</div>
-        <div>Waterfall: {data.waterfall.toFixed(1)}ms</div>
-        <div>Blocks: {data.blocks.toFixed(1)}ms</div>
+        <div className="text-gray-500 text-[10px] mb-0.5">TIMING (ms/100ms)</div>
+        <div>Controls: {data.controls.toFixed(1)}</div>
+        <div>EnemyAI: {data.enemyAI.toFixed(1)}</div>
+        <div>Blocks: {data.blocks.toFixed(1)}</div>
+        <div>Render: {data.render.toFixed(1)}</div>
       </div>
+      
+      <div className="mt-1 border-t border-gray-600 pt-1">
+        <div className="text-gray-500 text-[10px] mb-0.5">GPU</div>
+        <div>Draw Calls: {data.drawCalls}</div>
+        <div>Triangles: {(data.triangles / 1000).toFixed(1)}K</div>
+      </div>
+      
+      <div className="mt-1 border-t border-gray-600 pt-1">
+        <div className="text-gray-500 text-[10px] mb-0.5">COLLISION</div>
+        <div className={gridColor}>World Grid: {data.worldGrid}</div>
+        <div>Entity Grid: {data.entityGrid}</div>
+        <div>Cache Hit: {data.gridCacheHitRate.toFixed(0)}%</div>
+      </div>
+      
+      {data.enemyCount > 0 && (
+        <div className="mt-1 border-t border-gray-600 pt-1">
+          <div className="text-gray-500 text-[10px] mb-0.5">AI</div>
+          <div>Enemies: {data.enemyCount}</div>
+        </div>
+      )}
+      
       {data.memory !== undefined && (
         <div className="mt-1 border-t border-gray-600 pt-1 text-gray-400">
           Memory: {data.memory.toFixed(0)}MB
         </div>
       )}
+      
       <div className="mt-1 text-gray-500 text-[10px]">
         Shift+P to hide
       </div>

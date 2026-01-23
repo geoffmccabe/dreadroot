@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { diagnostics } from './diagnosticsLogger';
 
 // Smaller cell size = fewer colliders per cell = faster iteration
 const CELL_SIZE = 2;
@@ -284,8 +285,12 @@ class SpatialHashGrid {
       this._cachedQueryGeneration === this.generation
     ) {
       // Cache hit - return previously computed count (nearbyResult already populated)
+      diagnostics.gridCacheHits++;
       return this._cachedQueryCount;
     }
+    
+    // Cache miss
+    diagnostics.gridCacheMisses++;
     
     // Use query stamp for dedup (does NOT increment generation - that's for mutations only)
     const stamp = ++this._queryStamp;
