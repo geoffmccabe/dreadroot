@@ -61,6 +61,12 @@ class FrameLoopRegistry {
       this.sorted = true;
     }
     
+    // F1: Update diagnostic counter with current callback count
+    // Import would create circular dependency, so access via window
+    if ((window as any).__d) {
+      (window as any).__d.frameLoopCallbacks = this.callbacks.length;
+    }
+    
     // Call all callbacks
     for (let i = 0; i < this.callbacks.length; i++) {
       this.callbacks[i].callback(delta, elapsedTime);

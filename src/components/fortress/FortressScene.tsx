@@ -210,23 +210,19 @@ function CameraTrackedBlocks({
     return unregister;
   }, [camera, visibleChunksRef]);
 
+  // F2.2: Stable ref to avoid unnecessary re-renders when content is unchanged
+  const visibleBlocksRef = useRef<PlacedBlock[]>([]);
+  const lastVisibleSignatureRef = useRef('');
+  
   // Memoize visible blocks based on the stable trigger
   const visibleBlocks = useMemo(() => {
     const filtered: PlacedBlock[] = [];
     const seenIds = new Set<string>();
     
-    // DEBUG: Track chunk (3,1) specifically
-    let chunk31Count = 0;
-    
     // Add blocks from visible chunks (includes tree blocks now - unified system)
     for (const chunkKey of visibleChunksRef.current) {
       const chunkBlocks = blocksByChunk.get(chunkKey);
       if (chunkBlocks) {
-        // DEBUG: Track chunk (3,1)
-        if (chunkKey === 'chunk_3_1') {
-          chunk31Count = chunkBlocks.length;
-        }
-        
         for (const block of chunkBlocks) {
           if (!seenIds.has(block.id)) {
             seenIds.add(block.id);
@@ -236,13 +232,19 @@ function CameraTrackedBlocks({
       }
     }
     
-    // DEBUG: Log chunk (3,1) visibility (guarded for FPS)
-    if (DEBUG_RENDER && visibleChunksRef.current.has('chunk_3_1')) {
-      console.log(`[Render DEBUG] Chunk (3,1) is VISIBLE: ${chunk31Count} blocks in chunk, ${filtered.length} total visible`);
+    // F2.2: Cheap signature to detect if content actually changed
+    // Only create new array ref if content differs
+    const n = filtered.length;
+    const sig = n === 0 ? '0' : `${n}|${filtered[0].id}|${filtered[n-1].id}`;
+    
+    if (sig === lastVisibleSignatureRef.current) {
+      // Content unchanged - return stable ref to prevent downstream re-renders
+      return visibleBlocksRef.current;
     }
     
-    // D1: Don't overwrite here - let InstancedBlockGroup accumulate via +=
-    // diagnostics.visibleBlocks = filtered.length;
+    // Content changed - update refs and return new array
+    lastVisibleSignatureRef.current = sig;
+    visibleBlocksRef.current = filtered;
     return filtered;
   }, [renderTrigger, blocksByChunk, visibleChunksRef]);
 

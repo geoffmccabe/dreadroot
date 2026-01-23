@@ -44,6 +44,7 @@ class DiagnosticsLogger {
   visibleBlocks = 0;
   particleCount = 0;
   coinCount = 0;
+  frameLoopCallbacks = 0; // F1: Track how many frameLoop callbacks are registered
   
   // Real-time metrics for overlay (updated every frame)
   currentFps = 0;
@@ -164,7 +165,8 @@ class DiagnosticsLogger {
   print() {
     const n = Math.min(this.ticker, BUFFER_SIZE);
     const lines: string[] = [];
-    lines.push('ticker fps frames camX camY camZ blocks e1 e4 e5 tCtrl tCoin tWF tBlk');
+    lines.push('ticker fps frames camX camY camZ blocks fLoops e1 e4 e5 tCtrl tCoin tWF tBlk');
+    console.log(`[D-Flow] frameLoop callbacks at end: ${this.frameLoopCallbacks}`);
     for (let s = 0; s < n; s++) {
       const i = s * METRICS;
       lines.push(
