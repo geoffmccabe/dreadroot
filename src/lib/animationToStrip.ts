@@ -29,16 +29,63 @@ const DEFAULT_QUALITY = 0.9;
 
 /**
  * Check if a file is an animated format (GIF, video)
+ * Note: For WebP files, use isAnimatedWebP() for async detection
  */
 export function isAnimatedFile(file: File): boolean {
   const ext = file.name.toLowerCase().split('.').pop() || '';
   const animatedExts = ['gif', 'mp4', 'webm', 'mov', 'avi', 'm4v'];
-  
+
   if (animatedExts.includes(ext)) return true;
-  
+
   // Also check MIME type
   const animatedMimes = ['image/gif', 'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
   return animatedMimes.includes(file.type);
+}
+
+/**
+ * Check if a WebP file is animated by reading its header
+ * WebP animation is indicated by ANIM chunk in the file
+ */
+export async function isAnimatedWebP(file: File): Promise<boolean> {
+  const ext = file.name.toLowerCase().split('.').pop() || '';
+  if (ext !== 'webp' && file.type !== 'image/webp') return false;
+
+  // Read the first 100 bytes to check for animation markers
+  const buffer = await file.slice(0, 100).arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  // Check for RIFF header
+  if (bytes[0] !== 0x52 || bytes[1] !== 0x49 || bytes[2] !== 0x46 || bytes[3] !== 0x46) {
+    return false;
+  }
+
+  // Check for WEBP
+  if (bytes[8] !== 0x57 || bytes[9] !== 0x45 || bytes[10] !== 0x42 || bytes[11] !== 0x50) {
+    return false;
+  }
+
+  // Look for VP8X chunk with animation flag or ANIM chunk
+  // VP8X chunk starts at byte 12, flag byte is at offset 20
+  // Animation flag is bit 1 (0x02) of the flags byte
+  if (bytes[12] === 0x56 && bytes[13] === 0x50 && bytes[14] === 0x38 && bytes[15] === 0x58) {
+    // VP8X chunk found, check animation flag at byte 20
+    const flags = bytes[20];
+    if (flags & 0x02) return true;
+  }
+
+  // Also search for ANIM chunk marker in the file
+  const text = String.fromCharCode(...bytes);
+  if (text.includes('ANIM')) return true;
+
+  return false;
+}
+
+/**
+ * Check if file needs animation processing (async version that handles WebP)
+ */
+export async function needsAnimationProcessing(file: File): Promise<boolean> {
+  if (isAnimatedFile(file)) return true;
+  return await isAnimatedWebP(file);
 }
 
 /**
@@ -90,12 +137,156 @@ export async function convertAnimationToStrip(
   options: ConversionOptions = {}
 ): Promise<StripResult> {
   const ext = file.name.toLowerCase().split('.').pop() || '';
-  
+
   if (ext === 'gif' || file.type === 'image/gif') {
     return convertGifToStrip(file, options);
+  } else if (ext === 'webp' || file.type === 'image/webp') {
+    // Animated WebP - use frame capture approach
+    return convertAnimatedWebPToStrip(file, options);
   } else {
     return convertVideoToStrip(file, options);
   }
+}
+
+/**
+ * Convert an animated WebP to horizontal strip by capturing frames
+ * Uses requestAnimationFrame to capture frames as the browser renders them
+ */
+async function convertAnimatedWebPToStrip(
+  file: File,
+  options: ConversionOptions = {}
+): Promise<StripResult> {
+  const frameSize = options.frameSize ?? DEFAULT_FRAME_SIZE;
+  const maxFrames = options.maxFrames ?? DEFAULT_MAX_FRAMES;
+  const quality = options.quality ?? DEFAULT_QUALITY;
+
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    // Load the animated WebP
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Failed to load animated WebP'));
+      image.src = objectUrl;
+    });
+
+    // Create a canvas to capture frames
+    const captureCanvas = document.createElement('canvas');
+    captureCanvas.width = img.width;
+    captureCanvas.height = img.height;
+    const captureCtx = captureCanvas.getContext('2d')!;
+
+    // Capture frames over time
+    // Animated WebP typically runs at ~10-30 fps, capture for up to 3 seconds
+    const frames: ImageData[] = [];
+    const frameHashes: Set<string> = new Set();
+    const startTime = performance.now();
+    const maxCaptureTime = 3000; // 3 seconds max
+    const captureInterval = 50; // Capture every 50ms
+
+    await new Promise<void>((resolve) => {
+      const captureFrame = () => {
+        const elapsed = performance.now() - startTime;
+
+        // Draw current frame
+        captureCtx.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+        captureCtx.drawImage(img, 0, 0);
+
+        // Get image data and create a simple hash to detect unique frames
+        const imageData = captureCtx.getImageData(0, 0, captureCanvas.width, captureCanvas.height);
+        const hash = hashImageData(imageData);
+
+        // Only add if this is a new unique frame
+        if (!frameHashes.has(hash) && frames.length < maxFrames) {
+          frameHashes.add(hash);
+          frames.push(imageData);
+        }
+
+        // Continue capturing or finish
+        if (elapsed < maxCaptureTime && frames.length < maxFrames) {
+          setTimeout(captureFrame, captureInterval);
+        } else {
+          resolve();
+        }
+      };
+
+      captureFrame();
+    });
+
+    URL.revokeObjectURL(objectUrl);
+
+    if (frames.length === 0) {
+      throw new Error('Could not extract frames from animated WebP');
+    }
+
+    // If only 1 frame captured, it might not be animated - return as single frame
+    const frameCount = frames.length;
+    const estimatedDelay = Math.round(maxCaptureTime / Math.max(frameCount, 1) / 10) * 10; // Round to 10ms
+
+    // Create output strip canvas
+    const stripCanvas = document.createElement('canvas');
+    stripCanvas.width = frameSize * frameCount;
+    stripCanvas.height = frameSize;
+    const stripCtx = stripCanvas.getContext('2d')!;
+
+    // Draw each frame to the strip with crop-to-fill
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = img.width;
+    tempCanvas.height = img.height;
+    const tempCtx = tempCanvas.getContext('2d')!;
+
+    for (let i = 0; i < frameCount; i++) {
+      tempCtx.putImageData(frames[i], 0, 0);
+
+      // Center crop and scale to frameSize
+      const srcSize = Math.min(tempCanvas.width, tempCanvas.height);
+      const srcX = (tempCanvas.width - srcSize) / 2;
+      const srcY = (tempCanvas.height - srcSize) / 2;
+
+      stripCtx.drawImage(
+        tempCanvas,
+        srcX, srcY, srcSize, srcSize,
+        i * frameSize, 0, frameSize, frameSize
+      );
+    }
+
+    // Convert to WebP blob
+    const stripBlob = await new Promise<Blob>((resolve, reject) => {
+      stripCanvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to create strip blob'));
+        },
+        'image/webp',
+        quality
+      );
+    });
+
+    return {
+      stripBlob,
+      frameCount,
+      frameDelay: estimatedDelay || 100,
+      originalFrameCount: frameCount,
+    };
+  } catch (err) {
+    URL.revokeObjectURL(objectUrl);
+    throw err;
+  }
+}
+
+/**
+ * Create a simple hash of image data for detecting unique frames
+ */
+function hashImageData(imageData: ImageData): string {
+  // Sample pixels at regular intervals to create a fast hash
+  const data = imageData.data;
+  const step = Math.max(1, Math.floor(data.length / 100));
+  let hash = 0;
+  for (let i = 0; i < data.length; i += step) {
+    hash = ((hash << 5) - hash + data[i]) | 0;
+  }
+  return hash.toString(16);
 }
 
 /**

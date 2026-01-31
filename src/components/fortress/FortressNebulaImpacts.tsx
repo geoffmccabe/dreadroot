@@ -21,7 +21,7 @@ function createBodyInitializer(sprite: THREE.Sprite) {
 }
 
 // Debug flag
-const DEBUG_NEBULA_IMPACTS = false;
+const DEBUG_NEBULA_IMPACTS = true;
 
 // Maximum concurrent impact effects
 const MAX_IMPACTS = 20;

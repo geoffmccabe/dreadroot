@@ -14,8 +14,8 @@ import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
 /** How long revenge lasts without damage exchange (3 minutes) */
 export const REVENGE_TIMEOUT_MS = 3 * 60 * 1000;
 
-/** How long headshot stun lasts (2 seconds) */
-export const STUN_DURATION_MS = 2000;
+/** Stun duration per 20 damage dealt (0.5 seconds) */
+export const STUN_MS_PER_20_DAMAGE = 500;
 
 export interface RevengeTarget {
   damageReceived: number;      // Total damage received from ALL attackers
@@ -45,9 +45,15 @@ export const RevengeBehavior: BehaviorModule = {
       ctx.state.returningHome = true;
       return 0;
     }
-    
-    // ALWAYS pursue until timeout - shnakes are relentless!
-    // (Previously stopped when damageDealt >= damageReceived, causing stuck behavior)
+
+    // Stop revenge if damage dealt equals or exceeds damage received
+    if (revengeTarget.damageDealt >= revengeTarget.damageReceived) {
+      // Satisfied - clear revenge and return home
+      ctx.state.revengeTarget = null;
+      ctx.state.returningHome = true;
+      return 0;
+    }
+
     return 0.95; // Very high priority - revenge is important!
   },
   
@@ -68,15 +74,22 @@ export const RevengeBehavior: BehaviorModule = {
   
   tick(ctx: BehaviorContext, _deltaMs: number): BehaviorResult {
     const revengeTarget = ctx.state.revengeTarget as RevengeTarget | null;
-    
-    // Check timeout first (this is the ONLY exit condition now)
+
+    // Check timeout
     const now = performance.now();
     if (!revengeTarget || now - revengeTarget.lastDamageAt > REVENGE_TIMEOUT_MS) {
       ctx.state.revengeTarget = null;
       ctx.state.returningHome = true;
       return { kind: 'idle' };
     }
-    
+
+    // Check if satisfied (dealt >= received damage)
+    if (revengeTarget.damageDealt >= revengeTarget.damageReceived) {
+      ctx.state.revengeTarget = null;
+      ctx.state.returningHome = true;
+      return { kind: 'idle' };
+    }
+
     // STUN CHECK: If stunned by headshot, stay idle until stun expires
     const stunnedUntil = ctx.state.stunnedUntil as number | undefined;
     if (stunnedUntil && now < stunnedUntil) {
@@ -86,10 +99,11 @@ export const RevengeBehavior: BehaviorModule = {
       // Stun just expired - clear it
       ctx.state.stunnedUntil = undefined;
     }
-    
-    // IMPORTANT: Shnakes now ALWAYS chase until timeout expires
-    // They no longer stop when damageDealt >= damageReceived
-    // This keeps them aggressive and prevents getting "stuck" after hitting player
+
+    // Continuous roar during revenge (every tick)
+    if (ctx.custom.onIndignantRoar) {
+      (ctx.custom.onIndignantRoar as (volume: number) => void)(1.0);
+    }
     
     // Get attack parameters
     const attackRange = (ctx.custom.attackRange as number) ?? 1.5;
@@ -211,10 +225,18 @@ export function recordRevengeDamageDealt(state: Record<string, unknown>, damageD
 }
 
 /**
- * Helper: Stun a shnake for 2 seconds after headshot during revenge.
+ * Helper: Stun a shnake after headshot during revenge.
+ * Stun duration scales with damage: 0.5 seconds per 20 damage dealt.
  * Call this when the shnake's head takes damage while in revenge mode.
+ *
+ * @param state - The behavior state object
+ * @param damage - Amount of damage dealt (determines stun duration)
  */
-export function applyShnakeStun(state: Record<string, unknown>): void {
+export function applyShnakeStun(state: Record<string, unknown>, damage: number): void {
   const now = performance.now();
-  state.stunnedUntil = now + STUN_DURATION_MS;
+  // 0.5 seconds (500ms) per 20 damage
+  const stunDuration = Math.floor(damage / 20) * STUN_MS_PER_20_DAMAGE;
+  if (stunDuration > 0) {
+    state.stunnedUntil = now + stunDuration;
+  }
 }

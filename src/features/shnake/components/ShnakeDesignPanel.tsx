@@ -24,7 +24,7 @@ const TIERS = Array.from({ length: 30 }, (_, i) => i + 1);
 
 export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
   const [definitions, setDefinitions] = useState<ShnakeDefinition[]>([]);
-  const [selectedTier, setSelectedTier] = useState<number>(1);
+  const [selectedTier, setSelectedTier] = useState<number | null>(null); // null = ALL TIERS
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -40,7 +40,9 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
   const bodyInputRef = useRef<HTMLInputElement>(null);
   const faceInputRef = useRef<HTMLInputElement>(null);
 
-  const currentDef = definitions.find(d => d.tier === selectedTier) || null;
+  const currentDef = selectedTier !== null ? definitions.find(d => d.tier === selectedTier) || null : null;
+  // Use T1 definition for global AI settings
+  const globalDef = definitions.find(d => d.tier === 1) || null;
 
   // Load sound settings
   useEffect(() => {
@@ -60,13 +62,15 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
     loadSoundSettings();
   }, []);
 
-  // Save sound settings
+  // Save sound settings (upsert to create row if doesn't exist)
   const saveSoundSettings = async (key: string, value: any) => {
     const { error } = await supabase
       .from('enemy_sound_settings')
-      .update({ [key]: value, updated_at: new Date().toISOString() })
-      .eq('enemy_type', 'shnake');
-    
+      .upsert(
+        { enemy_type: 'shnake', [key]: value, updated_at: new Date().toISOString() },
+        { onConflict: 'enemy_type' }
+      );
+
     if (error) {
       toast({ title: 'Failed to save sound setting', variant: 'destructive' });
     }
@@ -358,6 +362,17 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
             <h3 className="font-semibold mb-3 text-2xl">Shnakes</h3>
             <ScrollArea className="h-[500px]">
             <div className="space-y-1 pr-2">
+              {/* ALL TIERS option for global settings */}
+              <Button
+                variant={selectedTier === null ? 'default' : 'ghost'}
+                size="sm"
+                className="w-full justify-start text-xs h-auto py-1 mb-2"
+                onClick={() => setSelectedTier(null)}
+              >
+                <span className="flex items-center gap-1">
+                  <span className="font-semibold">ALL TIERS</span>
+                </span>
+              </Button>
               {definitions.map(def => (
                 <Button
                   key={def.tier}
@@ -405,37 +420,39 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
         </div>
 
         <div className="col-span-9 flex flex-col gap-4">
-          {/* Global Sound Settings Panel - above tier editor */}
-          <EnemySoundSettings
-            enemyType="shnake"
-            sounds={soundConfigs}
-            volume={soundVolume}
-            onSoundChange={handleSoundChange}
-            onVolumeChange={handleVolumeChange}
-          />
-          
-          {/* AI Behavior Settings Panel - collapsible */}
-          {currentDef && (
-            <EnemyBehaviorSettings
-              enemyType="shnake"
-              aiConfig={currentDef.ai_config as AIConfig | null}
-              onConfigChange={(config) => {
-                // Update all ai_config fields at once
-                setDefinitions(prev =>
-                  prev.map(d => d.tier === selectedTier ? { ...d, ai_config: config } : d)
-                );
-                setHasChanges(true);
-              }}
-            />
-          )}
-          
+          {/* ALL TIERS view: Show global Sound Settings + AI Behavior Settings */}
+          {selectedTier === null ? (
+            <>
+              <EnemySoundSettings
+                enemyType="shnake"
+                sounds={soundConfigs}
+                volume={soundVolume}
+                onSoundChange={handleSoundChange}
+                onVolumeChange={handleVolumeChange}
+              />
+
+              {globalDef && (
+                <EnemyBehaviorSettings
+                  enemyType="shnake"
+                  aiConfig={globalDef.ai_config as AIConfig | null}
+                  onConfigChange={(config) => {
+                    // Update T1's ai_config as the global config
+                    setDefinitions(prev =>
+                      prev.map(d => d.tier === 1 ? { ...d, ai_config: config } : d)
+                    );
+                    setHasChanges(true);
+                  }}
+                />
+              )}
+            </>
+          ) : (
           <Card className="p-4 flex-1">
             {currentDef ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b">
                 <div>
                   <h3 className="font-semibold">Tier {selectedTier} Shnake</h3>
-                  <p className="text-xs text-muted-foreground">Length: {10 + selectedTier} segments</p>
+                  <p className="text-xs text-muted-foreground">Length: {2 + selectedTier} segments</p>
                 </div>
                 <Button onClick={saveDef} disabled={!hasChanges || isSaving} size="sm" className="gap-2">
                   <Save className="h-4 w-4" />
@@ -638,6 +655,7 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
             <p className="text-muted-foreground">Select a tier to edit.</p>
           )}
         </Card>
+          )}
       </div>
       </div>
     </Card>

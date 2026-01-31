@@ -131,5 +131,10 @@ export const SHWARM_SOUNDS = [
 export const SHNAKE_SOUND = '/shnake_sound_1.mp3';
 export const SHNAKE_DEATH_SOUND = '/shnake_death.mp3';
 
-// Preload sounds on module load
-preloadSpatialSounds([...SHWARM_SOUNDS, SHNAKE_SOUND, SHNAKE_DEATH_SOUND]);
+// Wisp sound URLs
+export const WISP_DEATH_SOUND = '/wisp_death.mp3';
+
+// Preload sounds on module load (with error handling to avoid blocking)
+preloadSpatialSounds([...SHWARM_SOUNDS, SHNAKE_SOUND, SHNAKE_DEATH_SOUND, WISP_DEATH_SOUND]).catch((e) => {
+  console.warn('[SpatialAudio] Failed to preload sounds:', e);
+});

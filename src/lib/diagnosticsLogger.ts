@@ -88,7 +88,79 @@ class DiagnosticsLogger {
   gridCacheHits = 0;
   gridCacheMisses = 0;
   gridGeneration = 0;
-  
+
+  // === Stall / chunk / collider diagnostics (per-sample) ===
+  private longTaskCount = 0;
+  private longTaskMs = 0;
+
+  private eventLoopLagCount = 0;
+  private eventLoopLagMaxMs = 0;
+
+  private chunkLoads = 0;
+  private chunkUnloads = 0;
+  private chunkFetchMs = 0;
+  private chunkBuildMs = 0;
+
+  private emits = 0;
+  private flattenMs = 0;
+  private flattenBlocks = 0;
+
+  private colliderAdds = 0;
+  private colliderRemoves = 0;
+  private colliderMs = 0;
+
+  // === PlacedBlocks grouping diagnostics ===
+  private groupCacheHits = 0;
+  private groupCacheMisses = 0;
+  private groupMs = 0;
+  private groupBlocks = 0;
+
+  // === InstancedMesh rebuild diagnostics ===
+  private meshRebuildCount = 0;
+  private meshRebuildMs = 0;
+  private meshRebuildBlocks = 0;
+
+  // === Chunk rendering diagnostics (Phase 0) ===
+  private chunkRenderCount = 0;      // ChunkRenderer components currently mounted
+  private chunkRebuildCount = 0;     // chunks that re-rendered this sample interval
+  private chunkRebuildMs = 0;        // total time in chunk-level grouping+mesh rebuilds
+  private globalFlattenMs = 0;       // time in CameraTrackedBlocks flatten/dedup/sort
+  meshInstanceTotal = 0;             // sum of all InstancedMesh.count values
+  gpuTextureMemMB = 0;              // estimated GPU texture memory
+
+  private chunkRenderCountTotal = 0;
+  private chunkRebuildCountTotal = 0;
+  private chunkRebuildMsTotal = 0;
+  private globalFlattenMsTotal = 0;
+
+  // === Totals over recording ===
+  private longTaskCountTotal = 0;
+  private longTaskMsTotal = 0;
+  private eventLoopLagCountTotal = 0;
+  private eventLoopLagMaxMsTotal = 0;
+
+  private chunkLoadsTotal = 0;
+  private chunkUnloadsTotal = 0;
+  private chunkFetchMsTotal = 0;
+  private chunkBuildMsTotal = 0;
+
+  private emitsTotal = 0;
+  private flattenMsTotal = 0;
+  private flattenBlocksTotal = 0;
+
+  private colliderAddsTotal = 0;
+  private colliderRemovesTotal = 0;
+  private colliderMsTotal = 0;
+
+  private groupCacheHitsTotal = 0;
+  private groupCacheMissesTotal = 0;
+  private groupMsTotal = 0;
+  private groupBlocksTotal = 0;
+
+  private meshRebuildCountTotal = 0;
+  private meshRebuildMsTotal = 0;
+  private meshRebuildBlocksTotal = 0;
+
   // === Frame time analysis ===
   private frameTimes = new Float32Array(100);
   private frameTimeIndex = 0;
@@ -129,13 +201,132 @@ class DiagnosticsLogger {
     if (ms > 33) this.longFrameCount++;
     if (ms > this.frameTimeMax) this.frameTimeMax = ms;
   }
-  
+
+  // === Stall diagnostics methods ===
+  recordLongTask(ms: number): void {
+    if (!this.enabled) return;
+    this.longTaskCount++;
+    this.longTaskMs += ms;
+  }
+
+  recordEventLoopLag(ms: number): void {
+    if (!this.enabled) return;
+    this.eventLoopLagCount++;
+    if (ms > this.eventLoopLagMaxMs) this.eventLoopLagMaxMs = ms;
+  }
+
+  recordChunkLoad(fetchMs: number, buildMs: number): void {
+    if (!this.enabled) return;
+    this.chunkLoads++;
+    this.chunkFetchMs += fetchMs;
+    this.chunkBuildMs += buildMs;
+  }
+
+  recordChunkUnload(): void {
+    if (!this.enabled) return;
+    this.chunkUnloads++;
+  }
+
+  recordFlattenEmit(blockCount: number, ms: number): void {
+    if (!this.enabled) return;
+    this.emits++;
+    this.flattenBlocks += blockCount;
+    this.flattenMs += ms;
+  }
+
+  recordColliderOp(kind: 'add' | 'remove', ms: number): void {
+    if (!this.enabled) return;
+    if (kind === 'add') this.colliderAdds++;
+    else this.colliderRemoves++;
+    this.colliderMs += ms;
+  }
+
+  // === PlacedBlocks grouping diagnostics ===
+  recordGroupCacheHit(): void {
+    if (!this.enabled) return;
+    this.groupCacheHits++;
+  }
+
+  recordGrouping(ms: number, blockCount: number): void {
+    if (!this.enabled) return;
+    this.groupCacheMisses++;
+    this.groupMs += ms;
+    this.groupBlocks += blockCount;
+  }
+
+  // === InstancedMesh rebuild diagnostics ===
+  recordMeshRebuild(ms: number, blockCount: number): void {
+    if (!this.enabled) return;
+    this.meshRebuildCount++;
+    this.meshRebuildMs += ms;
+    this.meshRebuildBlocks += blockCount;
+  }
+
+  // === Chunk rendering diagnostics (Phase 0) ===
+  setChunkRenderCount(count: number): void {
+    if (!this.enabled) return;
+    this.chunkRenderCount = count;
+  }
+
+  recordChunkRebuild(ms: number): void {
+    if (!this.enabled) return;
+    this.chunkRebuildCount++;
+    this.chunkRebuildMs += ms;
+  }
+
+  recordGlobalFlatten(ms: number): void {
+    if (!this.enabled) return;
+    this.globalFlattenMs += ms;
+  }
+
+  // Get accumulated stall stats for report
+  getExtraStats() {
+    return {
+      longTaskCountTotal: this.longTaskCountTotal,
+      longTaskMsTotal: this.longTaskMsTotal,
+      eventLoopLagCountTotal: this.eventLoopLagCountTotal,
+      eventLoopLagMaxMsTotal: this.eventLoopLagMaxMsTotal,
+
+      chunkLoadsTotal: this.chunkLoadsTotal,
+      chunkUnloadsTotal: this.chunkUnloadsTotal,
+      chunkFetchMsTotal: this.chunkFetchMsTotal,
+      chunkBuildMsTotal: this.chunkBuildMsTotal,
+
+      emitsTotal: this.emitsTotal,
+      flattenMsTotal: this.flattenMsTotal,
+      flattenBlocksTotal: this.flattenBlocksTotal,
+
+      colliderAddsTotal: this.colliderAddsTotal,
+      colliderRemovesTotal: this.colliderRemovesTotal,
+      colliderMsTotal: this.colliderMsTotal,
+
+      // Chunk rendering (Phase 0)
+      chunkRenderCount: this.chunkRenderCount,
+      chunkRebuildCountTotal: this.chunkRebuildCountTotal,
+      chunkRebuildMsTotal: this.chunkRebuildMsTotal,
+      globalFlattenMsTotal: this.globalFlattenMsTotal,
+      meshInstanceTotal: this.meshInstanceTotal,
+      gpuTextureMemMB: this.gpuTextureMemMB,
+
+      // Grouping/Mesh
+      groupCacheMissesTotal: this.groupCacheMissesTotal,
+      groupMsTotal: this.groupMsTotal,
+      groupBlocksTotal: this.groupBlocksTotal,
+      meshRebuildCountTotal: this.meshRebuildCountTotal,
+      meshRebuildMsTotal: this.meshRebuildMsTotal,
+      meshRebuildBlocksTotal: this.meshRebuildBlocksTotal,
+    };
+  }
+
   captureRendererStats(renderer: THREE.WebGLRenderer): void {
     if (!this.enabled || !renderer) return;
     this.drawCalls = renderer.info.render.calls;
     this.triangles = renderer.info.render.triangles;
     this.geometries = renderer.info.memory.geometries;
     this.textures = renderer.info.memory.textures;
+    // Estimate GPU texture memory from atlas (8192x8192 RGBA = 256MB, no mipmaps)
+    // This is a rough estimate; actual depends on atlas size constant
+    this.gpuTextureMemMB = (8192 * 8192 * 4) / (1024 * 1024); // 256MB for current atlas
   }
   
   captureMemoryStats(): void {
@@ -194,6 +385,9 @@ class DiagnosticsLogger {
     }
   }
   
+  // Fallback timer for when frame loop is frozen
+  private fallbackTimerId: number | null = null;
+
   toggle(): void {
     this.enabled = !this.enabled;
     if (this.enabled) {
@@ -210,12 +404,167 @@ class DiagnosticsLogger {
       this.startTime = performance.now();
       this.lastSampleTime = this.startTime;
       this.elapsedSeconds = 0;
-      console.log('[D-Flow] Recording started... (Shift+3 to stop and print)');
+
+      // Reset stall diagnostics
+      this.longTaskCount = 0;
+      this.longTaskMs = 0;
+      this.eventLoopLagCount = 0;
+      this.eventLoopLagMaxMs = 0;
+      this.chunkLoads = 0;
+      this.chunkUnloads = 0;
+      this.chunkFetchMs = 0;
+      this.chunkBuildMs = 0;
+      this.emits = 0;
+      this.flattenMs = 0;
+      this.flattenBlocks = 0;
+      this.colliderAdds = 0;
+      this.colliderRemoves = 0;
+      this.colliderMs = 0;
+
+      // Reset totals
+      this.longTaskCountTotal = 0;
+      this.longTaskMsTotal = 0;
+      this.eventLoopLagCountTotal = 0;
+      this.eventLoopLagMaxMsTotal = 0;
+      this.chunkLoadsTotal = 0;
+      this.chunkUnloadsTotal = 0;
+      this.chunkFetchMsTotal = 0;
+      this.chunkBuildMsTotal = 0;
+      this.emitsTotal = 0;
+      this.flattenMsTotal = 0;
+      this.flattenBlocksTotal = 0;
+      this.colliderAddsTotal = 0;
+      this.colliderRemovesTotal = 0;
+      this.colliderMsTotal = 0;
+      this.groupCacheHitsTotal = 0;
+      this.groupCacheMissesTotal = 0;
+      this.groupMsTotal = 0;
+      this.groupBlocksTotal = 0;
+      this.meshRebuildCountTotal = 0;
+      this.meshRebuildMsTotal = 0;
+      this.meshRebuildBlocksTotal = 0;
+
+      // Reset chunk rendering diagnostics
+      this.chunkRenderCount = 0;
+      this.chunkRebuildCount = 0;
+      this.chunkRebuildMs = 0;
+      this.globalFlattenMs = 0;
+      this.meshInstanceTotal = 0;
+      this.gpuTextureMemMB = 0;
+      this.chunkRenderCountTotal = 0;
+      this.chunkRebuildCountTotal = 0;
+      this.chunkRebuildMsTotal = 0;
+      this.globalFlattenMsTotal = 0;
+
+      // Start fallback timer - collects samples even if frame loop is frozen
+      this.fallbackTimerId = window.setInterval(() => {
+        this.tickFallback();
+      }, 100) as unknown as number;
+
+      this.tickCallCount = 0;
+      this.fallbackCallCount = 0;
+      console.log('[D-Flow] Recording STARTED (Shift+3 to stop)');
     } else {
+      console.log('[D-Flow] Recording STOPPED. Samples:', this.ticker);
+      // Stop fallback timer
+      if (this.fallbackTimerId !== null) {
+        window.clearInterval(this.fallbackTimerId);
+        this.fallbackTimerId = null;
+      }
       this.print();
     }
   }
-  
+
+  // Fallback tick - runs via setInterval, doesn't require frame loop
+  private tickFallback(): void {
+    if (!this.enabled) return;
+    this.fallbackCallCount++;
+
+    const now = performance.now();
+    this.elapsedSeconds = Math.floor((now - this.startTime) / 1000);
+
+    // Only write a sample if the frame loop didn't already do it
+    if (now - this.lastSampleTime >= 100) {
+      const i = (this.ticker % BUFFER_SIZE) * METRICS;
+      // Calculate FPS based on frame count (may be 0 if frozen)
+      const elapsed = now - this.lastSampleTime;
+      const fps = elapsed > 0 ? (this.masterFrameCount / elapsed) * 1000 : 0;
+
+      // Buffer layout - same as tick()
+      this.buffer[i] = this.ticker;
+      this.buffer[i+1] = fps;
+      this.buffer[i+2] = this.masterFrameCount;
+      this.buffer[i+3] = this.cameraX;
+      this.buffer[i+4] = this.cameraY;
+      this.buffer[i+5] = this.cameraZ;
+      this.buffer[i+6] = this.visibleBlocks;
+      this.buffer[i+7] = this.particleCount;
+      this.buffer[i+8] = this.coinCount;
+
+      // Events
+      this.buffer[i+9] = this.e1;
+      this.buffer[i+10] = this.e2;
+      this.buffer[i+11] = this.e3;
+      this.buffer[i+12] = this.e4;
+      this.buffer[i+13] = this.e5;
+      this.buffer[i+14] = this.e6;
+      this.buffer[i+15] = this.e7;
+      this.buffer[i+16] = this.e8;
+      this.buffer[i+17] = this.e9;
+      this.buffer[i+18] = this.e10;
+      this.buffer[i+19] = this.e11;
+      this.buffer[i+20] = this.e12;
+
+      // Timing
+      this.buffer[i+21] = this.timeControls;
+      this.buffer[i+22] = this.timeCoins;
+      this.buffer[i+23] = this.timeWaterfall;
+      this.buffer[i+24] = this.timeBlocks;
+      this.buffer[i+25] = this.timeEnemyAI;
+      this.buffer[i+26] = this.timeParticles;
+      this.buffer[i+27] = this.timeTrees;
+      this.buffer[i+28] = this.timeBullets;
+      this.buffer[i+29] = this.timeMatrix;
+      this.buffer[i+30] = this.timeRender;
+      this.buffer[i+31] = this.timeFrame;
+
+      // GPU
+      this.buffer[i+32] = this.drawCalls;
+      this.buffer[i+33] = this.triangles;
+      this.buffer[i+34] = this.geometries;
+      this.buffer[i+35] = this.textures;
+      this.buffer[i+36] = this.jsHeapUsed;
+      this.buffer[i+37] = this.jsHeapTotal;
+
+      // Enemy AI
+      this.buffer[i+38] = this.enemyCount;
+      this.buffer[i+39] = this.enemiesFullLOD;
+      this.buffer[i+40] = this.enemiesThrottled;
+      this.buffer[i+41] = this.enemiesFrozen;
+      this.buffer[i+42] = this.behaviorTransitions;
+      this.buffer[i+43] = this.spatialQueries;
+
+      // Grid
+      this.buffer[i+44] = this.worldGridSize;
+      this.buffer[i+45] = this.entityGridSize;
+      this.buffer[i+46] = this.gridCacheHits;
+      this.buffer[i+47] = this.gridCacheMisses;
+
+      // Frame analysis
+      this.buffer[i+48] = this.longFrameCount;
+      this.buffer[i+49] = this.frameTimeMax;
+
+      this.ticker++;
+      this.masterFrameCount = 0;
+      this.resetEventCounters();
+      this.resetTimingCounters();
+      this.accumulateAndResetStallCounters();
+      this.longFrameCount = 0;
+      this.frameTimeMax = 0;
+      this.lastSampleTime = now;
+    }
+  }
+
   private resetEventCounters(): void {
     this.e1 = 0; this.e2 = 0; this.e3 = 0; this.e4 = 0;
     this.e5 = 0; this.e6 = 0; this.e7 = 0; this.e8 = 0;
@@ -241,9 +590,83 @@ class DiagnosticsLogger {
     this.timeMatrix = 0;
     this.timeRender = 0;
   }
+
+  private accumulateAndResetStallCounters(): void {
+    // Accumulate totals for overlay summary
+    this.longTaskCountTotal += this.longTaskCount;
+    this.longTaskMsTotal += this.longTaskMs;
+
+    this.eventLoopLagCountTotal += this.eventLoopLagCount;
+    this.eventLoopLagMaxMsTotal = Math.max(this.eventLoopLagMaxMsTotal, this.eventLoopLagMaxMs);
+
+    this.chunkLoadsTotal += this.chunkLoads;
+    this.chunkUnloadsTotal += this.chunkUnloads;
+    this.chunkFetchMsTotal += this.chunkFetchMs;
+    this.chunkBuildMsTotal += this.chunkBuildMs;
+
+    this.emitsTotal += this.emits;
+    this.flattenMsTotal += this.flattenMs;
+    this.flattenBlocksTotal += this.flattenBlocks;
+
+    this.colliderAddsTotal += this.colliderAdds;
+    this.colliderRemovesTotal += this.colliderRemoves;
+    this.colliderMsTotal += this.colliderMs;
+
+    this.groupCacheHitsTotal += this.groupCacheHits;
+    this.groupCacheMissesTotal += this.groupCacheMisses;
+    this.groupMsTotal += this.groupMs;
+    this.groupBlocksTotal += this.groupBlocks;
+
+    this.meshRebuildCountTotal += this.meshRebuildCount;
+    this.meshRebuildMsTotal += this.meshRebuildMs;
+    this.meshRebuildBlocksTotal += this.meshRebuildBlocks;
+
+    // Reset per-sample
+    this.longTaskCount = 0;
+    this.longTaskMs = 0;
+
+    this.eventLoopLagCount = 0;
+    this.eventLoopLagMaxMs = 0;
+
+    this.chunkLoads = 0;
+    this.chunkUnloads = 0;
+    this.chunkFetchMs = 0;
+    this.chunkBuildMs = 0;
+
+    this.emits = 0;
+    this.flattenMs = 0;
+    this.flattenBlocks = 0;
+
+    this.colliderAdds = 0;
+    this.colliderRemoves = 0;
+    this.colliderMs = 0;
+
+    this.groupCacheHits = 0;
+    this.groupCacheMisses = 0;
+    this.groupMs = 0;
+    this.groupBlocks = 0;
+
+    this.meshRebuildCount = 0;
+    this.meshRebuildMs = 0;
+    this.meshRebuildBlocks = 0;
+
+    // Chunk rendering diagnostics
+    this.chunkRenderCountTotal = this.chunkRenderCount; // snapshot, not accumulated
+    this.chunkRebuildCountTotal += this.chunkRebuildCount;
+    this.chunkRebuildMsTotal += this.chunkRebuildMs;
+    this.globalFlattenMsTotal += this.globalFlattenMs;
+
+    this.chunkRebuildCount = 0;
+    this.chunkRebuildMs = 0;
+    this.globalFlattenMs = 0;
+  }
   
+  private tickCallCount = 0;
+  private fallbackCallCount = 0;
+
   tick(): void {
     if (!this.enabled) return;
+    this.tickCallCount++;
     this.masterFrameCount++;
     const now = performance.now();
     this.elapsedSeconds = Math.floor((now - this.startTime) / 1000);
@@ -324,12 +747,13 @@ class DiagnosticsLogger {
       this.masterFrameCount = 0;
       this.resetEventCounters();
       this.resetTimingCounters();
+      this.accumulateAndResetStallCounters();
       this.longFrameCount = 0;
       this.frameTimeMax = 0;
       this.lastSampleTime = now;
     }
   }
-  
+
   lastOutput = '';
   showOutput = false;
   
@@ -344,7 +768,8 @@ class DiagnosticsLogger {
     let maxDrawCalls = 0, drawCallsSum = 0;
     let heapStart = 0, heapEnd = 0;
     let maxWorldGrid = 0, maxEntityGrid = 0;
-    
+    let totalLongFrames = 0, maxFrameTime = 0, totalFrames = 0;
+
     for (let s = 0; s < n; s++) {
       const i = s * METRICS;
       const fps = this.buffer[i+1];
@@ -352,21 +777,29 @@ class DiagnosticsLogger {
       if (fps < fpsMin) { fpsMin = fps; fpsMinSample = s; }
       if (fps > fpsMax) fpsMax = fps;
       if (fps < 30) below30Count++;
-      
+
       tControlsSum += this.buffer[i+21];
       tAISum += this.buffer[i+25];
       tBlocksSum += this.buffer[i+24];
       tRenderSum += this.buffer[i+30];
-      
+
       drawCallsSum += this.buffer[i+32];
       if (this.buffer[i+32] > maxDrawCalls) maxDrawCalls = this.buffer[i+32];
-      
+
       if (s === 0) heapStart = this.buffer[i+36];
       if (s === n - 1) heapEnd = this.buffer[i+36];
-      
+
       if (this.buffer[i+44] > maxWorldGrid) maxWorldGrid = this.buffer[i+44];
       if (this.buffer[i+45] > maxEntityGrid) maxEntityGrid = this.buffer[i+45];
+
+      // Frame time analysis
+      totalLongFrames += this.buffer[i+48];
+      if (this.buffer[i+49] > maxFrameTime) maxFrameTime = this.buffer[i+49];
+      totalFrames += this.buffer[i+2];
     }
+
+    // Calculate average frame time
+    const avgFrameTime = totalFrames > 0 ? (duration * 1000) / totalFrames : 0;
     
     const lines: string[] = [];
     lines.push('=== D-Flow Performance Report ===');
@@ -377,6 +810,8 @@ class DiagnosticsLogger {
     lines.push(`  Min: ${fpsMin.toFixed(0)} FPS (sample ${fpsMinSample})`);
     lines.push(`  Max: ${fpsMax.toFixed(0)} FPS`);
     lines.push(`  Below 30 FPS: ${below30Count} samples (${((below30Count/n)*100).toFixed(1)}%)`);
+    lines.push(`  Avg frame time: ${avgFrameTime.toFixed(1)}ms (${totalFrames} frames)`);
+    lines.push(`  Long frames (>33ms): ${totalLongFrames}, Max: ${maxFrameTime.toFixed(1)}ms`);
     lines.push('');
     lines.push('Frame Time Breakdown (avg ms/100ms):');
     lines.push(`  Controls:  ${(tControlsSum/n).toFixed(2)}ms`);
@@ -397,9 +832,24 @@ class DiagnosticsLogger {
     lines.push(`  World Grid max: ${maxWorldGrid}`);
     lines.push(`  Entity Grid max: ${maxEntityGrid}`);
     lines.push('');
+
+    // Get frameLoop callback timing breakdown
+    const frameLoopTiming = (window as any).frameLoop?.getTimingReport?.();
+    if (frameLoopTiming && frameLoopTiming.length > 0) {
+      lines.push('Frame Loop Callbacks (total ms over recording):');
+      // Show top 10 callbacks by time
+      const topCallbacks = frameLoopTiming.slice(0, 10);
+      for (const { id, time } of topCallbacks) {
+        lines.push(`  ${id}: ${time.toFixed(1)}ms`);
+      }
+      lines.push('');
+      // Reset timing for next recording
+      (window as any).frameLoop?.resetTiming?.();
+    }
+
     lines.push('--- Raw Data (last 20 samples) ---');
     lines.push('sample fps frames wGrid eGrid drawCalls tCtrl tAI tBlk tRender');
-    
+
     const startSample = Math.max(0, n - 20);
     for (let s = startSample; s < n; s++) {
       const i = s * METRICS;
@@ -416,7 +866,26 @@ class DiagnosticsLogger {
         `${this.buffer[i+30].toFixed(1)}`
       );
     }
-    
+
+    // Add stall diagnostics section
+    lines.push('');
+    lines.push('--- Stall Diagnostics ---');
+    lines.push(`LongTasks: ${this.longTaskCountTotal} (${this.longTaskMsTotal.toFixed(1)}ms total)`);
+    lines.push(`EventLoopLag: ${this.eventLoopLagCountTotal} spikes (max ${this.eventLoopLagMaxMsTotal.toFixed(1)}ms)`);
+    lines.push(`Chunk Loads/Unloads: ${this.chunkLoadsTotal}/${this.chunkUnloadsTotal}`);
+    lines.push(`Chunk Fetch/Build: ${this.chunkFetchMsTotal.toFixed(1)}ms / ${this.chunkBuildMsTotal.toFixed(1)}ms`);
+    lines.push(`Emits: ${this.emitsTotal}, Flatten: ${this.flattenMsTotal.toFixed(1)}ms (${this.flattenBlocksTotal} blocks)`);
+    lines.push(`Colliders: +${this.colliderAddsTotal} -${this.colliderRemovesTotal} (${this.colliderMsTotal.toFixed(1)}ms)`);
+    lines.push(`Grouping: ${this.groupCacheHitsTotal} hits, ${this.groupCacheMissesTotal} misses (${this.groupMsTotal.toFixed(1)}ms for ${this.groupBlocksTotal} blocks)`);
+    lines.push(`MeshRebuild: ${this.meshRebuildCountTotal} rebuilds (${this.meshRebuildMsTotal.toFixed(1)}ms for ${this.meshRebuildBlocksTotal} blocks)`);
+    lines.push('');
+    lines.push('--- Chunk Rendering ---');
+    lines.push(`ChunkRenderers: ${this.chunkRenderCountTotal}`);
+    lines.push(`ChunkRebuilds: ${this.chunkRebuildCountTotal} (${this.chunkRebuildMsTotal.toFixed(1)}ms)`);
+    lines.push(`GlobalFlatten: ${this.globalFlattenMsTotal.toFixed(1)}ms`);
+    lines.push(`MeshInstances: ${this.meshInstanceTotal}`);
+    lines.push(`GPU Texture Mem: ${this.gpuTextureMemMB.toFixed(1)}MB`);
+
     this.lastOutput = lines.join('\n');
     this.showOutput = true;
     console.log(this.lastOutput);

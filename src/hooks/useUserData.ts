@@ -12,6 +12,8 @@ export interface UserProfile {
   user_id: string;
   coins: number;
   blockchain_address?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
   visual_distance?: number;
   fog_enabled?: boolean;
   total_points?: number;
@@ -43,7 +45,9 @@ export interface UserInventoryItem {
 export const useUserData = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [tokenBalance, setTokenBalance] = useState<UserTokenBalance | null>(null);
+  const [allTokenBalances, setAllTokenBalances] = useState<UserTokenBalance[]>([]);
   const [inventory, setInventory] = useState<UserInventoryItem[]>([]);
+  const [equippedItems, setEquippedItems] = useState<Array<{ slot: number; itemId: string }>>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -87,12 +91,13 @@ export const useUserData = () => {
       loadingRef.current = true;
       setIsLoading(true);
       
-      // Load profile, token balance, inventory, and roles in parallel
+      // Load profile, token balance, inventory, roles, and all token balances in parallel
       const [
         { data: existingProfile, error: profileError },
         { data: tokenBalanceData, error: tokenBalanceError },
         { data: inventoryData, error: inventoryError },
-        { data: rolesData, error: rolesError }
+        { data: rolesData, error: rolesError },
+        { data: allBalancesData, error: allBalancesError }
       ] = await Promise.all([
         supabase
           .from('user_profiles')
@@ -112,11 +117,34 @@ export const useUserData = () => {
         supabase
           .from('user_roles')
           .select('role')
+          .eq('user_id', user.id),
+        supabase
+          .from('user_token_balances')
+          .select('*')
           .eq('user_id', user.id)
       ]);
 
-      if (profileError) throw profileError;
-      if (inventoryError) throw inventoryError;
+      // Check all errors - log but don't throw for non-critical ones
+      if (profileError) {
+        console.error('[useUserData] Profile error:', profileError);
+        throw profileError;
+      }
+      if (inventoryError) {
+        console.error('[useUserData] Inventory error:', inventoryError);
+        throw inventoryError;
+      }
+      if (tokenBalanceError) {
+        console.error('[useUserData] Token balance error:', tokenBalanceError);
+        // Non-critical - will create new balance below
+      }
+      if (rolesError) {
+        console.error('[useUserData] Roles error:', rolesError);
+        // Non-critical - default to empty roles
+      }
+      if (allBalancesError) {
+        console.error('[useUserData] All balances error:', allBalancesError);
+        // Non-critical - default to empty array
+      }
 
       if (!existingProfile) {
         toast({
@@ -176,7 +204,85 @@ export const useUserData = () => {
       setProfile(existingProfile);
       setInventory(inventoryData || []);
       setUserRoles(roles);
+
+      // Consolidate duplicate inventory rows (same user + item_type + item_id)
+      const inv = inventoryData || [];
+      const seen = new Map<string, typeof inv[0]>();
+      for (const row of inv) {
+        if (row.item_type !== 'item' || !row.item_id) continue;
+        const key = `${row.item_type}:${row.item_id}`;
+        const prev = seen.get(key);
+        if (prev) {
+          // Merge: add quantity to first row, delete duplicate
+          const newQty = prev.quantity + row.quantity;
+          await supabase.from('user_inventory').update({ quantity: newQty }).eq('id', prev.id);
+          await supabase.from('user_inventory').delete().eq('id', row.id);
+          prev.quantity = newQty;
+        } else {
+          seen.set(key, row);
+        }
+      }
+
+      // Ensure starter items (#15 Pistol, #193 Flame Glove) with quantity >= 4
+      const { data: starterDefs } = await supabase
+        .from('items')
+        .select('id, item_number')
+        .in('item_number', [15, 193]);
+
+      if (starterDefs && starterDefs.length > 0) {
+        for (const sd of starterDefs) {
+          const existing = inv.find(i => i.item_type === 'item' && i.item_id === sd.id);
+          if (!existing) {
+            // Insert new starter item
+            const { data: inserted } = await supabase
+              .from('user_inventory')
+              .insert({ user_id: user.id, item_type: 'item', item_id: sd.id, quantity: 4 })
+              .select();
+            if (inserted) setInventory(prev => [...prev, ...inserted]);
+          } else if (existing.quantity < 4) {
+            // Bump up to 4
+            await supabase
+              .from('user_inventory')
+              .update({ quantity: 4 })
+              .eq('id', existing.id);
+            setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: 4 } : i));
+          }
+        }
+      }
+
+      // Load equipped items (hotbar slots 1-6)
+      const { data: equippedData } = await supabase
+        .from('user_equipped_items')
+        .select('slot_type, item_id')
+        .eq('user_id', user.id)
+        .like('slot_type', 'hotbar_%');
+
+      if (equippedData && equippedData.length > 0) {
+        setEquippedItems(equippedData.map(e => ({
+          slot: parseInt(e.slot_type.replace('hotbar_', '')),
+          itemId: e.item_id,
+        })));
+      } else {
+        // First time: equip starter items — #15 Pistol in slot 1, #193 Flame Glove in slot 2
+        if (starterDefs && starterDefs.length > 0) {
+          const pistol = starterDefs.find(d => d.item_number === 15);
+          const glove = starterDefs.find(d => d.item_number === 193);
+          const starterEquips: Array<{ user_id: string; item_id: string; slot_type: string }> = [];
+          if (pistol) starterEquips.push({ user_id: user.id, item_id: pistol.id, slot_type: 'hotbar_1' });
+          if (glove) starterEquips.push({ user_id: user.id, item_id: glove.id, slot_type: 'hotbar_2' });
+          if (starterEquips.length > 0) {
+            await supabase.from('user_equipped_items').insert(starterEquips);
+            setEquippedItems(starterEquips.map(e => ({
+              slot: parseInt(e.slot_type.replace('hotbar_', '')),
+              itemId: e.item_id,
+            })));
+          }
+        }
+      }
+
+      setAllTokenBalances(allBalancesData || []);
     } catch (error) {
+      console.error('[useUserData] Load failed:', error);
       toast({
         title: "Error",
         description: "Failed to load user data",
@@ -504,6 +610,10 @@ export const useUserData = () => {
     if (!user?.id || !profile) return false;
 
     const clampedDistance = Math.max(1, Math.min(20, distance));
+    const prevDistance = profile.visual_distance;
+
+    // Optimistic update for immediate UI response
+    setProfile(prev => prev ? { ...prev, visual_distance: clampedDistance } : null);
 
     try {
       const { error } = await supabase
@@ -513,10 +623,10 @@ export const useUserData = () => {
 
       if (error) throw error;
 
-      setProfile(prev => prev ? { ...prev, visual_distance: clampedDistance } : null);
-      
       return true;
     } catch (error) {
+      // Revert on failure
+      setProfile(prev => prev ? { ...prev, visual_distance: prevDistance } : null);
       console.error('Error updating visual distance:', error);
       toast({
         title: "Error",
@@ -530,6 +640,11 @@ export const useUserData = () => {
   const updateFogEnabled = async (enabled: boolean) => {
     if (!user?.id || !profile) return false;
 
+    const prevFog = profile.fog_enabled;
+
+    // Optimistic update for immediate UI response
+    setProfile(prev => prev ? { ...prev, fog_enabled: enabled } : null);
+
     try {
       const { error } = await supabase
         .from('user_profiles')
@@ -538,10 +653,10 @@ export const useUserData = () => {
 
       if (error) throw error;
 
-      setProfile(prev => prev ? { ...prev, fog_enabled: enabled } : null);
-      
       return true;
     } catch (error) {
+      // Revert on failure
+      setProfile(prev => prev ? { ...prev, fog_enabled: prevFog } : null);
       console.error('Error updating fog setting:', error);
       toast({
         title: "Error",
@@ -552,10 +667,9 @@ export const useUserData = () => {
     }
   };
 
-  const refreshData = async () => {
-    console.log('refreshData called');
+  const refreshData = useCallback(async () => {
     await loadUserData();
-  };
+  }, [loadUserData]);
 
   // Collect wisp block (free addition to inventory)
   const collectWispBlock = async (blockKey: string) => {
@@ -783,17 +897,157 @@ export const useUserData = () => {
     return { newLevel: leveledUp };
   }, [user?.id, profile]);
 
+  // Add an item to inventory (server-verified)
+  const addItem = async (itemId: string, quantity: number = 1): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    const { data: existing } = await supabase
+      .from('user_inventory')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('item_type', 'item')
+      .eq('item_id', itemId)
+      .maybeSingle();
+
+    if (existing) {
+      const newQty = existing.quantity + quantity;
+      const { error } = await supabase
+        .from('user_inventory')
+        .update({ quantity: newQty, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+      if (error) return false;
+      setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: newQty } : i));
+    } else {
+      const { data: newItem, error } = await supabase
+        .from('user_inventory')
+        .insert({ user_id: user.id, item_type: 'item', item_id: itemId, quantity })
+        .select()
+        .single();
+      if (error || !newItem) return false;
+      setInventory(prev => [...prev, newItem]);
+    }
+    return true;
+  };
+
+  // Remove items from inventory (server-verified)
+  const removeItems = async (itemId: string, quantity: number): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    // Server-side verify ownership and quantity
+    const { data: existing } = await supabase
+      .from('user_inventory')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('item_type', 'item')
+      .eq('item_id', itemId)
+      .maybeSingle();
+
+    if (!existing || existing.quantity < quantity) return false;
+
+    if (existing.quantity === quantity) {
+      const { error } = await supabase
+        .from('user_inventory')
+        .delete()
+        .eq('id', existing.id);
+      if (error) return false;
+      setInventory(prev => prev.filter(i => i.id !== existing.id));
+    } else {
+      const newQty = existing.quantity - quantity;
+      const { error } = await supabase
+        .from('user_inventory')
+        .update({ quantity: newQty, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+      if (error) return false;
+      setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: newQty } : i));
+    }
+    return true;
+  };
+
+  const updateEquippedSlot = useCallback(async (slot: number, itemId: string | null) => {
+    if (!user?.id) return;
+    const slotType = `hotbar_${slot}`;
+
+    // Optimistic update
+    setEquippedItems(prev => {
+      const filtered = prev.filter(e => e.slot !== slot);
+      if (itemId) filtered.push({ slot, itemId });
+      return filtered;
+    });
+
+    if (itemId) {
+      // Upsert: try update first, insert if not found
+      const { data: existing } = await supabase
+        .from('user_equipped_items')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('slot_type', slotType)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('user_equipped_items')
+          .update({ item_id: itemId })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('user_equipped_items')
+          .insert({ user_id: user.id, item_id: itemId, slot_type: slotType });
+      }
+    } else {
+      // Remove from slot
+      await supabase
+        .from('user_equipped_items')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('slot_type', slotType);
+    }
+  }, [user?.id]);
+
+  const updateDisplayName = useCallback(async (name: string) => {
+    if (!user?.id) return;
+    const trimmed = name.trim() || null;
+    setProfile(prev => prev ? { ...prev, display_name: trimmed } : null);
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ display_name: trimmed })
+      .eq('user_id', user.id);
+    if (error) {
+      console.error('Error updating display name:', error);
+      toast({ title: `Failed to save display name: ${error.message}`, variant: 'destructive' });
+    }
+  }, [user?.id, toast]);
+
+  const updateAvatarUrl = useCallback(async (url: string) => {
+    if (!user?.id) return;
+    setProfile(prev => prev ? { ...prev, avatar_url: url } : null);
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ avatar_url: url })
+      .eq('user_id', user.id);
+    if (error) {
+      console.error('Error updating user image URL:', error);
+      toast({ title: `Failed to save user image: ${error.message}`, variant: 'destructive' });
+    }
+  }, [user?.id, toast]);
+
   return {
     profile,
     tokenBalance,
+    allTokenBalances,
     inventory,
+    equippedItems,
     userRoles,
     isLoading,
     buyBlock,
     useBlock,
     addCoins,
     addPoints,
+    addItem,
+    removeItems,
     updateBlockchainAddress,
+    updateEquippedSlot,
+    updateDisplayName,
+    updateAvatarUrl,
     updateVisualDistance,
     updateFogEnabled,
     refreshData,

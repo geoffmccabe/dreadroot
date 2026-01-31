@@ -1,7 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
@@ -186,10 +184,9 @@ function BulletTierPanel({ tier, definition, onChange }: BulletTierPanelProps) {
   );
 }
 
-export function WeaponsPanel() {
-  const [activeSubTab, setActiveSubTab] = useState<'bullets' | 'weapons'>('bullets');
+export function BulletsPanel() {
   const [isSaving, setIsSaving] = useState(false);
-  const { definitions, getDefinition, updateDefinition, saveAllToDatabase, hasUnsavedChanges, isLoading } = useBulletDefinitions();
+  const { getDefinition, updateDefinition, saveAllToDatabase, hasUnsavedChanges, isLoading } = useBulletDefinitions();
 
   const handleChange = useCallback((tier: number, def: BulletDefinition) => {
     updateDefinition(tier, def);
@@ -206,59 +203,33 @@ export function WeaponsPanel() {
 
   return (
     <div className="space-y-4">
-      <Tabs value={activeSubTab} onValueChange={(v) => setActiveSubTab(v as 'bullets' | 'weapons')}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="bullets">Bullets</TabsTrigger>
-          <TabsTrigger value="weapons">Weapons</TabsTrigger>
-        </TabsList>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm text-muted-foreground">
+          {isLoading ? 'Loading...' : hasUnsavedChanges ? '⚠️ Unsaved changes' : '✓ All saved'}
+        </div>
+        <Button
+          onClick={handleSave}
+          disabled={isSaving || isLoading || !hasUnsavedChanges}
+          variant={hasUnsavedChanges ? "default" : "outline"}
+          size="sm"
+        >
+          {isSaving ? 'Saving...' : 'Save All'}
+        </Button>
+      </div>
 
-        <TabsContent value="bullets" className="mt-4">
-          {/* Save button header */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm text-muted-foreground">
-              {isLoading ? 'Loading...' : hasUnsavedChanges ? '⚠️ Unsaved changes' : '✓ All saved'}
-            </div>
-            <Button 
-              onClick={handleSave} 
-              disabled={isSaving || isLoading || !hasUnsavedChanges}
-              variant={hasUnsavedChanges ? "default" : "outline"}
-              size="sm"
-            >
-              {isSaving ? 'Saving...' : 'Save All'}
-            </Button>
-          </div>
-          
-          <ScrollArea className="h-[calc(90vh-320px)]">
-            <div className="pr-4 space-y-2">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map(tier => {
-                const def = getDefinition(tier);
-                return (
-                  <BulletTierPanel
-                    key={tier}
-                    tier={tier}
-                    definition={def}
-                    onChange={(d) => handleChange(tier, d)}
-                  />
-                );
-              })}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-
-        <TabsContent value="weapons" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Weapons Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-sm">
-                Weapon configuration coming soon. This panel will allow you to configure different weapon types, 
-                their bullet tiers, fire rates, and other properties.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <div className="space-y-2">
+        {Array.from({ length: 10 }, (_, i) => i + 1).map(tier => {
+          const def = getDefinition(tier);
+          return (
+            <BulletTierPanel
+              key={tier}
+              tier={tier}
+              definition={def}
+              onChange={(d) => handleChange(tier, d)}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

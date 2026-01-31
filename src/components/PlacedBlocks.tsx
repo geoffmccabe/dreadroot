@@ -1,13 +1,18 @@
-import React, { useRef, useMemo, useCallback, useEffect, MutableRefObject } from 'react';
+import React, { useRef, useMemo, useEffect, MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
+import { InstancedAtlasBlockGroup } from './InstancedAtlasBlockGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
-import { collisionGrid } from '@/lib/spatialHashGrid';
-import { isInvisiblock, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+// collisionGrid import removed — collision handled by useChunkLoader (ensureBlockCollider)
+import { isInvisiblock, isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { getMaterialVariantId, fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
+import { useTextureAtlas } from '@/hooks/useTextureAtlas';
+import { useAtlasSync } from '@/hooks/useAtlasSync';
+import { initLogStep } from '@/contexts/InitializationContext';
+import { cullOccludedBlocks } from '@/lib/occlusionCulling';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
 // Use white color so textures render at full brightness without tinting
@@ -29,8 +34,33 @@ const TREE_BLOCK_FALLBACK: BlockType = {
   }
 };
 
+// Fallback block definition for user-placed blocks without database entries
+// Uses the default cliff texture from InstancedBlockGroup
+const DEFAULT_BLOCK_FALLBACK: BlockType = {
+  id: -2,
+  key: 'default_block',
+  name: 'Block',
+  description: 'A block',
+  cost: 0,
+  category: 'building',
+  rarity: 'common',
+  class: 'basic',
+  tier: 1,
+  properties: {
+    color: '#ffffff', // White - lets default texture show through
+    emissive: false,
+    transparent: false,
+    glowFactor: 0
+  }
+};
+
 // Re-export clearTextureCache for backward compatibility
 export const clearTextureCache = clearInstancedTextureCache;
+
+// Flags for one-time init logging
+let _loggedTreeBlocksReady = false;
+let _loggedAtlasRendering = false;
+let _loggedNonTreeBlocks = false;
 
 // Shared geometry for performance
 const SharedBlockGeometry = () => {
@@ -43,18 +73,26 @@ export const fallingBlocksState = new Map<string, { currentY: number; velocity: 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
 
-// D2: Cheap O(1) group key for fast cache hit detection
-// Only compute expensive visual signature when cheap key differs
+// D2/B10: Group key that detects content changes using sampled position hash
+// Samples blocks at regular intervals instead of hashing all 400K+ blocks.
+// Uses first, last, and evenly spaced samples for O(1) amortized detection.
 function cheapGroupKey(arr: PlacedBlock[]): string {
   const n = arr.length;
   if (n === 0) return '0';
-  const a = arr[0];
-  const b = arr[n - 1];
-  const atx = canonicalizeTextureUrl(a.texture_url || '');
-  const btx = canonicalizeTextureUrl(b.texture_url || '');
-  const abd = (a as any).branch_depth ?? '';
-  const bbd = (b as any).branch_depth ?? '';
-  return `${n}|${a.position_x},${a.position_y},${a.position_z},${a.block_type},${atx},${abd}|${b.position_x},${b.position_y},${b.position_z},${b.block_type},${btx},${bbd}`;
+  // Sample up to 64 blocks evenly distributed across the array
+  const SAMPLE_COUNT = 64;
+  const step = n <= SAMPLE_COUNT ? 1 : Math.floor(n / SAMPLE_COUNT);
+  let posHash = 0;
+  for (let i = 0; i < n; i += step) {
+    const b = arr[i];
+    posHash ^= (b.position_x * 73856093) ^ (b.position_y * 19349663) ^ (b.position_z * 83492791);
+  }
+  // Always include last block for boundary change detection
+  if (n > 1) {
+    const last = arr[n - 1];
+    posHash ^= (last.position_x * 73856093) ^ (last.position_y * 19349663) ^ (last.position_z * 83492791);
+  }
+  return `${n}|${posHash}`;
 }
 
 // C2: Visual signature helpers - order-insensitive, ID-independent (EXPENSIVE - only call when needed)
@@ -74,21 +112,23 @@ function computeGroupSignature(arr: PlacedBlock[]): string {
   return `${arr.length}:${xor.toString(16)}:${sum.toString(16)}`;
 }
 
-// Shared geometry for invisiblock outlines (reused across all invisiblocks)
-const invisiblockEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-const invisiblockOutlineMaterial = new THREE.LineBasicMaterial({ 
-  color: new THREE.Color(0.4, 0.4, 0.4), // Subtle grey
-  linewidth: 1,
-  transparent: true,
-  opacity: 0.5
-});
+// Invisiblock outlines disabled for performance - uncomment to debug
+// const invisiblockEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+// const invisiblockOutlineMaterial = new THREE.LineBasicMaterial({
+//   color: new THREE.Color(0.4, 0.4, 0.4),
+//   linewidth: 1,
+//   transparent: true,
+//   opacity: 0.5
+// });
+
+// Performance: Skip invisiblock outline rendering - each was a separate draw call
+const RENDER_INVISIBLOCK_OUTLINES = false;
 
 // B2.2: Global threshold for auto-enabling performance mode
 const GLOBAL_VISIBLE_BLOCKS_THRESHOLD = 3000;
 
 interface PlacedBlocksProps {
   blocks: PlacedBlock[]; 
-  onCollision?: (boxes: THREE.Box3[]) => void;
   showOwnershipOutline?: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
@@ -98,21 +138,26 @@ interface PlacedBlocksProps {
 
 // F2.1: Wrap in React.memo with custom comparison to prevent cascade re-renders
 // Only re-render when blocks array ref changes or hover/outline state changes
-const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({ 
-  blocks, 
-  onCollision, 
-  showOwnershipOutline = false, 
-  currentUserId, 
-  hoveredBlockId = null, 
-  onMeshReady, 
-  performanceMode = false 
+const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
+  blocks,
+  showOwnershipOutline = false,
+  currentUserId,
+  hoveredBlockId = null,
+  onMeshReady,
+  performanceMode = false
 }) => {
   // B2.2: Auto-enable performance mode when total visible blocks exceed threshold
   const effectivePerformanceMode = performanceMode || blocks.length > GLOBAL_VISIBLE_BLOCKS_THRESHOLD;
-  const collisionBoxes = useRef<Map<string, THREE.Box3>>(new Map());
   const geometry = SharedBlockGeometry();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastThudTime = useRef(0);
+
+  // Global texture atlas for efficient rendering
+  const { texture: atlasTexture, isReady: atlasReady, isLoading: atlasLoading } = useTextureAtlas();
+
+  // Sync all texture definitions to the atlas
+  useAtlasSync({ enabled: true });
+
   
   // Initialize audio
   useEffect(() => {
@@ -135,13 +180,20 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   
   // Initialize falling state for new blocks with expires_at and update height map
   useEffect(() => {
-    // Clean up removed blocks from falling state
-    const blockIds = new Set(blocks.map(b => b.id));
-    Array.from(fallingBlocksState.keys()).forEach(id => {
-      if (!blockIds.has(id)) {
+    // B8: Clean up removed blocks from falling state WITHOUT creating world-sized Set
+    // fallingBlocksState is tiny (only actively falling blocks), so O(n*m) is fine
+    // where n=falling count (tiny) and m=blocks count (large but only scanned per falling block)
+    if (fallingBlocksState.size > 0) {
+      const toRemove: string[] = [];
+      for (const id of fallingBlocksState.keys()) {
+        // Linear search is fine since fallingBlocksState is tiny
+        const exists = blocks.some(b => b.id === id);
+        if (!exists) toRemove.push(id);
+      }
+      for (const id of toRemove) {
         fallingBlocksState.delete(id);
       }
-    });
+    }
     
     // Do NOT automatically make blocks with expires_at fall from the sky
     // Falling state is tracked in-memory only and does not persist across refreshes
@@ -161,16 +213,10 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     }
   }, [blocks]);
   
-  // Create block ID to block map for O(1) lookups in frame loop
-  const blocksById = useMemo(() => {
-    const map = new Map<string, PlacedBlock>();
-    blocks.forEach(block => map.set(block.id, block));
-    return map;
-  }, [blocks]);
-  
-  // Store blocksById in ref for frame loop access
-  const blocksByIdRef = useRef(blocksById);
-  useEffect(() => { blocksByIdRef.current = blocksById; }, [blocksById]);
+  // B5: Use ref instead of Map to avoid massive allocations on every blocks change
+  // Falling blocks count is tiny, so linear lookup is fine
+  const blocksRef = useRef<PlacedBlock[]>(blocks);
+  useEffect(() => { blocksRef.current = blocks; }, [blocks]);
   
   // Physics update for falling blocks - register with centralized frame loop
   useEffect(() => {
@@ -183,10 +229,11 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
       const maxDelta = 0.1;
       const cappedDelta = Math.min(delta, maxDelta);
       
-      const currentBlocksById = blocksByIdRef.current;
-      
+      // B5: Use linear lookup - falling blocks count is tiny so this is fine
+      const currentBlocks = blocksRef.current;
+
       fallingBlocksState.forEach((fallState, blockId) => {
-        const block = currentBlocksById.get(blockId);
+        const block = currentBlocks.find(b => b.id === blockId);
         if (!block) return;
         
         fallState.velocity += gravity * cappedDelta;
@@ -212,165 +259,166 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     return unregister;
   }, []);
 
-  const handleBlockCollision = useCallback((box: THREE.Box3, blockId: string) => {
-    collisionBoxes.current.set(blockId, box);
-  }, []);
+  // Collision is fully managed by useChunkLoader (ensureBlockCollider).
+  // No per-render collision allocation needed.
 
-  // Use ref to avoid stale closure with onCollision
-  const onCollisionRef = useRef(onCollision);
-  React.useEffect(() => {
-    onCollisionRef.current = onCollision;
-  }, [onCollision]);
-  
-  // Only update collision boxes when blocks are added/removed
-  const blockIds = useMemo(() => new Set(blocks.map(b => b.id)), [blocks]);
-  
-  React.useEffect(() => {
-    // Remove collision boxes for deleted blocks
-    const currentBoxIds = Array.from(collisionBoxes.current.keys());
-    currentBoxIds.forEach(id => {
-      if (!blockIds.has(id)) {
-        collisionBoxes.current.delete(id);
-      }
-    });
-    
-    // Call onCollision with updated collision boxes
-    if (onCollisionRef.current && collisionBoxes.current.size > 0) {
-      onCollisionRef.current(Array.from(collisionBoxes.current.values()));
-    }
-  }, [blockIds]);
-
-  // Separate invisiblocks from visible blocks
-  // Invisiblocks need collision registration but no visual rendering
-  // OPTIMIZATION: Cap texture variants per block_type to prevent excessive InstancedBlockGroup components
+  // Separate invisiblocks from visible blocks and group by block type
+  // B6: Signature-based caching to avoid O(n) work when blocks haven't changed
   const MAX_TEXTURE_VARIANTS_PER_TYPE = 8;
-  
-  // D2: Cache for stable array references with cheap key + expensive signature
-  // Cheap key (O(1)) is checked first, expensive signature only when cheap differs
-  const groupCacheRef = useRef<Map<string, { 
-    blocks: PlacedBlock[]; 
-    textureOverride?: string;
-    signature: string;
-    cheapKey: string;
-  }>>(new Map());
-  const invisiblocksCacheRef = useRef<{ blocks: PlacedBlock[]; signature: string; cheapKey: string }>({ blocks: [], signature: '', cheapKey: '' });
-  
-  const { groupedBlocks, invisiblocks } = useMemo(() => {
+
+  // B6: Cache for groupedBlocks result - avoids re-grouping on every render
+  type GroupedResult = {
+    groupedBlocks: Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>;
+    invisiblocks: PlacedBlock[];
+    atlasTreeBlocks: PlacedBlock[];
+  };
+  const groupCacheRef = useRef<{ key: string; result: GroupedResult } | null>(null);
+
+  // B10: Cache variant counts across re-groupings. Block types/textures don't change
+  // on chunk boundary crossings (only positions change), so we can reuse variant counts.
+  const variantsCacheRef = useRef<{
+    typeHash: number;
+    variantsByType: Map<string, Set<string>>;
+  } | null>(null);
+
+  const { groupedBlocks, invisiblocks, atlasTreeBlocks } = useMemo(() => {
+    // B6: Compute cheap key to detect if blocks have changed
+    const cheapKey = cheapGroupKey(blocks);
+
+    // If cheap key matches cached result, return cached without doing any work
+    if (groupCacheRef.current && groupCacheRef.current.key === cheapKey) {
+      diagnostics.recordGroupCacheHit();
+      return groupCacheRef.current.result;
+    }
+
+    // D-Flow: Track grouping time when cache misses
+    const groupT0 = performance.now();
+
+    // Key changed - must recompute grouping
     const groups = new Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>();
     const invisibleBlocks: PlacedBlock[] = [];
-    const seenIds = new Set<string>();
-    
-    // First pass: dedupe blocks silently
-    const deduped: PlacedBlock[] = [];
-    for (const block of blocks) {
-      if (seenIds.has(block.id)) continue;
-      seenIds.add(block.id);
-      deduped.push(block);
-    }
-    
-    // Count texture variants per block_type - use CANONICAL URLs
-    const variantsByType = new Map<string, Set<string>>();
-    for (const b of deduped) {
-      if (!b.texture_url) continue;
-      let s = variantsByType.get(b.block_type);
-      if (!s) variantsByType.set(b.block_type, (s = new Set()));
-      s.add(canonicalizeTextureUrl(b.texture_url));
-    }
-    
-    // Temporary grouping to build signatures
-    const tempGroups = new Map<string, PlacedBlock[]>();
-    
-    // Second pass: group with cap
-    for (const block of deduped) {
-      // Invisiblocks go to separate array for collision-only handling
+    const treeBlocksForAtlas: PlacedBlock[] = [];
+
+    // Pass 1: Classify ALL blocks (tree/invis/non-tree) and compute type hash.
+    // Tree blocks (~80%+ of total) are pushed directly. Non-tree blocks are
+    // collected for a second pass that only iterates the non-tree subset.
+    // This reduces total iterations from 3×N to N + 2×(non-tree count).
+    let typeHash = 0;
+    let nonTreeCount = 0;
+    const nonTreeBlocks: PlacedBlock[] = [];
+
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+
       if (isInvisiblock(block.block_type)) {
         invisibleBlocks.push(block);
         continue;
       }
-      
-      // Check if this block_type has too many texture variants
+
+      if (isTreeBlockType(block.block_type)) {
+        treeBlocksForAtlas.push(block);
+        continue;
+      }
+
+      // Non-tree: collect + compute type hash
+      nonTreeBlocks.push(block);
+      nonTreeCount++;
+      const bt = block.block_type;
+      typeHash ^= (bt.charCodeAt(0) | 0) * 73856093;
+      if (bt.length > 1) typeHash ^= (bt.charCodeAt(1) | 0) * 19349663;
+      typeHash ^= bt.length * 83492791;
+    }
+    typeHash = (typeHash ^ nonTreeCount) >>> 0;
+
+    // Check variant cache (only iterates non-tree blocks on miss)
+    let variantsByType: Map<string, Set<string>>;
+
+    if (variantsCacheRef.current && variantsCacheRef.current.typeHash === typeHash) {
+      variantsByType = variantsCacheRef.current.variantsByType;
+    } else {
+      variantsByType = new Map<string, Set<string>>();
+      for (let i = 0; i < nonTreeBlocks.length; i++) {
+        const b = nonTreeBlocks[i];
+        if (!b.texture_url) continue;
+        let s = variantsByType.get(b.block_type);
+        if (!s) variantsByType.set(b.block_type, (s = new Set()));
+        s.add(canonicalizeTextureUrl(b.texture_url));
+      }
+      variantsCacheRef.current = { typeHash, variantsByType };
+    }
+
+    // Pass 2: Group only non-tree blocks (typically ~20% of total)
+    for (let i = 0; i < nonTreeBlocks.length; i++) {
+      const block = nonTreeBlocks[i];
       const variantCount = variantsByType.get(block.block_type)?.size ?? 0;
       const allowOverride = variantCount > 0 && variantCount <= MAX_TEXTURE_VARIANTS_PER_TYPE;
-      
-      // C2: Create stable group key using canonical texture URL hash
+
       const groupKey = allowOverride && block.texture_url
         ? getMaterialVariantId(block.block_type, block.texture_url)
         : `${block.block_type}:default`;
-      
-      const arr = tempGroups.get(groupKey) || [];
-      arr.push(block);
-      tempGroups.set(groupKey, arr);
-    }
-    
-    // D2: Build stable arrays with CHEAP precheck + expensive signature fallback
-    // Cheap key O(1) catches 99% of "no change" cases; expensive signature only when needed
-    const cache = groupCacheRef.current;
-    const usedKeys = new Set<string>();
-    
-    for (const [groupKey, blocksArr] of tempGroups) {
-      usedKeys.add(groupKey);
-      
-      // D2: Compute cheap O(1) key first
-      const cheap = cheapGroupKey(blocksArr);
-      const cached = cache.get(groupKey);
-      
-      // C2: Extract block type from new groupKey format (blockType:default or blockType:tx:hash)
-      const blockType = groupKey.split(':')[0];
-      const textureOverride = (variantsByType.get(blockType)?.size ?? 0) <= MAX_TEXTURE_VARIANTS_PER_TYPE
-        ? (blocksArr[0]?.texture_url || undefined)
-        : undefined;
-      
-      // D2: FAST PATH - cheap key matches, reuse cached array immediately
-      if (cached && cached.cheapKey === cheap) {
-        groups.set(groupKey, { blocks: cached.blocks, textureOverride: cached.textureOverride });
-        continue; // Skip expensive signature computation!
+
+      let group = groups.get(groupKey);
+      if (!group) {
+        const blockType = groupKey.split(':')[0];
+        const textureOverride = (variantsByType.get(blockType)?.size ?? 0) <= MAX_TEXTURE_VARIANTS_PER_TYPE
+          ? (block.texture_url || undefined)
+          : undefined;
+        group = { blocks: [], textureOverride };
+        groups.set(groupKey, group);
       }
-      
-      // D2: SLOW PATH - cheap key differs, compute expensive signature
-      const sig = blocksArr.length === 0 ? 'empty' : computeGroupSignature(blocksArr);
-      
-      if (cached && cached.signature === sig) {
-        // Visual signature matches (order changed but content same) - update cheap key and reuse
-        cached.cheapKey = cheap;
-        groups.set(groupKey, { blocks: cached.blocks, textureOverride: cached.textureOverride });
-      } else {
-        // Content actually changed - use new array and update cache
-        cache.set(groupKey, { blocks: blocksArr, textureOverride, signature: sig, cheapKey: cheap });
-        groups.set(groupKey, { blocks: blocksArr, textureOverride });
-      }
+      group.blocks.push(block);
     }
-    
-    // Clean up stale cache entries
-    for (const key of cache.keys()) {
-      if (!usedKeys.has(key)) {
-        cache.delete(key);
-      }
-    }
-    
-    // D2: Stable invisiblocks array with cheap precheck
-    const invisiCheap = cheapGroupKey(invisibleBlocks);
-    
-    let stableInvisiblocks: PlacedBlock[];
-    if (invisiblocksCacheRef.current.cheapKey === invisiCheap) {
-      stableInvisiblocks = invisiblocksCacheRef.current.blocks;
-    } else {
-      // Cheap key differs - compute expensive signature
-      const invisiSig = invisibleBlocks.length === 0 ? 'empty' : computeGroupSignature(invisibleBlocks);
-      if (invisiblocksCacheRef.current.signature === invisiSig) {
-        // Content same, just update cheap key
-        invisiblocksCacheRef.current.cheapKey = invisiCheap;
-        stableInvisiblocks = invisiblocksCacheRef.current.blocks;
-      } else {
-        invisiblocksCacheRef.current = { blocks: invisibleBlocks, signature: invisiSig, cheapKey: invisiCheap };
-        stableInvisiblocks = invisibleBlocks;
-      }
-    }
-    
-    return { groupedBlocks: groups, invisiblocks: stableInvisiblocks };
+
+    const result: GroupedResult = { groupedBlocks: groups, invisiblocks: invisibleBlocks, atlasTreeBlocks: treeBlocksForAtlas };
+
+    // D-Flow: Record grouping time
+    diagnostics.recordGrouping(performance.now() - groupT0, blocks.length);
+
+    // B6: Cache the result for next render
+    groupCacheRef.current = { key: cheapKey, result };
+
+    return result;
   }, [blocks]);
   
   // NOTE: Invisiblock colliders are now handled by chunk loader (ensureBlockCollider)
   // This removes duplicate collider authority that was causing grid inflation
+
+  // Render-time culling for tree blocks: removes fully-surrounded interior blocks.
+  // Chunks are pre-culled on load, but after mutations visibleBlocks is invalidated
+  // and the full blocks array is emitted. This render-time pass catches those.
+  // Cached by cheapGroupKey to avoid recomputing when blocks haven't changed.
+  const occlusionCacheRef = useRef<{ key: string; culled: PlacedBlock[] } | null>(null);
+
+  const culledAtlasTreeBlocks = useMemo(() => {
+    if (atlasTreeBlocks.length < 50) return atlasTreeBlocks;
+
+    const treeKey = cheapGroupKey(atlasTreeBlocks);
+    if (occlusionCacheRef.current && occlusionCacheRef.current.key === treeKey) {
+      return occlusionCacheRef.current.culled;
+    }
+
+    const culled = cullOccludedBlocks(atlasTreeBlocks);
+    occlusionCacheRef.current = { key: treeKey, culled };
+
+    return culled;
+  }, [atlasTreeBlocks]);
+
+  // Log render state to init overlay (once per session)
+  if (!_loggedTreeBlocksReady && atlasTreeBlocks.length > 0) {
+    _loggedTreeBlocksReady = true;
+    const culledCount = atlasTreeBlocks.length - culledAtlasTreeBlocks.length;
+    initLogStep('PlacedBlocks.tsx', `Tree blocks loaded (${culledCount} interior culled)`, culledAtlasTreeBlocks.length);
+  }
+  if (!_loggedAtlasRendering && atlasReady && atlasTexture && culledAtlasTreeBlocks.length > 0) {
+    _loggedAtlasRendering = true;
+    initLogStep('PlacedBlocks.tsx', `Tree atlas rendering started`, culledAtlasTreeBlocks.length);
+  }
+
+  if (!_loggedNonTreeBlocks && groupedBlocks.size > 0) {
+    _loggedNonTreeBlocks = true;
+    const totalNonTreeBlocks = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
+    initLogStep('PlacedBlocks.tsx', `Non-tree blocks rendering`, totalNonTreeBlocks);
+  }
 
   // Don't render blocks until block definitions are loaded
   if (blockDefsLoading || blocks.length === 0) {
@@ -379,33 +427,63 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
 
   return (
     <>
+      {/* Render tree blocks with atlas (single draw call for ALL tree blocks) */}
+      {atlasReady && atlasTexture && culledAtlasTreeBlocks.length > 0 && (
+        <InstancedAtlasBlockGroup
+          key="tree-atlas"
+          blocks={culledAtlasTreeBlocks}
+          blockDef={TREE_BLOCK_FALLBACK}
+          geometry={geometry}
+          atlasTexture={atlasTexture}
+
+          showOwnershipOutline={showOwnershipOutline}
+          currentUserId={currentUserId}
+          hoveredBlockId={hoveredBlockId}
+          onMeshReady={onMeshReady ? (mesh) => onMeshReady('tree_atlas', mesh) : undefined}
+          performanceMode={effectivePerformanceMode}
+        />
+      )}
+
+      {/* Fallback: render tree blocks without atlas while loading */}
+      {(!atlasReady || !atlasTexture) && culledAtlasTreeBlocks.length > 0 && (
+        <InstancedBlockGroup
+          key="tree-fallback"
+          blocks={culledAtlasTreeBlocks}
+          blockDef={TREE_BLOCK_FALLBACK}
+          geometry={geometry}
+
+          showOwnershipOutline={showOwnershipOutline}
+          currentUserId={currentUserId}
+          hoveredBlockId={hoveredBlockId}
+          onMeshReady={onMeshReady ? (mesh) => onMeshReady('tree_fallback', mesh) : undefined}
+          performanceMode={effectivePerformanceMode}
+        />
+      )}
+
+      {/* Render non-tree blocks with individual textures */}
       {Array.from(groupedBlocks.entries()).map(([groupKey, { blocks: blocksOfType, textureOverride }]) => {
         // C2: Extract block_type from new groupKey format (blockType:default or blockType:tx:hash)
         const blockType = groupKey.split(':')[0];
-        
-        // For tree blocks (textureOverride OR encoded tree type), ALWAYS use fallback
-        // This prevents color tinting from the blocks table (e.g., brown "trunk" block)
-        // The fallback has white color so textures render at full brightness
-        // Also handles tree blocks without textures (like branches when branch_texture_url is null)
+
+        // Get block definition (non-tree blocks only now)
         let blockDef: BlockType | undefined;
-        if (textureOverride || isTreeBlockType(blockType)) {
+        if (textureOverride) {
           blockDef = TREE_BLOCK_FALLBACK;
         } else {
           blockDef = blocksMap.get(blockType);
+          // Use default fallback for user-placed blocks without database entries
+          if (!blockDef) {
+            blockDef = DEFAULT_BLOCK_FALLBACK;
+          }
         }
-        
-        if (!blockDef) {
-          // Skip blocks with missing definitions silently (common for deprecated/removed block types)
-          return null;
-        }
-        
+
         return (
           <InstancedBlockGroup
             key={groupKey}
             blocks={blocksOfType}
             blockDef={blockDef}
             geometry={geometry}
-            onCollision={handleBlockCollision}
+  
             showOwnershipOutline={showOwnershipOutline}
             currentUserId={currentUserId}
             hoveredBlockId={hoveredBlockId}
@@ -415,17 +493,9 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
           />
         );
       })}
-      
-      {/* Render subtle grey outlines for invisiblocks */}
-      {invisiblocks.map((block) => (
-        <lineSegments 
-          key={`invisi-outline-${block.id}`} 
-          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
-        >
-          <primitive object={invisiblockEdgesGeometry} attach="geometry" />
-          <primitive object={invisiblockOutlineMaterial} attach="material" />
-        </lineSegments>
-      ))}
+
+      {/* Invisiblock outlines disabled for performance (was creating N draw calls)
+          Set RENDER_INVISIBLOCK_OUTLINES = true to debug invisiblock positions */}
     </>
   );
 };

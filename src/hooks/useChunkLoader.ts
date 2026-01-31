@@ -6,16 +6,24 @@ import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStartStep, initLogFinishStep } from '@/contexts/InitializationContext';
 import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
+import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 import * as THREE from 'three';
 
 // Configuration for chunk loading
-const LOAD_RADIUS = 4;    // Chunks to load around player (9x9 = 81 chunks max)
-const UNLOAD_RADIUS = 6;  // Hysteresis: don't unload until this far away
+// LOAD_RADIUS is now dynamic — derived from loadRadius prop (defaults to 4)
+const DEFAULT_LOAD_RADIUS = 4;
+const UNLOAD_HYSTERESIS = 2;          // Extra chunks beyond load radius before unloading
 const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 
+// Budgeted unload configuration - prevents GC storms at chunk boundaries
+const MIN_RESIDENCY_MS = 4000;        // Don't unload chunks loaded less than 4s ago
+const COLLIDER_REMOVAL_BATCH = 200;   // Colliders to remove per frame during unload
+
+// B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
+const PREFETCH_ENABLED = false;
+
 // Phase 3A: Eviction configuration
-// MAX must be >= (2*UNLOAD_RADIUS+1)^2 = 169, plus buffer
-const MAX_LOADED_CHUNKS = 220;
 const EVICTION_BATCH_SIZE = 10;
 
 // Phase 3D: Cache configuration
@@ -41,17 +49,33 @@ interface PrefetchHandle {
   id: number;
 }
 
+// B4: Numeric chunk signature for O(1) world signature updates
+interface ChunkSignature {
+  count: number;
+  xor: number;
+  sum: number;
+}
+
 interface ChunkData {
   blocks: PlacedBlock[];
+  // Surface-only blocks for rendering (interior blocks culled via Uint8Array grid)
+  // Collision uses `blocks`; rendering uses `visibleBlocks ?? blocks`.
+  visibleBlocks?: PlacedBlock[];
   loadedAt: number;
   // Phase 3A: Track for LRU and pinning
   lastAccessedAt: number;
   hasOptimisticBlocks: boolean;
+  // B4: Numeric signature for incremental world signature tracking
+  signature: ChunkSignature;
 }
 
 interface UseChunkLoaderProps {
   worldId: string | null;
   onBlocksChanged: (blocks: PlacedBlock[]) => void;
+  // Phase 4: Revision callback for efficient dependency tracking
+  onRevisionChanged?: (revision: number) => void;
+  emitRadius?: number; // Only flatten/emit chunks within this radius (default: loadRadius)
+  loadRadius?: number; // Chunk load radius — matches user's visual distance setting
 }
 
 /**
@@ -121,7 +145,11 @@ const ensureBlockCollider = (block: PlacedBlock): void => {
 
   // Ensure collider is in the grid (may have been cleared by hot reload/world switch)
   if (!worldCollisionGrid.has(collider)) {
+    // D-Flow: Sample 1/32 collider ops for timing (keeps overhead low)
+    const shouldTime = (Math.random() * 32) < 1;
+    const t0 = shouldTime ? performance.now() : 0;
     worldCollisionGrid.insert(collider);
+    if (shouldTime) diagnostics.recordColliderOp('add', performance.now() - t0);
   }
 
   (block as any).__collider = collider;
@@ -135,7 +163,11 @@ const removeBlockCollider = (block: PlacedBlock): void => {
   const collider = cached ?? ((block as any).__collider as THREE.Box3 | null | undefined);
 
   if (collider) {
+    // D-Flow: Sample 1/32 collider ops for timing (keeps overhead low)
+    const shouldTime = (Math.random() * 32) < 1;
+    const t0 = shouldTime ? performance.now() : 0;
     worldCollisionGrid.remove(collider);
+    if (shouldTime) diagnostics.recordColliderOp('remove', performance.now() - t0);
   }
 
   colliderByBlockId.delete(block.id);
@@ -143,31 +175,138 @@ const removeBlockCollider = (block: PlacedBlock): void => {
 };
 
 /**
- * Check if two block arrays are equivalent (same blocks at same positions with same properties)
- * Used to skip unnecessary re-renders when refetch returns identical data
+ * Surface-only culling: removes fully-surrounded interior blocks per chunk.
+ * Uses a compact Uint8Array occupancy grid (16×16×H) for O(1) neighbor checks.
+ * Chunk-edge blocks are always kept (cross-chunk culling is too expensive).
+ * This is the "Minecraft approach" — render faces, not cubes.
  */
-const blocksAreEquivalent = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
-  if (a.length !== b.length) return false;
-  if (a.length === 0) return true;
-  
-  // Create position-keyed map for O(1) lookup
-  const mapA = new Map<string, PlacedBlock>();
-  for (const block of a) {
-    const key = `${block.position_x},${block.position_y},${block.position_z}`;
-    mapA.set(key, block);
+function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: PlacedBlock[]): PlacedBlock[] {
+  if (blocks.length < 50) return blocks; // Not worth culling tiny sets
+
+  const originX = chunkX * CHUNK_SIZE;
+  const originZ = chunkZ * CHUNK_SIZE;
+
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < blocks.length; i++) {
+    const y = blocks[i].position_y;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
   }
-  
-  for (const blockB of b) {
-    const key = `${blockB.position_x},${blockB.position_y},${blockB.position_z}`;
-    const blockA = mapA.get(key);
-    if (!blockA) return false;
-    
-    // Compare visual properties that affect rendering
-    if (blockA.block_type !== blockB.block_type) return false;
-    if (blockA.texture_url !== blockB.texture_url) return false;
+
+  const ySpan = (maxY - minY + 1);
+  if (ySpan <= 0 || ySpan > 2048) return blocks; // Safety fallback
+
+  const stride = 256; // 16 * 16 per Y layer
+  const occ = new Uint8Array(ySpan * stride);
+
+  // Fill occupancy grid
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const lx = b.position_x - originX;
+    const lz = b.position_z - originZ;
+    const ly = b.position_y - minY;
+
+    if (lx < 0 || lx >= 16 || lz < 0 || lz >= 16) continue;
+    occ[(ly * stride) + (lz * 16) + lx] = 1;
   }
-  
-  return true;
+
+  // Filter: keep blocks with at least one exposed face
+  const visible: PlacedBlock[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const lx = b.position_x - originX;
+    const lz = b.position_z - originZ;
+    const ly = b.position_y - minY;
+
+    // Out-of-chunk blocks: always keep (shouldn't happen, but safe)
+    if (lx < 0 || lx >= 16 || lz < 0 || lz >= 16) {
+      visible.push(b);
+      continue;
+    }
+
+    const base = (ly * stride) + (lz * 16) + lx;
+
+    // Chunk edges = always exposed (cross-chunk neighbors unknown)
+    const exposed =
+      (lx === 0) || (lx === 15) || (lz === 0) || (lz === 15) ||
+      (ly === 0) || (ly === ySpan - 1) ||
+      (occ[base - 1] === 0) || (occ[base + 1] === 0) ||       // ±X
+      (occ[base - 16] === 0) || (occ[base + 16] === 0) ||     // ±Z
+      (occ[base - stride] === 0) || (occ[base + stride] === 0); // ±Y
+
+    if (exposed) visible.push(b);
+  }
+
+  return visible;
+}
+
+/**
+ * B4: Fast integer mixing for numeric signatures (no strings, no allocations)
+ */
+const mix32 = (n: number): number => {
+  n |= 0;
+  n = Math.imul(n ^ (n >>> 16), 0x7feb352d);
+  n = Math.imul(n ^ (n >>> 15), 0x846ca68b);
+  return (n ^ (n >>> 16)) >>> 0;
+};
+
+/**
+ * B4: Compute numeric hash for a single block (no string creation)
+ * Uses FNV-1a style mixing with position, block_type hash, and branch_depth
+ */
+const blockSig32 = (b: PlacedBlock): number => {
+  let h = 2166136261 >>> 0; // FNV offset basis
+  h = Math.imul(h ^ mix32(b.position_x | 0), 16777619) >>> 0;
+  h = Math.imul(h ^ mix32(b.position_y | 0), 16777619) >>> 0;
+  h = Math.imul(h ^ mix32(b.position_z | 0), 16777619) >>> 0;
+  // Hash block_type string by summing char codes (fast, no allocation)
+  const bt = b.block_type || '';
+  let btHash = 0;
+  for (let i = 0; i < bt.length; i++) {
+    btHash = (btHash * 31 + bt.charCodeAt(i)) | 0;
+  }
+  h = Math.imul(h ^ mix32(btHash), 16777619) >>> 0;
+  h = Math.imul(h ^ mix32((b as any).branch_depth | 0), 16777619) >>> 0;
+  return h >>> 0;
+};
+
+/**
+ * B4: Compute numeric chunk signature - O(n) but no string allocations
+ * Returns {count, xor, sum} for incremental world signature updates
+ */
+function computeChunkSignature(blocks: PlacedBlock[]): ChunkSignature {
+  let xor = 0 >>> 0;
+  let sum = 0 >>> 0;
+  for (let i = 0; i < blocks.length; i++) {
+    const v = blockSig32(blocks[i]);
+    xor = (xor ^ v) >>> 0;
+    sum = (sum + v) >>> 0;
+  }
+  return { count: blocks.length, xor, sum };
+}
+
+// B4: Empty signature constant
+const EMPTY_CHUNK_SIG: ChunkSignature = { count: 0, xor: 0, sum: 0 };
+
+/**
+ * Sort blocks deterministically by position (y, x, z).
+ * Prevents reorder churn when the same blocks arrive in different order
+ * from server queries or cache reads. This stabilizes cheapGroupKey sampling
+ * in PlacedBlocks.tsx, avoiding false cache misses and unnecessary re-grouping.
+ * In-place sort, O(n log n) per chunk — negligible for typical chunk sizes.
+ */
+const sortBlocksDeterministic = (blocks: PlacedBlock[]): void => {
+  blocks.sort((a, b) =>
+    (a.position_y - b.position_y) ||
+    (a.position_x - b.position_x) ||
+    (a.position_z - b.position_z)
+  );
+};
+
+// B4: Compare two chunk signatures for equality
+const signaturesEqual = (a: ChunkSignature, b: ChunkSignature): boolean => {
+  return a.count === b.count && a.xor === b.xor && a.sum === b.sum;
 };
 
 /**
@@ -180,32 +319,47 @@ const blocksAreEquivalent = (a: PlacedBlock[], b: PlacedBlock[]): boolean => {
  * Phase 3.0: Single emit per frame batching
  * Phase 3A: Distance-aware eviction with LRU safety cap
  */
-export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps) {
+export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, emitRadius, loadRadius: loadRadiusProp }: UseChunkLoaderProps) {
+  // Dynamic radii based on user's visual distance setting
+  const LOAD_RADIUS = loadRadiusProp ?? DEFAULT_LOAD_RADIUS;
+  const UNLOAD_RADIUS = LOAD_RADIUS + UNLOAD_HYSTERESIS;
+  const MAX_LOADED_CHUNKS = (2 * UNLOAD_RADIUS + 1) ** 2 + 50;
+  // EMIT_RADIUS: Only flatten chunks within this radius for emit (reduces downstream processing)
+  const EMIT_RADIUS = emitRadius ?? LOAD_RADIUS;
   // Loaded chunks: Map<chunkKey, ChunkData>
   const loadedChunksRef = useRef<Map<string, ChunkData>>(new Map());
-  
+
   // Current player chunk position
   const playerChunkRef = useRef<{ x: number; z: number } | null>(null);
-  
+
+  // Atomic chunk transitions: load-before-unload with transition ID for rapid crossings
+  const transitionIdRef = useRef(0);
+
   // Throttle position updates
   const lastPositionUpdateRef = useRef(0);
-  
+
   // Track if initial load has happened
   const [isLoading, setIsLoading] = useState(true);
   const initialLoadDone = useRef(false);
-  
+
   // Track current world to clear on change
   const currentWorldRef = useRef<string | null>(null);
 
   // Phase 3.0: Single emit per frame batching
   const emitScheduledRef = useRef(false);
-  
+
   // Phase 4: Stable block array reference tracking
   // Only emit a new array if contents actually changed (prevents React re-renders)
   const lastEmittedBlocksRef = useRef<PlacedBlock[]>([]);
-  const lastEmittedSignatureRef = useRef<string>('');
-  // D2: Cheap key for fast precheck (length + first/last positions)
-  const lastEmittedCheapKeyRef = useRef<string>('');
+
+  // Phase 4: World revision counter - incremented when visible content changes
+  // Used by consumers for efficient useMemo dependencies
+  const worldRevisionRef = useRef(0);
+
+  // B4: Incremental world signature - updated when chunks change, checked in scheduleEmit
+  // This is O(1) to check instead of O(blocks) to compute
+  const worldSigRef = useRef<ChunkSignature>({ count: 0, xor: 0, sum: 0 });
+  const lastEmittedWorldKeyRef = useRef<string>('');
 
   // Phase 3E: Velocity tracking with ring buffer
   const posHistRef = useRef({
@@ -222,89 +376,112 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
   const lastDirRef = useRef<{ dx: number; dz: number } | null>(null);
 
   /**
-   * D2: Cheap O(1) world key for fast cache hit detection
-   * Only compute expensive visual signature when cheap key differs
+   * B4: Update world signature incrementally when a chunk changes
+   * This is O(1) - just XOR/add the old sig out and new sig in
    */
-  const generateCheapWorldKey = useCallback((allBlocks: PlacedBlock[]): string => {
-    const n = allBlocks.length;
-    if (n === 0) return '0';
-    const a = allBlocks[0];
-    const b = allBlocks[n - 1];
-    return `${n}|${a.id}|${b.id}|${a.position_x},${a.position_z}|${b.position_x},${b.position_z}`;
-  }, []);
-
-  /**
-   * C4: Generate a stable visual signature for block array comparison (EXPENSIVE - O(n))
-   * Uses XOR + sum of per-block hashes for order-insensitivity
-   * Includes position, block_type, canonical texture_url, and branch_depth
-   */
-  const generateBlockSignature = useCallback((blocks: PlacedBlock[]): string => {
-    if (blocks.length === 0) return '0';
-
-    let xor = 0;
-    let sum = 0;
-
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      const tx = canonicalizeTextureUrl(b.texture_url || '');
-      const s = `${b.position_x},${b.position_y},${b.position_z}|${b.block_type}|${tx}|${(b as any).branch_depth ?? ''}`;
-      const h = parseInt(fnv1a32(s), 16) >>> 0;
-      xor ^= h;
-      sum = (sum + h) >>> 0;
-    }
-
-    return `${blocks.length}:${xor.toString(16)}:${sum.toString(16)}`;
+  const applyChunkSigChange = useCallback((
+    prevSig: ChunkSignature,
+    nextSig: ChunkSignature
+  ): void => {
+    const ws = worldSigRef.current;
+    ws.count += (nextSig.count - prevSig.count);
+    // XOR is self-inverse: XOR out old, XOR in new
+    ws.xor = (ws.xor ^ prevSig.xor ^ nextSig.xor) >>> 0;
+    // For sum: subtract old, add new
+    ws.sum = (ws.sum - prevSig.sum + nextSig.sum) >>> 0;
   }, []);
 
   /**
    * Phase 3.0: Schedule a single emission per animation frame
    * This prevents multiple React updates from rapid chunk operations
-   * 
-   * D2 OPTIMIZATION: Uses cheap O(1) precheck before expensive O(n) signature.
-   * Cheap key catches 99% of "no change" cases.
+   *
+   * B4 OPTIMIZATION: World signature is maintained INCREMENTALLY via applyChunkSigChange.
+   * scheduleEmit just checks if worldSigRef changed - O(1), no iteration at all.
+   *
+   * @param immediate - If true, emit synchronously (for initial load). Otherwise use RAF batching.
    */
-  const scheduleEmit = useCallback(() => {
-    if (emitScheduledRef.current) return;
-    emitScheduledRef.current = true;
-
-    requestAnimationFrame(() => {
+  const scheduleEmit = useCallback((immediate = false) => {
+    // Helper to do the actual emit
+    const doEmit = () => {
       emitScheduledRef.current = false;
-      // Avoid `push(...arr)` which is slow and can create large argument lists.
-      let total = 0;
-      for (const chunkData of loadedChunksRef.current.values()) {
-        total += chunkData.blocks.length;
-      }
-      const allBlocks: PlacedBlock[] = new Array(total);
-      let idx = 0;
-      for (const chunkData of loadedChunksRef.current.values()) {
-        const blocks = chunkData.blocks;
-        for (let i = 0; i < blocks.length; i++) {
-          allBlocks[idx++] = blocks[i];
+
+      // Get player chunk position for EMIT_RADIUS filtering
+      const centerX = playerChunkRef.current?.x ?? 0;
+      const centerZ = playerChunkRef.current?.z ?? 0;
+
+      // B5: Compute visible-only signature (only chunks within EMIT_RADIUS)
+      // This prevents flattening ALL loaded chunks when we only render visible ones
+      let visibleBlockCount = 0;
+      let visibleChunkCount = 0;
+      let sigXor = 0 >>> 0;
+      let sigSum = 0 >>> 0;
+
+      for (let dx = -EMIT_RADIUS; dx <= EMIT_RADIUS; dx++) {
+        for (let dz = -EMIT_RADIUS; dz <= EMIT_RADIUS; dz++) {
+          const key = `chunk_${centerX + dx}_${centerZ + dz}`;
+          const chunkData = loadedChunksRef.current.get(key);
+          if (!chunkData) continue;
+
+          visibleChunkCount++;
+          // Use visibleBlocks (surface-only) for block count — interior blocks are culled
+          visibleBlockCount += (chunkData.visibleBlocks ?? chunkData.blocks).length;
+
+          // Use numeric signature from chunk (no string operations)
+          const cs = chunkData.signature;
+          sigXor = (sigXor ^ cs.xor) >>> 0;
+          sigSum = (sigSum + cs.sum) >>> 0;
         }
       }
-      
-      // D2: CHEAP precheck first (O(1)) - catches 99% of "no change" cases
-      const cheapKey = generateCheapWorldKey(allBlocks);
-      if (cheapKey === lastEmittedCheapKeyRef.current) {
-        // Cheap key matches - very likely same content, skip expensive signature
+
+      // Gate on visible-only signature
+      const visibleWorldKey = `${visibleChunkCount}:${visibleBlockCount}:${sigXor}:${sigSum}`;
+      if (visibleWorldKey === lastEmittedWorldKeyRef.current) {
         return;
       }
-      
-      // D2: SLOW PATH - cheap key differs, compute expensive O(n) signature
-      const newSignature = generateBlockSignature(allBlocks);
-      if (newSignature === lastEmittedSignatureRef.current) {
-        // Visual signature matches (order/IDs changed but content same) - update cheap key and skip emit
-        lastEmittedCheapKeyRef.current = cheapKey;
-        return;
+      lastEmittedWorldKeyRef.current = visibleWorldKey;
+
+      // Phase 4: Bump revision and notify callback
+      worldRevisionRef.current++;
+      if (onRevisionChanged) {
+        onRevisionChanged(worldRevisionRef.current);
       }
-      
-      // Content actually changed - emit
-      lastEmittedCheapKeyRef.current = cheapKey;
-      lastEmittedSignatureRef.current = newSignature;
+
+      // Only now do we flatten - only visible chunks within EMIT_RADIUS
+      const flattenT0 = performance.now();
+      const allBlocks: PlacedBlock[] = new Array(visibleBlockCount);
+      let idx = 0;
+
+      for (let dx = -EMIT_RADIUS; dx <= EMIT_RADIUS; dx++) {
+        for (let dz = -EMIT_RADIUS; dz <= EMIT_RADIUS; dz++) {
+          const key = `chunk_${centerX + dx}_${centerZ + dz}`;
+          const chunkData = loadedChunksRef.current.get(key);
+          if (!chunkData) continue;
+
+          // Emit only surface-visible blocks — interior blocks are culled per-chunk
+          const src = chunkData.visibleBlocks ?? chunkData.blocks;
+          for (let i = 0; i < src.length; i++) {
+            allBlocks[idx++] = src[i];
+          }
+        }
+      }
+
+      const flattenMs = performance.now() - flattenT0;
+      diagnostics.recordFlattenEmit(allBlocks.length, flattenMs);
+
       lastEmittedBlocksRef.current = allBlocks;
       onBlocksChanged(allBlocks);
-    });
-  }, [onBlocksChanged, generateCheapWorldKey, generateBlockSignature]);
+    };
+
+    if (immediate) {
+      // Synchronous emit for initial load
+      doEmit();
+    } else {
+      // Batched emit via RAF for runtime updates
+      if (emitScheduledRef.current) return;
+      emitScheduledRef.current = true;
+      requestAnimationFrame(doEmit);
+    }
+  }, [onBlocksChanged, onRevisionChanged]);
 
   /**
    * Flatten all loaded chunks into a single blocks array
@@ -312,16 +489,17 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    */
   const flattenLoadedBlocks = useCallback((): PlacedBlock[] => {
     // Same strategy as scheduleEmit, preallocate and copy.
+    // Uses visibleBlocks (surface-only) to avoid emitting interior blocks.
     let total = 0;
     for (const chunkData of loadedChunksRef.current.values()) {
-      total += chunkData.blocks.length;
+      total += (chunkData.visibleBlocks ?? chunkData.blocks).length;
     }
     const allBlocks: PlacedBlock[] = new Array(total);
     let idx = 0;
     for (const chunkData of loadedChunksRef.current.values()) {
-      const blocks = chunkData.blocks;
-      for (let i = 0; i < blocks.length; i++) {
-        allBlocks[idx++] = blocks[i];
+      const src = chunkData.visibleBlocks ?? chunkData.blocks;
+      for (let i = 0; i < src.length; i++) {
+        allBlocks[idx++] = src[i];
       }
     }
     return allBlocks;
@@ -360,13 +538,16 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Phase 3A: Evict LRU chunks as a safety cap
    * Only evicts non-pinned chunks when we exceed MAX_LOADED_CHUNKS
    */
+  /**
+   * B3: LRU eviction now uses budgeted work for collider removal
+   */
   const evictLRUChunks = useCallback(() => {
     const chunkCount = loadedChunksRef.current.size;
     if (chunkCount <= MAX_LOADED_CHUNKS) return;
 
     // Find non-pinned chunks sorted by lastAccessedAt (oldest first)
     const evictionCandidates: Array<{ key: string; lastAccessedAt: number }> = [];
-    
+
     for (const [key, data] of loadedChunksRef.current.entries()) {
       if (!isChunkPinned(key)) {
         evictionCandidates.push({ key, lastAccessedAt: data.lastAccessedAt });
@@ -378,22 +559,39 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
 
     // Evict up to EVICTION_BATCH_SIZE chunks
     const toEvict = evictionCandidates.slice(0, EVICTION_BATCH_SIZE);
-    
+
     if (toEvict.length > 0) {
       for (const { key } of toEvict) {
-        // Remove colliders for all blocks in this chunk before deleting
         const chunkData = loadedChunksRef.current.get(key);
+
         if (chunkData) {
-          for (const block of chunkData.blocks) {
-            removeBlockCollider(block);
-          }
+          // B4: Update world signature before removing chunk
+          applyChunkSigChange(chunkData.signature, EMPTY_CHUNK_SIG);
         }
+
+        // Remove from map immediately (visuals disappear)
         loadedChunksRef.current.delete(key);
+
+        if (chunkData && chunkData.blocks.length > 0) {
+          // B3: Enqueue budgeted job to remove colliders
+          const blocks = chunkData.blocks;
+          let idx = 0;
+
+          enqueueJob(`evict-colliders:${key}`, () => {
+            const end = Math.min(idx + COLLIDER_REMOVAL_BATCH, blocks.length);
+
+            for (; idx < end; idx++) {
+              removeBlockCollider(blocks[idx]);
+            }
+
+            return idx >= blocks.length;
+          });
+        }
       }
       // Use batched emit
       scheduleEmit();
     }
-  }, [isChunkPinned, scheduleEmit]);
+  }, [isChunkPinned, scheduleEmit, applyChunkSigChange]);
 
   /**
    * Add a block optimistically to the chunk loader's internal Map.
@@ -409,37 +607,52 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     
     if (chunkData) {
       // Check for duplicates at the same position
-      const existsAtPosition = chunkData.blocks.some(b => 
+      const existsAtPosition = chunkData.blocks.some(b =>
         b.position_x === block.position_x &&
         b.position_y === block.position_y &&
         b.position_z === block.position_z
       );
-      
+
       if (!existsAtPosition) {
+        // B4: Save old signature before modification
+        const oldSig = chunkData.signature;
         // Create collider for new block
         ensureBlockCollider(block);
-        chunkData.blocks.push(block);
+        // Phase 1: Create new array reference so React.memo detects the change per-chunk
+        chunkData.blocks = [...chunkData.blocks, block];
         // Phase 3A: Mark as having optimistic blocks (temp-*)
         if (block.id.startsWith('temp-')) {
           chunkData.hasOptimisticBlocks = true;
         }
         chunkData.lastAccessedAt = now;
-        // INSTANT: Synchronous callback - no batching, no delays
-        onBlocksChanged(flattenLoadedBlocks());
+        // B4: Update signature and world signature
+        const newSig = computeChunkSignature(chunkData.blocks);
+        chunkData.signature = newSig;
+        applyChunkSigChange(oldSig, newSig);
+        // Invalidate cached visibleBlocks — falls back to full blocks until next load/refetch.
+        chunkData.visibleBlocks = undefined;
+        // Batched emit via RAF — prevents rebuild storms from rapid block placements
+        scheduleEmit();
       }
     } else {
       // Chunk not loaded - create it with just this block for immediate visibility
       // Create collider for new block
       ensureBlockCollider(block);
+      const newBlocks = [block];
+      const newSig = computeChunkSignature(newBlocks);
       loadedChunksRef.current.set(chunkKey, {
-        blocks: [block],
+        blocks: newBlocks,
         loadedAt: now,
         lastAccessedAt: now,
-        hasOptimisticBlocks: block.id.startsWith('temp-')
+        hasOptimisticBlocks: block.id.startsWith('temp-'),
+        signature: newSig
+        // visibleBlocks intentionally undefined — tiny chunk, not worth culling
       });
-      onBlocksChanged(flattenLoadedBlocks());
+      // B4: Update world signature for new chunk
+      applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
+      scheduleEmit();
     }
-  }, [onBlocksChanged, flattenLoadedBlocks]);
+  }, [scheduleEmit, applyChunkSigChange]);
 
   /**
    * BATCH: Add multiple blocks at once with a SINGLE React re-render.
@@ -450,49 +663,69 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    */
   const addBlocksBatch = useCallback((blocks: PlacedBlock[]): void => {
     if (blocks.length === 0) return;
-    
+
     const now = Date.now();
-    let anyAdded = false;
-    
+    // B4: Track old signatures for chunks we'll modify
+    const oldSigs = new Map<string, ChunkSignature>();
+
     for (const block of blocks) {
       const chunkKey = getChunkKey(block.position_x, block.position_z);
       let chunkData = loadedChunksRef.current.get(chunkKey);
-      
+
       if (!chunkData) {
-        // Create chunk if needed
+        // Create chunk if needed - new chunks have empty signature
         chunkData = {
           blocks: [],
           loadedAt: now,
           lastAccessedAt: now,
-          hasOptimisticBlocks: false
+          hasOptimisticBlocks: false,
+          signature: EMPTY_CHUNK_SIG
         };
         loadedChunksRef.current.set(chunkKey, chunkData);
+        oldSigs.set(chunkKey, EMPTY_CHUNK_SIG);
+      } else if (!oldSigs.has(chunkKey)) {
+        // First modification to existing chunk - save old signature
+        oldSigs.set(chunkKey, chunkData.signature);
       }
-      
+
       // Check for duplicates at the same position
-      const existsAtPosition = chunkData.blocks.some(b => 
+      const existsAtPosition = chunkData.blocks.some(b =>
         b.position_x === block.position_x &&
         b.position_y === block.position_y &&
         b.position_z === block.position_z
       );
-      
+
       if (!existsAtPosition) {
         // Create collider for new block
         ensureBlockCollider(block);
+        // Phase 1: Create new array reference (batch — final copy done below in signature update)
         chunkData.blocks.push(block);
         if (block.id.startsWith('temp-')) {
           chunkData.hasOptimisticBlocks = true;
         }
         chunkData.lastAccessedAt = now;
-        anyAdded = true;
       }
     }
-    
-    // Single emit for ALL blocks via requestAnimationFrame
-    if (anyAdded) {
+
+    // B4: Update signatures for all modified chunks
+    // Phase 1: Create new array references for all modified chunks
+    if (oldSigs.size > 0) {
+      for (const [chunkKey, oldSig] of oldSigs) {
+        const chunkData = loadedChunksRef.current.get(chunkKey);
+        if (chunkData) {
+          // Phase 1: Create new array reference so React.memo detects the change
+          chunkData.blocks = [...chunkData.blocks];
+          const newSig = computeChunkSignature(chunkData.blocks);
+          chunkData.signature = newSig;
+          applyChunkSigChange(oldSig, newSig);
+          // Invalidate visibleBlocks — PlacedBlocks culling handles tree blocks at render time
+          chunkData.visibleBlocks = undefined;
+        }
+      }
+      // Single emit for ALL blocks via requestAnimationFrame
       scheduleEmit();
     }
-  }, [scheduleEmit]);
+  }, [scheduleEmit, applyChunkSigChange]);
 
   /**
    * Replace a temp block with the real server block (by position match)
@@ -548,43 +781,61 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           (oldBlock as any).__collider = null;
         }
         
-        chunkData.blocks[index] = preservedBlock;
+        // Phase 1: Create new array reference so React.memo detects the change per-chunk
+        const newBlocks = [...chunkData.blocks];
+        newBlocks[index] = preservedBlock;
+        chunkData.blocks = newBlocks;
         chunkData.lastAccessedAt = Date.now();
-        
+
         // Phase 3A: Recompute hasOptimisticBlocks after replacement
         chunkData.hasOptimisticBlocks = chunkData.blocks.some(b => b.id.startsWith('temp-'));
-        
+
         // Only trigger React re-render if visual properties changed
         if (visualChanged) {
-          onBlocksChanged(flattenLoadedBlocks());
+          // B4: Update signature and world signature
+          const oldSig = chunkData.signature;
+          const newSig = computeChunkSignature(chunkData.blocks);
+          chunkData.signature = newSig;
+          applyChunkSigChange(oldSig, newSig);
+          chunkData.visibleBlocks = undefined;
+          scheduleEmit();
         }
       }
     }
-  }, [onBlocksChanged, flattenLoadedBlocks]);
+  }, [scheduleEmit, applyChunkSigChange]);
 
   /**
    * Remove a block by ID from the chunk loader
    * Phase 3A: Update hasOptimisticBlocks when blocks are removed
    */
   const removeBlockById = useCallback((blockId: string): void => {
-    for (const chunkData of loadedChunksRef.current.values()) {
+    for (const [chunkKey, chunkData] of loadedChunksRef.current.entries()) {
       const index = chunkData.blocks.findIndex(b => b.id === blockId);
       if (index >= 0) {
+        // B4: Save old signature before modification
+        const oldSig = chunkData.signature;
+
         // Remove collider before removing block
         const block = chunkData.blocks[index];
         removeBlockCollider(block);
-        
-        chunkData.blocks.splice(index, 1);
+
+        // Phase 1: Create new array reference so React.memo detects the change per-chunk
+        chunkData.blocks = [...chunkData.blocks.slice(0, index), ...chunkData.blocks.slice(index + 1)];
         chunkData.lastAccessedAt = Date.now();
-        
+
         // Phase 3A: Recompute hasOptimisticBlocks after removal
         chunkData.hasOptimisticBlocks = chunkData.blocks.some(b => b.id.startsWith('temp-'));
-        
-        onBlocksChanged(flattenLoadedBlocks());
+        // B4: Update signature and world signature
+        const newSig = computeChunkSignature(chunkData.blocks);
+        chunkData.signature = newSig;
+        applyChunkSigChange(oldSig, newSig);
+        chunkData.visibleBlocks = undefined;
+
+        scheduleEmit();
         return;
       }
     }
-  }, [onBlocksChanged, flattenLoadedBlocks]);
+  }, [scheduleEmit, applyChunkSigChange]);
 
   /**
    * Load chunks in a bounding box around the player using a single query
@@ -614,7 +865,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       .lte('chunk_x', maxChunkX)
       .gte('chunk_z', minChunkZ)
       .lte('chunk_z', maxChunkZ)
-      .limit(10000);
+      .limit(50000);
 
     if (error) {
       console.error('Error loading chunks:', error);
@@ -643,28 +894,37 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         const chunkX = centerChunkX + dx;
         const chunkZ = centerChunkZ + dz;
         const chunkKey = `chunk_${chunkX}_${chunkZ}`;
-        
+
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
-        
+
+        // Deterministic sort to prevent reorder churn
+        sortBlocksDeterministic(chunkBlocks);
+
         // Create colliders for all blocks in this chunk
         for (const block of chunkBlocks) {
           ensureBlockCollider(block);
         }
-        
+
         // Store chunk data (even if empty - means we loaded it)
         // Phase 3A: Initialize with lastAccessedAt and hasOptimisticBlocks
-        loadedChunksRef.current.set(chunkKey, {
+        const newSig = computeChunkSignature(chunkBlocks);
+        const newChunkData: ChunkData = {
           blocks: chunkBlocks,
           loadedAt,
           lastAccessedAt: loadedAt,
-          hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-'))
-        });
+          hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-')),
+          signature: newSig
+        };
+        newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, chunkBlocks);
+        loadedChunksRef.current.set(chunkKey, newChunkData);
+        // B4: Update world signature for new chunk
+        applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
       }
     }
 
     // Phase 3.0: Use batched emit instead of synchronous callback
     scheduleEmit();
-  }, [worldId, scheduleEmit]);
+  }, [worldId, scheduleEmit, applyChunkSigChange]);
 
   /**
    * Phase 3D: Fetch chunk versions from server for a set of chunks
@@ -815,18 +1075,26 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     let cacheBlockCount = 0;
     for (const { x, z, blocks } of chunksFromCache) {
       const chunkKey = `chunk_${x}_${z}`;
+      // Deterministic sort to prevent reorder churn
+      sortBlocksDeterministic(blocks);
       // Create colliders for all blocks from cache
       for (const block of blocks) {
         ensureBlockCollider(block);
       }
       cacheBlockCount += blocks.length;
-      loadedChunksRef.current.set(chunkKey, {
+      const newSig = computeChunkSignature(blocks);
+      const newChunkData: ChunkData = {
         blocks,
         loadedAt,
         lastAccessedAt: loadedAt,
-        hasOptimisticBlocks: blocks.some(b => b.id.startsWith('temp-'))
-      });
-      
+        hasOptimisticBlocks: blocks.some(b => b.id.startsWith('temp-')),
+        signature: newSig
+      };
+      newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(x, z, blocks);
+      loadedChunksRef.current.set(chunkKey, newChunkData);
+      // B4: Update world signature for new chunk
+      applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
+
       // DEBUG: Log chunk (3,1) specifically
       if (x === 3 && z === 1) {
         console.log(`[ChunkLoader DEBUG] Chunk (3,1) from CACHE: ${blocks.length} blocks`);
@@ -853,9 +1121,12 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       let lastError: Error | null = null;
       let offset = 0;
       let hasMore = true;
-      
+
+      // D-Flow: Start timing fetch phase
+      const fetchT0 = performance.now();
+
       console.log(`[ChunkLoader DEBUG] Fetching chunks: worldId=${worldId}, bounds=(${minChunkX},${minChunkZ})-(${maxChunkX},${maxChunkZ}), wanted=${Array.from(wantedChunkKeys).join(',')}`);
-      
+
       while (hasMore) {
         const { data, error, count } = await supabase
           .from('placed_blocks')
@@ -894,6 +1165,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         }
       }
       
+      // D-Flow: End fetch timing, start build timing
+      const fetchMs = performance.now() - fetchT0;
+      const buildT0 = performance.now();
+
       console.log(`[ChunkLoader DEBUG] Pagination complete: ${blocks.length} total blocks fetched`);
 
       if (blocks.length === 0 && lastError) {
@@ -935,24 +1210,33 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       for (const { x, z } of chunksToFetchFromServer) {
         const chunkKey = `chunk_${x}_${z}`;
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
-        
+
+        // Deterministic sort to prevent reorder churn
+        sortBlocksDeterministic(chunkBlocks);
+
         // DEBUG: Log chunk (3,1) specifically
         if (x === 3 && z === 1) {
           console.log(`[ChunkLoader DEBUG] Chunk (3,1) from SERVER: ${chunkBlocks.length} blocks`);
         }
-        
+
         // Create colliders for all blocks from server
         for (const block of chunkBlocks) {
           ensureBlockCollider(block);
         }
         serverBlockCount += chunkBlocks.length;
         
-        loadedChunksRef.current.set(chunkKey, {
+        const newSig = computeChunkSignature(chunkBlocks);
+        const newChunkData: ChunkData = {
           blocks: chunkBlocks,
           loadedAt,
           lastAccessedAt: loadedAt,
-          hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-'))
-        });
+          hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-')),
+          signature: newSig
+        };
+        newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(x, z, chunkBlocks);
+        loadedChunksRef.current.set(chunkKey, newChunkData);
+        // B4: Update world signature for new chunk from server
+        applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
 
         // Prepare cache entry
         chunksToCache.push({
@@ -966,6 +1250,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         });
       }
 
+      // D-Flow: End build timing, record chunk load
+      const buildMs = performance.now() - buildT0;
+      diagnostics.recordChunkLoad(fetchMs, buildMs);
+
       initLogStep('useChunkLoader.ts', `Loaded from server: ${chunksToFetchFromServer.length} chunks, ${serverBlockCount} blocks`);
 
       // Batch save to cache (fire and forget)
@@ -978,8 +1266,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
 
     // FIX: Single consolidated emit after ALL data (cache + server) is loaded
+    // Use immediate emit during initial load for faster rendering
     initLogStep('useChunkLoader.ts', 'Emitting blocks to React state...');
-    scheduleEmit();
+    const isInitialLoad = !initialLoadDone.current;
+    scheduleEmit(isInitialLoad);
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
@@ -1340,7 +1630,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       .eq('world_id', worldId)
       .eq('chunk_x', chunkX)
       .eq('chunk_z', chunkZ)
-      .limit(5000);
+      .limit(20000);
 
     if (error) {
       console.error('Error refetching chunk:', error);
@@ -1375,10 +1665,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Merge: server blocks + unconfirmed optimistic blocks
     const mergedBlocks = [...activeServerBlocks, ...optimisticBlocks];
 
-    // Check if blocks actually changed before updating state
-    // This prevents unnecessary re-renders (tree flashing during growth)
-    const existingBlocks = existingChunkData.blocks;
-    const blocksChanged = !blocksAreEquivalent(existingBlocks, mergedBlocks);
+    // Deterministic sort to prevent reorder churn
+    sortBlocksDeterministic(mergedBlocks);
+
+    // B4: Check if blocks actually changed using numeric signature comparison
+    const oldSignature = existingChunkData.signature;
+    const newSignature = computeChunkSignature(mergedBlocks);
+    const blocksChanged = !signaturesEqual(oldSignature, newSignature);
 
     if (!blocksChanged) {
       // Data is identical - just update timestamp, skip state change and emit
@@ -1386,10 +1679,13 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       return; // Early exit - no visual change needed
     }
 
+    // B4: Update world signature incrementally
+    applyChunkSigChange(oldSignature, newSignature);
+
     // FIX: Remove colliders for blocks that no longer exist (ghost collider cleanup)
     // This prevents invisible collision barriers from deleted blocks (e.g., chopped trees)
     const mergedBlockIds = new Set(mergedBlocks.map(b => b.id));
-    for (const oldBlock of existingBlocks) {
+    for (const oldBlock of existingChunkData.blocks) {
       if (!mergedBlockIds.has(oldBlock.id)) {
         removeBlockCollider(oldBlock);
       }
@@ -1401,12 +1697,15 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
 
     // Update chunk data with Phase 3A fields (only if blocks changed)
-    loadedChunksRef.current.set(chunkKey, {
+    const refetchedChunkData: ChunkData = {
       blocks: mergedBlocks,
       loadedAt,
       lastAccessedAt: loadedAt,
-      hasOptimisticBlocks: optimisticBlocks.length > 0
-    });
+      hasOptimisticBlocks: optimisticBlocks.length > 0,
+      signature: newSignature
+    };
+    refetchedChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, mergedBlocks);
+    loadedChunksRef.current.set(chunkKey, refetchedChunkData);
 
     // Phase 3D: Update cache with server data (only if no optimistic blocks)
     // We skip caching if there are optimistic blocks to avoid caching temp data
@@ -1433,47 +1732,66 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Unload chunks that are beyond UNLOAD_RADIUS from player
    * Phase 3.0: Uses scheduleEmit for batched emission
    * Phase 3A: Respects pinned chunks (those with optimistic blocks)
+   * B3: Uses budgeted work to spread collider removal across frames (prevents GC storms)
+   *
+   * CRITICAL FIX: All chunk data removals happen immediately with a SINGLE emit.
+   * Previously, deferred unloads each triggered separate emits, causing cascading
+   * O(N) incremental updates in InstancedAtlasBlockGroup (one per deferred chunk).
+   * Only collider removal is budgeted (the slow part), not the data/emit path.
    */
   const unloadDistantChunks = useCallback((centerChunkX: number, centerChunkZ: number) => {
-    const chunksToUnload: string[] = [];
-    
-    for (const chunkKey of loadedChunksRef.current.keys()) {
+    const now = Date.now();
+    let removedAny = false;
+
+    for (const [chunkKey, chunkData] of loadedChunksRef.current) {
       const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
       if (!match) continue;
-      
+
       const chunkX = parseInt(match[1], 10);
       const chunkZ = parseInt(match[2], 10);
-      
+
       // Use Chebyshev distance (max of dx, dz)
       const dx = Math.abs(chunkX - centerChunkX);
       const dz = Math.abs(chunkZ - centerChunkZ);
       const distance = Math.max(dx, dz);
-      
+
       if (distance > UNLOAD_RADIUS) {
         // Phase 3A: Don't unload chunks with optimistic blocks
-        const chunkData = loadedChunksRef.current.get(chunkKey);
-        if (chunkData?.hasOptimisticBlocks) {
-          continue; // Skip - has pending optimistic blocks
+        if (chunkData.hasOptimisticBlocks) continue;
+
+        // B3: Don't unload chunks that were loaded recently (prevents thrashing)
+        if (now - chunkData.loadedAt < MIN_RESIDENCY_MS) continue;
+
+        // D-Flow: Record chunk unload
+        diagnostics.recordChunkUnload();
+
+        // B4: Update world signature before removing
+        applyChunkSigChange(chunkData.signature, EMPTY_CHUNK_SIG);
+
+        // Remove chunk data immediately (so next emit reflects removal)
+        loadedChunksRef.current.delete(chunkKey);
+        removedAny = true;
+
+        // Budget only the collider removal (the expensive part)
+        if (chunkData.blocks.length > 0) {
+          const blocks = chunkData.blocks;
+          let idx = 0;
+          enqueueJob(`unload-colliders:${chunkKey}`, () => {
+            const end = Math.min(idx + COLLIDER_REMOVAL_BATCH, blocks.length);
+            for (; idx < end; idx++) {
+              removeBlockCollider(blocks[idx]);
+            }
+            return idx >= blocks.length;
+          });
         }
-        chunksToUnload.push(chunkKey);
       }
     }
 
-    if (chunksToUnload.length > 0) {
-      for (const key of chunksToUnload) {
-        // Remove colliders for all blocks in this chunk before deleting
-        const chunkData = loadedChunksRef.current.get(key);
-        if (chunkData) {
-          for (const block of chunkData.blocks) {
-            removeBlockCollider(block);
-          }
-        }
-        loadedChunksRef.current.delete(key);
-      }
-      // Phase 3.0: Use batched emit
+    // Single emit for ALL removals — prevents cascading incremental updates
+    if (removedAny) {
       scheduleEmit();
     }
-  }, [scheduleEmit]);
+  }, [scheduleEmit, applyChunkSigChange]);
 
   /**
    * Update player position - called by game controller
@@ -1494,7 +1812,10 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     addPositionSample(worldX, worldZ, now);
 
     // Phase 3E: ALWAYS try to enqueue prefetch (runs even when still in same chunk)
-    enqueuePrefetch(worldX, worldZ, now);
+    // B4: Disabled temporarily to isolate stutter sources
+    if (PREFETCH_ENABLED) {
+      enqueuePrefetch(worldX, worldZ, now);
+    }
 
     const newChunkX = Math.floor(worldX / CHUNK_SIZE);
     const newChunkZ = Math.floor(worldZ / CHUNK_SIZE);
@@ -1522,7 +1843,9 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       }
 
       // Phase 3B: Use incremental stripe loading for movement
-      // FIX: Fire-and-forget to avoid blocking the render loop during movement
+      // ATOMIC TRANSITIONS: Load new chunks FIRST, then unload old ones.
+      // This prevents the intermediate "smaller world" state that caused
+      // unnecessary mesh rebuilds and visual pop-in at chunk boundaries.
       if (hadPrevChunk) {
         // Calculate stripe chunks for the movement direction
         const stripeChunks = getStripeChunks(
@@ -1530,23 +1853,45 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
           newChunkX, newChunkZ,
           LOAD_RADIUS
         );
-        
+
         if (stripeChunks.length > 0) {
-          // Don't await - let chunks load asynchronously without blocking frames
-          loadSpecificChunks(stripeChunks).catch(err => {
-            console.warn('Stripe chunk load error:', err);
-          });
+          // Increment transition ID so rapid crossings discard stale completions
+          const transitionId = ++transitionIdRef.current;
+
+          loadSpecificChunks(stripeChunks)
+            .then(() => {
+              // Only unload if this is still the latest transition
+              if (transitionIdRef.current !== transitionId) return;
+
+              // Use CURRENT player position (not stale position from call time)
+              const currentChunk = playerChunkRef.current;
+              if (currentChunk) {
+                unloadDistantChunks(currentChunk.x, currentChunk.z);
+                evictLRUChunks();
+              }
+            })
+            .catch(err => {
+              console.warn('Stripe chunk load error:', err);
+              // Still unload on error to prevent unbounded memory growth
+              if (transitionIdRef.current !== transitionId) return;
+              const currentChunk = playerChunkRef.current;
+              if (currentChunk) {
+                unloadDistantChunks(currentChunk.x, currentChunk.z);
+                evictLRUChunks();
+              }
+            });
+        } else {
+          // No new chunks needed (all already loaded), safe to unload immediately
+          unloadDistantChunks(newChunkX, newChunkZ);
+          evictLRUChunks();
         }
       } else {
         // No previous chunk - do full initial load (this one can block as it's startup)
         await loadChunksInRadius(newChunkX, newChunkZ, LOAD_RADIUS);
+        // After initial load, clean up any stale chunks
+        unloadDistantChunks(newChunkX, newChunkZ);
+        evictLRUChunks();
       }
-
-      // Unload distant chunks
-      unloadDistantChunks(newChunkX, newChunkZ);
-      
-      // Phase 3A: Run LRU eviction as safety cap
-      evictLRUChunks();
     }
   }, [worldId, loadChunksInRadius, loadSpecificChunks, getStripeChunks, unloadDistantChunks, evictLRUChunks, addPositionSample, enqueuePrefetch]);
 
@@ -1578,8 +1923,11 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     if (colliderStepId) initLogFinishStep(colliderStepId, removedColliders);
     
     loadedChunksRef.current.clear();
+    // B4: Reset world signature when clearing chunks for new world
+    worldSigRef.current = { count: 0, xor: 0, sum: 0 };
+    lastEmittedWorldKeyRef.current = '';
     initLogStep('useChunkLoader.ts', 'Chunk cache cleared');
-    
+
     initLogStep('useChunkLoader.ts', 'Collision grid size after clear', worldCollisionGrid.size);
     
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
@@ -1595,13 +1943,20 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Phase 3C: Use progressive ring loading for smoother initial experience
     const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
     initLogStep('useChunkLoader.ts', `Loading ${totalChunks} chunks (radius ${LOAD_RADIUS})...`);
-    
+
     // C7: Track overall ring loading with start/finish
+    // Load ring 0 first and yield to let React render closest blocks
     for (let ring = 0; ring <= LOAD_RADIUS; ring++) {
       const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
       const ringStepId = initLogStartStep('useChunkLoader.ts', `Loading ring ${ring} (${ringChunks.length} chunks)...`);
       await loadSpecificChunks(ringChunks);
       if (ringStepId) initLogFinishStep(ringStepId, ringChunks.length);
+
+      // After ring 0 (center), yield to let React render the closest blocks
+      // This provides faster visual feedback while outer rings load
+      if (ring === 0) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
     }
     
     initLogStep('useChunkLoader.ts', 'All chunk rings loaded', totalChunks);
@@ -1617,7 +1972,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
       }
     }
     initLogStep('useChunkLoader.ts', 'Total blocks in memory', totalBlocks);
-    
+
     // OPTIMIZATION: Limit block type logging to top 5 to prevent init panel spam
     const sortedTypes = Array.from(blockTypeCounts.entries()).sort((a, b) => b[1] - a[1]);
     const topTypes = sortedTypes.slice(0, 5);
@@ -1638,15 +1993,19 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
    * Clear all chunks (on world change)
    * Phase 3E: Also resets prefetch state
    * FIXED: Now properly removes all block colliders before clearing
+   * B3: Also clears pending budgeted work jobs
    */
   const clearAllChunks = useCallback(() => {
+    // B3: Cancel any pending collider removal jobs before clearing
+    clearPendingJobs();
+
     // CRITICAL: Remove all block colliders from the collision grid before clearing chunks
     for (const [, chunkData] of loadedChunksRef.current) {
       for (const block of chunkData.blocks) {
         removeBlockCollider(block);
       }
     }
-    
+
     // CRITICAL FIX: Clear the canonical collider cache to prevent memory leaks
     // This ensures old colliders don't accumulate across world switches
     colliderByBlockId.clear();
@@ -1655,10 +2014,14 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     playerChunkRef.current = null;
     initialLoadDone.current = false;
     emitScheduledRef.current = false; // Cancel any pending emit
-    
+
+    // B4: Reset world signature when clearing all chunks
+    worldSigRef.current = { count: 0, xor: 0, sum: 0 };
+    lastEmittedWorldKeyRef.current = '';
+
     // Phase 3E: Reset prefetch state
     resetPrefetchState();
-    
+
     // Emit empty blocks to clear the UI
     onBlocksChanged([]);
   }, [resetPrefetchState, onBlocksChanged]);
@@ -1727,7 +2090,9 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     // Iterate through all loaded chunks and filter out matching blocks
     for (const [chunkKey, chunkData] of loadedChunksRef.current.entries()) {
       const originalLength = chunkData.blocks.length;
-      
+      // B4: Save old signature before modification
+      const oldSig = chunkData.signature;
+
       // Filter blocks, removing colliders for deleted blocks
       chunkData.blocks = chunkData.blocks.filter(block => {
         const posKey = `${block.position_x},${block.position_y},${block.position_z}`;
@@ -1740,9 +2105,14 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
         return true; // Keep in array
       });
 
-      // Update lastAccessedAt if blocks were removed
+      // Update lastAccessedAt and signature if blocks were removed
       if (chunkData.blocks.length !== originalLength) {
         chunkData.lastAccessedAt = Date.now();
+        // B4: Update signature and world signature
+        const newSig = computeChunkSignature(chunkData.blocks);
+        chunkData.signature = newSig;
+        applyChunkSigChange(oldSig, newSig);
+        chunkData.visibleBlocks = undefined;
       }
     }
 
@@ -1752,7 +2122,26 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     }
 
     return removedCount;
-  }, [scheduleEmit]);
+  }, [scheduleEmit, applyChunkSigChange]);
+
+  /**
+   * Refresh all currently loaded chunks - used after missing tree blocks are restored
+   * This refetches all loaded chunks from the server to pick up any blocks
+   * that were inserted by the sync_all_missing_tree_blocks RPC.
+   */
+  const refreshLoadedChunks = useCallback(async (): Promise<void> => {
+    if (!worldId) return;
+
+    const chunkKeys = Array.from(loadedChunksRef.current.keys());
+    for (const chunkKey of chunkKeys) {
+      const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
+      if (!match) continue;
+
+      const chunkX = parseInt(match[1], 10);
+      const chunkZ = parseInt(match[2], 10);
+      await refetchSingleChunk(chunkX, chunkZ);
+    }
+  }, [worldId, refetchSingleChunk]);
 
   // Return stable object using useMemo to prevent dependency cascades
   return useMemo(() => ({
@@ -1760,6 +2149,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     updatePlayerPosition,
     initializeForWorld,
     refetchSingleChunk,
+    refreshLoadedChunks, // For restoring missing tree blocks
     clearAllChunks,
     getLoadedChunkKeys,
     isChunkLoaded,
@@ -1777,6 +2167,7 @@ export function useChunkLoader({ worldId, onBlocksChanged }: UseChunkLoaderProps
     updatePlayerPosition,
     initializeForWorld,
     refetchSingleChunk,
+    refreshLoadedChunks,
     clearAllChunks,
     getLoadedChunkKeys,
     isChunkLoaded,

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-type PanelTab = 'user' | 'level' | 'wallet' | 'kills' | 'blocks' | 'market' | 'trees';
+type PanelTab = 'user' | 'level' | 'wallet' | 'items' | 'kills' | 'blocks' | 'market' | 'trees';
 
 interface UserPanelContextType {
   isOpen: boolean;

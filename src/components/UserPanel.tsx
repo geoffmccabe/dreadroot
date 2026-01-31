@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { useUserData } from '@/hooks/useUserData';
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { BlockType } from '@/types/blocks';
@@ -19,6 +20,7 @@ import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { LevelTab } from '@/components/LevelTab';
 import { KillsTab } from '@/components/KillsTab';
 import { TreesTab } from '@/components/TreesTab';
+import { ItemsTab } from '@/components/ItemsTab';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useCurrentWorldId } from '@/hooks/useCurrentWorldId';
 
@@ -71,12 +73,15 @@ interface UserPanelProps {
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
-  const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateVisualDistance, updateFogEnabled, refreshData } = useUserData();
+  const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateDisplayName, updateAvatarUrl, updateVisualDistance, updateFogEnabled, refreshData } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const { currentTheme } = useCoinTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const [visualDistance, setVisualDistance] = useState(4);
   const [fogEnabled, setFogEnabled] = useState(true);
+  const [displayName, setDisplayName] = useState('');
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [panelSize, setPanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
@@ -169,6 +174,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     }
   }, [tokenBalance?.blockchain_address]);
 
+  // Sync display name with profile
+  useEffect(() => {
+    if (profile?.display_name !== undefined) {
+      setDisplayName(profile.display_name || '');
+    }
+  }, [profile?.display_name]);
+
   // Sync visual distance with profile
   useEffect(() => {
     if (profile?.visual_distance !== undefined) {
@@ -202,6 +214,77 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const handleFogToggle = async (checked: boolean) => {
     setFogEnabled(checked); // Update local state immediately
     await updateFogEnabled(checked); // Save to database
+  };
+
+  const handleDisplayNameBlur = async () => {
+    if (displayName !== (profile?.display_name || '')) {
+      await updateDisplayName(displayName);
+    }
+  };
+
+  const handleDisplayNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+
+    setAvatarUploading(true);
+    try {
+      // For animated GIFs, upload directly without canvas processing
+      const isGif = file.type === 'image/gif';
+
+      let blob: Blob;
+      if (isGif) {
+        blob = file;
+      } else {
+        // Load image into canvas, crop to square, resize to 256x256, export as webp
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = URL.createObjectURL(file);
+        });
+
+        const size = Math.min(img.width, img.height);
+        const sx = (img.width - size) / 2;
+        const sy = (img.height - size) / 2;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, 256, 256);
+
+        blob = await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b!), 'image/webp', 0.85);
+        });
+      }
+
+      const ext = isGif ? 'gif' : 'webp';
+      const path = `avatar_${user.id}_${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('block-textures')
+        .upload(path, blob, { upsert: true, contentType: isGif ? 'image/gif' : 'image/webp' });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('block-textures')
+        .getPublicUrl(path);
+
+      await updateAvatarUrl(urlData.publicUrl);
+    } catch (err: any) {
+      console.error('User image upload failed:', err);
+    } finally {
+      setAvatarUploading(false);
+      // Reset input so same file can be re-selected
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
   };
 
   const handleBuyBlock = async (itemKey: string, cost: number) => {
@@ -254,10 +337,11 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className={`grid w-full ${showTreesTab ? 'grid-cols-7' : 'grid-cols-6'}`}>
+          <TabsList className={`grid w-full ${showTreesTab ? 'grid-cols-8' : 'grid-cols-7'}`}>
             <TabsTrigger value="user">User</TabsTrigger>
             <TabsTrigger value="level">Level</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
+            <TabsTrigger value="items">Items</TabsTrigger>
             <TabsTrigger value="kills">Kills</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
             <TabsTrigger value="market">Market</TabsTrigger>
@@ -275,9 +359,79 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             }}
           >
             <Card className="p-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Email</Label>
-                <div className="text-lg font-semibold">{user?.email || 'Not logged in'}</div>
+              <div className="flex gap-4">
+                {/* Left: Name + Email */}
+                <div className="flex-1 space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">User Name</Label>
+                    <Input
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      onBlur={handleDisplayNameBlur}
+                      onKeyDown={handleDisplayNameKeyDown}
+                      placeholder="Enter display name..."
+                      className="h-8"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Email</Label>
+                    <div className="text-sm font-semibold">{user?.email || 'Not logged in'}</div>
+                  </div>
+                </div>
+
+                {/* Right: User Image */}
+                <div className="flex flex-col items-center gap-1">
+                  <div
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="cursor-pointer relative"
+                    title="Click to upload user image"
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      borderRadius: '50%',
+                      overflow: 'hidden',
+                      border: '2px solid hsl(var(--border))',
+                      background: 'hsl(var(--muted))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {profile?.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt="User Image"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                    )}
+                    {avatarUploading && (
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '11px',
+                      }}>
+                        Uploading...
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/gif,image/webp,image/png"
+                    onChange={handleAvatarUpload}
+                    style={{ display: 'none' }}
+                  />
+                </div>
               </div>
             </Card>
 
@@ -382,6 +536,19 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 />
               </div>
             </Card>
+          </TabsContent>
+
+          {/* Items Tab */}
+          <TabsContent
+            value="items"
+            className="overflow-y-auto"
+            style={{
+              height: `${panelSize.height - 104}px`,
+              marginTop: 0,
+              paddingTop: '1rem'
+            }}
+          >
+            <ItemsTab />
           </TabsContent>
 
           {/* Kills Tab */}

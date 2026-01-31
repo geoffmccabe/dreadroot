@@ -106,7 +106,7 @@ export function PulsingSeedBlocks({ blocks, seedTexturesByTier }: PulsingSeedBlo
   const fruitBlocks = useMemo(() => {
     return blocks.filter(b => getBaseTreeBlockType(b.block_type) === 'fruit');
   }, [blocks]);
-  
+
   if (fruitBlocks.length === 0) return null;
   
   return (

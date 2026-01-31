@@ -78,12 +78,12 @@ export function useFruitPickup({
     onFruitCollected?.(closestFruit);
   }, [userId, cameraRef, treeFruits, toast, onFruitCollected]);
 
-  // Listen for E key
+  // Listen for F key
   useEffect(() => {
     if (!isLocked || !TREE_CONFIG.ENABLED) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyE') {
+      if (e.code === 'KeyF') {
         collectNearbyFruit();
       }
     };

@@ -27,7 +27,7 @@ export function createAudioRefs() {
     gunshot: new Audio('/space_gunshot.mp3'),
     coinHit: new Audio('/coin_hit_sound.mp3'),
     woodenThud: new Audio('/wooden_thud_sound.mp3'),
-    wispBoom: new Audio('/space_gunshot.mp3'),
+    wispBoom: new Audio('/wisp_death.mp3'),
     wispCheer: new Audio('/coin_hit_sound.mp3'),
     // Shwarm sounds
     shwarmHit: new Audio('/brick_drop_sound.mp3'),
@@ -164,5 +164,155 @@ export function createThrottledAudioPlayer(throttleMs: number = 100) {
     } catch (e) {
       console.warn('Audio play failed:', e);
     }
+  };
+}
+
+// ============== AMBIENT AUDIO ==============
+
+const DEFAULT_AMBIENT_URL = '/ambient_alien_planet_bkgd_1.mp3';
+const DEFAULT_AMBIENT_VOLUME = 100; // 100% = 0.3 base volume
+
+let ambientAudio: HTMLAudioElement | null = null;
+let ambientAudioLoaded = false;
+let currentAmbientUrl: string | null = null;
+let currentVolumePercent = DEFAULT_AMBIENT_VOLUME;
+
+// Convert 0-200% slider to actual volume (0-200% maps to 0-0.6 audio volume)
+function percentToVolume(percent: number): number {
+  return (percent / 100) * 0.3; // 100% = 0.3, 200% = 0.6
+}
+
+/**
+ * Preload ambient audio during initialization
+ * Returns a promise that resolves when audio is loaded
+ */
+export async function preloadAmbientAudio(url?: string | null): Promise<boolean> {
+  const targetUrl = url || DEFAULT_AMBIENT_URL;
+
+  // If same URL is already loaded, just return true
+  if (ambientAudioLoaded && ambientAudio && currentAmbientUrl === targetUrl) {
+    return true;
+  }
+
+  // If different URL, stop current and load new
+  if (ambientAudio && currentAmbientUrl !== targetUrl) {
+    stopAmbientAudio();
+    ambientAudioLoaded = false;
+  }
+
+  currentAmbientUrl = targetUrl;
+
+  return new Promise((resolve) => {
+    try {
+      ambientAudio = new Audio(targetUrl);
+      ambientAudio.volume = percentToVolume(currentVolumePercent);
+      ambientAudio.loop = true;
+      ambientAudio.preload = 'auto';
+
+      ambientAudio.addEventListener('canplaythrough', () => {
+        ambientAudioLoaded = true;
+        resolve(true);
+      }, { once: true });
+
+      ambientAudio.addEventListener('error', (e) => {
+        console.warn('[AmbientAudio] Failed to load:', e);
+        resolve(false);
+      }, { once: true });
+
+      // Start loading
+      ambientAudio.load();
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (!ambientAudioLoaded) {
+          console.warn('[AmbientAudio] Load timeout');
+          resolve(false);
+        }
+      }, 10000);
+    } catch (e) {
+      console.warn('[AmbientAudio] Error creating audio element:', e);
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * Start playing the ambient audio (call after initialization completes)
+ */
+export function startAmbientAudio(): void {
+  if (!ambientAudio || !ambientAudioLoaded) {
+    console.warn('[AmbientAudio] Not loaded yet');
+    return;
+  }
+
+  ambientAudio.play().catch((e) => {
+    // Autoplay blocked - will need user interaction
+    console.warn('[AmbientAudio] Autoplay blocked, waiting for user interaction');
+
+    // Add one-time click handler to start audio
+    const startOnInteraction = () => {
+      if (ambientAudio) {
+        ambientAudio.play().catch(() => {});
+      }
+      document.removeEventListener('click', startOnInteraction);
+      document.removeEventListener('keydown', startOnInteraction);
+    };
+
+    document.addEventListener('click', startOnInteraction, { once: true });
+    document.addEventListener('keydown', startOnInteraction, { once: true });
+  });
+}
+
+/**
+ * Stop the ambient audio
+ */
+export function stopAmbientAudio(): void {
+  if (ambientAudio) {
+    ambientAudio.pause();
+    ambientAudio.currentTime = 0;
+  }
+}
+
+/**
+ * Set ambient audio volume (0-200 percent scale)
+ */
+export function setAmbientVolume(percent: number): void {
+  currentVolumePercent = Math.max(0, Math.min(200, percent));
+  if (ambientAudio) {
+    ambientAudio.volume = percentToVolume(currentVolumePercent);
+  }
+}
+
+/**
+ * Change ambient music track (loads and plays new track)
+ */
+export async function changeAmbientTrack(url: string | null, volumePercent?: number): Promise<void> {
+  if (volumePercent !== undefined) {
+    currentVolumePercent = volumePercent;
+  }
+
+  if (!url) {
+    stopAmbientAudio();
+    currentAmbientUrl = null;
+    ambientAudioLoaded = false;
+    return;
+  }
+
+  const wasPlaying = ambientAudio && !ambientAudio.paused;
+  await preloadAmbientAudio(url);
+
+  if (wasPlaying) {
+    startAmbientAudio();
+  }
+}
+
+/**
+ * Get current ambient audio state
+ */
+export function getAmbientAudioState(): { url: string | null; volume: number; isPlaying: boolean } {
+  return {
+    url: currentAmbientUrl,
+    volume: currentVolumePercent,
+    isPlaying: ambientAudio ? !ambientAudio.paused : false
   };
 }

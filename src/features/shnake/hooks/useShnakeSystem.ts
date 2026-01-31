@@ -8,7 +8,7 @@ import type { ShnakeDefinition, ShnakeInstance, ShnakeSegment } from '../types';
 // Debug flag - disable in production for FPS
 const DEBUG_SHNAKE = false;
 
-const LENGTH_BASE = 10; // length = 10 + tier
+const LENGTH_BASE = 2; // length = 2 + tier
 const CHUNK_SIZE = 16;
 const SPAWN_COOLDOWN_MS = 30000; // 30 second cooldown after failed spawn
 const REBUILD_INTERVAL_MS = 5000; // Rebuild index every 5 seconds (was 1s)
@@ -225,9 +225,12 @@ export function useShnakeSystem({
   }, []);
 
   const spawnOnTree = useCallback((tree: PlantedTree): ShnakeInstance | null => {
+    // Skip fungal trees - shnakes only spawn on ordinary trees
+    if (tree.seed_definition?.tree_type === 'fungal') return null;
+
     const tier = (tree as any).seed_tier ?? tree.seed_definition?.tier ?? 1;
     const def = defsByTier.get(tier);
-    
+
     if (!def) {
       if (DEBUG_SHNAKE) console.log(`[Shnake Spawn] No definition found for tier ${tier}`);
       return null;
@@ -371,6 +374,9 @@ export function useShnakeSystem({
       const now = Date.now();
       
       for (const tree of trees) {
+        // Skip fungal trees - shnakes only spawn on ordinary trees
+        if (tree.seed_definition?.tree_type === 'fungal') continue;
+
         const count = countShnakesOnTree(tree.id);
         if (count === 0) {
           // Check cooldown for this tree

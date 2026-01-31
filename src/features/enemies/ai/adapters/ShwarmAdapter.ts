@@ -16,6 +16,7 @@ import type {
 } from '../types';
 import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
+import { isPointInFSZ } from '../fortressSafeZone';
 import { 
   applyShwarmMove, 
   getOrCreateBlockTarget,
@@ -186,7 +187,7 @@ export const ShwarmAdapter: EnemyAdapter<ShwarmWithAI> = {
       pz: shared.playerZ,
       
       distToPlayer,
-      hasLineOfSight: true, // Shwarms fly, assume LOS
+      hasLineOfSight: !isPointInFSZ(shared.playerX, shared.playerY, shared.playerZ),
       
       health: totalHealth,
       maxHealth: maxHealth || 1,

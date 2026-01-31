@@ -50,6 +50,9 @@ class FrameLoopRegistry {
     }
   }
   
+  // Per-callback timing for diagnostics
+  private callbackTimes: Map<string, number> = new Map();
+
   /**
    * Run all registered callbacks
    * Called from the single master useFrame hook
@@ -60,17 +63,44 @@ class FrameLoopRegistry {
       this.callbacks.sort((a, b) => a.priority - b.priority);
       this.sorted = true;
     }
-    
+
     // F1: Update diagnostic counter with current callback count
     // Import would create circular dependency, so access via window
-    if ((window as any).__d) {
-      (window as any).__d.frameLoopCallbacks = this.callbacks.length;
+    const diag = (window as any).__d;
+    if (diag) {
+      diag.frameLoopCallbacks = this.callbacks.length;
     }
-    
-    // Call all callbacks
+
+    // Call all callbacks with optional timing
+    const shouldTime = diag?.enabled;
     for (let i = 0; i < this.callbacks.length; i++) {
-      this.callbacks[i].callback(delta, elapsedTime);
+      const cb = this.callbacks[i];
+      if (shouldTime) {
+        const start = performance.now();
+        cb.callback(delta, elapsedTime);
+        const elapsed = performance.now() - start;
+        this.callbackTimes.set(cb.id, (this.callbackTimes.get(cb.id) || 0) + elapsed);
+      } else {
+        cb.callback(delta, elapsedTime);
+      }
     }
+  }
+
+  /**
+   * Get timing report for diagnostics
+   */
+  getTimingReport(): { id: string; time: number }[] {
+    const report = Array.from(this.callbackTimes.entries())
+      .map(([id, time]) => ({ id, time }))
+      .sort((a, b) => b.time - a.time);
+    return report;
+  }
+
+  /**
+   * Reset timing data
+   */
+  resetTiming(): void {
+    this.callbackTimes.clear();
   }
   
   /**
@@ -83,3 +113,6 @@ class FrameLoopRegistry {
 
 // Singleton instance
 export const frameLoop = new FrameLoopRegistry();
+
+// Expose to window for diagnostics access
+(window as any).frameLoop = frameLoop;

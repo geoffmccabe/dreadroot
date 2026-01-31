@@ -20,6 +20,9 @@ export const TREE_BLOCK_TYPE_MAP = {
   'sm': 'shroom',
   'ss': 'shroom_stem',
   'sc': 'shroom_cap',
+  'fs': 'fungal_stem',
+  'fct': 'fungal_cap_top',
+  'fcu': 'fungal_cap_underside',
   'ib': 'invisiblock',
   'f': 'fruit'
 } as const;
@@ -78,6 +81,32 @@ export function decodeBlockType(encoded: string): DecodedBlockType | null {
       tier
     };
   }
+
+  // Handle compound types like 'fungal_stem_0_5' (4 parts: [fungal, stem, depth, tier])
+  if (parts.length === 4 && parts[0] === 'fungal') {
+    const tier = parseInt(parts[3], 10);
+    const depth = parseInt(parts[2], 10);
+    if (isNaN(tier) || isNaN(depth)) return null;
+    return {
+      type: `${parts[0]}_${parts[1]}`,
+      depth,
+      tier
+    };
+  }
+
+  // Handle compound types like 'fungal_cap_top_0_5' or 'fungal_cap_underside_0_5'
+  // These have 5 or 6 parts
+  if (parts.length >= 5 && parts[0] === 'fungal' && parts[1] === 'cap') {
+    const tier = parseInt(parts[parts.length - 1], 10);
+    const depth = parseInt(parts[parts.length - 2], 10);
+    if (isNaN(tier) || isNaN(depth)) return null;
+    const typeParts = parts.slice(0, parts.length - 2);
+    return {
+      type: typeParts.join('_'),
+      depth,
+      tier
+    };
+  }
   
   // Standard format: type_depth_tier (3 parts)
   if (parts.length === 3) {
@@ -99,29 +128,43 @@ export function decodeBlockType(encoded: string): DecodedBlockType | null {
   return null;
 }
 
+// Result cache for isTreeBlockType — only ~30-50 unique block_type strings exist
+// but the function is called 360K+ times per grouping pass (3 passes × 120K blocks).
+// Cache turns O(n*m) string operations into O(1) Map lookups after first encounter.
+const _isTreeCache = new Map<string, boolean>();
+
 /**
  * Checks if a block_type string represents a tree block
  * Handles both simple types ('trunk'), short codes ('t'), and encoded types ('t_-1_5', 'trunk_-1_5')
  */
 export function isTreeBlockType(blockType: string): boolean {
   if (!blockType) return false;
-  
+
+  const cached = _isTreeCache.get(blockType);
+  if (cached !== undefined) return cached;
+
+  const result = _isTreeBlockTypeUncached(blockType);
+  _isTreeCache.set(blockType, result);
+  return result;
+}
+
+function _isTreeBlockTypeUncached(blockType: string): boolean {
   // Check if it's a short code directly
   if (blockType in TREE_BLOCK_TYPE_MAP) {
     return true;
   }
-  
+
   // Check if it's a full type name
   if (TREE_BLOCK_TYPES.includes(blockType)) {
     return true;
   }
-  
+
   // Try decoding - works for encoded types like 't_-1_5' or 'trunk_-1_5'
   const decoded = decodeBlockType(blockType);
   if (decoded) {
     return TREE_BLOCK_TYPES.includes(decoded.type);
   }
-  
+
   // Check if blockType STARTS with a short code or full type followed by underscore
   for (const shortCode of TREE_BLOCK_SHORT_CODES) {
     if (blockType.startsWith(`${shortCode}_`)) {
@@ -133,7 +176,7 @@ export function isTreeBlockType(blockType: string): boolean {
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -214,6 +257,11 @@ export function getTextureUrlForTreeBlock(
     case 'shroom_cap':
       // Fall back to trunk texture if branch texture is not set
       return branchTextureUrl || trunkTextureUrl;
+    case 'fungal_stem':
+    case 'fungal_cap_top':
+    case 'fungal_cap_underside':
+      // Fungal textures handled via atlas UV routing; pass trunk as fallback
+      return trunkTextureUrl;
     case 'leaf':
     case 'fruit':
       // Fall back to branch, then trunk texture

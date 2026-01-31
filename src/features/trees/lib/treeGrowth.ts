@@ -123,17 +123,17 @@ export function generateTreeBlueprint(
   const maxHeight = tier * TREE_CONFIG.BLOCKS_PER_TIER_HEIGHT;
   const maxBranchLength = Math.max(1, Math.floor(maxHeight * widthFactor));
   
-  // Use options or defaults
+  // Use options or defaults (min 4 for decorations with tuning-fork patterns)
   const opts: Required<TreeGrowthOptions> = {
     lowBranchHeight: options?.lowBranchHeight ?? TREE_CONFIG.MIN_BRANCH_HEIGHT,
     spikeChance: options?.spikeChance ?? 0,
-    spikeLength: options?.spikeLength ?? 3,
+    spikeLength: Math.max(4, options?.spikeLength ?? 4),  // Min 4 for tuning-fork pattern
     nobChance: options?.nobChance ?? 0,
     nobSize: options?.nobSize ?? 1,
     crossChance: options?.crossChance ?? 0,
-    crossLength: options?.crossLength ?? 3,
+    crossLength: Math.max(4, options?.crossLength ?? 4),  // Min 4 for tuning-fork pattern
     shroomChance: options?.shroomChance ?? 0,
-    shroomLength: options?.shroomLength ?? 5,
+    shroomLength: Math.max(4, options?.shroomLength ?? 5),  // Min 4 for tuning-fork pattern
     shroomCapDiameter: options?.shroomCapDiameter ?? 3,
     symmetry: symmetryMode,
   };
@@ -190,7 +190,10 @@ export function generateTreeBlueprint(
   // Key: "dx,dz" -> array of Y heights where branches exist
   const branchHeightsByDirection = new Map<string, number[]>();
   const MIN_BRANCH_GAP = 2; // Minimum vertical gap between branches on same side
-  
+
+  // Track decoration positions to enforce minimum spacing (3 empty blocks between)
+  const decorPositions: Array<{ x: number; y: number; z: number }> = [];
+
   // 6. Generate branches at selected heights with gap enforcement
   let branchesCreated = 0;
   for (const branchY of candidateBranchHeights) {
@@ -229,7 +232,8 @@ export function generateTreeBlueprint(
       symmetryMode,
       baseX,        // tree base X for symmetry
       baseZ,        // tree base Z for symmetry
-      groupCounter  // mutable group counter
+      groupCounter,  // mutable group counter
+      decorPositions // shared decoration positions for spacing
     );
     
     branchesCreated++;
@@ -253,12 +257,34 @@ export function generateTreeBlueprint(
   };
 }
 
+// Minimum gap between decorations (3 empty blocks = 4 total distance)
+const MIN_DECORATION_GAP = 4;
+
+/**
+ * Check if a position is far enough from all existing decoration positions
+ */
+function canPlaceDecoration(
+  x: number,
+  y: number,
+  z: number,
+  decorPositions: Array<{ x: number; y: number; z: number }>
+): boolean {
+  for (const pos of decorPositions) {
+    const dist = Math.abs(x - pos.x) + Math.abs(y - pos.y) + Math.abs(z - pos.z);
+    if (dist < MIN_DECORATION_GAP) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Recursively grow a branch in a direction
  * Branches can go horizontal or up, never down
  * Inline decoration generation - decorations use negative growthOrder as anchor links
  * treeBaseX/treeBaseZ are the trunk coordinates used for symmetry calculations
  * groupCounter is a mutable ref to track symmetry groups across recursive calls
+ * decorPositions tracks all decoration positions to enforce minimum spacing
  */
 function growBranch(
   blocks: BlueprintBlock[],
@@ -275,7 +301,8 @@ function growBranch(
   symmetryMode: SymmetryMode = 'none',
   treeBaseX: number = startX,
   treeBaseZ: number = startZ,
-  groupCounter: { value: number } = { value: 0 }
+  groupCounter: { value: number } = { value: 0 },
+  decorPositions: Array<{ x: number; y: number; z: number }> = []
 ): void {
   // Limit recursion depth
   if (depth > 3) return;
@@ -334,27 +361,44 @@ function growBranch(
     // ========== INLINE DECORATION GENERATION ==========
     // Decorations are added at the primary position only
     // The symmetry is handled at the branch block level
-    
-    // SPIKE: Vertical blocks going up
-    if (opts.spikeChance > 0 && rng() < opts.spikeChance) {
-      addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
+    // Enforce minimum spacing between decorations (3 empty blocks)
+
+    // Check if this position is far enough from existing decorations
+    const canDecorate = canPlaceDecoration(x, y, z, decorPositions);
+
+    if (canDecorate) {
+      let decorationPlaced = false;
+
+      // SPIKE: Vertical blocks going up
+      if (!decorationPlaced && opts.spikeChance > 0 && rng() < opts.spikeChance) {
+        addSpikeWithSymmetry(blocks, occupied, x, y, z, opts.spikeLength, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
+        decorationPlaced = true;
+      }
+
+      // NOB: Cube of blocks adjacent to this point
+      if (!decorationPlaced && opts.nobChance > 0 && rng() < opts.nobChance) {
+        addNobWithSymmetry(blocks, occupied, x, y, z, opts.nobSize, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
+        decorationPlaced = true;
+      }
+
+      // CROSS: Perpendicular + shape
+      if (!decorationPlaced && opts.crossChance > 0 && rng() < opts.crossChance) {
+        addCrossWithSymmetry(blocks, occupied, x, y, z, direction, opts.crossLength, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth);
+        decorationPlaced = true;
+      }
+
+      // SHROOM: Stem + cap
+      if (!decorationPlaced && opts.shroomChance > 0 && rng() < opts.shroomChance) {
+        addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
+        decorationPlaced = true;
+      }
+
+      // Record decoration position if one was placed
+      if (decorationPlaced) {
+        decorPositions.push({ x, y, z });
+      }
     }
-    
-    // NOB: Cube of blocks adjacent to this point (no invisiblocks - nobs are not vertical obstacles)
-    if (opts.nobChance > 0 && rng() < opts.nobChance) {
-      addNobWithSymmetry(blocks, occupied, x, y, z, opts.nobSize, anchorIndex, anchorGroup, rng, treeBaseX, treeBaseZ, symmetryMode, depth);
-    }
-    
-    // CROSS: Perpendicular + shape
-    if (opts.crossChance > 0 && rng() < opts.crossChance) {
-      addCrossWithSymmetry(blocks, occupied, x, y, z, direction, opts.crossLength, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth);
-    }
-    
-    // SHROOM: Stem + cap
-    if (opts.shroomChance > 0 && rng() < opts.shroomChance) {
-      addShroomWithSymmetry(blocks, occupied, x, y, z, opts.shroomLength, opts.shroomCapDiameter, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
-    }
-    
+
     // ========== END DECORATIONS ==========
     
     // Chance to spawn sub-branch (decreases with depth)
@@ -387,7 +431,8 @@ function growBranch(
         symmetryMode,
         treeBaseX,    // Pass tree base through recursion
         treeBaseZ,
-        groupCounter  // Pass mutable counter through recursion
+        groupCounter,  // Pass mutable counter through recursion
+        decorPositions // Share decoration positions across branches
       );
     }
   }
@@ -396,8 +441,8 @@ function growBranch(
 // ========== DECORATION HELPER FUNCTIONS WITH SYMMETRY ==========
 
 /**
- * Add a ring of invisiblocks around the trunk at a specific height
- * This allows players to walk between branches at the same height
+ * Add a ring of branch blocks around the trunk at a specific height
+ * This allows players to walk around the trunk to reach other branches
  */
 function addTrunkJunctionRing(
   blocks: BlueprintBlock[],
@@ -416,12 +461,12 @@ function addTrunkJunctionRing(
     [-1, 0],          [1, 0],
     [-1, 1],  [0, 1],  [1, 1]
   ];
-  
+
   for (const [dx, dz] of offsets) {
     const x = trunkX + dx;
     const z = trunkZ + dz;
     const key = `${x},${y},${z}`;
-    
+
     // Only add if not already occupied (no symmetry needed - trunk is always at center)
     if (!occupied.has(key)) {
       occupied.add(key);
@@ -429,7 +474,7 @@ function addTrunkJunctionRing(
         x,
         y,
         z,
-        type: 'invisiblock',
+        type: 'branch',  // Use branch blocks instead of invisiblocks
         growthOrder: -anchorIndex - 1,
         symmetryGroup: anchorGroup,
         branchDepth
@@ -438,66 +483,13 @@ function addTrunkJunctionRing(
   }
 }
 
-/**
- * Add invisiblocks on both sides of a decoration for walkability
- * Places 3 blocks on each perpendicular side (6 total)
- * @param branchDir - The direction the branch is growing [dx, dz]
- */
-function addInvisiblocksAroundDecoration(
-  blocks: BlueprintBlock[],
-  occupied: Set<string>,
-  centerX: number,
-  centerY: number,  // Y level of the branch (where feet walk)
-  centerZ: number,
-  branchDir: [number, number],
-  anchorIndex: number,
-  anchorGroup: number,
-  baseX: number,
-  baseZ: number,
-  symmetryMode: SymmetryMode,
-  branchDepth: number
-): void {
-  // Get perpendicular direction to the branch
-  // If branch is [1,0] or [-1,0] (X-axis), perp is [0,1] (Z-axis)
-  // If branch is [0,1] or [0,-1] (Z-axis), perp is [1,0] (X-axis)
-  const perpX = branchDir[0] === 0 ? 1 : 0;
-  const perpZ = branchDir[1] === 0 ? 1 : 0;
-  
-  // Offsets along the branch direction: -1, 0, +1 (3 blocks per side)
-  const alongOffsets = [-1, 0, 1];
-  
-  // Two perpendicular sides: +1 and -1
-  const perpSides = [1, -1];
-  
-  for (const perpSide of perpSides) {
-    for (const alongOffset of alongOffsets) {
-      // Calculate position relative to decoration center
-      const x = centerX + branchDir[0] * alongOffset + perpX * perpSide;
-      const z = centerZ + branchDir[1] * alongOffset + perpZ * perpSide;
-      
-      // Apply symmetry and place blocks
-      const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
-      for (const pos of positions) {
-        const key = `${pos.x},${centerY},${pos.z}`;
-        if (!occupied.has(key)) {
-          occupied.add(key);
-          blocks.push({
-            x: pos.x,
-            y: centerY,
-            z: pos.z,
-            type: 'invisiblock',
-            growthOrder: -anchorIndex - 1,  // Same as decoration
-            symmetryGroup: anchorGroup,
-            branchDepth
-          });
-        }
-      }
-    }
-  }
-}
+// Invisiblocks removed from tree generation - decorations now have built-in doorways
 
 /**
- * Add a vertical spike from a point with symmetry
+ * Add a spike with 3-block high doorway above the branch
+ * Shape: Vertical stack of 3 blocks on each side of branch, empty space above branch center,
+ * then spike continues above the doorway
+ * Minimum spike length is 4
  */
 function addSpikeWithSymmetry(
   blocks: BlueprintBlock[],
@@ -513,23 +505,25 @@ function addSpikeWithSymmetry(
   baseZ: number,
   symmetryMode: SymmetryMode,
   branchDepth: number = 0,
-  branchDir: [number, number]  // Branch direction for invisiblock placement
+  branchDir: [number, number]
 ): void {
-  // Build spike blocks upward from branch
-  let spikeBaseY = startY;
-  for (let i = 1; i <= length; i++) {
-    const positions = applySymmetry(startX, startZ, baseX, baseZ, symmetryMode);
-    // Calculate actual Y - spike grows upward from base
-    const actualY = spikeBaseY + i;
-    
+  // Enforce minimum spike length of 4
+  const actualLength = Math.max(4, length);
+
+  // Get perpendicular direction to the branch
+  const perpX = branchDir[0] === 0 ? 1 : 0;
+  const perpZ = branchDir[1] === 0 ? 1 : 0;
+
+  // Helper to add a spike block
+  const addSpikeBlock = (x: number, y: number, z: number) => {
+    const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
-      const key = `${pos.x},${actualY},${pos.z}`;
-      // Skip if position is already occupied by another block
+      const key = `${pos.x},${y},${pos.z}`;
       if (occupied.has(key)) continue;
       occupied.add(key);
       blocks.push({
         x: pos.x,
-        y: actualY,
+        y,
         z: pos.z,
         type: 'spike',
         growthOrder: -anchorIndex - 1,
@@ -537,18 +531,32 @@ function addSpikeWithSymmetry(
         branchDepth
       });
     }
+  };
+
+  // SIDE STACKS: 3-block tall vertical stacks on each side of the branch
+  // Creates walls that form a doorway/tunnel
+  for (const perpSide of [1, -1]) {
+    const sideX = startX + perpX * perpSide;
+    const sideZ = startZ + perpZ * perpSide;
+
+    // Stack of 3 blocks at Y+1, Y+2, Y+3
+    for (let h = 1; h <= 3; h++) {
+      addSpikeBlock(sideX, startY + h, sideZ);
+    }
   }
-  
-  // Add invisiblocks for walkability at the branch Y level
-  addInvisiblocksAroundDecoration(
-    blocks, occupied, startX, startY, startZ,
-    branchDir, anchorIndex, anchorGroup,
-    baseX, baseZ, symmetryMode, branchDepth
-  );
+
+  // SPIKE CONTINUATION: Single column above the branch center starting at Y+4
+  // The doorway is at Y+1, Y+2, Y+3 (empty), spike starts at Y+4
+  for (let i = 4; i <= actualLength; i++) {
+    addSpikeBlock(startX, startY + i, startZ);
+  }
 }
 
 /**
  * Add a nob (1x1 to 4x4 cube) in a random direction with symmetry
+ * Rules:
+ * - Small nobs (1x1 and 2x2) cannot spawn on top of branches, only sides or bottom
+ * - Nobs on top of branches have a 3-block high tunnel through them for walkability
  */
 function addNobWithSymmetry(
   blocks: BlueprintBlock[],
@@ -563,33 +571,66 @@ function addNobWithSymmetry(
   baseX: number,
   baseZ: number,
   symmetryMode: SymmetryMode,
-  branchDepth: number = 0
+  branchDepth: number = 0,
+  branchDir: [number, number]
 ): void {
-  const directions: [number, number, number][] = [
+  // Direction options: up, down, and 4 horizontal directions
+  let directions: [number, number, number][] = [
     [0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1],
   ];
+
+  // Small nobs (1x1, 2x2) cannot spawn on top of branches
+  if (size <= 2) {
+    directions = directions.filter(d => d[1] !== 1); // Remove "up" direction
+  }
+
+  if (directions.length === 0) return; // Safety check
+
   const dir = directions[Math.floor(rng() * directions.length)];
-  
+  const isOnTop = dir[1] === 1; // Nob is above the branch
+
   const nobCenterX = centerX + dir[0] * (1 + Math.floor(size / 2));
   const nobCenterY = centerY + dir[1] * (1 + Math.floor(size / 2));
   const nobCenterZ = centerZ + dir[2] * (1 + Math.floor(size / 2));
-  
+
   const halfSize = Math.floor(size / 2);
   const nobStartX = nobCenterX - halfSize;
   const nobStartY = nobCenterY - halfSize;
   const nobStartZ = nobCenterZ - halfSize;
-  
+
+  // Get perpendicular direction to the branch for tunnel orientation
+  const perpX = branchDir[0] === 0 ? 1 : 0;
+  const perpZ = branchDir[1] === 0 ? 1 : 0;
+
   for (let dx = 0; dx < size; dx++) {
     for (let dy = 0; dy < size; dy++) {
       for (let dz = 0; dz < size; dz++) {
         const x = nobStartX + dx;
         const y = nobStartY + dy;
         const z = nobStartZ + dz;
-        
+
+        // If nob is on top and size >= 3, create 3-block high tunnel through it
+        // Tunnel runs perpendicular to branch direction, 1 block wide at center
+        if (isOnTop && size >= 3) {
+          // Calculate position relative to nob center
+          const relX = x - nobCenterX;
+          const relZ = z - nobCenterZ;
+          const relY = y - nobStartY; // Height within the nob (0 to size-1)
+
+          // Tunnel is at the center of the perpendicular axis
+          // Check if this block is in the tunnel area
+          const alongBranchOffset = branchDir[0] !== 0 ? relX : relZ;
+          const perpOffset = perpX !== 0 ? relX : relZ;
+
+          // Tunnel: center of perpendicular axis (offset 0), bottom 3 rows
+          if (perpOffset === 0 && relY < 3) {
+            continue; // Skip this block - it's part of the tunnel
+          }
+        }
+
         const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
         for (const pos of positions) {
           const key = `${pos.x},${y},${pos.z}`;
-          // Skip if position is already occupied by another block
           if (occupied.has(key)) continue;
           occupied.add(key);
           blocks.push({ x: pos.x, y, z: pos.z, type: 'nob', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
@@ -600,7 +641,8 @@ function addNobWithSymmetry(
 }
 
 /**
- * Add a + shaped cross perpendicular to branch direction with symmetry
+ * Add a cross made of 4 spikes at right angles around the branch
+ * Each spike has 3-block high doorway with side stacks
  */
 function addCrossWithSymmetry(
   blocks: BlueprintBlock[],
@@ -617,48 +659,53 @@ function addCrossWithSymmetry(
   symmetryMode: SymmetryMode,
   branchDepth: number = 0
 ): void {
-  const perpX = branchDir[0] === 0 ? 1 : 0;
-  const perpZ = branchDir[1] === 0 ? 1 : 0;
-  
-  // Horizontal arm of cross (perpendicular to branch)
-  for (let i = -length; i <= length; i++) {
-    if (i === 0) continue;
-    const x = centerX + perpX * i;
-    const z = centerZ + perpZ * i;
-    
+  // Enforce minimum length of 4 for the doorway pattern
+  const actualLength = Math.max(4, length);
+
+  // Helper to add a cross block
+  const addCrossBlock = (x: number, y: number, z: number) => {
     const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
-      const key = `${pos.x},${centerY},${pos.z}`;
-      // Skip if position is already occupied by another block
+      const key = `${pos.x},${y},${pos.z}`;
       if (occupied.has(key)) continue;
       occupied.add(key);
-      blocks.push({ x: pos.x, y: centerY, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
+      blocks.push({ x: pos.x, y, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
+    }
+  };
+
+  // 4 directions around the branch: +X, -X, +Z, -Z
+  const directions: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+  for (const [dirX, dirZ] of directions) {
+    // Get perpendicular direction for this spike arm
+    const armPerpX = dirZ !== 0 ? 1 : 0;
+    const armPerpZ = dirX !== 0 ? 1 : 0;
+
+    // Arm base is 1 block out from center in the arm direction
+    const armBaseX = centerX + dirX;
+    const armBaseZ = centerZ + dirZ;
+
+    // SIDE STACKS: 3-block tall vertical stacks on each side of the arm
+    for (const perpSide of [1, -1]) {
+      const sideX = armBaseX + armPerpX * perpSide;
+      const sideZ = armBaseZ + armPerpZ * perpSide;
+
+      // Stack of 3 blocks at Y+1, Y+2, Y+3
+      for (let h = 1; h <= 3; h++) {
+        addCrossBlock(sideX, centerY + h, sideZ);
+      }
+    }
+
+    // SPIKE CONTINUATION: Single column at the arm position from Y+4 upward
+    for (let i = 4; i <= actualLength; i++) {
+      addCrossBlock(armBaseX, centerY + i, armBaseZ);
     }
   }
-  
-  // Vertical arm of cross
-  const centerPositions = applySymmetry(centerX, centerZ, baseX, baseZ, symmetryMode);
-  for (let i = -length; i <= length; i++) {
-    if (i === 0) continue;
-    for (const pos of centerPositions) {
-      const key = `${pos.x},${centerY + i},${pos.z}`;
-      // Skip if position is already occupied by another block
-      if (occupied.has(key)) continue;
-      occupied.add(key);
-      blocks.push({ x: pos.x, y: centerY + i, z: pos.z, type: 'cross', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
-    }
-  }
-  
-  // Add invisiblocks for walkability at the branch Y level
-  addInvisiblocksAroundDecoration(
-    blocks, occupied, centerX, centerY, centerZ,
-    branchDir, anchorIndex, anchorGroup,
-    baseX, baseZ, symmetryMode, branchDepth
-  );
 }
 
 /**
  * Add a mushroom shape with symmetry
+ * Shape: 3-block tall stacks on each side of branch (doorway), stem above, then cap
  */
 function addShroomWithSymmetry(
   blocks: BlueprintBlock[],
@@ -674,45 +721,61 @@ function addShroomWithSymmetry(
   baseZ: number,
   symmetryMode: SymmetryMode,
   branchDepth: number = 0,
-  branchDir: [number, number]  // Branch direction for invisiblock placement
+  branchDir: [number, number]
 ): void {
-  // Shroom stem (vertical)
-  for (let i = 1; i <= stemLength; i++) {
-    const positions = applySymmetry(shroomBaseX, shroomBaseZ, baseX, baseZ, symmetryMode);
+  // Minimum stem length to accommodate doorway (3 blocks) + at least 1 block of stem
+  const actualStemLength = Math.max(4, stemLength);
+
+  // Get perpendicular direction to the branch
+  const perpX = branchDir[0] === 0 ? 1 : 0;
+  const perpZ = branchDir[1] === 0 ? 1 : 0;
+
+  // Helper to add a stem block
+  const addStemBlock = (x: number, y: number, z: number) => {
+    const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
     for (const pos of positions) {
-      const key = `${pos.x},${shroomBaseY + i},${pos.z}`;
-      // Skip if position is already occupied by another block
+      const key = `${pos.x},${y},${pos.z}`;
       if (occupied.has(key)) continue;
       occupied.add(key);
-      blocks.push({ x: pos.x, y: shroomBaseY + i, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
+      blocks.push({ x: pos.x, y, z: pos.z, type: 'shroom_stem', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
+    }
+  };
+
+  // SIDE STACKS: 3-block tall vertical stacks on each side of the branch
+  // Creates walls that form a doorway/tunnel
+  for (const perpSide of [1, -1]) {
+    const sideX = shroomBaseX + perpX * perpSide;
+    const sideZ = shroomBaseZ + perpZ * perpSide;
+
+    // Stack of 3 blocks at Y+1, Y+2, Y+3
+    for (let h = 1; h <= 3; h++) {
+      addStemBlock(sideX, shroomBaseY + h, sideZ);
     }
   }
-  
-  // Shroom cap (horizontal disc)
-  const capY = shroomBaseY + stemLength + 1;
+
+  // STEM CONTINUATION: Single column at center from Y+4 to stem top
+  for (let i = 4; i <= actualStemLength; i++) {
+    addStemBlock(shroomBaseX, shroomBaseY + i, shroomBaseZ);
+  }
+
+  // SHROOM CAP: Horizontal disc at top of stem
+  const capY = shroomBaseY + actualStemLength + 1;
   const radius = Math.floor(capDiameter / 2);
-  
+
   for (let dx = -radius; dx <= radius; dx++) {
     for (let dz = -radius; dz <= radius; dz++) {
+      // Skip corners for rounder shape (when diameter > 2)
       if (Math.abs(dx) === radius && Math.abs(dz) === radius && capDiameter > 2) continue;
-      
+
       const positions = applySymmetry(shroomBaseX + dx, shroomBaseZ + dz, baseX, baseZ, symmetryMode);
       for (const pos of positions) {
         const key = `${pos.x},${capY},${pos.z}`;
-        // Skip if position is already occupied by another block
         if (occupied.has(key)) continue;
         occupied.add(key);
         blocks.push({ x: pos.x, y: capY, z: pos.z, type: 'shroom_cap', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
       }
     }
   }
-  
-  // Add invisiblocks for walkability at the branch Y level
-  addInvisiblocksAroundDecoration(
-    blocks, occupied, shroomBaseX, shroomBaseY, shroomBaseZ,
-    branchDir, anchorIndex, anchorGroup,
-    baseX, baseZ, symmetryMode, branchDepth
-  );
 }
 
 // ========== END DECORATION HELPERS ==========

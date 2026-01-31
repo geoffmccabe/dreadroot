@@ -13,6 +13,67 @@ export const clearBlocksCache = () => {
   fetchPromise = null;
 };
 
+// Preload block definitions - call this during app initialization
+// Returns a promise that resolves when block definitions are loaded
+export const preloadBlockDefinitions = async (): Promise<void> => {
+  // If already cached, return immediately
+  if (cachedBlocks && cachedBlocksMap) {
+    return;
+  }
+
+  // If already fetching, wait for that promise
+  if (fetchPromise) {
+    await fetchPromise;
+    return;
+  }
+
+  // Import supabase dynamically to avoid circular dependencies
+  const { supabase } = await import('@/integrations/supabase/client');
+
+  fetchPromise = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('blocks')
+        .select('*')
+        .order('class', { ascending: true })
+        .order('tier', { ascending: true })
+        .order('cost', { ascending: true });
+
+      if (error) throw error;
+
+      const typedBlocks = (data || []).map((block: any) => ({
+        id: block.id,
+        key: block.key,
+        name: block.name,
+        description: block.description || '',
+        cost: block.cost,
+        category: block.category,
+        rarity: block.rarity,
+        class: block.class,
+        tier: block.tier || 0,
+        texture: block.texture_url ? { diffuse: block.texture_url } : undefined,
+        properties: {
+          ...(block.properties || {}),
+          glowFactor: block.glow_factor || undefined
+        }
+      }));
+
+      const blockMap = new Map();
+      typedBlocks.forEach((block: any) => blockMap.set(block.key, block));
+
+      cachedBlocks = typedBlocks;
+      cachedBlocksMap = blockMap;
+    } catch (error) {
+      console.error('Failed to preload block definitions:', error);
+      throw error;
+    } finally {
+      fetchPromise = null;
+    }
+  })();
+
+  await fetchPromise;
+};
+
 export const useBlocksData = () => {
   const [blocks, setBlocks] = useState<BlockType[]>([]);
   const [blocksMap, setBlocksMap] = useState<Map<string, BlockType>>(new Map());

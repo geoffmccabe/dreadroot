@@ -3,17 +3,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 // Tier color definitions with defaults
+// Color scheme: T1-3 yellow, T4-6 green, T7-9 blue, T10-12 purple, T13-15 red
 const TIER_DEFAULTS: Record<number, { name: string; colors: string[] }> = {
-  1: { name: 'Yellow', colors: ['#FFFF00'] },
-  2: { name: 'Green', colors: ['#00FF00'] },
-  3: { name: 'Blue', colors: ['#0088FF'] },
-  4: { name: 'Purple', colors: ['#8B00FF'] },
-  5: { name: 'Red', colors: ['#FF0000'] },
-  6: { name: 'White', colors: ['#FFFFFF'] },
-  7: { name: 'Pink', colors: ['#FF69B4'] },
-  8: { name: 'Rainbow', colors: ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#8B00FF'] },
-  9: { name: 'Black', colors: ['#1a1a1a'] },
-  10: { name: 'Gold', colors: ['#FFD700'] },
+  // Yellow tiers (1-3)
+  1: { name: 'Yellow I', colors: ['#FFFF00'] },
+  2: { name: 'Yellow II', colors: ['#FFEE00'] },
+  3: { name: 'Yellow III', colors: ['#FFDD00'] },
+  // Green tiers (4-6)
+  4: { name: 'Green I', colors: ['#00FF00'] },
+  5: { name: 'Green II', colors: ['#00EE00'] },
+  6: { name: 'Green III', colors: ['#00DD00'] },
+  // Blue tiers (7-9)
+  7: { name: 'Blue I', colors: ['#0088FF'] },
+  8: { name: 'Blue II', colors: ['#0066FF'] },
+  9: { name: 'Blue III', colors: ['#0044FF'] },
+  // Purple tiers (10-12)
+  10: { name: 'Purple I', colors: ['#8B00FF'] },
+  11: { name: 'Purple II', colors: ['#7700EE'] },
+  12: { name: 'Purple III', colors: ['#6600DD'] },
+  // Red tiers (13-15)
+  13: { name: 'Red I', colors: ['#FF0000'] },
+  14: { name: 'Red II', colors: ['#EE0000'] },
+  15: { name: 'Red III', colors: ['#DD0000'] },
 };
 
 export interface BulletDefinition {
@@ -29,6 +40,7 @@ export interface BulletDefinition {
 const DEFAULT_VELOCITIES: Record<number, number> = {
   1: 100, 2: 150, 3: 200, 4: 250, 5: 300,
   6: 350, 7: 400, 8: 450, 9: 500, 10: 550,
+  11: 600, 12: 650, 13: 700, 14: 750, 15: 800,
 };
 
 // Get default bullet definition for a tier

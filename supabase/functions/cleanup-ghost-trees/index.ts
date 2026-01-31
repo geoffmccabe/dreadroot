@@ -191,42 +191,47 @@ Deno.serve(async (req) => {
     }
 
     // STEP 4: Find orphan placed_blocks with tree block types
-    // If no valid trees exist, ALL tree blocks in placed_blocks are orphans
-    if (validTreeIds.size === 0) {
-      console.log('No valid trees found - cleaning ALL tree-type placed_blocks')
-      
-      // CRITICAL: Supabase default limit is 1000 rows - need higher for world-wide cleanup
-      const { data: allPlacedBlocks, error: placedBlocksError } = await supabaseAdmin
-        .from('placed_blocks')
-        .select('id, block_type')
-        .limit(50000)
+    // Delete blocks that are tree-type but NOT in any valid tree's blueprint
+    console.log('Checking for orphan tree blocks in placed_blocks...')
 
-      if (placedBlocksError) {
-        console.error('Error fetching placed_blocks:', placedBlocksError)
-        throw placedBlocksError
-      }
+    // CRITICAL: Supabase default limit is 1000 rows - need higher for world-wide cleanup
+    const { data: allPlacedBlocks, error: placedBlocksError } = await supabaseAdmin
+      .from('placed_blocks')
+      .select('id, block_type, position_x, position_y, position_z')
+      .limit(50000)
 
-      const treePlacedBlocks = (allPlacedBlocks || []).filter(pb => isTreeBlockType(pb.block_type))
-      console.log(`Found ${treePlacedBlocks.length} tree-type placed_blocks to delete`)
-
-      if (treePlacedBlocks.length > 0) {
-        const orphanIds = treePlacedBlocks.map(pb => pb.id)
-        for (let i = 0; i < orphanIds.length; i += 500) {
-          const batch = orphanIds.slice(i, i + 500)
-          const { error } = await supabaseAdmin
-            .from('placed_blocks')
-            .delete()
-            .in('id', batch)
-          if (error) {
-            console.error('Error deleting orphan placed_blocks batch:', error)
-          } else {
-            stats.orphan_placed_blocks_deleted += batch.length
-          }
-        }
-        console.log(`Deleted ${stats.orphan_placed_blocks_deleted} orphan placed_blocks`)
-      }
+    if (placedBlocksError) {
+      console.error('Error fetching placed_blocks:', placedBlocksError)
+      throw placedBlocksError
     }
-    // Note: If trees exist, we trust the normal deletion flow via delete_tree_with_blocks RPC
+
+    // Filter to tree-type blocks
+    const treePlacedBlocks = (allPlacedBlocks || []).filter(pb => isTreeBlockType(pb.block_type))
+    console.log(`Found ${treePlacedBlocks.length} total tree-type placed_blocks`)
+
+    // Find orphans - tree blocks that are NOT in any valid tree's blueprint
+    const orphanTreeBlocks = treePlacedBlocks.filter(pb => {
+      const posKey = `${pb.position_x},${pb.position_y},${pb.position_z}`
+      return !validBlockKeys.has(posKey)
+    })
+    console.log(`Found ${orphanTreeBlocks.length} orphan tree blocks (not in any blueprint)`)
+
+    if (orphanTreeBlocks.length > 0) {
+      const orphanIds = orphanTreeBlocks.map(pb => pb.id)
+      for (let i = 0; i < orphanIds.length; i += 500) {
+        const batch = orphanIds.slice(i, i + 500)
+        const { error } = await supabaseAdmin
+          .from('placed_blocks')
+          .delete()
+          .in('id', batch)
+        if (error) {
+          console.error('Error deleting orphan placed_blocks batch:', error)
+        } else {
+          stats.orphan_placed_blocks_deleted += batch.length
+        }
+      }
+      console.log(`Deleted ${stats.orphan_placed_blocks_deleted} orphan placed_blocks`)
+    }
 
     // STEP 5: Bump chunk versions to force clients to refetch
     if (stats.orphan_placed_blocks_deleted > 0 || stats.tree_fruits_deleted > 0) {

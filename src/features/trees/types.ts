@@ -3,6 +3,9 @@
 // Symmetry modes for tree generation
 export type SymmetryMode = 'none' | '2xs' | '4r' | '4x2';
 
+// Tree type modes
+export type TreeType = 'original' | 'wide' | 'fungal';
+
 export interface SeedDefinition {
   id: string;
   tier: number;
@@ -31,6 +34,22 @@ export interface SeedDefinition {
   shroom_cap_diameter: number;
   // Symmetry mode
   symmetry: SymmetryMode;
+  // Tree type: original (standard), wide (future), fungal (giant mushrooms)
+  tree_type: TreeType;
+  // Fungal tree textures (only used when tree_type === 'fungal')
+  fungal_stem_texture_url: string | null;
+  fungal_cap_top_texture_url: string | null;
+  fungal_cap_underside_texture_url: string | null;
+  // Fungal tree generation settings
+  fungal_min_height: number | null;
+  fungal_max_height: number | null;
+  fungal_min_cap_width: number | null;
+  fungal_max_cap_width: number | null;
+  fungal_stem_random: number | null;
+  fungal_lean_angle: number | null;
+  fungal_s_curve: boolean | null;
+  // Whether this seed appears in the [ ] bracket key cycling menu
+  in_bracket_menu: boolean;
 }
 
 export interface PlantedTree {
@@ -81,7 +100,7 @@ export interface TreeFruit {
 
 // Block types for decorations - allows future unique textures per type
 // 'invisiblock' = invisible collision block for walkways around decorations
-export type TreeBlockType = 'trunk' | 'branch' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fruit' | 'invisiblock';
+export type TreeBlockType = 'trunk' | 'branch' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fungal_stem' | 'fungal_cap_top' | 'fungal_cap_underside' | 'fruit' | 'invisiblock';
 
 // Blueprint types for generation algorithm
 export interface BlueprintBlock {

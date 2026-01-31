@@ -132,10 +132,10 @@ export const ELBOW_BEND_MAX = 0.6; // Increased max bend offset (simulates 90+ d
 export const DEFAULT_SHOMBIE_TEXTURE_URL = '/grass_texture_seamless.webp';
 
 // Knockdown settings (headshot)
-export const KNOCKDOWN_SLIDE_DISTANCE = 3.0; // Slide 3 meters when headshot
-export const KNOCKDOWN_TILT_DURATION_MS = 400; // Time to tilt backward (fast)
-export const KNOCKDOWN_SLIDE_DURATION_MS = 600; // Time to slide after tilting
-export const KNOCKDOWN_RECOVERY_DURATION_MS = 500; // Time to get back up
+export const KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL = 1.0; // Slide 1 block per player level
+export const KNOCKDOWN_TILT_DURATION_MS = 400; // Time to tilt backward to 90 degrees (flat on back)
+export const KNOCKDOWN_SLIDE_DURATION_MS = 800; // Time to slide while on back
+export const KNOCKDOWN_RECOVERY_DURATION_MS = 800; // Time to get back up (~2 seconds total)
 export const KNOCKDOWN_TOTAL_DURATION_MS = KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS + KNOCKDOWN_RECOVERY_DURATION_MS;
 
 // Shombie-to-shombie collision avoidance

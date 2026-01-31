@@ -8,9 +8,12 @@ import { Card } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { Save } from 'lucide-react';
+import { Save, RotateCw } from 'lucide-react';
+import { AnimatedTexturePreview } from '@/components/AnimatedTexturePreview';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
+import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
+import { rotateTexture } from '@/lib/textureRotation';
 import type { ShombieDefinition } from '../types';
 
 interface ShombieDesignPanelProps {
@@ -67,8 +70,10 @@ function getRarityForTier(tier: number): string {
 export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
   const queryClient = useQueryClient();
   const [definitions, setDefinitions] = useState<ShombieDefinition[]>([]);
-  const [selectedTier, setSelectedTier] = useState(1);
+  const [selectedTier, setSelectedTier] = useState<number | null>(null); // null = ALL TIERS
   const [currentDef, setCurrentDef] = useState<ShombieDefinition | null>(null);
+  // Use T1 definition for global AI settings
+  const globalDef = definitions.find(d => d.tier === 1) || null;
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -78,6 +83,7 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
     { key: 'death', label: 'Death Sound', url: null },
   ]);
   const [soundVolume, setSoundVolume] = useState(100);
+  const [isRotating, setIsRotating] = useState(false);
 
   // Fetch definitions
   useEffect(() => {
@@ -138,32 +144,46 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
     }
   };
 
-  const selectTier = (tier: number) => {
+  const selectTier = (tier: number | null) => {
     setSelectedTier(tier);
-    const def = definitions.find(d => d.tier === tier);
-    setCurrentDef(def || null);
+    if (tier !== null) {
+      const def = definitions.find(d => d.tier === tier);
+      setCurrentDef(def || null);
+    } else {
+      setCurrentDef(null);
+    }
     setHasChanges(false);
   };
 
   const updateDef = (field: keyof ShombieDefinition, value: any) => {
     if (!currentDef) return;
-    setCurrentDef({ ...currentDef, [field]: value });
+    const updatedDef = { ...currentDef, [field]: value };
+    setCurrentDef(updatedDef);
+    // Also update definitions array so sidebar reflects changes immediately
+    setDefinitions(prev => prev.map(d => d.tier === currentDef.tier ? updatedDef : d));
     setHasChanges(true);
   };
 
   const updateAiConfig = (config: AIConfig) => {
     if (!currentDef) return;
-    setCurrentDef({ ...currentDef, ai_config: config });
+    const updatedDef = { ...currentDef, ai_config: config };
+    setCurrentDef(updatedDef);
+    // Also update definitions array so sidebar reflects changes immediately
+    setDefinitions(prev => prev.map(d => d.tier === currentDef.tier ? updatedDef : d));
     setHasChanges(true);
   };
 
   const saveDef = async () => {
     if (!currentDef) return;
+
+    // Capture the tier we're saving BEFORE any async operations
+    const savingTier = currentDef.tier;
+
     setIsSaving(true);
 
     const isNew = currentDef.id.startsWith('temp_');
     const { id, created_at, updated_at, ai_config, ...baseData } = currentDef;
-    
+
     // Convert ai_config to JSON-safe format
     const saveData = {
       ...baseData,
@@ -173,6 +193,8 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
     console.log('[ShombieDesign] Saving:', { isNew, tier: baseData.tier, saveData });
 
     try {
+      let savedData: ShombieDefinition | null = null;
+
       if (isNew) {
         // Insert new definition - use upsert on tier for safety
         const { data, error } = await supabase
@@ -181,6 +203,7 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
           .select()
           .single();
         if (error) throw error;
+        savedData = data as ShombieDefinition;
         console.log('[ShombieDesign] Inserted/Upserted:', data);
       } else {
         // Update existing definition by id
@@ -191,13 +214,25 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
           .select()
           .single();
         if (error) throw error;
+        savedData = data as ShombieDefinition;
         console.log('[ShombieDesign] Updated:', data);
       }
 
-      toast.success(`Tier ${currentDef.tier} saved!`);
+      toast.success(`Tier ${savingTier} saved!`);
       setHasChanges(false);
+
+      // Update local state immediately with saved data (don't wait for refetch)
+      if (savedData) {
+        setDefinitions(prev => {
+          const updated = prev.map(d => d.tier === savingTier ? savedData : d);
+          return updated;
+        });
+        // Keep currentDef in sync with the saved data
+        setCurrentDef(savedData);
+      }
+
+      // Invalidate queries for other components that use this data
       queryClient.invalidateQueries({ queryKey: ['shombie-definitions'] });
-      await fetchDefinitions(); // Re-fetch to get updated data
     } catch (err: any) {
       console.error('[ShombieDesign] Save error:', err);
       toast.error(`Failed to save: ${err.message}`);
@@ -209,11 +244,43 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
   const handleTextureUpload = async (file: File) => {
     if (!currentDef) return;
 
-    const fileName = `shombie_tier${currentDef.tier}_${Date.now()}.webp`;
-    
+    // Capture the tier at the START of the upload to prevent closure issues
+    const uploadingForTier = currentDef.tier;
+    const uploadingForId = currentDef.id;
+
+    let uploadBlob: Blob = file;
+    let fileName: string;
+
+    // Check if file needs animation processing (includes animated WebP)
+    const isAnimated = await needsAnimationProcessing(file);
+
+    if (isAnimated) {
+      // Convert animation (GIF/video/animated WebP) to horizontal strip
+      toast.info('Converting animation to strip texture...');
+
+      try {
+        const result = await convertAnimationToStrip(file, {
+          frameSize: 256,
+          maxFrames: 24,
+        });
+
+        uploadBlob = result.stripBlob;
+        // Filename encodes frame count and delay for playback
+        fileName = `shombie_tier${uploadingForTier}_${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
+
+        toast.success(`Converted ${result.originalFrameCount} frames to ${result.frameCount}-frame strip`);
+      } catch (err: any) {
+        toast.error(`Animation conversion failed: ${err.message}`);
+        return;
+      }
+    } else {
+      // Static image - upload as-is
+      fileName = `shombie_tier${uploadingForTier}_${Date.now()}.webp`;
+    }
+
     const { error: uploadError } = await supabase.storage
       .from('block-textures')
-      .upload(fileName, file, { upsert: true });
+      .upload(fileName, uploadBlob, { upsert: true });
 
     if (uploadError) {
       toast.error('Failed to upload texture');
@@ -224,22 +291,63 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
       .from('block-textures')
       .getPublicUrl(fileName);
 
-    updateDef('texture_url', urlData.publicUrl);
-    toast.success('Texture uploaded!');
+    // Update the SPECIFIC tier we started uploading for, not whatever is currently selected
+    setDefinitions(prev => prev.map(d =>
+      d.tier === uploadingForTier ? { ...d, texture_url: urlData.publicUrl } : d
+    ));
+
+    // Also update currentDef if it's still the same tier
+    setCurrentDef(prev =>
+      prev && prev.tier === uploadingForTier ? { ...prev, texture_url: urlData.publicUrl } : prev
+    );
+
+    setHasChanges(true);
+    toast.success(`Texture uploaded for Tier ${uploadingForTier}!`);
+  };
+
+  const handleTextureRotate = async () => {
+    if (!currentDef?.texture_url) {
+      toast.error('Upload a texture first');
+      return;
+    }
+
+    setIsRotating(true);
+
+    try {
+      const result = await rotateTexture(currentDef.texture_url, `shombie_tier${currentDef.tier}`);
+
+      const { error: uploadError } = await supabase.storage
+        .from('block-textures')
+        .upload(result.fileName, result.blob, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('block-textures')
+        .getPublicUrl(result.fileName);
+
+      updateDef('texture_url', urlData.publicUrl);
+      toast.success('Texture rotated 90° clockwise');
+    } catch (err) {
+      console.error('[ShombieDesign] Rotate error:', err);
+      toast.error('Rotation failed');
+    } finally {
+      setIsRotating(false);
+    }
   };
 
   const handleSoundChange = async (key: string, url: string | null) => {
     setSoundConfigs(prev => prev.map(s => s.key === key ? { ...s, url } : s));
-    
-    const updateData = key === 'ambient' 
+
+    const updateData = key === 'ambient'
       ? { ambient_sound_url: url }
       : { death_sound_url: url };
-    
+
+    // Upsert the sound settings (creates row if doesn't exist)
     const { error } = await supabase
       .from('enemy_sound_settings')
-      .update(updateData)
-      .eq('enemy_type', 'shombie');
-    
+      .upsert({ enemy_type: 'shombie', ...updateData }, { onConflict: 'enemy_type' });
+
     if (error) {
       toast.error('Failed to update sound');
     }
@@ -247,11 +355,11 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
 
   const handleVolumeChange = async (volume: number) => {
     setSoundVolume(volume);
-    
+
+    // Upsert the sound settings (creates row if doesn't exist)
     const { error } = await supabase
       .from('enemy_sound_settings')
-      .update({ volume })
-      .eq('enemy_type', 'shombie');
+      .upsert({ enemy_type: 'shombie', volume }, { onConflict: 'enemy_type' });
     
     if (error) {
       toast.error('Failed to update volume');
@@ -266,6 +374,17 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
           <h3 className="font-semibold mb-3 text-2xl">Shombies</h3>
           <ScrollArea className="h-[500px]">
             <div className="space-y-1 pr-2">
+              {/* ALL TIERS option for global settings */}
+              <Button
+                variant={selectedTier === null ? 'default' : 'ghost'}
+                size="sm"
+                className="w-full justify-start text-xs h-auto py-1 mb-2"
+                onClick={() => selectTier(null)}
+              >
+                <span className="flex items-center gap-1">
+                  <span className="font-semibold">ALL TIERS</span>
+                </span>
+              </Button>
               {definitions.map(def => (
                 <Button
                   key={def.tier}
@@ -278,13 +397,12 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
                     <span className="w-6 font-mono">T{def.tier}</span>
                     <div className="flex gap-0.5">
                       {/* Texture thumbnail */}
-                      <div className="w-4 h-4 rounded-sm bg-muted border border-border overflow-hidden flex-shrink-0">
-                        {def.texture_url ? (
-                          <img src={def.texture_url} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-green-600/50" />
-                        )}
-                      </div>
+                      <AnimatedTexturePreview
+                        url={def.texture_url}
+                        size={16}
+                        className="flex-shrink-0"
+                        fallback={<div className="w-full h-full bg-green-600/50" />}
+                      />
                     </div>
                     <span 
                       className="ml-1 text-[10px] capitalize"
@@ -302,25 +420,32 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
 
       {/* Part 2 & 3: Sound Settings + Tier Editor */}
       <div className="col-span-9 flex flex-col gap-4">
-        {/* Global Sound Settings Panel */}
-        <EnemySoundSettings
-          enemyType="shombie"
-          sounds={soundConfigs}
-          volume={soundVolume}
-          onSoundChange={handleSoundChange}
-          onVolumeChange={handleVolumeChange}
-        />
-        
-        {/* AI Behavior Settings Panel - collapsible */}
-        {currentDef && (
-          <EnemyBehaviorSettings
-            enemyType="shombie"
-            aiConfig={currentDef.ai_config as AIConfig | null}
-            onConfigChange={updateAiConfig}
-          />
-        )}
-        
-        {/* Tier Editor Card */}
+        {/* ALL TIERS view: Show global Sound Settings + AI Behavior Settings */}
+        {selectedTier === null ? (
+          <>
+            <EnemySoundSettings
+              enemyType="shombie"
+              sounds={soundConfigs}
+              volume={soundVolume}
+              onSoundChange={handleSoundChange}
+              onVolumeChange={handleVolumeChange}
+            />
+
+            {globalDef && (
+              <EnemyBehaviorSettings
+                enemyType="shombie"
+                aiConfig={globalDef.ai_config as AIConfig | null}
+                onConfigChange={(config) => {
+                  // Update T1's ai_config as the global config
+                  setDefinitions(prev =>
+                    prev.map(d => d.tier === 1 ? { ...d, ai_config: config } : d)
+                  );
+                  setHasChanges(true);
+                }}
+              />
+            )}
+          </>
+        ) : (
         <Card className="p-4 flex-1">
           {currentDef ? (
             <div className="space-y-4">
@@ -351,7 +476,7 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
                   <Slider
                     value={[currentDef.health]}
                     min={10}
-                    max={500}
+                    max={10000}
                     step={10}
                     onValueChange={([v]) => updateDef('health', v)}
                   />
@@ -406,25 +531,29 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
               <div className="space-y-2">
                 <Label>Body Texture</Label>
                 <div className="flex gap-2 items-center">
-                  <div className="w-12 h-12 rounded-sm bg-muted border border-border overflow-hidden flex-shrink-0">
-                    {currentDef.texture_url ? (
-                      <img
-                        src={currentDef.texture_url}
-                        alt="Texture"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-green-600/50" />
-                    )}
-                  </div>
+                  <AnimatedTexturePreview
+                    url={currentDef.texture_url}
+                    size={48}
+                    fallback={<div className="w-full h-full bg-green-600/50" />}
+                  />
                   <Input
                     type="file"
                     accept="image/*"
+                    className="flex-1"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) handleTextureUpload(file);
                     }}
                   />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTextureRotate}
+                    disabled={!currentDef.texture_url || isRotating}
+                    title="Rotate 90° clockwise"
+                  >
+                    <RotateCw className={`h-4 w-4 ${isRotating ? 'animate-spin' : ''}`} />
+                  </Button>
                 </div>
               </div>
 
@@ -448,11 +577,11 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Difficulty:</span>
-                    <span 
+                    <span
                       className="ml-1 font-medium capitalize"
-                      style={{ color: RARITY_COLORS[getRarityForTier(selectedTier)] }}
+                      style={{ color: RARITY_COLORS[getRarityForTier(selectedTier!)] }}
                     >
-                      {getRarityForTier(selectedTier)}
+                      {getRarityForTier(selectedTier!)}
                     </span>
                   </div>
                 </div>
@@ -464,6 +593,7 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
             </div>
           )}
         </Card>
+        )}
       </div>
     </div>
   );

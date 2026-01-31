@@ -17,7 +17,7 @@ import {
   SHOMBIE_ATTACK_VERTICAL_REACH,
   PLAYER_HEIGHT,
   SHOMBIE_ATTACK_COOLDOWN_MS,
-  KNOCKDOWN_SLIDE_DISTANCE,
+  KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL,
   KNOCKDOWN_TOTAL_DURATION_MS,
   KNOCKDOWN_TILT_DURATION_MS,
   KNOCKDOWN_SLIDE_DURATION_MS,
@@ -41,6 +41,8 @@ interface UseShombieSystemOptions {
   isEnabled: boolean;
   /** User roles for admin hotkey access */
   userRoles: string[];
+  /** Player's current level (for knockback distance calculation) */
+  playerLevel?: number;
   onShombieKilled?: (tier: number) => void;
   /** Callback when shombie attacks player */
   onPlayerHit?: (damage: number, knockbackForce: number, direction: THREE.Vector3) => void;
@@ -67,13 +69,15 @@ export function useShombieSystem({
   cameraRef,
   isEnabled,
   userRoles,
+  playerLevel = 1,
   onShombieKilled,
   onPlayerHit,
 }: UseShombieSystemOptions) {
   const [shombies, setShombies] = useState<ShombieInstance[]>([]);
   const [spawningEnabled, setSpawningEnabled] = useState(false);
   const shombiesRef = useRef<ShombieInstance[]>([]);
-  
+  const lastMovementDebugRef = useRef(0); // Debug: track last log time for movement
+
   // Keep ref in sync
   useEffect(() => {
     shombiesRef.current = shombies;
@@ -358,13 +362,23 @@ export function useShombieSystem({
   const updateMovement = useCallback((deltaTime: number) => {
     const camera = cameraRef.current;
     if (!camera) return;
-    
+
     let needsUpdate = false;
     const allShombies = shombiesRef.current;
-    
+
+    // Debug: Log movement updates once per second
+    const now = Date.now();
+    if (now - lastMovementDebugRef.current > 1000) {
+      lastMovementDebugRef.current = now;
+      if (allShombies.length > 0) {
+        const s = allShombies[0];
+        console.log(`[Shombie Movement] Count=${allShombies.length}, First: active=${s.isActive}, emerged=${s.emergenceProgress?.toFixed(2)}, pos=(${s.position.x.toFixed(1)}, ${s.position.z.toFixed(1)}), vel=${s.velocity?.length().toFixed(2)}`);
+      }
+    }
+
     for (const shombie of allShombies) {
       if (!shombie.isActive) continue;
-      
+
       // Don't move until fully emerged
       if (shombie.emergenceProgress < 1) continue;
       
@@ -374,30 +388,30 @@ export function useShombieSystem({
         const elapsed = now - shombie.knockdownStartTime;
         const progress = Math.min(1, elapsed / KNOCKDOWN_TOTAL_DURATION_MS);
         shombie.knockdownProgress = progress;
-        
-        // Phase 1: Tilt backward (0 to KNOCKDOWN_TILT_DURATION_MS)
-        // Phase 2: Slide (KNOCKDOWN_TILT_DURATION_MS to KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS)
-        // Phase 3: Recovery (rest of time)
-        
-        const tiltEndTime = KNOCKDOWN_TILT_DURATION_MS;
+
+        // Phase 1: Tilt backward while sliding (0 to KNOCKDOWN_TILT_DURATION_MS)
+        // Phase 2: Lie flat while sliding (KNOCKDOWN_TILT_DURATION_MS to KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS)
+        // Phase 3: Recovery - no sliding (rest of time)
+
         const slideEndTime = KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS;
-        
-        // Slide during phase 2
-        if (elapsed > tiltEndTime && elapsed < slideEndTime && shombie.knockdownDirection) {
-          const slideElapsed = elapsed - tiltEndTime;
-          const slideProgress = slideElapsed / KNOCKDOWN_SLIDE_DURATION_MS;
+
+        // Slide during phases 1 and 2 (tilt and flat) - starts immediately
+        if (elapsed < slideEndTime && shombie.knockdownDirection) {
+          const slideProgress = elapsed / slideEndTime;
+          // Total slide distance = 1 block per player level
+          const totalSlideDistance = KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL * playerLevel;
           // Decelerate: more speed at start, less at end
-          const slideSpeed = KNOCKDOWN_SLIDE_DISTANCE * (1 - slideProgress) * 4 * deltaTime;
+          const slideSpeed = totalSlideDistance * (1 - slideProgress) * 3 * deltaTime;
           shombie.position.x += shombie.knockdownDirection.x * slideSpeed;
           shombie.position.z += shombie.knockdownDirection.z * slideSpeed;
         }
-        
+
         // End knockdown when complete
         if (progress >= 1) {
           shombie.isKnockedDown = false;
           shombie.knockdownProgress = 0;
         }
-        
+
         needsUpdate = true;
         continue; // Skip normal movement when knocked down
       }
@@ -589,6 +603,7 @@ export function useShombieSystem({
     shombiesRef,
     spawningEnabled,
     spawnShombie,
+    spawnShombieAt,
     spawnShombieGroup,
     getDefinitionByTier,
     damageShombie,

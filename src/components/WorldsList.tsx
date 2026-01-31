@@ -3,11 +3,13 @@ import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useWorlds, World } from '@/hooks/useWorlds';
+import { useWorlds, World, AmbientMusicTrack } from '@/hooks/useWorlds';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous, RefreshCw, Music, Volume2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { DEFAULT_TEXTURES } from '@/hooks/useCurrentWorldId';
 import { cn } from '@/lib/utils';
@@ -21,7 +23,7 @@ interface WorldsListProps {
 }
 
 export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
-  const { worlds, isLoading, createWorld, updateWorld, setDefaultWorld, deleteWorld } = useWorlds();
+  const { worlds, ambientTracks, isLoading, createWorld, updateWorld, setDefaultWorld, deleteWorld, uploadAmbientTrack } = useWorlds();
   const { toast } = useToast();
   
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -35,8 +37,15 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
   });
   const [isCleaningGhostTrees, setIsCleaningGhostTrees] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [isRestoringTrees, setIsRestoringTrees] = useState(false);
+  const [isGrowingTrees, setIsGrowingTrees] = useState(false);
+  const [uploadingAmbient, setUploadingAmbient] = useState(false);
+  const [newTrackName, setNewTrackName] = useState('');
+  const [showUploadTrackDialog, setShowUploadTrackDialog] = useState(false);
+  const [pendingAmbientFile, setPendingAmbientFile] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ambientFileInputRef = useRef<HTMLInputElement>(null);
 
   // Clear ghost trees from ALL persistence layers using edge function (bypasses RLS)
   const handleClearGhostTrees = async () => {
@@ -131,6 +140,107 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       });
     } finally {
       setIsCleaningGhostTrees(false);
+    }
+  };
+
+  // Trigger server-side tree growth processing
+  const handleGrowTrees = async () => {
+    setIsGrowingTrees(true);
+    try {
+      console.log('[TreeGrowth] Triggering server-side tree growth...');
+
+      const { data, error } = await supabase.rpc('trigger_tree_growth');
+
+      if (error) {
+        if (error.code === 'PGRST202') {
+          throw new Error('Migration not deployed. Run the server_side_tree_growth migration first.');
+        }
+        throw error;
+      }
+
+      console.log('[TreeGrowth] Result:', data);
+
+      const blocksInserted = data?.total_blocks_inserted || 0;
+      const treesProcessed = data?.trees_processed || 0;
+      const treesCompleted = data?.trees_completed || 0;
+
+      if (blocksInserted > 0) {
+        toast({
+          title: 'Trees grown',
+          description: `Inserted ${blocksInserted} blocks across ${treesProcessed} trees. ${treesCompleted} trees completed.`
+        });
+      } else if (treesProcessed > 0) {
+        toast({
+          title: 'Trees up to date',
+          description: `Checked ${treesProcessed} trees - all blocks already placed.`
+        });
+      } else {
+        toast({
+          title: 'No growing trees',
+          description: 'No trees currently need growth processing.'
+        });
+      }
+    } catch (err) {
+      console.error('[TreeGrowth] Error:', err);
+      toast({
+        title: 'Growth failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsGrowingTrees(false);
+    }
+  };
+
+  // Restore missing tree blocks from blueprints
+  const handleRestoreTrees = async () => {
+    if (!currentWorldId) {
+      toast({ title: 'No world selected', description: 'Please select a world first', variant: 'destructive' });
+      return;
+    }
+
+    setIsRestoringTrees(true);
+    try {
+      console.log('[TreeRestore] Starting tree block restoration...');
+
+      const { data, error } = await supabase.rpc('sync_all_missing_tree_blocks', {
+        p_world_id: currentWorldId
+      });
+
+      if (error) {
+        // Check if the function doesn't exist
+        if (error.code === 'PGRST202') {
+          throw new Error('Migration not deployed. Run the sync_missing_tree_blocks migration in Supabase first.');
+        }
+        throw error;
+      }
+
+      console.log('[TreeRestore] Result:', data);
+
+      if (data.total_blocks_inserted > 0) {
+        toast({
+          title: 'Trees restored',
+          description: `Restored ${data.total_blocks_inserted} blocks from ${data.trees_processed} trees. Reloading...`
+        });
+
+        // Clear cache and reload to see restored trees
+        await blockDB.clearAllChunkCache();
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        toast({
+          title: 'No missing blocks',
+          description: `Checked ${data.trees_processed} trees - all blocks already exist.`
+        });
+      }
+    } catch (err) {
+      console.error('[TreeRestore] Error:', err);
+      toast({
+        title: 'Restore failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsRestoringTrees(false);
     }
   };
 
@@ -286,6 +396,59 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
     fileInputRef.current?.click();
   };
 
+  // Ambient music handlers
+  const handleAmbientFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPendingAmbientFile(file);
+      setNewTrackName(file.name.replace(/\.[^/.]+$/, '')); // Default name from filename
+      setShowUploadTrackDialog(true);
+    }
+    if (ambientFileInputRef.current) {
+      ambientFileInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadAmbientTrack = async () => {
+    if (!pendingAmbientFile || !newTrackName.trim()) return;
+
+    setUploadingAmbient(true);
+    try {
+      await uploadAmbientTrack(newTrackName.trim(), pendingAmbientFile);
+      toast({ title: 'Track uploaded', description: `"${newTrackName}" is now available` });
+      setShowUploadTrackDialog(false);
+      setPendingAmbientFile(null);
+      setNewTrackName('');
+    } catch (err) {
+      toast({ title: 'Upload failed', description: err instanceof Error ? err.message : 'Failed to upload track', variant: 'destructive' });
+    } finally {
+      setUploadingAmbient(false);
+    }
+  };
+
+  const handleAmbientMusicChange = async (worldId: string, url: string) => {
+    try {
+      await updateWorld(worldId, { ambient_music_url: url || null });
+      toast({ title: 'Music updated', description: 'Ambient music changed for this world' });
+    } catch (err) {
+      console.error('Failed to update ambient music:', err);
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to update ambient music. Run the migration first.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleAmbientVolumeChange = async (worldId: string, volume: number) => {
+    try {
+      await updateWorld(worldId, { ambient_music_volume: volume });
+    } catch (err) {
+      // Silent fail for volume changes to avoid spamming toasts
+      console.error('Failed to update volume:', err);
+    }
+  };
+
   // Helper to get display texture (actual or default)
   const getDisplayTexture = (url: string | null, type: 'fortress' | 'ground' | 'sky') => {
     if (url) return { url, isDefault: false };
@@ -310,13 +473,33 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
             <RefreshCw className={cn("h-4 w-4 mr-1", isClearingCache && "animate-spin")} /> 
             {isClearingCache ? 'Clearing...' : 'Clear Cache'}
           </Button>
-          <Button 
-            onClick={handleClearGhostTrees} 
-            size="sm" 
+          <Button
+            onClick={handleGrowTrees}
+            size="sm"
+            variant="outline"
+            disabled={isGrowingTrees}
+            className="text-emerald-600 border-emerald-600 hover:bg-emerald-50"
+          >
+            <TreeDeciduous className={cn("h-4 w-4 mr-1", isGrowingTrees && "animate-spin")} />
+            {isGrowingTrees ? 'Growing...' : 'Grow Trees'}
+          </Button>
+          <Button
+            onClick={handleRestoreTrees}
+            size="sm"
+            variant="outline"
+            disabled={isRestoringTrees}
+            className="text-green-600 border-green-600 hover:bg-green-50"
+          >
+            <TreeDeciduous className={cn("h-4 w-4 mr-1", isRestoringTrees && "animate-pulse")} />
+            {isRestoringTrees ? 'Restoring...' : 'Restore Trees'}
+          </Button>
+          <Button
+            onClick={handleClearGhostTrees}
+            size="sm"
             variant="destructive"
             disabled={isCleaningGhostTrees}
           >
-            <TreeDeciduous className="h-4 w-4 mr-1" /> 
+            <TreeDeciduous className="h-4 w-4 mr-1" />
             {isCleaningGhostTrees ? 'Clearing...' : 'Clear Ghost Trees'}
           </Button>
           <Button onClick={() => setShowCreateDialog(true)} size="sm">
@@ -335,6 +518,14 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
         accept="image/png,image/jpeg,image/webp"
         className="hidden"
         onChange={handleFileSelect}
+      />
+
+      <input
+        ref={ambientFileInputRef}
+        type="file"
+        accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4"
+        className="hidden"
+        onChange={handleAmbientFileSelect}
       />
 
       <div className="grid gap-4">
@@ -451,13 +642,13 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
                   <Label className="text-xs text-muted-foreground">Sky</Label>
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      <img 
-                        src={skyTex.url} 
+                      <img
+                        src={skyTex.url}
                         className={cn(
                           "w-12 h-12 object-cover rounded border",
                           skyTex.isDefault && "opacity-60"
-                        )} 
-                        alt="Sky" 
+                        )}
+                        alt="Sky"
                       />
                       {skyTex.isDefault && (
                         <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white rounded-b">
@@ -465,14 +656,63 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
                         </span>
                       )}
                     </div>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'sky'}
                       onClick={() => triggerUpload(world.id, 'sky')}
                     >
                       <Upload className="h-3 w-3" />
                     </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ambient Music Section */}
+              <div className="mt-4 pt-3 border-t border-border/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <Music className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-xs text-muted-foreground">Ambient Music</Label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Select
+                    value={world.ambient_music_url || '__none__'}
+                    onValueChange={(value) => handleAmbientMusicChange(world.id, value === '__none__' ? '' : value)}
+                  >
+                    <SelectTrigger className="w-[200px] h-8 text-xs">
+                      <SelectValue placeholder="Select track..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {(ambientTracks || []).map(track => (
+                        <SelectItem key={track.id} value={track.url}>
+                          {track.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => ambientFileInputRef.current?.click()}
+                  >
+                    <Upload className="h-3 w-3 mr-1" /> Upload New
+                  </Button>
+
+                  <div className="flex items-center gap-2 flex-1 min-w-[150px]">
+                    <Volume2 className="h-4 w-4 text-muted-foreground" />
+                    <Slider
+                      value={[world.ambient_music_volume ?? 100]}
+                      min={0}
+                      max={200}
+                      step={5}
+                      className="flex-1"
+                      onValueChange={([value]) => handleAmbientVolumeChange(world.id, value)}
+                    />
+                    <span className="text-xs text-muted-foreground w-10 text-right">
+                      {world.ambient_music_volume ?? 100}%
+                    </span>
                   </div>
                 </div>
               </div>
@@ -528,6 +768,41 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Ambient Track Dialog */}
+      <Dialog open={showUploadTrackDialog} onOpenChange={setShowUploadTrackDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Ambient Track</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="track-name">Track Name</Label>
+              <Input
+                id="track-name"
+                placeholder="Alien Planet Ambient"
+                value={newTrackName}
+                onChange={(e) => setNewTrackName(e.target.value)}
+              />
+            </div>
+            {pendingAmbientFile && (
+              <p className="text-sm text-muted-foreground">
+                File: {pendingAmbientFile.name} ({(pendingAmbientFile.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowUploadTrackDialog(false);
+              setPendingAmbientFile(null);
+              setNewTrackName('');
+            }}>Cancel</Button>
+            <Button onClick={handleUploadAmbientTrack} disabled={uploadingAmbient || !newTrackName.trim()}>
+              {uploadingAmbient ? 'Uploading...' : 'Upload'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

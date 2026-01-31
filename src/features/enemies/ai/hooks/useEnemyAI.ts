@@ -16,10 +16,14 @@ import { EnemyManager } from '../EnemyManager';
 import { ShnakeAdapter, type ShnakeWithAI, setShnakeLocomotionContext, cleanupShnakeResources, markShnakeAttacked } from '../adapters/ShnakeAdapter';
 import { ShwarmAdapter, type ShwarmWithAI, setShwarmLocomotionContext, cleanupShwarmResources } from '../adapters/ShwarmAdapter';
 import { ShombieAdapter, type ShombieWithAI, setShombieLocomotionContext } from '../adapters/ShombieAdapter';
+import { WalapaAdapter, type WalapaWithAI, setWalapaLocomotionContext } from '../adapters/WalapaAdapter';
+import { ShtickmanAdapter, type ShtickmanWithAI, setShtickmanLocomotionContext } from '../adapters/ShtickmanAdapter';
 import { frameLoop } from '@/lib/frameLoop';
 import type { ShnakeInstance } from '@/features/shnake/types';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
 import type { ShombieInstance } from '@/features/shombie/types';
+import type { WalapaInstance } from '@/features/walapa/types';
+import type { ShtickmanInstance } from '@/features/shtickman/types';
 import type { PlantedTree } from '@/features/trees/types';
 
 interface UseEnemyAIOptions {
@@ -52,6 +56,14 @@ interface UseEnemyAIOptions {
   
   // Shombie locomotion context
   onShombiePlayerHit?: (damage: number, knockbackForce: number, direction: THREE.Vector3) => void;
+
+  // Walapa instances ref
+  walapasRef?: React.RefObject<WalapaInstance[]>;
+  onWalapaPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
+
+  // Shtickman instances ref
+  shtickmenRef?: React.RefObject<ShtickmanInstance[]>;
+  onShtickmanPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
 }
 
 /**
@@ -76,6 +88,10 @@ export function useEnemyAI({
   onIndignantRoar,
   onTriggerWiggle,
   onShombiePlayerHit,
+  walapasRef,
+  onWalapaPlayerHit,
+  shtickmenRef,
+  onShtickmanPlayerHit,
 }: UseEnemyAIOptions) {
   // Track registered enemy IDs to detect changes (reused, not reallocated)
   const registeredShnakesRef = useRef<Set<string>>(new Set());
@@ -87,6 +103,10 @@ export function useEnemyAI({
   const tempShnakeIdsRef = useRef<Set<string>>(new Set());
   const tempShwarmIdsRef = useRef<Set<string>>(new Set());
   const tempShombieIdsRef = useRef<Set<string>>(new Set());
+  const registeredWalapasRef = useRef<Set<string>>(new Set());
+  const registeredShtickmenRef = useRef<Set<string>>(new Set());
+  const tempWalapaIdsRef = useRef<Set<string>>(new Set());
+  const tempShtickmanIdsRef = useRef<Set<string>>(new Set());
   
   // Update locomotion context when deps change
   useEffect(() => {
@@ -97,7 +117,7 @@ export function useEnemyAI({
     for (const t of (plantedTrees ?? [])) {
       treeById.set(t.id, t);
     }
-    
+
     // Update shnake locomotion context (no worldBlocks - uses collisionGrid O(1) lookup)
     setShnakeLocomotionContext({
       plantedTrees: plantedTrees ?? [],
@@ -118,7 +138,17 @@ export function useEnemyAI({
     setShombieLocomotionContext({
       onPlayerHit: onShombiePlayerHit,
     });
-  }, [isEnabled, aiControlled, plantedTrees, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved, onIndignantRoar, onTriggerWiggle, onShombiePlayerHit]);
+
+    // Update walapa locomotion context
+    setWalapaLocomotionContext({
+      onPlayerHit: onWalapaPlayerHit,
+    });
+
+    // Update shtickman locomotion context
+    setShtickmanLocomotionContext({
+      onPlayerHit: onShtickmanPlayerHit,
+    });
+  }, [isEnabled, aiControlled, plantedTrees, treeBlocksByTierRef, onPlayerHit, onShnakeHeadMoved, onIndignantRoar, onTriggerWiggle, onShombiePlayerHit, onWalapaPlayerHit, onShtickmanPlayerHit]);
   
   // Stable sync function for shnakes (avoids stale closures)
   // OPTIMIZED: Reuses tempShnakeIds set instead of allocating new Set each call
@@ -217,7 +247,63 @@ export function useEnemyAI({
       }
     }
   }, [shombiesRef]);
-  
+
+  // Stable sync function for walapas
+  const syncWalapas = useCallback(() => {
+    if (!walapasRef?.current) return;
+    const walapas = walapasRef.current;
+    const tempIds = tempWalapaIdsRef.current;
+    tempIds.clear();
+
+    for (const w of walapas) {
+      tempIds.add(w.id);
+    }
+
+    const registered = registeredWalapasRef.current;
+
+    for (const walapa of walapas) {
+      if (!registered.has(walapa.id) && walapa.isActive) {
+        EnemyManager.register(walapa as WalapaWithAI, WalapaAdapter);
+        registered.add(walapa.id);
+      }
+    }
+
+    for (const id of registered) {
+      if (!tempIds.has(id)) {
+        EnemyManager.unregister(id);
+        registered.delete(id);
+      }
+    }
+  }, [walapasRef]);
+
+  // Stable sync function for shtickmen
+  const syncShtickmen = useCallback(() => {
+    if (!shtickmenRef?.current) return;
+    const shtickmen = shtickmenRef.current;
+    const tempIds = tempShtickmanIdsRef.current;
+    tempIds.clear();
+
+    for (const s of shtickmen) {
+      tempIds.add(s.id);
+    }
+
+    const registered = registeredShtickmenRef.current;
+
+    for (const shtickman of shtickmen) {
+      if (!registered.has(shtickman.id) && shtickman.isActive) {
+        EnemyManager.register(shtickman as ShtickmanWithAI, ShtickmanAdapter);
+        registered.add(shtickman.id);
+      }
+    }
+
+    for (const id of registered) {
+      if (!tempIds.has(id)) {
+        EnemyManager.unregister(id);
+        registered.delete(id);
+      }
+    }
+  }, [shtickmenRef]);
+
   // Initialize EnemyManager on mount
   useEffect(() => {
     if (!isEnabled) return;
@@ -248,6 +334,8 @@ export function useEnemyAI({
       registeredShnakesRef.current.clear();
       registeredShwarmsRef.current.clear();
       registeredShombiesRef.current.clear();
+      registeredWalapasRef.current.clear();
+      registeredShtickmenRef.current.clear();
     };
   }, [isEnabled, aiControlled, cameraRef]);
   
@@ -265,10 +353,12 @@ export function useEnemyAI({
       syncShnakes();
       syncShwarms();
       syncShombies();
+      syncWalapas();
+      syncShtickmen();
     }, 34); // Near the playerPos updater priority
-    
+
     return unregister;
-  }, [isEnabled, syncShnakes, syncShwarms, syncShombies]);
+  }, [isEnabled, syncShnakes, syncShwarms, syncShombies, syncWalapas, syncShtickmen]);
   
   // Wire markShnakeAttacked global to AI system when AI controls
   useEffect(() => {

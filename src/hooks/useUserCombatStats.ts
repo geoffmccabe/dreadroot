@@ -15,7 +15,7 @@ export interface EnemyDefinition {
   name: string;
   texture_url: string | null;
   rarity?: string;
-  enemyType: 'shwarm' | 'shnake' | 'shombie'; // Distinguish between enemy types
+  enemyType: 'shwarm' | 'shnake' | 'shombie' | 'shtickman'; // Distinguish between enemy types
 }
 
 // Rarity order for sorting (lowest to highest)
@@ -54,6 +54,15 @@ function getShombieRarityFromTier(tier: number): string {
   return 'legendary';
 }
 
+// Derive rarity from tier (for shtickman - tiers 1-10)
+function getShtickmanRarityFromTier(tier: number): string {
+  if (tier <= 2) return 'common';
+  if (tier <= 4) return 'uncommon';
+  if (tier <= 6) return 'rare';
+  if (tier <= 8) return 'epic';
+  return 'legendary';
+}
+
 export function useUserCombatStats() {
   const { user } = useAuth();
   const [stats, setStats] = useState<CombatStat[]>([]);
@@ -71,7 +80,7 @@ export function useUserCombatStats() {
     const loadData = async () => {
       setIsLoading(true);
       
-      const [statsResult, shwarmDefsResult, shnakeDefsResult, shombieDefsResult] = await Promise.all([
+      const [statsResult, shwarmDefsResult, shnakeDefsResult, shombieDefsResult, shtickmanDefsResult] = await Promise.all([
         supabase
           .from('user_combat_stats')
           .select('*')
@@ -87,6 +96,10 @@ export function useUserCombatStats() {
         supabase
           .from('shombie_definitions')
           .select('id, tier, name, texture_url')
+          .order('tier', { ascending: true }),
+        supabase
+          .from('shtickman_definitions')
+          .select('id, tier, name, body_texture_url')
           .order('tier', { ascending: true })
       ]);
 
@@ -134,7 +147,20 @@ export function useUserCombatStats() {
         }));
         allDefs.push(...shombieDefs);
       }
-      
+
+      // Add shtickman definitions
+      if (!shtickmanDefsResult.error) {
+        const shtickmanDefs = (shtickmanDefsResult.data || []).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.body_texture_url, // Use body texture for display
+          rarity: getShtickmanRarityFromTier(d.tier),
+          enemyType: 'shtickman' as const,
+        }));
+        allDefs.push(...shtickmanDefs);
+      }
+
       setDefinitions(allDefs);
       setIsLoading(false);
     };

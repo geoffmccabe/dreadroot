@@ -7,8 +7,9 @@ export interface InitStep {
   file: string;
   message: string;
   count?: number;
-  durationSecs: number;
-  timestamp: number;
+  startTime: number;      // When this step started (ms from init start)
+  endTime?: number;       // When this step finished (ms from init start)
+  durationMs?: number;    // Actual duration of this step
   status: InitStepStatus;
   errorMessage?: string;
 }
@@ -25,6 +26,7 @@ interface InitializationContextType {
   finishInitialization: () => void;
   dismissOverlay: () => void;
   isOverlayVisible: boolean;
+  elapsedMs: number;  // Current elapsed time for live updates
 }
 
 const InitializationContext = createContext<InitializationContextType | null>(null);
@@ -38,7 +40,28 @@ let globalFinishStep: ((id: string, count?: number) => void) | null = null;
 let globalErrorStep: ((id: string, message?: string) => void) | null = null;
 
 // Max steps to prevent memory issues
-const MAX_STEPS = 250;
+const MAX_STEPS = 150;
+
+// Deduplication: track recent messages to avoid duplicates
+const recentMessages = new Map<string, number>(); // message key -> timestamp
+const DEDUPE_WINDOW_MS = 500; // Don't repeat same message within 500ms
+
+function getMessageKey(file: string, message: string): string {
+  return `${file}|${message}`;
+}
+
+function shouldDedupe(file: string, message: string): boolean {
+  const key = getMessageKey(file, message);
+  const lastTime = recentMessages.get(key);
+  const now = performance.now();
+
+  if (lastTime && now - lastTime < DEDUPE_WINDOW_MS) {
+    return true; // Skip this message
+  }
+
+  recentMessages.set(key, now);
+  return false;
+}
 
 // Exported functions for hooks that run outside React context
 export function initLogStep(file: string, message: string, count?: number) {
@@ -95,33 +118,44 @@ export function InitializationProvider({ children }: { children: React.ReactNode
   const [isOverlayVisible, setIsOverlayVisible] = useState(false);
   const [steps, setSteps] = useState<InitStep[]>([]);
   const [totalDurationSecs, setTotalDurationSecs] = useState(0);
-  
-  // Initialize with current time so early steps have valid baseline
+  const [elapsedMs, setElapsedMs] = useState(0);
+
   const startTimeRef = useRef<number>(performance.now());
-  const lastStepTimeRef = useRef<number>(performance.now());
   const isInitializingRef = useRef(false);
+  const elapsedIntervalRef = useRef<number | null>(null);
 
   const startInitialization = useCallback(() => {
     const now = performance.now();
     startTimeRef.current = now;
-    lastStepTimeRef.current = now;
     stepIdCounter = 0;
+    recentMessages.clear();
     setSteps([]);
     setIsInitializing(true);
     isInitializingRef.current = true;
     setIsOverlayVisible(true);
     setTotalDurationSecs(0);
+    setElapsedMs(0);
+
+    // Update elapsed time every 100ms for live display
+    if (elapsedIntervalRef.current) {
+      clearInterval(elapsedIntervalRef.current);
+    }
+    elapsedIntervalRef.current = window.setInterval(() => {
+      setElapsedMs(performance.now() - startTimeRef.current);
+    }, 100);
   }, []);
 
-  // Legacy addStep - creates a "done" step immediately
+  // Instant step - logs immediately as done (for info messages)
   const addStep = useCallback((file: string, message: string, count?: number) => {
     if (!isInitializingRef.current) return;
-    
+
+    // Deduplicate
+    if (shouldDedupe(file, message)) return;
+
     const now = performance.now();
-    const durationSecs = (now - lastStepTimeRef.current) / 1000;
-    lastStepTimeRef.current = now;
+    const elapsed = now - startTimeRef.current;
     const id = `step-${++stepIdCounter}`;
-    
+
     setSteps(prev => {
       if (prev.length >= MAX_STEPS) return prev;
       return [...prev, {
@@ -129,51 +163,53 @@ export function InitializationProvider({ children }: { children: React.ReactNode
         file,
         message,
         count,
-        durationSecs,
-        timestamp: now - startTimeRef.current,
+        startTime: elapsed,
+        endTime: elapsed,
+        durationMs: 0, // Instant step
         status: 'done' as InitStepStatus
       }];
     });
   }, []);
 
-  // Start a step (status = 'running')
+  // Start a step (status = 'running') - returns ID to finish later
   const startStep = useCallback((file: string, message: string): string => {
     const id = `step-${++stepIdCounter}`;
-    
+
     if (!isInitializingRef.current) return id;
-    
+
+    // Don't dedupe start steps - they have unique IDs
     const now = performance.now();
-    const durationSecs = (now - lastStepTimeRef.current) / 1000;
-    lastStepTimeRef.current = now;
-    
+    const elapsed = now - startTimeRef.current;
+
     setSteps(prev => {
       if (prev.length >= MAX_STEPS) return prev;
       return [...prev, {
         id,
         file,
         message,
-        durationSecs,
-        timestamp: now - startTimeRef.current,
+        startTime: elapsed,
         status: 'running' as InitStepStatus
       }];
     });
-    
+
     return id;
   }, []);
 
-  // Finish a running step
+  // Finish a running step - calculates actual duration
   const finishStep = useCallback((id: string, count?: number) => {
     if (!isInitializingRef.current) return;
-    
+
     const now = performance.now();
-    
+    const elapsed = now - startTimeRef.current;
+
     setSteps(prev => prev.map(step => {
       if (step.id !== id) return step;
       return {
         ...step,
         status: 'done' as InitStepStatus,
         count,
-        durationSecs: (now - startTimeRef.current - step.timestamp) / 1000
+        endTime: elapsed,
+        durationMs: elapsed - step.startTime
       };
     }));
   }, []);
@@ -181,16 +217,18 @@ export function InitializationProvider({ children }: { children: React.ReactNode
   // Mark a step as errored
   const errorStep = useCallback((id: string, message?: string) => {
     if (!isInitializingRef.current) return;
-    
+
     const now = performance.now();
-    
+    const elapsed = now - startTimeRef.current;
+
     setSteps(prev => prev.map(step => {
       if (step.id !== id) return step;
       return {
         ...step,
         status: 'error' as InitStepStatus,
         errorMessage: message,
-        durationSecs: (now - startTimeRef.current - step.timestamp) / 1000
+        endTime: elapsed,
+        durationMs: elapsed - step.startTime
       };
     }));
   }, []);
@@ -199,8 +237,15 @@ export function InitializationProvider({ children }: { children: React.ReactNode
     const now = performance.now();
     const total = (now - startTimeRef.current) / 1000;
     setTotalDurationSecs(total);
+    setElapsedMs(now - startTimeRef.current);
     setIsInitializing(false);
     isInitializingRef.current = false;
+
+    // Stop elapsed timer
+    if (elapsedIntervalRef.current) {
+      clearInterval(elapsedIntervalRef.current);
+      elapsedIntervalRef.current = null;
+    }
   }, []);
 
   const dismissOverlay = useCallback(() => {
@@ -222,6 +267,9 @@ export function InitializationProvider({ children }: { children: React.ReactNode
       globalStartStep = null;
       globalFinishStep = null;
       globalErrorStep = null;
+      if (elapsedIntervalRef.current) {
+        clearInterval(elapsedIntervalRef.current);
+      }
     };
   }, [addStep, startInitialization, finishInitialization, startStep, finishStep, errorStep]);
 
@@ -237,7 +285,8 @@ export function InitializationProvider({ children }: { children: React.ReactNode
       errorStep,
       finishInitialization,
       dismissOverlay,
-      isOverlayVisible
+      isOverlayVisible,
+      elapsedMs
     }}>
       {children}
     </InitializationContext.Provider>

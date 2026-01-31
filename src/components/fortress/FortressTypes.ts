@@ -3,6 +3,8 @@ import { PlacedBlock } from '@/types/blocks';
 import type { ShwarmDefinition } from '@/features/shwarm/types';
 import type { ShnakeDefinition } from '@/features/shnake/types';
 import type { ShombieDefinition } from '@/features/shombie/types';
+import type { WalapaDefinition, WalapaInstance } from '@/features/walapa/types';
+import type { ShtickmanDefinition } from '@/features/shtickman/types';
 // ============================================================
 // DEBUG CONFIGURATION
 // ============================================================
@@ -51,6 +53,14 @@ export interface CycleState {
   isNight: boolean;
 }
 
+// Selected hotbar item definition (passed from Fortress → Scene → Controls)
+export interface SelectedItemDef {
+  itemNumber: number | null;
+  tier: number | null;
+  name: string | null;
+  itemId: string | null;
+}
+
 // Scene props interface
 export interface SceneProps {
   settings: GameSettings;
@@ -59,17 +69,21 @@ export interface SceneProps {
   wallPositions: Record<number, { x: number; y: number; z: number; rotX: number; rotY: number; rotZ: number }>;
   blockPlacementMode: boolean;
   treePlacementMode: boolean;
+  fungalPlacementMode: boolean;
   onBlockPlace: (position: THREE.Vector3) => void;
   onTreePlace: (position: THREE.Vector3) => void;
-  onModeChange: (mode: 'shooting' | 'building' | 'planting' | null) => void;
+  onFungalTreePlace: (position: THREE.Vector3) => void;
+  onModeChange: (mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | null) => void;
   onOpenPanel: (tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => void;
   crosshairsEnabled: boolean;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
   selectedSeedTier: number | null;
+  selectedFungalTier: number | null;
   panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   onCycleSeed: (direction: 'next' | 'prev') => void;
+  onCycleFungalSeed: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
   weatherSettings: WeatherSettings;
   onBlockRain: () => void;
@@ -114,6 +128,12 @@ export interface SceneProps {
   plantedTrees?: import('@/features/trees/types').PlantedTree[];
   // Shombie system
   shombieDefinitions?: ShombieDefinition[];
+  // Walapa system
+  walapaDefinitions?: WalapaDefinition[];
+  onWalapaKilled?: (tier: number) => void;
+  // Shtickman system
+  shtickmanDefinitions?: ShtickmanDefinition[];
+  onShtickmanKilled?: (tier: number) => void;
   // Points system callback
   onPointsEarned?: (points: number) => void;
   // Shwarm group killed callback (passes tier for kill tracking)
@@ -132,6 +152,12 @@ export interface SceneProps {
   // Pentabullet system
   playerLevel?: number;
   onPentabulletChargeChange?: (charge: number) => void;
+  // Jet Boost system
+  onJetBoostStateChange?: (state: JetBoostState) => void;
+  // Selected hotbar item (for flame glove detection)
+  selectedItemDef?: SelectedItemDef;
+  // Inventory management
+  addItem?: (itemId: string, quantity: number) => Promise<boolean>;
 }
 
 // First person controls props
@@ -142,16 +168,21 @@ export interface FirstPersonControlsProps {
   playAudio: (audio: HTMLAudioElement) => Promise<void>;
   blockPlacementMode: boolean;
   treePlacementMode: boolean;
+  fungalPlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
   onTreePlace?: (position: THREE.Vector3) => void;
+  onFungalTreePlace?: (position: THREE.Vector3) => void;
   onOpenPanel: (tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => void;
-  onModeChange: (mode: 'shooting' | 'building' | 'planting' | null) => void;
+  onToggleInventory?: () => void;
+  onModeChange: (mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | null) => void;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
   selectedSeedTier: number | null;
+  selectedFungalTier: number | null;
   panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   onCycleSeed: (direction: 'next' | 'prev') => void;
+  onCycleFungalSeed: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
   onBlockRain: () => void;
   userRoles: string[];
@@ -181,6 +212,24 @@ export interface FirstPersonControlsProps {
   onPentabulletChargeChange?: (charge: number) => void;
   // Admin spawn shortcut (!2# for shnakes)
   onSpawnShnake?: (tier: number) => void;
+  // Jet Boost system
+  onJetBoostStateChange?: (state: { available: number; max: number; nextRefillAtMs: number; isGliding: boolean }) => void;
+  onJetBoostFired?: (position: THREE.Vector3, colors: string[]) => void;
+  bulletTier?: number;
+  // Walapa riding system - ref to active walapas for moving platform support
+  walapasRef?: React.MutableRefObject<WalapaInstance[]>;
+  // Flame Glove system
+  isFlameGloveSelected?: boolean;
+  onFlameStart?: () => void;
+  onFlameStop?: () => void;
+}
+
+// Jet Boost state for HUD
+export interface JetBoostState {
+  available: number;
+  max: number;
+  nextRefillAtMs: number;
+  isGliding: boolean;
 }
 
 // Bullet interface
@@ -202,6 +251,7 @@ export interface FlyingCoin {
   startX: number;
   startY: number;
   startTime: number;
+  imageUrl?: string; // URL of the coin image to display
 }
 
 // Waterfall drop interface

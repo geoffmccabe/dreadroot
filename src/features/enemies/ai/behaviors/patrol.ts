@@ -14,11 +14,16 @@ const PATROL_PAUSE_MIN_MS = 1000; // 1 second minimum pause
 const PATROL_PAUSE_MAX_MS = 3000; // 3 seconds maximum pause
 const PATROL_DESTINATION_REACHED_THRESHOLD = 1.5; // Within 1.5 units = arrived
 
+const DEBUG_PATROL = false;
+
 export const PatrolBehavior: BehaviorModule = {
   id: 'patrol',
   name: 'Patrol',
-  
+
   evaluate(ctx: BehaviorContext): number {
+    if (DEBUG_PATROL) {
+      console.log(`[Patrol] Evaluating for ${ctx.entityId}, distToPlayer=${ctx.distToPlayer.toFixed(1)}, hasLOS=${ctx.hasLineOfSight}`);
+    }
     // Check if currently pursuing revenge (revenge takes priority)
     const revengeTarget = ctx.state.revengeTarget as { damageReceived: number; damageDealt: number } | null;
     if (revengeTarget && revengeTarget.damageDealt < revengeTarget.damageReceived) {
@@ -118,16 +123,23 @@ export const PatrolBehavior: BehaviorModule = {
         const tier = ctx.custom.tier as number ?? 1;
         const treeRadius = 5 + tier * 2; // Larger trees for higher tiers
         const treeHeight = 10 + tier * 5;
-        
+
         // Random offset from tree base
         const angle = Math.random() * Math.PI * 2;
         const radius = Math.random() * treeRadius;
         const height = Math.random() * treeHeight;
-        
+
         ctx.state.patrolTargetX = treeBaseX + Math.cos(angle) * radius;
         ctx.state.patrolTargetY = treeBaseY + height;
         ctx.state.patrolTargetZ = treeBaseZ + Math.sin(angle) * radius;
+
+        if (DEBUG_PATROL) {
+          console.log(`[Patrol] ${ctx.entityId} new target: (${ctx.state.patrolTargetX.toFixed(1)}, ${ctx.state.patrolTargetY.toFixed(1)}, ${ctx.state.patrolTargetZ.toFixed(1)})`);
+        }
       } else {
+        if (DEBUG_PATROL) {
+          console.log(`[Patrol] ${ctx.entityId} no tree data - treeBaseX=${treeBaseX}, treeBaseY=${treeBaseY}, treeBaseZ=${treeBaseZ}`);
+        }
         // No tree data available, just idle
         return { kind: 'idle' };
       }

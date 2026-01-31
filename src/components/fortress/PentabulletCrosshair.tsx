@@ -84,7 +84,8 @@ function CrosshairRing({
 
 export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '#ff2431' }: PentabulletCrosshairProps) {
   const [rotation, setRotation] = useState(0);
-  
+  const [cycleColorIndex, setCycleColorIndex] = useState(0);
+
   // Calculate number of additional rings based on charge time
   // Ring timing: 1.0s, 1.75s, 2.5s, 3.25s, 4.0s (every 0.75s after 1s)
   const additionalRingCount = chargeProgress >= 4.0 ? 4 :
@@ -92,21 +93,39 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
                               chargeProgress >= 2.5 ? 2 :
                               chargeProgress >= 1.75 ? 1 :
                               chargeProgress >= 1.0 ? 0 : -1; // -1 means no extra rings yet
-  
+
   // Start rotating as soon as charging begins (at 1 second)
   const isCharging = chargeProgress >= 1.0;
   const isFullyCharged = chargeProgress >= 5.0;
-  
+
+  // Color cycling when fully charged (10 cycles per second = 33ms per color)
+  const cycleColors = [bulletColor, '#ffffff', '#000000'];
+  const displayColor = isFullyCharged ? cycleColors[cycleColorIndex] : bulletColor;
+
+  // Color cycling animation when fully charged
+  useEffect(() => {
+    if (!isFullyCharged) {
+      setCycleColorIndex(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setCycleColorIndex(i => (i + 1) % 3);
+    }, 33); // ~10 full cycles per second (3 colors × 33ms = 99ms per cycle)
+
+    return () => clearInterval(interval);
+  }, [isFullyCharged]);
+
   // Rotation animation - starts at 1 second, speeds up when fully charged
   useEffect(() => {
     if (!isCharging) {
       setRotation(0);
       return;
     }
-    
+
     let animationId: number;
     let lastTime = performance.now();
-    
+
     const animate = (now: number) => {
       const delta = now - lastTime;
       lastTime = now;
@@ -115,7 +134,7 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
       setRotation(r => r + (delta / 1000) * speed);
       animationId = requestAnimationFrame(animate);
     };
-    
+
     animationId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationId);
   }, [isCharging, isFullyCharged]);
@@ -134,7 +153,7 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
           diameter={baseDiameter} 
           rotation={isCharging ? rotation : 0} 
           baseOffset={0}
-          color={bulletColor}
+          color={displayColor}
         />
       )}
       
@@ -164,7 +183,7 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
           rotation={isCharging ? -rotation : 0} 
           baseOffset={45}
           opacity={0.9}
-          color={bulletColor}
+          color={displayColor}
         />
       )}
       
@@ -175,7 +194,7 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
           rotation={isCharging ? rotation : 0} 
           baseOffset={0}
           opacity={0.8}
-          color={bulletColor}
+          color={displayColor}
         />
       )}
       
@@ -186,7 +205,7 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
           rotation={isCharging ? -rotation : 0} 
           baseOffset={45}
           opacity={0.7}
-          color={bulletColor}
+          color={displayColor}
         />
       )}
       
@@ -197,7 +216,7 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
           rotation={isCharging ? rotation : 0} 
           baseOffset={0}
           opacity={0.6}
-          color={bulletColor}
+          color={displayColor}
         />
       )}
     </div>

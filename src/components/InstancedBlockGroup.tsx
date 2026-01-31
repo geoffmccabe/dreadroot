@@ -39,7 +39,6 @@ interface InstancedBlockGroupProps {
   blocks: PlacedBlock[];
   blockDef: BlockType;
   geometry: THREE.BoxGeometry;
-  onCollision?: (box: THREE.Box3, blockId: string) => void;
   showOwnershipOutline?: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
@@ -53,7 +52,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   blocks,
   blockDef,
   geometry,
-  onCollision,
   showOwnershipOutline = false,
   currentUserId,
   hoveredBlockId = null,
@@ -240,41 +238,39 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [onMeshReady]);
   
-  // B2.4: Track last processed signature to skip redundant matrix rebuilds
-  const lastProcessedSignatureRef = useRef<string>('');
-  
+  // Reference gating: skip rebuild if array ref + texture are identical.
+  // Safe because PlacedBlocks group cache reuses the same array for unchanged content.
+  const lastProcessedBlocksRef = useRef<PlacedBlock[] | null>(null);
+  const lastProcessedTextureRef = useRef<string | null>(null);
+  const prevCountRef = useRef(0);
+
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-    
-    // B2.4: Build cheap signature to detect actual content changes
-    // Uses count + first/last block IDs + positions as a fast fingerprint
-    let sig: string;
-    if (blocks.length === 0) {
-      sig = 'empty';
-    } else {
-      const first = blocks[0];
-      const last = blocks[blocks.length - 1];
-      sig = `${blocks.length}:${first.id}:${first.position_x},${first.position_y},${first.position_z}:${last.id}:${last.position_x},${last.position_y},${last.position_z}`;
-    }
-    
-    // Skip rebuild if signature unchanged (array reference changed but content same)
-    if (sig === lastProcessedSignatureRef.current) {
-      // Still update mesh count in case it's out of sync
-      mesh.count = blocks.length;
+
+    const texId = textureOverride ?? null;
+    if (blocks === lastProcessedBlocksRef.current && texId === lastProcessedTextureRef.current) {
       return;
     }
-    lastProcessedSignatureRef.current = sig;
-    
-    // IMPORTANT: Always update the mesh count to match blocks array
-    mesh.count = blocks.length;
-    
+    lastProcessedBlocksRef.current = blocks;
+    lastProcessedTextureRef.current = texId;
+
     const matrix = matrixRef.current;
-    
+
+    // If the array shrank, zero out the old tail to prevent stale instance artifacts
+    const prevCount = prevCountRef.current;
+    if (prevCount > blocks.length) {
+      matrix.makeScale(0, 0, 0);
+      for (let i = blocks.length; i < prevCount; i++) {
+        mesh.setMatrixAt(i, matrix);
+      }
+      matrix.identity(); // Reset for the active block loop below
+    }
+
     // Compute bounding box with numeric min/max - NO allocations per block
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-    
+
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
       const x = block.position_x;
@@ -337,6 +333,11 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       mesh.boundingBox.max.set(maxX, maxY, maxZ);
       mesh.boundingBox.getBoundingSphere(mesh.boundingSphere);
     }
+
+    // Set mesh.count AFTER all instance data is written to prevent
+    // rendering uninitialized indices for a single frame (flicker).
+    mesh.count = blocks.length;
+    prevCountRef.current = blocks.length;
   }, [blocks, textureOverride]);
   
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
@@ -345,13 +346,28 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Reuse Set to avoid GC pressure - clear and refill instead of creating new
   const currentlyFallingRef = useRef<Set<string>>(new Set());
   
-  // Create block ID to index map for O(1) lookups instead of O(n) findIndex
-  const blockIndexMap = useMemo(() => {
-    const map = new Map<string, number>();
-    blocks.forEach((block, index) => {
-      map.set(block.id, index);
-    });
-    return map;
+  // B8: Only build index map for FALLING blocks (tiny set), not all blocks
+  // This eliminates world-sized Map allocation that was causing GC storms
+  const fallingIndexRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    const m = fallingIndexRef.current;
+    m.clear();
+
+    // Early exit if nothing is falling
+    if (fallingBlocksState.size === 0) return;
+
+    // Build indices only for currently-falling blocks
+    const want = new Set<string>();
+    for (const id of fallingBlocksState.keys()) want.add(id);
+
+    for (let i = 0; i < blocks.length; i++) {
+      const id = blocks[i].id;
+      if (want.has(id)) {
+        m.set(id, i);
+        if (m.size === want.size) break; // Found all falling blocks
+      }
+    }
   }, [blocks]);
   
   // E1: Migrate from useFrame to centralized frameLoop to eliminate per-group fan-out
@@ -365,61 +381,66 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   // Store refs for access in frameLoop callback (avoids stale closures)
   const blocksRef = useRef(blocks);
-  const blockIndexMapRef = useRef(blockIndexMap);
   const effectiveShowOwnershipOutlineRef = useRef(effectiveShowOwnershipOutline);
   const hoveredBlockRef = useRef<PlacedBlock | null>(null); // Initialize as null, updated by effect after hoveredBlock is defined
-  
+
   useEffect(() => {
     blocksRef.current = blocks;
-    blockIndexMapRef.current = blockIndexMap;
     effectiveShowOwnershipOutlineRef.current = effectiveShowOwnershipOutline;
-  }, [blocks, blockIndexMap, effectiveShowOwnershipOutline]);
+  }, [blocks, effectiveShowOwnershipOutline]);
   
   useEffect(() => {
     const unregister = frameLoop.register(loopId, (delta) => {
       if (!meshRef.current) return;
-      
+
       const currentBlocks = blocksRef.current;
-      const currentBlockIndexMap = blockIndexMapRef.current;
-      
+
       // D1A: ACCUMULATE visible blocks count (not overwrite)
       // Reset happens once per frame in FortressScene master loop
       diagnostics.visibleBlocks += currentBlocks.length;
-      
+
+      // B8: Early exit if nothing is falling - avoid any work
+      if (fallingBlocksState.size === 0 && previouslyFallingRef.current.size === 0) {
+        return;
+      }
+
       let needsUpdate = false;
       const matrix = matrixRef.current;
-      
+      const fallingIndex = fallingIndexRef.current;
+
       // Reuse Set instead of creating new one every frame
       const currentlyFalling = currentlyFallingRef.current;
       currentlyFalling.clear();
-      
+
       // Update positions for falling blocks - O(1) lookup per block
       fallingBlocksState.forEach((fallState, blockId) => {
-        const blockIndex = currentBlockIndexMap.get(blockId);
+        const blockIndex = fallingIndex.get(blockId);
         if (blockIndex === undefined) return;
-        
+
         currentlyFalling.add(blockId);
-        
+
         const block = currentBlocks[blockIndex];
+        if (!block) return;
         const x = block.position_x + 0.5;
         const y = fallState.currentY + 0.5;
         const z = block.position_z + 0.5;
-        
+
         matrix.setPosition(x, y, z);
         meshRef.current!.setMatrixAt(blockIndex, matrix);
         needsUpdate = true;
       });
-      
+
       // Reset blocks that were falling but have now landed to their database position
       previouslyFallingRef.current.forEach(blockId => {
         if (!currentlyFalling.has(blockId)) {
-          const blockIndex = currentBlockIndexMap.get(blockId);
+          const blockIndex = fallingIndex.get(blockId);
           if (blockIndex !== undefined) {
             const block = currentBlocks[blockIndex];
+            if (!block) return;
             const x = block.position_x + 0.5;
             const y = block.position_y + 0.5; // Use database position
             const z = block.position_z + 0.5;
-            
+
             matrix.setPosition(x, y, z);
             meshRef.current!.setMatrixAt(blockIndex, matrix);
             needsUpdate = true;
@@ -460,39 +481,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     return unregister;
   }, [loopId]);
   
-  // Create collision boxes for all instances (only when blocks change, not on every frame)
-  // REMOVED: O(n log n) sort + join - use blocks array reference instead
-  const blockIdsForCollision = useMemo(() => 
-    blocks.map(b => b.id).join(','), // Simple join without sort - O(n)
-    [blocks]
-  );
-  
-  useEffect(() => {
-    if (!onCollision) return;
-    
-    // Clear stale collision data by passing null for removed blocks
-    // The parent component should handle cleanup based on current block ids
-    
-    blocks.forEach(block => {
-      const fallState = fallingBlocksState.get(block.id);
-      // Use fallState currentY if falling, otherwise use database position
-      const y = fallState ? fallState.currentY : block.position_y;
-      
-      const box = new THREE.Box3(
-        new THREE.Vector3(
-          block.position_x,
-          y,
-          block.position_z
-        ),
-        new THREE.Vector3(
-          block.position_x + 1,
-          y + 1,
-          block.position_z + 1
-        )
-      );
-      onCollision(box, block.id);
-    });
-  }, [blockIdsForCollision, onCollision]);
+  // Collision is fully managed by useChunkLoader (ensureBlockCollider).
   
   // Filter blocks owned by current user for outline rendering (must be before early returns)
   // B2.1: Cap outlines to prevent performance death with many owned blocks (trees)

@@ -11,6 +11,7 @@ import { CoinThemeProvider } from "@/contexts/CoinThemeContext";
 import { AvatarProvider } from "@/contexts/AvatarContext";
 import { InitializationProvider } from "@/contexts/InitializationContext";
 import { BulletDefinitionsProvider } from "@/contexts/BulletDefinitionsContext";
+import { FlamethrowerTiersProvider } from "@/contexts/FlamethrowerTiersContext";
 import { InitializationOverlay } from "@/components/InitializationOverlay";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -67,6 +68,7 @@ const App = () => (
           <InitializationProvider>
             <InitializationOverlay />
             <BulletDefinitionsProvider>
+            <FlamethrowerTiersProvider>
               <BlocksProvider>
                 <AvatarProvider>
                   <UserPanelProvider>
@@ -100,6 +102,7 @@ const App = () => (
                   </UserPanelProvider>
                 </AvatarProvider>
               </BlocksProvider>
+            </FlamethrowerTiersProvider>
             </BulletDefinitionsProvider>
           </InitializationProvider>
         </CoinThemeProvider>

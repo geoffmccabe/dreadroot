@@ -21,7 +21,8 @@ interface UseShwarmSystemOptions {
   cameraRef: React.RefObject<THREE.Camera>;
   blocksRef: React.RefObject<{ position_x: number; position_y: number; position_z: number }[]>;
   isEnabled: boolean;
-  onGroupKilled?: (tier: number) => void; // Called when all blocks in a shwarm group are killed, passes tier
+  onGroupKilled?: (tier: number, definition: ShwarmDefinition, centerPosition: THREE.Vector3) => void;
+  onBlockKilled?: (definition: ShwarmDefinition, blockPosition: THREE.Vector3) => void;
 }
 
 // Pre-allocated vectors for spawning calculations
@@ -38,6 +39,7 @@ export function useShwarmSystem({
   blocksRef,
   isEnabled,
   onGroupKilled,
+  onBlockKilled,
 }: UseShwarmSystemOptions) {
   const [shwarms, setShwarms] = useState<ShwarmInstance[]>([]);
   const shwarmsRef = useRef<ShwarmInstance[]>([]);
@@ -73,12 +75,13 @@ export function useShwarmSystem({
   }, [cameraRef]);
 
   /**
-   * Spawn a shwarm with the given definition
+   * Spawn a shwarm at a specific world position
    */
-  const spawnShwarm = useCallback((definition: ShwarmDefinition): ShwarmInstance | null => {
-    const spawnPos = calculateSpawnPosition();
-    if (!spawnPos) return null;
-
+  const spawnShwarmAt = useCallback((
+    definition: ShwarmDefinition,
+    worldX: number,
+    worldZ: number
+  ): ShwarmInstance | null => {
     const id = `shwarm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const seed = Math.floor(Math.random() * 1000000);
 
@@ -87,6 +90,9 @@ export function useShwarmSystem({
       definition.min_blocks + Math.random() * (definition.max_blocks - definition.min_blocks)
     );
     const actualBlockCount = Math.min(blockCount, MAX_SHWARM_BLOCKS);
+
+    // Spawn Y position within bounds
+    const spawnY = SHWARM_SPAWN_BOUNDS.minY + Math.random() * (SHWARM_SPAWN_BOUNDS.maxY - SHWARM_SPAWN_BOUNDS.minY);
 
     // Generate blocks in a cluster around spawn position
     const blocks: ShwarmBlock[] = [];
@@ -102,9 +108,9 @@ export function useShwarmSystem({
         shwarmId: id,
         blockIndex: i,
         position: new THREE.Vector3(
-          spawnPos.x + offsetX,
-          spawnPos.y + offsetY,
-          spawnPos.z + offsetZ
+          worldX + offsetX,
+          spawnY + offsetY,
+          worldZ + offsetZ
         ),
         currentHealth: definition.health_per_block,
         maxHealth: definition.health_per_block,
@@ -126,10 +132,19 @@ export function useShwarmSystem({
     // Update ref synchronously first, then state
     shwarmsRef.current = [...shwarmsRef.current, instance];
     setShwarms(shwarmsRef.current);
-    console.log(`[Shwarm] Spawned tier ${definition.tier} shwarm with ${actualBlockCount} blocks at`, spawnPos);
+    console.log(`[Shwarm] Spawned tier ${definition.tier} shwarm with ${actualBlockCount} blocks at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
 
     return instance;
-  }, [calculateSpawnPosition]);
+  }, []);
+
+  /**
+   * Spawn a shwarm with the given definition (in front of player)
+   */
+  const spawnShwarm = useCallback((definition: ShwarmDefinition): ShwarmInstance | null => {
+    const spawnPos = calculateSpawnPosition();
+    if (!spawnPos) return null;
+    return spawnShwarmAt(definition, spawnPos.x, spawnPos.z);
+  }, [calculateSpawnPosition, spawnShwarmAt]);
 
   /**
    * Remove a shwarm instance
@@ -165,16 +180,27 @@ export function useShwarmSystem({
     // Apply the update to the ref synchronously (for rapid fire accuracy)
     // Track if THIS specific shwarm just died (was active, now all dead)
     let justKilledTier: number | null = null;
-    
+    let justKilledDef: ShwarmDefinition | null = null;
+    let justKilledCenter: THREE.Vector3 | null = null;
+    // Track individual block kill for loot drops
+    let killedBlockPos: THREE.Vector3 | null = null;
+    let killedBlockDef: ShwarmDefinition | null = null;
+
     const updatedShwarms = shwarmsRef.current.map(shwarm => {
       if (shwarm.id !== shwarmId) return shwarm;
 
       const updatedBlocks = shwarm.blocks.map(block => {
         if (block.id !== blockId || !block.isAlive) return block;
-        
+
         const newHealth = Math.max(0, block.currentHealth - damage);
         const isAlive = newHealth > 0;
-        
+
+        // Track individual block kill position for loot drops
+        if (!isAlive) {
+          killedBlockPos = block.position.clone();
+          killedBlockDef = shwarm.definition;
+        }
+
         // Calculate visual scale based on health in 10% increments
         const healthPercent = newHealth / block.maxHealth;
         const scale = Math.max(0.1, Math.floor(healthPercent * 10) / 10);
@@ -189,30 +215,50 @@ export function useShwarmSystem({
 
       // Check if all blocks dead
       const allDead = updatedBlocks.every(b => !b.isAlive);
-      
-      // Only trigger callback if THIS shwarm was active and just became fully dead
+
+      // Only trigger group callback if THIS shwarm was active and just became fully dead
       if (allDead && shwarm.isActive) {
         justKilledTier = shwarm.definition.tier;
+        justKilledDef = shwarm.definition;
+        // Compute center of mass from all block positions
+        let cx = 0, cy = 0, cz = 0;
+        for (const b of shwarm.blocks) {
+          cx += b.position.x;
+          cy += b.position.y;
+          cz += b.position.z;
+        }
+        const n = shwarm.blocks.length;
+        justKilledCenter = new THREE.Vector3(cx / n, cy / n, cz / n);
       }
-      
+
       return {
         ...shwarm,
         blocks: updatedBlocks,
         isActive: !allDead,
       };
     });
-    
+
     // Update ref synchronously, then state
     shwarmsRef.current = updatedShwarms;
     setShwarms(updatedShwarms);
-    
-    // Trigger callback AFTER state update, only once for the killed shwarm
-    if (justKilledTier !== null) {
-      setTimeout(() => onGroupKilled?.(justKilledTier!), 0);
+
+    // Fire per-block-kill callback (for loot drops)
+    if (killedBlockPos && killedBlockDef) {
+      const pos = killedBlockPos;
+      const def = killedBlockDef;
+      setTimeout(() => onBlockKilled?.(def, pos), 0);
+    }
+
+    // Fire group-kill callback (for sound + kill tracking)
+    if (justKilledTier !== null && justKilledDef && justKilledCenter) {
+      const tier = justKilledTier;
+      const def = justKilledDef;
+      const center = justKilledCenter;
+      setTimeout(() => onGroupKilled?.(tier, def, center), 0);
     }
 
     return { wasKilled, actualDamage };
-  }, [onGroupKilled]);
+  }, [onGroupKilled, onBlockKilled]);
 
   /**
    * Get definition by tier (0 = tier 10)
@@ -255,6 +301,7 @@ export function useShwarmSystem({
     shwarms,
     shwarmsRef,
     spawnShwarm,
+    spawnShwarmAt,
     spawnShwarmByTier,
     removeShwarm,
     damageBlock,

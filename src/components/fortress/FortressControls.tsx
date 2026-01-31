@@ -5,9 +5,10 @@ import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { calculatePlacementFast } from '@/lib/voxelRaycast';
 import { PlacedBlock } from '@/types/blocks';
-import { 
-  DEBUG_LOGGING, 
-  FirstPersonControlsProps 
+import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import {
+  DEBUG_LOGGING,
+  FirstPersonControlsProps
 } from './FortressTypes';
 import {
   createFortressColliders,
@@ -22,24 +23,30 @@ import {
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { playerTracker } from '@/lib/playerTracker';
 
 export function FirstPersonControls({
-  onShoot, 
-  showCrosshairs, 
-  audioRefs, 
+  onShoot,
+  showCrosshairs,
+  audioRefs,
   playAudio,
   blockPlacementMode,
   treePlacementMode,
+  fungalPlacementMode,
   onBlockPlace,
   onTreePlace,
+  onFungalTreePlace,
   onOpenPanel,
+  onToggleInventory,
   onModeChange,
   getBlockQuantity,
   selectedBlockType,
   selectedSeedTier,
+  selectedFungalTier,
   panelOpen,
   onCycleBlock,
   onCycleSeed,
+  onCycleFungalSeed,
   blocks,
   onBlockRain,
   userRoles,
@@ -65,7 +72,17 @@ export function FirstPersonControls({
   playerLevel = 1,
   onPentabulletChargeChange,
   // Admin spawn shortcut
-  onSpawnShnake
+  onSpawnShnake,
+  // Jet Boost system
+  onJetBoostStateChange,
+  onJetBoostFired,
+  bulletTier = 1,
+  // Walapa riding system
+  walapasRef,
+  // Flame Glove system
+  isFlameGloveSelected,
+  onFlameStart,
+  onFlameStop,
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -76,21 +93,33 @@ export function FirstPersonControls({
     w: false, s: false, a: false, d: false,
     shift: false, space: false, r: false, ctrl: false,
     previouslyCtrl: false, rightMouse: false,
-    q: false, z: false
+    q: false, z: false, e: false
   });
   // Glide mode: activated by pressing G while falling, auto-deactivates on landing
   const glideActiveRef = useRef(false);
+
+  // Jet Boost system: 1 boost per 3 levels, recharges every 60 seconds
+  const jetBoostMaxRef = useRef(0);
+  const jetBoostAvailRef = useRef(0);
+  const jetBoostNextRefillRef = useRef(0);
+  const jetBoostRequestRef = useRef(false);
+  const spaceKeyEdgeRef = useRef(false); // Edge detection for space key
+  const lastJetBoostStateUpdateRef = useRef(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   
   // R-mode for bullet tier selection (admin only) - press R, then 1-0 to select tier
   const rModeActiveRef = useRef(false);
   const rModeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // T-mode for fungal tree selection - press T, then 3 within 3 seconds
+  const tModeActiveRef = useRef(false);
+  const tModeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // God Mode state (fly + noclip for admins/superadmins)
   const godModeRef = useRef(false);
   const [godModeEnabled, setGodModeEnabled] = useState(false);
   const onGround = useRef(true);
-  const yaw = useRef(0);
+  const yaw = useRef(Math.PI); // Start facing outward (180 degrees)
   const pitch = useRef(0);
   const lastGroundCheck = useRef(0);
   const stuckTimer = useRef(0);
@@ -98,7 +127,12 @@ export function FirstPersonControls({
   
   // Knockback velocity for shwarm hits (decays over time)
   const knockbackVelRef = useRef(new THREE.Vector3());
-  
+
+  // Moving platform (walapa riding) tracking
+  const currentWalapaIdRef = useRef<string | null>(null);
+  const walapaLastPosRef = useRef(new THREE.Vector3());
+  const walapaDeltaRef = useRef(new THREE.Vector3());
+
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
   const rightVecRef = useRef(new THREE.Vector3());
@@ -116,6 +150,7 @@ export function FirstPersonControls({
   // Reusable vectors for shooting (avoid allocations on every shot)
   const shootDirectionRef = useRef(new THREE.Vector3());
   const shootOriginRef = useRef(new THREE.Vector3());
+  const playerDirectionRef = useRef(new THREE.Vector3()); // For player tracker
   
   // Throttle ref for hover detection (avoid per-frame setState!)
   const lastHoverCheckRef = useRef(0);
@@ -137,7 +172,7 @@ export function FirstPersonControls({
   const chopCountRef = useRef(0);
   const choppingPositionRef = useRef<{ x: number; y: number; z: number } | null>(null);
   const lastChopSoundTimeRef = useRef(0);
-  const axeChopAudioRef = useRef<HTMLAudioElement | null>(null);
+  // axeChopAudioRef removed - now using playSpatialSound for reliable audio
   
   // Pentabullet charging state
   const pentabulletChargeStartRef = useRef<number | null>(null);
@@ -152,14 +187,46 @@ export function FirstPersonControls({
   // Track previous crawl state for crouch height transition
   const wasCrawlingRef = useRef(false);
   
-  // Initialize axe chop audio once
+  // Preload axe chop sound via spatial audio system
   useEffect(() => {
-    axeChopAudioRef.current = new Audio('/axe_chop.mp3');
-    axeChopAudioRef.current.volume = 0.5;
+    preloadSpatialSounds(['/axe_chop.mp3']);
+  }, []);
+
+  // Preload gunshot, pentabullet, and jet boost sounds via spatial audio system (works reliably)
+  useEffect(() => {
+    preloadSpatialSounds([
+      '/space_gunshot.mp3',
+      '/pentabullet_sound.mp3',
+      '/pentabullet_powerup.mp3',
+      '/pentabullet_power_steady.mp3',
+      '/pentabullet_powerdown.mp3',
+      '/pistol_cocking_sound.mp3',
+      '/holster_pistol_sound.mp3',
+      '/jet_boots_1.mp3',
+    ]);
+  }, []);
+
+  // Preload pentabullet charging sounds (looping sounds need HTMLAudioElement for pause/play)
+  useEffect(() => {
+    // Preload powerup sound with explicit load
+    const powerup = new Audio('/pentabullet_powerup.mp3');
+    powerup.volume = 0.5;
+    powerup.preload = 'auto';
+    powerup.load(); // Force preload
+    pentabulletPowerupAudioRef.current = powerup;
+
+    // Preload steady sound with explicit load
+    const steady = new Audio('/pentabullet_power_steady.mp3');
+    steady.volume = 0.5;
+    steady.loop = true;
+    steady.preload = 'auto';
+    steady.load(); // Force preload
+    pentabulletSteadyAudioRef.current = steady;
   }, []);
   
   // Keep player level ref updated
   useEffect(() => {
+    console.log(`[FortressControls] playerLevel prop updated to: ${playerLevel}`);
     playerLevelRef.current = playerLevel;
   }, [playerLevel]);
 
@@ -233,7 +300,7 @@ export function FirstPersonControls({
     switch (event.code) {
       case 'KeyI':
         event.preventDefault();
-        onOpenPanel('blocks');
+        onToggleInventory?.();
         break;
       case 'KeyW':
       case 'ArrowUp':
@@ -257,23 +324,23 @@ export function FirstPersonControls({
         break;
       case 'Space':
         keys.current.space = true;
+        // Edge detection for jet boost (only on initial press, not repeat)
+        if (!event.repeat) {
+          spaceKeyEdgeRef.current = true;
+        }
         event.preventDefault();
         break;
       case 'ControlLeft':
         keys.current.ctrl = true;
         break;
       case 'KeyR':
-        // Block rain: DISABLED - keeping code for future use
-        // if (event.shiftKey && !event.metaKey && !event.ctrlKey) {
-        //   event.preventDefault();
-        //   onBlockRain();
-        // } else
-        if (!event.shiftKey && !blockPlacementMode) {
+        // R toggles gun on/off regardless of shift/movement state
+        if (!blockPlacementMode) {
           const newCrosshairsState = !showCrosshairs;
           onModeChange(newCrosshairsState ? 'shooting' : null);
-          const audio = newCrosshairsState ? audioRefs.pistolCocking : audioRefs.pistolHolster;
-          playAudio(audio);
-          
+          const soundUrl = newCrosshairsState ? '/pistol_cocking_sound.mp3' : '/holster_pistol_sound.mp3';
+          playSpatialSound(soundUrl, 0, { baseVolume: 0.5 });
+
           // For admins: activate R-mode for bullet tier selection (2 second window)
           if (newCrosshairsState && (userRoles.includes('admin') || userRoles.includes('superadmin')) && onBulletTierChange) {
             rModeActiveRef.current = true;
@@ -282,10 +349,11 @@ export function FirstPersonControls({
               rModeActiveRef.current = false;
             }, 2000);
           }
-        } else if (!event.shiftKey) {
+        } else {
+          // In block placement mode, R still activates shooting
           onModeChange('shooting');
-          playAudio(audioRefs.pistolCocking);
-          
+          playSpatialSound('/pistol_cocking_sound.mp3', 0, { baseVolume: 0.5 });
+
           // For admins: activate R-mode for bullet tier selection (2 second window)
           if ((userRoles.includes('admin') || userRoles.includes('superadmin')) && onBulletTierChange) {
             rModeActiveRef.current = true;
@@ -309,7 +377,21 @@ export function FirstPersonControls({
       case 'Digit9':
       case 'Digit0':
         // Legacy spawn mode removed - now handled by useSpawnCommands hook in FortressScene
-        
+
+        // T-mode: T+3 for fungal tree planting
+        if (tModeActiveRef.current && event.code === 'Digit3') {
+          console.log('[KeyHandler] T+3 detected, switching to fungal_planting');
+          event.preventDefault();
+          tModeActiveRef.current = false;
+          if (tModeTimeoutRef.current) {
+            clearTimeout(tModeTimeoutRef.current);
+            tModeTimeoutRef.current = null;
+          }
+          // Switch from tree planting to fungal planting
+          onModeChange('fungal_planting');
+          break;
+        }
+
         // R-mode for bullet tier selection
         if (rModeActiveRef.current && onBulletTierChange && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           event.preventDefault();
@@ -331,10 +413,16 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyT':
-        if (treePlacementMode) {
+        if (treePlacementMode || fungalPlacementMode) {
           onModeChange(null);
         } else {
           onModeChange('planting');
+          // Start T-mode: 3 second window for T+3 fungal combo
+          tModeActiveRef.current = true;
+          if (tModeTimeoutRef.current) clearTimeout(tModeTimeoutRef.current);
+          tModeTimeoutRef.current = setTimeout(() => {
+            tModeActiveRef.current = false;
+          }, 3000);
         }
         break;
       case 'KeyO':
@@ -348,6 +436,9 @@ export function FirstPersonControls({
         } else if (treePlacementMode) {
           event.preventDefault();
           onCycleSeed('prev');
+        } else if (fungalPlacementMode) {
+          event.preventDefault();
+          onCycleFungalSeed('prev');
         }
         break;
       case 'BracketRight':
@@ -357,6 +448,9 @@ export function FirstPersonControls({
         } else if (treePlacementMode) {
           event.preventDefault();
           onCycleSeed('next');
+        } else if (fungalPlacementMode) {
+          event.preventDefault();
+          onCycleFungalSeed('next');
         }
         break;
       case 'Escape':
@@ -381,9 +475,11 @@ export function FirstPersonControls({
         break;
       case 'F10': // Emergency: clear entire collision grid and rebuild
       case 'Digit0': // Also 0 key (with Shift) - Mac-friendly alternative: Shift+0
+        if (event.repeat) break; // Ignore key repeat
         if (event.code === 'Digit0' && !event.shiftKey) break; // Only Shift+0 triggers clear
         if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
           event.preventDefault();
+          console.warn('[ADMIN] collision grid clear invoked', { code: event.code });
           const oldWorldSize = worldCollisionGrid.size;
           const oldEntitySize = entityCollisionGrid.size;
           console.log('[Debug] EMERGENCY: Clearing both collision grids!');
@@ -413,8 +509,11 @@ export function FirstPersonControls({
           glideActiveRef.current = true;
         }
         break;
+      case 'KeyE':
+        keys.current.e = true;
+        break;
     }
-  }, [crosshairsEnabled, onModeChange, onOpenPanel, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     if (panelOpen || 
@@ -456,12 +555,15 @@ export function FirstPersonControls({
       case 'KeyZ':
         keys.current.z = false;
         break;
+      case 'KeyE':
+        keys.current.e = false;
+        break;
     }
   }, [panelOpen]);
 
   // Euler for camera rotation
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
-  const needsCameraUpdate = useRef(false);
+  const needsCameraUpdate = useRef(true); // Start true to apply initial rotation on first frame
   
   // Handler refs to prevent event listener re-attachment
   const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
@@ -561,7 +663,7 @@ export function FirstPersonControls({
       gl.domElement.requestPointerLock();
       return;
     }
-    
+
     if (blockPlacementMode && showOwnershipOutline && hoveredBlockId && onBlockRemove) {
       onBlockRemove(hoveredBlockId);
       setHoveredBlockId(null);
@@ -618,7 +720,7 @@ export function FirstPersonControls({
         existingBlocks || [],
         5
       );
-      
+
       if (placementResult.isValid) {
         const position = new THREE.Vector3(
           placementResult.x,
@@ -627,48 +729,59 @@ export function FirstPersonControls({
         );
         onTreePlace(position);
       }
+    } else if (fungalPlacementMode && onFungalTreePlace) {
+      // Fungal tree placement - tree grows around the player
+      const placementResult = calculatePlacementFast(
+        camera,
+        existingBlocks || [],
+        5
+      );
+
+      if (placementResult.isValid) {
+        const position = new THREE.Vector3(
+          placementResult.x,
+          placementResult.y,
+          placementResult.z
+        );
+        onFungalTreePlace(position);
+      }
     } else if (showCrosshairs && onShoot) {
+      // Flame Glove uses continuous hold, not click-to-fire
+      if (isFlameGloveSelected) return;
+
       // Skip normal shot if pentabullet is charging (>1s hold)
       if (pentabulletChargeRef.current >= 1.0) {
         return; // Will fire pentabullet or cancel on mouseup
       }
-      
+
       const now = Date.now();
       if (now - lastFireTime.current < FIRE_RATE_LIMIT) return;
       lastFireTime.current = now;
-      
+
       // Calculate shoot direction from camera orientation
       shootDirectionRef.current.set(0, 0, -1);
       shootDirectionRef.current.applyQuaternion(camera.quaternion);
       shootDirectionRef.current.normalize();
-      
+
       // Bullet starts exactly at camera position - no offset needed
       // The bullet will travel in the exact direction the camera is facing
       shootOriginRef.current.copy(camera.position);
-      
+
       onShoot(shootOriginRef.current, shootDirectionRef.current);
-      
-      // Play gunshot with random ±5% speed and pitch variation for organic feel
-      const audio = audioRefs.gunshot;
-      if (audio) {
-        const variation = 0.95 + Math.random() * 0.1; // 0.95 to 1.05
-        audio.playbackRate = variation;
-        audio.currentTime = 0;
-        audio.play().catch(() => {});
-      }
+
+      // Play gunshot sound via spatial audio (works reliably, distance 0 = full volume)
+      playSpatialSound('/space_gunshot.mp3', 0, { baseVolume: 0.3 });
     }
-  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, onBlockPlace, onTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId, audioRefs, playAudio]);
+  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, fungalPlacementMode, onBlockPlace, onTreePlace, onFungalTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId]);
   
   handleClickRef.current = handleClick;
 
   // Cancel pentabullet charge helper
   const cancelPentabulletCharge = useCallback(() => {
     if (pentabulletPhaseRef.current !== 'idle') {
-      // Play powerdown sound
-      const powerdownAudio = new Audio('/pentabullet_powerdown.mp3');
-      powerdownAudio.volume = 0.5;
-      powerdownAudio.play().catch(() => {});
-      
+      // Play powerdown sound via spatial audio
+      playSpatialSound('/pentabullet_powerdown.mp3', 0, { baseVolume: 0.5 });
+
       // Stop any playing charge sounds
       if (pentabulletPowerupAudioRef.current) {
         pentabulletPowerupAudioRef.current.pause();
@@ -685,38 +798,39 @@ export function FirstPersonControls({
     onPentabulletChargeChange?.(0);
   }, [onPentabulletChargeChange]);
   
-  // Fire pentabullet (5 bullets with spread, 0.1s apart; 10 bullets if level >= 9)
+  // Fire pentabullet - base 10 bullets (2 rounds of 5), +5 bullets every 6 levels
+  // Sound file has 5 shots, so it plays once per round with no gap between sounds
   // Calculate spread direction for a single bullet (first bullet true, others have spread)
   const calculateSpreadDirection = useCallback((isFirstInRound: boolean): THREE.Vector3 => {
     // Get current camera direction at fire time
     const baseDirection = new THREE.Vector3(0, 0, -1);
     baseDirection.applyQuaternion(camera.quaternion);
     baseDirection.normalize();
-    
+
     // First bullet fires true (straight)
     if (isFirstInRound) {
       return baseDirection;
     }
-    
+
     // Apply spread to non-first bullets
     const spreadAngle = Math.max(0.005, 0.05 - (playerLevelRef.current * 0.001));
     const up = new THREE.Vector3(0, 1, 0);
     const right = new THREE.Vector3().crossVectors(baseDirection, up).normalize();
     const realUp = new THREE.Vector3().crossVectors(right, baseDirection).normalize();
-    
+
     const dir = baseDirection.clone();
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.random() * spreadAngle;
     dir.addScaledVector(right, Math.cos(theta) * Math.sin(phi));
     dir.addScaledVector(realUp, Math.sin(theta) * Math.sin(phi));
     dir.normalize();
-    
+
     return dir;
   }, [camera]);
 
   const firePentabullet = useCallback(() => {
     if (!onShoot) return;
-    
+
     // Stop charging sounds
     if (pentabulletPowerupAudioRef.current) {
       pentabulletPowerupAudioRef.current.pause();
@@ -726,27 +840,28 @@ export function FirstPersonControls({
       pentabulletSteadyAudioRef.current.pause();
       pentabulletSteadyAudioRef.current.currentTime = 0;
     }
-    
+
     // Determine number of rounds based on player level
+    // Base: 2 rounds (10 bullets), +1 round every 6 levels
+    // Level 1-5: 2 rounds (10 bullets), Level 6-11: 3 rounds (15 bullets), etc.
     const playerLevel = playerLevelRef.current;
-    const numRounds = playerLevel >= 9 ? 2 : 1;
-    
-    // Fire each round
+    const numRounds = 2 + Math.floor(playerLevel / 6);
+
+    // Fire each round - 5 bullets per round, 0.1s apart = 0.5s per round
+    // No gap between sounds, so roundDelay = 500ms per round
     for (let round = 0; round < numRounds; round++) {
-      const roundDelay = round * 600; // 0.6 seconds between rounds (5 bullets * 0.1s + 0.1s gap)
-      
-      // Play pentabullet fire sound for each round
+      const roundDelay = round * 500; // 0.5 seconds between rounds (no gap - sounds play continuously)
+
+      // Play pentabullet fire sound for each round via spatial audio
       setTimeout(() => {
-        const fireAudio = new Audio('/pentabullet_sound.mp3');
-        fireAudio.volume = 0.6;
-        fireAudio.play().catch(() => {});
+        playSpatialSound('/pentabullet_sound.mp3', 0, { baseVolume: 0.6 });
       }, roundDelay);
-      
+
       // Fire 5 bullets 0.1 seconds apart, calculating direction at fire time
       for (let i = 0; i < 5; i++) {
         const bulletDelay = roundDelay + i * 100;
         const isFirstInRound = i === 0;
-        
+
         setTimeout(() => {
           // Get current camera position and direction at fire time
           const origin = camera.position.clone();
@@ -755,7 +870,7 @@ export function FirstPersonControls({
         }, bulletDelay);
       }
     }
-    
+
     // Reset state
     pentabulletChargeStartRef.current = null;
     pentabulletChargeRef.current = 0;
@@ -787,13 +902,21 @@ export function FirstPersonControls({
       chopStartTimeRef.current = performance.now();
       chopCountRef.current = 0;
       choppingPositionRef.current = null;
-      
-      // Start pentabullet charge if in shooting mode
+
+      // Debug: Log mouse down state for tree chopping
+      console.log(`[TreeChop] MouseDown: showCrosshairs=${showCrosshairs}, blockMode=${blockPlacementMode}, treeMode=${treePlacementMode}`);
+
+      // Start flame glove or pentabullet charge if in shooting mode
       if (showCrosshairs && !blockPlacementMode && !treePlacementMode) {
-        pentabulletChargeStartRef.current = performance.now();
+        if (isFlameGloveSelected && onFlameStart) {
+          // Flame Glove selected — start flamethrower
+          onFlameStart();
+        } else {
+          pentabulletChargeStartRef.current = performance.now();
+        }
       }
     }
-  }, [showCrosshairs, blockPlacementMode, treePlacementMode]);
+  }, [showCrosshairs, blockPlacementMode, treePlacementMode, isFlameGloveSelected, onFlameStart]);
   
   handleMouseDownRef.current = handleMouseDown;
 
@@ -803,6 +926,11 @@ export function FirstPersonControls({
       setHoveredBlockId(null);
     }
     if (event.button === 0) {
+      // Stop flame glove if active
+      if (isFlameGloveSelected && onFlameStop) {
+        onFlameStop();
+      }
+
       // Check for pentabullet release
       if (pentabulletChargeRef.current >= 5.0 && showCrosshairs) {
         firePentabullet();
@@ -810,7 +938,7 @@ export function FirstPersonControls({
         // Incomplete charge - cancel and fire normal shot
         cancelPentabulletCharge();
       }
-      
+
       leftMouseDownRef.current = false;
       chopCountRef.current = 0;
       choppingPositionRef.current = null;
@@ -818,7 +946,7 @@ export function FirstPersonControls({
       // Reset progress when releasing
       onTreeChopProgress?.(0, CHOPS_REQUIRED);
     }
-  }, [setHoveredBlockId, onTreeChopProgress, showCrosshairs, firePentabullet, cancelPentabulletCharge]);
+  }, [setHoveredBlockId, onTreeChopProgress, showCrosshairs, firePentabullet, cancelPentabulletCharge, isFlameGloveSelected, onFlameStop]);
   
   handleMouseUpRef.current = handleMouseUp;
 
@@ -917,19 +1045,6 @@ export function FirstPersonControls({
   useEffect(() => { onPentabulletChargeChangeRef.current = onPentabulletChargeChange; }, [onPentabulletChargeChange]);
   useEffect(() => { showCrosshairsRef.current = showCrosshairs; }, [showCrosshairs]);
 
-  // TEMPORARY: Grid size diagnostic - remove after verifying leak is fixed
-  useEffect(() => {
-    let acc = 0;
-    const unregister = frameLoop.register('grid-sizes', (dt) => {
-      acc += dt;
-      if (acc < 1) return;
-      acc = 0;
-      console.log(
-        `[GridSizes] world=${worldCollisionGrid.size} entity=${entityCollisionGrid.size}`
-      );
-    }, 1); // Low priority
-    return unregister;
-  }, []);
 
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
@@ -980,17 +1095,26 @@ export function FirstPersonControls({
       }
       
       // Tree chopping detection - hold left mouse on owned tree blocks (not in shooting mode)
-      if (leftMouseDownRef.current && !showCrosshairs && isOwnedTreeAtPositionRef.current) {
+      // IMPORTANT: Must use showCrosshairsRef.current, not showCrosshairs, because this is in a frame loop
+      // Debug: Log every 500ms when holding left mouse to trace chopping flow
+      if (leftMouseDownRef.current) {
+        // Log once per second for clarity
+        if (now % 1000 < 20) {
+          console.log(`[TreeChop] === HOLDING LEFT MOUSE === crosshairs=${showCrosshairsRef.current}, blockMode=${blockPlacementModeRef.current}, hasOwnerFn=${!!isOwnedTreeAtPositionRef.current}, meshCount=${meshesArrayCache.current.length}`);
+        }
+      }
+      if (leftMouseDownRef.current && !showCrosshairsRef.current && isOwnedTreeAtPositionRef.current) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
         if (meshesArray.length > 0) {
           const result = raycastMeshes(meshesArray, 15);
-          
+
           if (result && result.instanceId !== undefined) {
             const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
-            
+            console.log(`[TreeChop] Raycast hit blockType: ${blockType}, isTreeBlockType: ${blockType ? isTreeBlockType(blockType) : 'N/A'}`);
+
             // Check if it's any tree block type (handles encoded types like 'trunk_-1_5')
-            if (blockType && isTreeBlockType(blockType)) {
+            if (blockType && (isTreeBlockType(blockType) || blockType === 'tree_atlas' || blockType === 'tree_fallback')) {
               // Get the block position from the instanced mesh matrix
               const mesh = result.object as THREE.InstancedMesh;
               const matrix = new THREE.Matrix4();
@@ -1003,7 +1127,9 @@ export function FirstPersonControls({
               const blockZ = Math.round(position.z);
               
               // Check if this is an owned tree
-              if (isOwnedTreeAtPositionRef.current(blockX, blockY, blockZ)) {
+              const isOwned = isOwnedTreeAtPositionRef.current(blockX, blockY, blockZ);
+              console.log(`[TreeChop] Ownership check at (${blockX},${blockY},${blockZ}): ${isOwned}`);
+              if (isOwned) {
                 // Initialize or continue chopping on this position
                 const isNewBlock = !choppingPositionRef.current || 
                     choppingPositionRef.current.x !== blockX ||
@@ -1024,12 +1150,10 @@ export function FirstPersonControls({
                 if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
                   lastChopSoundTimeRef.current = now;
                   chopCountRef.current++;
-                  
-                  // Play chop sound
-                  if (axeChopAudioRef.current) {
-                    axeChopAudioRef.current.currentTime = 0;
-                    axeChopAudioRef.current.play().catch(() => {});
-                  }
+                  console.log(`[TreeChop] Chop #${chopCountRef.current}/${CHOPS_REQUIRED}`);
+
+                  // Play chop sound via spatial audio (reliable, works in frame loops)
+                  playSpatialSound('/axe_chop.mp3', 0, { baseVolume: 0.5 });
                   
                   // Report progress
                   if (onTreeChopProgressRef.current) {
@@ -1082,9 +1206,10 @@ export function FirstPersonControls({
         // At 1 second, start powerup sound (plays for ~4 seconds)
         if (chargeTime >= 1.0 && pentabulletPhaseRef.current === 'idle') {
           pentabulletPhaseRef.current = 'powerup';
-          pentabulletPowerupAudioRef.current = new Audio('/pentabullet_powerup.mp3');
-          pentabulletPowerupAudioRef.current.volume = 0.5;
-          pentabulletPowerupAudioRef.current.play().catch(() => {});
+          if (pentabulletPowerupAudioRef.current) {
+            pentabulletPowerupAudioRef.current.currentTime = 0;
+            pentabulletPowerupAudioRef.current.play().catch(() => {});
+          }
         }
         
         // At 5 seconds, switch to steady sound (looping)
@@ -1094,11 +1219,11 @@ export function FirstPersonControls({
           if (pentabulletPowerupAudioRef.current) {
             pentabulletPowerupAudioRef.current.pause();
           }
-          // Start steady (looping)
-          pentabulletSteadyAudioRef.current = new Audio('/pentabullet_power_steady.mp3');
-          pentabulletSteadyAudioRef.current.volume = 0.5;
-          pentabulletSteadyAudioRef.current.loop = true;
-          pentabulletSteadyAudioRef.current.play().catch(() => {});
+          // Start steady (looping) - use preloaded ref
+          if (pentabulletSteadyAudioRef.current) {
+            pentabulletSteadyAudioRef.current.currentTime = 0;
+            pentabulletSteadyAudioRef.current.play().catch(() => {});
+          }
         }
       }
       
@@ -1114,9 +1239,12 @@ export function FirstPersonControls({
       const baseSpeed = 4.0;
       const crawlSpeed = baseSpeed * 0.6;
       const godSpeed = keys.current.shift ? 16.0 : 8.0; // Faster in god mode
-      const runSpeed = godModeRef.current 
-        ? godSpeed 
-        : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed));
+      const isAdmin = userRolesRef.current.includes('admin') || userRolesRef.current.includes('superadmin');
+      const superSprintActive = isAdmin && keys.current.shift && keys.current.e;
+      const superSprintSpeed = baseSpeed * 10; // 10x normal speed for admin Shift+E
+      const runSpeed = godModeRef.current
+        ? godSpeed
+        : (superSprintActive ? superSprintSpeed : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
       
       // Apply movement
       const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
@@ -1172,15 +1300,127 @@ export function FirstPersonControls({
       const SURFACE_EPS = 0.002;
       
       // Gliding: press G while falling to activate, auto-deactivates on landing
-      // Only glide if active AND still falling (not on ground)
-      const isGliding = glideActiveRef.current && velocity.current.y < 0 && !onGround.current;
+      // Glide is active as long as player is airborne (works during jet boosts too)
+      const isGliding = glideActiveRef.current && !onGround.current;
       const effectiveGravity = isGliding ? 4.9 : 9.8; // Half gravity when gliding
-      
-      // Auto-deactivate glide when landing (on ground or positive velocity = hit something)
-      if (glideActiveRef.current && (onGround.current || velocity.current.y >= 0)) {
+
+      // Auto-deactivate glide only when landing on ground
+      if (glideActiveRef.current && onGround.current) {
         glideActiveRef.current = false;
       }
-      
+
+      // === JET BOOST SYSTEM ===
+      // Update max charges based on player level (1 per 3 levels, rounded down)
+      const level = playerLevelRef.current || 0;
+      const newMaxBoosts = Math.floor(level / 3);
+      if (newMaxBoosts !== jetBoostMaxRef.current) {
+        console.log(`[JetBoost] Level ${level} → Max boosts changing from ${jetBoostMaxRef.current} to ${newMaxBoosts}`);
+        jetBoostMaxRef.current = newMaxBoosts;
+        // Cap available to new max
+        jetBoostAvailRef.current = Math.min(jetBoostAvailRef.current, newMaxBoosts);
+        // Grant initial charges when first qualifying
+        if (jetBoostAvailRef.current === 0 && newMaxBoosts > 0) {
+          jetBoostAvailRef.current = newMaxBoosts;
+        }
+        console.log(`[JetBoost] Available: ${jetBoostAvailRef.current}, Max: ${jetBoostMaxRef.current}`);
+      }
+
+      // Refill charges every 60 seconds
+      if (jetBoostMaxRef.current > 0) {
+        if (jetBoostNextRefillRef.current === 0) {
+          jetBoostNextRefillRef.current = now + 60000;
+        } else if (now >= jetBoostNextRefillRef.current) {
+          jetBoostAvailRef.current = jetBoostMaxRef.current;
+          jetBoostNextRefillRef.current = now + 60000;
+        }
+      } else {
+        jetBoostAvailRef.current = 0;
+        jetBoostNextRefillRef.current = 0;
+      }
+
+      // Check for jet boost activation (space key edge, airborne, has charges)
+      // Works anytime player is not on ground - jumping, falling, or gliding
+      if (spaceKeyEdgeRef.current) {
+        spaceKeyEdgeRef.current = false;
+        const isAirborne = !onGround.current;
+
+        if (isAirborne && jetBoostAvailRef.current > 0) {
+          jetBoostAvailRef.current -= 1;
+          jetBoostRequestRef.current = true;
+        }
+      }
+
+      // Apply jet boost if requested
+      if (jetBoostRequestRef.current) {
+        jetBoostRequestRef.current = false;
+
+        // Calculate horizontal speed
+        const vx = velocity.current.x;
+        const vz = velocity.current.z;
+        const hSpeed = Math.hypot(vx, vz);
+
+        // Forward direction from camera
+        const forwardDir = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
+
+        // Determine horizontal direction
+        let horizDir = rightVecRef.current.set(vx, 0, vz);
+        if (hSpeed > 0.25) {
+          horizDir.multiplyScalar(1 / hSpeed);
+        } else if (direction.current.lengthSq() > 0.0001) {
+          horizDir.copy(direction.current);
+          horizDir.y = 0;
+          horizDir.normalize();
+        } else {
+          horizDir.copy(forwardDir);
+        }
+
+        const boostStrength = 9.0;
+        const cos45 = 0.70710678;
+        const sin45 = 0.70710678;
+
+        // Apply boost based on current movement
+        if (velocity.current.y < 0 && hSpeed > 0.25) {
+          // Falling at an angle: vertical boost only (don't change horizontal)
+          velocity.current.y = Math.max(velocity.current.y, 0) + boostStrength;
+        } else {
+          // Boost 45 degrees up in current direction
+          const boostX = horizDir.x * cos45 * boostStrength;
+          const boostY = sin45 * boostStrength;
+          const boostZ = horizDir.z * cos45 * boostStrength;
+          velocity.current.x += boostX;
+          velocity.current.y += boostY;
+          velocity.current.z += boostZ;
+        }
+
+        // Trigger VFX at feet position
+        const feetPos = testPosRef.current.clone();
+        feetPos.copy(camera.position);
+        feetPos.y -= 1.6; // Feet position below camera
+        onJetBoostFired?.(feetPos, []); // Colors will be determined by Scene based on tier
+
+        // Play jet boost sound via spatial audio
+        playSpatialSound('/jet_boots_1.mp3', 0, { baseVolume: 0.6 });
+
+        // Immediately update HUD when boost is used
+        onJetBoostStateChange?.({
+          available: jetBoostAvailRef.current,
+          max: jetBoostMaxRef.current,
+          nextRefillAtMs: jetBoostNextRefillRef.current,
+          isGliding: glideActiveRef.current,
+        });
+      }
+
+      // Update jet boost state for HUD (throttled to 10Hz for responsive glide indicator)
+      if (now - lastJetBoostStateUpdateRef.current > 100) {
+        lastJetBoostStateUpdateRef.current = now;
+        onJetBoostStateChange?.({
+          available: jetBoostAvailRef.current,
+          max: jetBoostMaxRef.current,
+          nextRefillAtMs: jetBoostNextRefillRef.current,
+          isGliding: glideActiveRef.current,
+        });
+      }
+
       // Gravity and jumping
       velocity.current.y -= effectiveGravity * dt;
 
@@ -1457,11 +1697,51 @@ export function FirstPersonControls({
             velocity.current.y = 0;
           }
           onGround.current = true;
+
+          // Check if standing on a walapa (moving platform)
+          const walapaCollider = groundHit as THREE.Box3 & { __isWalapaCollider?: boolean; __walapaId?: string };
+          if (walapaCollider?.__isWalapaCollider && walapaCollider.__walapaId && walapasRef?.current) {
+            const walapa = walapasRef.current.find(w => w.id === walapaCollider.__walapaId && w.isActive);
+            if (walapa) {
+              // Check if this is the same walapa we were on before
+              if (currentWalapaIdRef.current === walapa.id) {
+                // Calculate walapa movement delta and apply to player
+                walapaDeltaRef.current.set(
+                  walapa.position.x - walapaLastPosRef.current.x,
+                  walapa.position.y - walapaLastPosRef.current.y,
+                  walapa.position.z - walapaLastPosRef.current.z
+                );
+                // Apply walapa movement to player position
+                camera.position.x += walapaDeltaRef.current.x;
+                camera.position.y += walapaDeltaRef.current.y;
+                camera.position.z += walapaDeltaRef.current.z;
+              }
+              // Update tracking
+              currentWalapaIdRef.current = walapa.id;
+              walapaLastPosRef.current.copy(walapa.position);
+            } else {
+              currentWalapaIdRef.current = null;
+            }
+          } else {
+            // Not on a walapa - clear tracking
+            currentWalapaIdRef.current = null;
+          }
         } else {
           onGround.current = false;
+          // Player left the ground - if was on walapa, inherit its velocity
+          if (currentWalapaIdRef.current && walapasRef?.current) {
+            const walapa = walapasRef.current.find(w => w.id === currentWalapaIdRef.current && w.isActive);
+            if (walapa && walapa.velocity) {
+              // Add walapa velocity to player velocity (for jumping off)
+              velocity.current.x += walapa.velocity.x;
+              velocity.current.z += walapa.velocity.z;
+              // Don't add Y velocity - player controls their own vertical movement
+            }
+          }
+          currentWalapaIdRef.current = null;
         }
       }
-      
+
       // Broadcast position to multiplayer (throttled to 20Hz)
       if (now - lastBroadcastRef.current >= BROADCAST_INTERVAL) {
         lastBroadcastRef.current = now;
@@ -1469,6 +1749,15 @@ export function FirstPersonControls({
         if (broadcast) {
           broadcast(camera.position, yaw.current, pitch.current);
         }
+
+        // Update player tracker for enemy awareness
+        // Direction from yaw (facing direction on XZ plane)
+        playerDirectionRef.current.set(
+          -Math.sin(yaw.current),
+          0,
+          -Math.cos(yaw.current)
+        );
+        playerTracker.updatePlayer('local', camera.position, playerDirectionRef.current);
       }
       
       // Phase 2B: Update player position for chunk loading (throttled to 2Hz)

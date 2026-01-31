@@ -18,6 +18,7 @@ import { useUserPanel } from '@/contexts/UserPanelContext';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useToast } from '@/hooks/use-toast';
+import { isSpawnSequenceActive } from '@/features/enemies/hooks/useSpawnCommands';
 import { Toaster } from '@/components/ui/toaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
@@ -25,7 +26,8 @@ import { clearBlocksCache } from '@/hooks/useBlocksData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { PlantedTree } from '@/features/trees/types';
 import { useSeedPlanting } from '@/features/trees/hooks/useSeedPlanting';
-import { useLocalGrowth } from '@/features/trees/hooks/useLocalGrowth';
+import { useLocalGrowth, isTreeDeleted } from '@/features/trees/hooks/useLocalGrowth';
+import { useTreeGrowthPoller } from '@/features/trees/hooks/useTreeGrowthPoller';
 import { useTreeChopping } from '@/features/trees/hooks/useTreeChopping';
 import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,11 +37,18 @@ import { TREE_CONFIG } from '@/features/trees/constants';
 import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '@/features/shwarm';
 import { useShnakeDefinitions } from '@/features/shnake';
 import { useShombieDefinitions } from '@/features/shombie';
+import { useWalapaDefinitions } from '@/features/walapa';
+import { useShtickmanDefinitions } from '@/features/shtickman';
+import { usePathfindingConfigs } from '@/hooks/usePathfindingConfigs';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 
 import { FortressScene } from './FortressScene';
+import { FortressProviders } from './FortressProviders';
+import { FortressHUD } from './FortressHUD';
+import { FortressOverlays } from './FortressOverlays';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
-import { FlyingCoin, GameSettings, WeatherSettings } from './FortressTypes';
+import { playSpatialSound } from '@/lib/spatialAudio';
+import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef } from './FortressTypes';
 import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
@@ -47,7 +56,7 @@ import { getDefaultBulletTier } from '@/lib/bulletScaling';
 
 // Main Fortress orchestrator component
 export function Fortress() {
-  const { currentTheme, isLoading: themeLoading } = useCoinTheme();
+  const { currentTheme, availableThemes, isLoading: themeLoading } = useCoinTheme();
   
   const defaultColorPalette = [
     { hex: '#06c8c0', weight: 10 },
@@ -102,10 +111,26 @@ export function Fortress() {
   // UI State
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+
+  // Close inventory when pointer lock is re-acquired (user clicks back into game)
+  useEffect(() => {
+    const handlePointerLockChange = () => {
+      if (document.pointerLockElement) {
+        setInventoryOpen(false);
+      }
+    };
+    document.addEventListener('pointerlockchange', handlePointerLockChange);
+    return () => document.removeEventListener('pointerlockchange', handlePointerLockChange);
+  }, []);
+
   const [selectedBlockType, setSelectedBlockType] = useState<string | null>(null);
   const [selectedSeedTier, setSelectedSeedTier] = useState<number | null>(null);
   const [blockPlacementMode, setBlockPlacementMode] = useState(false);
   const [treePlacementMode, setTreePlacementMode] = useState(false);
+  // Fungal tree (giant mushroom) planting mode - activated by T then 3
+  const [fungalPlacementMode, setFungalPlacementMode] = useState(false);
+  const [selectedFungalTier, setSelectedFungalTier] = useState<number | null>(null);
   const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
   const [showPerfMonitor, setShowPerfMonitor] = useState(false);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
@@ -117,7 +142,11 @@ export function Fortress() {
   // Admin override for bullet tier (R-mode)
   const [adminTierOverride, setAdminTierOverride] = useState<number | null>(null);
   const [pentabulletCharge, setPentabulletCharge] = useState(0);
-  
+  // Jet Boost state for HUD
+  const [jetBoostState, setJetBoostState] = useState({ available: 0, max: 0, nextRefillAtMs: 0, isGliding: false });
+  // Hotbar selected slot (1-6), lifted from HUD for cross-component access
+  const [selectedSlot, setSelectedSlot] = useState(1);
+
   // Tree chopping modal state
   const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
   const [pendingChopPosition, setPendingChopPosition] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -127,13 +156,58 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, inventory, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed } = useUserData();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem } = useUserData();
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks } = useBlocks();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
   
+  // Derive selected item definition from hotbar slot + equipped items
+  // Cache fetched item defs by itemId to avoid async lag on weapon switching
+  const itemDefCacheRef = useRef<Map<string, SelectedItemDef>>(new Map());
+  const [selectedItemDef, setSelectedItemDef] = useState<SelectedItemDef>({ itemNumber: null, tier: null, name: null, itemId: null });
+
+  useEffect(() => {
+    const eq = equippedItems.find((e: { slot: number; itemId: string }) => e.slot === selectedSlot);
+    if (!eq) {
+      setSelectedItemDef({ itemNumber: null, tier: null, name: null, itemId: null });
+      return;
+    }
+
+    // Check cache first for instant switching
+    const cached = itemDefCacheRef.current.get(eq.itemId);
+    if (cached) {
+      setSelectedItemDef(cached);
+      return;
+    }
+
+    // Clear immediately so stale weapon type doesn't linger
+    setSelectedItemDef({ itemNumber: null, tier: null, name: null, itemId: null });
+
+    // Fetch the item definition from DB
+    const fetchDef = async () => {
+      const { data } = await supabase
+        .from('items')
+        .select('id, name, item_number, tier')
+        .eq('id', eq.itemId)
+        .maybeSingle();
+      if (data) {
+        const def: SelectedItemDef = {
+          itemNumber: data.item_number,
+          tier: data.tier,
+          name: data.name,
+          itemId: data.id,
+        };
+        itemDefCacheRef.current.set(eq.itemId, def);
+        setSelectedItemDef(def);
+      } else {
+        setSelectedItemDef({ itemNumber: null, tier: null, name: null, itemId: null });
+      }
+    };
+    fetchDef();
+  }, [selectedSlot, equippedItems]);
+
   // Compute bullet tier from player level (automatic for all players)
   // Level 1-3 → Tier 1, Level 4-6 → Tier 2, etc.
   const baseBulletTier = useMemo(() => 
@@ -168,9 +242,28 @@ export function Fortress() {
   // Shombie definitions
   const { data: shombieDefinitions } = useShombieDefinitions();
 
+  // Walapa definitions
+  const { definitions: walapaDefinitions } = useWalapaDefinitions();
+
+  // Shtickman definitions
+  const { data: shtickmanDefinitions } = useShtickmanDefinitions();
+
+  // Pathfinding configurations (populates the pathfindingService cache)
+  usePathfindingConfigs();
+
   const [respawnTimer, setRespawnTimer] = useState(0);
   const [respawnPosition, setRespawnPosition] = useState<THREE.Vector3 | null>(null);
-  
+
+  // Listen for admin teleport events from UI panels
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { x, y, z } = (e as CustomEvent).detail;
+      setRespawnPosition(new THREE.Vector3(x, y, z));
+    };
+    window.addEventListener('playerTeleport', handler);
+    return () => window.removeEventListener('playerTeleport', handler);
+  }, []);
+
   // Clear block cache once on mount to ensure new block types (wood, fruit) are loaded
   useEffect(() => {
     if (TREE_CONFIG.ENABLED) {
@@ -180,63 +273,26 @@ export function Fortress() {
   
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
   // Note: Tree blocks are now stored in placed_blocks and come through the regular chunk loading system
-  const { seedDefinitions, plantedTrees, myIncompleteTrees } = useTreeData(
+  const { seedDefinitions, plantedTrees, myIncompleteTrees, refetch: refetchTrees, removeTree } = useTreeData(
     TREE_CONFIG.ENABLED ? currentWorldId : null,
     user?.id ?? null
   );
   
-  // Local growth manager - stores growing trees in refs, not React state
-  const { startGrowing, updateTreeId, stopGrowing, isTreeGrowing, growingTreesRef } = useLocalGrowth({
-    worldId: currentWorldId,
-    userId: user?.id ?? null,
-    placeBlocksBatch,
+  // Local growth manager - stub for backwards compatibility
+  const { stopGrowing, growingTreesRef } = useLocalGrowth();
+
+  // Automatic server-side tree growth polling
+  const hasGrowingTrees = plantedTrees.some(t => !t.is_fully_grown);
+  useTreeGrowthPoller({
+    hasGrowingTrees,
+    enabled: TREE_CONFIG.ENABLED && !!user?.id,
   });
-  
-  // Resume incomplete trees on page load
-  useEffect(() => {
-    if (!myIncompleteTrees.length || !TREE_CONFIG.ENABLED) return;
-    
-    // For each incomplete tree, check if it's already being grown locally
-    for (const tree of myIncompleteTrees) {
-      if (isTreeGrowing(tree.id)) continue;
-      
-      const seedDef = tree.seed_definition;
-      if (!seedDef) continue;
-      
-      // Verify tree still exists in DB before resuming (prevents ghost tree growth)
-      (async () => {
-        // First check if the tree still exists in planted_trees
-        const { data: treeExists } = await supabase
-          .from('planted_trees')
-          .select('id, current_block_count, target_block_count')
-          .eq('id', tree.id)
-          .maybeSingle();
-        
-        if (!treeExists) {
-          // Tree no longer exists in DB, skip resume
-          return;
-        }
-        
-        // NEW ARCHITECTURE: Use current_block_count from planted_trees
-        // This is updated by useLocalGrowth during growth
-        // Calculate approximate growth order from block count
-        // Note: Growth order != block count due to batch placement, but this is close enough
-        const currentBlocks = treeExists.current_block_count ?? 0;
-        
-        // Resume tree growth from approximate order
-        // The growth algorithm will skip already-placed positions anyway
-        startGrowing(tree.id, seedDef, tree.base_x, tree.base_y, tree.base_z, tree.growth_seed, currentBlocks);
-      })();
-    }
-  }, [myIncompleteTrees, startGrowing, isTreeGrowing]);
-  
+
   const { plantSeed } = useSeedPlanting({
     worldId: currentWorldId,
     userId: user?.id ?? null,
     seedDefinitions,
     placeBlock,
-    startGrowing,
-    updateTreeId,
   });
   
   // Tree chopping - allows owner to destroy tree and get seed back
@@ -304,12 +360,16 @@ export function Fortress() {
   const { chopTreeAtPosition, isOwnedTreeAtPosition } = useTreeChopping({
     worldId: currentWorldId,
     userId: user?.id ?? null,
+    userRoles,  // For admin/superadmin bypass
     plantedTrees: allTrees,  // Pass ALL trees including user's incomplete ones
     seedDefinitions,
     returnSeed,
     refetchChunk: refetchSingleChunk,
+    refetchTrees,  // Force refresh tree labels after chopping
+    removeTreeFromState: removeTree,  // Immediately remove tree from UI
     stopGrowing,
     removeBlocksByPositions,
+    // onTreeChopped will be added when we implement Shnake cleanup
   });
   
   // Tree chop modal handlers
@@ -322,8 +382,13 @@ export function Fortress() {
   }, []);
   
   const handleTreeChopConfirm = useCallback(async () => {
+    console.log('[Fortress] handleTreeChopConfirm called, pendingChopPosition:', pendingChopPosition);
     if (pendingChopPosition) {
-      await chopTreeAtPosition(pendingChopPosition.x, pendingChopPosition.y, pendingChopPosition.z);
+      console.log(`[Fortress] Calling chopTreeAtPosition at (${pendingChopPosition.x}, ${pendingChopPosition.y}, ${pendingChopPosition.z})`);
+      const result = await chopTreeAtPosition(pendingChopPosition.x, pendingChopPosition.y, pendingChopPosition.z);
+      console.log('[Fortress] chopTreeAtPosition result:', result);
+    } else {
+      console.warn('[Fortress] No pendingChopPosition set!');
     }
     setTreeChopModalOpen(false);
     setPendingChopPosition(null);
@@ -398,7 +463,8 @@ export function Fortress() {
     }
   }, [respawnTimer, isDead, respawn]);
 
-  // Block removal handler - checks if block is part of a tree first
+  // Block removal handler - only removes user-placed blocks, NOT tree blocks
+  // Tree chopping requires hold-to-chop flow with confirmation modal
   const handleBlockRemove = useCallback(async (blockId: string) => {
     // Find the block to get its position
     const block = blocks.find(b => b.id === blockId);
@@ -406,22 +472,20 @@ export function Fortress() {
       console.warn('Block not found for removal:', blockId);
       return;
     }
-    
-    // Check if this is a tree block and if user owns the tree
-    // Uses isTreeBlockType to handle encoded block types like 'trunk_-1_5'
-    const baseType = getBaseTreeBlockType(block.block_type);
-    if (isTreeBlockType(block.block_type) && baseType !== 'invisiblock' && TREE_CONFIG.ENABLED) {
-      const isOwned = isOwnedTreeAtPosition(block.position_x, block.position_y, block.position_z);
-      if (isOwned) {
-        // Chop the entire tree instead of just removing one block
-        await chopTreeAtPosition(block.position_x, block.position_y, block.position_z);
-        return;
-      }
+
+    // Don't allow single-click removal of tree blocks - must use hold-to-chop
+    if (isTreeBlockType(block.block_type) && TREE_CONFIG.ENABLED) {
+      toast({
+        title: "Hold to chop",
+        description: "Hold left mouse button on tree to chop it",
+        duration: 2000
+      });
+      return;
     }
-    
-    // Standard block removal
+
+    // Standard block removal for user-placed blocks
     playReversedAudio('/wooden_thud_sound.mp3');
-    
+
     const success = await removeBlock(blockId);
     if (success) {
       toast({
@@ -430,7 +494,7 @@ export function Fortress() {
         duration: 2000
       });
     }
-  }, [blocks, removeBlock, toast, isOwnedTreeAtPosition, chopTreeAtPosition]);
+  }, [blocks, removeBlock, toast]);
 
   // Settings handlers
   const handleSettingsChange = (key: string, value: any) => {
@@ -451,8 +515,10 @@ export function Fortress() {
     const startTime = Date.now();
     let startX = screenPosition?.x || window.innerWidth / 2;
     let startY = screenPosition?.y || window.innerHeight / 2;
-    
-    setFlyingCoins(prev => [...prev, { id: coinId, startX, startY, startTime }]);
+    // Use the current theme's coin image for the flying animation
+    const imageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
+
+    setFlyingCoins(prev => [...prev, { id: coinId, startX, startY, startTime, imageUrl }]);
 
     const audio = new Audio('/coin_hit_sound.mp3');
     audio.volume = 0.3;
@@ -465,7 +531,7 @@ export function Fortress() {
       }
       setFlyingCoins(prev => prev.filter(coin => coin.id !== coinId));
     }, 600);
-  }, [addCoins]);
+  }, [addCoins, currentTheme?.coin_image_url]);
 
   // Block rain batch handler - non-blocking, uses requestAnimationFrame for smooth placement
   const handleBlockRainBatch = useCallback((
@@ -670,7 +736,7 @@ export function Fortress() {
   };
 
   // Mode change handler
-  const handleModeChange = useCallback((mode: 'shooting' | 'building' | 'planting' | null) => {
+  const handleModeChange = useCallback((mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | null) => {
     // Filter for ONLY placeable blocks (not seeds, fruits, or trunk)
     const isPlaceableBlock = (itemType: string): boolean => {
       if (itemType.startsWith('seed_tier_')) return false;
@@ -684,7 +750,9 @@ export function Fortress() {
     
     if (mode === 'building') {
       setTreePlacementMode(false);
+      setFungalPlacementMode(false);
       setSelectedSeedTier(null);
+      setSelectedFungalTier(null);
       const availableItem = availablePlaceableBlocks[0];
       if (availableItem && availableItem.quantity > 0) {
         setSelectedBlockType(availableItem.item_type);
@@ -701,7 +769,9 @@ export function Fortress() {
       }
     } else if (mode === 'planting') {
       setBlockPlacementMode(false);
+      setFungalPlacementMode(false);
       setSelectedBlockType(null);
+      setSelectedFungalTier(null);
       setTreePlacementMode(true);
       setCrosshairsEnabled(false);
       setBlockMode(false);
@@ -716,21 +786,46 @@ export function Fortress() {
       } else {
         toast({ title: "No seeds available", description: "Configure seed names in Admin Panel > Seeds", duration: 3000 });
       }
+    } else if (mode === 'fungal_planting') {
+      // Fungal tree planting mode (giant mushrooms) - only 10 tiers
+      setBlockPlacementMode(false);
+      setSelectedBlockType(null);
+      setTreePlacementMode(false);
+      setSelectedSeedTier(null);
+      setFungalPlacementMode(true);
+      setCrosshairsEnabled(false);
+      setBlockMode(false);
+      // Filter for fungal seeds (tree_type === 'fungal') with names, max tier 10
+      const availableFungalSeeds = seedDefinitions.filter(s =>
+        s.tree_type === 'fungal' && s.name && s.name.trim() !== '' && s.tier <= 10
+      );
+      if (availableFungalSeeds.length > 0) {
+        setSelectedFungalTier(availableFungalSeeds[0].tier);
+        toast({ title: "Fungal tree mode", description: `Press [ ] to cycle tiers (1-10). Click to plant.`, duration: 3000 });
+      } else {
+        // Default to tier 1 if no fungal seeds configured
+        setSelectedFungalTier(1);
+        toast({ title: "Fungal tree mode", description: "No fungal seeds configured. Using default tier 1.", duration: 3000 });
+      }
     } else if (mode === 'shooting') {
       setSelectedBlockType(null);
       setBlockPlacementMode(false);
       setTreePlacementMode(false);
+      setFungalPlacementMode(false);
       setSelectedSeedTier(null);
+      setSelectedFungalTier(null);
       setCrosshairsEnabled(true);
       setBlockMode(false);
     } else {
       setSelectedBlockType(null);
       setBlockPlacementMode(false);
       setTreePlacementMode(false);
+      setFungalPlacementMode(false);
       setSelectedSeedTier(null);
+      setSelectedFungalTier(null);
       setCrosshairsEnabled(false);
       setBlockMode(false);
-      toast({ title: "Mode disabled", description: "Press B for blocks, T for trees", duration: 2000 });
+      toast({ title: "Mode disabled", description: "Press B for blocks, T for trees, T+3 for fungal", duration: 2000 });
     }
   }, [inventory, setBlockMode, toast, seedDefinitions]);
 
@@ -808,8 +903,8 @@ export function Fortress() {
   const cycleSelectedSeed = useCallback((direction: 'next' | 'prev') => {
     const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
     // Get named seeds, and for admins also include T29 (tier 29) even if unnamed
-    const availableSeeds = seedDefinitions.filter(s => 
-      (s.name && s.name.trim() !== '') || (isAdmin && s.tier === 29)
+    const availableSeeds = seedDefinitions.filter(s =>
+      s.in_bracket_menu || (isAdmin && s.tier === 29)
     );
     if (availableSeeds.length === 0) return;
     if (!selectedSeedTier) {
@@ -826,6 +921,54 @@ export function Fortress() {
       : (currentIndex - 1 + availableSeeds.length) % availableSeeds.length;
     setSelectedSeedTier(availableSeeds[nextIndex].tier);
   }, [selectedSeedTier, seedDefinitions, userRoles]);
+
+  // Cycle through fungal tree tiers (1-10)
+  const cycleFungalSeed = useCallback((direction: 'next' | 'prev') => {
+    // Fungal seeds: tree_type === 'fungal', max 10 tiers
+    const availableFungalSeeds = seedDefinitions.filter(s =>
+      s.tree_type === 'fungal' && s.in_bracket_menu && s.tier <= 10
+    );
+
+    // If no configured fungal seeds, cycle through tiers 1-10 directly
+    if (availableFungalSeeds.length === 0) {
+      const currentTier = selectedFungalTier || 1;
+      const nextTier = direction === 'next'
+        ? (currentTier % 10) + 1
+        : ((currentTier - 2 + 10) % 10) + 1;
+      setSelectedFungalTier(nextTier);
+      toast({ title: `Fungal Tier ${nextTier}`, duration: 1000 });
+      return;
+    }
+
+    if (!selectedFungalTier) {
+      setSelectedFungalTier(availableFungalSeeds[0].tier);
+      return;
+    }
+    const currentIndex = availableFungalSeeds.findIndex(s => s.tier === selectedFungalTier);
+    if (currentIndex === -1) {
+      setSelectedFungalTier(availableFungalSeeds[0].tier);
+      return;
+    }
+    const nextIndex = direction === 'next'
+      ? (currentIndex + 1) % availableFungalSeeds.length
+      : (currentIndex - 1 + availableFungalSeeds.length) % availableFungalSeeds.length;
+    const nextSeed = availableFungalSeeds[nextIndex];
+    setSelectedFungalTier(nextSeed.tier);
+    toast({ title: `${nextSeed.name} (T${nextSeed.tier})`, duration: 1000 });
+  }, [selectedFungalTier, seedDefinitions, toast]);
+
+  // Fungal tree placement handler
+  const handleFungalTreePlace = useCallback(async (position: THREE.Vector3) => {
+    if (!selectedFungalTier) return;
+    const roundedPos = { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z) };
+
+    // Play planting sound
+    playSpatialSound('/planting_tree_sound.mp3', 0, { baseVolume: 0.4 });
+
+    // Plant the fungal tree - force fungal tree type regardless of seed definition
+    const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedFungalTier, 'fungal');
+    if (result.success) refetchTrees();
+  }, [selectedFungalTier, plantSeed, refetchTrees]);
 
   // Tree placement handler with pitched-up sound
   const handleTreePlace = useCallback(async (position: THREE.Vector3) => {
@@ -845,9 +988,10 @@ export function Fortress() {
       source.start();
     } catch (e) { console.warn('Seed sound failed', e); }
     
-    // Plant seed - growth starts locally via useLocalGrowth (ref-based, no flashing)
-    await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedSeedTier);
-  }, [selectedSeedTier, plantSeed]);
+    // Plant seed - growth handled server-side
+    const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedSeedTier);
+    if (result.success) refetchTrees();
+  }, [selectedSeedTier, plantSeed, refetchTrees]);
 
   const handleOpenPanel = useCallback((tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => {
     openPanel(tab);
@@ -898,8 +1042,8 @@ export function Fortress() {
         setShowOwnershipOutline(prev => !prev);
       }
       
-      // Performance mode toggle (0 key)
-      if (event.key === '0' && !event.repeat && !event.metaKey && !event.ctrlKey) {
+      // Performance mode toggle (0 key) - skip if spawn command sequence is active
+      if (event.key === '0' && !event.repeat && !event.metaKey && !event.ctrlKey && !isSpawnSequenceActive()) {
         setPerformanceMode(prev => {
           const newValue = !prev;
           toast({
@@ -928,6 +1072,7 @@ export function Fortress() {
 
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
+      <FortressProviders>
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
         shadows={false}
@@ -941,18 +1086,31 @@ export function Fortress() {
           wallPositions={wallPositions}
           blockPlacementMode={blockPlacementMode}
           treePlacementMode={treePlacementMode}
+          fungalPlacementMode={fungalPlacementMode}
           onBlockPlace={handleBlockPlace}
           onTreePlace={handleTreePlace}
+          onFungalTreePlace={handleFungalTreePlace}
           onModeChange={handleModeChange}
           onOpenPanel={handleOpenPanel}
+          onToggleInventory={() => {
+            setInventoryOpen(prev => {
+              const next = !prev;
+              if (next) {
+                document.exitPointerLock();
+              }
+              return next;
+            });
+          }}
           crosshairsEnabled={crosshairsEnabled}
           getBlockQuantity={getBlockQuantity}
           coinImageUrl={currentTheme?.coin_image_url}
           selectedBlockType={selectedBlockType}
           selectedSeedTier={selectedSeedTier}
+          selectedFungalTier={selectedFungalTier}
           panelOpen={panelOpen}
           onCycleBlock={cycleSelectedBlock}
           onCycleSeed={cycleSelectedSeed}
+          onCycleFungalSeed={cycleFungalSeed}
           blocks={blocks}
           weatherSettings={weatherSettings}
           onBlockRain={handleBlockRain}
@@ -972,13 +1130,15 @@ export function Fortress() {
           groundTextureUrl={currentWorld?.ground_texture_url}
           skyTextureUrl={currentWorld?.sky_texture_url}
           seedDefinitions={seedDefinitions}
-          plantedTrees={plantedTrees}
+          plantedTrees={allTrees}
           healthRef={healthRef}
           applyDamageWithKnockback={applyDamageWithKnockback}
           takeDamage={takeDamage}
           shwarmDefinitions={shwarmDefinitions}
           shnakeDefinitions={shnakeDefinitions}
           shombieDefinitions={shombieDefinitions}
+          walapaDefinitions={walapaDefinitions}
+          shtickmanDefinitions={shtickmanDefinitions}
           onPointsEarned={async (points) => {
             const { newLevel } = await addPoints(points);
             if (newLevel) {
@@ -1115,6 +1275,48 @@ export function Fortress() {
               }
             }
           }}
+          onShtickmanKilled={async (tier) => {
+            console.log(`[Fortress] Shtickman killed - tier ${tier}, user: ${user?.id}`);
+            if (!user?.id) {
+              console.error('[Fortress] Cannot track shtickman kill - no user ID');
+              return;
+            }
+
+            // Play kill sound
+            const audio = new Audio('/yay_sound.mp3');
+            audio.volume = 0.3;
+            audio.play().catch(() => {});
+
+            // Increment kill count in database
+            const { data: existing, error: fetchError } = await supabase
+              .from('user_combat_stats')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('enemy_type', `shtickman_t${tier}`)
+              .maybeSingle();
+
+            if (fetchError) {
+              console.error('[Fortress] Error fetching shtickman combat stats:', fetchError);
+              return;
+            }
+
+            if (existing) {
+              const { error: updateError } = await supabase
+                .from('user_combat_stats')
+                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+              if (updateError) {
+                console.error('[Fortress] Error updating shtickman kill count:', updateError);
+              }
+            } else {
+              const { error: insertError } = await supabase
+                .from('user_combat_stats')
+                .insert({ user_id: user.id, enemy_type: `shtickman_t${tier}`, kills: 1 });
+              if (insertError) {
+                console.error('[Fortress] Error inserting shtickman kill count:', insertError);
+              }
+            }
+          }}
           respawnPosition={respawnPosition}
           onRespawnComplete={() => setRespawnPosition(null)}
           isOwnedTreeAtPosition={isOwnedTreeAtPosition}
@@ -1124,6 +1326,9 @@ export function Fortress() {
           onBulletTierChange={setAdminTierOverride}
           playerLevel={profile?.current_level ?? 1}
           onPentabulletChargeChange={setPentabulletCharge}
+          onJetBoostStateChange={setJetBoostState}
+          selectedItemDef={selectedItemDef}
+          addItem={addItem}
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
@@ -1142,185 +1347,77 @@ export function Fortress() {
             trunkTextureUrl={seedDefinitions.find(s => s.tier === selectedSeedTier)?.trunk_texture_url}
           />
         )}
-        
-      </Canvas>
 
-      {/* Flying coin animations */}
-      {flyingCoins.map(coin => (
-        <div
-          key={coin.id}
-          className="fixed pointer-events-none z-50"
-          style={{
-            left: coin.startX,
-            top: coin.startY,
-            animation: 'flyToCoin 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards'
-          }}
-        >
-          <img src="/waterfall_coin.png" alt="coin" className="w-8 h-8 animate-spin" />
-        </div>
-      ))}
-
-      {/* FPS Display */}
-      <FPSDisplay isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
-      
-      {/* D-Flow Output Panel */}
-      <DFlowOutputPanel />
-
-      {/* Top right controls */}
-      <div className="fixed top-4 right-4 z-30 flex items-center gap-2">
-        {user?.email && (
-          <div className="bg-black/70 text-white px-3 py-2 rounded text-sm font-medium border border-white/20">
-            {user.email}
-          </div>
+        {fungalPlacementMode && selectedFungalTier && (
+          <SeedPreview
+            tier={selectedFungalTier}
+            visible={true}
+            existingBlocks={blocks || []}
+            trunkTextureUrl={seedDefinitions.find(s => s.tree_type === 'fungal' && s.tier === selectedFungalTier)?.fungal_stem_texture_url}
+            isFungal={true}
+          />
         )}
-        
-        <Button
-          className="waterfall-button bg-red-500/80 hover:bg-red-600/80 text-white border-red-400/50"
-          size="sm"
-          onClick={signOut}
-          title="Sign out"
-        >
-          Sign Out
-        </Button>
-        
-        {(userRoles.includes('admin') || userRoles.includes('superadmin')) && (
-          <Button
-            className="waterfall-button"
-            size="sm"
-            onClick={() => openAdminPanel('coins')}
-            title="Admin Panel"
-          >
-            <Eye className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-      
-      {/* Admin Panel */}
-      <AdminPanel 
-        waterfallSettings={settings}
-        onWaterfallSettingsChange={handleSettingsChange}
-        onWallPositionsChange={setWallPositions}
-        onMoveModeChange={setIsMoveMode}
+
+
+</Canvas>
+
+      <FortressHUD
+        flyingCoins={flyingCoins}
+        currentTheme={currentTheme}
+        availableThemes={availableThemes}
+        tokenBalance={tokenBalance}
+        allTokenBalances={allTokenBalances}
+        openPanel={openPanel}
+        inventory={inventory}
+        blockPlacementMode={blockPlacementMode}
+        selectedBlockType={selectedBlockType}
+        handleModeChange={handleModeChange}
+        currentHealth={currentHealth}
+        maxHealth={maxHealth}
+        profile={profile}
+        user={user}
+        userRoles={userRoles}
+        openAdminPanel={openAdminPanel}
+        jetBoostAvailable={jetBoostState.available}
+        jetBoostMax={jetBoostState.max}
+        isGliding={jetBoostState.isGliding}
+        equippedItems={equippedItems}
+        updateEquippedSlot={updateEquippedSlot}
+        inventoryOpen={inventoryOpen}
+        setInventoryOpen={setInventoryOpen}
+        selectedSlot={selectedSlot}
+        onSelectSlot={setSelectedSlot}
+      />
+
+      <FortressOverlays
+        settings={settings}
+        handleSettingsChange={handleSettingsChange}
+        setWallPositions={setWallPositions}
+        setIsMoveMode={setIsMoveMode}
         weatherSettings={weatherSettings}
-        onWeatherSettingsChange={handleWeatherSettingsChange}
-      />
-      
-      {/* Score display and block inventory */}
-      <div className="fixed bottom-4 left-4 z-20 flex items-center gap-2">
-        <div className="flex items-center gap-0 bg-black/50 text-white rounded">
-          <div 
-            className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-l"
-            onClick={() => openPanel('blocks')}
-            title="Open inventory"
-          >
-            <img src={currentTheme?.coin_image_url || '/waterfall_coin.png'} alt="coin" className="w-6 h-6" />
-          </div>
-          <div 
-            className="p-2 hover:bg-black/70 transition-colors cursor-pointer rounded-r border-l border-white/20"
-            onClick={() => openPanel('blocks')}
-            title="Open inventory"
-          >
-            <span className="font-bold">x{tokenBalance?.coins || 0}</span>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <div 
-            className={`flex items-center gap-2 bg-black/50 text-white p-2 rounded cursor-pointer transition-colors ${
-              blockPlacementMode ? 'bg-blue-500/70' : 'hover:bg-black/70'
-            }`}
-            onClick={() => {
-              const availableBlocks = inventory.filter(item => item.quantity > 0);
-              const totalBlocks = availableBlocks.reduce((total, item) => total + item.quantity, 0);
-              
-              if (totalBlocks > 0) {
-                handleModeChange(selectedBlockType ? null : 'building');
-              } else {
-                openPanel('market');
-              }
-            }}
-            title={(() => {
-              const totalBlocks = inventory.filter(item => item.quantity > 0).reduce((total, item) => total + item.quantity, 0);
-              return totalBlocks > 0 ? (selectedBlockType ? "Exit block mode" : "Enter block mode") : "Buy blocks from shop";
-            })()}
-          >
-            <div className="w-6 h-6 bg-gradient-to-br from-stone-400 to-stone-600 rounded border border-stone-300 flex items-center justify-center">
-              <div className="w-4 h-4 bg-gradient-to-br from-stone-300 to-stone-500 rounded-sm border border-stone-400"></div>
-            </div>
-            <span className="font-bold">x{inventory.filter(item => item.quantity > 0).reduce((total, item) => total + item.quantity, 0)}</span>
-          </div>
-          
-          {/* Health Bar with Points - inline with block counter */}
-          <HealthBar currentHealth={currentHealth} maxHealth={maxHealth} totalPoints={profile?.total_points || 0} />
-          
-          {blockPlacementMode && selectedBlockType && (
-            <div className="bg-blue-500/70 text-white px-2 py-1 rounded text-xs">
-              BLOCK MODE: {selectedBlockType}
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Instructions */}
-      <div className="fixed bottom-4 right-4 z-20 text-white text-sm bg-black/50 p-2 rounded">
-        <div>{blockPlacementMode ? (selectedBlockType ? 'Click to place block • Tab to see placed blocks' : 'Tab to see placed blocks • O to buy blocks') : 'R for crosshairs • Click to shoot'}</div>
-        <div className="text-xs opacity-75 mt-1">
-          B = Block mode • O = Open Shop • I = Inventory
-        </div>
-      </div>
-      
-      {/* User Panel */}
-      <UserPanel onBlockPurchased={handleBlockPurchased} />
-      
-      {/* Crosshair - Pentabullet-enabled */}
-      <PentabulletCrosshair 
-        chargeProgress={pentabulletCharge}
-        baseMode={blockPlacementMode ? 'building' : treePlacementMode ? 'planting' : crosshairsEnabled ? 'shooting' : 'inactive'}
+        handleWeatherSettingsChange={handleWeatherSettingsChange}
+        handleBlockPurchased={handleBlockPurchased}
+        pentabulletCharge={pentabulletCharge}
+        blockPlacementMode={blockPlacementMode}
+        treePlacementMode={treePlacementMode}
+        crosshairsEnabled={crosshairsEnabled}
         bulletColor={bulletColor}
+        isDead={isDead}
+        respawnTimer={respawnTimer}
+        respawn={respawn}
+        setRespawnPosition={setRespawnPosition}
+        setRespawnTimer={setRespawnTimer}
+        godMode={godMode}
+        treeChopModalOpen={treeChopModalOpen}
+        pendingChopPosition={pendingChopPosition}
+        chopProgress={chopProgress}
+        setTreeChopModalOpen={setTreeChopModalOpen}
+        setPendingChopPosition={setPendingChopPosition}
+        setChopProgress={setChopProgress}
+        handleTreeChopConfirm={handleTreeChopConfirm}
+        plantedTrees={allTrees}
       />
-      
-      
-      {/* Death Overlay */}
-      <DeathOverlay 
-        isDead={isDead} 
-        respawnTimer={respawnTimer} 
-        onRespawn={() => {
-          const spawnPos = respawn();
-          setRespawnPosition(spawnPos);
-          setRespawnTimer(0);
-        }} 
-      />
-      
-      {/* God Mode HUD Indicator */}
-      {godMode && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-purple-600/90 text-white px-6 py-2 rounded-lg font-bold text-lg border border-purple-400/50 shadow-lg shadow-purple-500/30">
-          GOD MODE (~)
-        </div>
-      )}
-      
-      {/* Performance Mode HUD Indicator */}
-      {performanceMode && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-green-600/90 text-white px-6 py-2 rounded-lg font-bold text-lg border border-green-400/50 shadow-lg shadow-green-500/30">
-          PERF MODE (0)
-        </div>
-      )}
-      
-      {/* Tree Chop Confirmation Modal */}
-      <TreeChopConfirmModal
-        isOpen={treeChopModalOpen}
-        onConfirm={handleTreeChopConfirm}
-        onCancel={() => {
-          setTreeChopModalOpen(false);
-          setPendingChopPosition(null);
-          setChopProgress(0);
-        }}
-      />
-      
-      {/* Toast notifications */}
-      <Toaster />
-      
-      {/* Performance Overlay - Toggle with Shift+P */}
-      <PerformanceOverlay />
+      </FortressProviders>
     </div>
   );
 }

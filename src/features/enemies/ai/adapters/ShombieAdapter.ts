@@ -16,6 +16,7 @@ import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
 import { EnemyManager } from '../EnemyManager';
 import { KNOCKBACK_DECAY_RATE, SHOMBIE_GRAVITY } from '@/features/shombie/constants';
+import { isPointInFSZ, clampPositionOutsideFSZ } from '../fortressSafeZone';
 
 // Module-level locomotion context
 let locomotionContext: {
@@ -92,7 +93,7 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
       pz: shared.playerZ,
       
       distToPlayer,
-      hasLineOfSight: true, // Ground enemies assume LOS for now
+      hasLineOfSight: !isPointInFSZ(shared.playerX, shared.playerY, shared.playerZ),
       
       health: shombie.currentHealth,
       maxHealth: shombie.maxHealth,
@@ -134,26 +135,30 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     shombie.position.x += shombie.velocity.x * deltaSeconds;
     shombie.position.y += shombie.velocity.y * deltaSeconds;
     shombie.position.z += shombie.velocity.z * deltaSeconds;
-    
+
     // Ground clamp
     if (shombie.position.y < 0) {
       shombie.position.y = 0;
       shombie.velocity.y = 0;
     }
-    
+
     // Decay horizontal velocity (knockback)
     const decay = Math.exp(-KNOCKBACK_DECAY_RATE * deltaSeconds);
     shombie.velocity.x *= decay;
     shombie.velocity.z *= decay;
-    
+
     if (result.kind === 'idle') {
+      // Clamp to FSZ boundary even when idle (knockback may push into zone)
+      const clamped = clampPositionOutsideFSZ(shombie.position.x, shombie.position.z);
+      shombie.position.x = clamped.x;
+      shombie.position.z = clamped.z;
       return;
     }
-    
+
     // Skip movement during emergence (first 3 seconds)
     const timeSinceSpawn = performance.now() - shombie.spawnedAt;
     const isEmerging = timeSinceSpawn < 3000;
-    
+
     if (result.kind === 'move' && !isEmerging) {
       // Calculate direction to target
       _direction.set(
@@ -161,26 +166,31 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
         0,
         result.tz - shombie.position.z
       );
-      
+
       const dist = _direction.length();
       if (dist > 0.1) {
         _direction.normalize();
-        
+
         // Shambling movement with speed multiplier
         const speed = shombie.definition.speed * (result.speedMultiplier ?? 1);
         const moveAmount = speed * deltaSeconds;
-        
+
         // Don't overshoot
         const actualMove = Math.min(moveAmount, dist);
-        
+
         shombie.position.x += _direction.x * actualMove;
         shombie.position.z += _direction.z * actualMove;
-        
+
         // Face movement direction
         shombie.rotation = Math.atan2(_direction.x, _direction.z);
       }
     }
-    
+
+    // Clamp to FSZ boundary after all movement (knockback + AI move)
+    const clamped = clampPositionOutsideFSZ(shombie.position.x, shombie.position.z);
+    shombie.position.x = clamped.x;
+    shombie.position.z = clamped.z;
+
     if (result.kind === 'attack') {
       shombie.lastAttackAt = performance.now();
       

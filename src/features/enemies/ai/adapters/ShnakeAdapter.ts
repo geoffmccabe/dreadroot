@@ -15,9 +15,10 @@ import type {
   BehaviorState,
   BehaviorModule,
 } from '../types';
-import { getBehaviorsByIds, type RevengeTarget, STUN_DURATION_MS } from '../behaviors';
+import { getBehaviorsByIds, type RevengeTarget, STUN_MS_PER_20_DAMAGE } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
 import { applyShnakeMove, applyShnakeAttack, type ShnakeLocomotionContext } from '../locomotion/ShnakeLocomotion';
+import { isPointInFSZ } from '../fortressSafeZone';
 import { EnemyManager } from '../EnemyManager';
 
 /**
@@ -95,11 +96,14 @@ export function initializeShnakeRevenge(shnakeId: string, damageReceived: number
   const state = entry.behaviorState;
   const existing = state.revengeTarget as RevengeTarget | null;
   
-  // STUN MECHANIC: If already in revenge mode, headshot stuns for 2 seconds
-  // This gives the player a chance to escape or deal more damage
+  // STUN MECHANIC: If already in revenge mode, headshot stuns based on damage
+  // 0.5 seconds per 20 damage dealt
   if (existing) {
-    state.stunnedUntil = now + STUN_DURATION_MS;
-    console.log(`[ShnakeAdapter] Headshot stun applied for ${STUN_DURATION_MS}ms`);
+    const stunDuration = Math.floor(damageReceived / 20) * STUN_MS_PER_20_DAMAGE;
+    if (stunDuration > 0) {
+      state.stunnedUntil = now + stunDuration;
+      console.log(`[ShnakeAdapter] Headshot stun applied for ${stunDuration}ms (${damageReceived} damage)`);
+    }
   }
   
   if (existing) {
@@ -237,7 +241,7 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
       pz: shared.playerZ,
       
       distToPlayer,
-      hasLineOfSight: distToPlayer < 32, // Simplified for now - shnakes in tree have LOS
+      hasLineOfSight: distToPlayer < 32 && !isPointInFSZ(shared.playerX, shared.playerY, shared.playerZ),
       
       health: shnake.headHealth,
       maxHealth: shnake.definition.health_per_segment,
@@ -280,8 +284,8 @@ export const ShnakeAdapter: EnemyAdapter<ShnakeWithAI> = {
   },
   
   applyResult(
-    shnake: ShnakeWithAI, 
-    result: BehaviorResult, 
+    shnake: ShnakeWithAI,
+    result: BehaviorResult,
     _deltaMs: number,
     shared?: SharedContext
   ): void {

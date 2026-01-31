@@ -15,6 +15,10 @@ export interface ShwarmDefinition {
   damage_per_hit: number;
   spawn_chance_per_minute: number;
   x_factor: number; // random movement variance (1-10)
+  /** Loot drop rate percentage (0-100, step 0.1) */
+  drop_rate: number | null;
+  /** Drop table code (e.g. "DT1") */
+  drop_table_code: string | null;
   created_at: string;
   updated_at: string;
   /** AI behavior configuration (from database) */
@@ -27,6 +31,20 @@ export interface ShwarmDefinition {
     attackCooldownMs?: number;
     custom?: Record<string, unknown>;
   } | null;
+}
+
+/**
+ * A dropped world item from a killed enemy
+ */
+export interface DroppedWorldItem {
+  id: string;
+  itemNumber: number;
+  itemName: string;
+  itemId: string;
+  position: THREE.Vector3;
+  droppedAt: number;
+  killerUserId: string;
+  pickedUp: boolean;
 }
 
 /**
@@ -73,6 +91,8 @@ export interface ShwarmDefinitionRow {
   damage_per_hit: number;
   spawn_chance_per_minute: number;
   x_factor: number;
+  drop_rate: number | null;
+  drop_table_code: string | null;
   created_at: string;
   updated_at: string;
   /** AI behavior configuration (from database) */

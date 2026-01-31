@@ -2,7 +2,7 @@
 // Minecraft-style hearts display with damage/heal animations
 
 import React, { useEffect, useState } from 'react';
-import { Heart, HeartCrack } from 'lucide-react';
+import { Heart, HeartCrack, Rocket } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface HealthBarProps {
@@ -10,9 +10,12 @@ interface HealthBarProps {
   maxHealth: number;
   totalPoints?: number;
   className?: string;
+  jetBoostAvailable?: number;
+  jetBoostMax?: number;
+  isGliding?: boolean;
 }
 
-export function HealthBar({ currentHealth, maxHealth, totalPoints, className }: HealthBarProps) {
+export function HealthBar({ currentHealth, maxHealth, totalPoints, className, jetBoostAvailable = 0, jetBoostMax = 0, isGliding = false }: HealthBarProps) {
   const [shake, setShake] = useState(false);
   const [prevHealth, setPrevHealth] = useState(currentHealth);
   
@@ -99,6 +102,37 @@ export function HealthBar({ currentHealth, maxHealth, totalPoints, className }: 
         <span className="ml-2 text-[10px] font-bold tabular-nums text-yellow-400">
           PTS {totalPoints}
         </span>
+      )}
+
+      {/* Jet Boost indicators - inverted triangles + Glide indicator */}
+      {(jetBoostMax > 0 || isGliding) && (
+        <div className="ml-2 flex items-center gap-0.5">
+          {Array.from({ length: jetBoostMax }).map((_, i) => {
+            const isAvailable = i < jetBoostAvailable;
+            return (
+              <svg
+                key={`boost-${i}`}
+                width="12"
+                height="12"
+                viewBox="0 0 10 10"
+                className={cn(
+                  "drop-shadow-[0_0_2px_rgba(255,165,0,0.5)]",
+                  isAvailable ? "fill-orange-500" : "fill-transparent stroke-orange-500"
+                )}
+                strokeWidth={isAvailable ? 0 : 1.5}
+              >
+                {/* Inverted triangle (pointing down) */}
+                <polygon points="5,10 0,0 10,0" />
+              </svg>
+            );
+          })}
+          {/* Glide indicator - shows G when gliding is active */}
+          {isGliding && (
+            <span className="ml-1 text-[10px] font-bold text-cyan-400 drop-shadow-[0_0_2px_rgba(0,255,255,0.5)]">
+              G
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

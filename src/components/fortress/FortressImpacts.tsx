@@ -27,7 +27,7 @@ export interface ImpactConfig {
 }
 
 export interface BulletImpactsHandle {
-  spawnImpact: (position: THREE.Vector3, config?: ImpactConfig) => void;
+  spawnImpact: (...args: any[]) => void;
 }
 
 interface FireInstance {
@@ -65,42 +65,42 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   const { scene, camera } = useThree();
   const activeGroupsRef = useRef<ImpactGroup[]>([]);
 
-  const spawnImpact = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
+  const spawnImpactImpl = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
     // DEBUG: Log what config we receive (guarded for FPS)
     if (DEBUG_IMPACTS) {
       console.log('[FortressImpacts] spawnImpact called with config:', JSON.stringify(config));
     }
-    
+
     // Get colors - fill missing with first color
     const inputColors = config?.colors ?? ['#FFFF00'];
     const color1 = inputColors[0] || '#FFFF00';
     const color2 = inputColors[1] || color1;
     const color3 = inputColors[2] || color1;
-    
+
     // Get dimensions from config
     const userWidth = config?.size ?? 0.5;
     const userHeight = config?.height ?? 1.0;
     const userDuration = config?.duration ?? 0.5;
-    
+
     if (DEBUG_IMPACTS) {
-      console.log('[FortressImpacts] Creating 7 fires:', { 
-        colors: [color1, color2, color3], 
-        width: userWidth, 
-        height: userHeight, 
-        duration: userDuration 
+      console.log('[FortressImpacts] Creating 7 fires:', {
+        colors: [color1, color2, color3],
+        width: userWidth,
+        height: userHeight,
+        duration: userDuration
       });
     }
-    
+
     // Calculate actual sizes based on user's design spec
     const centerWidth = userWidth * 0.5;
     const outerWidth = userWidth * 0.3;
     const centerHeight = userHeight;
     const outerHeightA = userHeight * 0.4; // First set of 3
     const outerHeightB = userHeight * 0.6; // Second set of 3
-    
+
     const centerDuration = userDuration * 1000;
     const outerDuration = userDuration * 0.8 * 1000;
-    
+
     // Hex offsets for the 6 outer fires
     const hexOffsets = getHexOffsets(userWidth);
 
@@ -131,7 +131,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       const radius = width / 2;
       const geometry = new particleFire.Geometry(radius, height, particleCount);
       const material = new particleFire.Material({ color: hexToNumber(color) });
-      
+
       // Fix dark fringe against sky using CustomBlending
       // The library's shader outputs alpha=1.0, so we use CustomBlending to ignore alpha
       // Blend equation: src.rgb * ONE + dst.rgb * ONE (pure additive, ignores alpha)
@@ -144,7 +144,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       (material as any).depthWrite = false;
       (material as any).depthTest = false;
       (material as any).transparent = true;
-      
+
       if (camera instanceof THREE.PerspectiveCamera) {
         material.setPerspective(camera.fov, window.innerHeight);
       }
@@ -193,6 +193,22 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     });
   }, [scene, camera]);
 
+  // Adapter: supports both call signatures
+  // 1. spawnImpact(position: Vector3, config?: ImpactConfig)
+  // 2. spawnImpact(x: number, y: number, z: number, colors: string[], burnTime: number)
+  const spawnImpact = useCallback((...args: any[]) => {
+    if (typeof args[0] === 'number') {
+      const position = new THREE.Vector3(args[0], args[1], args[2]);
+      const config: ImpactConfig = {
+        colors: args[3],
+        duration: args[4],
+      };
+      spawnImpactImpl(position, config);
+    } else {
+      spawnImpactImpl(args[0] as THREE.Vector3, args[1] as ImpactConfig | undefined);
+    }
+  }, [spawnImpactImpl]);
+
   useImperativeHandle(ref, () => ({ spawnImpact }), [spawnImpact]);
 
   // Update all fires and clean up expired ones
@@ -219,7 +235,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
           allExpired = false;
           // Update animation
           fire.material.update(delta);
-          
+
           // Fade out in last 20%
           const remaining = 1 - (elapsed / fire.duration);
           if (remaining < 0.2) {

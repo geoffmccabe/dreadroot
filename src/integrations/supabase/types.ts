@@ -268,6 +268,57 @@ export type Database = {
         }
         Relationships: []
       }
+      flamethrower_tiers: {
+        Row: {
+          id: number
+          tier: number
+          width: number
+          distance: number
+          speed: number
+          particles: number
+          transparency: number
+          color1: string
+          color2: string
+          color3: string
+          fire_opacity: number
+          smoke_opacity: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          tier: number
+          width?: number
+          distance?: number
+          speed?: number
+          particles?: number
+          transparency?: number
+          color1?: string
+          color2?: string
+          color3?: string
+          fire_opacity?: number
+          smoke_opacity?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          tier?: number
+          width?: number
+          distance?: number
+          speed?: number
+          particles?: number
+          transparency?: number
+          color1?: string
+          color2?: string
+          color3?: string
+          fire_opacity?: number
+          smoke_opacity?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chunk_versions: {
         Row: {
           chunk_x: number
@@ -330,6 +381,74 @@ export type Database = {
         }
         Relationships: []
       }
+      drop_tables: {
+        Row: {
+          id: string
+          code: string
+          name: string
+          description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          code: string
+          name?: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          code?: string
+          name?: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      drop_table_entries: {
+        Row: {
+          id: string
+          drop_table_id: string
+          item_number: number
+          item_name: string
+          weight: number
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          drop_table_id: string
+          item_number: number
+          item_name: string
+          weight?: number
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          drop_table_id?: string
+          item_number?: number
+          item_name?: string
+          weight?: number
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drop_table_entries_drop_table_id_fkey"
+            columns: ["drop_table_id"]
+            isOneToOne: false
+            referencedRelation: "drop_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           class: string
@@ -339,6 +458,7 @@ export type Database = {
           glow_factor: number | null
           id: string
           item_category: string
+          item_number: number | null
           key: string
           name: string
           properties: Json | null
@@ -355,6 +475,7 @@ export type Database = {
           glow_factor?: number | null
           id?: string
           item_category?: string
+          item_number?: number | null
           key: string
           name: string
           properties?: Json | null
@@ -371,6 +492,7 @@ export type Database = {
           glow_factor?: number | null
           id?: string
           item_category?: string
+          item_number?: number | null
           key?: string
           name?: string
           properties?: Json | null
@@ -915,6 +1037,8 @@ export type Database = {
           ai_config: Json | null
           created_at: string | null
           damage_per_hit: number
+          drop_rate: number | null
+          drop_table_code: string | null
           health_per_block: number
           id: string
           max_blocks: number
@@ -931,6 +1055,8 @@ export type Database = {
           ai_config?: Json | null
           created_at?: string | null
           damage_per_hit?: number
+          drop_rate?: number | null
+          drop_table_code?: string | null
           health_per_block?: number
           id?: string
           max_blocks?: number
@@ -947,6 +1073,8 @@ export type Database = {
           ai_config?: Json | null
           created_at?: string | null
           damage_per_hit?: number
+          drop_rate?: number | null
+          drop_table_code?: string | null
           health_per_block?: number
           id?: string
           max_blocks?: number
@@ -1299,11 +1427,13 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          avatar_url: string | null
           blockchain_address: string | null
           coins: number
           created_at: string
           current_health: number
           current_level: number
+          display_name: string | null
           fog_enabled: boolean
           id: string
           max_health: number
@@ -1313,11 +1443,13 @@ export type Database = {
           visual_distance: number
         }
         Insert: {
+          avatar_url?: string | null
           blockchain_address?: string | null
           coins?: number
           created_at?: string
           current_health?: number
           current_level?: number
+          display_name?: string | null
           fog_enabled?: boolean
           id?: string
           max_health?: number
@@ -1327,11 +1459,13 @@ export type Database = {
           visual_distance?: number
         }
         Update: {
+          avatar_url?: string | null
           blockchain_address?: string | null
           coins?: number
           created_at?: string
           current_health?: number
           current_level?: number
+          display_name?: string | null
           fog_enabled?: boolean
           id?: string
           max_health?: number
@@ -1393,6 +1527,51 @@ export type Database = {
         }
         Relationships: []
       }
+      walapa_definitions: {
+        Row: {
+          belly_texture_url: string | null
+          body_texture_url: string | null
+          created_at: string | null
+          eyes_texture_url: string | null
+          health: number
+          id: string
+          min_tree_tier: number
+          name: string
+          speed: number
+          tier: number
+          updated_at: string | null
+          wait_time_seconds: number
+        }
+        Insert: {
+          belly_texture_url?: string | null
+          body_texture_url?: string | null
+          created_at?: string | null
+          eyes_texture_url?: string | null
+          health?: number
+          id?: string
+          min_tree_tier?: number
+          name?: string
+          speed?: number
+          tier?: number
+          updated_at?: string | null
+          wait_time_seconds?: number
+        }
+        Update: {
+          belly_texture_url?: string | null
+          body_texture_url?: string | null
+          created_at?: string | null
+          eyes_texture_url?: string | null
+          health?: number
+          id?: string
+          min_tree_tier?: number
+          name?: string
+          speed?: number
+          tier?: number
+          updated_at?: string | null
+          wait_time_seconds?: number
+        }
+        Relationships: []
+      }
       worlds: {
         Row: {
           created_at: string
@@ -1422,6 +1601,54 @@ export type Database = {
           is_default?: boolean
           name?: string
           sky_texture_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pathfinding_configs: {
+        Row: {
+          id: string
+          code: string
+          name: string
+          description: string | null
+          algorithm_code: string
+          grid_size: number
+          max_iterations: number
+          default_randomization: number
+          randomization_mode: string
+          algorithm_params: Json | null
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          code: string
+          name: string
+          description?: string | null
+          algorithm_code: string
+          grid_size?: number
+          max_iterations?: number
+          default_randomization?: number
+          randomization_mode?: string
+          algorithm_params?: Json | null
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          code?: string
+          name?: string
+          description?: string | null
+          algorithm_code?: string
+          grid_size?: number
+          max_iterations?: number
+          default_randomization?: number
+          randomization_mode?: string
+          algorithm_params?: Json | null
+          is_default?: boolean
+          created_at?: string
           updated_at?: string
         }
         Relationships: []

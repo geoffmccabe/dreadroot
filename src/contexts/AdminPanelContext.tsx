@@ -1,6 +1,16 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useRef, ReactNode } from 'react';
+import type { FlameDemoHandle } from '@/components/fortress/FlameDemoSpawner';
 
-type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'weapons' | 'shombies';
+type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'npcs' | 'items' | 'effects';
+
+// Subtab types for NPCs panel
+export type NPCSubtab = 'enemies' | 'friends' | 'pathfinding';
+
+// Subtab types for Seeds panel
+export type SeedSubtab = 'ordinary' | 'wide' | 'fungal';
+
+// Subtab types for Items panel
+export type ItemsSubtab = 'all-items' | 'weapons-items' | 'bullets' | 'drop-tables';
 
 interface AdminPanelContextType {
   isOpen: boolean;
@@ -8,6 +18,7 @@ interface AdminPanelContextType {
   openPanel: (tab?: AdminTab) => void;
   closePanel: () => void;
   setActiveTab: (tab: AdminTab) => void;
+  flameDemoRef: React.MutableRefObject<FlameDemoHandle | null>;
 }
 
 const AdminPanelContext = createContext<AdminPanelContextType | undefined>(undefined);
@@ -15,6 +26,7 @@ const AdminPanelContext = createContext<AdminPanelContextType | undefined>(undef
 export const AdminPanelProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>('coins');
+  const flameDemoRef = useRef<FlameDemoHandle | null>(null);
 
   const openPanel = (tab: AdminTab = 'coins') => {
     setActiveTab(tab);
@@ -30,7 +42,7 @@ export const AdminPanelProvider: React.FC<{ children: ReactNode }> = ({ children
   };
 
   return (
-    <AdminPanelContext.Provider value={{ isOpen, activeTab, openPanel, closePanel, setActiveTab }}>
+    <AdminPanelContext.Provider value={{ isOpen, activeTab, openPanel, closePanel, setActiveTab, flameDemoRef }}>
       {children}
     </AdminPanelContext.Provider>
   );

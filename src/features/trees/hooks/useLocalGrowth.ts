@@ -1,41 +1,15 @@
-// Local Growth Manager - Ref-based growth system
-// NEW ARCHITECTURE: Writes directly to placed_blocks via placeBlocksBatch
-// No more tree_blocks table - unified block rendering path
+// Local Growth Manager - Server-Side Growth Architecture
+// Tree growth is now handled server-side by the process_tree_growth() database function
+// This file only contains tree deletion logic and exports
 
-import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SeedDefinition, PlantedTree, TreeBlueprint, TreeGrowthOptions } from '../types';
-import { generateTreeBlueprint, getBlocksAtOrder, getMaxGrowthOrder } from '../lib/treeGrowth';
-import { TREE_CONFIG, getGrowthInterval } from '../constants';
+import { SeedDefinition, PlantedTree, TreeGrowthOptions } from '../types';
+import { generateTreeBlueprint } from '../lib/treeGrowth';
+import { generateFungalTreeBlueprint } from '../lib/fungalTreeGenerator';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { encodeBlockType, getTextureUrlForTreeBlock } from '../lib/blockTypeEncoder';
 
-// Check interval - 1 second max for FPS optimization
-const GROWTH_CHECK_INTERVAL = 1000;
-
-// Type for the placeBlocksBatch function from useBlocks
-type PlaceBlocksBatchFn = (positions: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string }>) => any[];
-
-interface GrowingTree {
-  id: string;
-  worldId: string;
-  blueprint: TreeBlueprint;
-  currentOrder: number;
-  lastGrowthTime: number;
-  growthInterval: number;
-  seedDef: SeedDefinition; // Store full seed def for texture lookups
-  baseX: number;
-  baseY: number;
-  baseZ: number;
-  growthSeed: number;
-  createdAt: number; // Timestamp when tree was added to growth loop
-}
-
-interface UseLocalGrowthOptions {
-  worldId: string | null;
-  userId: string | null;
-  placeBlocksBatch: PlaceBlocksBatchFn | null;
-}
+// Set of tree IDs that have been deleted - prevents race conditions
+const deletedTreeIds = new Set<string>();
 
 /**
  * Build options object from seed definition for tree generation
@@ -56,380 +30,89 @@ function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
   };
 }
 
-// Module-level reference for clearing growing trees from outside the hook
-let growingTreesRefGlobal: React.MutableRefObject<Map<string, GrowingTree>> | null = null;
-
-// Set of tree IDs that have been deleted - prevents race conditions
-const deletedTreeIds = new Set<string>();
-
 /**
- * Mark all current growing trees as deleted to prevent any further block placement
- * This is called BEFORE clearing the map to ensure no race conditions
+ * Mark all current growing trees as deleted (legacy - now a no-op)
+ * Kept for backwards compatibility with cleanup code
  */
 export function markAllTreesDeleted() {
-  if (growingTreesRefGlobal?.current) {
-    for (const treeId of growingTreesRefGlobal.current.keys()) {
-      deletedTreeIds.add(treeId);
-    }
-    console.log(`[LocalGrowth] Marked ${growingTreesRefGlobal.current.size} trees as deleted`);
-  }
+  // No-op - server handles growth now
 }
 
 /**
- * Clear all pending blocks (stub for backwards compatibility)
+ * Clear all pending blocks (legacy - now a no-op)
  */
 export function clearAllPendingBlocks() {
-  // No longer needed - blocks go directly to placed_blocks (no-op stub)
+  // No-op - server handles growth now
 }
 
 /**
- * Clear pending blocks for a specific tree (stub for backwards compatibility)
+ * Clear pending blocks for a specific tree (legacy - now a no-op)
  */
 export function clearPendingBlocksForTree(_treeId: string) {
-  // No longer needed - blocks go directly to placed_blocks (no-op stub)
+  // No-op - server handles growth now
 }
 
 /**
- * Clear all growing trees from memory (used for ghost tree cleanup)
+ * Clear all growing trees from memory (legacy - now a no-op)
  */
 export function clearGrowingTrees() {
-  if (growingTreesRefGlobal?.current) {
-    growingTreesRefGlobal.current.clear();
-  }
+  // No-op - server handles growth now
 }
 
-export function useLocalGrowth({
-  worldId,
-  userId,
-  placeBlocksBatch,
-}: UseLocalGrowthOptions) {
-  // All growing trees stored in a ref - no React state = no re-renders
-  const growingTreesRef = useRef<Map<string, GrowingTree>>(new Map());
-  const placeBlocksBatchRef = useRef(placeBlocksBatch);
-  const isGrowingRef = useRef(false);
-  const prevWorldIdRef = useRef<string | null>(null);
+/**
+ * Check if a tree ID has been marked as deleted
+ */
+export function isTreeDeleted(treeId: string): boolean {
+  return deletedTreeIds.has(treeId);
+}
 
-  // Keep placeBlocksBatch ref in sync AND set global reference (once)
-  useEffect(() => {
-    placeBlocksBatchRef.current = placeBlocksBatch;
-    // Set the global reference for external clearing
-    growingTreesRefGlobal = growingTreesRef;
-  }, [placeBlocksBatch]);
-  
-  // CRITICAL: Clear all growing trees when worldId changes to prevent cross-world ghosts
-  useEffect(() => {
-    if (worldId !== prevWorldIdRef.current) {
-      if (prevWorldIdRef.current !== null && growingTreesRef.current.size > 0) {
-        console.warn(`[LocalGrowth] World changed from ${prevWorldIdRef.current} to ${worldId} - clearing ${growingTreesRef.current.size} growing trees`);
-        // Mark all current trees as deleted before clearing
-        for (const treeId of growingTreesRef.current.keys()) {
-          deletedTreeIds.add(treeId);
-        }
-        growingTreesRef.current.clear();
-      }
-      prevWorldIdRef.current = worldId;
-    }
-  }, [worldId]);
+/**
+ * Mark a tree as deleted
+ */
+export function markTreeDeleted(treeId: string): void {
+  deletedTreeIds.add(treeId);
+}
 
-  /**
-   * Start growing a new tree locally
-   * Generates blueprint once and stores in ref
-   */
-  const startGrowing = useCallback((
-    treeId: string,
-    seedDef: SeedDefinition,
-    baseX: number,
-    baseY: number,
-    baseZ: number,
-    growthSeed: number,
-    startingOrder: number = 0
-  ) => {
-    // Generate blueprint once
-    const blueprint = generateTreeBlueprint(
-      baseX,
-      baseY,
-      baseZ,
-      seedDef.tier,
-      seedDef.width_factor,
-      seedDef.branching_factor,
-      growthSeed,
-      buildGrowthOptions(seedDef)
-    );
-
-    const growingTree: GrowingTree = {
-      id: treeId,
-      worldId: worldId || '',
-      blueprint,
-      currentOrder: startingOrder,
-      lastGrowthTime: Date.now(),
-      growthInterval: getGrowthInterval(seedDef.growth_factor),
-      seedDef, // Store full seed def for texture lookups
-      baseX,
-      baseY,
-      baseZ,
-      growthSeed,
-      createdAt: Date.now(),
-    };
-
-    growingTreesRef.current.set(treeId, growingTree);
-  }, [worldId]);
-
-  /**
-   * Update tree ID (used when temp ID is replaced with real DB ID)
-   */
-  const updateTreeId = useCallback((tempId: string, realId: string) => {
-    const tree = growingTreesRef.current.get(tempId);
-    if (tree) {
-      growingTreesRef.current.delete(tempId);
-      tree.id = realId;
-      growingTreesRef.current.set(realId, tree);
-    }
-  }, []);
-
-  /**
-   * Check if a tree is currently growing locally
-   */
-  const isTreeGrowing = useCallback((treeId: string): boolean => {
-    return growingTreesRef.current.has(treeId);
-  }, []);
-
-  /**
-   * Stop growing a specific tree (used when tree is deleted)
-   */
-  const stopGrowing = useCallback((treeId: string) => {
-    // Add to deleted set IMMEDIATELY to prevent race conditions
-    deletedTreeIds.add(treeId);
-    if (growingTreesRef.current.has(treeId)) {
-      growingTreesRef.current.delete(treeId);
-    }
-  }, []);
-
-  // Main growth loop - checks once per second
-  // NEW: Writes blocks to placed_blocks via placeBlocksBatch (not tree_blocks)
-  useEffect(() => {
-    if (!TREE_CONFIG.ENABLED) return;
-
-    // Track last parent check per tree to avoid redundant checks
-    const lastParentCheck = new Map<string, number>();
-    const PARENT_CHECK_INTERVAL = 3000; // Check parent existence every 3 seconds
-
-    const checkGrowth = async () => {
-      const placeBlocksBatchFn = placeBlocksBatchRef.current;
-      if (!placeBlocksBatchFn || isGrowingRef.current) return;
-
-      isGrowingRef.current = true;
-      const now = Date.now();
-
-      try {
-        // Collect all trees that need to grow this tick
-        const treesToGrow: GrowingTree[] = [];
-        
-        for (const [id, tree] of growingTreesRef.current) {
-          // CRITICAL: Check deleted set FIRST (sync, no race condition)
-          if (deletedTreeIds.has(id)) {
-            growingTreesRef.current.delete(id);
-            continue;
-          }
-          
-          // Handle temp trees specially - they need timeout protection
-          if (id.startsWith('temp_')) {
-            const tempAge = now - (tree.createdAt || tree.lastGrowthTime);
-            const TEMP_TREE_TIMEOUT = 10000; // 10 seconds max for temp trees (reduced from 30)
-            
-            // If temp tree is too old, it's orphaned - stop it
-            if (tempAge > TEMP_TREE_TIMEOUT) {
-              console.warn(`[LocalGrowth] Removing orphaned temp tree: ${id}`);
-              growingTreesRef.current.delete(id);
-              deletedTreeIds.add(id);
-            }
-            // Skip growth tick for temp trees - wait for DB ID assignment
-            continue;
-          }
-          
-          // GHOST TREE CHECK: Verify tree has a valid UUID format (not temp)
-          // Real DB IDs are UUIDs, temp IDs start with "temp_"
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (!uuidRegex.test(id)) {
-            console.warn(`[LocalGrowth] Removing ghost tree with invalid ID format: ${id}`);
-            growingTreesRef.current.delete(id);
-            deletedTreeIds.add(id);
-            continue;
-          }
-
-          // Check if enough time has passed for this tree
-          if (now - tree.lastGrowthTime < tree.growthInterval) continue;
-
-          const maxOrder = getMaxGrowthOrder(tree.blueprint);
-
-          // Check if fully grown
-          if (tree.currentOrder > maxOrder) {
-            // Update DB with final state (async, fire-and-forget)
-            supabase
-              .from('planted_trees')
-              .update({
-                is_fully_grown: true,
-                current_block_count: tree.blueprint.blocks.length,
-                last_growth_at: new Date().toISOString(),
-              })
-              .eq('id', tree.id)
-              .then(() => {});
-
-            // Remove from growing map
-            growingTreesRef.current.delete(id);
-            continue;
-          }
-
-          // MANDATORY parent check on EVERY growth tick (not periodic)
-          // This prevents ghost trees from continuing to grow after deletion
-          const { data: parentExists, error: existsError } = await supabase
-            .from('planted_trees')
-            .select('id')
-            .eq('id', tree.id)
-            .maybeSingle();
-
-          if (existsError || !parentExists) {
-            console.warn(`[LocalGrowth] Removing ghost tree - no parent in DB: ${id}`);
-            growingTreesRef.current.delete(id);
-            deletedTreeIds.add(id);
-            continue;
-          }
-
-          treesToGrow.push(tree);
-        }
-
-        // Process up to 3 trees per tick for better performance
-        const maxTreesPerTick = 3;
-        
-        // BATCH: Collect ALL blocks from ALL trees to place in a single React update
-        const allBlocksToPlace: Array<{ x: number; y: number; z: number; blockType: string; textureUrl?: string }> = [];
-        const treesToUpdate: GrowingTree[] = [];
-        
-        // Verify each tree exists in DB BEFORE placing blocks
-        const verifiedTrees: GrowingTree[] = [];
-        for (let t = 0; t < Math.min(treesToGrow.length, maxTreesPerTick); t++) {
-          const tree = treesToGrow[t];
-          
-          if (tree.id.startsWith('temp_')) {
-            continue;
-          }
-          
-          // Quick existence check
-          const { data: exists } = await supabase
-            .from('planted_trees')
-            .select('id')
-            .eq('id', tree.id)
-            .maybeSingle();
-          
-          if (!exists) {
-            growingTreesRef.current.delete(tree.id);
-            deletedTreeIds.add(tree.id);
-            continue;
-          }
-          
-          verifiedTrees.push(tree);
-        }
-        
-        for (const tree of verifiedTrees) {
-          // Get blocks at this growth order
-          const blocksToPlace = getBlocksAtOrder(tree.blueprint, tree.currentOrder);
-
-          if (blocksToPlace.length > 0) {
-            // Collect blocks for batch placement with encoded block_type
-            for (const block of blocksToPlace) {
-              const encodedType = encodeBlockType(block.type, block.branchDepth, tree.seedDef.tier);
-              const textureUrl = getTextureUrlForTreeBlock(
-                block.type,
-                tree.seedDef.trunk_texture_url,
-                tree.seedDef.branch_texture_url,
-                tree.seedDef.fruit_texture_url
-              );
-              
-              allBlocksToPlace.push({
-                x: block.x,
-                y: block.y,
-                z: block.z,
-                blockType: encodedType,
-                textureUrl: textureUrl || undefined,
-              });
-            }
-          }
-
-          // Update ref state (no React re-render)
-          tree.currentOrder++;
-          tree.lastGrowthTime = now;
-          treesToUpdate.push(tree);
-        }
-        
-        // BATCH: Place ALL blocks from ALL trees with SINGLE React re-render
-        // Blocks go directly to placed_blocks via the standard placeBlocksBatch path
-        if (allBlocksToPlace.length > 0) {
-          placeBlocksBatchFn(allBlocksToPlace);
-        }
-        
-        // Update DB for trees that grew (fire-and-forget)
-        for (const tree of treesToUpdate) {
-          // Update current_block_count in DB periodically (every 10 orders) for resume support
-          if (tree.currentOrder % 10 === 0) {
-            const blocksPlacedSoFar = tree.blueprint.blocks
-              .filter(b => b.growthOrder <= tree.currentOrder)
-              .length;
-            supabase
-              .from('planted_trees')
-              .update({ 
-                current_block_count: blocksPlacedSoFar,
-                last_growth_at: new Date().toISOString()
-              })
-              .eq('id', tree.id)
-              .then(() => {});
-          }
-        }
-      } finally {
-        isGrowingRef.current = false;
-      }
-    };
-
-    // Check once per second
-    const intervalId = setInterval(checkGrowth, GROWTH_CHECK_INTERVAL);
-
-    // Initial check after a short delay
-    setTimeout(checkGrowth, 100);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, []);
-
+/**
+ * Stub hook for backwards compatibility
+ * Growth is now server-side, so this just returns empty functions
+ */
+export function useLocalGrowth() {
   return {
-    startGrowing,
-    updateTreeId,
-    isTreeGrowing,
-    stopGrowing,
-    growingTreesRef,
+    startGrowing: () => {},
+    updateTreeId: () => {},
+    isTreeGrowing: () => false,
+    stopGrowing: (treeId: string) => {
+      deletedTreeIds.add(treeId);
+    },
+    growingTreesRef: { current: new Map() },
   };
 }
 
 /**
- * Delete a tree using the tree_blueprints table (new architecture)
+ * Delete a tree using the tree_blueprints table
  * Falls back to blueprint regeneration if tree_blueprints is empty
- * 
- * IMPORTANT: Now uses delete_tree_with_blocks RPC for ownership-verified deletion
+ *
+ * IMPORTANT: Uses delete_tree_with_blocks RPC for ownership-verified deletion
+ * Admin/superadmin can bypass ownership check with isAdmin=true
  */
 export async function deleteTree(
   tree: PlantedTree,
   seedDef: SeedDefinition,
-  removeBlocksByPositions?: (positions: Array<{ x: number; y: number; z: number }>) => number
+  removeBlocksByPositions?: (positions: Array<{ x: number; y: number; z: number }>) => number,
+  isAdmin: boolean = false
 ): Promise<{ success: boolean; error?: string; deletedCount: number }> {
   try {
-    // CRITICAL: Add tree to deleted set FIRST to prevent any pending blocks from being flushed
+    // Add tree to deleted set to prevent any issues
     deletedTreeIds.add(tree.id);
-    
+
     // Get current user for ownership check
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: 'Not authenticated', deletedCount: 0 };
     }
-    
-    // First try to get blueprint from tree_blueprints table (new architecture)
+
+    // First try to get blueprint from tree_blueprints table
     const { data: blueprintData, error: bpError } = await supabase
       .from('tree_blueprints')
       .select('blueprint_data')
@@ -443,21 +126,25 @@ export async function deleteTree(
       const bp = blueprintData.blueprint_data as { blocks: Array<{ x: number; y: number; z: number }> };
       blocksToDelete = bp.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
     } else {
-      // NEW ARCHITECTURE: Regenerate blueprint from seed definition (no tree_blocks fallback!)
-      const blueprint = generateTreeBlueprint(
-        tree.base_x,
-        tree.base_y,
-        tree.base_z,
-        seedDef.tier,
-        seedDef.width_factor,
-        seedDef.branching_factor,
-        tree.growth_seed,
-        buildGrowthOptions(seedDef)
-      );
+      // Regenerate blueprint from seed definition
+      const treeType = seedDef.tree_type || 'original';
+      let blueprint;
+      if (treeType === 'fungal') {
+        blueprint = generateFungalTreeBlueprint(
+          tree.base_x, tree.base_y, tree.base_z,
+          seedDef.tier, tree.growth_seed, seedDef
+        );
+      } else {
+        blueprint = generateTreeBlueprint(
+          tree.base_x, tree.base_y, tree.base_z,
+          seedDef.tier, seedDef.width_factor, seedDef.branching_factor,
+          tree.growth_seed, buildGrowthOptions(seedDef)
+        );
+      }
       blocksToDelete = blueprint.blocks.map(b => ({ x: b.x, y: b.y, z: b.z }));
     }
 
-    // STEP 1: INSTANT local removal (blocks disappear immediately, single re-render)
+    // STEP 1: INSTANT local removal (blocks disappear immediately)
     let locallyRemoved = 0;
     if (removeBlocksByPositions) {
       locallyRemoved = removeBlocksByPositions(blocksToDelete);
@@ -468,20 +155,33 @@ export async function deleteTree(
       }
     }
 
-    // STEP 2: Use ownership-verified RPC for database deletion
+    // STEP 2: Database deletion via RPC
+    const effectiveUserId = isAdmin ? tree.planted_by : user.id;
+
+    if (isAdmin) {
+      console.log(`[deleteTree] Admin bypass - using tree owner ID: ${tree.planted_by.slice(0, 8)}`);
+    }
+
     const { data: rpcResult, error: rpcError } = await supabase
       .rpc('delete_tree_with_blocks', {
         p_tree_id: tree.id,
-        p_user_id: user.id,
+        p_user_id: effectiveUserId,
         p_world_id: tree.world_id,
         p_block_positions: blocksToDelete,
       });
 
     if (rpcError) {
       console.error('[deleteTree] RPC error:', rpcError);
-      // Fallback: direct deletion (no tree_blocks reference!)
-      await supabase.from('tree_blueprints').delete().eq('planted_tree_id', tree.id);
-      await supabase.from('planted_trees').delete().eq('id', tree.id);
+      // Fallback: direct deletion
+      console.log('[deleteTree] Attempting fallback deletion...');
+      const { error: bpErr } = await supabase.from('tree_blueprints').delete().eq('planted_tree_id', tree.id);
+      if (bpErr) console.warn('[deleteTree] Blueprint delete failed:', bpErr);
+
+      const { error: treeErr } = await supabase.from('planted_trees').delete().eq('id', tree.id);
+      if (treeErr) {
+        console.error('[deleteTree] Tree record delete failed:', treeErr);
+        return { success: false, error: 'Failed to delete tree', deletedCount: locallyRemoved };
+      }
     } else if (rpcResult && !(rpcResult as any).success) {
       console.error('[deleteTree] RPC returned failure:', rpcResult);
       return { success: false, error: (rpcResult as any).error, deletedCount: locallyRemoved };

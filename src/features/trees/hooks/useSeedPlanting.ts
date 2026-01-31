@@ -4,36 +4,26 @@
 
 import { useCallback, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SeedDefinition, TreeGrowthOptions } from '../types';
+import { SeedDefinition, TreeGrowthOptions, TreeBlueprint } from '../types';
 import { generateTreeBlueprint, getBlocksAtOrder } from '../lib/treeGrowth';
+import { generateFungalTreeBlueprint, getFungalBlocksAtOrder } from '../lib/fungalTreeGenerator';
 import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
 import { encodeBlockType, getTextureUrlForTreeBlock } from '../lib/blockTypeEncoder';
+import { recordPlantingEvent } from '../lib/treeDiagnosticsStore';
 
 // Type for the placeBlock function from useBlocks
 type PlaceBlockFn = (x: number, y: number, z: number, blockType: string, expiresAt?: string, textureUrl?: string) => any;
 
-// Type for the startGrowing function from useLocalGrowth
-type StartGrowingFn = (
-  treeId: string,
-  seedDef: SeedDefinition,
-  baseX: number,
-  baseY: number,
-  baseZ: number,
-  growthSeed: number,
-  startingOrder?: number
-) => void;
-
-// Type for the updateTreeId function from useLocalGrowth
-type UpdateTreeIdFn = (tempId: string, realId: string) => void;
+// NOTE: Server-side tree growth is now handled by the process_tree_growth() database function
+// The client only places the first block(s) for immediate visual feedback
+// startGrowing and updateTreeId are no longer needed
 
 interface UseSeedPlantingOptions {
   worldId: string | null;
   userId: string | null;
   seedDefinitions: SeedDefinition[];
   placeBlock: PlaceBlockFn | null;
-  startGrowing: StartGrowingFn;
-  updateTreeId: UpdateTreeIdFn;
 }
 
 interface PlantSeedResult {
@@ -66,8 +56,6 @@ export function useSeedPlanting({
   userId,
   seedDefinitions,
   placeBlock,
-  startGrowing,
-  updateTreeId,
 }: UseSeedPlantingOptions) {
   const [isPlanting, setIsPlanting] = useState(false);
   const [selectedSeedTier, setSelectedSeedTier] = useState<number | null>(null);
@@ -77,7 +65,8 @@ export function useSeedPlanting({
     positionX: number,
     positionY: number,
     positionZ: number,
-    tier: number
+    tier: number,
+    forceTreeType?: 'original' | 'fungal'
   ): Promise<PlantSeedResult> => {
     if (!worldId || !userId || !TREE_CONFIG.ENABLED) {
       return { success: false, error: 'Not ready to plant' };
@@ -87,13 +76,60 @@ export function useSeedPlanting({
       return { success: false, error: 'Block placement not available' };
     }
 
-    const seedDef = seedDefinitions.find(s => s.tier === tier);
+    // Find seed definition matching tier AND tree type
+    let seedDef = forceTreeType
+      ? seedDefinitions.find(s => s.tier === tier && s.tree_type === forceTreeType)
+        || seedDefinitions.find(s => s.tier === tier) // fallback to any matching tier
+      : seedDefinitions.find(s => s.tier === tier);
+
+    // For fungal trees, create a default seed definition if none exists
+    if (!seedDef && forceTreeType === 'fungal') {
+      seedDef = {
+        id: `fungal-default-${tier}`,
+        tier,
+        name: `Fungal T${tier}`,
+        tree_type: 'fungal',
+        trunk_texture_url: null,
+        branch_texture_url: null,
+        fruit_texture_url: null,
+        fungal_stem_texture_url: null,
+        fungal_cap_top_texture_url: null,
+        fungal_cap_underside_texture_url: null,
+        width_factor: 0.5,
+        branching_factor: 0.5,
+        fruiting_factor: 0.5,
+        growth_factor: 0.5,
+        cost: tier * 50,
+        rarity: 'common',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        low_branch_height: 2,
+        spike_chance: 0,
+        spike_length: 3,
+        nob_chance: 0,
+        nob_size: 1,
+        cross_chance: 0,
+        cross_length: 3,
+        shroom_chance: 0,
+        shroom_length: 5,
+        shroom_cap_diameter: 3,
+        symmetry: 'none',
+        fungal_min_height: null,
+        fungal_max_height: null,
+        fungal_min_cap_width: null,
+        fungal_max_cap_width: null,
+        fungal_stem_random: null,
+        fungal_lean_angle: null,
+        fungal_s_curve: null,
+      } as SeedDefinition;
+    }
+
     if (!seedDef) {
       return { success: false, error: `Seed tier ${tier} not found` };
     }
-    
-    // Only allow planting seeds that have a name configured
-    if (!seedDef.name || seedDef.name.trim() === '') {
+
+    // Only require name for regular trees, not forced fungal trees
+    if (!forceTreeType && (!seedDef.name || seedDef.name.trim() === '')) {
       return { success: false, error: `Seed tier ${tier} is not configured yet` };
     }
 
@@ -122,34 +158,54 @@ export function useSeedPlanting({
       // Generate random seed for this tree's growth pattern
       const growthSeed = Math.floor(Math.random() * 2147483647);
 
-      // Generate blueprint for first block placement and total count
-      const blueprint = generateTreeBlueprint(
-        baseX, baseY, baseZ,
-        seedDef.tier,
-        seedDef.width_factor,
-        seedDef.branching_factor,
-        growthSeed,
-        buildGrowthOptions(seedDef)
-      );
+      // Generate blueprint based on tree type (forceTreeType overrides seed definition)
+      let blueprint: TreeBlueprint;
+      const treeType = forceTreeType || seedDef.tree_type || 'original';
+
+      if (treeType === 'fungal') {
+        // Fungal trees: giant hollow mushrooms
+        blueprint = generateFungalTreeBlueprint(
+          baseX, baseY, baseZ,
+          seedDef.tier,
+          growthSeed,
+          seedDef
+        );
+      } else {
+        // Original trees: standard branching pattern
+        blueprint = generateTreeBlueprint(
+          baseX, baseY, baseZ,
+          seedDef.tier,
+          seedDef.width_factor,
+          seedDef.branching_factor,
+          growthSeed,
+          buildGrowthOptions(seedDef)
+        );
+      }
 
       // Place the first block(s) IMMEDIATELY using optimistic update system
       // Now using encoded block_type format: {type}_{depth}_{tier}
-      const firstBlocks = getBlocksAtOrder(blueprint, 0);
-      
+      const firstBlocks = treeType === 'fungal'
+        ? getFungalBlocksAtOrder(blueprint, 0)
+        : getBlocksAtOrder(blueprint, 0);
+
       for (const block of firstBlocks) {
         const encodedType = encodeBlockType(block.type, block.branchDepth, seedDef.tier);
-        const textureUrl = getTextureUrlForTreeBlock(
-          block.type,
-          seedDef.trunk_texture_url,
-          seedDef.branch_texture_url,
-          seedDef.fruit_texture_url
-        );
+        // Use fungal textures for fungal trees, falling back to original textures
+        const trunkTex = treeType === 'fungal'
+          ? (seedDef.fungal_stem_texture_url || seedDef.trunk_texture_url)
+          : seedDef.trunk_texture_url;
+        const branchTex = treeType === 'fungal'
+          ? (seedDef.fungal_stem_texture_url || seedDef.branch_texture_url)
+          : seedDef.branch_texture_url;
+        const fruitTex = treeType === 'fungal'
+          ? (seedDef.fungal_cap_top_texture_url || seedDef.fruit_texture_url)
+          : seedDef.fruit_texture_url;
+        const textureUrl = getTextureUrlForTreeBlock(block.type, trunkTex, branchTex, fruitTex);
         placeBlock(block.x, block.y, block.z, encodedType, undefined, textureUrl || undefined);
       }
 
-      // Start local growth with temp ID (will update after DB insert)
-      const tempId = `temp_${Date.now()}`;
-      startGrowing(tempId, seedDef, baseX, baseY, baseZ, growthSeed, 1); // Start at order 1 since we placed order 0
+      // NOTE: Tree growth is now handled server-side by the process_tree_growth() function
+      // The server will pick up this tree and grow it based on elapsed time
 
       // Create the planted tree record
       // Server-side trigger will enforce chunk planting limits
@@ -184,13 +240,9 @@ export function useSeedPlanting({
         return { success: false, error: 'Failed to plant seed' };
       }
 
-      // Update the temp ID to the real ID in the growth manager
-      updateTreeId(tempId, newTree.id);
-
-      // Save blueprint to tree_blueprints table (for reliable deletion)
-      // Fire-and-forget - don't block the UI
-      // Note: Cast needed until types are regenerated
-      (supabase
+      // Save blueprint to tree_blueprints table (required for server-side growth)
+      // Must succeed for growth to work - await it
+      const { error: blueprintError } = await (supabase
         .from('tree_blueprints' as any)
         .insert({
           planted_tree_id: newTree.id,
@@ -201,14 +253,29 @@ export function useSeedPlanting({
             maxWidth: blueprint.maxWidth,
             tier: seedDef.tier,
             seedDefId: seedDef.id,
+            treeType: treeType,
           },
           block_count: blueprint.blocks.length,
-        } as any) as any)
-        .then(({ error }: { error: any }) => {
-          if (error) {
-            console.error('[SeedPlanting] Blueprint save error:', error);
-          }
-        });
+        } as any) as any);
+
+      const bpSaved = !blueprintError;
+      if (blueprintError) {
+        console.error('[SeedPlanting] Blueprint save FAILED:', blueprintError.message || blueprintError.code || JSON.stringify(blueprintError));
+      } else {
+        console.log('[SeedPlanting] Blueprint saved successfully');
+      }
+
+      recordPlantingEvent({
+        timestamp: Date.now(),
+        position: { x: baseX, y: baseY, z: baseZ },
+        tier: seedDef.tier,
+        treeType: treeType,
+        blueprintSaved: bpSaved,
+        blueprintBlockCount: blueprint.blocks.length,
+        seedDefId: seedDef.id,
+        treeId: newTree.id,
+        error: blueprintError ? (blueprintError.message || blueprintError.code || 'Blueprint save failed') : undefined,
+      });
 
       toast({
         title: `Planted ${seedDef.name}!`,
@@ -222,7 +289,7 @@ export function useSeedPlanting({
     } finally {
       setIsPlanting(false);
     }
-  }, [worldId, userId, seedDefinitions, placeBlock, toast, startGrowing, updateTreeId]);
+  }, [worldId, userId, seedDefinitions, placeBlock, toast]);
 
   const cancelPlanting = useCallback(() => {
     setSelectedSeedTier(null);

@@ -622,17 +622,62 @@ class BlockDB {
    */
   async clearAllChunkCache(): Promise<void> {
     if (!this.db) await this.init();
-    
+
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
       const store = transaction.objectStore(this.chunkCacheStoreName);
       const request = store.clear();
-      
+
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         console.log('[IndexedDB] Chunk cache completely cleared');
         resolve();
       };
+    });
+  }
+
+  /**
+   * Invalidate (delete) a specific chunk from the cache.
+   * This forces a fresh fetch from server on next load.
+   * Used after tree growth to ensure new blocks are loaded.
+   */
+  async invalidateCachedChunk(worldId: string, chunkX: number, chunkZ: number): Promise<void> {
+    if (!this.db) await this.init();
+
+    const key = `${worldId}:${chunkX}:${chunkZ}`;
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      const request = store.delete(key);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  }
+
+  /**
+   * Invalidate multiple chunks from the cache in a single transaction.
+   * Used after tree growth to ensure all affected chunks refetch on next load.
+   */
+  async invalidateCachedChunksBatch(worldId: string, chunkCoords: Array<{ x: number; z: number }>): Promise<void> {
+    if (!this.db) await this.init();
+    if (chunkCoords.length === 0) return;
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+
+      transaction.oncomplete = () => {
+        console.log(`[IndexedDB] Invalidated ${chunkCoords.length} chunk cache entries`);
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+
+      for (const { x, z } of chunkCoords) {
+        const key = `${worldId}:${x}:${z}`;
+        store.delete(key);
+      }
     });
   }
 
@@ -704,6 +749,11 @@ export const useIndexedDB = () => {
     // Ghost tree cleanup
     clearTreeBlocksFromCache: () => blockDB.clearTreeBlocksFromCache(),
     clearAllChunkCache: () => blockDB.clearAllChunkCache(),
-    clearTreeBlocksFromBlocksStore: (treeBlockTypes: string[]) => blockDB.clearTreeBlocksFromBlocksStore(treeBlockTypes)
+    clearTreeBlocksFromBlocksStore: (treeBlockTypes: string[]) => blockDB.clearTreeBlocksFromBlocksStore(treeBlockTypes),
+    // Cache invalidation for tree growth
+    invalidateCachedChunk: (worldId: string, chunkX: number, chunkZ: number) =>
+      blockDB.invalidateCachedChunk(worldId, chunkX, chunkZ),
+    invalidateCachedChunksBatch: (worldId: string, chunkCoords: Array<{ x: number; z: number }>) =>
+      blockDB.invalidateCachedChunksBatch(worldId, chunkCoords),
   }), []); // Empty deps since blockDB is stable
 };
