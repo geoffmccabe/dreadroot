@@ -7,7 +7,7 @@ import { frameLoop } from '@/lib/frameLoop';
 
 import { useBlocks } from '@/contexts/BlocksContext';
 import { PlacedBlock } from '@/types/blocks';
-import { CHUNK_SIZE, getVisibleChunkKeys } from '@/lib/chunkManager';
+import { CHUNK_SIZE, getVisibleChunkKeys, parseChunkKey } from '@/lib/chunkManager';
 import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 
 import ChunkRenderer from '@/components/ChunkRenderer';
@@ -155,25 +155,29 @@ export function CameraTrackedBlocks({
     const camChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
     if (ref && ref.size > 0) {
+      let debugOnce = true;
       for (const [chunkKey, chunkData] of ref) {
         if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
 
         const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
 
         // Parse chunk coords from key "chunk_X_Z"
-        const parts = chunkKey.split('_');
-        const cx = parseInt(parts[1]);
-        const cz = parseInt(parts[2]);
+        const parsed = parseChunkKey(chunkKey);
 
         // If key format is unexpected, render as normal (safe fallback)
-        if (isNaN(cx) || isNaN(cz)) {
+        if (!parsed) {
           normal.push({ key: chunkKey, blocks });
           continue;
         }
 
-        const dcx = Math.abs(cx - camChunkX);
-        const dcz = Math.abs(cz - camChunkZ);
+        const dcx = Math.abs(parsed.chunkX - camChunkX);
+        const dcz = Math.abs(parsed.chunkZ - camChunkZ);
         const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
+
+        if (debugOnce) {
+          console.log('[FadeDebug] cam=', camChunkX, camChunkZ, 'chunk=', chunkKey, parsed, 'dist=', chunkDist, 'vd=', visualDistance, 'loaded=', ref.size);
+          debugOnce = false;
+        }
 
         if (chunkDist <= visualDistance) {
           normal.push({ key: chunkKey, blocks });
@@ -194,6 +198,8 @@ export function CameraTrackedBlocks({
     }
 
     diagnostics.setChunkRenderCount(normal.length);
+
+    console.log('[FadeDebug] normal=', normal.length, 'fade=', fade.length, 'total loaded=', ref?.size ?? 0, 'blocksByChunk=', blocksByChunk.size);
 
     return { normalEntries: normal, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
