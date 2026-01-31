@@ -52,7 +52,7 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   // B5: Pass visual_distance as emitRadius to reduce flatten scope and GC pressure
   // loadRadius = visualDistance + 2 extra rings for fade chunks (grey depth silhouettes)
   const visualDistanceForEmit = profile?.visual_distance || 4;
-  const FADE_EXTRA_CHUNKS = 2;
+  const FADE_EXTRA_CHUNKS = 3;
   const blocksHook = usePlacedBlocksWithCache(user?.id || null, currentWorldId, visualDistanceForEmit, visualDistanceForEmit + FADE_EXTRA_CHUNKS);
   
   // Visible chunks ref - updated imperatively by CameraTrackedBlocks, read by InstancedBlockGroup

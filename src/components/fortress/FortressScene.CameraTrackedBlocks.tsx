@@ -17,7 +17,7 @@ import { getAtlasVersion, useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { useBlocksData } from '@/hooks/useBlocksData';
 
-const FADE_EXTRA = 2;
+const FADE_EXTRA = 3;
 
 export function CameraTrackedBlocks({
   showOwnershipOutline,
