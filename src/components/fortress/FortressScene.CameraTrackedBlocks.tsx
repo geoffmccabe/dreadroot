@@ -150,22 +150,30 @@ export function CameraTrackedBlocks({
     const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
     const ref = loadedChunksRef?.current;
 
-    const camChunkX = lastChunkRef.current.x;
-    const camChunkZ = lastChunkRef.current.z;
+    // Compute camera chunk from live camera position (not lastChunkRef which may lag)
+    const camChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+    const camChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
     if (ref && ref.size > 0) {
       for (const [chunkKey, chunkData] of ref) {
         if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
 
+        const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
+
         // Parse chunk coords from key "chunk_X_Z"
         const parts = chunkKey.split('_');
         const cx = parseInt(parts[1]);
         const cz = parseInt(parts[2]);
+
+        // If key format is unexpected, render as normal (safe fallback)
+        if (isNaN(cx) || isNaN(cz)) {
+          normal.push({ key: chunkKey, blocks });
+          continue;
+        }
+
         const dcx = Math.abs(cx - camChunkX);
         const dcz = Math.abs(cz - camChunkZ);
         const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
-
-        const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
 
         if (chunkDist <= visualDistance) {
           normal.push({ key: chunkKey, blocks });
@@ -188,7 +196,7 @@ export function CameraTrackedBlocks({
     diagnostics.setChunkRenderCount(normal.length);
 
     return { normalEntries: normal, fadeEntries: fade };
-  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance]);
+  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
 
   return (
     <>
