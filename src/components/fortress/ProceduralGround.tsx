@@ -18,12 +18,14 @@ const SURFACE_Y = TERRAIN_CONFIG.SURFACE_Y;
 // Extra chunks beyond visual distance rendered as LoD (single block per chunk)
 const GROUND_EXTRA_DISTANCE = 4;
 
-// Near ground: individual blocks per chunk (up to visual distance)
-const MAX_NEAR_CHUNKS = 169; // 13x13 (visual distance up to 6)
+// Near ground: individual blocks for chunks within NEAR_DETAIL_RADIUS of camera
+// Beyond that, use single scaled block per chunk (LoD) even within visualDistance
+const NEAR_DETAIL_RADIUS = 5; // Individual blocks only for closest 5 chunks
+const MAX_NEAR_CHUNKS = 121; // 11x11
 const MAX_NEAR_INSTANCES = MAX_NEAR_CHUNKS * CHUNK_SIZE * CHUNK_SIZE;
 
-// Far ground: single scaled block per chunk (LoD extension)
-const MAX_FAR_CHUNKS = 500;
+// Far ground: single scaled block per chunk (LoD for rest of visualDistance + extra)
+const MAX_FAR_CHUNKS = 2000;
 
 // Total
 const MAX_INSTANCES = MAX_NEAR_INSTANCES + MAX_FAR_CHUNKS;
@@ -73,9 +75,10 @@ export function ProceduralGround({
     const { WORLD_HALF_SIZE } = TERRAIN_CONFIG;
     let instanceIdx = 0;
 
-    // NEAR GROUND: individual blocks for chunks within visual distance
-    for (let cx = camChunkX - visualDistance; cx <= camChunkX + visualDistance; cx++) {
-      for (let cz = camChunkZ - visualDistance; cz <= camChunkZ + visualDistance; cz++) {
+    // NEAR GROUND: individual blocks for closest chunks only (capped at NEAR_DETAIL_RADIUS)
+    const nearRadius = Math.min(visualDistance, NEAR_DETAIL_RADIUS);
+    for (let cx = camChunkX - nearRadius; cx <= camChunkX + nearRadius; cx++) {
+      for (let cz = camChunkZ - nearRadius; cz <= camChunkZ + nearRadius; cz++) {
         const baseX = cx * CHUNK_SIZE;
         const baseZ = cz * CHUNK_SIZE;
 
@@ -107,14 +110,14 @@ export function ProceduralGround({
       }
     }
 
-    // FAR GROUND: single scaled block per chunk beyond visual distance
-    // Tinted progressively lighter grey with distance for LoD depth effect
+    // FAR GROUND: single scaled block per chunk beyond near detail radius
+    // Covers both the rest of visualDistance AND extra distance beyond it
     for (let cx = camChunkX - groundRadius; cx <= camChunkX + groundRadius; cx++) {
       for (let cz = camChunkZ - groundRadius; cz <= camChunkZ + groundRadius; cz++) {
-        // Skip near chunks (already rendered above)
+        // Skip near detail chunks (already rendered as individual blocks above)
         const dcx = Math.abs(cx - camChunkX);
         const dcz = Math.abs(cz - camChunkZ);
-        if (dcx <= visualDistance && dcz <= visualDistance) continue;
+        if (dcx <= nearRadius && dcz <= nearRadius) continue;
 
         const baseX = cx * CHUNK_SIZE;
         const baseZ = cz * CHUNK_SIZE;
@@ -133,15 +136,22 @@ export function ProceduralGround({
         temp.updateMatrix();
         mesh.setMatrixAt(instanceIdx, temp.matrix);
 
-        // Distance-based grey: closer far chunks are muted green, distant ones fade to light grey
+        // Distance-based tinting:
+        // Within visualDistance: full green (textured look via color tint)
+        // Beyond visualDistance: fade from muted green to light grey
         const dist = Math.max(dcx, dcz); // Chebyshev distance in chunks
-        const t = Math.min(1, (dist - visualDistance) / GROUND_EXTRA_DISTANCE); // 0 at edge of visual, 1 at max
-        // Lerp from muted green (0.35, 0.50, 0.30) to light grey (0.80, 0.80, 0.80)
-        farColor.setRGB(
-          0.35 + t * 0.45,
-          0.50 + t * 0.30,
-          0.30 + t * 0.50
-        );
+        if (dist <= visualDistance) {
+          // Still within visual range — use slightly muted normal color
+          farColor.setRGB(0.90, 0.95, 0.88);
+        } else {
+          const t = Math.min(1, (dist - visualDistance) / GROUND_EXTRA_DISTANCE);
+          // Lerp from muted green (0.35, 0.50, 0.30) to light grey (0.80, 0.80, 0.80)
+          farColor.setRGB(
+            0.35 + t * 0.45,
+            0.50 + t * 0.30,
+            0.30 + t * 0.50
+          );
+        }
         mesh.setColorAt(instanceIdx, farColor);
         instanceIdx++;
       }
