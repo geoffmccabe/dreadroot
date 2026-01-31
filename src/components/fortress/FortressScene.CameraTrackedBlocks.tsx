@@ -142,67 +142,68 @@ export function CameraTrackedBlocks({
     return null;
   }, [hoveredBlockId, loadedChunksRef]);
 
-  // Phase 1: Per-chunk rendering — iterate loaded chunks, classify into normal vs fade
-  // Normal chunks: within visualDistance, full atlas rendering
-  // Fade chunks: visualDistance+1 to visualDistance+2, grey silhouette rendering
-  const { normalEntries, fadeEntries } = useMemo(() => {
-    const normal: { key: string; blocks: PlacedBlock[] }[] = [];
-    const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
+  // Normal chunks: ALL loaded chunks get full atlas rendering (unchanged from original)
+  // Fade chunks: extra rings beyond visualDistance get grey silhouette rendering
+  const chunkEntries = useMemo(() => {
+    const entries: { key: string; blocks: PlacedBlock[] }[] = [];
     const ref = loadedChunksRef?.current;
 
-    // Compute camera chunk from live camera position (not lastChunkRef which may lag)
-    const camChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
-    const camChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
-
     if (ref && ref.size > 0) {
-      let debugOnce = true;
       for (const [chunkKey, chunkData] of ref) {
-        if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
-
-        const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
-
-        // Parse chunk coords from key "chunk_X_Z"
-        const parsed = parseChunkKey(chunkKey);
-
-        // If key format is unexpected, render as normal (safe fallback)
-        if (!parsed) {
-          normal.push({ key: chunkKey, blocks });
-          continue;
-        }
-
-        const dcx = Math.abs(parsed.chunkX - camChunkX);
-        const dcz = Math.abs(parsed.chunkZ - camChunkZ);
-        const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
-
-        if (debugOnce) {
-          console.log('[FadeDebug] cam=', camChunkX, camChunkZ, 'chunk=', chunkKey, parsed, 'dist=', chunkDist, 'vd=', visualDistance, 'loaded=', ref.size);
-          debugOnce = false;
-        }
-
-        if (chunkDist <= visualDistance) {
-          normal.push({ key: chunkKey, blocks });
-        } else if (chunkDist <= visualDistance + FADE_EXTRA) {
-          const distanceFactor = (chunkDist - visualDistance) / FADE_EXTRA;
-          fade.push({ key: chunkKey, blocks, distanceFactor });
+        if (chunkData?.blocks && chunkData.blocks.length > 0) {
+          entries.push({
+            key: chunkKey,
+            blocks: chunkData.visibleBlocks ?? chunkData.blocks
+          });
         }
       }
     }
 
     // FALLBACK: If loadedChunksRef is empty, use blocksByChunk (React state)
-    if (normal.length === 0 && blocksByChunk.size > 0) {
+    if (entries.length === 0 && blocksByChunk.size > 0) {
       for (const [chunkKey, chunkBlocks] of blocksByChunk) {
         if (chunkBlocks && chunkBlocks.length > 0) {
-          normal.push({ key: chunkKey, blocks: chunkBlocks });
+          entries.push({ key: chunkKey, blocks: chunkBlocks });
         }
       }
     }
 
-    diagnostics.setChunkRenderCount(normal.length);
+    diagnostics.setChunkRenderCount(entries.length);
+    return entries;
+  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision]);
 
-    console.log('[FadeDebug] normal=', normal.length, 'fade=', fade.length, 'total loaded=', ref?.size ?? 0, 'blocksByChunk=', blocksByChunk.size);
+  // Separate pass: identify fade-only chunks (beyond visualDistance, within visualDistance + FADE_EXTRA)
+  const fadeEntries = useMemo(() => {
+    const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
+    const ref = loadedChunksRef?.current;
+    if (!ref || ref.size === 0) return fade;
 
-    return { normalEntries: normal, fadeEntries: fade };
-  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
+    const camChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+    const camChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+
+    for (const [chunkKey, chunkData] of ref) {
+      if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
+
+      const parsed = parseChunkKey(chunkKey);
+      if (!parsed) continue;
+
+      const chunkDist = Math.max(
+        Math.abs(parsed.chunkX - camChunkX),
+        Math.abs(parsed.chunkZ - camChunkZ)
+      );
+
+      if (chunkDist > visualDistance && chunkDist <= visualDistance + FADE_EXTRA) {
+        const distanceFactor = (chunkDist - visualDistance) / FADE_EXTRA;
+        fade.push({
+          key: chunkKey,
+          blocks: chunkData.visibleBlocks ?? chunkData.blocks,
+          distanceFactor
+        });
+      }
+    }
+
+    return fade;
+  }, [renderTrigger, loadedChunksRef, visualDistance, camera]);
 
   return (
     <>
@@ -214,7 +215,7 @@ export function CameraTrackedBlocks({
         visualDistance={visualDistance}
         cameraRef={{ current: camera }}
       />
-      {normalEntries.map(({ key, blocks: chunkBlocks }) => (
+      {chunkEntries.map(({ key, blocks: chunkBlocks }) => (
         <ChunkRenderer
           key={key}
           chunkKey={key}
