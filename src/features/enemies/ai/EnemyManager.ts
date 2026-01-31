@@ -280,7 +280,7 @@ class EnemyManagerClass {
         ctx,
         behaviors,
         reg.currentBehaviorId,
-        deltaMs
+        elapsed
       );
       
       // Track behavior transitions
@@ -292,13 +292,11 @@ class EnemyManagerClass {
         reg.currentBehaviorId = newBehaviorId;
       }
       
-      // Apply result via adapter
-      if (result.kind !== 'idle') {
-        if (DEBUG_AI && result.kind === 'move') {
-          console.log(`[AI] ${id} moving to (${result.tx.toFixed(1)}, ${result.ty.toFixed(1)}, ${result.tz.toFixed(1)})`);
-        }
-        reg.adapter.applyResult(reg.enemy, result, deltaMs, this.sharedContext);
+      // Apply result via adapter (always call - gravity/knockback must run even when idle)
+      if (DEBUG_AI && result.kind === 'move') {
+        console.log(`[AI] ${id} moving to (${result.tx.toFixed(1)}, ${result.ty.toFixed(1)}, ${result.tz.toFixed(1)})`);
       }
+      reg.adapter.applyResult(reg.enemy, result, elapsed, this.sharedContext);
     }
     
     // Batch update spatial index

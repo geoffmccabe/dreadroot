@@ -31,7 +31,8 @@ interface DBBlock extends PlacedBlock {
 // B5: emitRadius controls how many chunks are flattened for emit (reduces downstream GC pressure)
 // Phase 4: Uses worldRevision for efficient useMemo dependencies in consumers
 export const usePlacedBlocksWithCache = (userId: string | null, worldId: string | null, emitRadius?: number, loadRadius?: number) => {
-  const [blocks, setBlocks] = useState<PlacedBlock[]>([]);
+  // Phase 2: Removed blocks state — CameraTrackedBlocks reads loadedChunksRef directly
+  // Consumers needing flat blocks use BlocksContext which derives from loadedChunksRef
   // Phase 4: Track revision for efficient dependency tracking
   const [worldRevision, setWorldRevision] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -82,10 +83,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   const lastSyncTimeRef = useRef<number>(0);
   const SYNC_DEBOUNCE_MS = 30000; // Only sync every 30 seconds max
 
-  // Phase 4: Update blocks state when chunks change
-  const handleBlocksChanged = useCallback((newBlocks: PlacedBlock[]) => {
-    setBlocks(newBlocks);
-  }, []);
+  // Phase 2: onBlocksChanged is now a no-op — flatten eliminated
+  const noopBlocksChanged = useCallback((_blocks: PlacedBlock[]) => {}, []);
 
   // Phase 4: Update revision counter for efficient useMemo dependencies
   const handleRevisionChanged = useCallback((revision: number) => {
@@ -94,7 +93,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
   const chunkLoader = useChunkLoader({
     worldId,
-    onBlocksChanged: handleBlocksChanged,
+    onBlocksChanged: noopBlocksChanged,  // Phase 2: No-op, flatten removed
     onRevisionChanged: handleRevisionChanged,  // Phase 4: Track revision
     emitRadius,  // B5: Only flatten chunks within visual distance
     loadRadius,  // Dynamic load radius matching visual distance
@@ -387,7 +386,6 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       initializeCache();
     } else {
       setIsLoading(true);
-      setBlocks([]);
       initializedWorldRef.current = null;
     }
 
@@ -395,44 +393,40 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     return cleanup;
   }, [userId, worldId, initializeCache, setupRealtimeSubscription]);
 
-  // Periodic check to filter expired blocks from state (every 5 seconds)
-  // This ensures blocks disappear within 5-10 seconds of expiring without FPS impact
-  // OPTIMIZED: Uses early-exit pattern to avoid expensive work when no blocks are expiring
+  // Phase 2: Expired blocks are now handled per-chunk via loadedChunksRef
+  // The periodic check scans loaded chunks and removes expired blocks directly
   useEffect(() => {
-    const DEBUG_EXPIRATION_LOGGING = false;
-
     const interval = setInterval(() => {
-      setBlocks(prev => {
-        // FAST EXIT: If no blocks have expires_at, nothing can expire - zero work
-        const hasExpiringBlocks = prev.some(b => b.expires_at);
-        if (!hasExpiringBlocks) {
-          return prev; // Same reference, no state update, no re-render
+      const chunksRef = chunkLoaderRef.current.loadedChunksRef?.current;
+      if (!chunksRef) return;
+
+      const nowTimestamp = Date.now();
+      let removedCount = 0;
+
+      for (const [, chunkData] of chunksRef) {
+        const original = chunkData.blocks;
+        // Fast exit: check if any block in this chunk has expires_at
+        let hasExpiring = false;
+        for (let i = 0; i < original.length; i++) {
+          if (original[i].expires_at) { hasExpiring = true; break; }
         }
+        if (!hasExpiring) continue;
 
-        // Only create timestamp once (not per-block)
-        const nowTimestamp = Date.now();
-
-        // Check if any blocks are actually expired before filtering
-        const hasExpiredBlocks = prev.some(b =>
-          b.expires_at && new Date(b.expires_at).getTime() <= nowTimestamp
+        const filtered = original.filter(b =>
+          !b.expires_at || new Date(b.expires_at).getTime() > nowTimestamp
         );
-
-        if (!hasExpiredBlocks) {
-          return prev; // Same reference, minimal work done
+        if (filtered.length < original.length) {
+          removedCount += original.length - filtered.length;
+          chunkData.blocks = filtered;
+          chunkData.visibleBlocks = undefined; // Invalidate surface cache
         }
+      }
 
-        // Only filter when blocks are actually expired (rare case)
-        const activeBlocks = prev.filter(block =>
-          !block.expires_at || new Date(block.expires_at).getTime() > nowTimestamp
-        );
-
-        if (DEBUG_EXPIRATION_LOGGING) {
-          console.log(`[Expiration] Filtered out ${prev.length - activeBlocks.length} expired blocks`);
-        }
-
-        return activeBlocks;
-      });
-    }, 5000); // Check every 5 seconds
+      // If blocks were removed, bump worldRevision to trigger re-render
+      if (removedCount > 0) {
+        chunkLoaderRef.current.bumpWorldRevision?.();
+      }
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
@@ -858,8 +852,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   }, []);
 
   return {
-    // Phase 4: Expose blocks (from EMIT_RADIUS chunks) and worldRevision (for efficient deps)
-    blocks,
+    // Phase 2: blocks is now deprecated — consumers should use loadedChunksRef
+    // BlocksContext derives a flat array from loadedChunksRef for backward compat
+    blocks: [] as PlacedBlock[],
     worldRevision,
     isLoading: isLoading || chunkLoader.isLoading,
     placeBlock,

@@ -141,9 +141,11 @@ interface DynamicSkyProps {
   weatherSettings: WeatherSettings;
   cycleStateRef: React.MutableRefObject<CycleState>;
   skyTextureUrl?: string | null;
+  freezeCycle?: boolean;
+  lightingOverride?: number | null;
 }
 
-export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSettings, cycleStateRef, skyTextureUrl }, ref) => {
+export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSettings, cycleStateRef, skyTextureUrl, freezeCycle = false, lightingOverride = null }, ref) => {
   const skyRefs = useRef<{ 
     skyMeshRef: React.RefObject<THREE.Mesh>; 
     starMeshRef: React.RefObject<THREE.Mesh> 
@@ -162,14 +164,27 @@ export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSetti
   // Expose update function instead of using useFrame
   useImperativeHandle(ref, () => ({
     update: () => {
-      // 1. Update weather cycle
-      const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
-      const currentTime = Date.now();
-      const cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
+      let lightingPercentage: number;
+      let cyclePosition: number;
 
-      const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
-      const [minLighting, maxLighting] = weatherSettings.lightingRange;
-      const lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
+      if (lightingOverride !== null) {
+        // Manual override from Lightning Panel — skip cycle calculation
+        lightingPercentage = lightingOverride;
+        cyclePosition = cycleStateRef.current.cyclePosition; // Keep last position
+      } else if (freezeCycle) {
+        // Frozen — keep current values
+        lightingPercentage = cycleStateRef.current.lightingPercentage;
+        cyclePosition = cycleStateRef.current.cyclePosition;
+      } else {
+        // Normal auto cycle
+        const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
+        const currentTime = Date.now();
+        cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
+
+        const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
+        const [minLighting, maxLighting] = weatherSettings.lightingRange;
+        lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
+      }
 
       const newIsNight = lightingPercentage < 50;
 
@@ -199,7 +214,7 @@ export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSetti
         }
       }
     }
-  }), [weatherSettings, cycleStateRef]);
+  }), [weatherSettings, cycleStateRef, freezeCycle, lightingOverride]);
 
   return (
     <SkyTexture 

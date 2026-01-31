@@ -111,20 +111,21 @@ export async function initializeAtlasTexture(): Promise<THREE.Texture> {
       throw new Error('Atlas canvas not available');
     }
 
-    // Create THREE.js texture
+    // Create THREE.js texture with GPU-generated mipmaps + anisotropic filtering
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
     texture.magFilter = THREE.LinearFilter;
-    texture.minFilter = THREE.LinearFilter;
-    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 16;
     texture.needsUpdate = true;
 
     globalAtlasTexture = texture;
     globalAtlasReady = true;
     globalAtlasVersion = atlasManager.getMetadata()?.version || 1;
 
-    console.log('[TextureAtlas] Pre-initialized atlas texture');
+    console.log('[TextureAtlas] Pre-initialized atlas texture with mipmaps');
   })();
 
   await globalInitPromise;
@@ -253,13 +254,14 @@ export function useTextureAtlas(): TextureAtlasState & {
           throw new Error('Atlas canvas not available');
         }
 
-        // Create THREE.js texture
+        // Create THREE.js texture with GPU-generated mipmaps + anisotropic filtering
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.ClampToEdgeWrapping;
         texture.wrapT = THREE.ClampToEdgeWrapping;
         texture.magFilter = THREE.LinearFilter;
-        texture.minFilter = THREE.LinearFilter;
-        texture.generateMipmaps = false;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.generateMipmaps = true;
+        texture.anisotropy = 16;
         texture.needsUpdate = true;
 
         globalAtlasTexture = texture;
@@ -304,7 +306,7 @@ export function useTextureAtlas(): TextureAtlasState & {
     const canvas = atlasManager.getCanvas();
     if (!canvas) return;
 
-    // Update texture from canvas
+    // Update texture from canvas (GPU will regenerate mipmaps)
     globalAtlasTexture.image = canvas;
     globalAtlasTexture.needsUpdate = true;
     globalAtlasVersion = atlasManager.getMetadata()?.version || globalAtlasVersion + 1;

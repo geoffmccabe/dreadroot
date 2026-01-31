@@ -746,6 +746,7 @@ export function FirstPersonControls({
         onFungalTreePlace(position);
       }
     } else if (showCrosshairs && onShoot) {
+      console.log('[Controls] Shoot branch reached, showCrosshairs=', showCrosshairs, 'isFlameGlove=', isFlameGloveSelected);
       // Flame Glove uses continuous hold, not click-to-fire
       if (isFlameGloveSelected) return;
 

@@ -18,6 +18,19 @@ export interface WeatherSettings {
   cycleDuration: number;
 }
 
+// Lightning Panel settings (real-time debug/tuning)
+export interface LightningSettings {
+  fogStartPct: number;       // 0-100, percentage of render distance where fog begins
+  fogEndPct: number;         // 0-100, percentage of render distance where fog is fully opaque
+  fogDayColor: string;       // Hex color string e.g. "#cccccc"
+  fogNightColor: string;     // Hex color string e.g. "#222233"
+  fogEnabled: boolean;
+  visualDistance: number;     // 1-20 chunks
+  lightingOverride: number | null; // null = auto cycle, 0-100 = manual lighting percentage
+  freezeCycle: boolean;       // If true, day/night cycle pauses
+  settingsVersion?: number;   // Migration version for localStorage defaults
+}
+
 // Game settings interface
 export interface GameSettings {
   flowSpeed: number;
@@ -158,6 +171,8 @@ export interface SceneProps {
   selectedItemDef?: SelectedItemDef;
   // Inventory management
   addItem?: (itemId: string, quantity: number) => Promise<boolean>;
+  // Lightning Panel overrides
+  lightningSettings?: LightningSettings;
 }
 
 // First person controls props

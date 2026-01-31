@@ -50,9 +50,10 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const { profile } = useUserData();
   const { currentWorldId, currentWorld, worlds, setCurrentWorldId, navigateWorld, worldIndex } = useCurrentWorldId();
   // B5: Pass visual_distance as emitRadius to reduce flatten scope and GC pressure
-  // Also pass as loadRadius so chunk loader matches visual distance
+  // loadRadius = visualDistance + 2 extra rings for fade chunks (grey depth silhouettes)
   const visualDistanceForEmit = profile?.visual_distance || 4;
-  const blocksHook = usePlacedBlocksWithCache(user?.id || null, currentWorldId, visualDistanceForEmit, visualDistanceForEmit);
+  const FADE_EXTRA_CHUNKS = 2;
+  const blocksHook = usePlacedBlocksWithCache(user?.id || null, currentWorldId, visualDistanceForEmit, visualDistanceForEmit + FADE_EXTRA_CHUNKS);
   
   // Visible chunks ref - updated imperatively by CameraTrackedBlocks, read by InstancedBlockGroup
   // Initialize with starting camera position to ensure blocks render on first frame
@@ -93,6 +94,29 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     return map;
   }, [blocksHook.worldRevision]); // Phase 4: Depend on revision, not blocks array
 
+  // Phase 2: Derive flat blocks array from loadedChunksRef for legacy consumers
+  // (enemy systems, block removal lookup, UserPanel counts)
+  // This replaces the old flatten in doEmit — runs during React render, not RAF
+  const blocks = useMemo(() => {
+    const ref = blocksHook.loadedChunksRef?.current;
+    if (!ref || ref.size === 0) return [] as PlacedBlock[];
+
+    // Use visibleBlocks when available to reduce array size
+    let total = 0;
+    for (const chunkData of ref.values()) {
+      total += (chunkData.visibleBlocks ?? chunkData.blocks).length;
+    }
+    const allBlocks: PlacedBlock[] = new Array(total);
+    let idx = 0;
+    for (const chunkData of ref.values()) {
+      const src = chunkData.visibleBlocks ?? chunkData.blocks;
+      for (let i = 0; i < src.length; i++) {
+        allBlocks[idx++] = src[i];
+      }
+    }
+    return allBlocks;
+  }, [blocksHook.worldRevision]);
+
   // Get visual distance from user profile, default to 4
   const visualDistance = profile?.visual_distance || 4;
   
@@ -100,7 +124,7 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const fogEnabled = profile?.fog_enabled ?? true;
   
   const contextValue: BlocksContextType = {
-    blocks: blocksHook.blocks, // Phase 4: From React state (EMIT_RADIUS filtered)
+    blocks, // Phase 2: Derived from loadedChunksRef for legacy consumers (enemy AI, etc.)
     blocksByChunk,
     visibleChunksRef,
     worldRevision: blocksHook.worldRevision, // Phase 4: For dependency tracking

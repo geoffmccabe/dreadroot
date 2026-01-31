@@ -163,18 +163,17 @@ export function useAtlasSync(options?: {
       }
 
       // Fungal tree textures (30 tiers × 3 types) with deterministic slots
-      // Always allocate slots even when URLs are null — otherwise blocks render black
+      // Allocate all 90 slots unconditionally — fungal-specific URL columns don't exist yet,
+      // so fall back to trunk_texture_url for the tier
       if (seedDefinitions) {
-        for (const def of seedDefinitions) {
-          const d = def as any;
-          if (d.tree_type === 'fungal' || d.fungal_stem_texture_url || d.fungal_cap_top_texture_url || d.fungal_cap_underside_texture_url) {
-            const stemSlot = calculateFungalTreeSlotIndex(def.tier, 'stem');
-            const capTopSlot = calculateFungalTreeSlotIndex(def.tier, 'cap_top');
-            const capUnderSlot = calculateFungalTreeSlotIndex(def.tier, 'cap_underside');
-            specs.push({ textureId: getFungalTreeTextureId(def.tier, 'stem'), category: 'fungal_tree', sourceUrl: d.fungal_stem_texture_url || d.trunk_texture_url || null, slotIndex: stemSlot });
-            specs.push({ textureId: getFungalTreeTextureId(def.tier, 'cap_top'), category: 'fungal_tree', sourceUrl: d.fungal_cap_top_texture_url || d.trunk_texture_url || null, slotIndex: capTopSlot });
-            specs.push({ textureId: getFungalTreeTextureId(def.tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: d.fungal_cap_underside_texture_url || d.trunk_texture_url || null, slotIndex: capUnderSlot });
-          }
+        for (let tier = 1; tier <= 30; tier++) {
+          const def = seedDefinitions.find(d => d.tier === tier);
+          const stemSlot = calculateFungalTreeSlotIndex(tier, 'stem');
+          const capTopSlot = calculateFungalTreeSlotIndex(tier, 'cap_top');
+          const capUnderSlot = calculateFungalTreeSlotIndex(tier, 'cap_underside');
+          specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: stemSlot });
+          specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capTopSlot });
+          specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capUnderSlot });
         }
       }
 
@@ -376,18 +375,17 @@ export async function syncAtlasOnInit(): Promise<void> {
     }
   }
 
-  // Fungal tree textures with deterministic slots
-  // Always allocate slots even when URLs are null — otherwise blocks render black
+  // Fungal tree textures (30 tiers × 3 types) with deterministic slots
+  // Allocate all 90 slots unconditionally — fungal-specific URL columns don't exist yet
   if (seedDefinitions) {
-    for (const def of seedDefinitions) {
-      if ((def as any).tree_type === 'fungal' || (def as any).fungal_stem_texture_url || (def as any).fungal_cap_top_texture_url || (def as any).fungal_cap_underside_texture_url) {
-        const stemSlot = calculateFungalTreeSlotIndex(def.tier, 'stem');
-        const capTopSlot = calculateFungalTreeSlotIndex(def.tier, 'cap_top');
-        const capUnderSlot = calculateFungalTreeSlotIndex(def.tier, 'cap_underside');
-        specs.push({ textureId: getFungalTreeTextureId(def.tier, 'stem'), category: 'fungal_tree', sourceUrl: (def as any).fungal_stem_texture_url || (def as any).trunk_texture_url || null, slotIndex: stemSlot });
-        specs.push({ textureId: getFungalTreeTextureId(def.tier, 'cap_top'), category: 'fungal_tree', sourceUrl: (def as any).fungal_cap_top_texture_url || (def as any).trunk_texture_url || null, slotIndex: capTopSlot });
-        specs.push({ textureId: getFungalTreeTextureId(def.tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: (def as any).fungal_cap_underside_texture_url || (def as any).trunk_texture_url || null, slotIndex: capUnderSlot });
-      }
+    for (let tier = 1; tier <= 30; tier++) {
+      const def = seedDefinitions.find(d => d.tier === tier);
+      const stemSlot = calculateFungalTreeSlotIndex(tier, 'stem');
+      const capTopSlot = calculateFungalTreeSlotIndex(tier, 'cap_top');
+      const capUnderSlot = calculateFungalTreeSlotIndex(tier, 'cap_underside');
+      specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: stemSlot });
+      specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capTopSlot });
+      specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capUnderSlot });
     }
   }
 

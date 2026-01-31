@@ -22,6 +22,7 @@ import { isSpawnSequenceActive } from '@/features/enemies/hooks/useSpawnCommands
 import { Toaster } from '@/components/ui/toaster';
 import { findInventoryItem, getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { heightMap, fallingBlocksState } from '@/components/PlacedBlocks';
+import { PlacedBlock } from '@/types/blocks';
 import { clearBlocksCache } from '@/hooks/useBlocksData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { PlantedTree } from '@/features/trees/types';
@@ -48,7 +49,8 @@ import { FortressHUD } from './FortressHUD';
 import { FortressOverlays } from './FortressOverlays';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { playSpatialSound } from '@/lib/spatialAudio';
-import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef } from './FortressTypes';
+import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef, LightningSettings, CycleState } from './FortressTypes';
+import { LightningPanel } from './LightningPanel';
 import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
@@ -108,6 +110,45 @@ export function Fortress() {
     };
   });
   
+  // Lightning Panel state
+  const [lightningPanelOpen, setLightningPanelOpen] = useState(false);
+  const [lightningSettings, setLightningSettings] = useState<LightningSettings>(() => {
+    const stored = localStorage.getItem('lightningSettings');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // Migrate stale fog settings to improved defaults
+        if (!parsed.settingsVersion || parsed.settingsVersion < 2) {
+          parsed.fogStartPct = 50;
+          parsed.fogEndPct = 95;
+          parsed.settingsVersion = 2;
+          localStorage.setItem('lightningSettings', JSON.stringify(parsed));
+        }
+        return parsed;
+      } catch {}
+    }
+    return {
+      fogStartPct: 50,
+      fogEndPct: 95,
+      fogDayColor: '#cccccc',
+      fogNightColor: '#222233',
+      fogEnabled: true,
+      visualDistance: 4,
+      lightingOverride: null,
+      freezeCycle: false,
+      settingsVersion: 2,
+    };
+  });
+  const cycleStateRef = useRef<CycleState>({ lightingPercentage: 0, cyclePosition: 0, isNight: false });
+
+  const handleLightningSettingsChange = useCallback(<K extends keyof LightningSettings>(key: K, value: LightningSettings[K]) => {
+    setLightningSettings(prev => {
+      const updated = { ...prev, [key]: value };
+      localStorage.setItem('lightningSettings', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   // UI State
   const [coinScore, setCoinScore] = useState(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
@@ -156,13 +197,45 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem } = useUserData();
-  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks } = useBlocks();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
   
+  // Sync lightning panel visualDistance from profile
+  useEffect(() => {
+    if (profile?.visual_distance !== undefined) {
+      setLightningSettings(prev => {
+        if (prev.visualDistance === profile.visual_distance) return prev;
+        return { ...prev, visualDistance: profile.visual_distance };
+      });
+    }
+    if (profile?.fog_enabled !== undefined) {
+      setLightningSettings(prev => {
+        if (prev.fogEnabled === profile.fog_enabled) return prev;
+        return { ...prev, fogEnabled: profile.fog_enabled };
+      });
+    }
+  }, [profile?.visual_distance, profile?.fog_enabled]);
+
+  // Handle visual distance change from Lightning Panel
+  useEffect(() => {
+    const profileDist = profile?.visual_distance || 4;
+    if (lightningSettings.visualDistance !== profileDist) {
+      updateVisualDistance(lightningSettings.visualDistance);
+    }
+  }, [lightningSettings.visualDistance]);
+
+  // Handle fog enabled change from Lightning Panel
+  useEffect(() => {
+    const profileFog = profile?.fog_enabled ?? true;
+    if (lightningSettings.fogEnabled !== profileFog) {
+      updateFogEnabled(lightningSettings.fogEnabled);
+    }
+  }, [lightningSettings.fogEnabled]);
+
   // Derive selected item definition from hotbar slot + equipped items
   // Cache fetched item defs by itemId to avoid async lag on weapon switching
   const itemDefCacheRef = useRef<Map<string, SelectedItemDef>>(new Map());
@@ -466,8 +539,15 @@ export function Fortress() {
   // Block removal handler - only removes user-placed blocks, NOT tree blocks
   // Tree chopping requires hold-to-chop flow with confirmation modal
   const handleBlockRemove = useCallback(async (blockId: string) => {
-    // Find the block to get its position
-    const block = blocks.find(b => b.id === blockId);
+    // Phase 2: Search loadedChunksRef instead of flat blocks array
+    let block: PlacedBlock | undefined;
+    const chunksRef = loadedChunksRef?.current;
+    if (chunksRef) {
+      for (const chunkData of chunksRef.values()) {
+        block = chunkData.blocks.find(b => b.id === blockId);
+        if (block) break;
+      }
+    }
     if (!block) {
       console.warn('Block not found for removal:', blockId);
       return;
@@ -494,7 +574,7 @@ export function Fortress() {
         duration: 2000
       });
     }
-  }, [blocks, removeBlock, toast]);
+  }, [loadedChunksRef, removeBlock, toast]);
 
   // Settings handlers
   const handleSettingsChange = (key: string, value: any) => {
@@ -1036,6 +1116,17 @@ export function Fortress() {
         event.preventDefault();
         setShowPerfMonitor(prev => !prev);
       }
+
+      // Lightning Panel toggle (Ctrl+L)
+      if ((event.metaKey || event.ctrlKey) && event.key === 'l') {
+        event.preventDefault();
+        setLightningPanelOpen(prev => {
+          if (!prev && document.pointerLockElement) {
+            document.exitPointerLock();
+          }
+          return !prev;
+        });
+      }
       
       if (event.key === 'Tab' && blockPlacementMode) {
         event.preventDefault();
@@ -1126,6 +1217,7 @@ export function Fortress() {
           waterfallEnabled={waterfallEnabled}
           onGodModeChange={setGodMode}
           performanceMode={performanceMode}
+          lightningSettings={lightningSettings}
           fortressTextureUrl={currentWorld?.fortress_texture_url}
           groundTextureUrl={currentWorld?.ground_texture_url}
           skyTextureUrl={currentWorld?.sky_texture_url}
@@ -1416,6 +1508,13 @@ export function Fortress() {
         setChopProgress={setChopProgress}
         handleTreeChopConfirm={handleTreeChopConfirm}
         plantedTrees={allTrees}
+      />
+      <LightningPanel
+        open={lightningPanelOpen}
+        onClose={() => setLightningPanelOpen(false)}
+        settings={lightningSettings}
+        onSettingsChange={handleLightningSettingsChange}
+        cycleState={cycleStateRef.current}
       />
       </FortressProviders>
     </div>

@@ -12,10 +12,14 @@ import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 
 import ChunkRenderer from '@/components/ChunkRenderer';
 import { ProceduralGround } from './ProceduralGround';
-import { getAtlasVersion } from '@/hooks/useTextureAtlas';
+import { FadeChunkBlocks } from '@/components/FadeChunkBlocks';
+import { getAtlasVersion, useTextureAtlas } from '@/hooks/useTextureAtlas';
+import { useAtlasSync } from '@/hooks/useAtlasSync';
+import { useBlocksData } from '@/hooks/useBlocksData';
+
+const FADE_EXTRA = 2;
 
 export function CameraTrackedBlocks({
-  blocks,
   showOwnershipOutline,
   currentUserId,
   hoveredBlockId,
@@ -23,7 +27,6 @@ export function CameraTrackedBlocks({
   performanceMode = false,
   groundTextureUrl
 }: {
-  blocks: PlacedBlock[];
   showOwnershipOutline: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
@@ -33,6 +36,14 @@ export function CameraTrackedBlocks({
 }) {
   const { camera } = useThree();
   const { blocksByChunk, visibleChunksRef, visualDistance, updatePlayerPosition, loadedChunksRef, worldRevision } = useBlocks();
+
+  // Phase 1 optimization: Call expensive hooks ONCE here instead of 71× in PlacedBlocks
+  // Results are passed down through ChunkRenderer → PlacedBlocks as hoisted props
+  const hoistedAtlas = useTextureAtlas();
+  const hoistedAtlasTexture = hoistedAtlas.texture;
+  const hoistedAtlasReady = hoistedAtlas.isReady;
+  useAtlasSync(); // Single sync instead of 71× (each fires 6 React Query fetches)
+  const { blocksMap: hoistedBlocksMap, isLoading: hoistedBlockDefsLoading } = useBlocksData();
 
   const lastChunkRef = useRef({ x: 0, z: 0 });
   const lastUpdateTime = useRef(0);
@@ -116,41 +127,72 @@ export function CameraTrackedBlocks({
     return unregister;
   }, [camera, visibleChunksRef, updatePlayerPosition]);
 
-  // Phase 1: Per-chunk rendering — iterate loaded chunks, render one ChunkRenderer per chunk
-  // No global flatten, no dedup Set, no localeCompare sort
-  const chunkEntries = useMemo(() => {
-    const entries: { key: string; blocks: PlacedBlock[] }[] = [];
+  // Localize hoveredBlockId to the chunk that contains it
+  // This prevents memo busting across all chunks when hover changes
+  const hoveredChunkKey = useMemo(() => {
+    if (!hoveredBlockId) return null;
     const ref = loadedChunksRef?.current;
+    if (!ref) return null;
+    for (const [chunkKey, chunkData] of ref) {
+      const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
+      for (let i = 0; i < blocks.length; i++) {
+        if (blocks[i].id === hoveredBlockId) return chunkKey;
+      }
+    }
+    return null;
+  }, [hoveredBlockId, loadedChunksRef]);
+
+  // Phase 1: Per-chunk rendering — iterate loaded chunks, classify into normal vs fade
+  // Normal chunks: within visualDistance, full atlas rendering
+  // Fade chunks: visualDistance+1 to visualDistance+2, grey silhouette rendering
+  const { normalEntries, fadeEntries } = useMemo(() => {
+    const normal: { key: string; blocks: PlacedBlock[] }[] = [];
+    const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
+    const ref = loadedChunksRef?.current;
+
+    const camChunkX = lastChunkRef.current.x;
+    const camChunkZ = lastChunkRef.current.z;
 
     if (ref && ref.size > 0) {
       for (const [chunkKey, chunkData] of ref) {
-        if (chunkData?.blocks && chunkData.blocks.length > 0) {
-          // Use visibleBlocks (surface-culled) if available, else full blocks
-          entries.push({
-            key: chunkKey,
-            blocks: chunkData.visibleBlocks ?? chunkData.blocks
-          });
+        if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
+
+        // Parse chunk coords from key "chunk_X_Z"
+        const parts = chunkKey.split('_');
+        const cx = parseInt(parts[1]);
+        const cz = parseInt(parts[2]);
+        const dcx = Math.abs(cx - camChunkX);
+        const dcz = Math.abs(cz - camChunkZ);
+        const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
+
+        const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
+
+        if (chunkDist <= visualDistance) {
+          normal.push({ key: chunkKey, blocks });
+        } else if (chunkDist <= visualDistance + FADE_EXTRA) {
+          const distanceFactor = (chunkDist - visualDistance) / FADE_EXTRA;
+          fade.push({ key: chunkKey, blocks, distanceFactor });
         }
       }
     }
 
     // FALLBACK: If loadedChunksRef is empty, use blocksByChunk (React state)
-    if (entries.length === 0 && blocksByChunk.size > 0) {
+    if (normal.length === 0 && blocksByChunk.size > 0) {
       for (const [chunkKey, chunkBlocks] of blocksByChunk) {
         if (chunkBlocks && chunkBlocks.length > 0) {
-          entries.push({ key: chunkKey, blocks: chunkBlocks });
+          normal.push({ key: chunkKey, blocks: chunkBlocks });
         }
       }
     }
 
-    // Update diagnostic counter
-    diagnostics.setChunkRenderCount(entries.length);
+    diagnostics.setChunkRenderCount(normal.length);
 
-    return entries;
-  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision]);
+    return { normalEntries: normal, fadeEntries: fade };
+  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance]);
 
   return (
     <>
+      <FadeChunkBlocks entries={fadeEntries} />
       <ProceduralGround
         visibleChunksRef={visibleChunksRef}
         renderTrigger={renderTrigger}
@@ -158,7 +200,7 @@ export function CameraTrackedBlocks({
         visualDistance={visualDistance}
         cameraRef={{ current: camera }}
       />
-      {chunkEntries.map(({ key, blocks: chunkBlocks }) => (
+      {normalEntries.map(({ key, blocks: chunkBlocks }) => (
         <ChunkRenderer
           key={key}
           chunkKey={key}
@@ -166,9 +208,13 @@ export function CameraTrackedBlocks({
           atlasVersion={atlasVersion}
           showOwnershipOutline={performanceMode ? false : showOwnershipOutline}
           currentUserId={currentUserId}
-          hoveredBlockId={performanceMode ? null : (hoveredBlockId || null)}
+          hoveredBlockId={performanceMode ? null : (key === hoveredChunkKey ? hoveredBlockId : null)}
           onMeshReady={onMeshReady}
           performanceMode={performanceMode}
+          hoistedAtlasTexture={hoistedAtlasTexture}
+          hoistedAtlasReady={hoistedAtlasReady}
+          hoistedBlocksMap={hoistedBlocksMap}
+          hoistedBlockDefsLoading={hoistedBlockDefsLoading}
         />
       ))}
     </>

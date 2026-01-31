@@ -132,7 +132,7 @@ function createAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMate
       '#include <map_fragment>',
       `#ifdef USE_MAP
         // Apply instance UV offset to map the correct atlas region
-        vec2 slotUv = clamp(fract(vMapUv), vec2(${(0.5/256).toFixed(6)}), vec2(${(1 - 0.5/256).toFixed(6)}));
+        vec2 slotUv = clamp(fract(vMapUv), vec2(${(4.0/256).toFixed(6)}), vec2(${(1 - 4.0/256).toFixed(6)}));
         vec2 atlasUv = vInstanceUvOffset + slotUv * ${slotSize.toFixed(6)};
         vec4 sampledDiffuseColor = texture2D(map, atlasUv);
         // Apply per-face directional shading for depth perception
@@ -902,10 +902,20 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       highWaterMarkRef.current = 0;
     }
 
-    // Build robust signature that detects content changes
+    // Track atlas version — clear UV cache if atlas changed (slots may have moved)
+    // This forces a rebuild by resetting the signature
+    if (atlasVersion !== lastAtlasVersionRef.current) {
+      uvLookupCache.clear();
+      animInfoCache.clear();
+      lastAtlasVersionRef.current = atlasVersion;
+      lastProcessedSignatureRef.current = ''; // Force rebuild with new UVs
+    }
+
+    // Build robust signature that detects content changes (atlas version excluded —
+    // atlas changes are handled above by resetting the signature)
     let sig: string;
     if (blocks.length === 0) {
-      sig = `empty:v${atlasVersion}`;
+      sig = 'empty';
     } else {
       let idHash = 0;
       for (let i = 0; i < blocks.length; i++) {
@@ -913,29 +923,13 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         const posHash = (b.position_x * 73856093) ^ (b.position_y * 19349663) ^ (b.position_z * 83492791);
         idHash ^= posHash;
       }
-      sig = `${blocks.length}:${idHash}:v${atlasVersion}`;
+      sig = `${blocks.length}:${idHash}`;
     }
 
     if (sig === lastProcessedSignatureRef.current) {
       return;
     }
     lastProcessedSignatureRef.current = sig;
-
-    // DISABLED: Incremental delta updates were O(N) in practice (iterating all blocks
-    // to find deltas via Map lookups) — slower than budgeted full rebuilds which use
-    // sequential array writes. Full rebuilds at 2000 blocks/batch stay under 2ms/frame.
-    // if (initialBuildDoneRef.current && atlasVersion === lastAtlasVersionRef.current) {
-    //   doIncrementalUpdate();
-    //   lastRebuildTimeRef.current = performance.now();
-    //   return;
-    // }
-
-    // Track atlas version — clear UV cache if atlas changed (slots may have moved)
-    if (atlasVersion !== lastAtlasVersionRef.current) {
-      uvLookupCache.clear();
-      animInfoCache.clear();
-    }
-    lastAtlasVersionRef.current = atlasVersion;
 
     // Full rebuild path (always used now — budgeted work spreads cost across frames)
     const now = performance.now();

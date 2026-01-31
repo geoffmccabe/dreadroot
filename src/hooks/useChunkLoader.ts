@@ -13,11 +13,11 @@ import * as THREE from 'three';
 // Configuration for chunk loading
 // LOAD_RADIUS is now dynamic — derived from loadRadius prop (defaults to 4)
 const DEFAULT_LOAD_RADIUS = 4;
-const UNLOAD_HYSTERESIS = 2;          // Extra chunks beyond load radius before unloading
+const UNLOAD_HYSTERESIS = 4;          // Extra chunks beyond load radius before unloading
 const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
-const MIN_RESIDENCY_MS = 4000;        // Don't unload chunks loaded less than 4s ago
+const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
 const COLLIDER_REMOVAL_BATCH = 200;   // Colliders to remove per frame during unload
 
 // B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
@@ -441,35 +441,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       lastEmittedWorldKeyRef.current = visibleWorldKey;
 
       // Phase 4: Bump revision and notify callback
+      // Phase 2 optimization: No longer flatten blocks — CameraTrackedBlocks reads loadedChunksRef directly
       worldRevisionRef.current++;
       if (onRevisionChanged) {
         onRevisionChanged(worldRevisionRef.current);
       }
 
-      // Only now do we flatten - only visible chunks within EMIT_RADIUS
-      const flattenT0 = performance.now();
-      const allBlocks: PlacedBlock[] = new Array(visibleBlockCount);
-      let idx = 0;
-
-      for (let dx = -EMIT_RADIUS; dx <= EMIT_RADIUS; dx++) {
-        for (let dz = -EMIT_RADIUS; dz <= EMIT_RADIUS; dz++) {
-          const key = `chunk_${centerX + dx}_${centerZ + dz}`;
-          const chunkData = loadedChunksRef.current.get(key);
-          if (!chunkData) continue;
-
-          // Emit only surface-visible blocks — interior blocks are culled per-chunk
-          const src = chunkData.visibleBlocks ?? chunkData.blocks;
-          for (let i = 0; i < src.length; i++) {
-            allBlocks[idx++] = src[i];
-          }
-        }
-      }
-
-      const flattenMs = performance.now() - flattenT0;
-      diagnostics.recordFlattenEmit(allBlocks.length, flattenMs);
-
-      lastEmittedBlocksRef.current = allBlocks;
-      onBlocksChanged(allBlocks);
+      // Record zero flatten for diagnostics (flatten eliminated in Phase 2)
+      diagnostics.recordFlattenEmit(0, 0);
     };
 
     if (immediate) {
@@ -2160,6 +2139,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     replaceBlockByPosition,
     removeBlockById,
     removeBlocksByPositions, // BULK: For tree chopping - single re-render for N removes
+    // Phase 2: Expose revision bump for external use (e.g., expired block cleanup)
+    bumpWorldRevision: () => {
+      worldRevisionRef.current++;
+      if (onRevisionChanged) onRevisionChanged(worldRevisionRef.current);
+    },
     LOAD_RADIUS,
     UNLOAD_RADIUS
   }), [

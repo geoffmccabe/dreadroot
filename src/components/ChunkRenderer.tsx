@@ -1,8 +1,9 @@
 // Phase 1: Per-chunk rendering wrapper
 // React.memo ensures only chunks with changed blocks references re-render
 import React from 'react';
+import * as THREE from 'three';
 import { PlacedBlocks } from './PlacedBlocks';
-import type { PlacedBlock } from '@/types/blocks';
+import type { PlacedBlock, BlockType } from '@/types/blocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface ChunkRendererProps {
@@ -14,6 +15,11 @@ interface ChunkRendererProps {
   hoveredBlockId?: string | null;
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
+  // Hoisted hook results from CameraTrackedBlocks (shared across all chunks)
+  hoistedAtlasTexture?: THREE.Texture | null;
+  hoistedAtlasReady?: boolean;
+  hoistedBlocksMap?: Map<string, BlockType>;
+  hoistedBlockDefsLoading?: boolean;
 }
 
 const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
@@ -22,7 +28,11 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
   currentUserId,
   hoveredBlockId,
   onMeshReady,
-  performanceMode
+  performanceMode,
+  hoistedAtlasTexture,
+  hoistedAtlasReady,
+  hoistedBlocksMap,
+  hoistedBlockDefsLoading
 }) => {
   const t0 = performance.now();
 
@@ -35,6 +45,10 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
       hoveredBlockId={hoveredBlockId}
       onMeshReady={onMeshReady}
       performanceMode={performanceMode}
+      hoistedAtlasTexture={hoistedAtlasTexture}
+      hoistedAtlasReady={hoistedAtlasReady}
+      hoistedBlocksMap={hoistedBlocksMap}
+      hoistedBlockDefsLoading={hoistedBlockDefsLoading}
     />
   );
 
@@ -45,14 +59,18 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
 };
 
 const ChunkRenderer = React.memo(ChunkRendererInner, (prev, next) => {
-  // Re-render only when blocks reference changes, atlas updates, or visual props change
+  // Re-render only when blocks reference changes or visual props change
+  // Atlas version changes are detected internally by InstancedAtlasBlockGroup's polling
   return (
     prev.blocks === next.blocks &&
-    prev.atlasVersion === next.atlasVersion &&
     prev.hoveredBlockId === next.hoveredBlockId &&
     prev.showOwnershipOutline === next.showOwnershipOutline &&
     prev.currentUserId === next.currentUserId &&
-    prev.performanceMode === next.performanceMode
+    prev.performanceMode === next.performanceMode &&
+    prev.hoistedAtlasTexture === next.hoistedAtlasTexture &&
+    prev.hoistedAtlasReady === next.hoistedAtlasReady &&
+    prev.hoistedBlocksMap === next.hoistedBlocksMap &&
+    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading
   );
 });
 

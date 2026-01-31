@@ -30,6 +30,55 @@ import {
 import { parseStripMetadata } from './animationToStrip';
 import { decompressFrames, parseGIF } from 'gifuct-js';
 
+/**
+ * Generate per-slot mipmaps to prevent cross-slot color bleeding.
+ * Standard GPU mipmap generation downsamples the entire atlas, causing
+ * neighboring slot colors to bleed into each other at lower mip levels.
+ * This function independently downsamples each slot at every mip level.
+ */
+export function generatePerSlotMipmaps(baseCanvas: HTMLCanvasElement): HTMLCanvasElement[] {
+  const mipmaps: HTMLCanvasElement[] = [];
+  let prevCanvas = baseCanvas;
+  let size = baseCanvas.width;
+  let slotSize = size / ATLAS_GRID_SIZE;
+
+  // Generate complete mipmap chain down to 1x1 (required by WebGL for LinearMipmapLinearFilter)
+  while (size > 1) {
+    const nextSize = Math.max(1, Math.floor(size / 2));
+    const nextSlotSize = slotSize / 2;
+
+    const mipCanvas = document.createElement('canvas');
+    mipCanvas.width = nextSize;
+    mipCanvas.height = nextSize;
+    const mipCtx = mipCanvas.getContext('2d')!;
+
+    if (nextSlotSize >= 1) {
+      // Per-slot downsample: independently downsample each slot to prevent cross-slot bleeding
+      const intSlotSize = Math.floor(slotSize);
+      const intNextSlotSize = Math.floor(nextSlotSize);
+      for (let row = 0; row < ATLAS_GRID_SIZE; row++) {
+        for (let col = 0; col < ATLAS_GRID_SIZE; col++) {
+          mipCtx.drawImage(
+            prevCanvas,
+            col * intSlotSize, row * intSlotSize, intSlotSize, intSlotSize,
+            col * intNextSlotSize, row * intNextSlotSize, intNextSlotSize, intNextSlotSize
+          );
+        }
+      }
+    } else {
+      // Below 1px per slot: standard downsample (slot bleeding irrelevant at this size)
+      mipCtx.drawImage(prevCanvas, 0, 0, nextSize, nextSize);
+    }
+
+    mipmaps.push(mipCanvas);
+    prevCanvas = mipCanvas;
+    size = nextSize;
+    slotSize = nextSlotSize;
+  }
+
+  return mipmaps;
+}
+
 // Slot range allocations by category
 // Trees: 30 tiers × 3 textures + animations = 150
 // Shwarm: 10 tiers × 1 = 10
@@ -194,7 +243,15 @@ async function loadGifFrames(url: string): Promise<{
 }
 
 /**
- * Draw image to canvas slot using crop-to-fill scaling
+ * Mipmap padding size — edge pixels are duplicated outward by this amount
+ * to prevent GPU mipmap bleed between neighboring atlas slots.
+ */
+const ATLAS_PADDING = 4;
+
+/**
+ * Draw image to canvas slot with edge-clamp padding for mipmap safety.
+ * The image is drawn at full slot size, then edge pixels are extended outward
+ * by ATLAS_PADDING pixels on each side using 1px-wide strips.
  */
 function drawImageToSlot(
   ctx: CanvasRenderingContext2D,
@@ -204,13 +261,26 @@ function drawImageToSlot(
   const pos = getSlotPixelPosition(slotIndex);
   const srcWidth = img.width;
   const srcHeight = img.height;
+  const P = ATLAS_PADDING;
+  const inner = ATLAS_SLOT_SIZE - 2 * P; // 248
 
   // Center crop to square
   const srcSize = Math.min(srcWidth, srcHeight);
   const srcX = (srcWidth - srcSize) / 2;
   const srcY = (srcHeight - srcSize) / 2;
 
-  ctx.drawImage(img, srcX, srcY, srcSize, srcSize, pos.x, pos.y, ATLAS_SLOT_SIZE, ATLAS_SLOT_SIZE);
+  // Draw image into the inner area (inset by P on each side)
+  ctx.drawImage(img, srcX, srcY, srcSize, srcSize, pos.x + P, pos.y + P, inner, inner);
+
+  // Extend edge pixels outward to fill padding (clamp-to-edge for mipmaps)
+  // Top padding: copy the top 1px row of the inner image upward P times
+  ctx.drawImage(ctx.canvas, pos.x + P, pos.y + P, inner, 1, pos.x + P, pos.y, inner, P);
+  // Bottom padding: copy the bottom 1px row of the inner image downward
+  ctx.drawImage(ctx.canvas, pos.x + P, pos.y + P + inner - 1, inner, 1, pos.x + P, pos.y + P + inner, inner, P);
+  // Left padding: copy the left 1px column of the full slot height
+  ctx.drawImage(ctx.canvas, pos.x + P, pos.y, 1, ATLAS_SLOT_SIZE, pos.x, pos.y, P, ATLAS_SLOT_SIZE);
+  // Right padding: copy the right 1px column of the full slot height
+  ctx.drawImage(ctx.canvas, pos.x + P + inner - 1, pos.y, 1, ATLAS_SLOT_SIZE, pos.x + P + inner, pos.y, P, ATLAS_SLOT_SIZE);
 }
 
 /**
@@ -226,6 +296,9 @@ function drawAnimationStripToSlots(
   const frameWidth = stripImg.width / frameCount;
   const frameHeight = stripImg.height;
 
+  const P = ATLAS_PADDING;
+  const inner = ATLAS_SLOT_SIZE - 2 * P;
+
   for (let i = 0; i < frameCount; i++) {
     const pos = getSlotPixelPosition(startSlotIndex + i);
     const srcX = i * frameWidth;
@@ -236,11 +309,18 @@ function drawAnimationStripToSlots(
     const srcCropX = srcX + (frameWidth - srcSize) / 2;
     const srcCropY = (frameHeight - srcSize) / 2;
 
+    // Draw into inner area with padding
     ctx.drawImage(
       stripImg,
       srcCropX, srcCropY, srcSize, srcSize,
-      pos.x, pos.y, ATLAS_SLOT_SIZE, ATLAS_SLOT_SIZE
+      pos.x + P, pos.y + P, inner, inner
     );
+
+    // Edge-clamp padding (same as drawImageToSlot)
+    ctx.drawImage(ctx.canvas, pos.x + P, pos.y + P, inner, 1, pos.x + P, pos.y, inner, P);
+    ctx.drawImage(ctx.canvas, pos.x + P, pos.y + P + inner - 1, inner, 1, pos.x + P, pos.y + P + inner, inner, P);
+    ctx.drawImage(ctx.canvas, pos.x + P, pos.y, 1, ATLAS_SLOT_SIZE, pos.x, pos.y, P, ATLAS_SLOT_SIZE);
+    ctx.drawImage(ctx.canvas, pos.x + P + inner - 1, pos.y, 1, ATLAS_SLOT_SIZE, pos.x + P + inner, pos.y, P, ATLAS_SLOT_SIZE);
   }
 
   return frameCount;

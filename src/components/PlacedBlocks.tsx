@@ -128,12 +128,17 @@ const RENDER_INVISIBLOCK_OUTLINES = false;
 const GLOBAL_VISIBLE_BLOCKS_THRESHOLD = 3000;
 
 interface PlacedBlocksProps {
-  blocks: PlacedBlock[]; 
+  blocks: PlacedBlock[];
   showOwnershipOutline?: boolean;
   currentUserId?: string;
   hoveredBlockId?: string | null;
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
+  // Phase 1 optimization: hoisted hooks — when provided, skip internal hook calls
+  hoistedAtlasTexture?: THREE.Texture | null;
+  hoistedAtlasReady?: boolean;
+  hoistedBlocksMap?: Map<string, BlockType>;
+  hoistedBlockDefsLoading?: boolean;
 }
 
 // F2.1: Wrap in React.memo with custom comparison to prevent cascade re-renders
@@ -144,7 +149,11 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   currentUserId,
   hoveredBlockId = null,
   onMeshReady,
-  performanceMode = false
+  performanceMode = false,
+  hoistedAtlasTexture,
+  hoistedAtlasReady,
+  hoistedBlocksMap,
+  hoistedBlockDefsLoading
 }) => {
   // B2.2: Auto-enable performance mode when total visible blocks exceed threshold
   const effectivePerformanceMode = performanceMode || blocks.length > GLOBAL_VISIBLE_BLOCKS_THRESHOLD;
@@ -152,11 +161,14 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastThudTime = useRef(0);
 
-  // Global texture atlas for efficient rendering
-  const { texture: atlasTexture, isReady: atlasReady, isLoading: atlasLoading } = useTextureAtlas();
+  // Phase 1 optimization: use hoisted hooks when provided (per-chunk rendering),
+  // fall back to internal hooks for standalone usage
+  const internalAtlas = useTextureAtlas();
+  const atlasTexture = hoistedAtlasTexture !== undefined ? hoistedAtlasTexture : internalAtlas.texture;
+  const atlasReady = hoistedAtlasReady !== undefined ? hoistedAtlasReady : internalAtlas.isReady;
 
-  // Sync all texture definitions to the atlas
-  useAtlasSync({ enabled: true });
+  // Only run atlas sync if not hoisted (parent handles it)
+  useAtlasSync({ enabled: hoistedAtlasTexture === undefined });
 
   
   // Initialize audio
@@ -171,8 +183,10 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     };
   }, []);
   
-  // Ensure block definitions are loaded before rendering any blocks
-  const { isLoading: blockDefsLoading, blocksMap } = useBlocksData();
+  // Phase 1 optimization: use hoisted block definitions when provided
+  const internalBlocksData = useBlocksData();
+  const blocksMap = hoistedBlocksMap !== undefined ? hoistedBlocksMap : internalBlocksData.blocksMap;
+  const blockDefsLoading = hoistedBlockDefsLoading !== undefined ? hoistedBlockDefsLoading : internalBlocksData.isLoading;
   
   // Height map rebuilding: GATED - only enabled when block-rain tooling is active
   // This was O(n) work on every blocks update but heightMap appears unused in production
@@ -509,6 +523,10 @@ export const PlacedBlocks = React.memo(PlacedBlocksInner, (prev, next) => {
     prev.hoveredBlockId === next.hoveredBlockId &&
     prev.showOwnershipOutline === next.showOwnershipOutline &&
     prev.currentUserId === next.currentUserId &&
-    prev.performanceMode === next.performanceMode
+    prev.performanceMode === next.performanceMode &&
+    prev.hoistedAtlasTexture === next.hoistedAtlasTexture &&
+    prev.hoistedAtlasReady === next.hoistedAtlasReady &&
+    prev.hoistedBlocksMap === next.hoistedBlocksMap &&
+    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading
   );
 });

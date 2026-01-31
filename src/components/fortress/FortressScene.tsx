@@ -84,6 +84,17 @@ import { useBurnSystem } from './useBurnSystem';
 // Universal Enemy Spawner (UES) - single system for all natural enemy spawning
 import { useEnemySpawnerIntegration } from '@/features/enemies/hooks/useEnemySpawnerIntegration';
 
+// Override Three.js fog to use radial distance instead of planar z-depth.
+// Default THREE.Fog uses -mvPosition.z (z-depth from camera plane), which
+// creates a flat "wall" of fog — objects at screen edges get less fog than
+// objects at screen center at the same real distance. Using length(mvPosition.xyz)
+// gives true spherical fog that fades uniformly in all directions.
+THREE.ShaderChunk.fog_vertex = `
+#ifdef USE_FOG
+  vFogDepth = length( mvPosition.xyz );
+#endif
+`;
+
 // Camera-tracked block renderer with chunk culling
 // Calculate which face of the block was hit based on hit position
 export function FortressScene({
@@ -156,13 +167,14 @@ export function FortressScene({
   onJetBoostStateChange,
   selectedItemDef,
   addItem,
+  lightningSettings,
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
-  // IMPORTANT: Use full blocks array from context (all loaded chunks), not just visible blocks prop
-  const { updatePlayerPosition, blocks: allLoadedBlocks, isLoading: blocksLoading } = useBlocks();
+  const { updatePlayerPosition, blocks: allLoadedBlocks, isLoading: blocksLoading, worldRevision, loadedChunksRef: chunksRef } = useBlocks();
 
   // Delay enemy spawning until blocks are loaded (prevents enemies showing before trees)
-  const enemiesEnabled = !blocksLoading && allLoadedBlocks.length > 0;
+  // Phase 2: Use worldRevision instead of flat blocks array length
+  const enemiesEnabled = !blocksLoading && worldRevision > 0;
   const { camera } = useThree();
   
   // Fetch usernames for tree labels
@@ -799,8 +811,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     }
   }, []);
 
-  // Fog configuration
-  const { visualDistance, fogEnabled, currentWorldId } = useBlocks();
+  // Fog configuration — lightning panel overrides profile value for instant control
+  const { visualDistance, fogEnabled: profileFogEnabled, currentWorldId } = useBlocks();
+  const fogEnabled = lightningSettings?.fogEnabled ?? profileFogEnabled;
   // Scope multiplayer by world - prevents cross-world player visibility
   const { players, broadcastPosition, broadcastPlayerHit, isConnected, localPlayerOnFire, localFireBurnTimeMs, localFireColors, setLocalPlayerOnFire } = useMultiplayer(currentWorldId);
   const { user } = useAuth();
@@ -811,18 +824,50 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   
   // Removed black background - was causing sky issues
 
+  // Day/night fog colors — use lightning panel overrides if available
+  const lsFogStartPct = lightningSettings?.fogStartPct ?? 30;
+  const lsFogEndPct = lightningSettings?.fogEndPct ?? 85;
+  const lsFogDayColor = lightningSettings?.fogDayColor ?? '#cccccc';
+  const lsFogNightColor = lightningSettings?.fogNightColor ?? '#222233';
+  const lsFreezeCycle = lightningSettings?.freezeCycle ?? false;
+  const lsLightingOverride = lightningSettings?.lightingOverride ?? null;
+
+  const fogColorDay = useMemo(() => new THREE.Color(lsFogDayColor), [lsFogDayColor]);
+  const fogColorNight = useMemo(() => new THREE.Color(lsFogNightColor), [lsFogNightColor]);
+  const fogColorCurrent = useRef(new THREE.Color(lsFogDayColor));
+
   useEffect(() => {
     if (fogEnabled) {
-      const fogStart = (visualDistance * 0.75) * CHUNK_SIZE;
-      const fogEnd = visualDistance * CHUNK_SIZE;
-      scene.fog = new THREE.Fog(0xcccccc, fogStart, fogEnd);
+      const maxDist = visualDistance * CHUNK_SIZE;
+      const fogStart = maxDist * (lsFogStartPct / 100);
+      const fogEnd = maxDist * (lsFogEndPct / 100);
+      scene.fog = new THREE.Fog(fogColorCurrent.current, fogStart, fogEnd);
+      scene.background = fogColorCurrent.current.clone();
     } else {
       scene.fog = null;
+      scene.background = null;
     }
     return () => {
       scene.fog = null;
+      scene.background = null;
     };
-  }, [scene, visualDistance, fogEnabled]);
+  }, [scene, visualDistance, fogEnabled, lsFogStartPct, lsFogEndPct]);
+
+  // Update fog color based on day/night cycle (low frequency — every 500ms)
+  useEffect(() => {
+    if (!fogEnabled) return;
+    const interval = setInterval(() => {
+      if (!scene.fog) return;
+      // Use manual override if set, otherwise use cycle state
+      const lp = (lsLightingOverride !== null ? lsLightingOverride : cycleStateRef.current.lightingPercentage) / 100;
+      fogColorCurrent.current.copy(fogColorNight).lerp(fogColorDay, lp);
+      (scene.fog as THREE.Fog).color.copy(fogColorCurrent.current);
+      if (scene.background instanceof THREE.Color) {
+        scene.background.copy(fogColorCurrent.current);
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [scene, fogEnabled, fogColorDay, fogColorNight, lsLightingOverride]);
 
   // Initialize audio
   useEffect(() => {
@@ -1217,14 +1262,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <SceneReflections />
       
       <DynamicLighting ref={lightingRef} cycleStateRef={cycleStateRef} />
-      <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} />
+      <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} freezeCycle={lsFreezeCycle} lightingOverride={lsLightingOverride} />
 
       <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
       {/* <FortressParticles /> */}
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
-      <CameraTrackedBlocks 
-        blocks={blocks} 
-        showOwnershipOutline={showOwnershipOutline && blockPlacementMode} 
+      <CameraTrackedBlocks
+        showOwnershipOutline={showOwnershipOutline && blockPlacementMode}
         currentUserId={user?.id}
         hoveredBlockId={hoveredBlockId}
         onMeshReady={handleMeshReady}

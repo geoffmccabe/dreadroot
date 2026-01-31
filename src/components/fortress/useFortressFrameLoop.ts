@@ -769,6 +769,7 @@ export function useFortressFrameLoop({
         // === SHTICKMAN COLLISION DETECTION ===
         // Shtickman uses cylinder collision similar to shombie but taller
         if (!hit && shtickmenRef.current && shtickmenRef.current.length > 0) {
+          const tierDef = getDefinitionRef.current(bullet.tier);
           const bx = bullet.position.x;
           const by = bullet.position.y;
           const bz = bullet.position.z;

@@ -89,7 +89,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
   const tokenDisplayName = currentTheme?.display_name || 'Waterfall';
-  const { blocks: allPlacedBlocks } = useBlocks();
+  const { loadedChunksRef, worldRevision } = useBlocks();
   const { currentWorldId } = useCurrentWorldId();
   const { plantedTrees, myIncompleteTrees, seedDefinitions, refetch: refetchTrees } = useTreeData(currentWorldId, user?.id);
   
@@ -124,16 +124,21 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   }, [isOpen, refreshData, refetchTrees]);
   
   // Count placed blocks by type for current user
+  // Phase 2: Iterate loadedChunksRef instead of flat blocks array
   const placedBlockCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    allPlacedBlocks.forEach(block => {
-      if (block.user_id === user?.id) {
-        const count = counts.get(block.block_type) || 0;
-        counts.set(block.block_type, count + 1);
+    const ref = loadedChunksRef?.current;
+    if (!ref) return counts;
+    for (const chunkData of ref.values()) {
+      for (const block of chunkData.blocks) {
+        if (block.user_id === user?.id) {
+          const count = counts.get(block.block_type) || 0;
+          counts.set(block.block_type, count + 1);
+        }
       }
-    });
+    }
     return counts;
-  }, [allPlacedBlocks, user?.id]);
+  }, [worldRevision, user?.id]);
 
   // Handle resize
   const handleResizeStart = (e: React.MouseEvent) => {
