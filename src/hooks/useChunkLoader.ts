@@ -1242,6 +1242,26 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       console.log(`[ChunkLoader DEBUG] Fetching chunks: worldId=${worldId}, bounds=(${minChunkX},${minChunkZ})-(${maxChunkX},${maxChunkZ}), wanted=${Array.from(wantedChunkKeys).join(',')}`);
 
+      // PHASE 1 FIX: Get exact total count from server FIRST to detect truncation
+      let serverTotalCount: number | null = null;
+      try {
+        const { count, error: countError } = await supabase
+          .from('placed_blocks')
+          .select('*', { count: 'exact', head: true })
+          .eq('world_id', worldId)
+          .gte('chunk_x', minChunkX)
+          .lte('chunk_x', maxChunkX)
+          .gte('chunk_z', minChunkZ)
+          .lte('chunk_z', maxChunkZ);
+
+        if (!countError && count !== null) {
+          serverTotalCount = count;
+          console.log(`[ChunkLoader] Server reports ${serverTotalCount} blocks in bounding box`);
+        }
+      } catch (err) {
+        console.warn('[ChunkLoader] Could not get server count, will proceed without truncation check');
+      }
+
       // Retry the entire paginated fetch (not individual pages) to avoid partial data
       for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
         blocks = [];
@@ -1253,7 +1273,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         while (hasMore) {
           const { data, error } = await supabase
             .from('placed_blocks')
-            .select('*', { count: 'exact' })
+            .select('*')
             .eq('world_id', worldId)
             .gte('chunk_x', minChunkX)
             .lte('chunk_x', maxChunkX)
@@ -1312,6 +1332,24 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           const key = `chunk_${x}_${z}`;
           const existing = failedChunksRef.current.get(key);
           failedChunksRef.current.set(key, { x, z, attempts: (existing?.attempts ?? 0) + MAX_RETRY_ATTEMPTS });
+        }
+        // Still emit what we have from cache
+        if (chunksFromCache.length > 0) {
+          scheduleEmit();
+        }
+        return;
+      }
+
+      // PHASE 1 FIX: Detect truncation by comparing fetched count to server count
+      // This catches the case where we hit MAX_TOTAL_BLOCKS but got partial data
+      const wasTruncated = serverTotalCount !== null && blocks.length < serverTotalCount;
+      if (wasTruncated) {
+        console.error(`[ChunkLoader] TRUNCATION DETECTED: fetched ${blocks.length} of ${serverTotalCount} blocks - marking ALL chunks as failed`);
+        initLogStep('useChunkLoader.ts', `TRUNCATION: fetched ${blocks.length}/${serverTotalCount} blocks`);
+        // Mark ALL chunks in this batch as failed - do not cache or render partial data
+        for (const { x, z } of chunksToFetchFromServer) {
+          const key = `chunk_${x}_${z}`;
+          failedChunksRef.current.set(key, { x, z, attempts: 0 });
         }
         // Still emit what we have from cache
         if (chunksFromCache.length > 0) {
@@ -2136,8 +2174,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     // C7: Track overall ring loading with start/finish
     // Load ring 0 first and yield to let React render closest blocks
+    // PHASE 2: Build set of required chunk keys for verification
+    const requiredChunkKeys = new Set<string>();
     for (let ring = 0; ring <= LOAD_RADIUS; ring++) {
       const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
+      for (const { x, z } of ringChunks) {
+        requiredChunkKeys.add(`chunk_${x}_${z}`);
+      }
       const ringStepId = initLogStartStep('useChunkLoader.ts', `Loading ring ${ring} (${ringChunks.length} chunks)...`);
       await loadSpecificChunks(ringChunks);
       if (ringStepId) initLogFinishStep(ringStepId, ringChunks.length);
@@ -2148,8 +2191,56 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
     }
-    
+
     initLogStep('useChunkLoader.ts', 'All chunk rings loaded', totalChunks);
+
+    // PHASE 2: Init barrier - check for failed required chunks and retry before completing
+    const getFailedRequiredChunks = () => {
+      const failed: Array<{ x: number; z: number }> = [];
+      for (const key of requiredChunkKeys) {
+        // Check if chunk is loaded
+        if (!loadedChunksRef.current.has(key)) {
+          // Either in failed set or never loaded
+          const failedInfo = failedChunksRef.current.get(key);
+          if (failedInfo) {
+            failed.push({ x: failedInfo.x, z: failedInfo.z });
+          } else {
+            // Parse chunk key to get coords
+            const match = key.match(/^chunk_(-?\d+)_(-?\d+)$/);
+            if (match) {
+              failed.push({ x: parseInt(match[1], 10), z: parseInt(match[2], 10) });
+            }
+          }
+        }
+      }
+      return failed;
+    };
+
+    let failedRequired = getFailedRequiredChunks();
+    let retryAttempt = 0;
+    const MAX_INIT_RETRIES = 3;
+
+    while (failedRequired.length > 0 && retryAttempt < MAX_INIT_RETRIES) {
+      retryAttempt++;
+      initLogStep('useChunkLoader.ts', `Init barrier: retrying ${failedRequired.length} failed required chunks (attempt ${retryAttempt}/${MAX_INIT_RETRIES})`);
+
+      // Clear from failed set before retry
+      for (const { x, z } of failedRequired) {
+        failedChunksRef.current.delete(`chunk_${x}_${z}`);
+      }
+
+      await loadSpecificChunks(failedRequired);
+
+      // Check again
+      failedRequired = getFailedRequiredChunks();
+    }
+
+    if (failedRequired.length > 0) {
+      console.error(`[ChunkLoader] INIT WARNING: ${failedRequired.length} required chunks could not be loaded after ${MAX_INIT_RETRIES} retries`);
+      initLogStep('useChunkLoader.ts', `WARNING: ${failedRequired.length} chunks still failed after retries`);
+    } else {
+      initLogStep('useChunkLoader.ts', 'All required chunks verified loaded');
+    }
     
     // Count total blocks loaded
     let totalBlocks = 0;

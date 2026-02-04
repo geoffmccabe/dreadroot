@@ -1,73 +1,120 @@
-# Welcome to your Lovable project
+# Fortress
 
-## Project info
+A browser-based 3D voxel game built with Three.js and React.
 
-**URL**: https://lovable.dev/projects/9c73ebbb-a5a9-4690-a675-20ac44f630d5
+## Game Vision
 
-## How can I edit this code?
+Fortress is designed to support:
+- **20-200 concurrent multiplayer players**
+- **300+ block tall trees** with navigable labyrinthine interiors
+- **Dozens of enemy types** with 10+ tiers each (100+ variations)
+- **Beautiful visual effects** (fire, lightning, glitter, magic particles)
+- **Cross-platform play** - must run smoothly on phones, tablets, and desktops
 
-There are several ways of editing your application.
+This is NOT a simple Minecraft clone. The environment features massive, complex tree structures that players climb through and battle within.
 
-**Use Lovable**
+## Technology Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/9c73ebbb-a5a9-4690-a675-20ac44f630d5) and start prompting.
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| Rendering | Three.js + @react-three/fiber | 3D graphics in browser |
+| UI Framework | React 18 | Component-based UI |
+| State Management | React Context + Refs | Minimize re-renders |
+| Styling | Tailwind CSS + shadcn/ui | Consistent UI components |
+| Database | Supabase (PostgreSQL) | Authoritative data store |
+| Caching | IndexedDB | Client-side persistence |
+| Realtime | Supabase Realtime | Multiplayer sync |
+| Build | Vite | Fast dev/build |
 
-Changes made via Lovable will be committed automatically to this repo.
+## Quick Start
 
-**Use your preferred IDE**
+```bash
+# Install dependencies
+npm install
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
+
+# Build for production
+npm run build
 ```
 
-**Edit a file directly in GitHub**
+## Documentation
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Detailed documentation for understanding the codebase:
 
-**Use GitHub Codespaces**
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | High-level system architecture |
+| [PERFORMANCE.md](docs/PERFORMANCE.md) | Performance constraints and optimizations |
+| [DATA_FLOW.md](docs/DATA_FLOW.md) | Three-tier cache system (Memory → IndexedDB → Supabase) |
+| [CHUNKS.md](docs/CHUNKS.md) | Chunk loading, rendering, and visibility |
+| [TREES.md](docs/TREES.md) | Tree generation, blueprints, and growth |
+| [ENEMIES.md](docs/ENEMIES.md) | Enemy AI system and behaviors |
+| [CLAUDE.md](CLAUDE.md) | Instructions for AI assistants |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Project Structure
 
-## What technologies are used for this project?
+```
+src/
+├── components/           # React components
+│   ├── fortress/        # Core game (scene, controls, HUD)
+│   └── Admin*.tsx       # Admin configuration panels
+├── contexts/            # React contexts (BlocksContext, AuthContext)
+├── features/            # Feature modules
+│   ├── enemies/         # Universal enemy AI system
+│   ├── trees/           # Tree generation and management
+│   ├── particles/       # Visual effects
+│   ├── shombie/         # Shombie enemy type
+│   ├── walapa/          # Walapa enemy type
+│   ├── shwarm/          # Shwarm enemy type
+│   └── ...              # Other enemy types
+├── hooks/               # Custom React hooks
+│   ├── useChunkLoader.ts      # Chunk loading engine
+│   └── usePlacedBlocksWithCache.ts  # Block sync layer
+├── lib/                 # Utilities and services
+│   ├── pathfinding/     # Navigation for enemies
+│   └── spatialHashGrid.ts  # Collision detection
+├── integrations/        # External services (Supabase)
+└── types/               # TypeScript definitions
+```
 
-This project is built with:
+## Key Architectural Concepts
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Three-Tier Cache
+```
+Memory (loadedChunksRef) → IndexedDB → Supabase
+```
+- Memory for real-time rendering
+- IndexedDB for offline persistence
+- Supabase as source of truth
 
-## How can I deploy this project?
+### Chunk-Based World
+- World divided into 16×16 block horizontal chunks
+- Progressive loading based on player position
+- Surface culling removes interior blocks for rendering
 
-Simply open [Lovable](https://lovable.dev/projects/9c73ebbb-a5a9-4690-a675-20ac44f630d5) and click on Share -> Publish.
+### Instanced Rendering
+- 200,000+ blocks rendered efficiently
+- Texture atlas packs all tree textures
+- Single draw call per block type
 
-## Can I connect a custom domain to my Lovable project?
+### LOD-Based Enemy AI
+- Enemies tick at different rates based on distance
+- Utility-based behavior selection
+- Adapter pattern for type-specific logic
 
-Yes, you can!
+## Performance Targets
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- **60 FPS** on mid-range mobile devices
+- **<100ms** chunk load time
+- **<16ms** frame budget
+- **<200MB** memory footprint
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Contributing
+
+See [CLAUDE.md](CLAUDE.md) for coding guidelines and project context.
+
+## License
+
+Proprietary - All rights reserved
