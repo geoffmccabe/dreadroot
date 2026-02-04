@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sprout, TreeDeciduous } from 'lucide-react';
 
 interface SeedDefinition {
@@ -45,15 +46,12 @@ const getRarityFromTier = (tier: number): string => {
   return 'legendary';
 };
 
-const getRarityColor = (rarity: string) => {
-  switch (rarity) {
-    case 'common': return 'bg-gray-100 text-gray-800';
-    case 'uncommon': return 'bg-green-100 text-green-800';
-    case 'rare': return 'bg-blue-100 text-blue-800';
-    case 'epic': return 'bg-purple-100 text-purple-800';
-    case 'legendary': return 'bg-amber-100 text-amber-800';
-    default: return 'bg-gray-100 text-gray-800';
-  }
+const getRarityStyle = (rarity: string): React.CSSProperties => {
+  const varName = `--rarity-${rarity === 'common' ? 'common' : rarity}`;
+  return {
+    backgroundColor: `hsla(var(${varName}) / 0.15)`,
+    color: `hsl(var(${varName}))`,
+  };
 };
 
 export const TreesTab: React.FC<TreesTabProps> = ({ 
@@ -98,11 +96,12 @@ export const TreesTab: React.FC<TreesTabProps> = ({
       </TabsList>
 
       {/* Seeds Sub-panel */}
-      <TabsContent 
-        value="seeds" 
-        className="space-y-2 overflow-y-auto"
-        style={{ height: `${height - 56}px`, paddingTop: '0.5rem' }}
+      <TabsContent
+        value="seeds"
+        style={{ paddingTop: '0.5rem' }}
       >
+        <ScrollArea style={{ height: `${height - 56}px` }}>
+        <div className="space-y-2 pr-4">
         {seedsInInventory.length === 0 ? (
           <Card className="p-4 text-center text-muted-foreground">
             <Sprout className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -120,7 +119,7 @@ export const TreesTab: React.FC<TreesTabProps> = ({
                     style={{
                       background: seed.trunk_texture_url 
                         ? `url(${seed.trunk_texture_url}) center/cover` 
-                        : 'linear-gradient(135deg, #4ade80, #22c55e)'
+                        : 'linear-gradient(135deg, hsl(var(--rarity-uncommon)), hsl(var(--rarity-uncommon) / 0.7))'
                     }}
                   >
                     {!seed.trunk_texture_url && <Sprout className="w-6 h-6 text-white" />}
@@ -132,9 +131,10 @@ export const TreesTab: React.FC<TreesTabProps> = ({
                       <h3 className="font-semibold truncate">
                         {seed.name || `Tier ${seed.tier} Seed`}
                       </h3>
-                      <Badge 
-                        variant="secondary" 
-                        className={`text-xs ${getRarityColor(rarity)}`}
+                      <Badge
+                        variant="secondary"
+                        className="text-xs"
+                        style={getRarityStyle(rarity)}
                       >
                         {rarity}
                       </Badge>
@@ -156,14 +156,17 @@ export const TreesTab: React.FC<TreesTabProps> = ({
             );
           })
         )}
+        </div>
+        </ScrollArea>
       </TabsContent>
 
       {/* Trees Sub-panel */}
-      <TabsContent 
-        value="trees" 
-        className="space-y-2 overflow-y-auto"
-        style={{ height: `${height - 56}px`, paddingTop: '0.5rem' }}
+      <TabsContent
+        value="trees"
+        style={{ paddingTop: '0.5rem' }}
       >
+        <ScrollArea style={{ height: `${height - 56}px` }}>
+        <div className="space-y-2 pr-4">
         {treesWithInfo.length === 0 ? (
           <Card className="p-4 text-center text-muted-foreground">
             <TreeDeciduous className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -186,7 +189,7 @@ export const TreesTab: React.FC<TreesTabProps> = ({
                     style={{
                       background: tree.seedDef?.trunk_texture_url 
                         ? `url(${tree.seedDef.trunk_texture_url}) center/cover` 
-                        : 'linear-gradient(135deg, #65a30d, #4d7c0f)'
+                        : 'linear-gradient(135deg, hsl(var(--rarity-uncommon)), hsl(var(--rarity-uncommon) / 0.6))'
                     }}
                   >
                     {!tree.seedDef?.trunk_texture_url && <TreeDeciduous className="w-6 h-6 text-white" />}
@@ -198,14 +201,22 @@ export const TreesTab: React.FC<TreesTabProps> = ({
                       <h3 className="font-semibold truncate">
                         {tree.seedDef?.name || `Tier ${tier} Tree`}
                       </h3>
-                      <Badge 
-                        variant="secondary" 
-                        className={`text-xs ${getRarityColor(rarity)}`}
+                      <Badge
+                        variant="secondary"
+                        className="text-xs"
+                        style={getRarityStyle(rarity)}
                       >
                         T{tier}
                       </Badge>
                       {!tree.is_fully_grown && (
-                        <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                        <Badge
+                          variant="outline"
+                          className="text-xs"
+                          style={{
+                            color: 'hsl(var(--rarity-uncommon))',
+                            borderColor: 'hsla(var(--rarity-uncommon) / 0.5)',
+                          }}
+                        >
                           Growing
                         </Badge>
                       )}
@@ -229,6 +240,8 @@ export const TreesTab: React.FC<TreesTabProps> = ({
             );
           })
         )}
+        </div>
+        </ScrollArea>
       </TabsContent>
     </Tabs>
   );

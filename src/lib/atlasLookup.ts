@@ -98,17 +98,31 @@ function calculateTreeSlotIndex(tier: number, type: 'trunk' | 'branch' | 'fruit'
 /**
  * Get UVs for a tree texture
  */
+// Diagnostic: track which tree UV lookups have been logged (once per unique textureId)
+const _treeUvDiagLogged = new Set<string>();
+
 export function getTreeUVs(tier: number, type: 'trunk' | 'branch' | 'fruit'): AtlasUVs | null {
   const textureId = getTreeTextureId(tier, type);
   const slot = atlasManager.getSlotForTexture(textureId);
 
   if (slot) {
+    if (!_treeUvDiagLogged.has(textureId)) {
+      _treeUvDiagLogged.add(textureId);
+      const det = calculateTreeSlotIndex(tier, type);
+      if (det !== slot.slotIndex) {
+        console.warn(`[AtlasUV] SLOT MISMATCH: ${textureId} atlas=${slot.slotIndex} deterministic=${det}`);
+      }
+    }
     return slotIndexToUVs(slot.slotIndex);
   }
 
   // Fallback: use deterministic slot calculation if metadata lookup fails
   // This handles race conditions where blocks render before sync completes
   const calculatedSlot = calculateTreeSlotIndex(tier, type);
+  if (!_treeUvDiagLogged.has(textureId)) {
+    _treeUvDiagLogged.add(textureId);
+    console.warn(`[AtlasUV] FALLBACK: ${textureId} → deterministic slot ${calculatedSlot} (no atlas entry)`);
+  }
   return slotIndexToUVs(calculatedSlot);
 }
 
@@ -130,11 +144,22 @@ export function getFungalTreeUVs(tier: number, type: 'stem' | 'cap_top' | 'cap_u
   const slot = atlasManager.getSlotForTexture(textureId);
 
   if (slot) {
+    if (!_treeUvDiagLogged.has(textureId)) {
+      _treeUvDiagLogged.add(textureId);
+      const det = calculateFungalTreeSlotIndex(tier, type);
+      if (det !== slot.slotIndex) {
+        console.warn(`[AtlasUV] FUNGAL SLOT MISMATCH: ${textureId} atlas=${slot.slotIndex} deterministic=${det}`);
+      }
+    }
     return slotIndexToUVs(slot.slotIndex);
   }
 
   // Fallback: use deterministic slot calculation
   const calculatedSlot = calculateFungalTreeSlotIndex(tier, type);
+  if (!_treeUvDiagLogged.has(textureId)) {
+    _treeUvDiagLogged.add(textureId);
+    console.warn(`[AtlasUV] FUNGAL FALLBACK: ${textureId} → deterministic slot ${calculatedSlot}`);
+  }
   return slotIndexToUVs(calculatedSlot);
 }
 

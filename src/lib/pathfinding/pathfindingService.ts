@@ -15,6 +15,7 @@ import type {
 import { algorithmRegistry } from './algorithmRegistry';
 import { applyRandomization } from './randomization';
 import { playerTracker } from '@/lib/playerTracker';
+import { requestPathAsync, isWorkerAvailable } from './workerBridge';
 
 // Default values
 const DEFAULT_GRID_SIZE = 2;
@@ -202,6 +203,45 @@ class PathfindingServiceClass {
     };
 
     return this.findPath(request);
+  }
+
+  /**
+   * Find a path asynchronously using the Web Worker.
+   * Falls back to synchronous findPathWithConfig if worker is unavailable.
+   */
+  async findPathAsync(
+    configCode: string,
+    fromX: number,
+    fromZ: number,
+    goalX: number,
+    goalZ: number,
+    entityRadius: number,
+    entityHeight: number,
+    entityFeetY: number
+  ): Promise<PathfindingResult> {
+    if (!isWorkerAvailable()) {
+      // Fallback to synchronous on main thread
+      return this.findPathWithConfig(configCode, fromX, fromZ, goalX, goalZ, entityRadius, entityHeight);
+    }
+
+    const config = this.configCache.get(configCode);
+
+    try {
+      return await requestPathAsync({
+        startX: fromX,
+        startZ: fromZ,
+        goalX,
+        goalZ,
+        entityRadius,
+        entityHeight,
+        entityFeetY,
+        gridSize: config?.grid_size ?? DEFAULT_GRID_SIZE,
+        maxIterations: config?.max_iterations ?? DEFAULT_MAX_ITERATIONS,
+      });
+    } catch {
+      // Worker failed — fall back to synchronous
+      return this.findPathWithConfig(configCode, fromX, fromZ, goalX, goalZ, entityRadius, entityHeight);
+    }
   }
 
   /**

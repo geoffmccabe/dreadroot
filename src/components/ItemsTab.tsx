@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUserData } from '@/hooks/useUserData';
 import { toast } from 'sonner';
@@ -36,7 +37,7 @@ function getSpriteUrl(def: ItemDef): string | null {
 
 function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoading: boolean }) {
   if (items.length === 0) {
-    return <p className="text-xs text-muted-foreground p-4">{isLoading ? 'Loading items...' : 'No items yet.'}</p>;
+    return <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>{isLoading ? 'Loading items...' : 'No items yet.'}</p>;
   }
 
   return (
@@ -54,9 +55,9 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
           <div
             key={item.inventoryId}
             style={{
-              background: 'hsl(var(--card))',
-              border: '1px solid hsl(var(--border))',
-              borderRadius: '6px',
+              background: 'hsla(var(--hud-bg-dim))',
+              border: '1px solid hsla(var(--hud-border))',
+              borderRadius: 'var(--hud-radius)',
               padding: '6px',
               textAlign: 'center',
               display: 'flex',
@@ -93,8 +94,8 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
                   width: '100%',
                   maxWidth: '64px',
                   aspectRatio: '1',
-                  background: 'hsl(var(--muted))',
-                  borderRadius: '4px',
+                  background: 'hsla(var(--hud-bg))',
+                  borderRadius: 'var(--hud-radius)',
                 }}
               />
             )}
@@ -112,7 +113,7 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
               {item.def.name}
             </span>
             {item.def.tier > 0 && (
-              <span style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))' }}>
+              <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>
                 Tier {item.def.tier}
               </span>
             )}
@@ -154,7 +155,7 @@ function ForgePanel({
 
   if (forgeable.length === 0 && !animatingGroup) {
     return (
-      <p className="text-xs text-muted-foreground p-4">
+      <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>
         Collect 4 of any item to forge them into a higher tier.
       </p>
     );
@@ -241,7 +242,7 @@ function ForgePanel({
                 fontSize: '11px',
                 fontWeight: 600,
                 marginBottom: '6px',
-                color: 'hsl(var(--foreground))',
+                color: 'hsl(var(--hud-text))',
               }}>
                 {item.def.name}
               </div>
@@ -272,11 +273,11 @@ function ForgePanel({
                         ) : (
                           <div style={{
                             width: '48px', height: '48px',
-                            background: 'hsl(var(--muted))', borderRadius: '4px',
+                            background: 'hsla(var(--hud-bg))', borderRadius: 'var(--hud-radius)',
                           }} />
                         )}
                       </div>
-                      <span style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))' }}>
+                      <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>
                         T{item.def.tier}
                       </span>
                     </div>
@@ -286,7 +287,7 @@ function ForgePanel({
                 {/* Arrow */}
                 <span style={{
                   fontSize: '20px',
-                  color: 'hsl(var(--muted-foreground))',
+                  color: 'hsl(var(--hud-text-dim))',
                   flexShrink: 0,
                   lineHeight: 1,
                 }}>
@@ -303,18 +304,18 @@ function ForgePanel({
                     alignItems: 'center',
                     gap: '2px',
                     padding: '6px',
-                    border: '2px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                    background: 'hsl(var(--muted) / 0.5)',
+                    border: '2px solid hsla(var(--hud-border))',
+                    borderRadius: 'var(--hud-radius)',
+                    background: 'hsla(var(--hud-bg))',
                     cursor: animatingGroup ? 'default' : 'pointer',
                     flexShrink: 0,
                     transition: 'border-color 0.2s',
                   }}
                   onMouseEnter={(e) => {
-                    if (!animatingGroup) e.currentTarget.style.borderColor = 'hsl(var(--primary))';
+                    if (!animatingGroup) e.currentTarget.style.borderColor = 'hsla(var(--hud-highlight))';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'hsl(var(--border))';
+                    e.currentTarget.style.borderColor = 'hsla(var(--hud-border))';
                   }}
                 >
                   <div style={{ width: '48px', height: '48px' }}>
@@ -331,13 +332,13 @@ function ForgePanel({
                     ) : (
                       <div style={{
                         width: '48px', height: '48px',
-                        background: 'hsl(var(--muted))', borderRadius: '4px',
+                        background: 'hsla(var(--hud-bg))', borderRadius: 'var(--hud-radius)',
                         filter: `saturate(${step * 25}%)`,
                         transition: 'filter 0.3s ease-in',
                       }} />
                     )}
                   </div>
-                  <span style={{ fontSize: '9px', color: 'hsl(var(--muted-foreground))' }}>
+                  <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>
                     T{item.def.tier + 1}
                   </span>
                 </button>
@@ -352,7 +353,7 @@ function ForgePanel({
 
 // ─── Main ItemsTab ───────────────────────────────────────────────
 
-export function ItemsTab() {
+export function ItemsTab({ height = 500 }: { height?: number }) {
   const { inventory, addItem, removeItems } = useUserData();
   const [itemDefs, setItemDefs] = useState<Map<string, ItemDef>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
@@ -409,13 +410,24 @@ export function ItemsTab() {
 
   // Forge handler — returns true on success, false on failure
   const handleForge = async (itemId: string, itemName: string, currentTier: number): Promise<boolean> => {
+    const nextTier = currentTier + 1;
+    console.log(`[Forge] Starting: "${itemName}" T${currentTier} → T${nextTier}, sourceItemId=${itemId}`);
+
     // Find the next-tier item (same name, tier+1)
-    let { data: nextTierItem } = await supabase
+    // Use .limit(1) instead of .maybeSingle() to handle duplicate items gracefully
+    const { data: nextTierRows, error: lookupErr } = await supabase
       .from('items')
       .select('id, tier')
       .eq('name', itemName)
-      .eq('tier', currentTier + 1)
-      .maybeSingle();
+      .eq('tier', nextTier)
+      .limit(1);
+
+    if (lookupErr) {
+      console.error('[Forge] Lookup error:', lookupErr.message);
+    }
+
+    let nextTierItem = nextTierRows && nextTierRows.length > 0 ? nextTierRows[0] : null;
+    console.log(`[Forge] Next tier lookup:`, nextTierItem ? `found id=${nextTierItem.id} tier=${nextTierItem.tier}` : 'not found, will auto-create');
 
     // Auto-create the next tier if it doesn't exist
     if (!nextTierItem) {
@@ -430,9 +442,11 @@ export function ItemsTab() {
         return false;
       }
 
-      const nextTier = currentTier + 1;
+      console.log(`[Forge] Current item key="${currentItem.key}", name="${currentItem.name}"`);
+
       const baseKey = currentItem.key.replace(/_t\d+$/, '');
       const newKey = `${baseKey}_t${nextTier}`;
+      console.log(`[Forge] Auto-create: baseKey="${baseKey}", newKey="${newKey}", tier=${nextTier}`);
 
       // Check if the key already exists (from a previous failed forge attempt)
       const { data: existingByKey } = await supabase
@@ -442,6 +456,13 @@ export function ItemsTab() {
         .maybeSingle();
 
       if (existingByKey) {
+        console.log(`[Forge] Found existing by key: id=${existingByKey.id} tier=${existingByKey.tier}`);
+        // Verify the existing item actually has the correct tier
+        if (existingByKey.tier !== nextTier) {
+          console.error(`[Forge] BUG: existing key "${newKey}" has tier=${existingByKey.tier}, expected ${nextTier}`);
+          toast.error(`Forge error: tier mismatch on item key`);
+          return false;
+        }
         nextTierItem = existingByKey;
       } else {
         const { data: created, error: createErr } = await supabase
@@ -466,9 +487,12 @@ export function ItemsTab() {
           toast.error(`Forge failed: ${createErr?.message || 'unknown error'}`);
           return false;
         }
+        console.log(`[Forge] Created new item: id=${created.id} tier=${created.tier}`);
         nextTierItem = created;
       }
     }
+
+    console.log(`[Forge] Will add item id=${nextTierItem.id} tier=${nextTierItem.tier}`);
 
     // Server-verified: remove 4 of current tier
     const removed = await removeItems(itemId, 4);
@@ -484,11 +508,12 @@ export function ItemsTab() {
       return false;
     }
 
+    console.log(`[Forge] Success: "${itemName}" T${currentTier} → T${nextTier}`);
     return true;
   };
 
   if (isLoading) {
-    return <p className="text-xs text-muted-foreground p-4">Loading items...</p>;
+    return <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>Loading items...</p>;
   }
 
   return (
@@ -500,10 +525,16 @@ export function ItemsTab() {
         </TabsList>
 
         <TabsContent value="items" className="mt-0">
-          <ItemsGrid items={displayItems} isLoading={isLoading} />
+          <ScrollArea style={{ height: `${height - 56}px` }}>
+            <div className="pr-4">
+              <ItemsGrid items={displayItems} isLoading={isLoading} />
+            </div>
+          </ScrollArea>
         </TabsContent>
 
         <TabsContent value="forge" className="mt-0">
+          <ScrollArea style={{ height: `${height - 56}px` }}>
+          <div className="pr-4">
           <ForgePanel
             items={displayItems}
             onForge={handleForge}
@@ -511,6 +542,8 @@ export function ItemsTab() {
               setForgeModal({ name, fromTier, toTier });
             }}
           />
+          </div>
+          </ScrollArea>
         </TabsContent>
       </Tabs>
 

@@ -62,7 +62,11 @@ import { getHeightBlocks } from '@/features/shtickman/types';
 
 // Tree system imports
 import { TreeInfoLabels } from '@/features/trees/components/TreeInfoLabels';
+import { WideTreeLights } from '@/features/trees/components/WideTreeLights';
+import { FruitRenderer } from '@/components/FruitRenderer';
 import { useTreePlanterNames } from '@/features/trees/hooks/useTreePlanterNames';
+import { useFruitSpawning } from '@/features/trees/hooks/useFruitSpawning';
+import { useFruitPickup } from '@/features/trees/hooks/useFruitPickup';
 import { PulsingSeedBlocks } from '@/features/trees/components/PulsingSeedBlocks';
 
 // Universal Enemy AI system (Phase 3)
@@ -104,9 +108,11 @@ export function FortressScene({
   blockPlacementMode,
   treePlacementMode,
   fungalPlacementMode,
+  widePlacementMode,
   onBlockPlace,
   onTreePlace,
   onFungalTreePlace,
+  onWideTreePlace,
   onModeChange,
   onOpenPanel,
   onToggleInventory,
@@ -115,10 +121,12 @@ export function FortressScene({
   selectedBlockType,
   selectedSeedTier,
   selectedFungalTier,
+  selectedWideTier,
   panelOpen,
   onCycleBlock,
   onCycleSeed,
   onCycleFungalSeed,
+  onCycleWideSeed,
   blocks,
   weatherSettings,
   onBlockRain,
@@ -153,12 +161,15 @@ export function FortressScene({
   isOwnedTreeAtPosition,
   onTreeChopComplete,
   onTreeChopProgress,
+  onBlockMineComplete,
   selectedBulletTier = 1,
   onBulletTierChange,
   playerLevel = 1,
   onPentabulletChargeChange,
   shnakeDefinitions,
   plantedTrees = [],
+  treeFruits = [],
+  onFruitRemoved,
   shombieDefinitions,
   walapaDefinitions,
   onWalapaKilled,
@@ -168,9 +179,10 @@ export function FortressScene({
   selectedItemDef,
   addItem,
   lightningSettings,
+  viewSettings,
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
-  const { updatePlayerPosition, blocks: allLoadedBlocks, isLoading: blocksLoading, worldRevision, loadedChunksRef: chunksRef } = useBlocks();
+  const { updatePlayerPosition, blocks: allLoadedBlocks, isLoading: blocksLoading, worldRevision, loadedChunksRef: chunksRef, currentWorldId } = useBlocks();
 
   // Delay enemy spawning until blocks are loaded (prevents enemies showing before trees)
   // Phase 2: Use worldRevision instead of flat blocks array length
@@ -179,7 +191,30 @@ export function FortressScene({
   
   // Fetch usernames for tree labels
   const { usernamesMap } = useTreePlanterNames(plantedTrees);
-  
+
+  // Camera ref — used by many subsystems below
+  const cameraRef = useRef<THREE.Camera>(camera);
+  cameraRef.current = camera;
+
+  // Fruit spawning - runs on interval, inserts fruits into DB under branch blocks
+  useFruitSpawning({
+    plantedTrees,
+    treeFruits,
+    worldId: currentWorldId,
+    userId: currentUserId ?? null,
+  });
+
+  // Fruit harvesting - F-key system with tier rolling
+  const { findClosestFruit, harvestNearest } = useFruitPickup({
+    treeFruits,
+    plantedTrees,
+    userId: currentUserId ?? null,
+    cameraRef,
+    toast,
+    addItem,
+    onFruitRemoved,
+  });
+
   // Create seed textures map for pulsing seed blocks
   const seedTexturesByTier = useMemo(() => {
     const map = new Map<number, string>();
@@ -190,10 +225,8 @@ export function FortressScene({
     }
     return map;
   }, [seedDefinitions]);
-  
+
   // Shwarm/Shnake system - needs ALL loaded blocks, not just visible ones
-  const cameraRef = useRef<THREE.Camera>(camera);
-  cameraRef.current = camera;
   const blocksRef = useRef(allLoadedBlocks);
   blocksRef.current = allLoadedBlocks;
   
@@ -507,10 +540,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   }, []);
   
   // Indignant callbacks - when shnake body is hit (no damage), play roar and wiggle
+  const lastRoarTimeRef = useRef<Record<string, number>>({});
   const handleIndignantRoar = useCallback((shnakeId: string, volume: number) => {
-    // Play roar sound at specified volume multiplier (2x for indignant)
+    const now = Date.now();
+    const lastTime = lastRoarTimeRef.current[shnakeId] || 0;
+    if (now - lastTime < 2500) return; // Cooldown: skip if roared < 2.5s ago
+    lastRoarTimeRef.current[shnakeId] = now;
     playSpatialSound('/shnake_sound_1.mp3', 10, { baseVolume: 0.5 * volume });
-    console.log(`[Shnake] Indignant roar from ${shnakeId} at ${volume}x volume`);
   }, []);
   
   const handleTriggerWiggle = useCallback((shnakeId: string) => {
@@ -773,7 +809,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const tracersRef = useRef<TracersHandle>(null);
   const jetBoostFXRef = useRef<JetBoostFXHandle>(null);
   const universalFlameRef = useRef<UniversalFlameRendererHandle>(null);
-  const { flameDemoRef } = useAdminPanel();
+  const { flameDemoRef, fruitVisibility } = useAdminPanel();
 
   // (Flame Glove setup is below, after getDefinition is available)
 
@@ -812,7 +848,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   }, []);
 
   // Fog configuration — lightning panel overrides profile value for instant control
-  const { visualDistance, fogEnabled: profileFogEnabled, currentWorldId } = useBlocks();
+  const { visualDistance, fogEnabled: profileFogEnabled } = useBlocks();
   const fogEnabled = lightningSettings?.fogEnabled ?? profileFogEnabled;
   // Scope multiplayer by world - prevents cross-world player visibility
   const { players, broadcastPosition, broadcastPlayerHit, isConnected, localPlayerOnFire, localFireBurnTimeMs, localFireColors, setLocalPlayerOnFire } = useMultiplayer(currentWorldId);
@@ -838,7 +874,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   useEffect(() => {
     if (fogEnabled) {
-      const maxDist = visualDistance * CHUNK_SIZE;
+      const FADE_EXTRA_CHUNKS = 3;
+      const maxDist = (visualDistance + FADE_EXTRA_CHUNKS) * CHUNK_SIZE;
       const fogStart = maxDist * (lsFogStartPct / 100);
       const fogEnd = maxDist * (lsFogEndPct / 100);
       scene.fog = new THREE.Fog(fogColorCurrent.current, fogStart, fogEnd);
@@ -928,45 +965,46 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     if (intersects.length > 0 && intersects[0].distance < 100) {
       const collectedBlock = collectWisp();
       if (collectedBlock) {
+        // Play sound and particles IMMEDIATELY (before server round-trip)
+        playSpatialSound('/wisp_death.mp3', 0, { baseVolume: 0.6 });
+
+        const explosionPos = wispPositionRef.current.clone();
+        const newParticles: WispParticle[] = [];
+        const particleCount = 8;
+
+        // 8 mini-wisps with individual speed variation (±50%)
+        for (let i = 0; i < particleCount; i++) {
+          const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.3;
+          const elevation = (Math.random() - 0.3) * Math.PI * 0.8; // More upward bias
+          const baseSpeed = 4 + Math.random() * 6;
+          const speedMultiplier = 0.5 + Math.random(); // 0.5 to 1.5 (±50%)
+          const speed = baseSpeed * speedMultiplier;
+
+          newParticles.push({
+            position: explosionPos.clone(),
+            velocity: new THREE.Vector3(
+              Math.cos(angle) * Math.cos(elevation) * speed,
+              Math.sin(elevation) * speed + 2, // Extra upward boost
+              Math.sin(angle) * Math.cos(elevation) * speed
+            ),
+            life: 1,
+            color: collectedBlock.properties?.color || '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+            scale: 0.25 // 1/4 diameter of normal wisp
+          });
+        }
+        wispParticlesRef.current.push(...newParticles);
+        setWispRenderTrigger(prev => prev + 1);
+
+        // Server confirmation (non-blocking for UX)
         const success = await collectWispBlock(collectedBlock.key);
 
         if (success) {
-          const explosionPos = wispPositionRef.current.clone();
-          const newParticles: WispParticle[] = [];
-          const particleCount = 8;
-
-          // 8 mini-wisps with individual speed variation (±50%)
-          for (let i = 0; i < particleCount; i++) {
-            const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.3;
-            const elevation = (Math.random() - 0.3) * Math.PI * 0.8; // More upward bias
-            const baseSpeed = 4 + Math.random() * 6;
-            const speedMultiplier = 0.5 + Math.random(); // 0.5 to 1.5 (±50%)
-            const speed = baseSpeed * speedMultiplier;
-
-            newParticles.push({
-              position: explosionPos.clone(),
-              velocity: new THREE.Vector3(
-                Math.cos(angle) * Math.cos(elevation) * speed,
-                Math.sin(elevation) * speed + 2, // Extra upward boost
-                Math.sin(angle) * Math.cos(elevation) * speed
-              ),
-              life: 1,
-              color: collectedBlock.properties?.color || '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
-              scale: 0.25 // 1/4 diameter of normal wisp
-            });
-          }
-          wispParticlesRef.current.push(...newParticles);
-          setWispRenderTrigger(prev => prev + 1);
-
-          // Use universal spatial audio system - distance 0 = full volume
-          playSpatialSound('/wisp_death.mp3', 0, { baseVolume: 0.6 });
-          
           toast({
             title: "✨ Wisp Block Collected!",
             description: `You found a ${collectedBlock.name}!`,
             duration: 3000
           });
-          
+
           return true;
         }
       }
@@ -1182,14 +1220,22 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       }
     }
 
-    // Damage shtickmen in cone (check a few meters up — position is at feet, they're 22-40m tall)
+    // Damage shtickmen in cone — check multiple points along body height (they're 22-40m tall)
     for (const shtickman of shtickmenRef.current) {
       if (!shtickman.isActive) continue;
-      const shtickCenter = _flameTmpPos.current.set(shtickman.position.x, shtickman.position.y + 4.0, shtickman.position.z);
-      if (isInCone(shtickCenter)) {
-        console.log(`[FlameGlove] Hit shtickman ${shtickman.id} for ${tickDamage} dmg`);
+      const sx = shtickman.position.x;
+      const sy = shtickman.position.y;
+      const sz = shtickman.position.z;
+      // Check feet, knees, waist, chest, head — any hit counts
+      let hit = false;
+      for (const yOff of [1, 4, 8, 14, 20]) {
+        _flameTmpPos.current.set(sx, sy + yOff, sz);
+        if (isInCone(_flameTmpPos.current)) { hit = true; break; }
+      }
+      if (hit) {
+        const hitPos = _flameTmpPos.current;
         damageShtickman(shtickman.id, tickDamage, undefined as any);
-        burnSystem.applyBurn('shtickman', shtickman.id, undefined, tier, colors, colorMode, tickDamage, 0, shtickCenter);
+        burnSystem.applyBurn('shtickman', shtickman.id, undefined, tier, colors, colorMode, tickDamage, 0, hitPos);
       }
     }
   });
@@ -1204,9 +1250,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         blockPlacementMode={blockPlacementMode}
         treePlacementMode={treePlacementMode}
         fungalPlacementMode={fungalPlacementMode}
+        widePlacementMode={widePlacementMode}
         onBlockPlace={onBlockPlace}
         onTreePlace={onTreePlace}
         onFungalTreePlace={onFungalTreePlace}
+        onWideTreePlace={onWideTreePlace}
         onOpenPanel={onOpenPanel}
         onToggleInventory={onToggleInventory}
         onModeChange={onModeChange}
@@ -1214,10 +1262,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         selectedBlockType={selectedBlockType}
         selectedSeedTier={selectedSeedTier}
         selectedFungalTier={selectedFungalTier}
+        selectedWideTier={selectedWideTier}
         panelOpen={panelOpen}
         onCycleBlock={onCycleBlock}
         onCycleSeed={onCycleSeed}
         onCycleFungalSeed={onCycleFungalSeed}
+        onCycleWideSeed={onCycleWideSeed}
         blocks={blocks}
         onBlockRain={onBlockRain}
         userRoles={userRoles}
@@ -1238,6 +1288,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}
+        onBlockMineComplete={onBlockMineComplete}
         onBulletTierChange={onBulletTierChange}
         playerLevel={playerLevel}
         onPentabulletChargeChange={onPentabulletChargeChange}
@@ -1253,6 +1304,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         isFlameGloveSelected={isFlameGloveSelected}
         onFlameStart={handleFlameStart}
         onFlameStop={handleFlameStop}
+        onHarvestFruit={harvestNearest}
       />
       
       <MultiplayerPlayers players={players} />
@@ -1274,6 +1326,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onMeshReady={handleMeshReady}
         performanceMode={performanceMode}
         groundTextureUrl={groundTextureUrl}
+        viewSettings={viewSettings}
       />
       <Waterfall
         flowSpeed={settings.flowSpeed} 
@@ -1322,6 +1375,20 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Dropped Loot Items */}
       <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />
+
+      {/* Fruit Renderer - proximity-based fruit spheres with flame plumes */}
+      <FruitRenderer
+        treeFruits={treeFruits}
+        cameraRef={cameraRef}
+        playerLevel={playerLevel}
+        universalFlameRef={universalFlameRef}
+        adminSeeAll={isAdmin && fruitVisibility}
+        findClosestFruit={findClosestFruit}
+        loadedChunksRef={chunksRef}
+      />
+
+      {/* Wide Tree Glow Lights */}
+      <WideTreeLights plantedTrees={plantedTrees} />
 
       {/* Tree Info Labels */}
       <TreeInfoLabels

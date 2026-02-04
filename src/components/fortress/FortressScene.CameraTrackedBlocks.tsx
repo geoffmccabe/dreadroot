@@ -13,6 +13,7 @@ import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 import ChunkRenderer from '@/components/ChunkRenderer';
 import { ProceduralGround } from './ProceduralGround';
 import { FadeChunkBlocks } from '@/components/FadeChunkBlocks';
+import type { ViewSettings } from './FortressTypes';
 import { getAtlasVersion, useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { useBlocksData } from '@/hooks/useBlocksData';
@@ -25,7 +26,8 @@ export function CameraTrackedBlocks({
   hoveredBlockId,
   onMeshReady,
   performanceMode = false,
-  groundTextureUrl
+  groundTextureUrl,
+  viewSettings
 }: {
   showOwnershipOutline: boolean;
   currentUserId?: string;
@@ -33,6 +35,7 @@ export function CameraTrackedBlocks({
   onMeshReady?: (blockType: string, mesh: THREE.InstancedMesh | null) => void;
   performanceMode?: boolean;
   groundTextureUrl?: string | null;
+  viewSettings?: ViewSettings;
 }) {
   const { camera } = useThree();
   const { blocksByChunk, visibleChunksRef, visualDistance, updatePlayerPosition, loadedChunksRef, worldRevision } = useBlocks();
@@ -44,6 +47,9 @@ export function CameraTrackedBlocks({
   const hoistedAtlasReady = hoistedAtlas.isReady;
   useAtlasSync(); // Single sync instead of 71× (each fires 6 React Query fetches)
   const { blocksMap: hoistedBlocksMap, isLoading: hoistedBlockDefsLoading } = useBlocksData();
+
+  // One-time diagnostic: log rendering pipeline state to confirm blocks flow through
+  const debugLogRef = useRef(false);
 
   const lastChunkRef = useRef({ x: 0, z: 0 });
   const lastUpdateTime = useRef(0);
@@ -145,27 +151,43 @@ export function CameraTrackedBlocks({
   // Phase 1: Per-chunk rendering — iterate loaded chunks, classify into normal vs fade
   // Normal chunks: within visualDistance, full atlas rendering
   // Fade chunks: visualDistance+1 to visualDistance+2, grey silhouette rendering
+  //
+  // PERF: Cache entry objects per chunk key. Only create a new entry when the blocks
+  // ref changes. This prevents ChunkRenderer React.memo from being busted by
+  // worldRevision/renderTrigger changes that don't actually change chunk data.
+  const entryCacheRef = useRef<Map<string, { key: string; blocks: PlacedBlock[] }>>(new Map());
+
   const { normalEntries, fadeEntries } = useMemo(() => {
     const normal: { key: string; blocks: PlacedBlock[] }[] = [];
     const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
     const ref = loadedChunksRef?.current;
+    const cache = entryCacheRef.current;
 
     // Compute camera chunk from live camera position (not lastChunkRef which may lag)
     const camChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
     const camChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
+    // Track which keys are still in use so we can prune stale cache entries
+    const activeKeys = new Set<string>();
+
     if (ref && ref.size > 0) {
       for (const [chunkKey, chunkData] of ref) {
         if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
 
-        const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
+        // Use visibleBlocks if non-empty, otherwise fall back to full blocks array
+        // NOTE: Must check length explicitly - `??` doesn't catch empty arrays
+        const blocks = (chunkData.visibleBlocks?.length) ? chunkData.visibleBlocks : chunkData.blocks;
 
         // Parse chunk coords from key "chunk_X_Z"
         const parsed = parseChunkKey(chunkKey);
 
         // If key format is unexpected, render as normal (safe fallback)
         if (!parsed) {
-          normal.push({ key: chunkKey, blocks });
+          const cached = cache.get(chunkKey);
+          const entry = (cached && cached.blocks === blocks) ? cached : { key: chunkKey, blocks };
+          cache.set(chunkKey, entry);
+          activeKeys.add(chunkKey);
+          normal.push(entry);
           continue;
         }
 
@@ -174,11 +196,24 @@ export function CameraTrackedBlocks({
         const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
 
         if (chunkDist <= visualDistance) {
-          normal.push({ key: chunkKey, blocks });
+          // Reuse cached entry if blocks ref is the same — prevents ChunkRenderer re-render
+          const cached = cache.get(chunkKey);
+          const entry = (cached && cached.blocks === blocks) ? cached : { key: chunkKey, blocks };
+          cache.set(chunkKey, entry);
+          activeKeys.add(chunkKey);
+          normal.push(entry);
         } else if (chunkDist <= visualDistance + FADE_EXTRA) {
           const distanceFactor = (chunkDist - visualDistance) / FADE_EXTRA;
+          activeKeys.add(chunkKey);
           fade.push({ key: chunkKey, blocks, distanceFactor });
         }
+      }
+    }
+
+    // Prune stale cache entries for chunks no longer loaded
+    if (cache.size > activeKeys.size + 20) {
+      for (const key of cache.keys()) {
+        if (!activeKeys.has(key)) cache.delete(key);
       }
     }
 
@@ -196,9 +231,50 @@ export function CameraTrackedBlocks({
     return { normalEntries: normal, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
 
+  // One-time pipeline diagnostic (fires once when normalEntries first has data)
+  if (!debugLogRef.current && normalEntries.length > 0) {
+    debugLogRef.current = true;
+    const totalBlocks = normalEntries.reduce((sum, e) => sum + e.blocks.length, 0);
+    console.log(`[CameraTrackedBlocks] Pipeline: ${normalEntries.length} chunks, ${totalBlocks} blocks, blockDefsLoading=${hoistedBlockDefsLoading}, atlasReady=${hoistedAtlasReady}, blocksMapSize=${hoistedBlocksMap.size}, fadeChunks=${fadeEntries.length}`);
+
+    // DEBUG: Compare chunkData.blocks vs chunkData.visibleBlocks for non-tree block loss
+    const ref = loadedChunksRef?.current;
+    if (ref) {
+      for (const [chunkKey, chunkData] of ref) {
+        if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
+        const allBlocks = chunkData.blocks;
+        const visBlocks = chunkData.visibleBlocks;
+
+        // Count non-tree blocks in both arrays
+        let allNonTree = 0;
+        let visNonTree = 0;
+        const nonTreeTypes = new Set<string>();
+
+        for (const b of allBlocks) {
+          const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
+          if (!isTree) {
+            allNonTree++;
+            nonTreeTypes.add(b.block_type);
+          }
+        }
+
+        if (visBlocks) {
+          for (const b of visBlocks) {
+            const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
+            if (!isTree) visNonTree++;
+          }
+        }
+
+        if (allNonTree > 0) {
+          console.log(`[PLACED BLOCKS DEBUG] ${chunkKey}: blocks=${allBlocks.length} (${allNonTree} placed), visibleBlocks=${visBlocks ? visBlocks.length + ' (' + visNonTree + ' placed)' : 'UNDEFINED (using blocks)'}, types: ${[...nonTreeTypes].join(', ')}`);
+        }
+      }
+    }
+  }
+
   return (
     <>
-      <FadeChunkBlocks entries={fadeEntries} />
+      <FadeChunkBlocks entries={fadeEntries} viewSettings={viewSettings} />
       <ProceduralGround
         visibleChunksRef={visibleChunksRef}
         renderTrigger={renderTrigger}

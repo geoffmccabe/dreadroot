@@ -52,7 +52,7 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
 
   const fetchDefinitions = async () => {
     const { data, error } = await supabase
-      .from('walapa_definitions')
+      .from('walapa_definitions' as any)
       .select('*')
       .order('tier', { ascending: true });
 
@@ -160,7 +160,7 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
 
       if (isNew) {
         const { data, error } = await supabase
-          .from('walapa_definitions')
+          .from('walapa_definitions' as any)
           .upsert([saveData], { onConflict: 'tier' })
           .select()
           .single();
@@ -169,7 +169,7 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
         console.log('[WalapaDesign] Inserted/Upserted:', data);
       } else {
         const { data, error } = await supabase
-          .from('walapa_definitions')
+          .from('walapa_definitions' as any)
           .update(saveData)
           .eq('id', id)
           .select()
@@ -213,7 +213,7 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
     try {
       if (isNew) {
         const { data, error } = await supabase
-          .from('walapa_definitions')
+          .from('walapa_definitions' as any)
           .upsert([saveData], { onConflict: 'tier' })
           .select()
           .single();
@@ -221,7 +221,7 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
         setDefinitions(prev => prev.map(d => d.tier === 1 ? (data as WalapaDefinition) : d));
       } else {
         const { data, error } = await supabase
-          .from('walapa_definitions')
+          .from('walapa_definitions' as any)
           .update(saveData)
           .eq('id', id)
           .select()

@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { SeedDefinition, TreeGrowthOptions, TreeBlueprint } from '../types';
 import { generateTreeBlueprint, getBlocksAtOrder } from '../lib/treeGrowth';
 import { generateFungalTreeBlueprint, getFungalBlocksAtOrder } from '../lib/fungalTreeGenerator';
+import { generateWideTreeBlueprint, getWideBlocksAtOrder } from '../lib/wideTreeGenerator';
 import { TREE_CONFIG } from '../constants';
 import { useToast } from '@/hooks/use-toast';
 import { encodeBlockType, getTextureUrlForTreeBlock } from '../lib/blockTypeEncoder';
@@ -47,6 +48,7 @@ function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
     shroomChance: seedDef.shroom_chance ?? 0,
     shroomLength: seedDef.shroom_length ?? 5,
     shroomCapDiameter: seedDef.shroom_cap_diameter ?? 3,
+    shrineChance: seedDef.shrine_chance ?? 0.0001,
     symmetry: seedDef.symmetry ?? 'none',
   };
 }
@@ -66,7 +68,7 @@ export function useSeedPlanting({
     positionY: number,
     positionZ: number,
     tier: number,
-    forceTreeType?: 'original' | 'fungal'
+    forceTreeType?: 'original' | 'fungal' | 'wide'
   ): Promise<PlantSeedResult> => {
     if (!worldId || !userId || !TREE_CONFIG.ENABLED) {
       return { success: false, error: 'Not ready to plant' };
@@ -110,6 +112,48 @@ export function useSeedPlanting({
         nob_size: 1,
         cross_chance: 0,
         cross_length: 3,
+        shroom_chance: 0,
+        shroom_length: 5,
+        shroom_cap_diameter: 3,
+        symmetry: 'none',
+        fungal_min_height: null,
+        fungal_max_height: null,
+        fungal_min_cap_width: null,
+        fungal_max_cap_width: null,
+        fungal_stem_random: null,
+        fungal_lean_angle: null,
+        fungal_s_curve: null,
+      } as SeedDefinition;
+    }
+
+    // For wide trees, create a default seed definition if none exists
+    if (!seedDef && forceTreeType === 'wide') {
+      seedDef = {
+        id: `wide-default-${tier}`,
+        tier,
+        name: `Wide T${tier}`,
+        tree_type: 'wide',
+        trunk_texture_url: null,
+        branch_texture_url: null,
+        fruit_texture_url: null,
+        fungal_stem_texture_url: null,
+        fungal_cap_top_texture_url: null,
+        fungal_cap_underside_texture_url: null,
+        width_factor: 0.3,
+        branching_factor: 0.5,
+        fruiting_factor: 0.5,
+        growth_factor: 0.5,
+        cost: tier * 50,
+        rarity: 'common',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        low_branch_height: 2,
+        spike_chance: 0,
+        spike_length: 4,
+        nob_chance: 0,
+        nob_size: 1,
+        cross_chance: 0,
+        cross_length: 4,
         shroom_chance: 0,
         shroom_length: 5,
         shroom_cap_diameter: 3,
@@ -170,6 +214,14 @@ export function useSeedPlanting({
           growthSeed,
           seedDef
         );
+      } else if (treeType === 'wide') {
+        // Wide trees: thick tapering trunks with branching decorations
+        blueprint = generateWideTreeBlueprint(
+          baseX, baseY, baseZ,
+          seedDef.tier,
+          growthSeed,
+          seedDef
+        );
       } else {
         // Original trees: standard branching pattern
         blueprint = generateTreeBlueprint(
@@ -186,6 +238,8 @@ export function useSeedPlanting({
       // Now using encoded block_type format: {type}_{depth}_{tier}
       const firstBlocks = treeType === 'fungal'
         ? getFungalBlocksAtOrder(blueprint, 0)
+        : treeType === 'wide'
+        ? getWideBlocksAtOrder(blueprint, 0)
         : getBlocksAtOrder(blueprint, 0);
 
       for (const block of firstBlocks) {

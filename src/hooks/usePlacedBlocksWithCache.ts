@@ -157,6 +157,17 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       await blockDefsPromise;
       initLogFinishStep(blockDefsStepId!);
 
+      // ONE-TIME ATLAS CACHE MIGRATION: Clear stale atlas for fruit texture fix
+      const ATLAS_CACHE_VERSION_KEY = 'fortress_atlas_cache_version';
+      const CURRENT_ATLAS_VERSION = 2; // Bump to force atlas rebuild for all users
+      const storedAtlasVersion = parseInt(localStorage.getItem(ATLAS_CACHE_VERSION_KEY) || '0', 10);
+      if (storedAtlasVersion < CURRENT_ATLAS_VERSION) {
+        console.log('[AtlasMigration] Clearing stale atlas cache (v' + storedAtlasVersion + ' -> v' + CURRENT_ATLAS_VERSION + ')');
+        const { atlasManager } = await import('@/lib/atlasManager');
+        await atlasManager.clear();
+        localStorage.setItem(ATLAS_CACHE_VERSION_KEY, String(CURRENT_ATLAS_VERSION));
+      }
+
       // CRITICAL: Initialize texture atlas BEFORE chunk loading starts
       // Tree blocks require atlas to render - if atlas isn't ready, trees won't show
       const atlasStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing texture atlas...');
@@ -747,7 +758,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         .select('role')
         .eq('user_id', user.id);
       
-      const isAdmin = roles?.some(r => r.role === 'admin');
+      const isAdmin = roles?.some(r => r.role === 'admin' || r.role === 'superadmin');
       const isOwner = blockToRemove.user_id === user.id;
 
       if (!isOwner && !isAdmin) {

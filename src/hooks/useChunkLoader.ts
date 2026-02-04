@@ -6,8 +6,10 @@ import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStartStep, initLogFinishStep } from '@/contexts/InitializationContext';
 import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
+import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { updateChunkHeightMap, removeChunkHeightMap, clearAllHeightMaps } from '@/lib/chunkHeightMap';
 import * as THREE from 'three';
 
 // Configuration for chunk loading
@@ -19,12 +21,19 @@ const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
 const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
 const COLLIDER_REMOVAL_BATCH = 200;   // Colliders to remove per frame during unload
+const COLLIDER_CREATION_BATCH = 200;  // Colliders to create per frame during load
 
 // B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
 const PREFETCH_ENABLED = false;
 
 // Phase 3A: Eviction configuration
 const EVICTION_BATCH_SIZE = 10;
+
+// Retry configuration for failed chunk loads
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 2000;     // 2s, 4s, 8s exponential backoff
+const FAILED_CHUNK_RETRY_INTERVAL = 5000; // Retry failed chunks every 5s
+const MAX_TOTAL_BLOCKS = 50000; // Safety limit for paginated fetches
 
 // Phase 3D: Cache configuration
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -174,6 +183,11 @@ const removeBlockCollider = (block: PlacedBlock): void => {
   (block as any).__collider = null;
 };
 
+// Reusable occupancy buffer for surface culling — avoids allocating a new
+// Uint8Array per chunk (up to 512KB each for tall trees, causing GC storms)
+let _occBuf: Uint8Array | null = null;
+let _occBufSize = 0;
+
 /**
  * Surface-only culling: removes fully-surrounded interior blocks per chunk.
  * Uses a compact Uint8Array occupancy grid (16×16×H) for O(1) neighbor checks.
@@ -198,7 +212,15 @@ function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: Pla
   if (ySpan <= 0 || ySpan > 2048) return blocks; // Safety fallback
 
   const stride = 256; // 16 * 16 per Y layer
-  const occ = new Uint8Array(ySpan * stride);
+  const needed = ySpan * stride;
+  // Reuse buffer if large enough, otherwise grow
+  if (!_occBuf || _occBufSize < needed) {
+    _occBuf = new Uint8Array(needed);
+    _occBufSize = needed;
+  }
+  const occ = _occBuf;
+  // Zero only the portion we'll use (faster than allocating new)
+  occ.fill(0, 0, needed);
 
   // Fill occupancy grid
   for (let i = 0; i < blocks.length; i++) {
@@ -212,9 +234,17 @@ function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: Pla
   }
 
   // Filter: keep blocks with at least one exposed face
+  // Only cull tree blocks — user-placed blocks are always kept visible
   const visible: PlacedBlock[] = [];
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
+
+    // Never cull non-tree blocks (user-placed blocks should always render)
+    if (!isTreeBlockType(b.block_type)) {
+      visible.push(b);
+      continue;
+    }
+
     const lx = b.position_x - originX;
     const lz = b.position_z - originZ;
     const ly = b.position_y - minY;
@@ -236,6 +266,13 @@ function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: Pla
       (occ[base - stride] === 0) || (occ[base + stride] === 0); // ±Y
 
     if (exposed) visible.push(b);
+  }
+
+  // Safety net: if all blocks were somehow culled, return original to prevent invisible chunks
+  // This should never happen for tree structures (branches always have exposed faces)
+  if (visible.length === 0 && blocks.length > 0) {
+    console.warn(`[SurfaceCulling] All ${blocks.length} tree blocks culled for chunk (${chunkX},${chunkZ}) - returning original to prevent invisible chunk`);
+    return blocks;
   }
 
   return visible;
@@ -328,6 +365,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   const EMIT_RADIUS = emitRadius ?? LOAD_RADIUS;
   // Loaded chunks: Map<chunkKey, ChunkData>
   const loadedChunksRef = useRef<Map<string, ChunkData>>(new Map());
+
+  // Track chunks that failed to load — retried periodically
+  const failedChunksRef = useRef<Map<string, { x: number; z: number; attempts: number }>>(new Map());
 
   // Current player chunk position
   const playerChunkRef = useRef<{ x: number; z: number } | null>(null);
@@ -550,6 +590,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         // Remove from map immediately (visuals disappear)
         loadedChunksRef.current.delete(key);
+        removeChunkHeightMap(key);
 
         if (chunkData && chunkData.blocks.length > 0) {
           // B3: Enqueue budgeted job to remove colliders
@@ -834,27 +875,81 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const minChunkZ = centerChunkZ - radius;
     const maxChunkZ = centerChunkZ + radius;
 
-    // Single bounding query for all chunks in radius
-    // CRITICAL: Supabase default limit is 1000 rows - we need more for large structures
-    const { data: blocks, error } = await supabase
-      .from('placed_blocks')
-      .select('*')
-      .eq('world_id', worldId)
-      .gte('chunk_x', minChunkX)
-      .lte('chunk_x', maxChunkX)
-      .gte('chunk_z', minChunkZ)
-      .lte('chunk_z', maxChunkZ)
-      .limit(50000);
+    // Paginated bounding query for all chunks in radius — with retry
+    const PAGE_SIZE = 1000;
+    let blocks: PlacedBlock[] | null = null;
+    let hitSafetyLimit = false;
 
-    if (error) {
-      console.error('Error loading chunks:', error);
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      const fetched: PlacedBlock[] = [];
+      hitSafetyLimit = false;
+      let offset = 0;
+      let hasMore = true;
+      let pageError = false;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('placed_blocks')
+          .select('*')
+          .eq('world_id', worldId)
+          .gte('chunk_x', minChunkX)
+          .lte('chunk_x', maxChunkX)
+          .gte('chunk_z', minChunkZ)
+          .lte('chunk_z', maxChunkZ)
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        if (error) {
+          console.error(`[ChunkLoader] loadChunksInRadius page failed at offset ${offset} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, error.message);
+          pageError = true;
+          break;
+        }
+
+        if (data && data.length > 0) {
+          fetched.push(...data);
+          offset += data.length;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+
+        if (offset >= MAX_TOTAL_BLOCKS) {
+          console.warn(`[ChunkLoader] loadChunksInRadius hit ${MAX_TOTAL_BLOCKS} safety limit`);
+          hitSafetyLimit = true;
+          hasMore = false;
+        }
+      }
+
+      if (!pageError) {
+        blocks = fetched;
+        break;
+      }
+
+      // Retry entire fetch
+      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+        await new Promise(r => setTimeout(r, RETRY_BASE_DELAY_MS * (2 ** attempt)));
+      }
+    }
+
+    if (!blocks) {
+      console.error('All retry attempts failed for loadChunksInRadius');
+      // Track all chunks in radius as failed for periodic retry
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          const cx = centerChunkX + dx;
+          const cz = centerChunkZ + dz;
+          const key = `chunk_${cx}_${cz}`;
+          if (!loadedChunksRef.current.has(key)) {
+            failedChunksRef.current.set(key, { x: cx, z: cz, attempts: MAX_RETRY_ATTEMPTS });
+          }
+        }
+      }
       return;
     }
 
     // Filter out expired blocks
     const now = new Date();
     const loadedAt = Date.now();
-    const activeBlocks = (blocks || []).filter(block => 
+    const activeBlocks = (blocks || []).filter(block =>
       !block.expires_at || new Date(block.expires_at) > now
     );
 
@@ -867,7 +962,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       chunkGroups.set(chunkKey, existing);
     }
 
-    // Generate all chunk keys that should be loaded
+    // Generate all chunk keys that should be loaded — clear from failed set on success
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dz = -radius; dz <= radius; dz++) {
         const chunkX = centerChunkX + dx;
@@ -876,12 +971,36 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
 
+        // If we hit the safety limit and this chunk got zero blocks,
+        // it may have been truncated — queue for individual retry instead
+        // of storing as a loaded empty chunk
+        if (hitSafetyLimit && chunkBlocks.length === 0) {
+          failedChunksRef.current.set(chunkKey, { x: chunkX, z: chunkZ, attempts: 0 });
+          continue;
+        }
+
+        failedChunksRef.current.delete(chunkKey);
+
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
 
-        // Create colliders for all blocks in this chunk
-        for (const block of chunkBlocks) {
-          ensureBlockCollider(block);
+        // Nearby chunks (within 2 of player): sync colliders for gravity/physics
+        // Distant chunks: defer to budgeted queue to avoid 1000ms+ stalls
+        const chunkDist = Math.max(Math.abs(dx), Math.abs(dz));
+        if (chunkDist <= 2 || chunkBlocks.length < 200) {
+          for (const block of chunkBlocks) {
+            ensureBlockCollider(block);
+          }
+        } else if (chunkBlocks.length > 0) {
+          const blocksForColliders = chunkBlocks;
+          let colliderIdx = 0;
+          enqueueJob(`load-colliders:${chunkKey}`, () => {
+            const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
+            for (; colliderIdx < end; colliderIdx++) {
+              ensureBlockCollider(blocksForColliders[colliderIdx]);
+            }
+            return colliderIdx >= blocksForColliders.length;
+          });
         }
 
         // Store chunk data (even if empty - means we loaded it)
@@ -898,6 +1017,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         loadedChunksRef.current.set(chunkKey, newChunkData);
         // B4: Update world signature for new chunk
         applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
+        // Update height map for pathfinding
+        updateChunkHeightMap(chunkKey, chunkBlocks);
       }
     }
 
@@ -1056,9 +1177,23 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       const chunkKey = `chunk_${x}_${z}`;
       // Deterministic sort to prevent reorder churn
       sortBlocksDeterministic(blocks);
-      // Create colliders for all blocks from cache
-      for (const block of blocks) {
-        ensureBlockCollider(block);
+      // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
+      const pChunk = playerChunkRef.current;
+      const cDist = pChunk ? Math.max(Math.abs(x - pChunk.x), Math.abs(z - pChunk.z)) : 0;
+      if (cDist <= 2 || blocks.length < 200) {
+        for (const block of blocks) {
+          ensureBlockCollider(block);
+        }
+      } else if (blocks.length > 0) {
+        const blocksForColliders = blocks;
+        let colliderIdx = 0;
+        enqueueJob(`load-colliders:${chunkKey}`, () => {
+          const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
+          for (; colliderIdx < end; colliderIdx++) {
+            ensureBlockCollider(blocksForColliders[colliderIdx]);
+          }
+          return colliderIdx >= blocksForColliders.length;
+        });
       }
       cacheBlockCount += blocks.length;
       const newSig = computeChunkSignature(blocks);
@@ -1073,6 +1208,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       loadedChunksRef.current.set(chunkKey, newChunkData);
       // B4: Update world signature for new chunk
       applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
+      // Update height map for pathfinding
+      updateChunkHeightMap(chunkKey, blocks);
 
       // DEBUG: Log chunk (3,1) specifically
       if (x === 3 && z === 1) {
@@ -1094,65 +1231,88 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       const wantedChunkKeys = new Set(chunksToFetchFromServer.map(c => `chunk_${c.x}_${c.z}`));
 
-      // Paginated fetch to handle Supabase's 1000 row limit
+      // Paginated fetch with retry logic
       const PAGE_SIZE = 1000;
       let blocks: PlacedBlock[] = [];
-      let lastError: Error | null = null;
-      let offset = 0;
-      let hasMore = true;
+      let fetchFailed = false;
+      let hitSafetyLimit = false;
 
       // D-Flow: Start timing fetch phase
       const fetchT0 = performance.now();
 
       console.log(`[ChunkLoader DEBUG] Fetching chunks: worldId=${worldId}, bounds=(${minChunkX},${minChunkZ})-(${maxChunkX},${maxChunkZ}), wanted=${Array.from(wantedChunkKeys).join(',')}`);
 
-      while (hasMore) {
-        const { data, error, count } = await supabase
-          .from('placed_blocks')
-          .select('*', { count: 'exact' })
-          .eq('world_id', worldId)
-          .gte('chunk_x', minChunkX)
-          .lte('chunk_x', maxChunkX)
-          .gte('chunk_z', minChunkZ)
-          .lte('chunk_z', maxChunkZ)
-          .range(offset, offset + PAGE_SIZE - 1);
+      // Retry the entire paginated fetch (not individual pages) to avoid partial data
+      for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+        blocks = [];
+        hitSafetyLimit = false;
+        let offset = 0;
+        let hasMore = true;
+        let pageError = false;
 
-        if (error) {
-          lastError = new Error(error.message);
-          console.error(`[ChunkLoader DEBUG] Page fetch failed at offset ${offset}:`, error.message);
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('placed_blocks')
+            .select('*', { count: 'exact' })
+            .eq('world_id', worldId)
+            .gte('chunk_x', minChunkX)
+            .lte('chunk_x', maxChunkX)
+            .gte('chunk_z', minChunkZ)
+            .lte('chunk_z', maxChunkZ)
+            .range(offset, offset + PAGE_SIZE - 1);
+
+          if (error) {
+            console.error(`[ChunkLoader] Page fetch failed at offset ${offset} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, error.message);
+            pageError = true;
+            break;
+          }
+
+          if (data && data.length > 0) {
+            blocks = blocks.concat(data);
+            offset += data.length;
+            hasMore = data.length === PAGE_SIZE;
+          } else {
+            hasMore = false;
+          }
+
+          if (offset >= MAX_TOTAL_BLOCKS) {
+            console.warn(`[ChunkLoader] Safety limit reached at ${MAX_TOTAL_BLOCKS} blocks`);
+            hitSafetyLimit = true;
+            hasMore = false;
+          }
+        }
+
+        if (!pageError) {
+          // Success — all pages fetched
+          fetchFailed = false;
           break;
         }
 
-        if (data && data.length > 0) {
-          blocks = blocks.concat(data);
-          offset += data.length;
-          
-          // Check if we got a full page (might be more)
-          hasMore = data.length === PAGE_SIZE;
-          
-          if (hasMore) {
-            console.log(`[ChunkLoader DEBUG] Fetched page: ${data.length} rows, total so far: ${blocks.length}, fetching more...`);
-          }
-        } else {
-          hasMore = false;
-        }
-        
-        // Safety limit to prevent infinite loops
-        if (offset > 50000) {
-          console.warn('[ChunkLoader DEBUG] Safety limit reached at 50000 blocks');
-          hasMore = false;
+        // Page failed — discard partial data and retry entire fetch
+        fetchFailed = true;
+        blocks = [];
+        if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+          const delay = RETRY_BASE_DELAY_MS * (2 ** attempt);
+          console.log(`[ChunkLoader] Retrying fetch in ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
         }
       }
-      
+
       // D-Flow: End fetch timing, start build timing
       const fetchMs = performance.now() - fetchT0;
       const buildT0 = performance.now();
 
       console.log(`[ChunkLoader DEBUG] Pagination complete: ${blocks.length} total blocks fetched`);
 
-      if (blocks.length === 0 && lastError) {
-        console.error('Error loading chunks from server:', lastError);
-        initLogStep('useChunkLoader.ts', `Supabase error: ${lastError?.message}`);
+      if (fetchFailed) {
+        console.error('[ChunkLoader] All retry attempts failed for server fetch');
+        initLogStep('useChunkLoader.ts', 'All retry attempts failed for server fetch');
+        // Track failed chunks for periodic retry — do NOT store them as loaded
+        for (const { x, z } of chunksToFetchFromServer) {
+          const key = `chunk_${x}_${z}`;
+          const existing = failedChunksRef.current.get(key);
+          failedChunksRef.current.set(key, { x, z, attempts: (existing?.attempts ?? 0) + MAX_RETRY_ATTEMPTS });
+        }
         // Still emit what we have from cache
         if (chunksFromCache.length > 0) {
           scheduleEmit();
@@ -1183,12 +1343,23 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
 
       // Store chunks and prepare cache entries
+      // Clear from failed set since fetch succeeded
+      for (const { x, z } of chunksToFetchFromServer) {
+        failedChunksRef.current.delete(`chunk_${x}_${z}`);
+      }
       const chunksToCache: CachedChunk[] = [];
       let serverBlockCount = 0;
 
       for (const { x, z } of chunksToFetchFromServer) {
         const chunkKey = `chunk_${x}_${z}`;
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
+
+        // If we hit the safety limit and this chunk got zero blocks,
+        // it may have been truncated — queue for individual retry
+        if (hitSafetyLimit && chunkBlocks.length === 0) {
+          failedChunksRef.current.set(chunkKey, { x, z, attempts: 0 });
+          continue;
+        }
 
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
@@ -1198,9 +1369,23 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           console.log(`[ChunkLoader DEBUG] Chunk (3,1) from SERVER: ${chunkBlocks.length} blocks`);
         }
 
-        // Create colliders for all blocks from server
-        for (const block of chunkBlocks) {
-          ensureBlockCollider(block);
+        // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
+        const pChunkS = playerChunkRef.current;
+        const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : 0;
+        if (sDist <= 2 || chunkBlocks.length < 200) {
+          for (const block of chunkBlocks) {
+            ensureBlockCollider(block);
+          }
+        } else if (chunkBlocks.length > 0) {
+          const blocksForColliders = chunkBlocks;
+          let colliderIdx = 0;
+          enqueueJob(`load-colliders:${chunkKey}`, () => {
+            const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
+            for (; colliderIdx < end; colliderIdx++) {
+              ensureBlockCollider(blocksForColliders[colliderIdx]);
+            }
+            return colliderIdx >= blocksForColliders.length;
+          });
         }
         serverBlockCount += chunkBlocks.length;
         
@@ -1216,6 +1401,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         loadedChunksRef.current.set(chunkKey, newChunkData);
         // B4: Update world signature for new chunk from server
         applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
+        // Update height map for pathfinding
+        updateChunkHeightMap(chunkKey, chunkBlocks);
 
         // Prepare cache entry
         chunksToCache.push({
@@ -1603,16 +1790,29 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     }
 
     // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
-    const { data: serverBlocks, error } = await supabase
-      .from('placed_blocks')
-      .select('*')
-      .eq('world_id', worldId)
-      .eq('chunk_x', chunkX)
-      .eq('chunk_z', chunkZ)
-      .limit(20000);
+    let serverBlocks: PlacedBlock[] | null = null;
+    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
+      const { data, error } = await supabase
+        .from('placed_blocks')
+        .select('*')
+        .eq('world_id', worldId)
+        .eq('chunk_x', chunkX)
+        .eq('chunk_z', chunkZ)
+        .limit(20000);
 
-    if (error) {
-      console.error('Error refetching chunk:', error);
+      if (!error) {
+        serverBlocks = data;
+        break;
+      }
+
+      console.error(`Error refetching chunk (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, error);
+      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+        await new Promise(r => setTimeout(r, RETRY_BASE_DELAY_MS * (2 ** attempt)));
+      }
+    }
+
+    if (serverBlocks === null) {
+      console.error(`[ChunkLoader] All retries failed for refetchSingleChunk (${chunkX},${chunkZ})`);
       return;
     }
 
@@ -1685,6 +1885,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     };
     refetchedChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, mergedBlocks);
     loadedChunksRef.current.set(chunkKey, refetchedChunkData);
+    // Update height map for pathfinding
+    updateChunkHeightMap(chunkKey, mergedBlocks);
 
     // Phase 3D: Update cache with server data (only if no optimistic blocks)
     // We skip caching if there are optimistic blocks to avoid caching temp data
@@ -1749,6 +1951,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         // Remove chunk data immediately (so next emit reflects removal)
         loadedChunksRef.current.delete(chunkKey);
+        removeChunkHeightMap(chunkKey);
         removedAny = true;
 
         // Budget only the collider removal (the expensive part)
@@ -1851,6 +2054,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
             })
             .catch(err => {
               console.warn('Stripe chunk load error:', err);
+              // Track failed stripe chunks for retry
+              for (const { x, z } of stripeChunks) {
+                const key = `chunk_${x}_${z}`;
+                if (!loadedChunksRef.current.has(key)) {
+                  failedChunksRef.current.set(key, { x, z, attempts: 1 });
+                }
+              }
               // Still unload on error to prevent unbounded memory growth
               if (transitionIdRef.current !== transitionId) return;
               const currentChunk = playerChunkRef.current;
@@ -1900,8 +2110,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
     }
     if (colliderStepId) initLogFinishStep(colliderStepId, removedColliders);
-    
+
     loadedChunksRef.current.clear();
+    clearAllHeightMaps();
     // B4: Reset world signature when clearing chunks for new world
     worldSigRef.current = { count: 0, xor: 0, sum: 0 };
     lastEmittedWorldKeyRef.current = '';
@@ -1988,8 +2199,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // CRITICAL FIX: Clear the canonical collider cache to prevent memory leaks
     // This ensures old colliders don't accumulate across world switches
     colliderByBlockId.clear();
-    
+
     loadedChunksRef.current.clear();
+    clearAllHeightMaps();
     playerChunkRef.current = null;
     initialLoadDone.current = false;
     emitScheduledRef.current = false; // Cancel any pending emit
@@ -1997,6 +2209,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // B4: Reset world signature when clearing all chunks
     worldSigRef.current = { count: 0, xor: 0, sum: 0 };
     lastEmittedWorldKeyRef.current = '';
+
+    // Clear failed chunks tracker
+    failedChunksRef.current.clear();
 
     // Phase 3E: Reset prefetch state
     resetPrefetchState();
@@ -2007,6 +2222,47 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
   // World change handling is now done via initializeForWorld which clears chunks internally
   // Removed separate effect to prevent race conditions with initialization
+
+  // Periodic retry for failed chunks — ensures transient failures don't leave permanent holes
+  useEffect(() => {
+    if (!worldId) return;
+
+    const intervalId = setInterval(() => {
+      const failed = failedChunksRef.current;
+      if (failed.size === 0) return;
+
+      // Collect chunks to retry (copy keys to avoid mutation during iteration)
+      const toRetry: Array<{ x: number; z: number }> = [];
+      for (const [key, info] of failed) {
+        // Skip chunks that are now loaded (e.g., by movement stripe loading)
+        if (loadedChunksRef.current.has(key)) {
+          failed.delete(key);
+          continue;
+        }
+        toRetry.push({ x: info.x, z: info.z });
+      }
+
+      if (toRetry.length > 0) {
+        console.log(`[ChunkLoader] Retrying ${toRetry.length} failed chunks...`);
+        // Clear from failed set — loadSpecificChunks will re-add if they fail again
+        for (const { x, z } of toRetry) {
+          failed.delete(`chunk_${x}_${z}`);
+        }
+        loadSpecificChunks(toRetry).catch(err => {
+          console.warn('[ChunkLoader] Failed chunk retry error:', err);
+          // Re-add chunks that weren't loaded so they can be retried next cycle
+          for (const { x, z } of toRetry) {
+            const key = `chunk_${x}_${z}`;
+            if (!loadedChunksRef.current.has(key) && !failedChunksRef.current.has(key)) {
+              failedChunksRef.current.set(key, { x, z, attempts: MAX_RETRY_ATTEMPTS });
+            }
+          }
+        });
+      }
+    }, FAILED_CHUNK_RETRY_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [worldId, loadSpecificChunks]);
 
   // If the collision grid is cleared (debug key, hot reload, etc.), reinsert colliders
   // for all currently loaded blocks so collisions don't "turn off".

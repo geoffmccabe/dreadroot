@@ -77,7 +77,7 @@ export function useFortressShooting({
     // Get tier definition for velocity and color
     const definition = getDefinitionRef.current(selectedBulletTier);
     bullet.speed = definition.velocity;
-    bullet.life = 3;
+    bullet.life = 180;
     bullet.tier = selectedBulletTier;
     bullet.color = (definition.colors && definition.colors[0]) || '#ffaa00';
     bullet.ricochetScale = 1.0;

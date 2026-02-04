@@ -516,12 +516,12 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Spawn Rate: {currentDef.spawn_chance_per_minute.toFixed(1)}/min</Label>
+                  <Label>Spawn Rate: {currentDef.spawn_chance_per_minute.toFixed(2)}/min</Label>
                   <Slider
                     value={[currentDef.spawn_chance_per_minute]}
-                    min={0.1}
+                    min={0.01}
                     max={5}
-                    step={0.1}
+                    step={0.01}
                     onValueChange={([v]) => updateDef('spawn_chance_per_minute', v)}
                   />
                 </div>

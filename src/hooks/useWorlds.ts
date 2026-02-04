@@ -9,6 +9,7 @@ export interface World {
   sky_texture_url: string | null;
   ambient_music_url: string | null;
   ambient_music_volume: number;
+  view_settings: Record<string, unknown> | null;
   is_default: boolean;
   created_at: string;
   updated_at: string;
@@ -130,7 +131,7 @@ export function useWorlds() {
 
   const updateWorld = useCallback(async (
     worldId: string,
-    updates: Partial<Pick<World, 'name' | 'fortress_texture_url' | 'ground_texture_url' | 'sky_texture_url' | 'ambient_music_url' | 'ambient_music_volume'>>
+    updates: Partial<Pick<World, 'name' | 'fortress_texture_url' | 'ground_texture_url' | 'sky_texture_url' | 'ambient_music_url' | 'ambient_music_volume' | 'view_settings'>>
   ): Promise<void> => {
     try {
       const { error } = await supabase

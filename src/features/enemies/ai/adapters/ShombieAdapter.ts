@@ -156,7 +156,7 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     }
 
     // Skip movement during emergence (first 3 seconds)
-    const timeSinceSpawn = performance.now() - shombie.spawnedAt;
+    const timeSinceSpawn = Date.now() - shombie.spawnedAt;
     const isEmerging = timeSinceSpawn < 3000;
 
     if (result.kind === 'move' && !isEmerging) {

@@ -248,61 +248,17 @@ export function useEnemyAI({
     }
   }, [shombiesRef]);
 
-  // Stable sync function for walapas
+  // Walapas use their own dedicated state machine (useWalapaSystem.updateMovement)
+  // for tree-to-tree flying behavior — not registered with AI system.
   const syncWalapas = useCallback(() => {
-    if (!walapasRef?.current) return;
-    const walapas = walapasRef.current;
-    const tempIds = tempWalapaIdsRef.current;
-    tempIds.clear();
+    // No-op: walapas are not AI-controlled
+  }, []);
 
-    for (const w of walapas) {
-      tempIds.add(w.id);
-    }
-
-    const registered = registeredWalapasRef.current;
-
-    for (const walapa of walapas) {
-      if (!registered.has(walapa.id) && walapa.isActive) {
-        EnemyManager.register(walapa as WalapaWithAI, WalapaAdapter);
-        registered.add(walapa.id);
-      }
-    }
-
-    for (const id of registered) {
-      if (!tempIds.has(id)) {
-        EnemyManager.unregister(id);
-        registered.delete(id);
-      }
-    }
-  }, [walapasRef]);
-
-  // Stable sync function for shtickmen
+  // Shtickmen use their own dedicated tree-patrol state machine (useShtickmanSystem.updateMovement)
+  // — not registered with AI system.
   const syncShtickmen = useCallback(() => {
-    if (!shtickmenRef?.current) return;
-    const shtickmen = shtickmenRef.current;
-    const tempIds = tempShtickmanIdsRef.current;
-    tempIds.clear();
-
-    for (const s of shtickmen) {
-      tempIds.add(s.id);
-    }
-
-    const registered = registeredShtickmenRef.current;
-
-    for (const shtickman of shtickmen) {
-      if (!registered.has(shtickman.id) && shtickman.isActive) {
-        EnemyManager.register(shtickman as ShtickmanWithAI, ShtickmanAdapter);
-        registered.add(shtickman.id);
-      }
-    }
-
-    for (const id of registered) {
-      if (!tempIds.has(id)) {
-        EnemyManager.unregister(id);
-        registered.delete(id);
-      }
-    }
-  }, [shtickmenRef]);
+    // No-op: shtickmen are not AI-controlled
+  }, []);
 
   // Initialize EnemyManager on mount
   useEffect(() => {

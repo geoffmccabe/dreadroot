@@ -14,6 +14,7 @@ import {
   WALAPA_SCALE_VARIATION,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 
 // Spawn check interval in ms
 const SPAWN_CHECK_INTERVAL_MS = 10000;
@@ -304,7 +305,18 @@ export function useWalapaSystem({
   }, [findClosestTree]);
 
   /**
-   * Spawn a walapa of a given tier near player
+   * Check if a position has collider interference using the world collision grid.
+   * Tests a bounding box roughly walapa-sized at the given position.
+   */
+  const hasColliderAt = useCallback((x: number, y: number, z: number, halfSize: number = 5): boolean => {
+    const count = worldCollisionGrid.getNearbyFiltered(x, z, halfSize, y - 2, y + 4);
+    return count > 0;
+  }, []);
+
+  /**
+   * Spawn a walapa of a given tier near player.
+   * Appears 6 blocks in front and 6 blocks above the player.
+   * If colliders are in the way, searches upward until clear.
    */
   const spawnWalapa = useCallback((tier: number): WalapaInstance | null => {
     console.log(`[Walapa] spawnWalapa called for tier ${tier}, current count: ${walapasRef.current.length}`);
@@ -321,24 +333,29 @@ export function useWalapaSystem({
       return null;
     }
 
-    // Spawn in front of player with some random offset to avoid stacking
+    // 6 blocks in front of player (horizontal only)
     const forward = new THREE.Vector3(0, 0, -1);
     forward.applyQuaternion(camera.quaternion);
     forward.y = 0;
     forward.normalize();
 
-    // Add random offset so multiple spawns don't stack
-    const randomOffset = (Math.random() - 0.5) * 10;
+    const spawnX = camera.position.x + forward.x * 6;
+    const spawnZ = camera.position.z + forward.z * 6;
+    let spawnY = camera.position.y + 6; // 6 blocks above
 
-    const spawnPos = new THREE.Vector3(
-      camera.position.x + forward.x * 15 + randomOffset,
-      camera.position.y + 10, // Spawn above
-      camera.position.z + forward.z * 15 + randomOffset
-    );
+    // Search upward if colliders are in the way (up to 500 blocks)
+    const MAX_SEARCH_HEIGHT = 500;
+    let searchY = spawnY;
+    while (hasColliderAt(spawnX, searchY, spawnZ) && searchY < spawnY + MAX_SEARCH_HEIGHT) {
+      searchY += 2; // Step up 2 blocks at a time
+    }
+    spawnY = searchY;
+
+    const spawnPos = new THREE.Vector3(spawnX, spawnY, spawnZ);
 
     console.log(`[Walapa] Spawning at position: (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)})`);
     return spawnWalapaAt(definition, spawnPos);
-  }, [cameraRef, getDefinitionByTier, spawnWalapaAt, definitions]);
+  }, [cameraRef, getDefinitionByTier, spawnWalapaAt, definitions, hasColliderAt]);
 
   /**
    * Damage a walapa

@@ -32,6 +32,8 @@ export interface SeedDefinition {
   shroom_chance: number;
   shroom_length: number;
   shroom_cap_diameter: number;
+  // Shrine decoration (rare, for Fruit Forging)
+  shrine_chance: number;
   // Symmetry mode
   symmetry: SymmetryMode;
   // Tree type: original (standard), wide (future), fungal (giant mushrooms)
@@ -48,6 +50,16 @@ export interface SeedDefinition {
   fungal_stem_random: number | null;
   fungal_lean_angle: number | null;
   fungal_s_curve: boolean | null;
+  // Wide tree generation settings (only used when tree_type === 'wide')
+  wide_min_height: number | null;
+  wide_max_height: number | null;
+  wide_lean_angle: number | null;
+  wide_s_curve: boolean | null;
+  wide_stem_random: number | null;
+  wide_base_trunk_radius: number | null;
+  wide_gradient_color_base: string | null;
+  wide_gradient_color_tip: string | null;
+  wide_glow_color: string | null;
   // Whether this seed appears in the [ ] bracket key cycling menu
   in_bracket_menu: boolean;
 }
@@ -95,12 +107,22 @@ export interface TreeFruit {
   is_falling: boolean;
   is_collectible: boolean;
   velocity_y: number;
+  fruit_code?: string; // Extensible fruit type code (#FR1, #FR2, etc.), defaults to 'FR1'
+  created_at: string;
+}
+
+// A harvested fruit owned by a player (stored in user_fruits table)
+export interface UserFruit {
+  id: string;
+  user_id: string;
+  fruit_code: string; // e.g. 'FR1'
+  tier: number;
   created_at: string;
 }
 
 // Block types for decorations - allows future unique textures per type
 // 'invisiblock' = invisible collision block for walkways around decorations
-export type TreeBlockType = 'trunk' | 'branch' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fungal_stem' | 'fungal_cap_top' | 'fungal_cap_underside' | 'fruit' | 'invisiblock';
+export type TreeBlockType = 'trunk' | 'branch' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fungal_stem' | 'fungal_cap_top' | 'fungal_cap_underside' | 'glow_bark' | 'fruit' | 'invisiblock' | 'shrine';
 
 // Blueprint types for generation algorithm
 export interface BlueprintBlock {
@@ -146,5 +168,6 @@ export interface TreeGrowthOptions {
   shroomChance?: number;
   shroomLength?: number;
   shroomCapDiameter?: number;
+  shrineChance?: number;
   symmetry?: SymmetryMode;
 }

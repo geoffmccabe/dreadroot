@@ -18,6 +18,7 @@ import { rotateTexture } from '@/lib/textureRotation';
 import { SeedDefinition, SymmetryMode, TreeType } from '../types';
 import { RARITY_COLORS, TREE_CONFIG } from '../constants';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
+import { WIDE_TIER_DEFAULTS } from '../lib/wideTreeConstants';
 import { PlantedTreesPanel } from './PlantedTreesPanel';
 
 const SYMMETRY_OPTIONS: { value: SymmetryMode; label: string; description: string }[] = [
@@ -54,7 +55,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
   const currentSeed = seedDefinitions.find(s => s.tier === selectedTier);
 
   // Max tiers per tree type
-  const maxTiers = treeType === 'fungal' ? 10 : 30;
+  const maxTiers = treeType === 'original' ? 30 : 10;
 
   // Fetch seed definitions filtered by tree type
   useEffect(() => {
@@ -64,10 +65,10 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
   const fetchSeedDefinitions = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('seed_definitions')
+      const { data, error } = await (supabase
+        .from('seed_definitions' as any)
         .select('*')
-        .order('tier', { ascending: true });
+        .order('tier', { ascending: true }) as any);
 
       if (error) throw error;
 
@@ -107,6 +108,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
             shroom_chance: 0,
             shroom_length: 5,
             shroom_cap_diameter: 3,
+            shrine_chance: 0.0001,  // 0.01% default - very rare
             symmetry: 'none',
             tree_type: treeType,
             fungal_stem_texture_url: null,
@@ -119,6 +121,15 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
             fungal_stem_random: 0,
             fungal_lean_angle: 0,
             fungal_s_curve: false,
+            wide_min_height: null,
+            wide_max_height: null,
+            wide_lean_angle: null,
+            wide_s_curve: null,
+            wide_stem_random: null,
+            wide_base_trunk_radius: null,
+            wide_gradient_color_base: null,
+            wide_gradient_color_tip: null,
+            wide_glow_color: '#88ffaa',
             in_bracket_menu: false,
           });
         }
@@ -177,6 +188,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
         shroom_chance: currentSeed.shroom_chance,
         shroom_length: currentSeed.shroom_length,
         shroom_cap_diameter: currentSeed.shroom_cap_diameter,
+        shrine_chance: currentSeed.shrine_chance ?? 0.0001,
         symmetry: currentSeed.symmetry || 'none',
         tree_type: treeType,
         fungal_stem_texture_url: currentSeed.fungal_stem_texture_url,
@@ -189,23 +201,32 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
         fungal_stem_random: currentSeed.fungal_stem_random,
         fungal_lean_angle: currentSeed.fungal_lean_angle,
         fungal_s_curve: currentSeed.fungal_s_curve,
+        wide_min_height: currentSeed.wide_min_height,
+        wide_max_height: currentSeed.wide_max_height,
+        wide_lean_angle: currentSeed.wide_lean_angle,
+        wide_s_curve: currentSeed.wide_s_curve,
+        wide_stem_random: currentSeed.wide_stem_random,
+        wide_base_trunk_radius: currentSeed.wide_base_trunk_radius,
+        wide_gradient_color_base: currentSeed.wide_gradient_color_base,
+        wide_gradient_color_tip: currentSeed.wide_gradient_color_tip,
+        wide_glow_color: currentSeed.wide_glow_color,
         in_bracket_menu: currentSeed.in_bracket_menu ?? false,
       };
 
       let result;
       if (isNew) {
-        const { data, error } = await supabase
-          .from('seed_definitions')
+        const { data, error } = await (supabase
+          .from('seed_definitions' as any)
           .insert(seedData)
           .select()
-          .single();
+          .single() as any);
         if (error) throw error;
         result = data;
       } else {
-        const { error } = await supabase
-          .from('seed_definitions')
+        const { error } = await (supabase
+          .from('seed_definitions' as any)
           .update(seedData)
-          .eq('id', currentSeed.id);
+          .eq('id', currentSeed.id) as any);
         if (error) throw error;
       }
 
@@ -383,8 +404,8 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
     }
   };
 
-  // Calculate preview stats (only for original trees, not fungal)
-  const previewStats = currentSeed && treeType !== 'fungal' ? {
+  // Calculate preview stats (only for original trees)
+  const previewStats = currentSeed && treeType === 'original' ? {
     maxHeight: currentSeed.tier * TREE_CONFIG.BLOCKS_PER_TIER_HEIGHT,
     maxBranchLength: Math.floor(currentSeed.tier * TREE_CONFIG.BLOCKS_PER_TIER_HEIGHT * currentSeed.width_factor),
     growthTime: Math.round((TREE_CONFIG.BASE_GROWTH_INTERVAL / currentSeed.growth_factor) / 1000),
@@ -406,6 +427,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
             shroomChance: currentSeed.shroom_chance ?? 0,
             shroomLength: currentSeed.shroom_length ?? 5,
             shroomCapDiameter: currentSeed.shroom_cap_diameter ?? 3,
+            shrineChance: currentSeed.shrine_chance ?? 0.0001,
             symmetry: currentSeed.symmetry ?? 'none',
           }
         );
@@ -554,7 +576,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
                     </Select>
                   </div>
 
-                  {/* Symmetry (only for original trees) */}
+                  {/* Symmetry (for original and wide trees) */}
                   {treeType !== 'fungal' && (
                     <div className="space-y-1">
                       <Label className="text-xs">Symmetry</Label>
@@ -593,9 +615,10 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
                   {/* Textures - Different based on tree type */}
                   <div className="space-y-3 pt-2">
                     <Label className="text-xs font-semibold">
-                      {treeType === 'fungal' ? 'Fungal Textures' : 'Textures'}
+                      {treeType === 'fungal' ? 'Fungal Textures' : treeType === 'wide' ? 'Wide Tree Textures' : 'Textures'}
                     </Label>
 
+                    {/* Wide trees use trunk/branch/fruit textures (same as original) */}
                     {treeType === 'fungal' ? (
                       <>
                         {/* Fungal Stem Texture */}
@@ -808,9 +831,333 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
                   </div>
                 </div>
 
-                {/* Right - Sliders (different for fungal vs original) */}
+                {/* Right - Sliders (different per tree type) */}
                 <div className="space-y-5">
-                  {treeType === 'fungal' ? (
+                  {treeType === 'wide' ? (
+                    <>
+                      {/* Wide Tree Settings */}
+                      <h4 className="font-semibold text-xs">Size Settings</h4>
+
+                      {/* Min Height */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <Label className="text-xs">Min Height</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {currentSeed.wide_min_height ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.minHeight ?? 30}
+                          </span>
+                        </div>
+                        <Slider
+                          value={[currentSeed.wide_min_height ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.minHeight ?? 30]}
+                          onValueChange={([v]) => updateSeed('wide_min_height', v)}
+                          min={10}
+                          max={100}
+                          step={5}
+                        />
+                      </div>
+
+                      {/* Max Height */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <Label className="text-xs">Max Height</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {currentSeed.wide_max_height ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.maxHeight ?? 100}
+                          </span>
+                        </div>
+                        <Slider
+                          value={[currentSeed.wide_max_height ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.maxHeight ?? 100]}
+                          onValueChange={([v]) => updateSeed('wide_max_height', v)}
+                          min={20}
+                          max={200}
+                          step={5}
+                        />
+                      </div>
+
+                      <div className="pt-4 border-t space-y-4">
+                        <h4 className="font-semibold text-xs">Shape Settings</h4>
+
+                        {/* Stem Random */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Stem Random</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {currentSeed.wide_stem_random ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.stemRandom ?? 0}
+                            </span>
+                          </div>
+                          <Slider
+                            value={[currentSeed.wide_stem_random ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.stemRandom ?? 0]}
+                            onValueChange={([v]) => updateSeed('wide_stem_random', v)}
+                            min={0}
+                            max={3}
+                            step={1}
+                          />
+                        </div>
+
+                        {/* Lean Angle */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Lean Angle</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {currentSeed.wide_lean_angle ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.leanAngle ?? 0}°
+                            </span>
+                          </div>
+                          <Slider
+                            value={[currentSeed.wide_lean_angle ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.leanAngle ?? 0]}
+                            onValueChange={([v]) => updateSeed('wide_lean_angle', v)}
+                            min={0}
+                            max={30}
+                            step={1}
+                          />
+                        </div>
+
+                        {/* Trunk Radius Override */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Trunk Radius Override</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {currentSeed.wide_base_trunk_radius ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.radius ?? currentSeed.tier}
+                            </span>
+                          </div>
+                          <Slider
+                            value={[currentSeed.wide_base_trunk_radius ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.radius ?? currentSeed.tier]}
+                            onValueChange={([v]) => updateSeed('wide_base_trunk_radius', v)}
+                            min={1}
+                            max={15}
+                            step={1}
+                          />
+                        </div>
+
+                        {/* S-Curve */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-xs">S-Curve</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Trunk bends mid-height then straightens
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={currentSeed.wide_s_curve ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.sCurve ?? false}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                              (currentSeed.wide_s_curve ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.sCurve) ? 'bg-primary' : 'bg-muted-foreground/30'
+                            }`}
+                            onClick={() => updateSeed('wide_s_curve', !(currentSeed.wide_s_curve ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.sCurve ?? false))}
+                          >
+                            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                              (currentSeed.wide_s_curve ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.sCurve) ? 'translate-x-4' : 'translate-x-0'
+                            }`} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Glow & Gradient Colors */}
+                      <div className="pt-4 border-t space-y-4">
+                        <h4 className="font-semibold text-xs">Colors</h4>
+
+                        {/* Glow Color */}
+                        <div className="space-y-2">
+                          <Label className="text-xs">Glow Bark Color</Label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={currentSeed.wide_glow_color ?? '#88ffaa'}
+                              onChange={(e) => updateSeed('wide_glow_color', e.target.value)}
+                              className="w-8 h-8 rounded cursor-pointer border"
+                            />
+                            <span className="text-xs text-muted-foreground">{currentSeed.wide_glow_color ?? '#88ffaa'}</span>
+                          </div>
+                        </div>
+
+                        {/* Gradient Base Color */}
+                        <div className="space-y-2">
+                          <Label className="text-xs">Gradient Base Color</Label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={currentSeed.wide_gradient_color_base ?? '#8B4513'}
+                              onChange={(e) => updateSeed('wide_gradient_color_base', e.target.value)}
+                              className="w-8 h-8 rounded cursor-pointer border"
+                            />
+                            <span className="text-xs text-muted-foreground">{currentSeed.wide_gradient_color_base ?? 'not set'}</span>
+                            {currentSeed.wide_gradient_color_base && (
+                              <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => updateSeed('wide_gradient_color_base', null)}>Clear</Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Gradient Tip Color */}
+                        <div className="space-y-2">
+                          <Label className="text-xs">Gradient Tip Color</Label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={currentSeed.wide_gradient_color_tip ?? '#228B22'}
+                              onChange={(e) => updateSeed('wide_gradient_color_tip', e.target.value)}
+                              className="w-8 h-8 rounded cursor-pointer border"
+                            />
+                            <span className="text-xs text-muted-foreground">{currentSeed.wide_gradient_color_tip ?? 'not set'}</span>
+                            {currentSeed.wide_gradient_color_tip && (
+                              <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => updateSeed('wide_gradient_color_tip', null)}>Clear</Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Growth + Decoration Factors (shared with original) */}
+                      <div className="pt-4 border-t space-y-4">
+                        <h4 className="font-semibold text-xs">Growth & Branch Settings</h4>
+
+                        {/* Width Factor */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Width Factor</Label>
+                            <span className="text-xs text-muted-foreground">{currentSeed.width_factor.toFixed(1)}</span>
+                          </div>
+                          <Slider value={[currentSeed.width_factor]} onValueChange={([v]) => updateSeed('width_factor', v)} min={0.1} max={1} step={0.1} />
+                        </div>
+
+                        {/* Branching Factor */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Branching Factor</Label>
+                            <span className="text-xs text-muted-foreground">{currentSeed.branching_factor.toFixed(1)}</span>
+                          </div>
+                          <Slider value={[currentSeed.branching_factor]} onValueChange={([v]) => updateSeed('branching_factor', v)} min={0.1} max={1} step={0.1} />
+                        </div>
+
+                        {/* Fruiting Factor */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Fruiting Factor</Label>
+                            <span className="text-xs text-muted-foreground">{currentSeed.fruiting_factor.toFixed(1)}</span>
+                          </div>
+                          <Slider value={[currentSeed.fruiting_factor]} onValueChange={([v]) => updateSeed('fruiting_factor', v)} min={0.1} max={1} step={0.1} />
+                        </div>
+
+                        {/* Growth Factor */}
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Growth Factor</Label>
+                            <span className="text-xs text-muted-foreground">{currentSeed.growth_factor.toFixed(1)}</span>
+                          </div>
+                          <Slider value={[currentSeed.growth_factor]} onValueChange={([v]) => updateSeed('growth_factor', v)} min={0.1} max={1} step={0.1} />
+                        </div>
+                      </div>
+
+                      {/* Decoration Factors */}
+                      <div className="pt-4 border-t space-y-4">
+                        <h4 className="font-semibold text-xs">Decoration Factors</h4>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <Label className="text-xs">Low Branch Height</Label>
+                            <span className="text-xs text-muted-foreground">{currentSeed.low_branch_height ?? 2} blocks</span>
+                          </div>
+                          <Slider value={[currentSeed.low_branch_height ?? 2]} onValueChange={([v]) => updateSeed('low_branch_height', v)} min={1} max={50} step={1} />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Spikes</Label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <span className="text-xs text-muted-foreground">Chance: {((currentSeed.spike_chance ?? 0) * 100).toFixed(0)}%</span>
+                              <Slider value={[currentSeed.spike_chance ?? 0]} onValueChange={([v]) => updateSeed('spike_chance', v)} min={0} max={0.30} step={0.01} />
+                            </div>
+                            <div>
+                              <span className="text-xs text-muted-foreground">Length: {currentSeed.spike_length ?? 3}</span>
+                              <Slider value={[currentSeed.spike_length ?? 3]} onValueChange={([v]) => updateSeed('spike_length', v)} min={1} max={10} step={1} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Nobs</Label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <span className="text-xs text-muted-foreground">Chance: {((currentSeed.nob_chance ?? 0) * 100).toFixed(1)}%</span>
+                              <Slider value={[currentSeed.nob_chance ?? 0]} onValueChange={([v]) => updateSeed('nob_chance', v)} min={0} max={0.30} step={0.001} />
+                            </div>
+                            <div>
+                              <span className="text-xs text-muted-foreground">Size: {currentSeed.nob_size ?? 1}x{currentSeed.nob_size ?? 1}</span>
+                              <Slider value={[currentSeed.nob_size ?? 1]} onValueChange={([v]) => updateSeed('nob_size', v)} min={1} max={4} step={1} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Crosses</Label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <span className="text-xs text-muted-foreground">Chance: {((currentSeed.cross_chance ?? 0) * 100).toFixed(0)}%</span>
+                              <Slider value={[currentSeed.cross_chance ?? 0]} onValueChange={([v]) => updateSeed('cross_chance', v)} min={0} max={0.10} step={0.01} />
+                            </div>
+                            <div>
+                              <span className="text-xs text-muted-foreground">Length: {currentSeed.cross_length ?? 3}</span>
+                              <Slider value={[currentSeed.cross_length ?? 3]} onValueChange={([v]) => updateSeed('cross_length', v)} min={1} max={10} step={1} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Shrooms</Label>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <span className="text-xs text-muted-foreground">Chance: {((currentSeed.shroom_chance ?? 0) * 100).toFixed(1)}%</span>
+                              <Slider value={[currentSeed.shroom_chance ?? 0]} onValueChange={([v]) => updateSeed('shroom_chance', v)} min={0} max={0.10} step={0.001} />
+                            </div>
+                            <div>
+                              <span className="text-xs text-muted-foreground">Length: {currentSeed.shroom_length ?? 5}</span>
+                              <Slider value={[currentSeed.shroom_length ?? 5]} onValueChange={([v]) => updateSeed('shroom_length', v)} min={3} max={20} step={1} />
+                            </div>
+                            <div>
+                              <span className="text-xs text-muted-foreground">Cap: {currentSeed.shroom_cap_diameter ?? 3}</span>
+                              <Slider value={[currentSeed.shroom_cap_diameter ?? 3]} onValueChange={([v]) => updateSeed('shroom_cap_diameter', v)} min={3} max={10} step={1} />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Shrines (for Fruit Forging)</Label>
+                          <div>
+                            <span className="text-xs text-muted-foreground">Chance: {((currentSeed.shrine_chance ?? 0.0001) * 100).toFixed(2)}%</span>
+                            <Slider value={[currentSeed.shrine_chance ?? 0.0001]} onValueChange={([v]) => updateSeed('shrine_chance', v)} min={0.0001} max={0.01} step={0.0001} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Wide Tree Stats */}
+                      <div className="mt-4 p-3 bg-muted rounded-lg space-y-3">
+                        <h4 className="font-semibold text-xs mb-2">Wide Tree Stats (Tier {currentSeed.tier})</h4>
+                        <div className="space-y-2 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Trunk Diameter:</span>
+                            <span className="font-medium">{(currentSeed.wide_base_trunk_radius ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.radius ?? currentSeed.tier) * 2 + 1} blocks</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Height Range:</span>
+                            <span className="font-medium">
+                              {currentSeed.wide_min_height ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.minHeight ?? 30} - {currentSeed.wide_max_height ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.maxHeight ?? 100}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Hollow Interior:</span>
+                            <span className="font-medium">{currentSeed.tier >= 3 ? 'Yes (staircase + door)' : 'No (solid trunk)'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Lean:</span>
+                            <span className="font-medium">{currentSeed.wide_lean_angle ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.leanAngle ?? 0}°</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">S-Curve:</span>
+                            <span className="font-medium">{(currentSeed.wide_s_curve ?? WIDE_TIER_DEFAULTS[Math.min(currentSeed.tier, 10)]?.sCurve) ? 'Yes' : 'No'}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+                          Wide trees have thick tapering trunks with branches, decorations, and phosphorescent glow bark.
+                        </p>
+                      </div>
+                    </>
+                  ) : treeType === 'fungal' ? (
                     <>
                       {/* Fungal Tree Settings */}
                       <h4 className="font-semibold text-xs">Size Settings</h4>
@@ -1150,6 +1497,14 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
                               <span className="text-xs text-muted-foreground">Cap: {currentSeed.shroom_cap_diameter ?? 3}</span>
                               <Slider value={[currentSeed.shroom_cap_diameter ?? 3]} onValueChange={([v]) => updateSeed('shroom_cap_diameter', v)} min={3} max={10} step={1} />
                             </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Shrines (for Fruit Forging)</Label>
+                          <div>
+                            <span className="text-xs text-muted-foreground">Chance: {((currentSeed.shrine_chance ?? 0.0001) * 100).toFixed(2)}%</span>
+                            <Slider value={[currentSeed.shrine_chance ?? 0.0001]} onValueChange={([v]) => updateSeed('shrine_chance', v)} min={0.0001} max={0.01} step={0.0001} />
                           </div>
                         </div>
                       </div>

@@ -80,10 +80,12 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
     const collidersRef = useRef<Map<string, WalapaCollider[]>>(new Map());
     const prevWalapaIdsRef = useRef<Set<string>>(new Set());
 
-    // Create atlas materials
+    // Create atlas materials — only use atlas if walapa textures exist in it,
+    // otherwise fall back to plain Lambert that works with tier fallback colors
     const bodyMaterial = useMemo(() => {
       const atlasTexture = getGlobalAtlasTexture();
-      if (!atlasTexture || !isAtlasReady()) {
+      const hasWalapaUvs = getWalapaUVs(1, 'body') !== null;
+      if (!atlasTexture || !isAtlasReady() || !hasWalapaUvs) {
         const mat = new THREE.MeshLambertMaterial({
           color: 0xffffff,
           side: THREE.FrontSide,
@@ -99,7 +101,8 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
 
     const bellyMaterial = useMemo(() => {
       const atlasTexture = getGlobalAtlasTexture();
-      if (!atlasTexture || !isAtlasReady()) {
+      const hasWalapaUvs = getWalapaUVs(1, 'belly') !== null;
+      if (!atlasTexture || !isAtlasReady() || !hasWalapaUvs) {
         const mat = new THREE.MeshLambertMaterial({
           color: 0xffffff,
           side: THREE.FrontSide,
@@ -115,7 +118,8 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
 
     const eyesMaterial = useMemo(() => {
       const atlasTexture = getGlobalAtlasTexture();
-      if (!atlasTexture || !isAtlasReady()) {
+      const hasWalapaUvs = getWalapaUVs(1, 'eyes') !== null;
+      if (!atlasTexture || !isAtlasReady() || !hasWalapaUvs) {
         const mat = new THREE.MeshLambertMaterial({
           color: 0x111111,
           side: THREE.FrontSide,
@@ -129,12 +133,17 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
       return mat;
     }, []);
 
-    // Update materials when atlas becomes ready
+    // Update materials when atlas becomes ready AND walapa textures exist in atlas
     useEffect(() => {
       const checkAtlas = () => {
         if (isAtlasReady()) {
           const atlasTexture = getGlobalAtlasTexture();
           if (!atlasTexture) return;
+
+          // Only swap to atlas material if at least one walapa tier has UVs
+          // Otherwise the atlas material would sample slot 0 (black) for unset UVs
+          const anyWalapaUvs = getWalapaUVs(1, 'body') !== null;
+          if (!anyWalapaUvs) return;
 
           if (bodyMeshRef.current && bodyMaterialRef.current && !bodyMaterialRef.current.map) {
             const newMat = createAtlasLambertMaterial(atlasTexture);

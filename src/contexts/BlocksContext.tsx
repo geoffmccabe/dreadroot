@@ -101,15 +101,17 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     const ref = blocksHook.loadedChunksRef?.current;
     if (!ref || ref.size === 0) return [] as PlacedBlock[];
 
-    // Use visibleBlocks when available to reduce array size
+    // Use visibleBlocks when available (and non-empty) to reduce array size
+    // NOTE: Must check length - empty array [] is not caught by ??
     let total = 0;
     for (const chunkData of ref.values()) {
-      total += (chunkData.visibleBlocks ?? chunkData.blocks).length;
+      const src = chunkData.visibleBlocks?.length ? chunkData.visibleBlocks : chunkData.blocks;
+      total += src.length;
     }
     const allBlocks: PlacedBlock[] = new Array(total);
     let idx = 0;
     for (const chunkData of ref.values()) {
-      const src = chunkData.visibleBlocks ?? chunkData.blocks;
+      const src = chunkData.visibleBlocks?.length ? chunkData.visibleBlocks : chunkData.blocks;
       for (let i = 0; i < src.length; i++) {
         allBlocks[idx++] = src[i];
       }

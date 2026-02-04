@@ -264,6 +264,10 @@ function drawImageToSlot(
   const P = ATLAS_PADDING;
   const inner = ATLAS_SLOT_SIZE - 2 * P; // 248
 
+  // Pre-fill slot with placeholder color so transparent PNG areas don't show as black
+  ctx.fillStyle = '#C9B8A3';
+  ctx.fillRect(pos.x, pos.y, ATLAS_SLOT_SIZE, ATLAS_SLOT_SIZE);
+
   // Center crop to square
   const srcSize = Math.min(srcWidth, srcHeight);
   const srcX = (srcWidth - srcSize) / 2;
@@ -303,6 +307,10 @@ function drawAnimationStripToSlots(
     const pos = getSlotPixelPosition(startSlotIndex + i);
     const srcX = i * frameWidth;
     const srcY = 0;
+
+    // Pre-fill slot so transparent areas don't show as black
+    ctx.fillStyle = '#C9B8A3';
+    ctx.fillRect(pos.x, pos.y, ATLAS_SLOT_SIZE, ATLAS_SLOT_SIZE);
 
     // Center crop each frame
     const srcSize = Math.min(frameWidth, frameHeight);
@@ -588,6 +596,9 @@ class AtlasManagerClass {
       // Pre-loaded GIF frames — draw each to consecutive slots
       for (let f = 0; f < preloadedGif.frames.length; f++) {
         const pos = getSlotPixelPosition(slotIndex + f);
+        // Pre-fill so transparent areas don't show as black
+        this.ctx.fillStyle = '#C9B8A3';
+        this.ctx.fillRect(pos.x, pos.y, ATLAS_SLOT_SIZE, ATLAS_SLOT_SIZE);
         this.ctx.drawImage(preloadedGif.frames[f], pos.x, pos.y);
       }
       if (preloadedGif.frames.length > 1) {
@@ -603,6 +614,9 @@ class AtlasManagerClass {
         if (gifData && gifData.frames.length > 0) {
           for (let f = 0; f < gifData.frames.length; f++) {
             const pos = getSlotPixelPosition(slotIndex + f);
+            // Pre-fill so transparent areas don't show as black
+            this.ctx!.fillStyle = '#C9B8A3';
+            this.ctx!.fillRect(pos.x, pos.y, ATLAS_SLOT_SIZE, ATLAS_SLOT_SIZE);
             this.ctx.drawImage(gifData.frames[f], pos.x, pos.y);
           }
           if (gifData.frames.length > 1) {
@@ -860,6 +874,18 @@ class AtlasManagerClass {
       }
     }
 
+    // Log how many textures were skipped (cache hit) vs need redrawing
+    const totalSpecs = specs.length;
+    const skipped = totalSpecs - toProcess.length;
+    console.log(`[AtlasManager] batchSetTextures: ${totalSpecs} specs, ${skipped} cached (skipped), ${toProcess.length} to redraw`);
+    if (toProcess.length > 0) {
+      // Log tree textures being redrawn (helps debug wrong-texture issues)
+      const treeRedraws = toProcess.filter(p => p.category === 'tree');
+      if (treeRedraws.length > 0) {
+        console.log(`[AtlasManager] Redrawing ${treeRedraws.length} tree textures:`, treeRedraws.map(t => `${t.textureId}@slot${t.resolvedSlot}`).join(', '));
+      }
+    }
+
     if (toProcess.length === 0) return 0;
 
     // Step 3: Load all non-GIF images in parallel with concurrency limit
@@ -887,6 +913,9 @@ class AtlasManagerClass {
           if (gifData && gifData.frames.length > 0) {
             for (let f = 0; f < gifData.frames.length; f++) {
               const pos = getSlotPixelPosition(item.resolvedSlot + f);
+              // Pre-fill so transparent areas don't show as black
+              this.ctx!.fillStyle = '#C9B8A3';
+              this.ctx!.fillRect(pos.x, pos.y, ATLAS_SLOT_SIZE, ATLAS_SLOT_SIZE);
               this.ctx!.drawImage(gifData.frames[f], pos.x, pos.y);
             }
             if (gifData.frames.length > 1) {
@@ -937,3 +966,17 @@ class AtlasManagerClass {
 
 // Singleton instance
 export const atlasManager = new AtlasManagerClass();
+
+/**
+ * Clear the atlas IndexedDB cache and force a full rebuild on next load.
+ * Call from browser console: window.clearAtlasCache()
+ */
+export async function clearAtlasCache(): Promise<void> {
+  await atlasManager.clear();
+  console.log('[AtlasManager] Cache cleared. Reload the page to rebuild all textures from scratch.');
+}
+
+// Expose on window for easy console access
+if (typeof window !== 'undefined') {
+  (window as any).clearAtlasCache = clearAtlasCache;
+}

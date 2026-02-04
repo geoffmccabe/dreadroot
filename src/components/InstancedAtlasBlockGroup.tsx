@@ -27,6 +27,8 @@ import {
   getTreeBlockAnimationInfo,
   getAnimatedUVOffset,
 } from '@/hooks/useTextureAtlas';
+import { playerTracker } from '@/lib/playerTracker';
+import { shrineTracker } from '@/lib/shrineTracker';
 
 // Shared geometry for all block instances
 const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
@@ -36,12 +38,18 @@ const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 
 // 44K lookups per rebuild hit this cache instead of decoding strings.
 const uvLookupCache = new Map<string, { uvOffsetX: number; uvOffsetY: number }>();
 const animInfoCache = new Map<string, ReturnType<typeof getTreeBlockAnimationInfo>>();
+// Diagnostic: track which block types have been logged (fires once per unique type, ~30 max)
+const _uvDiagLogged = new Set<string>();
 
 function getCachedUVs(blockType: string): { uvOffsetX: number; uvOffsetY: number } {
   let cached = uvLookupCache.get(blockType);
   if (!cached) {
     cached = getInstanceUVsForTreeBlock(blockType);
     uvLookupCache.set(blockType, cached);
+    if (!_uvDiagLogged.has(blockType)) {
+      _uvDiagLogged.add(blockType);
+      console.log(`[AtlasUV] ${blockType} → uv(${cached.uvOffsetX.toFixed(4)}, ${cached.uvOffsetY.toFixed(4)})`);
+    }
   }
   return cached;
 }
@@ -187,6 +195,11 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   // Reuse matrix to avoid GC
   const matrixRef = useRef(new THREE.Matrix4());
 
+  // Shrine glow tracking - stores instance indices and positions of shrine blocks
+  const shrineBlocksRef = useRef<Array<{ index: number; x: number; y: number; z: number }>>([]);
+  const lastShrineGlowState = useRef<boolean>(false);
+  const lastShrineCheckTime = useRef<number>(0);
+
   // Track refs for efficient updates
   const effectiveShowOwnershipOutlineRef = useRef(effectiveShowOwnershipOutline);
   effectiveShowOwnershipOutlineRef.current = effectiveShowOwnershipOutline;
@@ -214,7 +227,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     };
   }, []);
 
-  // Notify parent when mesh is ready
+  // Notify parent when mesh is ready (material gates mesh creation)
   useEffect(() => {
     if (meshRef.current && onMeshReady) {
       onMeshReady(meshRef.current);
@@ -224,16 +237,20 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         onMeshReady(null);
       }
     };
-  }, [onMeshReady]);
+  }, [onMeshReady, material]);
 
   // Track last processed signature to skip redundant rebuilds
   const lastProcessedSignatureRef = useRef<string>('');
 
-  // Throttle rebuilds to prevent frame spikes during rapid changes
+  // Throttle rebuilds/incremental updates to prevent frame spikes during rapid changes
   const lastRebuildTimeRef = useRef<number>(0);
   const pendingRebuildRef = useRef<boolean>(false);
   const rebuildTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const REBUILD_THROTTLE_MS = 50; // Max one rebuild per 50ms
+  const lastIncrementalTimeRef = useRef<number>(0);
+  const pendingIncrementalRef = useRef<boolean>(false);
+  const incrementalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const INCREMENTAL_THROTTLE_MS = 50; // Max one incremental per 50ms
   const rebuildRafRef = useRef<number | null>(null);
 
   // CRITICAL: Use stable mesh capacity to prevent mesh recreation on chunk boundaries
@@ -249,6 +266,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   const uvBufferRef = useRef<Float32Array | null>(null);
   const colorBufferRef = useRef<Float32Array | null>(null);
   const colorAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
+  // Reusable Set for incremental seen-keys (avoids 150K-entry Set allocation per call)
+  const seenKeysRef = useRef<Set<number>>(new Set());
 
   // Store blocks ref for deferred access
   const blocksRef = useRef<PlacedBlock[]>(blocks);
@@ -292,6 +311,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     uvOffsetData: Float32Array;
     colorData: Float32Array;
     animatedBlocks: AnimatedBlockInfo[];
+    shrineBlocks: Array<{ index: number; x: number; y: number; z: number }>;
     hasBranchDepth: boolean;
     minX: number; minY: number; minZ: number;
     maxX: number; maxY: number; maxZ: number;
@@ -356,6 +376,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         ? colorBufferRef.current
         : new Float32Array(requiredColorSize),
       animatedBlocks: [],
+      shrineBlocks: [],
       hasBranchDepth: false,
       minX: Infinity, minY: Infinity, minZ: Infinity,
       maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity,
@@ -438,17 +459,35 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         uvOffsetData[i * 2 + 1] = uvs.uvOffsetY;
       }
 
-      const depth = block.branch_depth;
-      if (depth !== undefined && depth !== null) {
+      // Glow bark blocks get bright green-tinted color for visual glow effect
+      const isGlowBark = block.block_type.charCodeAt(0) === 103 && block.block_type.charCodeAt(1) === 98; // 'gb'
+      // Shrine blocks - track for dynamic proximity glow ('shr')
+      const isShrine = block.block_type.charCodeAt(0) === 115 && // 's'
+                       block.block_type.charCodeAt(1) === 104 && // 'h'
+                       block.block_type.charCodeAt(2) === 114;   // 'r'
+      if (isShrine) {
+        // Track shrine block for dynamic glow updates
+        state.shrineBlocks.push({ index: i, x, y, z });
+      }
+      if (isGlowBark) {
         state.hasBranchDepth = true;
-        const lightenFactor = 1.0 + Math.max(0, depth + 1) * 0.12;
-        colorData[i * 3] = lightenFactor;
-        colorData[i * 3 + 1] = lightenFactor;
-        colorData[i * 3 + 2] = lightenFactor;
+        colorData[i * 3] = 1.4;     // slight warm tint
+        colorData[i * 3 + 1] = 2.0; // strong green boost
+        colorData[i * 3 + 2] = 1.5; // slight cyan tint
       } else {
-        colorData[i * 3] = 1.0;
-        colorData[i * 3 + 1] = 1.0;
-        colorData[i * 3 + 2] = 1.0;
+        // Shrine blocks start with default color (glow applied dynamically via frame loop)
+        const depth = block.branch_depth;
+        if (depth !== undefined && depth !== null) {
+          state.hasBranchDepth = true;
+          const lightenFactor = 1.0 + Math.max(0, depth + 1) * 0.12;
+          colorData[i * 3] = lightenFactor;
+          colorData[i * 3 + 1] = lightenFactor;
+          colorData[i * 3 + 2] = lightenFactor;
+        } else {
+          colorData[i * 3] = 1.0;
+          colorData[i * 3 + 1] = 1.0;
+          colorData[i * 3 + 2] = 1.0;
+        }
       }
 
       if (x < state.minX) state.minX = x;
@@ -479,6 +518,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       // set needsUpdate so Three.js uploads everything in a single
       // gl.bufferSubData per attribute — the GPU never sees partial state.
       animatedBlocksRef.current = animatedBlocks;
+      shrineBlocksRef.current = state.shrineBlocks;
+      lastShrineGlowState.current = false; // Reset glow state for fresh proximity check
 
       // 1. Matrix buffer — setMatrixAt already wrote to instanceMatrix.array
       mesh.instanceMatrix.needsUpdate = true;
@@ -559,8 +600,9 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
     const uvOffsetData = uvBufferRef.current;
 
-    // Track animated blocks
+    // Track animated blocks and shrine blocks
     const animatedBlocks: AnimatedBlockInfo[] = [];
+    const shrineBlocks: Array<{ index: number; x: number; y: number; z: number }> = [];
 
     // Reuse or grow color buffer
     const colorRequiredSize = meshCapacity * 3;
@@ -600,17 +642,35 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         uvOffsetData[i * 2 + 1] = uvs.uvOffsetY;
       }
 
-      const depth = block.branch_depth;
-      if (depth !== undefined && depth !== null) {
+      // Detect glow bark blocks (fast char check: 'gb')
+      const isGlowBark = block.block_type.charCodeAt(0) === 103 && block.block_type.charCodeAt(1) === 98;
+      // Detect shrine blocks (fast char check: 'shr')
+      const isShrine = block.block_type.charCodeAt(0) === 115 &&
+                       block.block_type.charCodeAt(1) === 104 &&
+                       block.block_type.charCodeAt(2) === 114;
+
+      if (isShrine) {
+        shrineBlocks.push({ index: i, x, y, z });
+      }
+
+      if (isGlowBark) {
         hasBranchDepth = true;
-        const lightenFactor = 1.0 + Math.max(0, depth + 1) * 0.12;
-        colorData[i * 3] = lightenFactor;
-        colorData[i * 3 + 1] = lightenFactor;
-        colorData[i * 3 + 2] = lightenFactor;
+        colorData[i * 3] = 1.4;
+        colorData[i * 3 + 1] = 2.0;
+        colorData[i * 3 + 2] = 1.5;
       } else {
-        colorData[i * 3] = 1.0;
-        colorData[i * 3 + 1] = 1.0;
-        colorData[i * 3 + 2] = 1.0;
+        const depth = block.branch_depth;
+        if (depth !== undefined && depth !== null) {
+          hasBranchDepth = true;
+          const lightenFactor = 1.0 + Math.max(0, depth + 1) * 0.12;
+          colorData[i * 3] = lightenFactor;
+          colorData[i * 3 + 1] = lightenFactor;
+          colorData[i * 3 + 2] = lightenFactor;
+        } else {
+          colorData[i * 3] = 1.0;
+          colorData[i * 3 + 1] = 1.0;
+          colorData[i * 3 + 2] = 1.0;
+        }
       }
 
       if (x < minX) minX = x;
@@ -622,6 +682,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
 
     animatedBlocksRef.current = animatedBlocks;
+    shrineBlocksRef.current = shrineBlocks;
+    lastShrineGlowState.current = false; // Reset glow state for fresh proximity check
     mesh.instanceMatrix.needsUpdate = true;
 
     // Update colors
@@ -721,13 +783,19 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     const uvData = uvAttrArray;
     const colorData = colorAttrArray ?? colorBufferRef.current ?? new Float32Array(meshCapacity * 3);
 
+    lastIncrementalTimeRef.current = performance.now();
+    pendingIncrementalRef.current = false;
+
     let changedCount = 0;
     let hasBranchDepth = false;
     const animatedBlocks: AnimatedBlockInfo[] = [];
 
     // Pass 1: Iterate new blocks — find additions/modifications, build seen-keys set
     // Uses numeric keys (zero string allocation) for O(1) Map lookups
-    const seenKeys = new Set<number>();
+    // PERF: Reuse Set to avoid allocating 150K-entry Set per call (was causing
+    // +300MB heap growth and 700ms GC pauses from boxing large numbers)
+    seenKeysRef.current.clear();
+    const seenKeys = seenKeysRef.current;
 
     for (let i = 0; i < currentBlocks.length; i++) {
       const block = currentBlocks[i];
@@ -756,17 +824,26 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             uvData[idx * 2 + 1] = uvs.uvOffsetY;
           }
 
-          const depth = block.branch_depth;
-          if (depth !== undefined && depth !== null) {
+          const isGlowBlock = block.block_type.charCodeAt(0) === 103 && block.block_type.charCodeAt(1) === 98;
+          if (isGlowBlock) {
             hasBranchDepth = true;
-            const f = 1.0 + Math.max(0, depth + 1) * 0.12;
-            colorData[idx * 3] = f;
-            colorData[idx * 3 + 1] = f;
-            colorData[idx * 3 + 2] = f;
+            colorData[idx * 3] = 1.4;
+            colorData[idx * 3 + 1] = 2.0;
+            colorData[idx * 3 + 2] = 1.5;
           } else {
-            colorData[idx * 3] = 1.0;
-            colorData[idx * 3 + 1] = 1.0;
-            colorData[idx * 3 + 2] = 1.0;
+            // Shrine blocks start with default color - glow is applied dynamically via frame loop
+            const depth = block.branch_depth;
+            if (depth !== undefined && depth !== null) {
+              hasBranchDepth = true;
+              const f = 1.0 + Math.max(0, depth + 1) * 0.12;
+              colorData[idx * 3] = f;
+              colorData[idx * 3 + 1] = f;
+              colorData[idx * 3 + 2] = f;
+            } else {
+              colorData[idx * 3] = 1.0;
+              colorData[idx * 3 + 1] = 1.0;
+              colorData[idx * 3 + 2] = 1.0;
+            }
           }
           changedCount++;
         } else {
@@ -815,18 +892,27 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
           uvData[idx * 2 + 1] = uvs.uvOffsetY;
         }
 
-        // Set color
-        const depth = block.branch_depth;
-        if (depth !== undefined && depth !== null) {
+        // Set color — glow bark gets bright green tint
+        // Shrine blocks start with default color - glow is applied dynamically via frame loop
+        const isGlowNew = block.block_type.charCodeAt(0) === 103 && block.block_type.charCodeAt(1) === 98;
+        if (isGlowNew) {
           hasBranchDepth = true;
-          const f = 1.0 + Math.max(0, depth + 1) * 0.12;
-          colorData[idx * 3] = f;
-          colorData[idx * 3 + 1] = f;
-          colorData[idx * 3 + 2] = f;
+          colorData[idx * 3] = 1.4;
+          colorData[idx * 3 + 1] = 2.0;
+          colorData[idx * 3 + 2] = 1.5;
         } else {
-          colorData[idx * 3] = 1.0;
-          colorData[idx * 3 + 1] = 1.0;
-          colorData[idx * 3 + 2] = 1.0;
+          const depth = block.branch_depth;
+          if (depth !== undefined && depth !== null) {
+            hasBranchDepth = true;
+            const f = 1.0 + Math.max(0, depth + 1) * 0.12;
+            colorData[idx * 3] = f;
+            colorData[idx * 3 + 1] = f;
+            colorData[idx * 3 + 2] = f;
+          } else {
+            colorData[idx * 3] = 1.0;
+            colorData[idx * 3 + 1] = 1.0;
+            colorData[idx * 3 + 2] = 1.0;
+          }
         }
         changedCount++;
       }
@@ -900,30 +986,44 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       positionIndexMapRef.current.clear();
       freeIndicesRef.current.length = 0;
       highWaterMarkRef.current = 0;
+      // Re-register the new mesh for raycasting
+      if (onMeshReady) {
+        onMeshReady(mesh);
+      }
     }
 
     // Track atlas version — clear UV cache if atlas changed (slots may have moved)
     // This forces a rebuild by resetting the signature
     if (atlasVersion !== lastAtlasVersionRef.current) {
+      console.log(`[AtlasUV] Atlas version changed ${lastAtlasVersionRef.current} → ${atlasVersion}, clearing ${uvLookupCache.size} cached UVs`);
       uvLookupCache.clear();
       animInfoCache.clear();
+      _uvDiagLogged.clear();
       lastAtlasVersionRef.current = atlasVersion;
       lastProcessedSignatureRef.current = ''; // Force rebuild with new UVs
     }
 
-    // Build robust signature that detects content changes (atlas version excluded —
-    // atlas changes are handled above by resetting the signature)
+    // Build cheap signature by sampling up to 64 evenly-spaced blocks.
+    // Full O(N) hash on 150K blocks costs ~600ms across 400 calls — sampling
+    // reduces this to O(64) while still catching adds, removes, and boundary changes.
     let sig: string;
     if (blocks.length === 0) {
       sig = 'empty';
     } else {
       let idHash = 0;
-      for (let i = 0; i < blocks.length; i++) {
+      const n = blocks.length;
+      const sampleCount = Math.min(n, 64);
+      const step = n <= 64 ? 1 : Math.floor(n / 64);
+      for (let i = 0; i < n; i += step) {
         const b = blocks[i];
-        const posHash = (b.position_x * 73856093) ^ (b.position_y * 19349663) ^ (b.position_z * 83492791);
-        idHash ^= posHash;
+        idHash ^= (b.position_x * 73856093) ^ (b.position_y * 19349663) ^ (b.position_z * 83492791);
       }
-      sig = `${blocks.length}:${idHash}`;
+      // Always include last block for boundary sensitivity
+      if (n > 1) {
+        const last = blocks[n - 1];
+        idHash ^= (last.position_x * 73856093) ^ (last.position_y * 19349663) ^ (last.position_z * 83492791);
+      }
+      sig = `${n}:${idHash}`;
     }
 
     if (sig === lastProcessedSignatureRef.current) {
@@ -931,33 +1031,66 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
     lastProcessedSignatureRef.current = sig;
 
-    // Full rebuild path (always used now — budgeted work spreads cost across frames)
-    const now = performance.now();
-    const timeSinceLastRebuild = now - lastRebuildTimeRef.current;
+    // Use incremental updates when possible — avoids full O(N) rebuild on every
+    // chunk load/unload. Only fall back to full rebuild when the mesh hasn't been
+    // built yet or a budgeted rebuild is already in progress (to avoid data races
+    // between incremental writes to GPU attributes and budgeted staging buffers).
+    const canIncremental = initialBuildDoneRef.current
+      && rebuildRafRef.current === null
+      && rebuildStateRef.current === null;
 
-    if (timeSinceLastRebuild >= REBUILD_THROTTLE_MS) {
-      doRebuild();
-    } else if (!pendingRebuildRef.current) {
-      pendingRebuildRef.current = true;
-      const delay = REBUILD_THROTTLE_MS - timeSinceLastRebuild;
+    if (canIncremental) {
+      // Throttle incremental updates — each one is O(N) for all blocks,
+      // so 381 calls × 150K blocks = 57M iterations without throttling
+      const now = performance.now();
+      const timeSinceLastIncremental = now - lastIncrementalTimeRef.current;
 
-      if (rebuildTimeoutRef.current) {
-        clearTimeout(rebuildTimeoutRef.current);
+      if (timeSinceLastIncremental >= INCREMENTAL_THROTTLE_MS) {
+        doIncrementalUpdate();
+      } else if (!pendingIncrementalRef.current) {
+        pendingIncrementalRef.current = true;
+        const delay = INCREMENTAL_THROTTLE_MS - timeSinceLastIncremental;
+
+        if (incrementalTimeoutRef.current) {
+          clearTimeout(incrementalTimeoutRef.current);
+        }
+        incrementalTimeoutRef.current = setTimeout(() => {
+          incrementalTimeoutRef.current = null;
+          doIncrementalUpdate();
+        }, delay);
       }
-      rebuildTimeoutRef.current = setTimeout(() => {
-        rebuildTimeoutRef.current = null;
+    } else {
+      const now = performance.now();
+      const timeSinceLastRebuild = now - lastRebuildTimeRef.current;
+
+      if (timeSinceLastRebuild >= REBUILD_THROTTLE_MS) {
         doRebuild();
-      }, delay);
+      } else if (!pendingRebuildRef.current) {
+        pendingRebuildRef.current = true;
+        const delay = REBUILD_THROTTLE_MS - timeSinceLastRebuild;
+
+        if (rebuildTimeoutRef.current) {
+          clearTimeout(rebuildTimeoutRef.current);
+        }
+        rebuildTimeoutRef.current = setTimeout(() => {
+          rebuildTimeoutRef.current = null;
+          doRebuild();
+        }, delay);
+      }
     }
 
     return () => {
-      // Only clean up the throttle timeout on re-render.
+      // Only clean up the throttle timeouts on re-render.
       // Do NOT cancel the RAF-based rebuild here — the queuing system in
       // doRebuild handles the case where blocks change mid-rebuild.
       // Canceling here would bypass queuing and cause flickering.
       if (rebuildTimeoutRef.current) {
         clearTimeout(rebuildTimeoutRef.current);
         rebuildTimeoutRef.current = null;
+      }
+      if (incrementalTimeoutRef.current) {
+        clearTimeout(incrementalTimeoutRef.current);
+        incrementalTimeoutRef.current = null;
       }
     };
   }, [blocks, atlasVersion, doRebuild, doIncrementalUpdate]);
@@ -1002,56 +1135,101 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       const mesh = meshRef.current;
       if (!mesh || blocks.length === 0) return;
 
-      // Update diagnostic counter (only once per blocks change, not every frame)
-      // diagnostics.visibleBlocks is updated in the blocks useEffect instead
-
-      // EARLY EXIT: Skip entirely if no blocks are falling and none were falling before
-      const hasFallingBlocks = fallingBlocksState.size > 0;
-      const hadFallingBlocks = previouslyFallingRef.current.size > 0;
-      if (!hasFallingBlocks && !hadFallingBlocks) {
-        return; // Nothing to do - fast path for 99% of frames
-      }
-
-      let needsUpdate = false;
+      let matrixNeedsUpdate = false;
+      let colorNeedsUpdate = false;
       const matrix = matrixRef.current;
-      const blockIndexMap = blockIndexMapRef.current;
 
-      // Handle falling blocks - only iterate falling blocks, not all blocks
-      const currentlyFalling = currentlyFallingRef.current;
-      currentlyFalling.clear();
+      // ========== SHRINE PROXIMITY GLOW (throttled to 100ms) ==========
+      const shrineBlocks = shrineBlocksRef.current;
+      if (shrineBlocks.length > 0 && colorAttrRef.current) {
+        const now = performance.now();
+        if (now - lastShrineCheckTime.current >= 100) {
+          lastShrineCheckTime.current = now;
 
-      // Iterate only the falling blocks state, not all blocks
-      const blockById = blockByIdRef.current;
-      fallingBlocksState.forEach((fallingState, blockId) => {
-        const entry = blockById.get(blockId);
-        if (!entry) return; // Not our block
+          // Get player position
+          const player = playerTracker.getPlayerById('local');
+          let isNearShrine = false;
 
-        currentlyFalling.add(blockId);
+          if (player) {
+            // Check if player is near any shrine block (within 5 blocks)
+            // Uses block-based detection for dynamic glow
+            isNearShrine = shrineTracker.hasShrineBLockNearby(
+              player.position.x,
+              player.position.y,
+              player.position.z,
+              5 // radius
+            );
+          }
 
-        matrix.setPosition(entry.block.position_x + 0.5, fallingState.currentY + 0.5, entry.block.position_z + 0.5);
-        mesh.setMatrixAt(entry.instanceIndex, matrix);
-        needsUpdate = true;
-      });
+          // Update colors only if state changed
+          if (isNearShrine !== lastShrineGlowState.current) {
+            lastShrineGlowState.current = isNearShrine;
+            const colorArr = colorAttrRef.current.array as Float32Array;
 
-      // Reset blocks that stopped falling
-      previouslyFallingRef.current.forEach(blockId => {
-        if (!currentlyFalling.has(blockId)) {
-          const entry = blockById.get(blockId);
-          if (entry) {
-            matrix.setPosition(entry.block.position_x + 0.5, entry.block.position_y + 0.5, entry.block.position_z + 0.5);
-            mesh.setMatrixAt(entry.instanceIndex, matrix);
-            needsUpdate = true;
+            for (const shrine of shrineBlocks) {
+              const idx = shrine.index;
+              if (isNearShrine) {
+                // Purple glow
+                colorArr[idx * 3] = 1.8;
+                colorArr[idx * 3 + 1] = 0.8;
+                colorArr[idx * 3 + 2] = 2.0;
+              } else {
+                // Default color
+                colorArr[idx * 3] = 1.0;
+                colorArr[idx * 3 + 1] = 1.0;
+                colorArr[idx * 3 + 2] = 1.0;
+              }
+            }
+            colorNeedsUpdate = true;
           }
         }
-      });
+      }
 
-      // Swap sets
-      const temp = previouslyFallingRef.current;
-      previouslyFallingRef.current = currentlyFalling;
-      currentlyFallingRef.current = temp;
+      // ========== FALLING BLOCKS ==========
+      const hasFallingBlocks = fallingBlocksState.size > 0;
+      const hadFallingBlocks = previouslyFallingRef.current.size > 0;
 
-      if (needsUpdate) {
+      if (hasFallingBlocks || hadFallingBlocks) {
+        // Handle falling blocks - only iterate falling blocks, not all blocks
+        const currentlyFalling = currentlyFallingRef.current;
+        currentlyFalling.clear();
+
+        // Iterate only the falling blocks state, not all blocks
+        const blockById = blockByIdRef.current;
+        fallingBlocksState.forEach((fallingState, blockId) => {
+          const entry = blockById.get(blockId);
+          if (!entry) return; // Not our block
+
+          currentlyFalling.add(blockId);
+
+          matrix.setPosition(entry.block.position_x + 0.5, fallingState.currentY + 0.5, entry.block.position_z + 0.5);
+          mesh.setMatrixAt(entry.instanceIndex, matrix);
+          matrixNeedsUpdate = true;
+        });
+
+        // Reset blocks that stopped falling
+        previouslyFallingRef.current.forEach(blockId => {
+          if (!currentlyFalling.has(blockId)) {
+            const entry = blockById.get(blockId);
+            if (entry) {
+              matrix.setPosition(entry.block.position_x + 0.5, entry.block.position_y + 0.5, entry.block.position_z + 0.5);
+              mesh.setMatrixAt(entry.instanceIndex, matrix);
+              matrixNeedsUpdate = true;
+            }
+          }
+        });
+
+        // Swap sets
+        const temp = previouslyFallingRef.current;
+        previouslyFallingRef.current = currentlyFalling;
+        currentlyFallingRef.current = temp;
+      }
+
+      if (matrixNeedsUpdate) {
         mesh.instanceMatrix.needsUpdate = true;
+      }
+      if (colorNeedsUpdate && colorAttrRef.current) {
+        colorAttrRef.current.needsUpdate = true;
       }
 
       // Animate UV offsets for animated textures

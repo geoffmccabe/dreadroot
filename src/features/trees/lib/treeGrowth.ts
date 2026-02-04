@@ -17,7 +17,7 @@ const HORIZONTAL_DIRECTIONS: [number, number][] = [
  * Apply symmetry transformation to a position
  * Returns array of positions to place blocks at
  */
-function applySymmetry(
+export function applySymmetry(
   x: number,
   z: number,
   baseX: number,
@@ -135,6 +135,7 @@ export function generateTreeBlueprint(
     shroomChance: options?.shroomChance ?? 0,
     shroomLength: Math.max(4, options?.shroomLength ?? 5),  // Min 4 for tuning-fork pattern
     shroomCapDiameter: options?.shroomCapDiameter ?? 3,
+    shrineChance: options?.shrineChance ?? 0.0001,  // 0.01% default - very rare
     symmetry: symmetryMode,
   };
   
@@ -263,7 +264,7 @@ const MIN_DECORATION_GAP = 4;
 /**
  * Check if a position is far enough from all existing decoration positions
  */
-function canPlaceDecoration(
+export function canPlaceDecoration(
   x: number,
   y: number,
   z: number,
@@ -393,6 +394,12 @@ function growBranch(
         decorationPlaced = true;
       }
 
+      // SHRINE: 5x5 hollow structure with tapered spire (very rare)
+      if (!decorationPlaced && opts.shrineChance > 0 && rng() < opts.shrineChance) {
+        addShrineWithSymmetry(blocks, occupied, x, y, z, anchorIndex, anchorGroup, treeBaseX, treeBaseZ, symmetryMode, depth, direction);
+        decorationPlaced = true;
+      }
+
       // Record decoration position if one was placed
       if (decorationPlaced) {
         decorPositions.push({ x, y, z });
@@ -444,7 +451,7 @@ function growBranch(
  * Add a ring of branch blocks around the trunk at a specific height
  * This allows players to walk around the trunk to reach other branches
  */
-function addTrunkJunctionRing(
+export function addTrunkJunctionRing(
   blocks: BlueprintBlock[],
   occupied: Set<string>,
   trunkX: number,
@@ -491,7 +498,7 @@ function addTrunkJunctionRing(
  * then spike continues above the doorway
  * Minimum spike length is 4
  */
-function addSpikeWithSymmetry(
+export function addSpikeWithSymmetry(
   blocks: BlueprintBlock[],
   occupied: Set<string>,
   startX: number,
@@ -558,7 +565,7 @@ function addSpikeWithSymmetry(
  * - Small nobs (1x1 and 2x2) cannot spawn on top of branches, only sides or bottom
  * - Nobs on top of branches have a 3-block high tunnel through them for walkability
  */
-function addNobWithSymmetry(
+export function addNobWithSymmetry(
   blocks: BlueprintBlock[],
   occupied: Set<string>,
   centerX: number,
@@ -644,7 +651,7 @@ function addNobWithSymmetry(
  * Add a cross made of 4 spikes at right angles around the branch
  * Each spike has 3-block high doorway with side stacks
  */
-function addCrossWithSymmetry(
+export function addCrossWithSymmetry(
   blocks: BlueprintBlock[],
   occupied: Set<string>,
   centerX: number,
@@ -707,7 +714,7 @@ function addCrossWithSymmetry(
  * Add a mushroom shape with symmetry
  * Shape: 3-block tall stacks on each side of branch (doorway), stem above, then cap
  */
-function addShroomWithSymmetry(
+export function addShroomWithSymmetry(
   blocks: BlueprintBlock[],
   occupied: Set<string>,
   shroomBaseX: number,
@@ -778,12 +785,194 @@ function addShroomWithSymmetry(
   }
 }
 
+/**
+ * addShrineWithSymmetry: Create a shrine decoration on a branch
+ *
+ * Shrines are 5x5 base structures with:
+ * - 3x3 flat floor at branch level for walking
+ * - Widened branch platform extending from doors for approach
+ * - Hollow interior with two pass-through doors
+ * - Tapered spire roof with gaps for interior glow
+ *
+ * Structure:
+ * - Floor (y+0): 5x5 solid base with 3x3 walkable interior
+ * - Walls (y+1 to y+5): 5x5 outer walls, 3x3 hollow interior, 5 layers
+ *   - Two 2w x 3h doors aligned with branch direction
+ * - Roof rings with gaps for glow:
+ *   - y+6: 4x4 ring, y+7: skip, y+8: 3x3 ring, y+9: skip
+ *   - y+10: 2x2 ring, y+11: skip, y+12: 2x2 ring
+ * - Spire (y+13 to y+16): 1x1, 4 blocks
+ */
+export function addShrineWithSymmetry(
+  blocks: BlueprintBlock[],
+  occupied: Set<string>,
+  shrineBaseX: number,
+  shrineBaseY: number,
+  shrineBaseZ: number,
+  anchorIndex: number,
+  anchorGroup: number,
+  baseX: number,
+  baseZ: number,
+  symmetryMode: SymmetryMode,
+  branchDepth: number = 0,
+  branchDir: [number, number]
+): void {
+  // Helper to add a shrine block
+  const addShrineBlock = (x: number, y: number, z: number) => {
+    const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
+    for (const pos of positions) {
+      const key = `${pos.x},${y},${pos.z}`;
+      if (occupied.has(key)) continue;
+      occupied.add(key);
+      blocks.push({ x: pos.x, y, z: pos.z, type: 'shrine', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
+    }
+  };
+
+  // Helper to add a branch block (for platform extension)
+  const addBranchBlock = (x: number, y: number, z: number) => {
+    const positions = applySymmetry(x, z, baseX, baseZ, symmetryMode);
+    for (const pos of positions) {
+      const key = `${pos.x},${y},${pos.z}`;
+      if (occupied.has(key)) continue;
+      occupied.add(key);
+      blocks.push({ x: pos.x, y, z: pos.z, type: 'branch', growthOrder: -anchorIndex - 1, symmetryGroup: anchorGroup, branchDepth });
+    }
+  };
+
+  // Determine door direction based on branch direction
+  // Doors face along the branch direction (so player can walk through along branch)
+  const doorAlongX = branchDir[0] !== 0; // true if branch runs along X axis
+
+  // FLOOR LAYER (y+0): Full 5x5 base - the floor is solid
+  // This creates a 3x3 walkable interior since walls will be on the outer edge
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      addShrineBlock(shrineBaseX + dx, shrineBaseY, shrineBaseZ + dz);
+    }
+  }
+
+  // BRANCH PLATFORM EXTENSION: Widen the approach from both doors
+  // Add 3-wide walkway extending 3 blocks out from each door
+  if (doorAlongX) {
+    // Doors are at z=-2 and z=+2, extend along Z axis
+    for (let ext = 3; ext <= 5; ext++) {
+      // Negative Z door approach
+      for (let dx = -1; dx <= 1; dx++) {
+        addBranchBlock(shrineBaseX + dx, shrineBaseY, shrineBaseZ - ext);
+      }
+      // Positive Z door approach
+      for (let dx = -1; dx <= 1; dx++) {
+        addBranchBlock(shrineBaseX + dx, shrineBaseY, shrineBaseZ + ext);
+      }
+    }
+  } else {
+    // Doors are at x=-2 and x=+2, extend along X axis
+    for (let ext = 3; ext <= 5; ext++) {
+      // Negative X door approach
+      for (let dz = -1; dz <= 1; dz++) {
+        addBranchBlock(shrineBaseX - ext, shrineBaseY, shrineBaseZ + dz);
+      }
+      // Positive X door approach
+      for (let dz = -1; dz <= 1; dz++) {
+        addBranchBlock(shrineBaseX + ext, shrineBaseY, shrineBaseZ + dz);
+      }
+    }
+  }
+
+  // WALLS: 5x5 outer walls, 5 layers tall (y+1 to y+5)
+  for (let layer = 1; layer <= 5; layer++) {
+    const y = shrineBaseY + layer;
+
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const x = shrineBaseX + dx;
+        const z = shrineBaseZ + dz;
+
+        // Check if this is an outer wall position (edge of 5x5)
+        const isOuterEdge = Math.abs(dx) === 2 || Math.abs(dz) === 2;
+
+        // Door positions: 2-wide gaps on opposite ends along branch direction
+        // Doors are at y+1, y+2, y+3 (3 blocks tall from floor level)
+        let isDoor = false;
+        if (layer <= 3) {
+          if (doorAlongX) {
+            // Branch runs along X, doors are at z=-2 and z=+2 walls
+            // Door spans dx=-1 to dx=0 (2 blocks wide, centered)
+            isDoor = Math.abs(dz) === 2 && (dx === -1 || dx === 0);
+          } else {
+            // Branch runs along Z, doors are at x=-2 and x=+2 walls
+            // Door spans dz=-1 to dz=0 (2 blocks wide, centered)
+            isDoor = Math.abs(dx) === 2 && (dz === -1 || dz === 0);
+          }
+        }
+
+        // Only place blocks on outer edge AND not in door opening
+        if (isOuterEdge && !isDoor) {
+          addShrineBlock(x, y, z);
+        }
+      }
+    }
+  }
+
+  // ROOF LAYERS: Hollow rings with gaps for glow effect
+  // y+6: 4x4 ring (hollow)
+  const roofY6 = shrineBaseY + 6;
+  for (let dx = -2; dx <= 1; dx++) {
+    for (let dz = -2; dz <= 1; dz++) {
+      // 4x4 ring: place only on edges
+      const isEdge = dx === -2 || dx === 1 || dz === -2 || dz === 1;
+      if (isEdge) {
+        addShrineBlock(shrineBaseX + dx, roofY6, shrineBaseZ + dz);
+      }
+    }
+  }
+
+  // y+7: SKIP (gap for glow)
+
+  // y+8: 3x3 ring (hollow)
+  const roofY8 = shrineBaseY + 8;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      const isEdge = Math.abs(dx) === 1 || Math.abs(dz) === 1;
+      if (isEdge) {
+        addShrineBlock(shrineBaseX + dx, roofY8, shrineBaseZ + dz);
+      }
+    }
+  }
+
+  // y+9: SKIP (gap for glow)
+
+  // y+10: 2x2 solid cap
+  const roofY10 = shrineBaseY + 10;
+  for (let dx = -1; dx <= 0; dx++) {
+    for (let dz = -1; dz <= 0; dz++) {
+      addShrineBlock(shrineBaseX + dx, roofY10, shrineBaseZ + dz);
+    }
+  }
+
+  // y+11: SKIP (gap for glow)
+
+  // y+12: 2x2 solid
+  const roofY12 = shrineBaseY + 12;
+  for (let dx = -1; dx <= 0; dx++) {
+    for (let dz = -1; dz <= 0; dz++) {
+      addShrineBlock(shrineBaseX + dx, roofY12, shrineBaseZ + dz);
+    }
+  }
+
+  // SPIRE: 1x1 column from y+13 to y+16 (4 blocks)
+  // Center the spire at -0.5, -0.5 offset (between the 4 2x2 blocks)
+  for (let i = 13; i <= 16; i++) {
+    addShrineBlock(shrineBaseX, shrineBaseY + i, shrineBaseZ);
+  }
+}
+
 // ========== END DECORATION HELPERS ==========
 
 /**
  * Assign growth order to blocks
  * Blocks in the same symmetryGroup get the same growthOrder so they appear together
- * 
+ *
  * ARCHITECTURE FIX: Two-pass approach
  * Pass 1: Assign orders to regular (non-decoration) blocks
  * Pass 2: Decorations (negative growthOrder) inherit their anchor's final order

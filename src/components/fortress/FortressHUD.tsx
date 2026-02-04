@@ -21,11 +21,11 @@ function InstructionsPanel({
     bottom: '16px',
     right: '16px',
     zIndex: 20,
-    borderRadius: '6px',
-    border: '1px solid hsla(211, 34%, 73%, 0.8)',
-    background: 'hsla(211, 30%, 51%, 0.35)',
-    color: 'hsl(211, 32%, 90%)',
-    fontFamily: 'Inter, sans-serif',
+    borderRadius: 'var(--hud-radius)',
+    border: '1px solid hsla(var(--hud-border))',
+    background: 'hsla(var(--hud-bg))',
+    color: 'hsl(var(--hud-text))',
+    fontFamily: 'var(--hud-font)',
     cursor: 'pointer',
     userSelect: 'none',
   };
@@ -413,11 +413,11 @@ export function FortressHUD(props: FortressHUDProps) {
         <div
           onClick={() => openPanel('user')}
           style={{
-            borderRadius: '6px',
-            border: '1px solid hsla(211, 34%, 73%, 0.8)',
-            background: 'hsla(211, 30%, 51%, 0.35)',
-            color: 'hsl(211, 32%, 90%)',
-            fontFamily: 'Inter, sans-serif',
+            borderRadius: 'var(--hud-radius)',
+            border: '1px solid hsla(var(--hud-border))',
+            background: 'hsla(var(--hud-bg))',
+            color: 'hsl(var(--hud-text))',
+            fontFamily: 'var(--hud-font)',
             padding: '8px 12px',
             display: 'flex',
             alignItems: 'center',
@@ -435,7 +435,7 @@ export function FortressHUD(props: FortressHUDProps) {
                 height: '48px',
                 borderRadius: '50%',
                 objectFit: 'cover',
-                border: '1px solid hsla(211, 34%, 73%, 0.8)',
+                border: '1px solid hsla(var(--hud-border))',
                 flexShrink: 0,
               }}
             />
@@ -472,7 +472,7 @@ export function FortressHUD(props: FortressHUDProps) {
                   gap: '4px',
                   padding: '2px 6px',
                   borderRadius: '4px',
-                  background: blockPlacementMode ? 'hsla(217, 80%, 55%, 0.5)' : 'transparent',
+                  background: blockPlacementMode ? 'hsla(var(--hud-highlight))' : 'transparent',
                   transform: 'scale(0.8)',
                   transformOrigin: 'center',
                 }}
@@ -510,7 +510,7 @@ export function FortressHUD(props: FortressHUDProps) {
                 <span style={{
                   fontSize: '10px',
                   fontWeight: 600,
-                  background: 'hsla(217, 80%, 55%, 0.5)',
+                  background: 'hsla(var(--hud-highlight))',
                   padding: '2px 6px',
                   borderRadius: '4px',
                 }}>
@@ -542,10 +542,10 @@ export function FortressHUD(props: FortressHUDProps) {
             style={{
               width: '36px',
               height: '36px',
-              borderRadius: '6px',
-              border: '1px solid hsla(211, 34%, 73%, 0.8)',
-              background: 'hsla(211, 30%, 51%, 0.35)',
-              color: 'hsl(211, 32%, 90%)',
+              borderRadius: 'var(--hud-radius)',
+              border: '1px solid hsla(var(--hud-border))',
+              background: 'hsla(var(--hud-bg))',
+              color: 'hsl(var(--hud-text))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -583,8 +583,8 @@ export function FortressHUD(props: FortressHUDProps) {
             <span style={{
               fontSize: '11px',
               fontWeight: 700,
-              color: 'hsl(211, 32%, 90%)',
-              fontFamily: 'Inter, sans-serif',
+              color: 'hsl(var(--hud-text))',
+              fontFamily: 'var(--hud-font)',
               letterSpacing: '0.05em',
             }}>
               INVENTORY
@@ -615,9 +615,9 @@ export function FortressHUD(props: FortressHUDProps) {
                         style={{
                           width: '56px',
                           height: '56px',
-                          borderRadius: '6px',
-                          border: '1px solid hsla(211, 34%, 73%, 0.8)',
-                          background: 'hsla(211, 30%, 51%, 0.15)',
+                          borderRadius: 'var(--hud-radius)',
+                          border: '1px solid hsla(var(--hud-border))',
+                          background: 'hsla(var(--hud-bg-dim))',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -636,7 +636,7 @@ export function FortressHUD(props: FortressHUDProps) {
                                 fontSize: '10px',
                                 fontWeight: 700,
                                 color: 'white',
-                                fontFamily: 'Inter, sans-serif',
+                                fontFamily: 'var(--hud-font)',
                                 lineHeight: 1,
                                 textShadow: '0 0 3px rgba(0,0,0,0.8)',
                                 pointerEvents: 'none',
@@ -669,8 +669,8 @@ export function FortressHUD(props: FortressHUDProps) {
           <span style={{
             fontSize: '11px',
             fontWeight: 700,
-            color: 'hsl(211, 32%, 90%)',
-            fontFamily: 'Inter, sans-serif',
+            color: 'hsl(var(--hud-text))',
+            fontFamily: 'var(--hud-font)',
             letterSpacing: '0.05em',
           }}>
             QUICK ACCESS
@@ -704,13 +704,13 @@ export function FortressHUD(props: FortressHUDProps) {
                     style={{
                       width: '56px',
                       height: '56px',
-                      borderRadius: '6px',
+                      borderRadius: 'var(--hud-radius)',
                       border: isSelected
                         ? '2px solid white'
-                        : '1px solid hsla(211, 34%, 73%, 0.8)',
+                        : '1px solid hsla(var(--hud-border))',
                       background: isSelected
-                        ? 'hsla(211, 30%, 51%, 0.35)'
-                        : 'hsla(211, 30%, 51%, 0.15)',
+                        ? 'hsla(var(--hud-bg))'
+                        : 'hsla(var(--hud-bg-dim))',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -729,7 +729,7 @@ export function FortressHUD(props: FortressHUDProps) {
                         fontSize: '10px',
                         fontWeight: 700,
                         color: 'white',
-                        fontFamily: 'Inter, sans-serif',
+                        fontFamily: 'var(--hud-font)',
                         lineHeight: 1,
                         textShadow: '0 0 3px rgba(0,0,0,0.8)',
                         pointerEvents: 'none',
@@ -750,8 +750,8 @@ export function FortressHUD(props: FortressHUDProps) {
                   <span style={{
                     fontSize: '11px',
                     fontWeight: 700,
-                    color: isSelected ? 'hsl(211, 32%, 98%)' : 'hsl(211, 32%, 90%)',
-                    fontFamily: 'Inter, sans-serif',
+                    color: isSelected ? 'hsl(var(--hud-text-bright))' : 'hsl(var(--hud-text))',
+                    fontFamily: 'var(--hud-font)',
                     pointerEvents: 'none',
                   }}>
                     {slot.slot}

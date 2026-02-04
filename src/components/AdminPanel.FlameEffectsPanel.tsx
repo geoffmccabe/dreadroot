@@ -1,4 +1,4 @@
-// Flame Effects Admin Panel - Demo and adjust fire/particle effects in real-time
+// Flame & Nebula Effects Admin Panel - Demo and adjust effects in real-time
 // Uses FlameDemoSpawner (R3F bridge) to spawn effects in the game world
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -6,12 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useFlamethrowerTiers } from '@/contexts/FlamethrowerTiersContext';
 import { FLAME_PRESETS, type FlameEffectPreset, type FlameColorMode } from './fortress/flameEffectPresets';
+import { getDefaultEditorParams, buildNebulaPreset } from '@/features/particles/presets';
+import { captureEffect, getAllCapturedEffects } from '@/features/particles/nebulaEffectRegistry';
+import {
+  NEBULA_EFFECT_IDS,
+  NEBULA_EFFECT_CODES,
+  NEBULA_EFFECT_NAMES,
+  type NebulaEffectId,
+  type NebulaEditorParams,
+  type CapturedNebulaEffect,
+} from '@/features/particles/types';
 import { toast } from 'sonner';
 
 const COLOR_MODES: FlameColorMode[] = ['static', 'rainbow', 'black'];
@@ -23,7 +33,9 @@ const SPRITE_INFO = [
   { label: 'Main Flame', size: '2048x2048', tiles: '3x6' },
 ];
 
-type PanelMode = 'flame-effects' | 'flamethrower-sprites';
+const FADE_EASINGS = ['easeOutQuart', 'easeOutCubic', 'easeLinear', 'easeOutQuad', 'easeInOutSine'];
+
+type PanelMode = 'flame-effects' | 'flamethrower-sprites' | 'nebula-effects';
 
 export function FlameEffectsPanel() {
   const { flameDemoRef } = useAdminPanel();
@@ -58,6 +70,14 @@ export function FlameEffectsPanel() {
   const [ftSmokeOpacity, setFtSmokeOpacity] = useState(1.0);
   const [spriteDataUrls, setSpriteDataUrls] = useState<string[]>([]);
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
+
+  // --- Nebula Effects state ---
+  const [nebulaParams, setNebulaParams] = useState<NebulaEditorParams>(() => getDefaultEditorParams('fire'));
+  const [capturedEffects, setCapturedEffects] = useState<CapturedNebulaEffect[]>([]);
+
+  const updateNebulaParam = useCallback(<K extends keyof NebulaEditorParams>(key: K, value: NebulaEditorParams[K]) => {
+    setNebulaParams(prev => ({ ...prev, [key]: value }));
+  }, []);
 
   // Load sprites from flamethrower.json on mount
   useEffect(() => {
@@ -178,12 +198,130 @@ export function FlameEffectsPanel() {
     reader.readAsDataURL(file);
   }, []);
 
+  // --- Nebula Effects callbacks ---
+  const selectNebulaEffect = useCallback((effectId: NebulaEffectId) => {
+    setPanelMode('nebula-effects');
+    setNebulaParams(getDefaultEditorParams(effectId));
+  }, []);
+
+  const spawnNebulaDemo = useCallback(() => {
+    const demo = flameDemoRef.current;
+    if (!demo) return;
+    const preset = buildNebulaPreset(nebulaParams);
+    demo.spawnDemo({
+      system: 'nebula',
+      type: nebulaParams.effectId,
+      nebulaPreset: preset,
+      colors: [nebulaParams.colorA, nebulaParams.colorB],
+      size: nebulaParams.scale,
+      height: 1,
+      duration: 5,
+      particleCount: nebulaParams.preParticles,
+    });
+  }, [flameDemoRef, nebulaParams]);
+
+  const captureNebulaEffect = useCallback(() => {
+    const code = captureEffect(nebulaParams.effectId, nebulaParams);
+    setCapturedEffects(getAllCapturedEffects());
+    toast.success(`Captured ${code}`);
+  }, [nebulaParams]);
+
+  const loadCapturedEffect = useCallback((captured: CapturedNebulaEffect) => {
+    setPanelMode('nebula-effects');
+    setNebulaParams({ ...captured.params });
+  }, []);
+
+  // --- Auto-spawn effect in game world on param changes (debounced) ---
+  const autoSpawnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (autoSpawnRef.current) clearTimeout(autoSpawnRef.current);
+
+    // Clear any running demo when switching to a mode without auto-spawn
+    if (panelMode === 'flamethrower-sprites') {
+      flameDemoRef.current?.clearDemo();
+      return;
+    }
+
+    autoSpawnRef.current = setTimeout(() => {
+      const demo = flameDemoRef.current;
+      if (!demo) return;
+
+      if (panelMode === 'nebula-effects') {
+        const preset = buildNebulaPreset(nebulaParams);
+        demo.spawnDemo({
+          system: 'nebula',
+          type: nebulaParams.effectId,
+          nebulaPreset: preset,
+          colors: [nebulaParams.colorA, nebulaParams.colorB],
+          size: nebulaParams.scale,
+          height: 1,
+          duration: 5,
+          particleCount: nebulaParams.preParticles,
+        });
+      } else if (panelMode === 'flame-effects') {
+        demo.spawnDemo({
+          system: selectedPreset.system,
+          type: selectedPreset.type,
+          colors,
+          size,
+          height,
+          duration,
+          particleCount,
+          colorMode: selectedPreset.system === 'ufr' ? colorMode : undefined,
+        });
+      }
+    }, 400);
+
+    return () => {
+      if (autoSpawnRef.current) clearTimeout(autoSpawnRef.current);
+    };
+  }, [
+    panelMode, flameDemoRef,
+    nebulaParams,
+    selectedPreset, colors, size, height, duration, particleCount, colorMode,
+  ]);
+
+  // Stop repeating demos when panel unmounts (admin panel closes)
+  useEffect(() => {
+    return () => {
+      flameDemoRef.current?.clearDemo();
+    };
+  }, [flameDemoRef]);
+
+  // --- Render ---
+  const eid = nebulaParams.effectId;
+
   return (
-    <div className="grid grid-cols-12 gap-4">
+    <div className="space-y-3">
+      {/* Captured effects cards */}
+      {capturedEffects.length > 0 && (
+        <div className="border rounded-lg p-3 bg-muted/30">
+          <h4 className="text-xs font-semibold text-muted-foreground mb-2">Captured Effects</h4>
+          <div className="grid grid-cols-5 gap-2">
+            {capturedEffects.map(cap => (
+              <button
+                key={cap.code}
+                className={`border rounded-md p-2 text-center text-xs font-mono cursor-pointer transition-colors ${
+                  panelMode === 'nebula-effects' && nebulaParams.effectId === cap.effectId
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-muted/50 hover:bg-muted border-border'
+                }`}
+                onClick={() => loadCapturedEffect(cap)}
+              >
+                <div className="font-semibold">{cap.code}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{NEBULA_EFFECT_NAMES[cap.effectId]}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-12 gap-4">
       {/* Left: Effect preset selector */}
       <div className="col-span-3">
         <div className="border rounded-lg p-3 bg-muted/30">
-          <h3 className="font-semibold mb-3 text-lg">Flame Effects</h3>
+          <h3 className="font-semibold mb-3 text-lg">Effects</h3>
 
           <h4 className="text-xs font-semibold text-muted-foreground mb-2">Volumetric (TPF)</h4>
           <div className="space-y-1 mb-3">
@@ -216,7 +354,7 @@ export function FlameEffectsPanel() {
           </div>
 
           <h4 className="text-xs font-semibold text-muted-foreground mb-2">Flamethrower</h4>
-          <div className="space-y-1">
+          <div className="space-y-1 mb-3">
             <Button
               variant={panelMode === 'flamethrower-sprites' ? 'default' : 'ghost'}
               size="sm"
@@ -225,6 +363,21 @@ export function FlameEffectsPanel() {
             >
               Sprites
             </Button>
+          </div>
+
+          <h4 className="text-xs font-semibold text-muted-foreground mb-2">Nebula (GPU)</h4>
+          <div className="space-y-1">
+            {NEBULA_EFFECT_IDS.map(id => (
+              <Button
+                key={id}
+                variant={panelMode === 'nebula-effects' && nebulaParams.effectId === id ? 'default' : 'ghost'}
+                size="sm"
+                className="w-full justify-start text-xs h-auto py-1.5"
+                onClick={() => selectNebulaEffect(id)}
+              >
+                {NEBULA_EFFECT_NAMES[id]} ({NEBULA_EFFECT_CODES[id]})
+              </Button>
+            ))}
           </div>
         </div>
       </div>
@@ -352,8 +505,206 @@ export function FlameEffectsPanel() {
               </div>
             </div>
           </Card>
+        ) : panelMode === 'nebula-effects' ? (
+          /* ─── Nebula Effects Editor ────────────────────────────────── */
+          <Card className="p-4">
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b">
+                <div>
+                  <h3 className="font-semibold">
+                    {NEBULA_EFFECT_NAMES[eid]}{' '}
+                    <Badge variant="secondary" className="text-xs ml-1">{NEBULA_EFFECT_CODES[eid]}</Badge>
+                  </h3>
+                  <span className="text-xs text-muted-foreground">three-nebula GPU particle system</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={captureNebulaEffect}>
+                    Capture
+                  </Button>
+                  <Button onClick={spawnNebulaDemo}>
+                    Spawn Demo
+                  </Button>
+                </div>
+              </div>
+
+              {/* Common Parameters */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">Scale: {nebulaParams.scale.toFixed(2)}</Label>
+                  <Slider value={[nebulaParams.scale]} onValueChange={([v]) => updateNebulaParam('scale', v)} min={0.1} max={5.0} step={0.1} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Particles: {nebulaParams.preParticles}</Label>
+                  <Slider value={[nebulaParams.preParticles]} onValueChange={([v]) => updateNebulaParam('preParticles', Math.round(v))} min={10} max={500} step={10} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Alpha Start: {nebulaParams.alphaStart.toFixed(2)}</Label>
+                  <Slider value={[nebulaParams.alphaStart]} onValueChange={([v]) => updateNebulaParam('alphaStart', v)} min={0} max={1} step={0.05} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Alpha End: {nebulaParams.alphaEnd.toFixed(2)}</Label>
+                  <Slider value={[nebulaParams.alphaEnd]} onValueChange={([v]) => updateNebulaParam('alphaEnd', v)} min={0} max={1} step={0.05} />
+                </div>
+              </div>
+
+              {/* Force Direction */}
+              <div>
+                <Label className="text-xs font-semibold">Force Direction</Label>
+                <div className="grid grid-cols-3 gap-4 mt-1">
+                  <div className="space-y-2">
+                    <Label className="text-xs">X (side): {nebulaParams.forceX.toFixed(1)}</Label>
+                    <Slider value={[nebulaParams.forceX]} onValueChange={([v]) => updateNebulaParam('forceX', v)} min={-10} max={10} step={0.1} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Y (up/down): {nebulaParams.forceY.toFixed(1)}</Label>
+                    <Slider value={[nebulaParams.forceY]} onValueChange={([v]) => updateNebulaParam('forceY', v)} min={-10} max={10} step={0.1} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs">Z (side): {nebulaParams.forceZ.toFixed(1)}</Label>
+                    <Slider value={[nebulaParams.forceZ]} onValueChange={([v]) => updateNebulaParam('forceZ', v)} min={-10} max={10} step={0.1} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Colors */}
+              <div>
+                <Label className="text-xs font-semibold">Colors</Label>
+                <div className="flex gap-3 mt-1">
+                  {(['colorA', 'colorB'] as const).map((key, i) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground">{i === 0 ? 'Start' : 'End'}</Label>
+                      <Input
+                        type="color"
+                        value={nebulaParams[key]}
+                        onChange={e => updateNebulaParam(key, e.target.value)}
+                        className="w-10 h-8 p-0.5 cursor-pointer"
+                      />
+                      <Input
+                        type="text"
+                        value={nebulaParams[key]}
+                        onChange={e => updateNebulaParam(key, e.target.value)}
+                        className="w-20 h-8 text-xs font-mono"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Effect-specific Parameters */}
+              <div>
+                <Label className="text-xs font-semibold mb-2 block">
+                  {NEBULA_EFFECT_NAMES[eid]} Parameters
+                </Label>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Fire */}
+                  {eid === 'fire' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Drift: {(nebulaParams.driftX ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.driftX ?? 0.5]} onValueChange={([v]) => updateNebulaParam('driftX', v)} min={0} max={3} step={0.05} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Radius Min: {(nebulaParams.radiusMin ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.radiusMin ?? 0.3]} onValueChange={([v]) => updateNebulaParam('radiusMin', v)} min={0.01} max={2} step={0.01} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Radius Max: {(nebulaParams.radiusMax ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.radiusMax ?? 0.8]} onValueChange={([v]) => updateNebulaParam('radiusMax', v)} min={0.01} max={3} step={0.01} />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Explosion */}
+                  {eid === 'explosion' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Radial Velocity: {(nebulaParams.radialVelocity ?? 0).toFixed(1)}</Label>
+                        <Slider value={[nebulaParams.radialVelocity ?? 15]} onValueChange={([v]) => updateNebulaParam('radialVelocity', v)} min={1} max={30} step={0.5} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Fade Easing</Label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {FADE_EASINGS.map(easing => (
+                            <Button
+                              key={easing}
+                              variant={nebulaParams.fadeEasing === easing ? 'default' : 'outline'}
+                              size="sm"
+                              className="text-[10px] h-6 px-2"
+                              onClick={() => updateNebulaParam('fadeEasing', easing)}
+                            >
+                              {easing.replace('ease', '')}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Sparkles */}
+                  {eid === 'sparkles' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Drift: {(nebulaParams.driftX ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.driftX ?? 1]} onValueChange={([v]) => updateNebulaParam('driftX', v)} min={0} max={3} step={0.05} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Twinkle Speed: {(nebulaParams.twinkleSpeed ?? 0).toFixed(3)}</Label>
+                        <Slider value={[nebulaParams.twinkleSpeed ?? 0.1]} onValueChange={([v]) => updateNebulaParam('twinkleSpeed', v)} min={0.01} max={0.5} step={0.01} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Radius Min: {(nebulaParams.radiusMin ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.radiusMin ?? 0.1]} onValueChange={([v]) => updateNebulaParam('radiusMin', v)} min={0.01} max={1} step={0.01} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Radius Max: {(nebulaParams.radiusMax ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.radiusMax ?? 0.3]} onValueChange={([v]) => updateNebulaParam('radiusMax', v)} min={0.01} max={1} step={0.01} />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Smoke */}
+                  {eid === 'smoke' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Scale Expansion: {(nebulaParams.scaleEnd ?? 0).toFixed(1)}</Label>
+                        <Slider value={[nebulaParams.scaleEnd ?? 3]} onValueChange={([v]) => updateNebulaParam('scaleEnd', v)} min={1} max={10} step={0.1} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Radius Max: {(nebulaParams.radiusMax ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.radiusMax ?? 1.5]} onValueChange={([v]) => updateNebulaParam('radiusMax', v)} min={0.5} max={5} step={0.1} />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Magic */}
+                  {eid === 'magic' && (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Spring: {(nebulaParams.springStrength ?? 0).toFixed(3)}</Label>
+                        <Slider value={[nebulaParams.springStrength ?? 0.02]} onValueChange={([v]) => updateNebulaParam('springStrength', v)} min={0.001} max={0.1} step={0.001} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Friction: {(nebulaParams.friction ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.friction ?? 0.95]} onValueChange={([v]) => updateNebulaParam('friction', v)} min={0.8} max={0.99} step={0.01} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Drift: {(nebulaParams.driftX ?? 0).toFixed(2)}</Label>
+                        <Slider value={[nebulaParams.driftX ?? 1]} onValueChange={([v]) => updateNebulaParam('driftX', v)} min={0} max={5} step={0.1} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">Radial Velocity: {(nebulaParams.radialVelocity ?? 0).toFixed(1)}</Label>
+                        <Slider value={[nebulaParams.radialVelocity ?? 5]} onValueChange={([v]) => updateNebulaParam('radialVelocity', v)} min={1} max={15} step={0.5} />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </Card>
         ) : (
-          /* Flamethrower Sprites panel */
+          /* ─── Flamethrower Sprites panel ────────────────────────── */
           <Card className="p-4">
             <div className="space-y-4">
               {/* Header */}
@@ -494,6 +845,7 @@ export function FlameEffectsPanel() {
           </Card>
         )}
       </div>
+    </div>
     </div>
   );
 }

@@ -9,26 +9,31 @@ interface KillsTabProps {
   height: number;
 }
 
-const getRarityColor = (rarity: string) => {
+const getRarityVar = (rarity: string) => {
   switch (rarity) {
-    case 'common': return 'bg-gray-100 text-gray-800 border-gray-300';
-    case 'uncommon': return 'bg-green-100 text-green-800 border-green-400';
-    case 'rare': return 'bg-blue-100 text-blue-800 border-blue-400';
-    case 'epic': return 'bg-purple-100 text-purple-800 border-purple-400';
-    case 'legendary': return 'bg-amber-100 text-amber-800 border-amber-400';
-    default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    case 'common': return '--rarity-common';
+    case 'uncommon': return '--rarity-uncommon';
+    case 'rare': return '--rarity-rare';
+    case 'epic': return '--rarity-epic';
+    case 'legendary': return '--rarity-legendary';
+    default: return '--rarity-common';
   }
 };
 
-const getRarityBorderColor = (rarity: string) => {
-  switch (rarity) {
-    case 'common': return 'border-gray-300';
-    case 'uncommon': return 'border-green-400';
-    case 'rare': return 'border-blue-400';
-    case 'epic': return 'border-purple-400';
-    case 'legendary': return 'border-amber-400';
-    default: return 'border-gray-300';
-  }
+const getRarityStyle = (rarity: string): React.CSSProperties => {
+  const v = getRarityVar(rarity);
+  return {
+    background: `hsla(${`var(${v})`} / 0.15)`,
+    color: `hsl(${`var(${v})`})`,
+    borderColor: `hsl(${`var(${v})`})`,
+  };
+};
+
+const getRarityBorderStyle = (rarity: string): React.CSSProperties => {
+  const v = getRarityVar(rarity);
+  return {
+    borderColor: `hsl(${`var(${v})`})`,
+  };
 };
 
 export const KillsTab: React.FC<KillsTabProps> = ({ height }) => {
@@ -47,9 +52,10 @@ export const KillsTab: React.FC<KillsTabProps> = ({ height }) => {
     <ScrollArea style={{ height: `${height - 40}px` }}>
       <div className="grid grid-cols-5 gap-2 pr-4">
         {monstersWithKills.map((monster) => (
-          <Card 
+          <Card
             key={monster.id}
-            className={`p-1.5 border transition-all hover:shadow-md ${getRarityBorderColor(monster.rarity || 'common')}`}
+            className="p-1.5 border transition-all hover:shadow-md"
+            style={getRarityBorderStyle(monster.rarity || 'common')}
           >
             {/* Square Monster Image - top 2/3 */}
             <div 

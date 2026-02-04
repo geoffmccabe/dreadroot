@@ -77,18 +77,23 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
   const gunAnimRef = useRef<string | null>(null);
   const animationConfigMapRef = useRef(new Map<string, any>());
   
+  // Collect mesh materials for per-frame opacity adjustment
+  const avatarMaterialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+
   const { camera } = useThree();
   const { avatarConfig, currentAnimation } = useAvatar();
-  
+
   const fbx = useFBX(avatarConfig.model);
 
   // Configure avatar materials and shadows (Effect 1: Cheap operations)
   useEffect(() => {
     if (!fbx) return;
-    
+
     // Ensure camera only renders layer 0 (default)
     camera.layers.set(0);
-    
+
+    const materials: THREE.MeshStandardMaterial[] = [];
+
     // Configure materials - VISIBLE to camera and shadow camera
     fbx.traverse((child) => {
       if (child instanceof THREE.Mesh) {
@@ -96,16 +101,20 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
         child.layers.enable(1); // Also visible to shadow camera
         child.castShadow = true;
         child.receiveShadow = true;
-        
+
         if (child.material) {
           const material = child.material as THREE.MeshStandardMaterial;
           material.color.set(avatarConfig.color);
-          // Ensure material can reflect in transparent surfaces
           material.metalness = 0.3;
           material.roughness = 0.7;
+          material.transparent = true;
+          material.opacity = 1.0;
+          materials.push(material);
         }
       }
     });
+
+    avatarMaterialsRef.current = materials;
   }, [fbx, avatarConfig.color, camera]);
 
   // Load animations (Effect 2: Expensive operations - only run when animations change)
@@ -176,7 +185,15 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
       
       // Get camera direction using reusable vector
       camera.getWorldDirection(cameraDirectionRef.current);
-      
+
+      // Fade avatar to 20% opacity when looking down past 45° to avoid seeing inside own model
+      const pitch = Math.asin(cameraDirectionRef.current.y); // negative = looking down
+      const targetOpacity = pitch > -Math.PI / 4 ? 1.0 : 0.2;
+      const mats = avatarMaterialsRef.current;
+      for (let i = 0; i < mats.length; i++) {
+        mats[i].opacity = targetOpacity;
+      }
+
       // Ground is at camera.position.y - 1.6 (standing height)
       // Position avatar with feet on ground, offset backward by 0.2m
       const groundY = camera.position.y - 1.6;

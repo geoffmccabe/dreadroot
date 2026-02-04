@@ -7,7 +7,7 @@ export const CHUNK_UPDATE_THROTTLE = 100; // ms
 
 export const MAX_WISP_PARTICLES = 50;
 
-export const MAX_BULLETS = 20;
+export const MAX_BULLETS = 100;
 export const BULLET_GRAVITY = 9.8; // m/s^2
 
 export const BULLET_RENDER_THROTTLE = 50; // ms

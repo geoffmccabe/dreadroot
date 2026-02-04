@@ -7,7 +7,8 @@ import { InstancedAtlasBlockGroup } from './InstancedAtlasBlockGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 // collisionGrid import removed — collision handled by useChunkLoader (ensureBlockCollider)
-import { isInvisiblock, isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { isInvisiblock, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { shrineTracker } from '@/lib/shrineTracker';
 import { getMaterialVariantId, fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 import { useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
@@ -321,6 +322,10 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     let nonTreeCount = 0;
     const nonTreeBlocks: PlacedBlock[] = [];
 
+    // Clear shrine blocks and re-detect from loaded blocks
+    shrineTracker.clearBlocks();
+    const shrineBlockPositions: Array<{ x: number; y: number; z: number }> = [];
+
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
 
@@ -331,6 +336,15 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
 
       if (isTreeBlockType(block.block_type)) {
         treeBlocksForAtlas.push(block);
+        // Detect shrine blocks for proximity tracking (fast char check: 'shr')
+        const bt = block.block_type;
+        if (bt.charCodeAt(0) === 115 && bt.charCodeAt(1) === 104 && bt.charCodeAt(2) === 114) {
+          shrineBlockPositions.push({
+            x: block.position_x,
+            y: block.position_y,
+            z: block.position_z,
+          });
+        }
         continue;
       }
 
@@ -343,6 +357,11 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
       typeHash ^= bt.length * 83492791;
     }
     typeHash = (typeHash ^ nonTreeCount) >>> 0;
+
+    // Register detected shrine blocks
+    if (shrineBlockPositions.length > 0) {
+      shrineTracker.registerShrineBlocks(shrineBlockPositions);
+    }
 
     // Check variant cache (only iterates non-tree blocks on miss)
     let variantsByType: Map<string, Set<string>>;
@@ -432,11 +451,30 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     _loggedNonTreeBlocks = true;
     const totalNonTreeBlocks = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
     initLogStep('PlacedBlocks.tsx', `Non-tree blocks rendering`, totalNonTreeBlocks);
+
+    // DEBUG: Log all non-tree block groups with their types and counts
+    for (const [groupKey, { blocks: gBlocks, textureOverride }] of groupedBlocks) {
+      const blockType = groupKey.split(':')[0];
+      const blockDef = blocksMap.get(blockType);
+      const texUrl = textureOverride || blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
+      console.warn(`[PlacedBlocks GROUP] "${groupKey}": ${gBlocks.length} blocks, blockDef=${blockDef ? blockDef.key : 'MISSING→fallback'}, texture=${texUrl}, sample pos=(${gBlocks[0]?.position_x},${gBlocks[0]?.position_y},${gBlocks[0]?.position_z})`);
+    }
   }
 
-  // Don't render blocks until block definitions are loaded
-  if (blockDefsLoading || blocks.length === 0) {
+  // Don't render if there are no blocks to show
+  // Note: blockDefsLoading is NOT gated here — fallback definitions
+  // (DEFAULT_BLOCK_FALLBACK, TREE_BLOCK_FALLBACK) ensure blocks render
+  // even before Supabase block definitions load.
+  if (blocks.length === 0) {
     return null;
+  }
+
+  // DEBUG: Log total blocks, tree blocks, non-tree blocks on first render per chunk
+  if (groupedBlocks.size > 0 || culledAtlasTreeBlocks.length > 0) {
+    const nonTreeTotal = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
+    if (nonTreeTotal > 0) {
+      console.warn(`[PlacedBlocks RENDER] total=${blocks.length}, tree=${culledAtlasTreeBlocks.length}, nonTree=${nonTreeTotal}, groups=${groupedBlocks.size}, atlasReady=${atlasReady}`);
+    }
   }
 
   return (

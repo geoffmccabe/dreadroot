@@ -94,6 +94,34 @@ All colors MUST be HSL.
     --brand-accent-4: 45 93% 47%; /* Gold/Amber */
     --brand-accent-5: 142 76% 36%; /* Green */
     --brand-danger: 0 84% 60%; /* Red */
+
+    /* ─── HUD & Panel shared tokens ─────────────────────────────────── */
+    /* Both FortressHUD and UserPanel reference these so they stay in sync */
+    --hud-bg: 211 30% 51% / 0.35;
+    --hud-bg-dim: 211 30% 51% / 0.15;
+    --hud-bg-hover: 211 30% 51% / 0.5;
+    --hud-border: 211 34% 73% / 0.8;
+    --hud-border-selected: 0 0% 100%;
+    --hud-text: 211 32% 90%;
+    --hud-text-dim: 211 32% 70%;
+    --hud-text-bright: 211 32% 98%;
+    --hud-radius: 6px;
+    --hud-radius-lg: 8px;
+    --hud-font: 'Inter', sans-serif;
+    --hud-font-xs: 10px;
+    --hud-font-sm: 11px;
+    --hud-font-base: 13px;
+    --hud-font-lg: 14px;
+    --hud-blur: blur(12px);
+    --hud-highlight: 217 80% 55% / 0.5;
+    --hud-selection: 271 81% 56%;
+
+    /* Rarity color tokens */
+    --rarity-common: 0 0% 60%;
+    --rarity-uncommon: 142 76% 36%;
+    --rarity-rare: 217 91% 60%;
+    --rarity-epic: 271 81% 56%;
+    --rarity-legendary: 45 93% 47%;
   }
 
   .dark {
@@ -389,17 +417,161 @@ All colors MUST be HSL.
     }
   }
 
-  /* User Panel - Fixed positioning override (only when open) */
-  .user-panel-dialog[data-state="open"] {
+  /* User Panel - HUD-style scoped variable overrides */
+  /* Shadcn primitives (Card, Badge, Input, Tabs, etc.) inside the panel
+     automatically inherit these so they match the HUD aesthetic. */
+  .user-panel-dialog {
+    --background: var(--hud-bg);
+    --card: var(--hud-bg-dim);
+    --card-foreground: var(--hud-text);
+    --card-border: var(--hud-border);
+    --muted: var(--hud-bg);
+    --muted-foreground: var(--hud-text-dim);
+    --border: var(--hud-border);
+    --input: var(--hud-bg-dim);
+    --foreground: var(--hud-text);
+    --primary-foreground: var(--hud-text-bright);
+    --secondary: var(--hud-bg);
+    --secondary-foreground: var(--hud-text);
+    --popover: var(--hud-bg);
+    --popover-foreground: var(--hud-text);
+    --ring: var(--hud-border);
+    --accent: var(--hud-bg);
+    --accent-foreground: var(--hud-text);
+    --shadow-sm: none;
+  }
+
+  /* Active tab inside user panel: subtle highlight, not bright white */
+  .user-panel-dialog [data-state="active"][role="tab"] {
+    background: hsla(211, 30%, 51%, 0.5) !important;
+    color: hsl(211, 32%, 95%) !important;
+    box-shadow: none !important;
+  }
+
+  /* User Panel - Fixed positioning (shared by open + close states) */
+  .user-panel-dialog[data-state="open"],
+  .user-panel-dialog[data-state="closed"] {
     position: fixed !important;
     top: 1rem !important;
     left: 1rem !important;
     right: auto !important;
     bottom: auto !important;
-    transform: none !important;
     translate: none !important;
     margin: 0 !important;
-    animation: fadeIn 0.2s ease-out !important;
+    transform-origin: bottom left !important;
+    /* Suppress Radix default animations */
+    --tw-enter-opacity: 1;
+    --tw-enter-scale: 1;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-opacity: 1;
+    --tw-exit-scale: 1;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+  }
+
+  .user-panel-dialog[data-state="open"] {
+    animation: userPanelOpen 0.8s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  }
+
+  .user-panel-dialog[data-state="closed"] {
+    animation: userPanelClose 0.5s cubic-bezier(0.55, 0, 1, 0.45) both !important;
+    animation-duration: 0.5s !important;
+  }
+
+  /* Hide contents during scale animation, reveal once fully open */
+  .user-panel-dialog[data-state="open"] > *:not([aria-hidden]) {
+    animation: userPanelContentReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .user-panel-dialog[data-state="closed"] > *:not([aria-hidden]) {
+    animation: userPanelContentHide 0.2s ease-out both;
+  }
+
+  @keyframes userPanelOpen {
+    0% {
+      opacity: 0;
+      transform: translateY(calc(100vh - 6rem)) scaleX(0.15) scaleY(0.08);
+    }
+    40% {
+      opacity: 1;
+      transform: translateY(0) scaleX(0.15) scaleY(1);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scaleX(1) scaleY(1);
+    }
+  }
+
+  @keyframes userPanelClose {
+    0% {
+      opacity: 1;
+      transform: translateY(0) scaleX(1) scaleY(1);
+    }
+    60% {
+      opacity: 1;
+      transform: translateY(0) scaleX(0.15) scaleY(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(calc(100vh - 6rem)) scaleX(0.15) scaleY(0.08);
+    }
+  }
+
+  @keyframes userPanelContentReveal {
+    0%, 85% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes userPanelContentHide {
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* Admin Panel - HUD-style scoped variable overrides (matches user panel) */
+  .admin-panel-dialog {
+    --background: var(--hud-bg);
+    --card: 211 30% 20% / 0.6;
+    --card-foreground: var(--hud-text);
+    --card-border: var(--hud-border);
+    --muted: 211 30% 25% / 0.5;
+    --muted-foreground: var(--hud-text-dim);
+    --border: var(--hud-border);
+    --input: 211 30% 20% / 0.5;
+    --foreground: 0 0% 95%;
+    --primary-foreground: var(--hud-text-bright);
+    --secondary: 211 30% 25% / 0.5;
+    --secondary-foreground: var(--hud-text);
+    --popover: 211 30% 20% / 0.7;
+    --popover-foreground: var(--hud-text);
+    --ring: var(--hud-border);
+    --accent: var(--hud-bg);
+    --accent-foreground: var(--hud-text);
+    --shadow-sm: none;
+  }
+
+  /* Headings inside admin panel: near-white */
+  .admin-panel-dialog h1,
+  .admin-panel-dialog h2,
+  .admin-panel-dialog h3,
+  .admin-panel-dialog h4,
+  .admin-panel-dialog [class*="DialogTitle"] {
+    color: hsl(0, 0%, 95%) !important;
+  }
+
+  /* Active tab inside admin panel: subtle highlight, not bright white */
+  .admin-panel-dialog [data-state="active"][role="tab"] {
+    background: hsla(211, 30%, 51%, 0.5) !important;
+    color: hsl(211, 32%, 95%) !important;
+    box-shadow: none !important;
   }
 
   /* Admin Panel - Fixed positioning override (only when open) */
@@ -434,4 +606,352 @@ All colors MUST be HSL.
   .animate-shake {
     animation: shake 0.3s ease-in-out;
   }
+}
+
+/* ========================================
+   RARITY BORDER EFFECTS
+   ======================================== */
+
+:root {
+  --border-scale: 1;
+  --perc-corner-radius: 8px;
+}
+
+/* Base border container */
+.perc-border {
+  position: relative;
+  border-radius: var(--perc-corner-radius, 8px);
+  overflow: hidden;
+}
+
+/* TIER 2: BASIC - Static three-line border */
+.perc-border-static {
+  padding: 1px;
+  background: var(--border-color);
+}
+
+.perc-border-outer {
+  width: 100%;
+  height: 100%;
+  padding: 1px;
+  background: var(--border-color);
+  border-radius: calc(var(--perc-corner-radius, 8px) - 2px);
+}
+
+.perc-border-middle {
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: calc(var(--perc-corner-radius, 8px) - 3px);
+}
+
+.perc-border-inner-static {
+  width: 100%;
+  height: 100%;
+  padding: 1px;
+  background: var(--border-color);
+  border-radius: calc(var(--perc-corner-radius, 8px) - 4px);
+}
+
+/* TIERS 3, 4, 8: INNER GLOW */
+.perc-border-inner-glow {
+  --glow-color: #FFD700;
+  position: relative;
+  padding: 0;
+  border-radius: var(--perc-corner-radius, 8px);
+  background: hsl(0 0% 5%);
+  overflow: hidden;
+}
+
+.perc-border-inner-glow .inner-glow-border {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--perc-corner-radius, 8px);
+  pointer-events: none;
+  z-index: 2;
+  box-shadow:
+    inset 0 0 0 1px var(--glow-color),
+    inset 0 0 2px 0 var(--glow-color),
+    inset 0 0 6px 0 color-mix(in srgb, var(--glow-color) 80%, transparent),
+    inset 0 0 12px 1px color-mix(in srgb, var(--glow-color) 60%, transparent),
+    inset 0 0 25px 2px color-mix(in srgb, var(--glow-color) 40%, transparent),
+    inset 0 0 50px 4px color-mix(in srgb, var(--glow-color) 25%, transparent);
+  animation: inner-glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes inner-glow-pulse {
+  0%, 100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      inset 0 0 0 1px var(--glow-color),
+      inset 0 0 3px 0 var(--glow-color),
+      inset 0 0 10px 1px color-mix(in srgb, var(--glow-color) 90%, transparent),
+      inset 0 0 20px 2px color-mix(in srgb, var(--glow-color) 70%, transparent),
+      inset 0 0 35px 4px color-mix(in srgb, var(--glow-color) 50%, transparent),
+      inset 0 0 60px 6px color-mix(in srgb, var(--glow-color) 35%, transparent);
+  }
+}
+
+.perc-border-inner-glow .inner-glow-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  border-radius: var(--perc-corner-radius, 8px);
+  overflow: hidden;
+}
+
+/* TIER 8: Rainbow variant */
+.perc-border-inner-glow.inner-glow-rainbow {
+  overflow: visible;
+}
+
+.perc-border-inner-glow.inner-glow-rainbow .inner-glow-border {
+  box-shadow: none;
+  animation: none;
+}
+
+.perc-border-inner-glow.inner-glow-rainbow::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: calc(var(--perc-corner-radius, 8px) + 8px);
+  background: linear-gradient(
+    90deg,
+    #ff00ff 0%, #0000ff 15%, #00ffff 30%, #00ff00 50%,
+    #ffff00 65%, #ff0000 80%, #ff00ff 100%
+  );
+  background-size: 300% 100%;
+  animation: rainbow-glow-flow 3s linear infinite;
+  filter: blur(15px);
+  opacity: 0.85;
+  z-index: -1;
+}
+
+.perc-border-inner-glow.inner-glow-rainbow .inner-glow-border {
+  z-index: 3;
+  background: linear-gradient(
+    90deg,
+    #ff00ff 0%, #0000ff 15%, #00ffff 30%, #00ff00 50%,
+    #ffff00 65%, #ff0000 80%, #ff00ff 100%
+  );
+  background-size: 300% 100%;
+  animation: rainbow-glow-flow 3s linear infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 2px;
+  box-shadow:
+    inset 0 0 8px 2px rgba(255, 255, 255, 0.4),
+    0 0 4px 1px rgba(255, 255, 255, 0.3);
+}
+
+.perc-border-inner-glow.inner-glow-rainbow .inner-glow-content {
+  z-index: 2;
+  background: hsl(0 0% 5%);
+}
+
+@keyframes rainbow-glow-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
+/* TIER 5: PULSE GLOW */
+.perc-border-pulse-glow {
+  --glow-color: #FFD700;
+  position: relative;
+  padding: 4px;
+  border-radius: var(--perc-corner-radius, 8px);
+  background: hsl(0 0% 8%);
+  box-shadow:
+    0 0 8px var(--glow-color),
+    0 0 16px color-mix(in srgb, var(--glow-color) 40%, transparent);
+  animation: pulse-glow-anim 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow-anim {
+  0%, 100% {
+    box-shadow:
+      0 0 8px var(--glow-color),
+      0 0 16px color-mix(in srgb, var(--glow-color) 40%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 12px var(--glow-color),
+      0 0 24px color-mix(in srgb, var(--glow-color) 50%, transparent),
+      0 0 36px color-mix(in srgb, var(--glow-color) 30%, transparent);
+  }
+}
+
+.perc-border-pulse-glow .pulse-glow-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--perc-corner-radius, 8px) - 2px);
+  overflow: hidden;
+  border: 2px solid var(--glow-color);
+}
+
+.perc-border-pulse-glow .pulse-glow-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  border-radius: calc(var(--perc-corner-radius, 8px) - 4px);
+  overflow: hidden;
+}
+
+/* TIERS 6, 7: MOVING LINES */
+.perc-border-moving-lines {
+  --line-color: #FFD700;
+  position: relative;
+  padding: calc(3px * var(--border-scale, 1));
+  border-radius: var(--perc-corner-radius, 8px);
+  background: transparent;
+}
+
+.perc-border-moving-lines .moving-lines-container {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--perc-corner-radius, 8px);
+  overflow: hidden;
+}
+
+.perc-border-moving-lines .moving-lines-border {
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg, var(--line-color) 20deg, transparent 40deg,
+    transparent 90deg, var(--line-color) 110deg, transparent 130deg,
+    transparent 180deg, var(--line-color) 200deg, transparent 220deg,
+    transparent 270deg, var(--line-color) 290deg, transparent 310deg,
+    transparent 360deg
+  );
+  animation: moving-lines-spin 3s linear infinite;
+}
+
+.perc-border-moving-lines .moving-lines-mask {
+  position: absolute;
+  inset: calc(3px * var(--border-scale, 1));
+  border-radius: calc(var(--perc-corner-radius, 8px) - 4px);
+  background: hsl(0 0% 5%);
+}
+
+.perc-border-moving-lines .moving-lines-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  border-radius: calc(var(--perc-corner-radius, 8px) - 4px);
+  overflow: hidden;
+}
+
+@keyframes moving-lines-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* TIERS 9, 10: ELECTRIC */
+.perc-border-electric {
+  --electric-color: #FFD700;
+  position: relative;
+  padding: calc(8px * var(--border-scale, 1));
+  border-radius: var(--perc-corner-radius, 8px);
+  background: transparent;
+  overflow: visible;
+}
+
+.perc-border-electric .electric-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--perc-corner-radius, 8px) - 2px);
+  overflow: visible;
+}
+
+.perc-border-electric .electric-border-line {
+  position: absolute;
+  inset: calc(-6px * var(--border-scale, 1));
+  border: calc(1.5px * var(--border-scale, 1)) solid var(--electric-color);
+  border-radius: calc(var(--perc-corner-radius, 8px) + 4px);
+  pointer-events: none;
+  filter: url(#electric-turbulence);
+  z-index: 2;
+}
+
+.perc-border-electric .electric-glow-1 {
+  position: absolute;
+  inset: calc(-6px * var(--border-scale, 1));
+  border: calc(3px * var(--border-scale, 1)) solid var(--electric-color);
+  border-radius: calc(var(--perc-corner-radius, 8px) + 4px);
+  pointer-events: none;
+  filter: blur(calc(4px * var(--border-scale, 1)));
+  opacity: 0.8;
+  z-index: 1;
+}
+
+.perc-border-electric .electric-glow-2 {
+  position: absolute;
+  inset: calc(-10px * var(--border-scale, 1));
+  border: calc(5px * var(--border-scale, 1)) solid var(--electric-color);
+  border-radius: calc(var(--perc-corner-radius, 8px) + 6px);
+  pointer-events: none;
+  filter: blur(calc(10px * var(--border-scale, 1)));
+  opacity: 0.5;
+  z-index: 0;
+}
+
+.perc-border-electric .electric-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  border-radius: calc(var(--perc-corner-radius, 8px) - 4px);
+  overflow: hidden;
+  background: hsl(0 0% 5%);
+}
+
+/* TIER 9: Fire/Apocalyptic variant */
+.perc-border-electric.electric-fire {
+  animation: fire-shift 0.4s linear infinite;
+}
+
+.perc-border-electric.electric-fire .electric-border-line {
+  filter: url(#electric-turbulence-medium);
+}
+
+@keyframes fire-shift {
+  0% { --electric-color: #FFFF00; }
+  33% { --electric-color: #FF8C00; }
+  66% { --electric-color: #FF2200; }
+  100% { --electric-color: #FFFF00; }
+}
+
+/* TIER 10: Cosmic variant */
+.perc-border-electric.electric-cosmic {
+  animation: cosmic-shift 0.6s linear infinite;
+}
+
+.perc-border-electric.electric-cosmic .electric-border-line {
+  filter: url(#electric-turbulence-heavy);
+  border-width: 2px;
+}
+
+@keyframes cosmic-shift {
+  0% { --electric-color: #FFD700; }
+  50% { --electric-color: #FFFFFF; }
+  100% { --electric-color: #FFD700; }
+}
+
+@property --electric-color {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #FFD700;
 }

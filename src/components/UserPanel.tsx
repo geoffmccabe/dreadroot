@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { useUserData } from '@/hooks/useUserData';
@@ -21,6 +22,8 @@ import { LevelTab } from '@/components/LevelTab';
 import { KillsTab } from '@/components/KillsTab';
 import { TreesTab } from '@/components/TreesTab';
 import { ItemsTab } from '@/components/ItemsTab';
+import { FruitsTab } from '@/components/FruitsTab';
+import { useFruitData } from '@/hooks/useFruitData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useCurrentWorldId } from '@/hooks/useCurrentWorldId';
 
@@ -73,7 +76,7 @@ interface UserPanelProps {
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
   const { user } = useAuth();
-  const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateDisplayName, updateAvatarUrl, updateVisualDistance, updateFogEnabled, refreshData } = useUserData();
+  const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateDisplayName, updateAvatarUrl, updateVisualDistance, updateFogEnabled, refreshData, userRoles } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const { currentTheme } = useCoinTheme();
   const [blockchainAddress, setBlockchainAddress] = useState('');
@@ -106,8 +109,12 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     return seedDefinitions.some(sd => inventory.some(i => i.item_id === sd.id && i.quantity > 0));
   }, [seedDefinitions, inventory]);
   
+  // Fruit data
+  const { userFruits } = useFruitData(user?.id ?? null);
+
   // Show trees tab only if user has seeds OR planted trees
   const showTreesTab = hasSeedsInInventory || allUserTrees.length > 0;
+  const showFruitsTab = true;
   
   // Track if we've loaded data at least once to avoid jarring loading screens
   const hasLoadedOnce = useRef(false);
@@ -325,24 +332,37 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={closePanel}>
-      <DialogContent 
-        className="user-panel-dialog bg-background/95 backdrop-blur relative overflow-hidden flex flex-col"
-        style={{ 
-          width: `${panelSize.width}px`, 
+      <DialogContent
+        ref={(node: HTMLDivElement | null) => {
+          if (node) {
+            node.style.setProperty('background', 'hsla(211, 30%, 51%, 0.35)', 'important');
+            node.style.setProperty('border', '1px solid hsla(211, 34%, 73%, 0.8)', 'important');
+            node.style.setProperty('border-radius', '6px', 'important');
+          }
+        }}
+        className="user-panel-dialog relative overflow-hidden flex flex-col"
+        style={{
+          width: `${panelSize.width}px`,
           height: `${panelSize.height}px`,
           maxWidth: '800px',
-          maxHeight: '90vh'
+          maxHeight: '90vh',
+          border: '1px solid hsla(var(--hud-border))',
+          borderRadius: 'var(--hud-radius)',
+          backdropFilter: 'var(--hud-blur)',
+          WebkitBackdropFilter: 'var(--hud-blur)',
+          color: 'hsl(var(--hud-text))',
+          fontFamily: 'var(--hud-font)',
         }}
       >
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
+        <DialogHeader className="flex-shrink-0 relative">
+          <DialogTitle className="flex items-center gap-2" style={{ color: 'hsl(var(--hud-text-bright))' }}>
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
             User Panel - {tokenDisplayName}: {tokenBalance?.coins || 0}
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className={`grid w-full ${showTreesTab ? 'grid-cols-8' : 'grid-cols-7'}`}>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="relative">
+          <TabsList className={`grid w-full ${showTreesTab && showFruitsTab ? 'grid-cols-9' : showTreesTab || showFruitsTab ? 'grid-cols-8' : 'grid-cols-7'}`} style={{ background: 'hsla(var(--hud-bg-dim))', borderRadius: 'var(--hud-radius)' }}>
             <TabsTrigger value="user">User</TabsTrigger>
             <TabsTrigger value="level">Level</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
@@ -351,6 +371,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
             <TabsTrigger value="market">Market</TabsTrigger>
             {showTreesTab && <TabsTrigger value="trees">Trees</TabsTrigger>}
+            {showFruitsTab && <TabsTrigger value="fruits">Fruits</TabsTrigger>}
           </TabsList>
 
           {/* User Tab */}
@@ -395,8 +416,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       height: '80px',
                       borderRadius: '50%',
                       overflow: 'hidden',
-                      border: '2px solid hsl(var(--border))',
-                      background: 'hsl(var(--muted))',
+                      border: '2px solid hsla(var(--hud-border))',
+                      background: 'hsla(var(--hud-bg-dim))',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -418,7 +439,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       <div style={{
                         position: 'absolute',
                         inset: 0,
-                        background: 'rgba(0,0,0,0.5)',
+                        background: 'hsla(0, 0%, 0%, 0.5)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -546,21 +567,19 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           {/* Items Tab */}
           <TabsContent
             value="items"
-            className="overflow-y-auto"
             style={{
               height: `${panelSize.height - 104}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
           >
-            <ItemsTab />
+            <ItemsTab height={panelSize.height - 104} />
           </TabsContent>
 
           {/* Kills Tab */}
-          <TabsContent 
-            value="kills" 
-            className="overflow-y-auto" 
-            style={{ 
+          <TabsContent
+            value="kills"
+            style={{
               height: `${panelSize.height - 104}px`,
               marginTop: 0,
               paddingTop: '1rem'
@@ -586,15 +605,15 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 <TabsTrigger value="iconic">ICONIC</TabsTrigger>
               </TabsList>
               
-              <TabsContent 
-                value={inventoryActiveClass} 
-                className="space-y-2 overflow-y-auto" 
-                style={{ 
-                  height: `${panelSize.height - 160}px`,
+              <TabsContent
+                value={inventoryActiveClass}
+                style={{
                   marginTop: 0,
                   paddingTop: '1rem'
                 }}
               >
+                <ScrollArea style={{ height: `${panelSize.height - 160}px` }}>
+                <div className="space-y-2 pr-4">
                 {(() => {
                   const blocksInClass = availableBlocks
                     .filter(block => {
@@ -614,7 +633,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       }
                       return a.tier - b.tier;
                     });
-                  
+
                   if (blocksInClass.length === 0) {
                     return (
                       <Card className="p-4 text-center text-muted-foreground">
@@ -622,21 +641,21 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       </Card>
                     );
                   }
-                  
+
                   return blocksInClass.map((block) => {
                     const inventoryCount = getInventoryQuantity(inventory, block.key);
                     const placedCount = placedBlockCounts.get(block.key) || 0;
-                    
+
                     return (
                       <Card key={block.key} className="p-3">
                         <div className="flex items-center gap-3">
                           <BlockIcon block={block} />
-                          
+
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <h3 className="font-semibold truncate">{block.name}</h3>
-                              <Badge 
-                                variant="secondary" 
+                              <Badge
+                                variant="secondary"
                                 className={`text-xs ${getRarityColor(block.rarity)}`}
                               >
                                 {block.rarity}
@@ -651,7 +670,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                               </Badge>
                             </div>
                           </div>
-                          
+
                           <div className="text-right flex-shrink-0 text-xs space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="text-muted-foreground">Inventory:</span>
@@ -667,6 +686,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                     );
                   });
                 })()}
+                </div>
+                </ScrollArea>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -697,15 +718,15 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   <TabsTrigger value="iconic">ICONIC</TabsTrigger>
                 </TabsList>
                 
-                <TabsContent 
-                  value={storeActiveClass} 
-                  className="space-y-4 overflow-y-auto" 
-                  style={{ 
-                    height: `${panelSize.height - 160}px`,
+                <TabsContent
+                  value={storeActiveClass}
+                  style={{
                     marginTop: 0,
                     paddingTop: '1rem'
                   }}
                 >
+                  <ScrollArea style={{ height: `${panelSize.height - 160}px` }}>
+                  <div className="space-y-4 pr-4">
                   {availableBlocks
                     .filter(block => block.class === storeActiveClass)
                     .sort((a, b) => {
@@ -723,22 +744,22 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                     <Card key={block.key} className="p-4 hover:shadow-md transition-shadow">
                       <div className="flex items-center gap-3">
                         <BlockIcon block={block} />
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-semibold truncate">{block.name}</h3>
-                            <Badge 
-                              variant="secondary" 
+                            <Badge
+                              variant="secondary"
                               className={`text-xs ${getRarityColor(block.rarity)}`}
                             >
                               {block.rarity}
                             </Badge>
                           </div>
-                          
+
                           <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
                             {block.description}
                           </p>
-                          
+
                           <div className="flex items-center gap-2 flex-wrap">
                             <img src={coinImageUrl} alt="coin" className="w-4 h-4" />
                             <span className="text-sm font-medium">{block.cost} coins</span>
@@ -753,7 +774,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                             </Badge>
                           </div>
                         </div>
-                        
+
                         <div className="text-center flex-shrink-0">
                           <div className="text-xs text-muted-foreground mb-2">
                             Owned: {getBlockQuantity(block.key)}
@@ -770,6 +791,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       </div>
                     </Card>
                   ))}
+                  </div>
+                  </ScrollArea>
               </TabsContent>
             </Tabs>
           )}
@@ -777,20 +800,37 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
 
           {/* Trees Tab - Only shown if user has seeds or trees */}
           {showTreesTab && (
-            <TabsContent 
+            <TabsContent
               value="trees"
-              className="overflow-y-auto"
-              style={{ 
+              style={{
                 height: `${panelSize.height - 104}px`,
                 marginTop: 0,
                 paddingTop: '1rem'
               }}
             >
-              <TreesTab 
+              <TreesTab
                 height={panelSize.height - 104}
                 inventory={inventory}
                 seedDefinitions={seedDefinitions}
                 plantedTrees={allUserTrees}
+              />
+            </TabsContent>
+          )}
+
+          {showFruitsTab && (
+            <TabsContent
+              value="fruits"
+              style={{
+                height: `${panelSize.height - 104}px`,
+                marginTop: 0,
+                paddingTop: '1rem'
+              }}
+            >
+              <FruitsTab
+                height={panelSize.height - 104}
+                userFruits={userFruits}
+                userId={user?.id ?? null}
+                isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')}
               />
             </TabsContent>
           )}
@@ -801,6 +841,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
           onMouseDown={handleResizeStart}
           style={{
+            zIndex: 3,
             background: 'linear-gradient(135deg, transparent 50%, currentColor 50%)',
             opacity: isResizing ? 0.8 : 0.3,
             transition: 'opacity 0.2s'

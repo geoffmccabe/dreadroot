@@ -19,23 +19,23 @@ export const LevelTab: React.FC<LevelTabProps> = ({ totalPoints, currentLevel: p
   return (
     <div className="space-y-4">
       {/* Points and Level Display - Side by Side */}
-      <Card className="p-4 bg-gradient-to-r from-primary/10 to-primary/5">
+      <Card className="p-4 mr-4" style={{ background: 'linear-gradient(to right, hsla(var(--hud-bg-dim)), hsla(var(--hud-bg-dim)))' }}>
         <div className="flex items-center justify-center gap-8">
           {/* Points - Left */}
           <div className="text-center">
-            <div className="text-xs text-muted-foreground mb-1">Points</div>
-            <div className="text-3xl font-bold text-primary">
+            <div className="text-xs mb-1" style={{ color: 'hsl(var(--hud-text-dim))' }}>Points</div>
+            <div className="text-3xl font-bold" style={{ color: 'hsl(var(--hud-text-bright))' }}>
               {totalPoints.toLocaleString()}
             </div>
           </div>
           
           {/* Divider */}
-          <div className="h-12 w-px bg-border" />
+          <div className="h-12 w-px" style={{ background: 'hsla(var(--hud-border))' }} />
           
           {/* Level - Right */}
           <div className="text-center">
-            <div className="text-xs text-muted-foreground mb-1">Level</div>
-            <div className="text-3xl font-bold text-foreground">
+            <div className="text-xs mb-1" style={{ color: 'hsl(var(--hud-text-dim))' }}>Level</div>
+            <div className="text-3xl font-bold" style={{ color: 'hsl(var(--hud-text))' }}>
               {currentLevel}
             </div>
           </div>
@@ -50,15 +50,23 @@ export const LevelTab: React.FC<LevelTabProps> = ({ totalPoints, currentLevel: p
             const isCurrent = currentLevel === level;
             
             return (
-              <Card 
+              <Card
                 key={level}
                 className={`p-3 transition-all ${
-                  isAchieved 
+                  isAchieved
                     ? isCurrent
-                      ? 'bg-primary/20 border-primary shadow-md'
-                      : 'bg-accent/50 border-accent'
-                    : 'bg-muted/30 border-muted opacity-50'
+                      ? 'shadow-md'
+                      : ''
+                    : 'opacity-50'
                 }`}
+                style={{
+                  background: isAchieved
+                    ? isCurrent ? 'hsla(var(--hud-bg))' : 'hsla(var(--hud-bg-dim))'
+                    : 'hsla(var(--hud-bg-dim))',
+                  borderColor: isAchieved
+                    ? isCurrent ? 'hsla(var(--hud-highlight))' : 'hsla(var(--hud-border))'
+                    : 'hsla(var(--hud-border))',
+                }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -69,27 +77,28 @@ export const LevelTab: React.FC<LevelTabProps> = ({ totalPoints, currentLevel: p
                       {level}
                     </Badge>
                     {isCurrent && (
-                      <span className="text-xs text-primary font-medium">Current</span>
+                      <span className="text-xs font-medium" style={{ color: 'hsl(var(--hud-text-bright))' }}>Current</span>
                     )}
                   </div>
-                  <div className={`text-sm font-medium ${
-                    isAchieved ? 'text-foreground' : 'text-muted-foreground'
-                  }`}>
+                  <div className="text-sm font-medium" style={{
+                    color: isAchieved ? 'hsl(var(--hud-text))' : 'hsl(var(--hud-text-dim))'
+                  }}>
                     {pointsRequired.toLocaleString()} pts
                   </div>
                 </div>
                 {/* Progress indicator for current level */}
                 {isCurrent && level < MAX_LEVEL && (
                   <div className="mt-2">
-                    <div className="h-1 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary transition-all"
-                        style={{ 
-                          width: `${Math.min(100, ((totalPoints - pointsRequired) / (levelThresholds[level]?.pointsRequired - pointsRequired || 1)) * 100)}%` 
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'hsla(var(--hud-bg-dim))' }}>
+                      <div
+                        className="h-full transition-all"
+                        style={{
+                          background: 'hsla(var(--hud-highlight))',
+                          width: `${Math.min(100, ((totalPoints - pointsRequired) / (levelThresholds[level]?.pointsRequired - pointsRequired || 1)) * 100)}%`
                         }}
                       />
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1 text-right">
+                    <div className="text-xs mt-1 text-right" style={{ color: 'hsl(var(--hud-text-dim))' }}>
                       {(levelThresholds[level]?.pointsRequired || 0) - totalPoints} to next
                     </div>
                   </div>

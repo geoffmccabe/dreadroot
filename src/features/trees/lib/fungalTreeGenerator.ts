@@ -155,8 +155,10 @@ function createStemShapeConfig(seedDefinition: SeedDefinition | undefined, rng: 
 
   // Random S-curve direction (perpendicular or independent from lean)
   const sCurveDir = rng() * 2 * Math.PI;
-  // S-curve magnitude: 10-30 degree equivalent offset over height/3
-  const sCurveMagnitude = sCurve ? seededRange(3, 8, rng) : 0;
+  // S-curve magnitude: scale proportionally to tree height (5-15% of height)
+  // seedDefinition height is used for proportional scaling
+  const baseHeight = seedDefinition?.fungal_max_height ?? FUNGAL_MAX_HEIGHT;
+  const sCurveMagnitude = sCurve ? seededRange(baseHeight * 0.05, baseHeight * 0.15, rng) : 0;
 
   return {
     stemRandom,
@@ -192,10 +194,12 @@ function buildStem(
     const layerCenterX = centerX + offsetX;
     const layerCenterZ = centerZ + offsetZ;
 
-    // Stem random: vary radius per layer
+    // Stem random: vary radius per layer, scaled proportionally to stem radius
     let layerRadius = stemRadius;
     if (shapeConfig.stemRandom > 0) {
-      layerRadius = stemRadius + seededInt(-shapeConfig.stemRandom, shapeConfig.stemRandom, stemRandomRng);
+      // Scale random variation by radius — e.g. stemRandom=2 on radius=14 gives ±4 blocks
+      const scaledRandom = Math.max(1, Math.round(shapeConfig.stemRandom * (stemRadius / 7)));
+      layerRadius = stemRadius + seededInt(-scaledRandom, scaledRandom, stemRandomRng);
       layerRadius = Math.max(3, layerRadius); // minimum radius of 3
     }
 
@@ -233,15 +237,23 @@ function getDoorPositions(
 ): Set<string> {
   const positions = new Set<string>();
 
+  // Extend door depth to cover maximum possible random radius variation
+  const scaledRandom = shapeConfig.stemRandom > 0
+    ? Math.max(1, Math.round(shapeConfig.stemRandom * (radius / 7)))
+    : 0;
+  const maxRadius = radius + scaledRandom;
+
   for (let dy = 0; dy < FUNGAL_DOOR_HEIGHT; dy++) {
     const y = baseY + dy;
     const { offsetX, offsetZ } = getStemCenterOffset(y, baseY, height, shapeConfig);
     const layerCX = centerX + offsetX;
     const layerCZ = centerZ + offsetZ;
-    const doorZ = layerCZ + radius;
 
-    for (let dx = -Math.floor(FUNGAL_DOOR_WIDTH / 2); dx <= Math.floor(FUNGAL_DOOR_WIDTH / 2); dx++) {
-      positions.add(`${layerCX + dx},${y},${doorZ}`);
+    // Carve door through all possible wall thicknesses (base radius to max varied radius)
+    for (let dz = radius - 1; dz <= maxRadius + 1; dz++) {
+      for (let dx = -Math.floor(FUNGAL_DOOR_WIDTH / 2); dx <= Math.floor(FUNGAL_DOOR_WIDTH / 2); dx++) {
+        positions.add(`${layerCX + dx},${y},${layerCZ + dz}`);
+      }
     }
   }
 
@@ -504,8 +516,9 @@ export function generateFungalTreeBlueprint(
   // Randomize tree parameters using per-seed values
   const params = randomizeFungalParams(growthSeed, effectiveTier, seedDefinition);
 
-  // Scale height by tier
-  const scaledHeight = Math.round(params.stemHeight * (0.5 + (effectiveTier / FUNGAL_MAX_TIERS) * 0.5));
+  // Scale height by tier, but never go below admin-set minimum
+  const minHeight = seedDefinition?.fungal_min_height ?? FUNGAL_MIN_HEIGHT;
+  const scaledHeight = Math.max(minHeight, Math.round(params.stemHeight * (0.5 + (effectiveTier / FUNGAL_MAX_TIERS) * 0.5)));
 
   // Create shape config from a separate RNG stream (offset seed to avoid correlation)
   const shapeRng = createSeededRandom(growthSeed + 99999);

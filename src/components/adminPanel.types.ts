@@ -49,8 +49,10 @@ export interface WeatherControlsProps {
   settings: {
     lightingRange: [number, number];
     cycleDuration: number;
+    cloudLayer1?: import('@/components/fortress/FortressTypes').CloudLayerSettings;
+    cloudLayer2?: import('@/components/fortress/FortressTypes').CloudLayerSettings;
   };
-  onSettingsChange: (key: string, value: number | [number, number]) => void;
+  onSettingsChange: (key: string, value: any) => void;
 }
 export interface AdminPanelProps {
   waterfallSettings?: any;
@@ -60,6 +62,10 @@ export interface AdminPanelProps {
   weatherSettings?: {
     lightingRange: [number, number];
     cycleDuration: number;
+    cloudLayer1?: import('@/components/fortress/FortressTypes').CloudLayerSettings;
+    cloudLayer2?: import('@/components/fortress/FortressTypes').CloudLayerSettings;
   };
-  onWeatherSettingsChange?: (key: string, value: number | [number, number]) => void;
+  onWeatherSettingsChange?: (key: string, value: any) => void;
+  viewSettings?: import('@/components/fortress/FortressTypes').ViewSettings;
+  onViewSettingsChange?: (settings: import('@/components/fortress/FortressTypes').ViewSettings) => void;
 }

@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AvatarPanel } from '@/components/AvatarPanel';
 import { BillboardControlPanel } from '@/components/BillboardControlPanel';
 import { BulletsPanel } from '@/components/WeaponsPanel';
 import { WorldsList } from '@/components/WorldsList';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAdminPanel, type NPCSubtab, type SeedSubtab, type ItemsSubtab } from '@/contexts/AdminPanelContext';
+import { useAdminPanel, type NPCSubtab, type SeedSubtab, type ItemsSubtab, type WorldsSubtab } from '@/contexts/AdminPanelContext';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { ShnakeDesignPanel } from '@/features/shnake';
 import { ShombieDesignPanel } from '@/features/shombie';
@@ -24,6 +26,9 @@ import { WeatherControls } from './AdminPanel.WeatherControls';
 import { UsersList } from './AdminPanel.UsersList';
 import { BlocksList } from './AdminPanel.BlocksList';
 import { FlameEffectsPanel } from './AdminPanel.FlameEffectsPanel';
+import { SolanaPanel } from './AdminPanel.SolanaPanel';
+import { AtlasDebugPanel } from './AdminPanel.AtlasDebugPanel';
+import { ViewSettingsPanel } from './AdminPanel.ViewSettings';
 import type { AdminPanelProps } from './adminPanel.types';
 
 export function AdminPanel({
@@ -32,7 +37,9 @@ export function AdminPanel({
   onWallPositionsChange,
   onMoveModeChange,
   weatherSettings,
-  onWeatherSettingsChange
+  onWeatherSettingsChange,
+  viewSettings,
+  onViewSettingsChange
 }: AdminPanelProps) {
   const { isOpen, activeTab, closePanel, setActiveTab } = useAdminPanel();
   const { userRoles } = useUserData();
@@ -40,10 +47,67 @@ export function AdminPanel({
   const [npcSubtab, setNpcSubtab] = useState<NPCSubtab>('enemies');
   const [seedSubtab, setSeedSubtab] = useState<SeedSubtab>('ordinary');
   const [itemsSubtab, setItemsSubtab] = useState<ItemsSubtab>('all-items');
+  const [coinsSubtab, setCoinsSubtab] = useState<'divi' | 'waterfall' | 'solana'>('divi');
+  const [worldsSubtab, setWorldsSubtab] = useState<WorldsSubtab>('worlds');
+
+  // Resizable dialog width — drag the left edge to widen
+  const [panelWidth, setPanelWidth] = useState<number | null>(null);
+  const resizingRef = useRef(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // When atlas tab is active and no custom width set, use wider default
+  const isAtlasTab = activeTab === 'worlds' && worldsSubtab === 'atlas';
+  const effectiveWidth = panelWidth ?? (isAtlasTab ? 1200 : undefined);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = true;
+    const startX = e.clientX;
+    const startWidth = dialogRef.current?.offsetWidth ?? 896;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      // Dragging left edge leftward increases width
+      const delta = startX - ev.clientX;
+      const newWidth = Math.max(600, Math.min(window.innerWidth - 40, startWidth + delta * 2));
+      setPanelWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      resizingRef.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closePanel()}>
-      <DialogContent className="admin-panel-dialog w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        ref={(node: HTMLDivElement | null) => {
+          dialogRef.current = node;
+          if (node) {
+            node.style.setProperty('background', 'hsla(211, 30%, 51%, 0.35)', 'important');
+            node.style.setProperty('border', '1px solid hsla(211, 34%, 73%, 0.8)', 'important');
+            node.style.setProperty('border-radius', '6px', 'important');
+          }
+        }}
+        className={cn(
+          "admin-panel-dialog w-full max-h-[90vh] overflow-hidden flex flex-col",
+          !effectiveWidth && "max-w-4xl",
+          activeTab === 'effects' && "!left-auto !right-4 !translate-x-0"
+        )}
+        style={effectiveWidth ? { maxWidth: effectiveWidth, width: effectiveWidth } : undefined}
+        overlayClassName={activeTab === 'effects' ? 'bg-transparent' : undefined}
+      >
+        {/* Left-edge resize handle */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/10 z-50"
+          onMouseDown={handleResizeStart}
+        />
         <DialogHeader>
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
@@ -63,14 +127,42 @@ export function AdminPanel({
           </TabsList>
 
           <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
-            <ScrollArea className="h-[calc(90vh-180px)] pr-4">
-              {waterfallSettings && onWaterfallSettingsChange && (
-                <WaterfallControls 
-                  settings={waterfallSettings}
-                  onSettingsChange={onWaterfallSettingsChange}
-                />
-              )}
-            </ScrollArea>
+            <Tabs value={coinsSubtab} onValueChange={(v) => setCoinsSubtab(v as typeof coinsSubtab)} className="flex flex-col h-full">
+              <TabsList className="grid w-full grid-cols-3 flex-shrink-0 mb-4">
+                <TabsTrigger value="divi">Divi</TabsTrigger>
+                <TabsTrigger value="waterfall">Waterfall</TabsTrigger>
+                <TabsTrigger value="solana">Solana</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="divi" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold">Divi</h3>
+                      <Badge variant="secondary">DIVI</Badge>
+                    </div>
+                    <Card><CardContent className="p-4">
+                      <p className="text-muted-foreground text-sm">Divi configuration coming soon.</p>
+                    </CardContent></Card>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="waterfall" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  {waterfallSettings && onWaterfallSettingsChange && (
+                    <WaterfallControls
+                      settings={waterfallSettings}
+                      onSettingsChange={onWaterfallSettingsChange}
+                    />
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="solana" className="flex-1 overflow-hidden mt-0">
+                <SolanaPanel />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="billboards" className="mt-4 flex-1 overflow-hidden">
@@ -84,7 +176,7 @@ export function AdminPanel({
           </TabsContent>
 
           <TabsContent value="weather" className="mt-4 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-4">
+            <ScrollArea className="h-[calc(90vh-180px)] pr-4">
               {weatherSettings && onWeatherSettingsChange && (
                 <WeatherControls 
                   settings={weatherSettings}
@@ -219,12 +311,49 @@ export function AdminPanel({
           </TabsContent>
 
           <TabsContent value="worlds" className="mt-4 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-4">
-              <WorldsList
-                currentWorldId={currentWorldId}
-                onWorldChange={setCurrentWorldId}
-              />
-            </ScrollArea>
+            <Tabs value={worldsSubtab} onValueChange={(v) => setWorldsSubtab(v as WorldsSubtab)} className="flex flex-col h-full">
+              <TabsList className="grid w-full grid-cols-5 flex-shrink-0 mb-4">
+                <TabsTrigger value="settings">Settings</TabsTrigger>
+                <TabsTrigger value="worlds">Worlds</TabsTrigger>
+                <TabsTrigger value="view">View</TabsTrigger>
+                <TabsTrigger value="fix">Fix</TabsTrigger>
+                <TabsTrigger value="atlas">Atlas</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="settings" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <WorldsList currentWorldId={currentWorldId} onWorldChange={setCurrentWorldId} subtab="settings" />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="worlds" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <WorldsList currentWorldId={currentWorldId} onWorldChange={setCurrentWorldId} subtab="worlds" />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="view" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  {viewSettings && onViewSettingsChange ? (
+                    <ViewSettingsPanel viewSettings={viewSettings} onUpdate={onViewSettingsChange} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground p-4">View settings not available.</p>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="fix" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <WorldsList currentWorldId={currentWorldId} onWorldChange={setCurrentWorldId} subtab="fix" />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="atlas" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <AtlasDebugPanel />
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </DialogContent>

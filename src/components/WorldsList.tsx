@@ -7,6 +7,7 @@ import { useWorlds, World, AmbientMusicTrack } from '@/hooks/useWorlds';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous, RefreshCw, Music, Volume2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
@@ -14,15 +15,19 @@ import { Badge } from '@/components/ui/badge';
 import { DEFAULT_TEXTURES } from '@/hooks/useCurrentWorldId';
 import { cn } from '@/lib/utils';
 import { blockDB } from '@/hooks/useIndexedDB';
+import { RarityTiersPanel } from './AdminPanel.RarityTiersPanel';
 
 const LOCAL_STORAGE_KEY = 'currentWorldId';
+
+type WorldsSubtab = 'settings' | 'worlds' | 'fix';
 
 interface WorldsListProps {
   currentWorldId: string | null;
   onWorldChange: (worldId: string) => void;
+  subtab: WorldsSubtab;
 }
 
-export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
+export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsListProps) {
   const { worlds, ambientTracks, isLoading, createWorld, updateWorld, setDefaultWorld, deleteWorld, uploadAmbientTrack } = useWorlds();
   const { toast } = useToast();
   
@@ -459,53 +464,59 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
     return <div className="p-4 text-muted-foreground">Loading worlds...</div>;
   }
 
-  return (
+  const fixPanel = (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold">Fix / Maintenance</h3>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          onClick={handleClearCache}
+          size="sm"
+          variant="outline"
+          disabled={isClearingCache}
+        >
+          <RefreshCw className={cn("h-4 w-4 mr-1", isClearingCache && "animate-spin")} />
+          {isClearingCache ? 'Clearing...' : 'Clear Cache'}
+        </Button>
+        <Button
+          onClick={handleGrowTrees}
+          size="sm"
+          variant="outline"
+          disabled={isGrowingTrees}
+          className="text-emerald-600 border-emerald-600 hover:bg-emerald-50"
+        >
+          <TreeDeciduous className={cn("h-4 w-4 mr-1", isGrowingTrees && "animate-spin")} />
+          {isGrowingTrees ? 'Growing...' : 'Grow Trees'}
+        </Button>
+        <Button
+          onClick={handleRestoreTrees}
+          size="sm"
+          variant="outline"
+          disabled={isRestoringTrees}
+          className="text-green-600 border-green-600 hover:bg-green-50"
+        >
+          <TreeDeciduous className={cn("h-4 w-4 mr-1", isRestoringTrees && "animate-pulse")} />
+          {isRestoringTrees ? 'Restoring...' : 'Restore Trees'}
+        </Button>
+        <Button
+          onClick={handleClearGhostTrees}
+          size="sm"
+          variant="destructive"
+          disabled={isCleaningGhostTrees}
+        >
+          <TreeDeciduous className="h-4 w-4 mr-1" />
+          {isCleaningGhostTrees ? 'Clearing...' : 'Clear Ghost Trees'}
+        </Button>
+      </div>
+    </div>
+  );
+
+  const worldsPanel = (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Worlds</h3>
-        <div className="flex gap-2">
-          <Button 
-            onClick={handleClearCache} 
-            size="sm" 
-            variant="outline"
-            disabled={isClearingCache}
-          >
-            <RefreshCw className={cn("h-4 w-4 mr-1", isClearingCache && "animate-spin")} /> 
-            {isClearingCache ? 'Clearing...' : 'Clear Cache'}
-          </Button>
-          <Button
-            onClick={handleGrowTrees}
-            size="sm"
-            variant="outline"
-            disabled={isGrowingTrees}
-            className="text-emerald-600 border-emerald-600 hover:bg-emerald-50"
-          >
-            <TreeDeciduous className={cn("h-4 w-4 mr-1", isGrowingTrees && "animate-spin")} />
-            {isGrowingTrees ? 'Growing...' : 'Grow Trees'}
-          </Button>
-          <Button
-            onClick={handleRestoreTrees}
-            size="sm"
-            variant="outline"
-            disabled={isRestoringTrees}
-            className="text-green-600 border-green-600 hover:bg-green-50"
-          >
-            <TreeDeciduous className={cn("h-4 w-4 mr-1", isRestoringTrees && "animate-pulse")} />
-            {isRestoringTrees ? 'Restoring...' : 'Restore Trees'}
-          </Button>
-          <Button
-            onClick={handleClearGhostTrees}
-            size="sm"
-            variant="destructive"
-            disabled={isCleaningGhostTrees}
-          >
-            <TreeDeciduous className="h-4 w-4 mr-1" />
-            {isCleaningGhostTrees ? 'Clearing...' : 'Clear Ghost Trees'}
-          </Button>
-          <Button onClick={() => setShowCreateDialog(true)} size="sm">
-            <Plus className="h-4 w-4 mr-1" /> Create World
-          </Button>
-        </div>
+        <Button onClick={() => setShowCreateDialog(true)} size="sm">
+          <Plus className="h-4 w-4 mr-1" /> Add World
+        </Button>
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -536,8 +547,8 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
           const skyTex = getDisplayTexture(world.sky_texture_url, 'sky');
 
           return (
-            <Card 
-              key={world.id} 
+            <Card
+              key={world.id}
               className={cn(
                 "p-4 transition-all",
                 isInUse && "bg-muted/50 ring-2 ring-blue-400/60"
@@ -582,13 +593,13 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
                   <Label className="text-xs text-muted-foreground">Fortress</Label>
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      <img 
-                        src={fortressTex.url} 
+                      <img
+                        src={fortressTex.url}
                         className={cn(
                           "w-12 h-12 object-cover rounded border",
                           fortressTex.isDefault && "opacity-60"
-                        )} 
-                        alt="Fortress" 
+                        )}
+                        alt="Fortress"
                       />
                       {fortressTex.isDefault && (
                         <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white rounded-b">
@@ -596,8 +607,8 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
                         </span>
                       )}
                     </div>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'fortress'}
                       onClick={() => triggerUpload(world.id, 'fortress')}
@@ -612,13 +623,13 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
                   <Label className="text-xs text-muted-foreground">Ground</Label>
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      <img 
-                        src={groundTex.url} 
+                      <img
+                        src={groundTex.url}
                         className={cn(
                           "w-12 h-12 object-cover rounded border",
                           groundTex.isDefault && "opacity-60"
-                        )} 
-                        alt="Ground" 
+                        )}
+                        alt="Ground"
                       />
                       {groundTex.isDefault && (
                         <span className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/60 text-white rounded-b">
@@ -626,8 +637,8 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
                         </span>
                       )}
                     </div>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       disabled={uploadingFor?.worldId === world.id && uploadingFor?.type === 'ground'}
                       onClick={() => triggerUpload(world.id, 'ground')}
@@ -808,4 +819,37 @@ export function WorldsList({ currentWorldId, onWorldChange }: WorldsListProps) {
       </Dialog>
     </div>
   );
+
+  const settingsPanel = (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold">World Settings</h3>
+      <Tabs defaultValue="sounds" className="flex flex-col">
+        <TabsList className="grid w-full grid-cols-3 flex-shrink-0 mb-4">
+          <TabsTrigger value="sounds">Sounds</TabsTrigger>
+          <TabsTrigger value="css">CSS</TabsTrigger>
+          <TabsTrigger value="rarity-tiers">Rarity Tiers</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sounds" className="mt-0">
+          <Card className="p-4">
+            <p className="text-muted-foreground text-sm">Sound settings coming soon.</p>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="css" className="mt-0">
+          <Card className="p-4">
+            <p className="text-muted-foreground text-sm">CSS settings coming soon.</p>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="rarity-tiers" className="mt-0">
+          <RarityTiersPanel />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+
+  if (subtab === 'settings') return settingsPanel;
+  if (subtab === 'fix') return fixPanel;
+  return worldsPanel;
 }

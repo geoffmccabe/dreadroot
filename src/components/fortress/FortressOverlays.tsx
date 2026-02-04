@@ -48,6 +48,8 @@ export function FortressOverlays(props: FortressOverlaysProps) {
     setPendingChopPosition,
     setChopProgress,
     handleTreeChopConfirm,
+    viewSettings,
+    handleViewSettingsChange,
   } = props;
 
   const baseMode = blockPlacementMode
@@ -68,6 +70,8 @@ export function FortressOverlays(props: FortressOverlaysProps) {
         onMoveModeChange={setIsMoveMode}
         weatherSettings={weatherSettings}
         onWeatherSettingsChange={handleWeatherSettingsChange}
+        viewSettings={viewSettings}
+        onViewSettingsChange={handleViewSettingsChange}
       />
 
       {/* User Panel */}

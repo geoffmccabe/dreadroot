@@ -24,7 +24,9 @@ export const TREE_BLOCK_TYPE_MAP = {
   'fct': 'fungal_cap_top',
   'fcu': 'fungal_cap_underside',
   'ib': 'invisiblock',
-  'f': 'fruit'
+  'gb': 'glow_bark',
+  'f': 'fruit',
+  'shr': 'shrine'
 } as const;
 
 // Reverse map for encoding
@@ -261,6 +263,12 @@ export function getTextureUrlForTreeBlock(
     case 'fungal_cap_top':
     case 'fungal_cap_underside':
       // Fungal textures handled via atlas UV routing; pass trunk as fallback
+      return trunkTextureUrl;
+    case 'glow_bark':
+      // Glow bark uses trunk texture (rendered with emissive material separately)
+      return trunkTextureUrl;
+    case 'shrine':
+      // Shrines use trunk texture for the tier they appear on
       return trunkTextureUrl;
     case 'leaf':
     case 'fruit':

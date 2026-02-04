@@ -18,6 +18,7 @@ export type {
 
 // Core algorithm
 export { generateTreeBlueprint, getNextGrowthBlock, estimateGrowthTime, getBlocksAtOrder, getMaxGrowthOrder } from './lib/treeGrowth';
+export { generateWideTreeBlueprint, getWideBlocksAtOrder, getWideMaxGrowthOrder } from './lib/wideTreeGenerator';
 export { createSeededRandom } from './lib/seededRandom';
 export { fruitPhysics, FruitPhysicsSystem } from './lib/fruitPhysics';
 

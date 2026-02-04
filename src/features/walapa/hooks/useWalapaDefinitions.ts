@@ -31,7 +31,7 @@ export function useWalapaDefinitions() {
     queryKey: ['walapa-definitions'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('walapa_definitions')
+        .from('walapa_definitions' as any)
         .select('*')
         .order('tier', { ascending: true });
 

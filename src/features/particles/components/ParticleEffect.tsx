@@ -6,7 +6,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import System, { SpriteRenderer } from 'three-nebula';
 import * as THREE from 'three';
 import { ParticleEffectType } from '../types';
-import { PARTICLE_PRESETS } from '../presets';
+import { PARTICLE_PRESETS, NebulaPreset } from '../presets';
 
 interface ParticleEffectProps {
   type: ParticleEffectType;
@@ -14,14 +14,16 @@ interface ParticleEffectProps {
   scale?: number;
   active?: boolean;
   onComplete?: () => void;
+  customPreset?: NebulaPreset;
 }
 
-export function ParticleEffect({ 
-  type, 
-  position, 
-  scale = 1, 
+export function ParticleEffect({
+  type,
+  position,
+  scale = 1,
   active = true,
-  onComplete 
+  onComplete,
+  customPreset,
 }: ParticleEffectProps) {
   const { scene } = useThree();
   const systemRef = useRef<System | null>(null);
@@ -31,7 +33,7 @@ export function ParticleEffect({
   useEffect(() => {
     if (!active) return;
 
-    const preset = PARTICLE_PRESETS[type];
+    const preset = customPreset ?? PARTICLE_PRESETS[type];
     if (!preset) {
       console.warn(`[ParticleEffect] Unknown type: ${type}`);
       return;

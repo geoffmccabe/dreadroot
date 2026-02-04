@@ -104,7 +104,7 @@ export function useAtlasSync(options?: {
     queryKey: ['atlas-walapa-definitions'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('walapa_definitions')
+        .from('walapa_definitions' as any)
         .select('tier, body_texture_url, belly_texture_url, eyes_texture_url')
         .order('tier');
       if (error) throw error;
@@ -152,28 +152,40 @@ export function useAtlasSync(options?: {
       }> = [];
 
       // Tree textures (30 tiers × 3 types) with deterministic slots
+      // Filter to 'original' tree type to avoid using fungal definitions
       if (seedDefinitions) {
+        const fruitDiag: string[] = [];
         for (let tier = 1; tier <= 30; tier++) {
-          const def = seedDefinitions.find(d => d.tier === tier);
+          const def = seedDefinitions.find(d => d.tier === tier && (d.tree_type || 'original') === 'original');
           const baseSlot = (tier - 1) * 3;
+          const fruitUrl = def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null;
           specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: baseSlot });
           specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 1 });
-          specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: def?.fruit_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 2 });
+          specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: fruitUrl, slotIndex: baseSlot + 2 });
+          // Track which URL source was used for fruit
+          const src = def?.fruit_texture_url ? 'fruit' : def?.branch_texture_url ? 'branch' : def?.trunk_texture_url ? 'trunk' : 'NONE';
+          if (!def) fruitDiag.push(`T${tier}:NO_DEF`);
+          else if (src === 'NONE') fruitDiag.push(`T${tier}:NULL`);
+          else if (src !== 'fruit') fruitDiag.push(`T${tier}:${src}`);
         }
+        if (fruitDiag.length > 0) {
+          console.warn(`[AtlasSync] Fruit texture issues: ${fruitDiag.join(', ')}`);
+        }
+        console.log(`[AtlasSync] seedDefinitions count=${seedDefinitions.length}, tree_types: ${[...new Set(seedDefinitions.map(d => d.tree_type || 'null'))].join(',')}`);
       }
 
       // Fungal tree textures (30 tiers × 3 types) with deterministic slots
-      // Allocate all 90 slots unconditionally — fungal-specific URL columns don't exist yet,
-      // so fall back to trunk_texture_url for the tier
+      // Filter to 'fungal' tree type; fall back to trunk_texture_url for missing fungal-specific URLs
       if (seedDefinitions) {
         for (let tier = 1; tier <= 30; tier++) {
-          const def = seedDefinitions.find(d => d.tier === tier);
+          const def = seedDefinitions.find(d => d.tier === tier && d.tree_type === 'fungal')
+            || seedDefinitions.find(d => d.tier === tier && (d.tree_type || 'original') === 'original');
           const stemSlot = calculateFungalTreeSlotIndex(tier, 'stem');
           const capTopSlot = calculateFungalTreeSlotIndex(tier, 'cap_top');
           const capUnderSlot = calculateFungalTreeSlotIndex(tier, 'cap_underside');
-          specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: stemSlot });
-          specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capTopSlot });
-          specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capUnderSlot });
+          specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.fungal_stem_texture_url || def?.trunk_texture_url || null, slotIndex: stemSlot });
+          specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_top_texture_url || def?.trunk_texture_url || null, slotIndex: capTopSlot });
+          specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_underside_texture_url || def?.trunk_texture_url || null, slotIndex: capUnderSlot });
         }
       }
 
@@ -345,7 +357,7 @@ export async function syncAtlasOnInit(): Promise<void> {
     supabase.from('shwarm_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shombie_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url').order('tier'),
-    supabase.from('walapa_definitions').select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
+    supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
     supabase.from('block_types').select('name, texture_url'),
   ]);
 
@@ -365,27 +377,39 @@ export async function syncAtlasOnInit(): Promise<void> {
   }> = [];
 
   // Tree textures (30 tiers × 3 types) with deterministic slots
+  // Filter to 'original' tree type to avoid using fungal definitions
   if (seedDefinitions) {
+    const fruitDiag: string[] = [];
     for (let tier = 1; tier <= 30; tier++) {
-      const def = seedDefinitions.find(d => d.tier === tier);
+      const def = seedDefinitions.find((d: any) => d.tier === tier && (d.tree_type || 'original') === 'original');
       const baseSlot = (tier - 1) * 3;
+      const fruitUrl = def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null;
       specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: baseSlot });
       specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 1 });
-      specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: def?.fruit_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 2 });
+      specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: fruitUrl, slotIndex: baseSlot + 2 });
+      const src = def?.fruit_texture_url ? 'fruit' : def?.branch_texture_url ? 'branch' : def?.trunk_texture_url ? 'trunk' : 'NONE';
+      if (!def) fruitDiag.push(`T${tier}:NO_DEF`);
+      else if (src === 'NONE') fruitDiag.push(`T${tier}:NULL`);
+      else if (src !== 'fruit') fruitDiag.push(`T${tier}:${src}`);
     }
+    if (fruitDiag.length > 0) {
+      console.warn(`[AtlasSync:init] Fruit texture issues: ${fruitDiag.join(', ')}`);
+    }
+    console.log(`[AtlasSync:init] seedDefinitions count=${seedDefinitions.length}, tree_types: ${[...new Set(seedDefinitions.map((d: any) => d.tree_type || 'null'))].join(',')}`);
   }
 
   // Fungal tree textures (30 tiers × 3 types) with deterministic slots
-  // Allocate all 90 slots unconditionally — fungal-specific URL columns don't exist yet
+  // Filter to 'fungal' tree type; fall back to trunk_texture_url for missing fungal-specific URLs
   if (seedDefinitions) {
     for (let tier = 1; tier <= 30; tier++) {
-      const def = seedDefinitions.find(d => d.tier === tier);
+      const def = seedDefinitions.find(d => d.tier === tier && d.tree_type === 'fungal')
+        || seedDefinitions.find(d => d.tier === tier && (d.tree_type || 'original') === 'original');
       const stemSlot = calculateFungalTreeSlotIndex(tier, 'stem');
       const capTopSlot = calculateFungalTreeSlotIndex(tier, 'cap_top');
       const capUnderSlot = calculateFungalTreeSlotIndex(tier, 'cap_underside');
-      specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: stemSlot });
-      specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capTopSlot });
-      specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: capUnderSlot });
+      specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.fungal_stem_texture_url || def?.trunk_texture_url || null, slotIndex: stemSlot });
+      specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_top_texture_url || def?.trunk_texture_url || null, slotIndex: capTopSlot });
+      specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_underside_texture_url || def?.trunk_texture_url || null, slotIndex: capUnderSlot });
     }
   }
 

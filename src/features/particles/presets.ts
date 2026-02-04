@@ -172,3 +172,175 @@ export const PARTICLE_PRESETS = {
   magic: magicPreset,
   impact: impactPreset,
 } as const;
+
+// ─── Nebula Editor Helpers ──────────────────────────────────────────────────
+
+import type { NebulaEffectId, NebulaEditorParams } from './types';
+
+// Helper to find a behaviour/initializer by type in an emitter
+function findBehaviour(emitter: any, type: string): any | null {
+  return emitter.behaviours?.find((b: any) => b.type === type) ?? null;
+}
+function findInitializer(emitter: any, type: string): any | null {
+  return emitter.initializers?.find((i: any) => i.type === type) ?? null;
+}
+
+// Get default editor params by reading the base preset values
+export function getDefaultEditorParams(effectId: NebulaEffectId): NebulaEditorParams {
+  const preset = PARTICLE_PRESETS[effectId];
+  const emitter = preset.emitters[0];
+  const radius = findInitializer(emitter, 'Radius');
+  const color = findBehaviour(emitter, 'Color');
+  const alpha = findBehaviour(emitter, 'Alpha');
+  const force = findBehaviour(emitter, 'Force');
+  const drift = findBehaviour(emitter, 'RandomDrift');
+  const radVel = findInitializer(emitter, 'RadialVelocity');
+  const scale = findBehaviour(emitter, 'Scale');
+  const spring = findBehaviour(emitter, 'Spring');
+
+  const params: NebulaEditorParams = {
+    effectId,
+    scale: 1.0,
+    preParticles: preset.preParticles,
+    colorA: color?.properties?.colorA ?? '#FFFFFF',
+    colorB: color?.properties?.colorB ?? '#FFFFFF',
+    alphaStart: alpha?.properties?.alphaA ?? 1,
+    alphaEnd: alpha?.properties?.alphaB ?? 0,
+    forceX: force?.properties?.fx ?? 0,
+    forceY: force?.properties?.fy ?? 0,
+    forceZ: force?.properties?.fz ?? 0,
+  };
+
+  // Effect-specific defaults
+  if (effectId === 'fire') {
+    params.driftX = drift?.properties?.driftX ?? 0.5;
+    params.radiusMin = radius?.properties?.min ?? 0.3;
+    params.radiusMax = radius?.properties?.max ?? 0.8;
+  } else if (effectId === 'explosion') {
+    params.radialVelocity = radVel?.properties?.radius ?? 15;
+    params.fadeEasing = alpha?.properties?.easing ?? 'easeOutQuart';
+  } else if (effectId === 'sparkles') {
+    params.driftX = drift?.properties?.driftX ?? 1;
+    params.radiusMin = radius?.properties?.min ?? 0.1;
+    params.radiusMax = radius?.properties?.max ?? 0.3;
+    params.twinkleSpeed = emitter.rate?.perSecondMax ?? 0.1;
+  } else if (effectId === 'smoke') {
+    params.scaleEnd = scale?.properties?.scaleB ?? 3;
+    params.radiusMax = radius?.properties?.max ?? 1.5;
+  } else if (effectId === 'magic') {
+    params.springStrength = spring?.properties?.spring ?? 0.02;
+    params.friction = spring?.properties?.friction ?? 0.95;
+    params.driftX = drift?.properties?.driftX ?? 1;
+    params.radialVelocity = radVel?.properties?.radius ?? 5;
+  }
+
+  return params;
+}
+
+// Build a modified NebulaPreset from editor params.
+// Uses spread-clone (not JSON.parse/JSON.stringify) to preserve texture references
+// and avoid WebGL texSubImage2D errors from corrupted image data.
+export function buildNebulaPreset(params: NebulaEditorParams): NebulaPreset {
+  const { effectId } = params;
+  const source = PARTICLE_PRESETS[effectId];
+  const srcEmitter = source.emitters[0];
+
+  // Spread-clone initializers and behaviours (shallow clone each object + properties)
+  const initializers = srcEmitter.initializers.map((init: any) => ({
+    ...init,
+    properties: { ...init.properties },
+  }));
+  const behaviours = srcEmitter.behaviours.map((beh: any) => ({
+    ...beh,
+    properties: { ...beh.properties },
+  }));
+  const rate = { ...srcEmitter.rate };
+
+  const emitter = {
+    ...srcEmitter,
+    rate,
+    initializers,
+    behaviours,
+  };
+
+  const preset: NebulaPreset = {
+    ...source,
+    preParticles: params.preParticles,
+    emitters: [emitter],
+  };
+
+  // Apply common: Radius (scaled)
+  const radius = findInitializer(emitter, 'Radius');
+  if (radius) {
+    const baseMin = params.radiusMin ?? radius.properties.min;
+    const baseMax = params.radiusMax ?? radius.properties.max;
+    radius.properties.min = baseMin * params.scale;
+    radius.properties.max = baseMax * params.scale;
+  }
+
+  // Apply common: Colors
+  const color = findBehaviour(emitter, 'Color');
+  if (color) {
+    color.properties.colorA = params.colorA;
+    color.properties.colorB = params.colorB;
+  }
+
+  // Apply common: Alpha
+  const alpha = findBehaviour(emitter, 'Alpha');
+  if (alpha) {
+    alpha.properties.alphaA = params.alphaStart;
+    alpha.properties.alphaB = params.alphaEnd;
+  }
+
+  // Apply common: Force direction (add Force behaviour if missing)
+  let force = findBehaviour(emitter, 'Force');
+  if (!force) {
+    force = { type: 'Force', properties: { fx: 0, fy: 0, fz: 0, life: null, easing: 'easeLinear' } };
+    emitter.behaviours.push(force);
+  }
+  force.properties.fx = params.forceX;
+  force.properties.fy = params.forceY;
+  force.properties.fz = params.forceZ;
+
+  // Effect-specific overrides
+  if (effectId === 'fire') {
+    const drift = findBehaviour(emitter, 'RandomDrift');
+    if (drift && params.driftX !== undefined) {
+      drift.properties.driftX = params.driftX;
+      drift.properties.driftZ = params.driftX;
+    }
+  } else if (effectId === 'explosion') {
+    const radVel = findInitializer(emitter, 'RadialVelocity');
+    if (radVel && params.radialVelocity !== undefined) radVel.properties.radius = params.radialVelocity;
+    if (alpha && params.fadeEasing) alpha.properties.easing = params.fadeEasing;
+  } else if (effectId === 'sparkles') {
+    const drift = findBehaviour(emitter, 'RandomDrift');
+    if (drift && params.driftX !== undefined) {
+      drift.properties.driftX = params.driftX;
+      drift.properties.driftZ = params.driftX;
+    }
+    if (params.twinkleSpeed !== undefined) {
+      rate.perSecondMin = params.twinkleSpeed * 0.5;
+      rate.perSecondMax = params.twinkleSpeed;
+    }
+  } else if (effectId === 'smoke') {
+    const scaleB = findBehaviour(emitter, 'Scale');
+    if (scaleB && params.scaleEnd !== undefined) scaleB.properties.scaleB = params.scaleEnd;
+  } else if (effectId === 'magic') {
+    const spring = findBehaviour(emitter, 'Spring');
+    if (spring) {
+      if (params.springStrength !== undefined) spring.properties.spring = params.springStrength;
+      if (params.friction !== undefined) spring.properties.friction = params.friction;
+    }
+    const drift = findBehaviour(emitter, 'RandomDrift');
+    if (drift && params.driftX !== undefined) {
+      drift.properties.driftX = params.driftX;
+      drift.properties.driftZ = params.driftX;
+    }
+    const radVel = findInitializer(emitter, 'RadialVelocity');
+    if (radVel && params.radialVelocity !== undefined) radVel.properties.radius = params.radialVelocity;
+  }
+
+  return preset;
+}
+

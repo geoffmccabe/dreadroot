@@ -16,6 +16,7 @@ export interface World {
   fortress_texture_url: string | null;
   ground_texture_url: string | null;
   sky_texture_url: string | null;
+  view_settings: Record<string, unknown> | null;
   is_default: boolean;
   created_at: string;
   updated_at: string;

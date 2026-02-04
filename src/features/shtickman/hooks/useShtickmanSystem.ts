@@ -63,10 +63,13 @@ export function useShtickmanSystem({
   const patrolTreesRef = useRef<PlantedTree[]>([]);
 
   // Update patrol trees when plantedTrees changes
+  // Only ordinary trees — shtickmen don't visit fungal or wide trees
   useEffect(() => {
     if (plantedTrees) {
       patrolTreesRef.current = plantedTrees.filter(
-        tree => (tree.seed_definition?.tier ?? 0) >= MIN_PATROL_TREE_TIER
+        tree =>
+          (tree.seed_definition?.tier ?? 0) >= MIN_PATROL_TREE_TIER &&
+          (tree.seed_definition?.tree_type === 'original' || !tree.seed_definition?.tree_type)
       );
     }
   }, [plantedTrees]);
@@ -139,7 +142,7 @@ export function useShtickmanSystem({
       lastDamagedAt: 0,
       currentPath: null,
       currentPathIndex: 0,
-      lastPathfindAt: 0,
+      lastPathfindAt: Date.now() - Math.floor(Math.random() * PATHFIND_INTERVAL_MS),
       heightBlocks: getHeightBlocks(definition.tier),
       headSizeBlocks: getHeadSizeBlocks(definition.tier),
       animationPhase: Math.random() * Math.PI * 2,
@@ -322,35 +325,48 @@ export function useShtickmanSystem({
         continue;
       }
 
-      // Pathfinding: calculate or follow path using universal pathfinding service
+      // Pathfinding: request path via Web Worker (async, non-blocking)
+      // Entity continues on current path while waiting for new one
       if (
         !shtickman.currentPath ||
         now - shtickman.lastPathfindAt > PATHFIND_INTERVAL_MS
       ) {
-        // Use pathfinding service with configurable algorithm
-        // Default to 'astar_default' config, can be overridden per shtickman definition
-        const pathfindingConfig = shtickman.definition.pathfinding_config_code || 'astar_default';
+        // Mark timestamp immediately to prevent re-requesting next frame
+        shtickman.lastPathfindAt = now;
 
-        const result = pathfindingService.findPathWithConfig(
+        const pathfindingConfig = shtickman.definition.pathfinding_config_code || 'astar_default';
+        const capturedId = shtickman.id;
+        // Increment request counter to detect stale out-of-order results
+        const requestId = (shtickman as any)._pathfindRequestId = ((shtickman as any)._pathfindRequestId || 0) + 1;
+
+        // Fire-and-forget async pathfind — result applied when it arrives
+        pathfindingService.findPathAsync(
           pathfindingConfig,
           shtickman.position.x,
           shtickman.position.z,
           shtickman.targetPos.x,
           shtickman.targetPos.z,
           entityRadius,
-          bodyHeight
-        );
+          bodyHeight,
+          0 // entityFeetY — ground level
+        ).then(result => {
+          // Find the shtickman by ID (it may have been removed while awaiting)
+          const s = shtickmenRef.current.find(s => s.id === capturedId);
+          if (!s || !s.isActive) return;
+          // Discard stale result if a newer request was issued
+          if ((s as any)._pathfindRequestId !== requestId) return;
 
-        if (result.success && result.path && result.path.length > 0) {
-          shtickman.currentPath = result.path;
-          shtickman.currentPathIndex = 0;
-        } else {
-          // Pathfinding failed - create simple direct path as fallback
-          // This allows shtickman to at least try moving toward target
-          shtickman.currentPath = [shtickman.targetPos.clone()];
-          shtickman.currentPathIndex = 0;
-        }
-        shtickman.lastPathfindAt = now;
+          if (result.success && result.path && result.path.length > 0) {
+            s.currentPath = result.path;
+            s.currentPathIndex = 0;
+          } else if (!s.currentPath) {
+            // Only set fallback if no existing path
+            s.currentPath = [s.targetPos.clone()];
+            s.currentPathIndex = 0;
+          }
+        }).catch(() => {
+          // Silently ignore — entity continues on current path
+        });
       }
 
       // Follow current path

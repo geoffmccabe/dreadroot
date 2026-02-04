@@ -92,29 +92,48 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   
   // C3: Canonical texture cache key - prevents signed URL query param churn
   const textureCacheKey = canonicalizeTextureUrl(textureUrl) || textureUrl;
-  
+
+  // Track previous cache key to detect URL changes (prevents stale texture cross-contamination)
+  const prevTextureCacheKeyRef = useRef<string>(textureCacheKey);
+
   // Get or cache the texture using canonical key
+  // IMPORTANT: When textureCacheKey changes (e.g. blockDef loaded with different URL),
+  // loadedTexture may still be the OLD texture from useAnimatedTexture's stale state.
+  // We must NOT create a cache entry in that case, or the new URL gets mapped to the old texture.
   const cachedTextureData = useMemo(() => {
-    if (!loadedTexture) return null;
-    
+    if (!loadedTexture) {
+      prevTextureCacheKeyRef.current = textureCacheKey;
+      return null;
+    }
+
     if (textureCache.has(textureCacheKey)) {
       const cached = textureCache.get(textureCacheKey)!;
       // Don't increment ref here - we handle it in the effect below
+      prevTextureCacheKeyRef.current = textureCacheKey;
       return cached;
     }
-    
+
+    // Only create a new cache entry if the cache key hasn't changed since last render.
+    // If it DID change, loadedTexture is stale (belongs to the old URL) — return null
+    // and wait for useAnimatedTexture to load the correct texture for the new URL.
+    if (prevTextureCacheKeyRef.current !== textureCacheKey) {
+      prevTextureCacheKeyRef.current = textureCacheKey;
+      return null;
+    }
+
     loadedTexture.wrapS = THREE.RepeatWrapping;
     loadedTexture.wrapT = THREE.RepeatWrapping;
     loadedTexture.repeat.set(1, 1);
     loadedTexture.offset.set(0, 0);
-    
-    const cached = { 
-      texture: loadedTexture, 
+
+    const cached = {
+      texture: loadedTexture,
       isAnimated,
       refCount: 0  // Start at 0, effect will increment
     };
     textureCache.set(textureCacheKey, cached);
-    
+    prevTextureCacheKeyRef.current = textureCacheKey;
+
     return cached;
   }, [loadedTexture, textureCacheKey, isAnimated]);
   
@@ -238,10 +257,15 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [onMeshReady]);
   
-  // Reference gating: skip rebuild if array ref + texture are identical.
+  // Reference gating: skip rebuild if array ref + texture + material are identical.
   // Safe because PlacedBlocks group cache reuses the same array for unchanged content.
+  // NOTE: material is included because when the component first mounts, texture hasn't
+  // loaded yet so material is null and the <instancedMesh> doesn't exist. When the
+  // texture loads, material becomes non-null and the mesh appears for the first time.
+  // Without material in deps, this effect wouldn't re-run to set instance matrices.
   const lastProcessedBlocksRef = useRef<PlacedBlock[] | null>(null);
   const lastProcessedTextureRef = useRef<string | null>(null);
+  const lastProcessedMaterialRef = useRef<THREE.Material | null>(null);
   const prevCountRef = useRef(0);
 
   useEffect(() => {
@@ -249,11 +273,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     if (!mesh) return;
 
     const texId = textureOverride ?? null;
-    if (blocks === lastProcessedBlocksRef.current && texId === lastProcessedTextureRef.current) {
+    if (blocks === lastProcessedBlocksRef.current && texId === lastProcessedTextureRef.current && material === lastProcessedMaterialRef.current) {
       return;
     }
     lastProcessedBlocksRef.current = blocks;
     lastProcessedTextureRef.current = texId;
+    lastProcessedMaterialRef.current = material;
 
     const matrix = matrixRef.current;
 
@@ -338,8 +363,8 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     // rendering uninitialized indices for a single frame (flicker).
     mesh.count = blocks.length;
     prevCountRef.current = blocks.length;
-  }, [blocks, textureOverride]);
-  
+  }, [blocks, textureOverride, material]);
+
   // Update falling block positions every frame (direct matrix updates, no React re-renders)
   // Also track which blocks were falling so we can reset them when they land
   const previouslyFallingRef = useRef<Set<string>>(new Set());

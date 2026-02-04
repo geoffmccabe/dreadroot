@@ -11,6 +11,7 @@ import { initLogStep } from '@/contexts/InitializationContext';
 import { isTreeDeleted, markTreeDeleted } from './useLocalGrowth';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
 import { generateFungalTreeBlueprint } from '../lib/fungalTreeGenerator';
+import { generateWideTreeBlueprint } from '../lib/wideTreeGenerator';
 
 interface TreeData {
   plantedTrees: PlantedTree[];
@@ -38,21 +39,28 @@ function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
 }
 
 /**
- * Repair missing blueprints for incomplete trees.
+ * Repair missing blueprints for any trees (incomplete or fully grown).
  * Uses growth_seed + seed_definition to regenerate the exact same blueprint.
+ * Fully-grown trees need blueprints for fruit spawning and chopping.
  */
-async function repairMissingBlueprints(incompleteTrees: PlantedTree[]): Promise<void> {
-  if (incompleteTrees.length === 0) return;
+async function repairMissingBlueprints(trees: PlantedTree[]): Promise<void> {
+  if (trees.length === 0) return;
 
-  // Check which trees have blueprints
-  const treeIds = incompleteTrees.map(t => t.id);
-  const { data: existingBps } = await supabase
-    .from('tree_blueprints' as any)
-    .select('planted_tree_id')
-    .in('planted_tree_id', treeIds);
+  // Check which trees have blueprints (batch in groups of 100 to avoid query limits)
+  const treeIds = trees.map(t => t.id);
+  const hasBlueprint = new Set<string>();
+  for (let i = 0; i < treeIds.length; i += 100) {
+    const batch = treeIds.slice(i, i + 100);
+    const { data: existingBps } = await supabase
+      .from('tree_blueprints' as any)
+      .select('planted_tree_id')
+      .in('planted_tree_id', batch);
+    for (const bp of (existingBps || []) as any[]) {
+      hasBlueprint.add(bp.planted_tree_id);
+    }
+  }
 
-  const hasBlueprint = new Set((existingBps || []).map((bp: any) => bp.planted_tree_id));
-  const missingTrees = incompleteTrees.filter(t => !hasBlueprint.has(t.id) && t.seed_definition);
+  const missingTrees = trees.filter(t => !hasBlueprint.has(t.id) && t.seed_definition);
 
   if (missingTrees.length === 0) return;
 
@@ -66,6 +74,13 @@ async function repairMissingBlueprints(incompleteTrees: PlantedTree[]): Promise<
       let blueprint;
       if (treeType === 'fungal') {
         blueprint = generateFungalTreeBlueprint(
+          tree.base_x, tree.base_y, tree.base_z,
+          seedDef.tier,
+          tree.growth_seed,
+          seedDef
+        );
+      } else if (treeType === 'wide') {
+        blueprint = generateWideTreeBlueprint(
           tree.base_x, tree.base_y, tree.base_z,
           seedDef.tier,
           tree.growth_seed,
@@ -114,6 +129,7 @@ export function useTreeData(
   userId: string | null = null
 ): TreeData & {
   refetch: () => Promise<void>;
+  removeFruit: (fruitId: string) => void;
 } {
   const [plantedTrees, setPlantedTrees] = useState<PlantedTree[]>([]);
   const [treeFruits, setTreeFruits] = useState<TreeFruit[]>([]);
@@ -228,11 +244,12 @@ export function useTreeData(
       setSeedDefinitions(seedDefs);
       setMyIncompleteTrees(mappedIncomplete);
 
-      // Repair missing blueprints for all incomplete trees (enables server-side growth)
-      const allIncomplete = combined.filter(t => !t.is_fully_grown && t.seed_definition);
-      if (allIncomplete.length > 0 && !blueprintRepairDoneRef.current) {
+      // Repair missing blueprints for ALL trees (incomplete + fully grown)
+      // Fully-grown trees need blueprints for fruit spawning and chopping
+      const treesNeedingBlueprints = combined.filter(t => t.seed_definition);
+      if (treesNeedingBlueprints.length > 0 && !blueprintRepairDoneRef.current) {
         blueprintRepairDoneRef.current = true;
-        repairMissingBlueprints(allIncomplete).catch(err => {
+        repairMissingBlueprints(treesNeedingBlueprints).catch(err => {
           console.error('[TreeData] Blueprint repair error:', err);
         });
       }
@@ -333,7 +350,16 @@ export function useTreeData(
       )
       .subscribe();
 
-    // Subscribe to seed_definitions changes (global, not filtered by world)
+    return () => {
+      supabase.removeChannel(fruitsChannel);
+      supabase.removeChannel(treesChannel);
+    };
+  }, [worldId, userId, fetchData]);
+
+  // Separate subscription for seed_definitions (global, not dependent on worldId)
+  useEffect(() => {
+    if (!TREE_CONFIG.ENABLED) return;
+
     const seedsChannel = supabase
       .channel('seed_definitions_global')
       .on(
@@ -352,7 +378,7 @@ export function useTreeData(
               return updated;
             });
           } else if (payload.eventType === 'UPDATE') {
-            setSeedDefinitions(prev => 
+            setSeedDefinitions(prev =>
               prev.map(s => s.id === payload.new.id ? payload.new as SeedDefinition : s)
             );
           } else if (payload.eventType === 'DELETE') {
@@ -363,11 +389,14 @@ export function useTreeData(
       .subscribe();
 
     return () => {
-      supabase.removeChannel(fruitsChannel);
-      supabase.removeChannel(treesChannel);
       supabase.removeChannel(seedsChannel);
     };
-  }, [worldId, userId, fetchData]);
+  }, []);
+
+  // Immediately remove a fruit from local state (for instant visual removal on harvest)
+  const removeFruit = useCallback((fruitId: string) => {
+    setTreeFruits(prev => prev.filter(f => f.id !== fruitId));
+  }, []);
 
   // Immediately remove a tree from local state (for instant UI updates when chopping)
   // Also marks tree as deleted to prevent it from coming back via realtime/refetch/growth
@@ -398,5 +427,6 @@ export function useTreeData(
     error,
     refetch: fetchData,
     removeTree,  // For immediate UI updates when chopping
+    removeFruit, // For immediate UI updates when harvesting
   };
 }

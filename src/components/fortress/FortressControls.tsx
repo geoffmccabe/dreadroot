@@ -24,6 +24,7 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
+import { setGlobalInspectData, clearGlobalInspectData } from '@/components/FPSCounter';
 
 export function FirstPersonControls({
   onShoot,
@@ -33,9 +34,11 @@ export function FirstPersonControls({
   blockPlacementMode,
   treePlacementMode,
   fungalPlacementMode,
+  widePlacementMode,
   onBlockPlace,
   onTreePlace,
   onFungalTreePlace,
+  onWideTreePlace,
   onOpenPanel,
   onToggleInventory,
   onModeChange,
@@ -43,10 +46,12 @@ export function FirstPersonControls({
   selectedBlockType,
   selectedSeedTier,
   selectedFungalTier,
+  selectedWideTier,
   panelOpen,
   onCycleBlock,
   onCycleSeed,
   onCycleFungalSeed,
+  onCycleWideSeed,
   blocks,
   onBlockRain,
   userRoles,
@@ -67,6 +72,7 @@ export function FirstPersonControls({
   isOwnedTreeAtPosition,
   onTreeChopComplete,
   onTreeChopProgress,
+  onBlockMineComplete,
   onBulletTierChange,
   // Pentabullet props
   playerLevel = 1,
@@ -83,6 +89,8 @@ export function FirstPersonControls({
   isFlameGloveSelected,
   onFlameStart,
   onFlameStop,
+  // Fruit harvest system (F-key)
+  onHarvestFruit,
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -378,6 +386,19 @@ export function FirstPersonControls({
       case 'Digit0':
         // Legacy spawn mode removed - now handled by useSpawnCommands hook in FortressScene
 
+        // T-mode: T+2 for wide tree planting
+        if (tModeActiveRef.current && event.code === 'Digit2') {
+          console.log('[KeyHandler] T+2 detected, switching to wide_planting');
+          event.preventDefault();
+          tModeActiveRef.current = false;
+          if (tModeTimeoutRef.current) {
+            clearTimeout(tModeTimeoutRef.current);
+            tModeTimeoutRef.current = null;
+          }
+          onModeChange('wide_planting');
+          break;
+        }
+
         // T-mode: T+3 for fungal tree planting
         if (tModeActiveRef.current && event.code === 'Digit3') {
           console.log('[KeyHandler] T+3 detected, switching to fungal_planting');
@@ -413,11 +434,11 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyT':
-        if (treePlacementMode || fungalPlacementMode) {
+        if (treePlacementMode || fungalPlacementMode || widePlacementMode) {
           onModeChange(null);
         } else {
           onModeChange('planting');
-          // Start T-mode: 3 second window for T+3 fungal combo
+          // Start T-mode: 3 second window for T+2 wide / T+3 fungal combo
           tModeActiveRef.current = true;
           if (tModeTimeoutRef.current) clearTimeout(tModeTimeoutRef.current);
           tModeTimeoutRef.current = setTimeout(() => {
@@ -439,6 +460,9 @@ export function FirstPersonControls({
         } else if (fungalPlacementMode) {
           event.preventDefault();
           onCycleFungalSeed('prev');
+        } else if (widePlacementMode) {
+          event.preventDefault();
+          onCycleWideSeed('prev');
         }
         break;
       case 'BracketRight':
@@ -451,6 +475,9 @@ export function FirstPersonControls({
         } else if (fungalPlacementMode) {
           event.preventDefault();
           onCycleFungalSeed('next');
+        } else if (widePlacementMode) {
+          event.preventDefault();
+          onCycleWideSeed('next');
         }
         break;
       case 'Escape':
@@ -458,8 +485,8 @@ export function FirstPersonControls({
           document.exitPointerLock();
         }
         break;
-      case 'Backquote': // ~ key (Shift+`) for God Mode
-        if (event.shiftKey && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
+      case 'Backquote': // ` or ~ key for God Mode
+        if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
           godModeRef.current = !godModeRef.current;
           setGodModeEnabled(godModeRef.current);
           onGodModeChange?.(godModeRef.current);
@@ -511,6 +538,12 @@ export function FirstPersonControls({
         break;
       case 'KeyE':
         keys.current.e = true;
+        break;
+      case 'KeyF':
+        // Harvest nearest fruit
+        if (onHarvestFruitRef.current) {
+          onHarvestFruitRef.current();
+        }
         break;
     }
   }, [crosshairsEnabled, onModeChange, onOpenPanel, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
@@ -745,6 +778,22 @@ export function FirstPersonControls({
         );
         onFungalTreePlace(position);
       }
+    } else if (widePlacementMode && onWideTreePlace) {
+      // Wide tree placement
+      const placementResult = calculatePlacementFast(
+        camera,
+        existingBlocks || [],
+        5
+      );
+
+      if (placementResult.isValid) {
+        const position = new THREE.Vector3(
+          placementResult.x,
+          placementResult.y,
+          placementResult.z
+        );
+        onWideTreePlace(position);
+      }
     } else if (showCrosshairs && onShoot) {
       console.log('[Controls] Shoot branch reached, showCrosshairs=', showCrosshairs, 'isFlameGlove=', isFlameGloveSelected);
       // Flame Glove uses continuous hold, not click-to-fire
@@ -773,7 +822,7 @@ export function FirstPersonControls({
       // Play gunshot sound via spatial audio (works reliably, distance 0 = full volume)
       playSpatialSound('/space_gunshot.mp3', 0, { baseVolume: 0.3 });
     }
-  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, fungalPlacementMode, onBlockPlace, onTreePlace, onFungalTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId]);
+  }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, fungalPlacementMode, widePlacementMode, onBlockPlace, onTreePlace, onFungalTreePlace, onWideTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId]);
   
   handleClickRef.current = handleClick;
 
@@ -881,14 +930,14 @@ export function FirstPersonControls({
   
   const handleRightClick = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
-    
+
     // Cancel pentabullet charge on right-click
     if (pentabulletPhaseRef.current !== 'idle') {
       event.preventDefault();
       cancelPentabulletCharge();
       return;
     }
-    
+
     if (!blockPlacementMode || !showOwnershipOutline) return;
     event.preventDefault();
   }, [blockPlacementMode, showOwnershipOutline, cancelPentabulletCharge]);
@@ -897,7 +946,144 @@ export function FirstPersonControls({
 
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
-    if (event.button === 2) keys.current.rightMouse = true;
+    if (event.button === 2) {
+      keys.current.rightMouse = true;
+
+      // Admin block inspect: right-click to see full block info
+      const isAdminUser = userRoles.includes('admin') || userRoles.includes('superadmin');
+      if (isAdminUser) {
+        const meshesArray = meshesArrayCache.current;
+        let bx = 0, by = 0, bz = 0;
+        let meshBlockType: string | undefined;
+        let inMesh = false;
+        let isGround = false;
+        let meshName = '';
+        let instanceId = -1;
+
+        // Try raycast against placed block meshes first
+        const result = meshesArray.length > 0 ? raycastMeshes(meshesArray, 20) : null;
+
+        if (result && result.instanceId !== undefined) {
+          // Hit an instanced mesh (placed block)
+          inMesh = true;
+          meshBlockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
+          const mesh = result.object as THREE.InstancedMesh;
+          const matrix = new THREE.Matrix4();
+          mesh.getMatrixAt(result.instanceId, matrix);
+          const pos = new THREE.Vector3();
+          pos.setFromMatrixPosition(matrix);
+
+          bx = Math.floor(pos.x);
+          by = Math.floor(pos.y);
+          bz = Math.floor(pos.z);
+          meshName = mesh.name || '(unnamed)';
+          instanceId = result.instanceId;
+        } else {
+          // No placed block hit - check if looking at ground (y=0 plane)
+          // Calculate ray-plane intersection with y=0
+          const camDir = new THREE.Vector3();
+          camera.getWorldDirection(camDir);
+
+          if (camDir.y < -0.01) { // Looking downward
+            const t = -camera.position.y / camDir.y;
+            if (t > 0 && t < 20) { // Within reasonable distance
+              bx = Math.floor(camera.position.x + camDir.x * t);
+              by = 0;
+              bz = Math.floor(camera.position.z + camDir.z * t);
+              isGround = true;
+              meshBlockType = 'grass_block';
+            }
+          }
+        }
+
+        // Only continue if we have a valid position
+        if (inMesh || isGround) {
+          // Search for matching PlacedBlock in state array
+          const matchedInState = existingBlocks?.find((b: PlacedBlock) =>
+            Math.floor(b.position_x) === bx &&
+            Math.floor(b.position_y) === by &&
+            Math.floor(b.position_z) === bz
+          );
+          const inState = !!matchedInState;
+
+          // For now, chunks and indexedDB checks use same state (they're derived from same source)
+          // A block in state means it was loaded from chunks/cache
+          const inChunks = inState;
+          const inIndexedDB = inState; // Would need async call to check separately
+
+          // Check if a collider exists at this position
+          const colliderCount = worldCollisionGrid.getNearbyFiltered(bx + 0.5, bz + 0.5, 1.0, by, by + 1);
+          let hasCollider = false;
+          const nearby = worldCollisionGrid.nearbyResult;
+          for (let i = 0; i < colliderCount; i++) {
+            const c = nearby[i];
+            if (c.min.x <= bx + 0.9 && c.max.x >= bx + 0.1 &&
+                c.min.y <= by + 0.9 && c.max.y >= by + 0.1 &&
+                c.min.z <= bz + 0.9 && c.max.z >= bz + 0.1) {
+              hasCollider = true;
+              break;
+            }
+          }
+
+          const isTree = meshBlockType ? isTreeBlockType(meshBlockType) : false;
+          const matchedBlock = matchedInState;
+
+          // Determine primary source
+          let source = 'none';
+          if (isGround) source = 'ground';
+          else if (inMesh) source = 'mesh';
+          else if (inState) source = 'state';
+
+          // Build raw info for clipboard
+          const info = [
+            `=== BLOCK INSPECT ===`,
+            `Grid pos: (${bx}, ${by}, ${bz})`,
+            `Block type: ${meshBlockType || 'NONE'}`,
+            `Is ground: ${isGround}`,
+            `Is tree type: ${isTree}`,
+            `Has collider: ${hasCollider}`,
+            ``,
+            `--- Sources ---`,
+            `In mesh: ${inMesh}${inMesh ? ` (instanceId: ${instanceId}, name: ${meshName})` : ''}`,
+            `In state array: ${inState}`,
+            `In chunks: ${inChunks}`,
+            `In IndexedDB: ${inIndexedDB}`,
+            ``,
+            `--- DB Record ---`,
+            matchedBlock ? [
+              `ID: ${matchedBlock.id}`,
+              `block_type: ${matchedBlock.block_type}`,
+              `user_id: ${matchedBlock.user_id || 'null (unowned)'}`,
+              `created: ${matchedBlock.created_at}`,
+              `expires: ${matchedBlock.expires_at || 'never'}`,
+              `texture: ${matchedBlock.texture_url || 'default'}`,
+              `branch_depth: ${matchedBlock.branch_depth ?? 'N/A'}`,
+            ].join('\n') : 'NO MATCHING DB RECORD FOUND',
+          ].join('\n');
+
+          console.log(info);
+
+          // Set global inspect data for HUD display
+          setGlobalInspectData({
+            gridPos: `${bx},${by},${bz}`,
+            meshBlockType: meshBlockType || 'NONE',
+            isTree,
+            hasCollider,
+            isGround,
+            source,
+            inMesh,
+            inState,
+            inChunks,
+            inIndexedDB,
+            dbId: matchedBlock?.id || null,
+            dbBlockType: matchedBlock?.block_type || null,
+            dbUserId: matchedBlock?.user_id || null,
+            rawInfo: info,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
     if (event.button === 0) {
       leftMouseDownRef.current = true;
       chopStartTimeRef.current = performance.now();
@@ -908,7 +1094,7 @@ export function FirstPersonControls({
       console.log(`[TreeChop] MouseDown: showCrosshairs=${showCrosshairs}, blockMode=${blockPlacementMode}, treeMode=${treePlacementMode}`);
 
       // Start flame glove or pentabullet charge if in shooting mode
-      if (showCrosshairs && !blockPlacementMode && !treePlacementMode) {
+      if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
         if (isFlameGloveSelected && onFlameStart) {
           // Flame Glove selected — start flamethrower
           onFlameStart();
@@ -917,8 +1103,8 @@ export function FirstPersonControls({
         }
       }
     }
-  }, [showCrosshairs, blockPlacementMode, treePlacementMode, isFlameGloveSelected, onFlameStart]);
-  
+  }, [showCrosshairs, blockPlacementMode, treePlacementMode, isFlameGloveSelected, onFlameStart, userRoles, raycastMeshes, existingBlocks, camera]);
+
   handleMouseDownRef.current = handleMouseDown;
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
@@ -968,7 +1154,8 @@ export function FirstPersonControls({
   const stableWheelListener = useCallback((event: WheelEvent) => {
     handleWheelRef.current?.(event);
   }, []);
-  const stableClickListener = useCallback(() => {
+  const stableClickListener = useCallback((event: MouseEvent) => {
+    if (event.button !== 0) return; // Only left-click triggers actions
     handleClickRef.current?.();
   }, []);
   const stableRightClickListener = useCallback((event: MouseEvent) => {
@@ -1023,7 +1210,13 @@ export function FirstPersonControls({
   const isOwnedTreeAtPositionRef = useRef(isOwnedTreeAtPosition);
   const onTreeChopCompleteRef = useRef(onTreeChopComplete);
   const onTreeChopProgressRef = useRef(onTreeChopProgress);
+
+  // Block mining ref (admin only)
+  const onBlockMineCompleteRef = useRef(onBlockMineComplete);
   
+  // Fruit harvest refs
+  const onHarvestFruitRef = useRef(onHarvestFruit);
+
   // Pentabullet refs
   const onPentabulletChargeChangeRef = useRef(onPentabulletChargeChange);
   const showCrosshairsRef = useRef(showCrosshairs);
@@ -1043,6 +1236,8 @@ export function FirstPersonControls({
   useEffect(() => { isOwnedTreeAtPositionRef.current = isOwnedTreeAtPosition; }, [isOwnedTreeAtPosition]);
   useEffect(() => { onTreeChopCompleteRef.current = onTreeChopComplete; }, [onTreeChopComplete]);
   useEffect(() => { onTreeChopProgressRef.current = onTreeChopProgress; }, [onTreeChopProgress]);
+  useEffect(() => { onBlockMineCompleteRef.current = onBlockMineComplete; }, [onBlockMineComplete]);
+  useEffect(() => { onHarvestFruitRef.current = onHarvestFruit; }, [onHarvestFruit]);
   useEffect(() => { onPentabulletChargeChangeRef.current = onPentabulletChargeChange; }, [onPentabulletChargeChange]);
   useEffect(() => { showCrosshairsRef.current = showCrosshairs; }, [showCrosshairs]);
 
@@ -1095,7 +1290,11 @@ export function FirstPersonControls({
         setHoveredBlockId(null);
       }
       
+      // Fruit harvest is now F-key based (handled in keydown handler)
+      const fruitHarvestActive = false;
+
       // Tree chopping detection - hold left mouse on owned tree blocks (not in shooting mode)
+      // Skip if actively harvesting a fruit
       // IMPORTANT: Must use showCrosshairsRef.current, not showCrosshairs, because this is in a frame loop
       // Debug: Log every 500ms when holding left mouse to trace chopping flow
       if (leftMouseDownRef.current) {
@@ -1104,7 +1303,7 @@ export function FirstPersonControls({
           console.log(`[TreeChop] === HOLDING LEFT MOUSE === crosshairs=${showCrosshairsRef.current}, blockMode=${blockPlacementModeRef.current}, hasOwnerFn=${!!isOwnedTreeAtPositionRef.current}, meshCount=${meshesArrayCache.current.length}`);
         }
       }
-      if (leftMouseDownRef.current && !showCrosshairsRef.current && isOwnedTreeAtPositionRef.current) {
+      if (leftMouseDownRef.current && !showCrosshairsRef.current && !fruitHarvestActive && isOwnedTreeAtPositionRef.current) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
         if (meshesArray.length > 0) {
@@ -1114,73 +1313,92 @@ export function FirstPersonControls({
             const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
             console.log(`[TreeChop] Raycast hit blockType: ${blockType}, isTreeBlockType: ${blockType ? isTreeBlockType(blockType) : 'N/A'}`);
 
-            // Check if it's any tree block type (handles encoded types like 'trunk_-1_5')
-            if (blockType && (isTreeBlockType(blockType) || blockType === 'tree_atlas' || blockType === 'tree_fallback')) {
-              // Get the block position from the instanced mesh matrix
-              const mesh = result.object as THREE.InstancedMesh;
-              const matrix = new THREE.Matrix4();
-              mesh.getMatrixAt(result.instanceId, matrix);
-              const position = new THREE.Vector3();
-              position.setFromMatrixPosition(matrix);
-              
-              const blockX = Math.round(position.x);
-              const blockY = Math.round(position.y);
-              const blockZ = Math.round(position.z);
-              
-              // Check if this is an owned tree
-              const isOwned = isOwnedTreeAtPositionRef.current(blockX, blockY, blockZ);
-              console.log(`[TreeChop] Ownership check at (${blockX},${blockY},${blockZ}): ${isOwned}`);
-              if (isOwned) {
-                // Initialize or continue chopping on this position
-                const isNewBlock = !choppingPositionRef.current || 
-                    choppingPositionRef.current.x !== blockX ||
-                    choppingPositionRef.current.y !== blockY ||
-                    choppingPositionRef.current.z !== blockZ;
-                
-                if (isNewBlock) {
-                  // Started chopping a new block - reset progress
-                  choppingPositionRef.current = { x: blockX, y: blockY, z: blockZ };
-                  chopCountRef.current = 0;
-                  // Set to past time so first chop happens immediately
-                  lastChopSoundTimeRef.current = now - CHOP_INTERVAL_MS;
-                }
-                
-                const timeSinceLastChop = now - lastChopSoundTimeRef.current;
-                
-                // Check if enough time passed for next chop
-                if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
-                  lastChopSoundTimeRef.current = now;
-                  chopCountRef.current++;
-                  console.log(`[TreeChop] Chop #${chopCountRef.current}/${CHOPS_REQUIRED}`);
+            // Determine what we're looking at
+            const isTreeBlock = blockType && (isTreeBlockType(blockType) || blockType === 'tree_atlas' || blockType === 'tree_fallback');
+            const isAdmin = userRolesRef.current?.some((r: string) => r === 'admin' || r === 'superadmin');
 
-                  // Play chop sound via spatial audio (reliable, works in frame loops)
-                  playSpatialSound('/axe_chop.mp3', 0, { baseVolume: 0.5 });
-                  
-                  // Report progress
-                  if (onTreeChopProgressRef.current) {
-                    onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);
-                  }
-                  
-                  // Check if we've reached the required chops
-                  if (chopCountRef.current >= CHOPS_REQUIRED) {
-                    // Trigger the confirmation modal via callback
-                    if (onTreeChopCompleteRef.current) {
-                      onTreeChopCompleteRef.current(blockX, blockY, blockZ);
-                    }
-                    
-                    // Reset state
-                    leftMouseDownRef.current = false;
-                    chopCountRef.current = 0;
-                    choppingPositionRef.current = null;
-                  }
-                }
-              } else {
-                // Not an owned tree - reset chopping state
-                choppingPositionRef.current = null;
+            // Get block position from instanced mesh matrix
+            const mesh = result.object as THREE.InstancedMesh;
+            const matrix = new THREE.Matrix4();
+            mesh.getMatrixAt(result.instanceId, matrix);
+            const position = new THREE.Vector3();
+            position.setFromMatrixPosition(matrix);
+
+            // Instanced meshes are centered at +0.5, so subtract before rounding
+            const blockX = Math.floor(position.x);
+            const blockY = Math.floor(position.y);
+            const blockZ = Math.floor(position.z);
+
+            // Check ownership for tree blocks
+            const isOwnedTree = isTreeBlock && isOwnedTreeAtPositionRef.current(blockX, blockY, blockZ);
+
+            if (isOwnedTree) {
+              // OWNED TREE: hold-to-chop with confirmation modal
+              const isNewBlock = !choppingPositionRef.current ||
+                  choppingPositionRef.current.x !== blockX ||
+                  choppingPositionRef.current.y !== blockY ||
+                  choppingPositionRef.current.z !== blockZ;
+
+              if (isNewBlock) {
+                choppingPositionRef.current = { x: blockX, y: blockY, z: blockZ };
                 chopCountRef.current = 0;
+                lastChopSoundTimeRef.current = now - CHOP_INTERVAL_MS;
+              }
+
+              const timeSinceLastChop = now - lastChopSoundTimeRef.current;
+              if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
+                lastChopSoundTimeRef.current = now;
+                chopCountRef.current++;
+                console.log(`[TreeChop] Chop #${chopCountRef.current}/${CHOPS_REQUIRED}`);
+
+                playSpatialSound('/axe_chop.mp3', 0, { baseVolume: 0.5 });
+
+                if (onTreeChopProgressRef.current) {
+                  onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);
+                }
+
+                if (chopCountRef.current >= CHOPS_REQUIRED) {
+                  if (onTreeChopCompleteRef.current) {
+                    onTreeChopCompleteRef.current(blockX, blockY, blockZ);
+                  }
+                  leftMouseDownRef.current = false;
+                  chopCountRef.current = 0;
+                  choppingPositionRef.current = null;
+                }
+              }
+            } else if (blockType && blockY >= 0 && isAdmin && onBlockMineCompleteRef.current) {
+              // ADMIN MINING: any block that isn't an owned tree (placed blocks, unowned tree blocks, etc.)
+              const isNewBlock = !choppingPositionRef.current ||
+                  choppingPositionRef.current.x !== blockX ||
+                  choppingPositionRef.current.y !== blockY ||
+                  choppingPositionRef.current.z !== blockZ;
+
+              if (isNewBlock) {
+                choppingPositionRef.current = { x: blockX, y: blockY, z: blockZ };
+                chopCountRef.current = 0;
+                lastChopSoundTimeRef.current = now - CHOP_INTERVAL_MS;
+              }
+
+              const timeSinceLastChop = now - lastChopSoundTimeRef.current;
+              if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
+                lastChopSoundTimeRef.current = now;
+                chopCountRef.current++;
+
+                playSpatialSound('/axe_chop.mp3', 0, { baseVolume: 0.5 });
+
+                if (onTreeChopProgressRef.current) {
+                  onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);
+                }
+
+                if (chopCountRef.current >= CHOPS_REQUIRED) {
+                  onBlockMineCompleteRef.current(blockX, blockY, blockZ);
+                  leftMouseDownRef.current = false;
+                  chopCountRef.current = 0;
+                  choppingPositionRef.current = null;
+                }
               }
             } else {
-              // Not looking at a trunk - reset chopping state
+              // Not a minable block - reset chopping state
               choppingPositionRef.current = null;
               chopCountRef.current = 0;
             }
@@ -1298,7 +1516,7 @@ export function FirstPersonControls({
       // Delta clamping to prevent tunneling during FPS drops
       const MAX_PHYSICS_DELTA = 1 / 30;
       const dt = Math.min(delta, MAX_PHYSICS_DELTA);
-      const SURFACE_EPS = 0.002;
+      const SURFACE_EPS = 0.005;
       
       // Gliding: press G while falling to activate, auto-deactivates on landing
       // Glide is active as long as player is airborne (works during jet boosts too)
@@ -1424,6 +1642,10 @@ export function FirstPersonControls({
 
       // Gravity and jumping
       velocity.current.y -= effectiveGravity * dt;
+      // Minecraft/Quake pattern: zero gravity when on ground to prevent bounce oscillation
+      if (onGround.current && velocity.current.y < 0) {
+        velocity.current.y = 0;
+      }
 
       // Player dimensions
       const playerRadius = 0.3;
@@ -1546,6 +1768,10 @@ export function FirstPersonControls({
           knockbackVelRef.current.z = 0;
         } else {
           if (push.direction === 1) {
+            // Already resting on ground — don't push up again (prevents bounce oscillation)
+            if (onGround.current && velocity.current.y >= 0) {
+              break;
+            }
             // Pushed UP onto a surface - set position but DON'T zero velocity
             // This allows gravity to immediately start pulling player back down
             camera.position.y = overlap.max.y + playerHeight + SURFACE_EPS;
@@ -1666,10 +1892,38 @@ export function FirstPersonControls({
         }
       }
       
+      // Edge detection: when on ground, check if there's still a block below.
+      // This is a lightweight check — no snapping, just sets onGround=false if
+      // the player walked off an edge. The full ground check below handles landing.
+      if (onGround.current && isMovingHorizontally) {
+        feetCheckPosRef.current.copy(camera.position);
+        feetCheckPosRef.current.y = camera.position.y - 0.1; // probe 0.1 below
+
+        const edgeHit = checkAxisCollisionFromCandidates(
+          feetCheckPosRef.current,
+          currentColliders,
+          candidateCount,
+          playerRadius,
+          playerHeight,
+          'y',
+          -1,
+          true,
+          0
+        );
+
+        const feetY = camera.position.y - playerHeight;
+        const onWorldGround = feetY <= (SURFACE_EPS + 0.01);
+
+        if (!edgeHit && !onWorldGround) {
+          onGround.current = false;
+        }
+      }
+
       // Ground detection (robust): test a small downward move using the SAME player box convention
-      const needsGroundCheck = !onGround.current || velocity.current.y < -0.1;
+      // Only runs when airborne or falling fast — prevents bounce oscillation when standing
+      const needsGroundCheck = !onGround.current || velocity.current.y < -0.5;
       if (needsGroundCheck) {
-        const GROUND_SNAP_DIST = 0.08;
+        const GROUND_SNAP_DIST = 0.02;
 
         feetCheckPosRef.current.copy(camera.position);
         feetCheckPosRef.current.y = camera.position.y - GROUND_SNAP_DIST;

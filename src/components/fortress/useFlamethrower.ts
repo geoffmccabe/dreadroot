@@ -469,22 +469,20 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     isActiveRef.current = false;
     fadingOutRef.current = true;
 
-    // Only pause emitters — stops NEW particle emission but lets
-    // existing in-flight particles continue their natural lifespan
+    // Stop all emitters and clear existing particles immediately
+    // restart() clears all in-flight particles, then pause() prevents new emission
     for (const emitter of emittersRef.current) {
       if (emitter.system) {
+        emitter.system.restart();
         emitter.system.pause();
       }
     }
 
-    // DO NOT hide the group or clear particles immediately.
-    // After a delay matching the longest particle lifetime, hide the group.
-    setTimeout(() => {
-      fadingOutRef.current = false;
-      if (!isActiveRef.current && loadedGroupRef.current) {
-        loadedGroupRef.current.visible = false;
-      }
-    }, 1500); // 1.5s covers typical particle lifetimes
+    // Hide the group immediately since particles are already cleared
+    fadingOutRef.current = false;
+    if (loadedGroupRef.current) {
+      loadedGroupRef.current.visible = false;
+    }
 
     console.log('[Flamethrower] STOP');
 

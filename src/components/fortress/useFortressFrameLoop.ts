@@ -187,7 +187,7 @@ export function useFortressFrameLoop({
   
   // Call consolidated component updates (eliminates 5 separate useFrame hooks)
   diagnostics.startTiming('render');
-  skyRef.current?.update();
+  skyRef.current?.update(delta);
   lightingRef.current?.update();
   bulletsComponentRef.current?.update();
   wispParticlesMeshRef.current?.update();
@@ -200,8 +200,8 @@ export function useFortressFrameLoop({
   frameLoop.tick(delta, state.clock.elapsedTime);
   diagnostics.recordTiming('frame');
 
-  // Process budgeted work (chunk unload/load spread across frames)
-  tickBudgetedWork(2.0);
+  // Process budgeted work (distant chunk collider creation + unload collider removal)
+  tickBudgetedWork(3.0);
 
   // Tick the diagnostics system (writes sample every 100ms)
   diagnostics.tick();
@@ -249,7 +249,7 @@ export function useFortressFrameLoop({
         const dz = bullet.position.z - lastTracerPos.z;
         const distSq = dx * dx + dy * dy + dz * dz;
         
-        if (distSq >= 4.0) { // 2 meters squared
+        if (distSq >= 25.0) { // 5 meters squared
           tracersRef.current?.addSegment(
             lastTracerPos.x, lastTracerPos.y, lastTracerPos.z,
             bullet.position.x, bullet.position.y, bullet.position.z,
@@ -1155,13 +1155,13 @@ export function useFortressFrameLoop({
     updateShombieMovement(delta);
   }
 
-  // Update walapa movement - skip if AI controls
-  if (!isAIControlled && updateWalapaMovement) {
+  // Update walapa movement - always run (walapas are friendly NPCs, not AI-controlled enemies)
+  if (updateWalapaMovement) {
     updateWalapaMovement(delta);
   }
 
-  // Update shtickman movement - skip if AI controls
-  if (!isAIControlled && updateShtickmanMovement) {
+  // Update shtickman movement - always run (shtickmen use their own tree-patrol state machine)
+  if (updateShtickmanMovement) {
     updateShtickmanMovement(delta, camera.position);
   }
 

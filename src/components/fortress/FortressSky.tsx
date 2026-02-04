@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { WeatherSettings, CycleState } from './FortressTypes';
+import { WeatherSettings, CycleState, CloudLayerSettings } from './FortressTypes';
+import { createCloudMesh, type CloudMeshHandle } from './SkyCloudLayer';
 
 // Helper function to interpolate between colors
 export function interpolateColor(color1: number, color2: number, factor: number): number {
@@ -23,9 +24,9 @@ export function getSkyColor(lightingPercentage: number): number {
 }
 
 interface SkyTextureProps {
-  onRefsReady: (refs: { 
-    skyMeshRef: React.RefObject<THREE.Mesh>; 
-    starMeshRef: React.RefObject<THREE.Mesh> 
+  onRefsReady: (refs: {
+    skyMeshRef: React.RefObject<THREE.Mesh>;
+    starMeshRef: React.RefObject<THREE.Mesh>
   }) => void;
   skyTextureUrl?: string | null;
 }
@@ -61,7 +62,7 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
     const textureLoader = new THREE.TextureLoader();
     // Use full sphere geometry - extends well below horizon
     // phiStart=0, phiLength=2*PI (full circle), thetaStart=0, thetaLength=PI (full sphere)
-    const skyGeo = new THREE.SphereGeometry(320, 64, 32, 0, Math.PI * 2, 0, Math.PI);
+    const skyGeo = new THREE.SphereGeometry(640, 64, 32, 0, Math.PI * 2, 0, Math.PI);
 
     // Layer 1: Solid color sky sphere
     const skyColorMat = new THREE.MeshBasicMaterial({
@@ -69,6 +70,7 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
       color: 0x000000,
       fog: false,
       transparent: true,
+      depthWrite: false,
       opacity: 0
     });
     const skyColorMesh = new THREE.Mesh(skyGeo.clone(), skyColorMat);
@@ -93,7 +95,7 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
 
       textureRef.current = loadedTexture;
 
-      const starGeo = new THREE.SphereGeometry(319, 64, 32, 0, Math.PI * 2, 0, Math.PI);
+      const starGeo = new THREE.SphereGeometry(638, 64, 32, 0, Math.PI * 2, 0, Math.PI);
       const starMat = new THREE.MeshBasicMaterial({
         side: THREE.BackSide,
         map: loadedTexture,
@@ -134,7 +136,7 @@ export function SkyTexture({ onRefsReady, skyTextureUrl }: SkyTextureProps) {
 }
 
 export interface SkyHandle {
-  update: () => void;
+  update: (delta: number) => void;
 }
 
 interface DynamicSkyProps {
@@ -145,54 +147,85 @@ interface DynamicSkyProps {
   lightingOverride?: number | null;
 }
 
+const defaultCloud: CloudLayerSettings = { enabled: false, opacity: 0.45, coverage: 0.5, height: 300, speed: 5, direction: 45, scale: 2.0, color: '#ffffff' };
+
 export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSettings, cycleStateRef, skyTextureUrl, freezeCycle = false, lightingOverride = null }, ref) => {
-  const skyRefs = useRef<{ 
-    skyMeshRef: React.RefObject<THREE.Mesh>; 
-    starMeshRef: React.RefObject<THREE.Mesh> 
+  const { scene, camera } = useThree();
+  const skyRefs = useRef<{
+    skyMeshRef: React.RefObject<THREE.Mesh>;
+    starMeshRef: React.RefObject<THREE.Mesh>
   } | null>(null);
-  
+
   // Track previous night state to avoid unnecessary setState calls
   const prevIsNightRef = useRef(false);
 
-  const handleRefsReady = useCallback((refs: { 
-    skyMeshRef: React.RefObject<THREE.Mesh>; 
-    starMeshRef: React.RefObject<THREE.Mesh> 
+  // Cloud meshes — created once, added to scene imperatively
+  const cloud1Ref = useRef<CloudMeshHandle | null>(null);
+  const cloud2Ref = useRef<CloudMeshHandle | null>(null);
+  const farClipSetRef = useRef(false);
+
+  // Create cloud meshes and add to scene
+  useEffect(() => {
+    const c1 = createCloudMesh();
+    const c2 = createCloudMesh();
+    cloud1Ref.current = c1;
+    cloud2Ref.current = c2;
+    scene.add(c1.mesh);
+    scene.add(c2.mesh);
+
+    return () => {
+      scene.remove(c1.mesh);
+      scene.remove(c2.mesh);
+      c1.dispose();
+      c2.dispose();
+      cloud1Ref.current = null;
+      cloud2Ref.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene]);
+
+  const handleRefsReady = useCallback((refs: {
+    skyMeshRef: React.RefObject<THREE.Mesh>;
+    starMeshRef: React.RefObject<THREE.Mesh>
   }) => {
     skyRefs.current = refs;
   }, []);
 
+  // Store weatherSettings in a ref so the imperative update() always reads fresh values
+  const weatherRef = useRef(weatherSettings);
+  weatherRef.current = weatherSettings;
+
   // Expose update function instead of using useFrame
   useImperativeHandle(ref, () => ({
-    update: () => {
+    update: (delta: number) => {
+      const ws = weatherRef.current;
       let lightingPercentage: number;
       let cyclePosition: number;
 
       if (lightingOverride !== null) {
-        // Manual override from Lightning Panel — skip cycle calculation
         lightingPercentage = lightingOverride;
-        cyclePosition = cycleStateRef.current.cyclePosition; // Keep last position
+        cyclePosition = cycleStateRef.current.cyclePosition;
       } else if (freezeCycle) {
-        // Frozen — keep current values
         lightingPercentage = cycleStateRef.current.lightingPercentage;
         cyclePosition = cycleStateRef.current.cyclePosition;
       } else {
-        // Normal auto cycle
-        const cycleDurationMs = weatherSettings.cycleDuration * 60 * 1000;
+        const cycleDurationMs = ws.cycleDuration * 60 * 1000;
         const currentTime = Date.now();
         cyclePosition = (currentTime % cycleDurationMs) / cycleDurationMs;
 
         const sineWave = Math.sin(cyclePosition * Math.PI * 2) * 0.5 + 0.5;
-        const [minLighting, maxLighting] = weatherSettings.lightingRange;
+        const [minLighting, maxLighting] = ws.lightingRange;
         lightingPercentage = minLighting + (maxLighting - minLighting) * sineWave;
       }
 
       const newIsNight = lightingPercentage < 50;
 
-      // Update ref directly - no React setState needed here
-      cycleStateRef.current = { lightingPercentage, cyclePosition, isNight: newIsNight };
+      cycleStateRef.current.lightingPercentage = lightingPercentage;
+      cycleStateRef.current.cyclePosition = cyclePosition;
+      cycleStateRef.current.isNight = newIsNight;
       prevIsNightRef.current = newIsNight;
 
-      // 2. Update sky transitions
+      // Update sky transitions
       if (skyRefs.current) {
         const skyMesh = skyRefs.current.skyMeshRef.current;
         const starMesh = skyRefs.current.starMeshRef.current;
@@ -200,8 +233,13 @@ export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSetti
         if (skyMesh) {
           const mat = skyMesh.material as THREE.MeshBasicMaterial;
           const t = lightingPercentage / 100;
-          mat.color.setRGB(135 / 255 * t, 206 / 255 * t, 235 / 255 * t);
+          const skyR = 135 / 255 * t;
+          const skyG = 206 / 255 * t;
+          const skyB = 235 / 255 * t;
+          mat.color.setRGB(skyR, skyG, skyB);
           mat.opacity = t;
+          if (!scene.userData.skyColor) scene.userData.skyColor = new THREE.Color();
+          scene.userData.skyColor.setRGB(skyR, skyG, skyB);
         }
 
         if (starMesh) {
@@ -213,11 +251,23 @@ export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSetti
           }
         }
       }
+
+      // Update cloud layers
+      const lightingPct = lightingPercentage / 100;
+      const cloud1Settings = ws.cloudLayer1 ?? defaultCloud;
+      const cloud2Settings = ws.cloudLayer2 ?? defaultCloud;
+
+      if (cloud1Ref.current) {
+        cloud1Ref.current.update(cloud1Settings, camera, delta, lightingPct);
+      }
+      if (cloud2Ref.current) {
+        cloud2Ref.current.update(cloud2Settings, camera, delta, lightingPct);
+      }
     }
-  }), [weatherSettings, cycleStateRef, freezeCycle, lightingOverride]);
+  }), [cycleStateRef, freezeCycle, lightingOverride, scene, camera]);
 
   return (
-    <SkyTexture 
+    <SkyTexture
       onRefsReady={handleRefsReady}
       skyTextureUrl={skyTextureUrl}
     />

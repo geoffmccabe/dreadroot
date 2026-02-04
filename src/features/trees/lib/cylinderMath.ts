@@ -56,11 +56,13 @@ export function getRingBlocks(
 ): Position[] {
   const blocks: Position[] = [];
   const innerRadius = Math.max(0, radius - 1);
-  const innerRadiusSq = (innerRadius - 0.5) * (innerRadius - 0.5);
-  const outerRadiusSq = (radius + 0.5) * (radius + 0.5);
+  // Use wider margin (0.7 instead of 0.5) to ensure no diagonal gaps at larger radii
+  const innerRadiusSq = (innerRadius - 0.7) * (innerRadius - 0.7);
+  const outerRadiusSq = (radius + 0.7) * (radius + 0.7);
 
-  for (let dx = -radius; dx <= radius; dx++) {
-    for (let dz = -radius; dz <= radius; dz++) {
+  const scanRadius = radius + 1;
+  for (let dx = -scanRadius; dx <= scanRadius; dx++) {
+    for (let dz = -scanRadius; dz <= scanRadius; dz++) {
       const distSq = dx * dx + dz * dz;
       if (distSq >= innerRadiusSq && distSq <= outerRadiusSq) {
         blocks.push({

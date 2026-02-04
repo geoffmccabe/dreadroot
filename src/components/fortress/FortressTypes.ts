@@ -12,10 +12,44 @@ import type { ShtickmanDefinition } from '@/features/shtickman/types';
 // WARNING: Enabling this will SEVERELY impact FPS (6-9 FPS) due to high-frequency console spam.
 export const DEBUG_LOGGING = false;
 
+// Cloud layer settings for procedural sky clouds
+export interface CloudLayerSettings {
+  enabled: boolean;
+  opacity: number;      // 0-1
+  coverage: number;     // 0-1 (0 = clear sky, 1 = fully overcast)
+  height: number;       // world units above origin
+  speed: number;        // wind speed (world units/sec)
+  direction: number;    // wind direction in degrees (0 = north/+Z, 90 = east/+X)
+  scale: number;        // noise pattern scale
+  color: string;        // hex color
+}
+
+// Distant chunk ring settings (per-ring)
+export interface DistantChunkRingSettings {
+  opacity: number;     // 0-1, base opacity before fog is applied
+}
+
+// View settings for distant chunk rendering (saved globally per-world)
+export interface ViewSettings {
+  baseColor: string;              // hex color for silhouette base
+  ring1: DistantChunkRingSettings;
+  ring2: DistantChunkRingSettings;
+  ring3: DistantChunkRingSettings;
+}
+
+export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
+  baseColor: '#4d5261',
+  ring1: { opacity: 0.55 },
+  ring2: { opacity: 0.40 },
+  ring3: { opacity: 0.30 },
+};
+
 // Weather settings interface
 export interface WeatherSettings {
   lightingRange: [number, number];
   cycleDuration: number;
+  cloudLayer1?: CloudLayerSettings;
+  cloudLayer2?: CloudLayerSettings;
 }
 
 // Lightning Panel settings (real-time debug/tuning)
@@ -83,10 +117,12 @@ export interface SceneProps {
   blockPlacementMode: boolean;
   treePlacementMode: boolean;
   fungalPlacementMode: boolean;
+  widePlacementMode: boolean;
   onBlockPlace: (position: THREE.Vector3) => void;
   onTreePlace: (position: THREE.Vector3) => void;
   onFungalTreePlace: (position: THREE.Vector3) => void;
-  onModeChange: (mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | null) => void;
+  onWideTreePlace: (position: THREE.Vector3) => void;
+  onModeChange: (mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | 'wide_planting' | null) => void;
   onOpenPanel: (tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => void;
   crosshairsEnabled: boolean;
   getBlockQuantity: (itemType: string) => number;
@@ -97,6 +133,8 @@ export interface SceneProps {
   onCycleBlock: (direction: 'next' | 'prev') => void;
   onCycleSeed: (direction: 'next' | 'prev') => void;
   onCycleFungalSeed: (direction: 'next' | 'prev') => void;
+  onCycleWideSeed: (direction: 'next' | 'prev') => void;
+  selectedWideTier: number | null;
   blocks: PlacedBlock[];
   weatherSettings: WeatherSettings;
   onBlockRain: () => void;
@@ -139,6 +177,8 @@ export interface SceneProps {
   // Shnake system
   shnakeDefinitions?: ShnakeDefinition[];
   plantedTrees?: import('@/features/trees/types').PlantedTree[];
+  treeFruits?: import('@/features/trees/types').TreeFruit[];
+  onFruitRemoved?: (fruitId: string) => void;
   // Shombie system
   shombieDefinitions?: ShombieDefinition[];
   // Walapa system
@@ -162,6 +202,8 @@ export interface SceneProps {
   isOwnedTreeAtPosition?: (x: number, y: number, z: number) => boolean;
   onTreeChopComplete?: (x: number, y: number, z: number) => Promise<void>;
   onTreeChopProgress?: (chopCount: number, maxChops: number) => void;
+  // Block mining props (admin only)
+  onBlockMineComplete?: (x: number, y: number, z: number) => Promise<void>;
   // Pentabullet system
   playerLevel?: number;
   onPentabulletChargeChange?: (charge: number) => void;
@@ -173,6 +215,8 @@ export interface SceneProps {
   addItem?: (itemId: string, quantity: number) => Promise<boolean>;
   // Lightning Panel overrides
   lightningSettings?: LightningSettings;
+  // View settings for distant chunk rendering
+  viewSettings?: ViewSettings;
 }
 
 // First person controls props
@@ -184,20 +228,24 @@ export interface FirstPersonControlsProps {
   blockPlacementMode: boolean;
   treePlacementMode: boolean;
   fungalPlacementMode: boolean;
+  widePlacementMode: boolean;
   onBlockPlace?: (position: THREE.Vector3) => void;
   onTreePlace?: (position: THREE.Vector3) => void;
   onFungalTreePlace?: (position: THREE.Vector3) => void;
+  onWideTreePlace?: (position: THREE.Vector3) => void;
   onOpenPanel: (tab: 'user' | 'wallet' | 'kills' | 'blocks' | 'market') => void;
   onToggleInventory?: () => void;
-  onModeChange: (mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | null) => void;
+  onModeChange: (mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | 'wide_planting' | null) => void;
   getBlockQuantity: (itemType: string) => number;
   selectedBlockType: string | null;
   selectedSeedTier: number | null;
   selectedFungalTier: number | null;
+  selectedWideTier: number | null;
   panelOpen: boolean;
   onCycleBlock: (direction: 'next' | 'prev') => void;
   onCycleSeed: (direction: 'next' | 'prev') => void;
   onCycleFungalSeed: (direction: 'next' | 'prev') => void;
+  onCycleWideSeed: (direction: 'next' | 'prev') => void;
   blocks: PlacedBlock[];
   onBlockRain: () => void;
   userRoles: string[];
@@ -220,6 +268,8 @@ export interface FirstPersonControlsProps {
   isOwnedTreeAtPosition?: (x: number, y: number, z: number) => boolean;
   onTreeChopComplete?: (x: number, y: number, z: number) => Promise<void>;
   onTreeChopProgress?: (chopCount: number, maxChops: number) => void;
+  // Block mining props (admin only)
+  onBlockMineComplete?: (x: number, y: number, z: number) => Promise<void>;
   // Bullet tier selection (admin only)
   onBulletTierChange?: (tier: number) => void;
   // Pentabullet system
@@ -237,6 +287,8 @@ export interface FirstPersonControlsProps {
   isFlameGloveSelected?: boolean;
   onFlameStart?: () => void;
   onFlameStop?: () => void;
+  // Fruit harvest system (F-key)
+  onHarvestFruit?: () => void;
 }
 
 // Jet Boost state for HUD

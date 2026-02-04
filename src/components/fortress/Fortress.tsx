@@ -49,7 +49,7 @@ import { FortressHUD } from './FortressHUD';
 import { FortressOverlays } from './FortressOverlays';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { playSpatialSound } from '@/lib/spatialAudio';
-import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef, LightningSettings, CycleState } from './FortressTypes';
+import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef, LightningSettings, CycleState, ViewSettings, DEFAULT_VIEW_SETTINGS } from './FortressTypes';
 import { LightningPanel } from './LightningPanel';
 import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { diagnostics } from '@/lib/diagnosticsLogger';
@@ -93,20 +93,43 @@ export function Fortress() {
   
   // Weather settings state
   const [weatherSettings, setWeatherSettings] = useState<WeatherSettings>(() => {
+    const defaultCloud1 = { enabled: false, opacity: 0.45, coverage: 0.5, height: 300, speed: 5, direction: 45, scale: 2.0, color: '#ffffff' };
+    const defaultCloud2 = { enabled: false, opacity: 0.35, coverage: 0.4, height: 450, speed: 3, direction: 120, scale: 3.0, color: '#ffffff' };
     const stored = localStorage.getItem('weatherSettings');
     if (stored) {
       const parsed = JSON.parse(stored);
       if ('maxLighting' in parsed && 'minLighting' in parsed) {
-        return {
+        const migrated = {
           lightingRange: [parsed.minLighting, parsed.maxLighting] as [number, number],
-          cycleDuration: parsed.cycleDuration || 5
+          cycleDuration: parsed.cycleDuration || 5,
+          cloudLayer1: defaultCloud1,
+          cloudLayer2: defaultCloud2,
         };
+        localStorage.setItem('weatherSettings', JSON.stringify(migrated));
+        return migrated;
       }
-      return parsed;
+      const result = {
+        ...parsed,
+        cloudLayer1: parsed.cloudLayer1 ?? defaultCloud1,
+        cloudLayer2: parsed.cloudLayer2 ?? defaultCloud2,
+      };
+      // Migrate old settings: bump low opacity, add missing direction field
+      if (result.cloudLayer1) {
+        if (result.cloudLayer1.opacity <= 0.25) result.cloudLayer1 = { ...result.cloudLayer1, opacity: defaultCloud1.opacity };
+        if (result.cloudLayer1.direction === undefined) result.cloudLayer1 = { ...result.cloudLayer1, direction: defaultCloud1.direction };
+      }
+      if (result.cloudLayer2) {
+        if (result.cloudLayer2.opacity <= 0.25) result.cloudLayer2 = { ...result.cloudLayer2, opacity: defaultCloud2.opacity };
+        if (result.cloudLayer2.direction === undefined) result.cloudLayer2 = { ...result.cloudLayer2, direction: defaultCloud2.direction };
+      }
+      localStorage.setItem('weatherSettings', JSON.stringify(result));
+      return result;
     }
     return {
       lightingRange: [0, 100] as [number, number],
-      cycleDuration: 2
+      cycleDuration: 2,
+      cloudLayer1: defaultCloud1,
+      cloudLayer2: defaultCloud2,
     };
   });
   
@@ -172,6 +195,9 @@ export function Fortress() {
   // Fungal tree (giant mushroom) planting mode - activated by T then 3
   const [fungalPlacementMode, setFungalPlacementMode] = useState(false);
   const [selectedFungalTier, setSelectedFungalTier] = useState<number | null>(null);
+  // Wide tree planting mode - activated by T then 2
+  const [widePlacementMode, setWidePlacementMode] = useState(false);
+  const [selectedWideTier, setSelectedWideTier] = useState<number | null>(null);
   const [showOwnershipOutline, setShowOwnershipOutline] = useState(false);
   const [showPerfMonitor, setShowPerfMonitor] = useState(false);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
@@ -203,7 +229,27 @@ export function Fortress() {
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
-  
+
+  // View settings — local state for immediate reactivity, synced from/to Supabase
+  const [viewSettings, setViewSettings] = useState<ViewSettings>(DEFAULT_VIEW_SETTINGS);
+  useEffect(() => {
+    const ws = currentWorld?.view_settings;
+    if (ws && typeof ws === 'object') {
+      setViewSettings({ ...DEFAULT_VIEW_SETTINGS, ...ws } as ViewSettings);
+    }
+  }, [currentWorld?.view_settings]);
+
+  const viewSettingsDbRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleViewSettingsChange = useCallback((updated: ViewSettings) => {
+    setViewSettings(updated);                       // immediate state for real-time reactivity
+    if (currentWorldId) {
+      if (viewSettingsDbRef.current) clearTimeout(viewSettingsDbRef.current);
+      viewSettingsDbRef.current = setTimeout(() => {
+        supabase.from('worlds').update({ view_settings: updated as any }).eq('id', currentWorldId).then();
+      }, 300);
+    }
+  }, [currentWorldId]);
+
   // Sync lightning panel visualDistance from profile
   useEffect(() => {
     if (profile?.visual_distance !== undefined) {
@@ -346,7 +392,7 @@ export function Fortress() {
   
   // Tree system hooks (only active if TREE_CONFIG.ENABLED)
   // Note: Tree blocks are now stored in placed_blocks and come through the regular chunk loading system
-  const { seedDefinitions, plantedTrees, myIncompleteTrees, refetch: refetchTrees, removeTree } = useTreeData(
+  const { seedDefinitions, plantedTrees, myIncompleteTrees, treeFruits, refetch: refetchTrees, removeTree, removeFruit } = useTreeData(
     TREE_CONFIG.ENABLED ? currentWorldId : null,
     user?.id ?? null
   );
@@ -477,7 +523,78 @@ export function Fortress() {
   const handleTreeChopProgress = useCallback((current: number, max: number) => {
     setChopProgress(current);
   }, []);
-  
+
+  // Admin block mining handler - removes block and returns to owner/inventory
+  const handleBlockMineComplete = useCallback(async (x: number, y: number, z: number) => {
+    // Find the block at this position
+    let block: PlacedBlock | undefined;
+    const chunksRef = loadedChunksRef?.current;
+    if (chunksRef) {
+      for (const chunkData of chunksRef.values()) {
+        block = chunkData.blocks.find(b =>
+          Math.floor(b.position_x) === x &&
+          Math.floor(b.position_y) === y &&
+          Math.floor(b.position_z) === z
+        );
+        if (block) break;
+      }
+    }
+
+    if (!block) {
+      toast({ title: "No block found", duration: 2000 });
+      return;
+    }
+
+    // Play removal sound
+    playReversedAudio('/wooden_thud_sound.mp3');
+
+    // Remove the block from the world
+    console.log(`[BlockMine] Removing block id=${block.id} type=${block.block_type} owner=${block.user_id} at (${x},${y},${z})`);
+    const success = await removeBlock(block.id);
+    if (!success) {
+      console.error(`[BlockMine] removeBlock returned false for id=${block.id}`);
+      toast({ title: "Failed to mine block", variant: "destructive", duration: 2000 });
+      return;
+    }
+
+    // Handle ownership
+    if (block.user_id && block.user_id === user?.id) {
+      // My block — returned to my inventory
+      toast({ title: "Block returned to inventory", duration: 2000 });
+    } else if (block.user_id) {
+      // Someone else's block — return to their inventory
+      // Use direct insert/upsert to their inventory
+      try {
+        const { data: existing } = await supabase
+          .from('user_inventory')
+          .select('id, quantity')
+          .eq('user_id', block.user_id)
+          .eq('item_type', 'fortress_block')
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from('user_inventory')
+            .update({ quantity: existing.quantity + 1 })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('user_inventory')
+            .insert({ user_id: block.user_id, item_type: 'fortress_block', quantity: 1 });
+        }
+        toast({ title: "Block returned to owner", duration: 2000 });
+      } catch (err) {
+        console.error('[BlockMine] Failed to return block to owner:', err);
+        toast({ title: "Block removed (inventory return failed)", duration: 2000 });
+      }
+    } else {
+      // Unowned block — just removed
+      toast({ title: "Block mined", duration: 2000 });
+    }
+
+    setChopProgress(0);
+  }, [loadedChunksRef, removeBlock, user, toast]);
+
   // Audio refs
   const mainAudioRefs = useRef(createMainAudioRefs());
   const rejectionSoundRef = useRef<{ audioContext: AudioContext | null; buffer: AudioBuffer | null }>({
@@ -581,7 +698,7 @@ export function Fortress() {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
   
-  const handleWeatherSettingsChange = (key: string, value: number | [number, number]) => {
+  const handleWeatherSettingsChange = (key: string, value: any) => {
     setWeatherSettings(prev => {
       const newSettings = { ...prev, [key]: value };
       localStorage.setItem('weatherSettings', JSON.stringify(newSettings));
@@ -816,7 +933,7 @@ export function Fortress() {
   };
 
   // Mode change handler
-  const handleModeChange = useCallback((mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | null) => {
+  const handleModeChange = useCallback((mode: 'shooting' | 'building' | 'planting' | 'fungal_planting' | 'wide_planting' | null) => {
     // Filter for ONLY placeable blocks (not seeds, fruits, or trunk)
     const isPlaceableBlock = (itemType: string): boolean => {
       if (itemType.startsWith('seed_tier_')) return false;
@@ -831,8 +948,10 @@ export function Fortress() {
     if (mode === 'building') {
       setTreePlacementMode(false);
       setFungalPlacementMode(false);
+      setWidePlacementMode(false);
       setSelectedSeedTier(null);
       setSelectedFungalTier(null);
+      setSelectedWideTier(null);
       const availableItem = availablePlaceableBlocks[0];
       if (availableItem && availableItem.quantity > 0) {
         setSelectedBlockType(availableItem.item_type);
@@ -850,8 +969,10 @@ export function Fortress() {
     } else if (mode === 'planting') {
       setBlockPlacementMode(false);
       setFungalPlacementMode(false);
+      setWidePlacementMode(false);
       setSelectedBlockType(null);
       setSelectedFungalTier(null);
+      setSelectedWideTier(null);
       setTreePlacementMode(true);
       setCrosshairsEnabled(false);
       setBlockMode(false);
@@ -872,6 +993,8 @@ export function Fortress() {
       setSelectedBlockType(null);
       setTreePlacementMode(false);
       setSelectedSeedTier(null);
+      setWidePlacementMode(false);
+      setSelectedWideTier(null);
       setFungalPlacementMode(true);
       setCrosshairsEnabled(false);
       setBlockMode(false);
@@ -887,13 +1010,38 @@ export function Fortress() {
         setSelectedFungalTier(1);
         toast({ title: "Fungal tree mode", description: "No fungal seeds configured. Using default tier 1.", duration: 3000 });
       }
+    } else if (mode === 'wide_planting') {
+      // Wide tree planting mode - only 10 tiers
+      setBlockPlacementMode(false);
+      setSelectedBlockType(null);
+      setTreePlacementMode(false);
+      setSelectedSeedTier(null);
+      setFungalPlacementMode(false);
+      setSelectedFungalTier(null);
+      setWidePlacementMode(true);
+      setCrosshairsEnabled(false);
+      setBlockMode(false);
+      // Filter for wide seeds (tree_type === 'wide') with names, max tier 10
+      const availableWideSeeds = seedDefinitions.filter(s =>
+        s.tree_type === 'wide' && s.name && s.name.trim() !== '' && s.tier <= 10
+      );
+      if (availableWideSeeds.length > 0) {
+        setSelectedWideTier(availableWideSeeds[0].tier);
+        toast({ title: "Wide tree mode", description: `Press [ ] to cycle tiers (1-10). Click to plant.`, duration: 3000 });
+      } else {
+        // Default to tier 1 if no wide seeds configured
+        setSelectedWideTier(1);
+        toast({ title: "Wide tree mode", description: "No wide seeds configured. Using default tier 1.", duration: 3000 });
+      }
     } else if (mode === 'shooting') {
       setSelectedBlockType(null);
       setBlockPlacementMode(false);
       setTreePlacementMode(false);
       setFungalPlacementMode(false);
+      setWidePlacementMode(false);
       setSelectedSeedTier(null);
       setSelectedFungalTier(null);
+      setSelectedWideTier(null);
       setCrosshairsEnabled(true);
       setBlockMode(false);
     } else {
@@ -901,11 +1049,13 @@ export function Fortress() {
       setBlockPlacementMode(false);
       setTreePlacementMode(false);
       setFungalPlacementMode(false);
+      setWidePlacementMode(false);
       setSelectedSeedTier(null);
       setSelectedFungalTier(null);
+      setSelectedWideTier(null);
       setCrosshairsEnabled(false);
       setBlockMode(false);
-      toast({ title: "Mode disabled", description: "Press B for blocks, T for trees, T+3 for fungal", duration: 2000 });
+      toast({ title: "Mode disabled", description: "Press B for blocks, T for trees, T+2 wide, T+3 fungal", duration: 2000 });
     }
   }, [inventory, setBlockMode, toast, seedDefinitions]);
 
@@ -1036,6 +1186,54 @@ export function Fortress() {
     setSelectedFungalTier(nextSeed.tier);
     toast({ title: `${nextSeed.name} (T${nextSeed.tier})`, duration: 1000 });
   }, [selectedFungalTier, seedDefinitions, toast]);
+
+  // Cycle through wide tree tiers (1-10)
+  const cycleWideSeed = useCallback((direction: 'next' | 'prev') => {
+    // Wide seeds: tree_type === 'wide', max 10 tiers
+    const availableWideSeeds = seedDefinitions.filter(s =>
+      s.tree_type === 'wide' && s.in_bracket_menu && s.tier <= 10
+    );
+
+    // If no configured wide seeds, cycle through tiers 1-10 directly
+    if (availableWideSeeds.length === 0) {
+      const currentTier = selectedWideTier || 1;
+      const nextTier = direction === 'next'
+        ? (currentTier % 10) + 1
+        : ((currentTier - 2 + 10) % 10) + 1;
+      setSelectedWideTier(nextTier);
+      toast({ title: `Wide Tier ${nextTier}`, duration: 1000 });
+      return;
+    }
+
+    if (!selectedWideTier) {
+      setSelectedWideTier(availableWideSeeds[0].tier);
+      return;
+    }
+    const currentIndex = availableWideSeeds.findIndex(s => s.tier === selectedWideTier);
+    if (currentIndex === -1) {
+      setSelectedWideTier(availableWideSeeds[0].tier);
+      return;
+    }
+    const nextIndex = direction === 'next'
+      ? (currentIndex + 1) % availableWideSeeds.length
+      : (currentIndex - 1 + availableWideSeeds.length) % availableWideSeeds.length;
+    const nextSeed = availableWideSeeds[nextIndex];
+    setSelectedWideTier(nextSeed.tier);
+    toast({ title: `${nextSeed.name} (T${nextSeed.tier})`, duration: 1000 });
+  }, [selectedWideTier, seedDefinitions, toast]);
+
+  // Wide tree placement handler
+  const handleWideTreePlace = useCallback(async (position: THREE.Vector3) => {
+    if (!selectedWideTier) return;
+    const roundedPos = { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z) };
+
+    // Play planting sound
+    playSpatialSound('/planting_tree_sound.mp3', 0, { baseVolume: 0.4 });
+
+    // Plant the wide tree - force wide tree type regardless of seed definition
+    const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedWideTier, 'wide');
+    if (result.success) refetchTrees();
+  }, [selectedWideTier, plantSeed, refetchTrees]);
 
   // Fungal tree placement handler
   const handleFungalTreePlace = useCallback(async (position: THREE.Vector3) => {
@@ -1178,9 +1376,11 @@ export function Fortress() {
           blockPlacementMode={blockPlacementMode}
           treePlacementMode={treePlacementMode}
           fungalPlacementMode={fungalPlacementMode}
+          widePlacementMode={widePlacementMode}
           onBlockPlace={handleBlockPlace}
           onTreePlace={handleTreePlace}
           onFungalTreePlace={handleFungalTreePlace}
+          onWideTreePlace={handleWideTreePlace}
           onModeChange={handleModeChange}
           onOpenPanel={handleOpenPanel}
           onToggleInventory={() => {
@@ -1198,10 +1398,12 @@ export function Fortress() {
           selectedBlockType={selectedBlockType}
           selectedSeedTier={selectedSeedTier}
           selectedFungalTier={selectedFungalTier}
+          selectedWideTier={selectedWideTier}
           panelOpen={panelOpen}
           onCycleBlock={cycleSelectedBlock}
           onCycleSeed={cycleSelectedSeed}
           onCycleFungalSeed={cycleFungalSeed}
+          onCycleWideSeed={cycleWideSeed}
           blocks={blocks}
           weatherSettings={weatherSettings}
           onBlockRain={handleBlockRain}
@@ -1218,11 +1420,14 @@ export function Fortress() {
           onGodModeChange={setGodMode}
           performanceMode={performanceMode}
           lightningSettings={lightningSettings}
+          viewSettings={viewSettings}
           fortressTextureUrl={currentWorld?.fortress_texture_url}
           groundTextureUrl={currentWorld?.ground_texture_url}
           skyTextureUrl={currentWorld?.sky_texture_url}
           seedDefinitions={seedDefinitions}
           plantedTrees={allTrees}
+          treeFruits={treeFruits}
+          onFruitRemoved={removeFruit}
           healthRef={healthRef}
           applyDamageWithKnockback={applyDamageWithKnockback}
           takeDamage={takeDamage}
@@ -1414,6 +1619,7 @@ export function Fortress() {
           isOwnedTreeAtPosition={isOwnedTreeAtPosition}
           onTreeChopComplete={handleTreeChopComplete}
           onTreeChopProgress={handleTreeChopProgress}
+          onBlockMineComplete={handleBlockMineComplete}
           selectedBulletTier={selectedBulletTier}
           onBulletTierChange={setAdminTierOverride}
           playerLevel={profile?.current_level ?? 1}
@@ -1447,6 +1653,15 @@ export function Fortress() {
             existingBlocks={blocks || []}
             trunkTextureUrl={seedDefinitions.find(s => s.tree_type === 'fungal' && s.tier === selectedFungalTier)?.fungal_stem_texture_url}
             isFungal={true}
+          />
+        )}
+
+        {widePlacementMode && selectedWideTier && (
+          <SeedPreview
+            tier={selectedWideTier}
+            visible={true}
+            existingBlocks={blocks || []}
+            trunkTextureUrl={seedDefinitions.find(s => s.tree_type === 'wide' && s.tier === selectedWideTier)?.trunk_texture_url}
           />
         )}
 
@@ -1488,6 +1703,8 @@ export function Fortress() {
         setIsMoveMode={setIsMoveMode}
         weatherSettings={weatherSettings}
         handleWeatherSettingsChange={handleWeatherSettingsChange}
+        viewSettings={viewSettings}
+        handleViewSettingsChange={handleViewSettingsChange}
         handleBlockPurchased={handleBlockPurchased}
         pentabulletCharge={pentabulletCharge}
         blockPlacementMode={blockPlacementMode}

@@ -29,6 +29,9 @@ export { pathfindingService } from './pathfindingService';
 // Export randomization
 export { applyRandomization } from './randomization';
 
+// Export worker bridge
+export { initPathfindingWorker, terminatePathfindingWorker } from './workerBridge';
+
 // Import algorithms to register them (order matters for default)
 import './algorithms/astar';
 import './algorithms/astarWeighted';
@@ -37,6 +40,10 @@ import './algorithms/bfs';
 import './algorithms/greedyBest';
 import './algorithms/steering';
 import './algorithms/jps';
+
+// Initialize pathfinding Web Worker for off-thread computation
+import { initPathfindingWorker } from './workerBridge';
+initPathfindingWorker();
 
 // Log registration complete
 console.log('[Pathfinding] System initialized');
