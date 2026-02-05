@@ -281,12 +281,19 @@ export const useUserData = () => {
       }
 
       setAllTokenBalances(allBalancesData || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[useUserData] Load failed:', error);
+      const errorMsg = error?.message || error?.code || 'Unknown error';
+      const isTimeout = errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT');
+      const isOverloaded = errorMsg.includes('CPU') || errorMsg.includes('overload') || errorMsg.includes('too many');
+
       toast({
-        title: "Error",
-        description: "Failed to load user data",
-        variant: "destructive"
+        title: "Error loading user data",
+        description: isTimeout || isOverloaded
+          ? "Server is busy. Please wait a moment and refresh."
+          : `Database error: ${errorMsg}`,
+        variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsLoading(false);
