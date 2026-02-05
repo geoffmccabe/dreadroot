@@ -10,6 +10,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { QuarksLoader, BatchedParticleRenderer, ParticleSystem, ParticleEmitter } from 'three.quarks';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 
 // Flame Glove constants
 const MAX_USE_DURATION = 10; // seconds
@@ -86,7 +87,7 @@ export function useFlamethrower(config: FlamethrowerConfig) {
 
   // Preload audio
   useEffect(() => {
-    const audio = new Audio('/flame_glove.mp3');
+    const audio = new Audio(getSoundUrl('flamethrower', '/flame_glove.mp3'));
     audio.loop = true;
     audio.volume = 0.5;
     audio.preload = 'auto';

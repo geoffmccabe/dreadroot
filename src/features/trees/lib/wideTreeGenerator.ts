@@ -6,7 +6,7 @@
  * and glow bark. Supports lean angle, S-curve, and symmetry.
  */
 
-import { BlueprintBlock, TreeBlueprint, TreeBlockType, SeedDefinition, TreeGrowthOptions, SymmetryMode } from '../types';
+import { BlueprintBlock, TreeBlueprint, TreeBlockType, SeedDefinition, TreeGrowthOptions, SymmetryMode, RootStyle } from '../types';
 import { createSeededRandom, seededInt } from './seededRandom';
 import {
   WIDE_MAX_TIERS,
@@ -16,6 +16,7 @@ import {
 } from './wideTreeConstants';
 import { buildWideTrunk, buildWideStaircase, createWideShapeConfig } from './wideTreeTrunk';
 import { generateWideBranches } from './wideTreeBranches';
+import { generateRoots } from './rootGenerator';
 
 /**
  * Generate a complete wide tree blueprint.
@@ -121,6 +122,33 @@ export function generateWideTreeBlueprint(
     nextGrowthOrder
   );
   allBlocks.push(...branchBlocks);
+
+  // ============ ADD ROOTS AS FINAL STEP ============
+  const rootStyle: RootStyle = seedDefinition?.root_style ?? 'none';
+  if (rootStyle !== 'none') {
+    // Build occupied set for root generation
+    const occupiedForRoots = new Set<string>();
+    for (const block of allBlocks) {
+      occupiedForRoots.add(`${block.x},${block.y},${block.z}`);
+    }
+    // Get max growth order
+    const maxOrder = Math.max(...allBlocks.map(b => b.growthOrder));
+    // Create RNG for roots
+    const rootRng = createSeededRandom(growthSeed + 55555);
+    generateRoots(
+      allBlocks,
+      occupiedForRoots,
+      baseX,
+      baseY,
+      baseZ,
+      height,
+      baseRadius,
+      'wide',
+      rootStyle,
+      rootRng,
+      maxOrder + 1
+    );
+  }
 
   // ============ DEDUPLICATE ============
   const seenPositions = new Set<string>();

@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { calculatePlacementFast } from '@/lib/voxelRaycast';
 import { PlacedBlock } from '@/types/blocks';
-import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 import {
   DEBUG_LOGGING,
   FirstPersonControlsProps
@@ -219,34 +220,34 @@ export function FirstPersonControls({
   
   // Preload axe chop sound via spatial audio system
   useEffect(() => {
-    preloadSpatialSounds(['/axe_chop.mp3']);
+    preloadSpatialSounds([getSoundUrl('axe_chop', '/axe_chop.mp3')]);
   }, []);
 
   // Preload gunshot, pentabullet, and jet boost sounds via spatial audio system (works reliably)
   useEffect(() => {
     preloadSpatialSounds([
-      '/space_gunshot.mp3',
-      '/pentabullet_sound.mp3',
-      '/pentabullet_powerup.mp3',
-      '/pentabullet_power_steady.mp3',
-      '/pentabullet_powerdown.mp3',
-      '/pistol_cocking_sound.mp3',
-      '/holster_pistol_sound.mp3',
-      '/jet_boots_1.mp3',
+      getSoundUrl('gunshot', '/space_gunshot.mp3'),
+      getSoundUrl('pentabullet_fire', '/pentabullet_sound.mp3'),
+      getSoundUrl('pentabullet_powerup', '/pentabullet_powerup.mp3'),
+      getSoundUrl('pentabullet_charging', '/pentabullet_power_steady.mp3'),
+      getSoundUrl('pentabullet_powerdown', '/pentabullet_powerdown.mp3'),
+      getSoundUrl('pistol_cock', '/pistol_cocking_sound.mp3'),
+      getSoundUrl('pistol_holster', '/holster_pistol_sound.mp3'),
+      getSoundUrl('jet_boots', '/jet_boots_1.mp3'),
     ]);
   }, []);
 
   // Preload pentabullet charging sounds (looping sounds need HTMLAudioElement for pause/play)
   useEffect(() => {
     // Preload powerup sound with explicit load
-    const powerup = new Audio('/pentabullet_powerup.mp3');
+    const powerup = new Audio(getSoundUrl('pentabullet_powerup', '/pentabullet_powerup.mp3'));
     powerup.volume = 0.5;
     powerup.preload = 'auto';
     powerup.load(); // Force preload
     pentabulletPowerupAudioRef.current = powerup;
 
     // Preload steady sound with explicit load
-    const steady = new Audio('/pentabullet_power_steady.mp3');
+    const steady = new Audio(getSoundUrl('pentabullet_charging', '/pentabullet_power_steady.mp3'));
     steady.volume = 0.5;
     steady.loop = true;
     steady.preload = 'auto';
@@ -341,9 +342,20 @@ export function FirstPersonControls({
         break;
       case 'KeyY':
         // Ctrl+Y plays yodel if player is at Y>=50
+        // Uses 3D positional audio so other players can hear direction
         if (event.ctrlKey && camera.position.y >= 50) {
           event.preventDefault();
-          playSpatialSound('/yodel_1.mp3', 0, { baseVolume: 0.7 });
+          const yodelPosition = camera.position.clone();
+          const cameraDirection = new THREE.Vector3();
+          camera.getWorldDirection(cameraDirection);
+          play3DPositionalSound(
+            getSoundUrl('yodel', '/yodel_1.mp3'),
+            yodelPosition,
+            camera.position,
+            cameraDirection,
+            { baseVolume: 0.8 }
+          );
+          // TODO: Broadcast yodel position to other players via multiplayer system
         }
         break;
       case 'KeyW':
@@ -382,7 +394,9 @@ export function FirstPersonControls({
         if (!blockPlacementMode) {
           const newCrosshairsState = !showCrosshairs;
           onModeChange(newCrosshairsState ? 'shooting' : null);
-          const soundUrl = newCrosshairsState ? '/pistol_cocking_sound.mp3' : '/holster_pistol_sound.mp3';
+          const soundUrl = newCrosshairsState
+            ? getSoundUrl('pistol_cock', '/pistol_cocking_sound.mp3')
+            : getSoundUrl('pistol_holster', '/holster_pistol_sound.mp3');
           playSpatialSound(soundUrl, 0, { baseVolume: 0.5 });
 
           // For admins: activate R-mode for bullet tier selection (2 second window)
@@ -396,7 +410,7 @@ export function FirstPersonControls({
         } else {
           // In block placement mode, R still activates shooting
           onModeChange('shooting');
-          playSpatialSound('/pistol_cocking_sound.mp3', 0, { baseVolume: 0.5 });
+          playSpatialSound(getSoundUrl('pistol_cock', '/pistol_cocking_sound.mp3'), 0, { baseVolume: 0.5 });
 
           // For admins: activate R-mode for bullet tier selection (2 second window)
           if ((userRoles.includes('admin') || userRoles.includes('superadmin')) && onBulletTierChange) {
@@ -865,7 +879,7 @@ export function FirstPersonControls({
       onShoot(shootOriginRef.current, shootDirectionRef.current);
 
       // Play gunshot sound via spatial audio (works reliably, distance 0 = full volume)
-      playSpatialSound('/space_gunshot.mp3', 0, { baseVolume: 0.3 });
+      playSpatialSound(getSoundUrl('gunshot', '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
     }
   }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, fungalPlacementMode, widePlacementMode, onBlockPlace, onTreePlace, onFungalTreePlace, onWideTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId]);
   
@@ -875,7 +889,7 @@ export function FirstPersonControls({
   const cancelPentabulletCharge = useCallback(() => {
     if (pentabulletPhaseRef.current !== 'idle') {
       // Play powerdown sound via spatial audio
-      playSpatialSound('/pentabullet_powerdown.mp3', 0, { baseVolume: 0.5 });
+      playSpatialSound(getSoundUrl('pentabullet_powerdown', '/pentabullet_powerdown.mp3'), 0, { baseVolume: 0.5 });
 
       // Stop any playing charge sounds
       if (pentabulletPowerupAudioRef.current) {
@@ -949,7 +963,7 @@ export function FirstPersonControls({
 
       // Play pentabullet fire sound for each round via spatial audio
       setTimeout(() => {
-        playSpatialSound('/pentabullet_sound.mp3', 0, { baseVolume: 0.6 });
+        playSpatialSound(getSoundUrl('pentabullet_fire', '/pentabullet_sound.mp3'), 0, { baseVolume: 0.6 });
       }, roundDelay);
 
       // Fire 5 bullets 0.1 seconds apart, calculating direction at fire time
@@ -1799,7 +1813,7 @@ export function FirstPersonControls({
                 chopCountRef.current++;
                 console.log(`[TreeChop] Chop #${chopCountRef.current}/${CHOPS_REQUIRED}`);
 
-                playSpatialSound('/axe_chop.mp3', 0, { baseVolume: 0.5 });
+                playSpatialSound(getSoundUrl('axe_chop', '/axe_chop.mp3'), 0, { baseVolume: 0.6 });
 
                 if (onTreeChopProgressRef.current) {
                   onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);
@@ -1832,7 +1846,7 @@ export function FirstPersonControls({
                 lastChopSoundTimeRef.current = now;
                 chopCountRef.current++;
 
-                playSpatialSound('/axe_chop.mp3', 0, { baseVolume: 0.5 });
+                playSpatialSound(getSoundUrl('axe_chop', '/axe_chop.mp3'), 0, { baseVolume: 0.6 });
 
                 if (onTreeChopProgressRef.current) {
                   onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);
@@ -2105,7 +2119,7 @@ export function FirstPersonControls({
         onJetBoostFired?.(feetPos, []); // Colors will be determined by Scene based on tier
 
         // Play jet boost sound via spatial audio
-        playSpatialSound('/jet_boots_1.mp3', 0, { baseVolume: 0.6 });
+        playSpatialSound(getSoundUrl('jet_boots', '/jet_boots_1.mp3'), 0, { baseVolume: 0.6 });
 
         // Immediately update HUD when boost is used
         onJetBoostStateChange?.({

@@ -1,9 +1,10 @@
 // Tree Growth Algorithm
 // Generates deterministic tree shapes from seed values
 
-import { BlueprintBlock, TreeBlueprint, TreeGrowthOptions, TreeBlockType, SymmetryMode } from '../types';
+import { BlueprintBlock, TreeBlueprint, TreeGrowthOptions, TreeBlockType, SymmetryMode, RootStyle } from '../types';
 import { createSeededRandom, seededShuffle, seededChoice, seededInt } from './seededRandom';
 import { TREE_CONFIG } from '../constants';
+import { generateRoots } from './rootGenerator';
 
 // Direction vectors for branch growth (never down)
 const HORIZONTAL_DIRECTIONS: [number, number][] = [
@@ -137,6 +138,7 @@ export function generateTreeBlueprint(
     shroomCapDiameter: options?.shroomCapDiameter ?? 3,
     shrineChance: options?.shrineChance ?? 0.0001,  // 0.01% default - very rare
     symmetry: symmetryMode,
+    rootStyle: options?.rootStyle ?? 'none',
   };
   
   // Helper to check/add position with symmetry - all symmetric blocks share same group
@@ -242,7 +244,25 @@ export function generateTreeBlueprint(
   
   // 5. Assign growth order (randomized for interesting growth pattern)
   assignGrowthOrder(blocks, rng);
-  
+
+  // 6. Add buttress roots as FINAL decoration step (appear last during growth)
+  if (opts.rootStyle && opts.rootStyle !== 'none') {
+    const maxOrder = Math.max(...blocks.map(b => b.growthOrder));
+    generateRoots(
+      blocks,
+      occupied,
+      baseX,
+      baseY,
+      baseZ,
+      maxHeight,
+      1,  // trunk radius for original trees
+      'original',
+      opts.rootStyle,
+      rng,
+      maxOrder + 1
+    );
+  }
+
   // Calculate max width for metadata
   let maxWidth = 0;
   for (const block of blocks) {

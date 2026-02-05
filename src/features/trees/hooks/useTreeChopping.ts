@@ -11,6 +11,7 @@ import { blockDB } from '@/hooks/useIndexedDB';
 import { collisionGrid } from '@/lib/spatialHashGrid';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
 import { generateFungalTreeBlueprint } from '../lib/fungalTreeGenerator';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 
 // Throttle chopping to prevent accidental double-chops
 const CHOP_COOLDOWN_MS = 1000;
@@ -165,7 +166,7 @@ function findTreeAtPosition(
 async function playTimberSound(): Promise<void> {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const response = await fetch('/timber_falling_sound.mp3');
+    const response = await fetch(getSoundUrl('timber_falling', '/timber_falling_sound.mp3'));
     const arrayBuffer = await response.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     

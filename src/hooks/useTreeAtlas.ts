@@ -253,6 +253,7 @@ export function useTreeAtlas(): TreeAtlasState & {
 
     switch (blockType.toLowerCase()) {
       case 'trunk':
+      case 'root':
         textureType = 'trunk';
         break;
       case 'branch':
@@ -351,6 +352,7 @@ export function useTreeAtlas(): TreeAtlasState & {
 function mapBlockTypeToTextureType(baseType: string): 'trunk' | 'branch' | 'fruit' {
   switch (baseType.toLowerCase()) {
     case 'trunk':
+    case 'root':
       return 'trunk';
     case 'branch':
     case 'spike':

@@ -12,8 +12,9 @@
  * Uses seeded random for deterministic generation.
  */
 
-import { BlueprintBlock, TreeBlueprint, TreeBlockType, SeedDefinition } from '../types';
+import { BlueprintBlock, TreeBlueprint, TreeBlockType, SeedDefinition, RootStyle } from '../types';
 import { createSeededRandom, seededInt, seededRange } from './seededRandom';
+import { generateRoots } from './rootGenerator';
 import {
   FUNGAL_MIN_HEIGHT,
   FUNGAL_MAX_HEIGHT,
@@ -594,6 +595,32 @@ export function generateFungalTreeBlueprint(
     occupiedPositions, topOffset.offsetX, topOffset.offsetZ
   );
   allBlocks.push(...invisiblocks);
+
+  // 7. Add buttress roots as FINAL step (appear last during growth)
+  const rootStyle: RootStyle = seedDefinition?.root_style ?? 'none';
+  if (rootStyle !== 'none') {
+    // Update occupied positions for root generation
+    for (const block of invisiblocks) {
+      occupiedPositions.add(`${block.x},${block.y},${block.z}`);
+    }
+    // Get max growth order
+    const maxOrder = Math.max(...allBlocks.map(b => b.growthOrder));
+    // Create RNG for roots
+    const rootRng = createSeededRandom(growthSeed + 55555);
+    generateRoots(
+      allBlocks,
+      occupiedPositions,
+      baseX,
+      baseY,
+      baseZ,
+      scaledHeight,
+      stemRadius,
+      'fungal',
+      rootStyle,
+      rootRng,
+      maxOrder + 1
+    );
+  }
 
   // Deduplicate blocks
   const seenPositions = new Set<string>();

@@ -29,6 +29,23 @@ const _clearanceMax = new THREE.Vector3();
 let _fortressColliders: THREE.Box3[] | null = null;
 let _fortressCollidersInGrid = false;
 
+// Automatically re-insert fortress colliders when the grid is cleared
+// This ensures fortress walls always have collision regardless of what clears the grid
+const FORTRESS_GRID_LISTENER_KEY = '__fortressGridClearListener';
+if (typeof window !== 'undefined' && !(window as any)[FORTRESS_GRID_LISTENER_KEY]) {
+  (window as any)[FORTRESS_GRID_LISTENER_KEY] = true;
+  window.addEventListener('collisionGridCleared', () => {
+    _fortressCollidersInGrid = false;
+    // Re-insert if we have cached colliders
+    if (_fortressColliders) {
+      for (const fc of _fortressColliders) {
+        worldCollisionGrid.insert(fc);
+      }
+      _fortressCollidersInGrid = true;
+    }
+  });
+}
+
 // Function to reset grid state when grid is cleared externally
 export function resetFortressGridState(): void {
   // Mark as not in grid, then immediately re-insert if we already have the cached colliders.

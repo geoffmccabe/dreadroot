@@ -319,6 +319,7 @@ export function mapTreeBlockTypeToTextureType(blockType: string): 'trunk' | 'bra
 
   switch (lowerType) {
     case 'trunk':
+    case 'root':
     case 'fungal_stem':
     case 'fungal_cap_top':
     case 'fungal_cap_underside':

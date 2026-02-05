@@ -50,7 +50,7 @@ export const useBillboardData = () => {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       const [wallsResult, urlsResult, mediaResult] = await Promise.all([
         supabase.from('billboard_walls').select('*').order('wall_number'),
         supabase.from('screen_urls').select('*').order('slot_number'),
@@ -63,11 +63,11 @@ export const useBillboardData = () => {
           wall_type: wall.wall_type as 'screen' | 'media-grid'
         })));
       }
-      
+
       if (urlsResult.data) {
         setScreenUrls(urlsResult.data as ScreenUrl[]);
       }
-      
+
       if (mediaResult.data) {
         setMediaItems(mediaResult.data.map(item => ({
           ...item,
@@ -75,7 +75,7 @@ export const useBillboardData = () => {
         })));
       }
     } catch (error) {
-      console.error('Error fetching billboard data:', error);
+      console.error('[useBillboardData] Error fetching billboard data:', error);
     } finally {
       setLoading(false);
     }

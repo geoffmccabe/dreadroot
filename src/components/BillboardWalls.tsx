@@ -102,12 +102,12 @@ const Wall1Screen = React.memo(({ position, rotation, currentUrl, wall1Urls, act
 
   return (
     <group position={[posX, posY, posZ]} rotation={[rotX, rotY + Math.PI, rotZ]}>
-      <mesh position={[0, 0, 0.01]}>
+      <mesh position={[0, 0, 0.01]} renderOrder={50}>
         <planeGeometry args={[18, 12]} />
         <meshBasicMaterial color="#000000" side={THREE.DoubleSide} />
       </mesh>
 
-      <mesh position={[0, 1, 0.02]}>
+      <mesh position={[0, 1, 0.02]} renderOrder={51}>
         <planeGeometry args={[17, 10]} />
         <meshBasicMaterial
           map={currentUrl?.url ? iframeTexture : fallbackTexture}
@@ -120,6 +120,7 @@ const Wall1Screen = React.memo(({ position, rotation, currentUrl, wall1Urls, act
           <group key={urlData.slot_number}>
             <mesh
               position={[index * 4.5, 0, 0]}
+              renderOrder={52}
               onClick={() => {
                 setActiveScreenUrl(urlData.slot_number);
               }}
@@ -130,7 +131,7 @@ const Wall1Screen = React.memo(({ position, rotation, currentUrl, wall1Urls, act
                 side={THREE.DoubleSide}
               />
             </mesh>
-            <mesh position={[index * 4.5, 0, 0.01]}>
+            <mesh position={[index * 4.5, 0, 0.01]} renderOrder={53}>
               <planeGeometry args={[3.8, 1.8]} />
               <meshBasicMaterial
                 color="#ffffff"

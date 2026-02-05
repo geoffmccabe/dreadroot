@@ -14,6 +14,7 @@ import { useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { initLogStep } from '@/contexts/InitializationContext';
 import { cullOccludedBlocks } from '@/lib/occlusionCulling';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
 // Use white color so textures render at full brightness without tinting
@@ -174,7 +175,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   
   // Initialize audio
   useEffect(() => {
-    audioRef.current = new Audio('/wooden_thud_sound.mp3');
+    audioRef.current = new Audio(getSoundUrl('block_place', '/wooden_thud_sound.mp3'));
     audioRef.current.volume = 0.3;
     return () => {
       if (audioRef.current) {

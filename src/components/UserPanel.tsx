@@ -26,6 +26,16 @@ import { FruitsTab } from '@/components/FruitsTab';
 import { useFruitData } from '@/hooks/useFruitData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useCurrentWorldId } from '@/hooks/useCurrentWorldId';
+// P2P Marketplace imports
+import { useDivi } from '@/features/marketplace/hooks/useDivi';
+import { BrowseTab } from '@/features/marketplace/components/BrowseTab';
+import { MyListingsTab } from '@/features/marketplace/components/MyListingsTab';
+import { MyStoreTab } from '@/features/marketplace/components/MyStoreTab';
+import { TransactionHistoryTab } from '@/features/marketplace/components/TransactionHistoryTab';
+import { WatchlistTab } from '@/features/marketplace/components/WatchlistTab';
+import { DiviBalance } from '@/features/marketplace/components/DiviBalance';
+import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -87,8 +97,20 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
-  const [panelSize, setPanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
+  const [basePanelSize, setBasePanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
   const [isResizing, setIsResizing] = useState(false);
+
+  // P2P Marketplace state
+  const [p2pSubtab, setP2pSubtab] = useState<MarketplaceTab>('browse');
+  const [p2pFilters, setP2pFilters] = useState<MarketplaceFilters>({});
+  const [p2pSortOption, setP2pSortOption] = useState<MarketplaceSortOption>('date_desc');
+  const { balance: diviBalance } = useDivi(user?.id ?? null);
+
+  // Expand panel width when P2P tab is active
+  const panelSize = {
+    width: activeTab === 'p2p' ? Math.max(basePanelSize.width, 900) : basePanelSize.width,
+    height: basePanelSize.height
+  };
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
   const tokenDisplayName = currentTheme?.display_name || 'Waterfall';
@@ -151,28 +173,28 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
-    
+
     const startX = e.clientX;
     const startY = e.clientY;
-    const startWidth = panelSize.width;
-    const startHeight = panelSize.height;
-    
+    const startWidth = basePanelSize.width;
+    const startHeight = basePanelSize.height;
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
       const deltaY = moveEvent.clientY - startY;
-      
-      setPanelSize({
-        width: Math.max(400, Math.min(800, startWidth + deltaX)),
+
+      setBasePanelSize({
+        width: Math.max(400, Math.min(1200, startWidth + deltaX)),
         height: Math.max(400, Math.min(900, startHeight + deltaY))
       });
     };
-    
+
     const handleMouseUp = () => {
       setIsResizing(false);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-    
+
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   };
@@ -303,11 +325,11 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     const success = await buyBlock(itemKey, cost);
     if (success) {
       // Play single coin sound (allows interruption on rapid clicks)
-      const audio = new Audio('/coin_hit_sound.mp3');
+      const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
       audio.volume = 0.3;
       audio.currentTime = 0;
       audio.play();
-      
+
       onBlockPurchased?.();
     }
   };
@@ -344,8 +366,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         style={{
           width: `${panelSize.width}px`,
           height: `${panelSize.height}px`,
-          maxWidth: '800px',
+          maxWidth: activeTab === 'p2p' ? '1200px' : '800px',
           maxHeight: '90vh',
+          transition: 'width 0.3s ease-out, max-width 0.3s ease-out',
           border: '1px solid hsla(var(--hud-border))',
           borderRadius: 'var(--hud-radius)',
           backdropFilter: 'var(--hud-blur)',
@@ -362,14 +385,15 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="relative">
-          <TabsList className={`grid w-full ${showTreesTab && showFruitsTab ? 'grid-cols-9' : showTreesTab || showFruitsTab ? 'grid-cols-8' : 'grid-cols-7'}`} style={{ background: 'hsla(var(--hud-bg-dim))', borderRadius: 'var(--hud-radius)' }}>
+          <TabsList className={`grid w-full ${showTreesTab && showFruitsTab ? 'grid-cols-10' : showTreesTab || showFruitsTab ? 'grid-cols-9' : 'grid-cols-8'}`} style={{ background: 'hsla(var(--hud-bg-dim))', borderRadius: 'var(--hud-radius)' }}>
             <TabsTrigger value="user">User</TabsTrigger>
             <TabsTrigger value="level">Level</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
             <TabsTrigger value="items">Items</TabsTrigger>
             <TabsTrigger value="kills">Kills</TabsTrigger>
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
-            <TabsTrigger value="market">Market</TabsTrigger>
+            <TabsTrigger value="market">Store</TabsTrigger>
+            <TabsTrigger value="p2p">P2P</TabsTrigger>
             {showTreesTab && <TabsTrigger value="trees">Trees</TabsTrigger>}
             {showFruitsTab && <TabsTrigger value="fruits">Fruits</TabsTrigger>}
           </TabsList>
@@ -816,6 +840,68 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
               />
             </TabsContent>
           )}
+
+          {/* P2P Marketplace Tab */}
+          <TabsContent
+            value="p2p"
+            style={{
+              height: `${panelSize.height - 104}px`,
+              marginTop: 0,
+              paddingTop: '1rem'
+            }}
+          >
+            <div className="flex flex-col h-full">
+              {/* DIVI Balance header */}
+              <div className="flex justify-end mb-2">
+                <DiviBalance balance={diviBalance} />
+              </div>
+
+              {/* P2P Sub-tabs */}
+              <Tabs
+                value={p2pSubtab}
+                onValueChange={(v) => {
+                  setP2pSubtab(v as MarketplaceTab);
+                  if (v !== 'browse') setP2pFilters({});
+                }}
+                className="flex-1 flex flex-col overflow-hidden"
+              >
+                <TabsList className="grid w-full grid-cols-5" style={{ background: 'hsla(var(--hud-bg-dim))', borderRadius: 'var(--hud-radius)' }}>
+                  <TabsTrigger value="browse">Browse</TabsTrigger>
+                  <TabsTrigger value="my-listings">My Listings</TabsTrigger>
+                  <TabsTrigger value="my-store">My Store</TabsTrigger>
+                  <TabsTrigger value="history">History</TabsTrigger>
+                  <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="browse" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                  <BrowseTab
+                    filters={p2pFilters}
+                    setFilters={setP2pFilters}
+                    sortOption={p2pSortOption}
+                    setSortOption={setP2pSortOption}
+                    userId={user?.id ?? null}
+                    userBalance={diviBalance}
+                  />
+                </TabsContent>
+
+                <TabsContent value="my-listings" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                  <MyListingsTab userId={user?.id ?? null} />
+                </TabsContent>
+
+                <TabsContent value="my-store" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                  <MyStoreTab userId={user?.id ?? null} />
+                </TabsContent>
+
+                <TabsContent value="history" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                  <TransactionHistoryTab userId={user?.id ?? null} />
+                </TabsContent>
+
+                <TabsContent value="watchlist" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                  <WatchlistTab userId={user?.id ?? null} userBalance={diviBalance} />
+                </TabsContent>
+              </Tabs>
+            </div>
+          </TabsContent>
 
           {showFruitsTab && (
             <TabsContent

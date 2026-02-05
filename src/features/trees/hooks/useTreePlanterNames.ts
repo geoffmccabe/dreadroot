@@ -1,7 +1,7 @@
 // Hook to fetch display names for tree planters
 // Uses blockchain_address from user_profiles (or truncated user_id as fallback)
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PlantedTree } from '../types';
 
@@ -14,25 +14,33 @@ function truncateId(id: string): string {
 export function useTreePlanterNames(plantedTrees: PlantedTree[]) {
   const [usernamesMap, setUsernamesMap] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Get unique user IDs from planted trees
-  const uniqueUserIds = useMemo(() => {
+  const lastFetchedIdsRef = useRef<string>('');
+  const errorCountRef = useRef(0);
+
+  // Get unique user IDs from planted trees - create stable string key
+  const { uniqueUserIds, userIdsKey } = useMemo(() => {
     const ids = new Set<string>();
     for (const tree of plantedTrees) {
       if (tree.planted_by) {
         ids.add(tree.planted_by);
       }
     }
-    return Array.from(ids);
+    const idsArray = Array.from(ids).sort();
+    return { uniqueUserIds: idsArray, userIdsKey: idsArray.join(',') };
   }, [plantedTrees]);
-  
+
   // Fetch user profiles when user IDs change
   useEffect(() => {
     if (uniqueUserIds.length === 0) {
       setUsernamesMap(new Map());
       return;
     }
-    
+
+    // Skip if we already fetched these IDs
+    if (lastFetchedIdsRef.current === userIdsKey) {
+      return;
+    }
+
     const fetchUserProfiles = async () => {
       setIsLoading(true);
       try {
@@ -40,9 +48,13 @@ export function useTreePlanterNames(plantedTrees: PlantedTree[]) {
           .from('user_profiles')
           .select('user_id, blockchain_address')
           .in('user_id', uniqueUserIds);
-        
+
         if (error) {
-          console.error('[TreePlanterNames] Error fetching profiles:', error);
+          // Only log first 3 errors to avoid spam during network issues
+          if (errorCountRef.current < 3) {
+            console.error('[TreePlanterNames] Error fetching profiles:', error);
+            errorCountRef.current++;
+          }
           // Fallback to truncated user IDs
           const fallbackMap = new Map<string, string>();
           for (const userId of uniqueUserIds) {
@@ -51,6 +63,10 @@ export function useTreePlanterNames(plantedTrees: PlantedTree[]) {
           setUsernamesMap(fallbackMap);
           return;
         }
+
+        // Reset error count on success
+        errorCountRef.current = 0;
+        lastFetchedIdsRef.current = userIdsKey;
         
         const newMap = new Map<string, string>();
         const foundUserIds = new Set<string>();
@@ -88,7 +104,7 @@ export function useTreePlanterNames(plantedTrees: PlantedTree[]) {
     };
     
     fetchUserProfiles();
-  }, [uniqueUserIds]);
+  }, [uniqueUserIds, userIdsKey]);
   
   return {
     usernamesMap,

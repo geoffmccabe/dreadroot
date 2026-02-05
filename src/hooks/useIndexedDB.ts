@@ -554,26 +554,35 @@ class BlockDB {
    * Check if a block_type is a tree block type (supports encoded format type_depth_tier)
    */
   private isTreeBlockType(blockType: string): boolean {
+    // Full type names
     const TREE_BLOCK_BASE_TYPES = [
-      'trunk', 'branch', 'leaf', 'fruit', 'spike', 'nob', 'cross', 
-      'shroom', 'shroom_stem', 'shroom_cap', 'invisiblock'
+      'trunk', 'branch', 'root', 'leaf', 'fruit', 'spike', 'nob', 'cross',
+      'shroom', 'shroom_stem', 'shroom_cap', 'fungal_stem', 'fungal_cap_top',
+      'fungal_cap_underside', 'glow_bark', 'invisiblock', 'shrine'
     ];
-    
-    // Direct match
+    // Short codes from blockTypeEncoder
+    const TREE_BLOCK_SHORT_CODES = [
+      't', 'b', 'r', 'l', 's', 'n', 'x', 'sm', 'ss', 'sc', 'fs', 'fct', 'fcu', 'ib', 'gb', 'f', 'shr'
+    ];
+
+    // Direct match (full type name or short code)
     if (TREE_BLOCK_BASE_TYPES.includes(blockType)) return true;
-    
-    // Encoded format: type_depth_tier (e.g., trunk_0_5, branch_2_3)
+    if (TREE_BLOCK_SHORT_CODES.includes(blockType)) return true;
+
+    // Encoded format: type_depth_tier (e.g., trunk_0_5, b_2_3, r_-1_5)
     const parts = blockType.split('_');
     if (parts.length >= 2) {
       const baseType = parts[0];
-      // Handle compound types like shroom_stem, shroom_cap
-      if (parts[0] === 'shroom' && (parts[1] === 'stem' || parts[1] === 'cap')) {
+      // Handle compound types like shroom_stem, shroom_cap, fungal_stem, etc.
+      if (parts.length >= 3) {
         const compoundType = `${parts[0]}_${parts[1]}`;
-        return TREE_BLOCK_BASE_TYPES.includes(compoundType);
+        if (TREE_BLOCK_BASE_TYPES.includes(compoundType)) return true;
       }
-      return TREE_BLOCK_BASE_TYPES.includes(baseType);
+      // Check if first part is a valid type or short code
+      if (TREE_BLOCK_BASE_TYPES.includes(baseType)) return true;
+      if (TREE_BLOCK_SHORT_CODES.includes(baseType)) return true;
     }
-    
+
     return false;
   }
 
@@ -682,6 +691,83 @@ class BlockDB {
   }
 
   /**
+   * Update the version of a cached chunk WITHOUT deleting the blocks.
+   * This preserves the cache data while marking it with the new server version.
+   * More efficient than invalidate+refetch when we know the data is still valid.
+   */
+  async updateCachedChunkVersion(
+    worldId: string,
+    chunkX: number,
+    chunkZ: number,
+    newVersion: number
+  ): Promise<void> {
+    if (!this.db) await this.init();
+
+    const key = `${worldId}:${chunkX}:${chunkZ}`;
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+
+      const getRequest = store.get(key);
+      getRequest.onsuccess = () => {
+        const existing = getRequest.result as CachedChunk | undefined;
+        if (existing) {
+          existing.version = newVersion;
+          existing.cachedAt = Date.now();
+          store.put(existing);
+        }
+        resolve();
+      };
+      getRequest.onerror = () => reject(getRequest.error);
+    });
+  }
+
+  /**
+   * Batch update versions of multiple cached chunks WITHOUT deleting the blocks.
+   * Used after tree growth to mark chunks as up-to-date with new server versions.
+   */
+  async updateCachedChunkVersionsBatch(
+    worldId: string,
+    chunkUpdates: Array<{ x: number; z: number; version: number }>
+  ): Promise<void> {
+    if (!this.db) await this.init();
+    if (chunkUpdates.length === 0) return;
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.chunkCacheStoreName], 'readwrite');
+      const store = transaction.objectStore(this.chunkCacheStoreName);
+      let pending = chunkUpdates.length;
+
+      transaction.oncomplete = () => {
+        console.log(`[IndexedDB] Updated versions for ${chunkUpdates.length} cached chunks`);
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+
+      const now = Date.now();
+      for (const { x, z, version } of chunkUpdates) {
+        const key = `${worldId}:${x}:${z}`;
+        const getRequest = store.get(key);
+
+        getRequest.onsuccess = () => {
+          const existing = getRequest.result as CachedChunk | undefined;
+          if (existing) {
+            existing.version = version;
+            existing.cachedAt = now;
+            store.put(existing);
+          }
+          pending--;
+        };
+
+        getRequest.onerror = () => {
+          pending--;
+        };
+      }
+    });
+  }
+
+  /**
    * Clear tree blocks from the main 'blocks' store (not chunk cache)
    * This prevents the sync loop from re-uploading ghost tree blocks
    * FIXED: Now handles both legacy and new encoded block types (type_depth_tier)
@@ -755,5 +841,10 @@ export const useIndexedDB = () => {
       blockDB.invalidateCachedChunk(worldId, chunkX, chunkZ),
     invalidateCachedChunksBatch: (worldId: string, chunkCoords: Array<{ x: number; z: number }>) =>
       blockDB.invalidateCachedChunksBatch(worldId, chunkCoords),
+    // Cache version updates (preserves blocks, more efficient than invalidate)
+    updateCachedChunkVersion: (worldId: string, chunkX: number, chunkZ: number, newVersion: number) =>
+      blockDB.updateCachedChunkVersion(worldId, chunkX, chunkZ, newVersion),
+    updateCachedChunkVersionsBatch: (worldId: string, chunkUpdates: Array<{ x: number; z: number; version: number }>) =>
+      blockDB.updateCachedChunkVersionsBatch(worldId, chunkUpdates),
   }), []); // Empty deps since blockDB is stable
 };

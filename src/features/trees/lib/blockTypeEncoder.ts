@@ -13,6 +13,7 @@
 export const TREE_BLOCK_TYPE_MAP = {
   't': 'trunk',
   'b': 'branch',
+  'r': 'root',
   'l': 'leaf',
   's': 'spike',
   'n': 'nob',
@@ -249,6 +250,7 @@ export function getTextureUrlForTreeBlock(
   
   switch (baseType) {
     case 'trunk':
+    case 'root':
       return trunkTextureUrl;
     case 'branch':
     case 'spike':

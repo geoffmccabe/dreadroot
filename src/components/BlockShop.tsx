@@ -11,6 +11,7 @@ import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useAuth } from '@/contexts/AuthContext';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 
 interface BlockShopProps {
   isOpen: boolean;
@@ -145,7 +146,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     setIsPurchasing(false);
     
     if (success) {
-      const audio = new Audio('/coin_hit_sound.mp3');
+      const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
       audio.volume = 0.3;
       audio.currentTime = 0;
       audio.play();
@@ -161,7 +162,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     setIsPurchasing(false);
     
     if (success) {
-      const audio = new Audio('/coin_hit_sound.mp3');
+      const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
       audio.volume = 0.3;
       audio.currentTime = 0;
       audio.play();

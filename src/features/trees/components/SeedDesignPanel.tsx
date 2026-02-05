@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { rotateTexture } from '@/lib/textureRotation';
-import { SeedDefinition, SymmetryMode, TreeType } from '../types';
+import { SeedDefinition, SymmetryMode, TreeType, RootStyle } from '../types';
 import { RARITY_COLORS, TREE_CONFIG } from '../constants';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
 import { WIDE_TIER_DEFAULTS } from '../lib/wideTreeConstants';
@@ -26,6 +26,13 @@ const SYMMETRY_OPTIONS: { value: SymmetryMode; label: string; description: strin
   { value: '2xs', label: '2XS', description: '2-axis mirror (4 blocks)' },
   { value: '4r', label: '4R', description: '4-way radial (4 blocks)' },
   { value: '4x2', label: '4X2', description: '4-way × mirror (8 blocks)' },
+];
+
+const ROOT_STYLE_OPTIONS: { value: RootStyle; label: string; description: string }[] = [
+  { value: 'none', label: 'None', description: 'No visible roots' },
+  { value: 'steep', label: 'Steep', description: 'Sharp angle, close to trunk' },
+  { value: '45deg', label: '45°', description: 'Moderate angle' },
+  { value: 'shallow', label: 'Shallow', description: 'Gentle spread, wide reach' },
 ];
 
 interface SeedDesignPanelProps {
@@ -110,6 +117,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
             shroom_cap_diameter: 3,
             shrine_chance: 0.0001,  // 0.01% default - very rare
             symmetry: 'none',
+            root_style: 'none',
             tree_type: treeType,
             fungal_stem_texture_url: null,
             fungal_cap_top_texture_url: null,
@@ -190,6 +198,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
         shroom_cap_diameter: currentSeed.shroom_cap_diameter,
         shrine_chance: currentSeed.shrine_chance ?? 0.0001,
         symmetry: currentSeed.symmetry || 'none',
+        root_style: currentSeed.root_style || 'none',
         tree_type: treeType,
         fungal_stem_texture_url: currentSeed.fungal_stem_texture_url,
         fungal_cap_top_texture_url: currentSeed.fungal_cap_top_texture_url,
@@ -600,6 +609,29 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
                       </Select>
                     </div>
                   )}
+
+                  {/* Root Style */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Root Style</Label>
+                    <Select
+                      value={currentSeed.root_style || 'none'}
+                      onValueChange={(v) => updateSeed('root_style', v as RootStyle)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROOT_STYLE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            <span className="flex items-center gap-2">
+                              <span className="font-medium">{opt.label}</span>
+                              <span className="text-muted-foreground text-xs">- {opt.description}</span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   {/* Cost */}
                   <div className="space-y-1">

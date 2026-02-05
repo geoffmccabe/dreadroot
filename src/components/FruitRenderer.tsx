@@ -1,8 +1,8 @@
-// FruitRenderer - renders fruit spheres with flame plumes on non-fungal trees
-// Uses InstancedMesh for batched rendering, proximity-based visibility + opacity
+// FruitRenderer - renders fruit spheres with flame plumes on trees
+// Uses InstancedMesh with atlas textures for per-tier fruit appearance
 // Shows "Press F to Harvest" text above nearest fruit in range
 
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
@@ -10,6 +10,9 @@ import { TreeFruit } from '@/features/trees/types';
 import { FRUIT_CONFIG, getFruitTier } from '@/features/trees/constants';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import type { UniversalFlameRendererHandle } from '@/components/fortress/UniversalFlameRenderer';
+import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
+import { getTreeUVs } from '@/lib/atlasLookup';
+import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset } from '@/lib/atlasMaterial';
 
 interface FruitRendererProps {
   treeFruits: TreeFruit[];
@@ -22,13 +25,14 @@ interface FruitRendererProps {
   loadedChunksRef?: React.RefObject<Map<string, { blocks: any[] }>>;
 }
 
-// Shared geometry + material (created once)
-const SPHERE_GEO = new THREE.SphereGeometry(0.4, 8, 8);
-const FRUIT_MATERIAL = new THREE.MeshStandardMaterial({
+// Shared geometry (created once)
+const SPHERE_GEO = new THREE.SphereGeometry(0.4, 12, 12);
+
+// Fallback material (brown) used before atlas is ready
+const FALLBACK_MATERIAL = new THREE.MeshStandardMaterial({
   color: '#cc8833',
   roughness: 0.6,
   metalness: 0.1,
-  transparent: true,
 });
 
 // Temp objects to avoid GC in frame loop
@@ -46,11 +50,27 @@ export const FruitRenderer = React.memo(function FruitRenderer({
   loadedChunksRef,
 }: FruitRendererProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const uvAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
   const activeFlamesRef = useRef<Map<string, string>>(new Map()); // fruitId -> flameId
   const flameInRangeRef = useRef<Set<string>>(new Set()); // fruitIds that had "in harvest range" flames
   const promptGroupRef = useRef<THREE.Group>(null);
   const findClosestFruitRef = useRef(findClosestFruit);
   findClosestFruitRef.current = findClosestFruit;
+
+  // Track atlas readiness
+  const [atlasReady, setAtlasReady] = useState(false);
+
+  // Check atlas readiness periodically
+  useEffect(() => {
+    const checkAtlas = () => {
+      if (isAtlasReady()) {
+        setAtlasReady(true);
+      }
+    };
+    checkAtlas();
+    const interval = setInterval(checkAtlas, 100);
+    return () => clearInterval(interval);
+  }, []);
 
   // Visibility range based on player level (admin override = 500 blocks)
   const visibilityRange = useMemo(() => {
@@ -60,6 +80,26 @@ export const FruitRenderer = React.memo(function FruitRenderer({
 
   // Max instance count
   const maxCount = FRUIT_CONFIG.MAX_VISIBLE_FRUITS;
+
+  // Create atlas material when ready
+  const atlasMaterial = useMemo(() => {
+    if (!atlasReady) return null;
+    const texture = getGlobalAtlasTexture();
+    if (!texture) return null;
+    return createAtlasStandardMaterial(texture, { roughness: 0.6, metalness: 0.1 });
+  }, [atlasReady]);
+
+  // Set up UV offset attribute when mesh is created
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh || !atlasMaterial) return;
+
+    // Assign atlas material
+    mesh.material = atlasMaterial;
+
+    // Create UV offset attribute
+    uvAttrRef.current = createUvOffsetAttribute(mesh, maxCount);
+  }, [atlasMaterial, maxCount]);
 
   // Clean up flames on unmount
   useEffect(() => {
@@ -88,6 +128,8 @@ export const FruitRenderer = React.memo(function FruitRenderer({
     const rangeSq = range * range;
     const buf = visibleBuf.current;
     const chunksMap = loadedChunksRef?.current;
+    const uvAttr = uvAttrRef.current;
+    const hasAtlas = atlasReady && uvAttr !== null;
 
     // Collect visible fruits into pre-allocated buffer
     let visibleCount = 0;
@@ -140,21 +182,18 @@ export const FruitRenderer = React.memo(function FruitRenderer({
       _mat4.makeTranslation(fx, fy, fz);
       mesh.setMatrixAt(i, _mat4);
 
-      // Opacity falloff: 1.0 at close range, MIN_OPACITY at max range
-      const t = dist / range;
-      const alpha = 1.0 - (1.0 - FRUIT_CONFIG.MIN_OPACITY) * t;
-
-      // Tint by tier
-      const tierDef = getFruitTier(fruit.tier);
-      _color.set(tierDef.flameColors[0]);
-      // Modulate alpha into color brightness (InstancedMesh doesn't support per-instance opacity)
-      _color.multiplyScalar(alpha);
-      mesh.setColorAt(i, _color);
+      // Set UV offset from atlas for this fruit's tier
+      if (hasAtlas && uvAttr) {
+        const uvs = getTreeUVs(fruit.tier, 'fruit');
+        if (uvs) {
+          setInstanceUvOffset(uvAttr, i, uvs.uvOffsetX, uvs.uvOffsetY);
+        }
+      }
     }
 
     mesh.count = count;
     mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    if (uvAttr) uvAttr.needsUpdate = true;
 
     // Update "Press F to Harvest" prompt position
     const promptGroup = promptGroupRef.current;
@@ -243,11 +282,14 @@ export const FruitRenderer = React.memo(function FruitRenderer({
 
   if (treeFruits.length === 0) return null;
 
+  // Use fallback material until atlas is ready
+  const material = atlasMaterial || FALLBACK_MATERIAL;
+
   return (
     <>
       <instancedMesh
         ref={meshRef}
-        args={[SPHERE_GEO, FRUIT_MATERIAL, maxCount]}
+        args={[SPHERE_GEO, material, maxCount]}
         frustumCulled={false}
       />
       {/* "Press F to Harvest" prompt — HTML overlay, always visible on top */}

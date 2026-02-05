@@ -289,6 +289,16 @@ export interface FirstPersonControlsProps {
   onFlameStop?: () => void;
   // Fruit harvest system (F-key)
   onHarvestFruit?: () => void;
+  // Swimming system - water detection callback
+  checkIsInWater?: (x: number, y: number, z: number) => boolean;
+  getWaterType?: (x: number, y: number, z: number) => 'water' | 'lava' | null;
+  // Swimming state callbacks
+  onSwimmingStateChange?: (isSwimming: boolean, waterType: 'water' | 'lava' | null) => void;
+  // Lava damage callback
+  onLavaDamage?: (damage: number) => void;
+  // Block Inspector: access to loaded chunks for comprehensive inspection
+  loadedChunksRef?: React.MutableRefObject<Map<string, { blocks: PlacedBlock[]; visibleBlocks?: PlacedBlock[] }>>;
+  currentWorldId?: string | null;
 }
 
 // Jet Boost state for HUD

@@ -48,6 +48,7 @@ import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
 import { FortressOverlays } from './FortressOverlays';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef, LightningSettings, CycleState, ViewSettings, DEFAULT_VIEW_SETTINGS } from './FortressTypes';
 import { LightningPanel } from './LightningPanel';
@@ -546,7 +547,7 @@ export function Fortress() {
     }
 
     // Play removal sound
-    playReversedAudio('/wooden_thud_sound.mp3');
+    playReversedAudio(getSoundUrl('block_remove', '/wooden_thud_sound.mp3'));
 
     // Remove the block from the world
     console.log(`[BlockMine] Removing block id=${block.id} type=${block.block_type} owner=${block.user_id} at (${x},${y},${z})`);
@@ -681,7 +682,7 @@ export function Fortress() {
     }
 
     // Standard block removal for user-placed blocks
-    playReversedAudio('/wooden_thud_sound.mp3');
+    playReversedAudio(getSoundUrl('block_remove', '/wooden_thud_sound.mp3'));
 
     const success = await removeBlock(blockId);
     if (success) {
@@ -723,7 +724,7 @@ export function Fortress() {
     // OPTIMISTIC: Remove from view immediately and play sound
     const blockPos = { x: Math.floor(block.position_x), y: Math.floor(block.position_y), z: Math.floor(block.position_z) };
     removeBlocksByPositions([blockPos]);
-    playSpatialSound('/bubble_pop.mp3', 0, { baseVolume: 0.6 });
+    playSpatialSound(getSoundUrl('bubble_pop', '/bubble_pop.mp3'), 0, { baseVolume: 0.6 });
 
     // Return true immediately - server ops run in background
     // Fire off server operations without awaiting
@@ -808,7 +809,7 @@ export function Fortress() {
 
     setFlyingCoins(prev => [...prev, { id: coinId, startX, startY, startTime, imageUrl }]);
 
-    const audio = new Audio('/coin_hit_sound.mp3');
+    const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
     audio.volume = 0.3;
     audio.play();
 
@@ -1319,7 +1320,7 @@ export function Fortress() {
     const roundedPos = { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z) };
 
     // Play planting sound
-    playSpatialSound('/planting_tree_sound.mp3', 0, { baseVolume: 0.4 });
+    playSpatialSound(getSoundUrl('planting_tree', '/planting_tree_sound.mp3'), 0, { baseVolume: 0.4 });
 
     // Plant the wide tree - force wide tree type regardless of seed definition
     const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedWideTier, 'wide');
@@ -1332,7 +1333,7 @@ export function Fortress() {
     const roundedPos = { x: Math.round(position.x), y: Math.round(position.y), z: Math.round(position.z) };
 
     // Play planting sound
-    playSpatialSound('/planting_tree_sound.mp3', 0, { baseVolume: 0.4 });
+    playSpatialSound(getSoundUrl('planting_tree', '/planting_tree_sound.mp3'), 0, { baseVolume: 0.4 });
 
     // Plant the fungal tree - force fungal tree type regardless of seed definition
     const result = await plantSeed(roundedPos.x, roundedPos.y, roundedPos.z, selectedFungalTier, 'fungal');
@@ -1347,7 +1348,7 @@ export function Fortress() {
     // Play placement sound with 2x pitch
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const response = await fetch('/wooden_thud_sound.mp3');
+      const response = await fetch(getSoundUrl('block_place', '/wooden_thud_sound.mp3'));
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
       const source = audioCtx.createBufferSource();
@@ -1532,7 +1533,7 @@ export function Fortress() {
             const { newLevel } = await addPoints(points);
             if (newLevel) {
               // Play level up sound
-              const audio = new Audio('/yay_sound.mp3');
+              const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
               audio.volume = 0.5;
               audio.play().catch(() => {});
               // Show toast
@@ -1588,7 +1589,7 @@ export function Fortress() {
             }
             
             // Play kill sound
-            const audio = new Audio('/yay_sound.mp3');
+            const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
             audio.volume = 0.3;
             audio.play().catch(() => {});
             
@@ -1630,7 +1631,7 @@ export function Fortress() {
             }
             
             // Play kill sound
-            const audio = new Audio('/yay_sound.mp3');
+            const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
             audio.volume = 0.3;
             audio.play().catch(() => {});
             
@@ -1672,7 +1673,7 @@ export function Fortress() {
             }
 
             // Play kill sound
-            const audio = new Audio('/yay_sound.mp3');
+            const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
             audio.volume = 0.3;
             audio.play().catch(() => {});
 

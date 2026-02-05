@@ -7,6 +7,7 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 import { tickBudgetedWork } from '@/lib/budgetedWork';
 import { playSpatialSound } from '@/lib/spatialAudio';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 import { entityCollisionGrid, worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 import { startPerfStallObservers, stopPerfStallObservers } from '@/lib/perfStallObservers';
@@ -531,7 +532,7 @@ export function useFortressFrameLoop({
                     if (bullet.ricochetScale > 0.1) {
                       // Play ricochet sound
                       const distToCamera = hitPos.distanceTo(camera.position);
-                      playSpatialSound('/ricochet_sound.mp3', distToCamera, { baseVolume: 0.6 });
+                      playSpatialSound(getSoundUrl('ricochet', '/ricochet_sound.mp3'), distToCamera, { baseVolume: 0.6 });
                       
                       // Calculate hit normal
                       const normal = calculateHitNormal(hitX, hitY, hitZ, seg.x, seg.y, seg.z);
@@ -984,7 +985,7 @@ export function useFortressFrameLoop({
                 const distToCamera = hitPos.distanceTo(camera.position);
                 
                 // Play ricochet sound with distance-based falloff
-                playSpatialSound('/ricochet_sound.mp3', distToCamera, {
+                playSpatialSound(getSoundUrl('ricochet', '/ricochet_sound.mp3'), distToCamera, {
                   baseVolume: 0.6,
                 });
                 

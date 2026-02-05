@@ -25,6 +25,8 @@ interface UseSeedPlantingOptions {
   userId: string | null;
   seedDefinitions: SeedDefinition[];
   placeBlock: PlaceBlockFn | null;
+  // Optional water check - prevents planting in water/lava
+  checkIsInWater?: (x: number, y: number, z: number) => boolean;
 }
 
 interface PlantSeedResult {
@@ -50,6 +52,7 @@ function buildGrowthOptions(seedDef: SeedDefinition): TreeGrowthOptions {
     shroomCapDiameter: seedDef.shroom_cap_diameter ?? 3,
     shrineChance: seedDef.shrine_chance ?? 0.0001,
     symmetry: seedDef.symmetry ?? 'none',
+    rootStyle: seedDef.root_style ?? 'none',
   };
 }
 
@@ -58,6 +61,7 @@ export function useSeedPlanting({
   userId,
   seedDefinitions,
   placeBlock,
+  checkIsInWater,
 }: UseSeedPlantingOptions) {
   const [isPlanting, setIsPlanting] = useState(false);
   const [selectedSeedTier, setSelectedSeedTier] = useState<number | null>(null);
@@ -116,6 +120,8 @@ export function useSeedPlanting({
         shroom_length: 5,
         shroom_cap_diameter: 3,
         symmetry: 'none',
+        shrine_chance: 0,
+        root_style: 'none',
         fungal_min_height: null,
         fungal_max_height: null,
         fungal_min_cap_width: null,
@@ -158,6 +164,8 @@ export function useSeedPlanting({
         shroom_length: 5,
         shroom_cap_diameter: 3,
         symmetry: 'none',
+        shrine_chance: 0,
+        root_style: 'none',
         fungal_min_height: null,
         fungal_max_height: null,
         fungal_min_cap_width: null,
@@ -184,6 +192,16 @@ export function useSeedPlanting({
       const baseX = Math.floor(positionX);
       const baseY = Math.floor(positionY);
       const baseZ = Math.floor(positionZ);
+
+      // Check if position is in water/lava
+      if (checkIsInWater && checkIsInWater(baseX, baseY, baseZ)) {
+        toast({
+          title: "Cannot plant here",
+          description: "Trees cannot be planted in water or lava",
+          variant: "destructive"
+        });
+        return { success: false, error: 'Cannot plant trees in water' };
+      }
 
       // Check if position is already occupied by a tree
       const { data: existing } = await supabase

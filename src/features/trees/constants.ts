@@ -25,8 +25,8 @@ export const TREE_CONFIG: {
   TESTING_MODE: true,
   
   // Speed multipliers when TESTING_MODE is true
-  SPEED_MULTIPLIER: 1000,
-  FRUIT_SPAWN_MULTIPLIER: 100,
+  SPEED_MULTIPLIER: 10000,
+  FRUIT_SPAWN_MULTIPLIER: 1000,
   
   // Base timing (in milliseconds)
   BASE_GROWTH_INTERVAL: 10000, // 10 seconds per block normally

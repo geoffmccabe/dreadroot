@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { TreeFruit, PlantedTree } from '../types';
 import { TREE_CONFIG, FRUIT_CONFIG, getFruitTier } from '../constants';
 import { playSpatialSound } from '@/lib/spatialAudio';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 
 interface UseFruitPickupOptions {
   treeFruits: TreeFruit[];
@@ -116,7 +117,7 @@ export function useFruitPickup({
     const tierDef = getFruitTier(rolledTier);
 
     // Play harvest sound
-    playSpatialSound('/axe_chop.mp3', 0, { baseVolume: 0.4 });
+    playSpatialSound(getSoundUrl('fruit_pickup', '/axe_chop.mp3'), 0, { baseVolume: 0.4 });
 
     // Mark fruit as not collectible immediately in the ref so prompt hides before React re-renders
     fruit.is_collectible = false;

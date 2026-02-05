@@ -37,6 +37,7 @@ const MAX_TOTAL_BLOCKS = 50000; // Safety limit for paginated fetches
 
 // Phase 3D: Cache configuration
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const CACHE_TRUST_WINDOW_MS = 30000; // 30 seconds - skip version check for very fresh cache
 
 // Phase 3E: Velocity-based prefetch configuration
 const PREFETCH_DISTANCE = 2;         // Chunks beyond LOAD_RADIUS to prefetch
@@ -68,7 +69,8 @@ interface ChunkSignature {
 interface ChunkData {
   blocks: PlacedBlock[];
   // Surface-only blocks for rendering (interior blocks culled via Uint8Array grid)
-  // Collision uses `blocks`; rendering uses `visibleBlocks ?? blocks`.
+  // Collision uses `blocks`; rendering uses `visibleBlocks?.length ? visibleBlocks : blocks`
+  // IMPORTANT: Must use ?.length check, not ??, because empty array [] is not nullish!
   visibleBlocks?: PlacedBlock[];
   loadedAt: number;
   // Phase 3A: Track for LRU and pinning
@@ -464,7 +466,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
           visibleChunkCount++;
           // Use visibleBlocks (surface-only) for block count — interior blocks are culled
-          visibleBlockCount += (chunkData.visibleBlocks ?? chunkData.blocks).length;
+          // NOTE: Must check length explicitly - `??` doesn't catch empty arrays
+          const blocksForCount = (chunkData.visibleBlocks?.length) ? chunkData.visibleBlocks : chunkData.blocks;
+          visibleBlockCount += blocksForCount.length;
 
           // Use numeric signature from chunk (no string operations)
           const cs = chunkData.signature;
@@ -509,14 +513,16 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   const flattenLoadedBlocks = useCallback((): PlacedBlock[] => {
     // Same strategy as scheduleEmit, preallocate and copy.
     // Uses visibleBlocks (surface-only) to avoid emitting interior blocks.
+    // NOTE: Must check length explicitly - `??` doesn't catch empty arrays
     let total = 0;
     for (const chunkData of loadedChunksRef.current.values()) {
-      total += (chunkData.visibleBlocks ?? chunkData.blocks).length;
+      const blocks = (chunkData.visibleBlocks?.length) ? chunkData.visibleBlocks : chunkData.blocks;
+      total += blocks.length;
     }
     const allBlocks: PlacedBlock[] = new Array(total);
     let idx = 0;
     for (const chunkData of loadedChunksRef.current.values()) {
-      const src = chunkData.visibleBlocks ?? chunkData.blocks;
+      const src = (chunkData.visibleBlocks?.length) ? chunkData.visibleBlocks : chunkData.blocks;
       for (let i = 0; i < src.length; i++) {
         allBlocks[idx++] = src[i];
       }
@@ -981,6 +987,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         failedChunksRef.current.delete(chunkKey);
 
+        // CRITICAL: Remove old colliders before replacing chunk data
+        const existingChunk = loadedChunksRef.current.get(chunkKey);
+        if (existingChunk) {
+          for (const oldBlock of existingChunk.blocks) {
+            removeBlockCollider(oldBlock);
+          }
+        }
+
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
 
@@ -1122,59 +1136,105 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const chunksFromCache: Array<{ x: number; z: number; blocks: PlacedBlock[] }> = [];
 
     if (chunksWithCache.length > 0) {
-      initLogStep('useChunkLoader.ts', 'Checking chunk versions...', chunksWithCache.length);
-      const serverVersions = await fetchChunkVersions(chunksWithCache.map(c => ({ x: c.x, z: c.z })));
-      initLogStep('useChunkLoader.ts', 'Chunk versions fetched', serverVersions.size);
+      // Performance optimization: Split cached chunks into "trustable" (very fresh) vs "need version check"
+      // Chunks cached within CACHE_TRUST_WINDOW_MS are trusted without server round-trip
+      const trustableChunks: Array<{ x: number; z: number; cached: CachedChunk }> = [];
+      const needVersionCheck: Array<{ x: number; z: number; cached: CachedChunk }> = [];
 
-      let freshCount = 0;
-      let staleCount = 0;
-      for (const { x, z, cached } of chunksWithCache) {
-        const chunkKey = `chunk_${x}_${z}`;
-        
-        // Check if server has a version entry for this chunk
-        const hasServerVersion = serverVersions.has(chunkKey);
-        const serverVersion = serverVersions.get(chunkKey) ?? 0;
-
-        // Cache is fresh if:
-        // 1. Server has a version entry AND cache version >= server version, OR
-        // 2. Server has NO version entry (chunk never modified since versioning started)
-        const cacheIsFresh = hasServerVersion 
-          ? cached.version >= serverVersion 
-          : true; // No server version = no changes tracked, cache is valid
-
-        if (cacheIsFresh) {
-          // Cache is fresh - use it
-          // Filter expired blocks from cache
-          const activeBlocks = cached.blocks.filter(block => 
-            !block.expires_at || new Date(block.expires_at) > now
-          );
-          
-          // HEURISTIC: Detect potentially truncated cache
-          // If cache has exactly 1000 blocks (Supabase default limit), it was likely truncated
-          // Force refetch for any chunk with exactly 1000 blocks
-          const possiblyTruncated = activeBlocks.length === 1000;
-          
-          if (possiblyTruncated) {
-            console.log(`[ChunkLoader DEBUG] Chunk (${x},${z}) cache looks truncated (${activeBlocks.length} blocks), forcing refetch`);
-            chunksToFetchFromServer.push({ x, z });
-            staleCount++;
-          } else {
-            chunksFromCache.push({ x, z, blocks: activeBlocks });
-            freshCount++;
-          }
+      for (const chunkWithCache of chunksWithCache) {
+        if (loadedAt - chunkWithCache.cached.cachedAt < CACHE_TRUST_WINDOW_MS) {
+          trustableChunks.push(chunkWithCache);
         } else {
-          // Cache is stale - need to fetch from server
-          chunksToFetchFromServer.push({ x, z });
-          staleCount++;
+          needVersionCheck.push(chunkWithCache);
         }
       }
-      initLogStep('useChunkLoader.ts', `Cache freshness: ${freshCount} fresh, ${staleCount} stale`);
+
+      // Process trustable chunks immediately without server check
+      let trustedCount = 0;
+      for (const { x, z, cached } of trustableChunks) {
+        const activeBlocks = cached.blocks.filter(block =>
+          !block.expires_at || new Date(block.expires_at) > now
+        );
+
+        // Still check for truncation heuristic
+        const possiblyTruncated = activeBlocks.length === 1000;
+        if (possiblyTruncated) {
+          chunksToFetchFromServer.push({ x, z });
+        } else {
+          chunksFromCache.push({ x, z, blocks: activeBlocks });
+          trustedCount++;
+        }
+      }
+
+      if (trustedCount > 0) {
+        initLogStep('useChunkLoader.ts', `Cache trusted (fresh): ${trustedCount} chunks (no version check needed)`);
+      }
+
+      // For older cached chunks, check versions with server
+      let freshCount = 0;
+      let staleCount = 0;
+
+      if (needVersionCheck.length > 0) {
+        initLogStep('useChunkLoader.ts', 'Checking chunk versions...', needVersionCheck.length);
+        const serverVersions = await fetchChunkVersions(needVersionCheck.map(c => ({ x: c.x, z: c.z })));
+        initLogStep('useChunkLoader.ts', 'Chunk versions fetched', serverVersions.size);
+
+        for (const { x, z, cached } of needVersionCheck) {
+          const chunkKey = `chunk_${x}_${z}`;
+
+          // Check if server has a version entry for this chunk
+          const hasServerVersion = serverVersions.has(chunkKey);
+          const serverVersion = serverVersions.get(chunkKey) ?? 0;
+
+          // Cache is fresh if:
+          // 1. Server has a version entry AND cache version >= server version, OR
+          // 2. Server has NO version entry (chunk never modified since versioning started)
+          const cacheIsFresh = hasServerVersion
+            ? cached.version >= serverVersion
+            : true; // No server version = no changes tracked, cache is valid
+
+          if (cacheIsFresh) {
+            // Cache is fresh - use it
+            // Filter expired blocks from cache
+            const activeBlocks = cached.blocks.filter(block =>
+              !block.expires_at || new Date(block.expires_at) > now
+            );
+
+            // HEURISTIC: Detect potentially truncated cache
+            // If cache has exactly 1000 blocks (Supabase default limit), it was likely truncated
+            // Force refetch for any chunk with exactly 1000 blocks
+            const possiblyTruncated = activeBlocks.length === 1000;
+
+            if (possiblyTruncated) {
+              chunksToFetchFromServer.push({ x, z });
+              staleCount++;
+            } else {
+              chunksFromCache.push({ x, z, blocks: activeBlocks });
+              freshCount++;
+            }
+          } else {
+            // Cache is stale - need to fetch from server
+            chunksToFetchFromServer.push({ x, z });
+            staleCount++;
+          }
+        }
+        initLogStep('useChunkLoader.ts', `Cache freshness: ${freshCount} fresh, ${staleCount} stale`);
+      }
     }
 
     // Load chunks from cache into memory (NO emit yet - wait for server data)
     let cacheBlockCount = 0;
     for (const { x, z, blocks } of chunksFromCache) {
       const chunkKey = `chunk_${x}_${z}`;
+
+      // CRITICAL: Remove old colliders before replacing chunk data
+      const existingChunk = loadedChunksRef.current.get(chunkKey);
+      if (existingChunk) {
+        for (const oldBlock of existingChunk.blocks) {
+          removeBlockCollider(oldBlock);
+        }
+      }
+
       // Deterministic sort to prevent reorder churn
       sortBlocksDeterministic(blocks);
       // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
@@ -1211,147 +1271,102 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // Update height map for pathfinding
       updateChunkHeightMap(chunkKey, blocks);
 
-      // DEBUG: Log chunk (3,1) specifically
-      if (x === 3 && z === 1) {
-        console.log(`[ChunkLoader DEBUG] Chunk (3,1) from CACHE: ${blocks.length} blocks`);
-      }
     }
     if (chunksFromCache.length > 0) {
       initLogStep('useChunkLoader.ts', `Loaded from cache: ${chunksFromCache.length} chunks, ${cacheBlockCount} blocks`);
     }
 
-    // Fetch remaining chunks from server with retry logic
+    // Fetch remaining chunks from server - fetch EACH CHUNK INDIVIDUALLY to avoid bounding box explosion
+    // Previous approach used bounding box which could fetch millions of unwanted blocks
     if (chunksToFetchFromServer.length > 0) {
       initLogStep('useChunkLoader.ts', 'Fetching chunks from Supabase...', chunksToFetchFromServer.length);
-      
-      const minChunkX = Math.min(...chunksToFetchFromServer.map(c => c.x));
-      const maxChunkX = Math.max(...chunksToFetchFromServer.map(c => c.x));
-      const minChunkZ = Math.min(...chunksToFetchFromServer.map(c => c.z));
-      const maxChunkZ = Math.max(...chunksToFetchFromServer.map(c => c.z));
 
       const wantedChunkKeys = new Set(chunksToFetchFromServer.map(c => `chunk_${c.x}_${c.z}`));
-
-      // Paginated fetch with retry logic
-      const PAGE_SIZE = 1000;
-      let blocks: PlacedBlock[] = [];
-      let fetchFailed = false;
-      let hitSafetyLimit = false;
 
       // D-Flow: Start timing fetch phase
       const fetchT0 = performance.now();
 
-      console.log(`[ChunkLoader DEBUG] Fetching chunks: worldId=${worldId}, bounds=(${minChunkX},${minChunkZ})-(${maxChunkX},${maxChunkZ}), wanted=${Array.from(wantedChunkKeys).join(',')}`);
 
-      // PHASE 1 FIX: Get exact total count from server FIRST to detect truncation
-      let serverTotalCount: number | null = null;
-      try {
-        const { count, error: countError } = await supabase
-          .from('placed_blocks')
-          .select('*', { count: 'exact', head: true })
-          .eq('world_id', worldId)
-          .gte('chunk_x', minChunkX)
-          .lte('chunk_x', maxChunkX)
-          .gte('chunk_z', minChunkZ)
-          .lte('chunk_z', maxChunkZ);
+      // Fetch chunks in parallel, but individually (avoids bounding box explosion)
+      // Each chunk query is fast; parallel execution keeps total time low
+      const PARALLEL_FETCH_LIMIT = 10; // Limit concurrent requests to avoid overwhelming server
+      let blocks: PlacedBlock[] = [];
+      let fetchFailed = false;
+      const failedChunkCoords: Array<{ x: number; z: number }> = [];
 
-        if (!countError && count !== null) {
-          serverTotalCount = count;
-          console.log(`[ChunkLoader] Server reports ${serverTotalCount} blocks in bounding box`);
-        }
-      } catch (err) {
-        console.warn('[ChunkLoader] Could not get server count, will proceed without truncation check');
-      }
+      // Process chunks in batches of PARALLEL_FETCH_LIMIT
+      for (let i = 0; i < chunksToFetchFromServer.length; i += PARALLEL_FETCH_LIMIT) {
+        const batch = chunksToFetchFromServer.slice(i, i + PARALLEL_FETCH_LIMIT);
 
-      // Retry the entire paginated fetch (not individual pages) to avoid partial data
-      for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-        blocks = [];
-        hitSafetyLimit = false;
-        let offset = 0;
-        let hasMore = true;
-        let pageError = false;
+        const batchPromises = batch.map(async ({ x, z }) => {
+          const PAGE_SIZE = 1000;
+          let chunkBlocks: PlacedBlock[] = [];
+          let offset = 0;
+          let hasMore = true;
 
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('placed_blocks')
-            .select('*')
-            .eq('world_id', worldId)
-            .gte('chunk_x', minChunkX)
-            .lte('chunk_x', maxChunkX)
-            .gte('chunk_z', minChunkZ)
-            .lte('chunk_z', maxChunkZ)
-            .range(offset, offset + PAGE_SIZE - 1);
+          while (hasMore) {
+            const { data, error } = await supabase
+              .from('placed_blocks')
+              .select('*')
+              .eq('world_id', worldId)
+              .eq('chunk_x', x)
+              .eq('chunk_z', z)
+              .range(offset, offset + PAGE_SIZE - 1);
 
-          if (error) {
-            console.error(`[ChunkLoader] Page fetch failed at offset ${offset} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, error.message);
-            pageError = true;
-            break;
+            if (error) {
+              console.error(`[ChunkLoader] Chunk (${x},${z}) fetch failed:`, error.message);
+              return { x, z, blocks: null as PlacedBlock[] | null, failed: true };
+            }
+
+            if (data && data.length > 0) {
+              chunkBlocks = chunkBlocks.concat(data);
+              offset += data.length;
+              hasMore = data.length === PAGE_SIZE;
+            } else {
+              hasMore = false;
+            }
+
+            // Safety limit per chunk
+            if (offset >= 10000) {
+              console.warn(`[ChunkLoader] Chunk (${x},${z}) safety limit reached at ${offset} blocks`);
+              hasMore = false;
+            }
           }
 
-          if (data && data.length > 0) {
-            blocks = blocks.concat(data);
-            offset += data.length;
-            hasMore = data.length === PAGE_SIZE;
+          return { x, z, blocks: chunkBlocks, failed: false };
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+
+        for (const result of batchResults) {
+          if (result.failed || result.blocks === null) {
+            failedChunkCoords.push({ x: result.x, z: result.z });
           } else {
-            hasMore = false;
+            blocks = blocks.concat(result.blocks);
           }
-
-          if (offset >= MAX_TOTAL_BLOCKS) {
-            console.warn(`[ChunkLoader] Safety limit reached at ${MAX_TOTAL_BLOCKS} blocks`);
-            hitSafetyLimit = true;
-            hasMore = false;
-          }
-        }
-
-        if (!pageError) {
-          // Success — all pages fetched
-          fetchFailed = false;
-          break;
-        }
-
-        // Page failed — discard partial data and retry entire fetch
-        fetchFailed = true;
-        blocks = [];
-        if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-          const delay = RETRY_BASE_DELAY_MS * (2 ** attempt);
-          console.log(`[ChunkLoader] Retrying fetch in ${delay}ms...`);
-          await new Promise(r => setTimeout(r, delay));
         }
       }
 
-      // D-Flow: End fetch timing, start build timing
+      // D-Flow: End fetch timing
       const fetchMs = performance.now() - fetchT0;
-      const buildT0 = performance.now();
 
-      console.log(`[ChunkLoader DEBUG] Pagination complete: ${blocks.length} total blocks fetched`);
+      console.log(`[ChunkLoader DEBUG] Individual chunk fetch complete: ${blocks.length} total blocks, ${failedChunkCoords.length} failed chunks, ${fetchMs.toFixed(0)}ms`);
 
-      if (fetchFailed) {
-        console.error('[ChunkLoader] All retry attempts failed for server fetch');
-        initLogStep('useChunkLoader.ts', 'All retry attempts failed for server fetch');
-        // Track failed chunks for periodic retry — do NOT store them as loaded
-        for (const { x, z } of chunksToFetchFromServer) {
+      // Track failed chunks for retry
+      if (failedChunkCoords.length > 0) {
+        for (const { x, z } of failedChunkCoords) {
           const key = `chunk_${x}_${z}`;
           const existing = failedChunksRef.current.get(key);
-          failedChunksRef.current.set(key, { x, z, attempts: (existing?.attempts ?? 0) + MAX_RETRY_ATTEMPTS });
+          failedChunksRef.current.set(key, { x, z, attempts: (existing?.attempts ?? 0) + 1 });
         }
-        // Still emit what we have from cache
-        if (chunksFromCache.length > 0) {
-          scheduleEmit();
-        }
-        return;
+        initLogStep('useChunkLoader.ts', `${failedChunkCoords.length} chunks failed to fetch`);
       }
 
-      // PHASE 1 FIX: Detect truncation by comparing fetched count to server count
-      // This catches the case where we hit MAX_TOTAL_BLOCKS but got partial data
-      const wasTruncated = serverTotalCount !== null && blocks.length < serverTotalCount;
-      if (wasTruncated) {
-        console.error(`[ChunkLoader] TRUNCATION DETECTED: fetched ${blocks.length} of ${serverTotalCount} blocks - marking ALL chunks as failed`);
-        initLogStep('useChunkLoader.ts', `TRUNCATION: fetched ${blocks.length}/${serverTotalCount} blocks`);
-        // Mark ALL chunks in this batch as failed - do not cache or render partial data
-        for (const { x, z } of chunksToFetchFromServer) {
-          const key = `chunk_${x}_${z}`;
-          failedChunksRef.current.set(key, { x, z, attempts: 0 });
-        }
-        // Still emit what we have from cache
+      // If ALL chunks failed, bail early
+      if (failedChunkCoords.length === chunksToFetchFromServer.length) {
+        fetchFailed = true;
+        console.error('[ChunkLoader] All chunk fetches failed');
+        initLogStep('useChunkLoader.ts', 'All chunk fetches failed');
         if (chunksFromCache.length > 0) {
           scheduleEmit();
         }
@@ -1360,9 +1375,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       initLogStep('useChunkLoader.ts', 'Supabase query complete', blocks?.length || 0);
 
-      // Get current versions for caching
+      // Get current versions for caching (only for successful chunks)
+      const successfulChunks = chunksToFetchFromServer.filter(
+        c => !failedChunkCoords.some(f => f.x === c.x && f.z === c.z)
+      );
       initLogStep('useChunkLoader.ts', 'Fetching versions for caching...');
-      const currentVersions = await fetchChunkVersions(chunksToFetchFromServer);
+      const currentVersions = await fetchChunkVersions(successfulChunks);
+
+      // D-Flow: Start build timing
+      const buildT0 = performance.now();
 
       // Filter expired and group by chunk
       const activeBlocks = (blocks || []).filter(block => 
@@ -1392,10 +1413,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         const chunkKey = `chunk_${x}_${z}`;
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
 
-        // If we hit the safety limit and this chunk got zero blocks,
-        // it may have been truncated — queue for individual retry
-        if (hitSafetyLimit && chunkBlocks.length === 0) {
-          failedChunksRef.current.set(chunkKey, { x, z, attempts: 0 });
+        // Individual chunk fetching has per-chunk safety limits (10,000 blocks)
+        // Empty chunks are valid - only skip if fetch explicitly failed
+        if (failedChunkCoords.some(f => f.x === x && f.z === z)) {
           continue;
         }
 
@@ -1426,7 +1446,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           });
         }
         serverBlockCount += chunkBlocks.length;
-        
+
+        // CRITICAL: Remove old colliders before replacing chunk data
+        const existingChunk = loadedChunksRef.current.get(chunkKey);
+        if (existingChunk) {
+          for (const oldBlock of existingChunk.blocks) {
+            removeBlockCollider(oldBlock);
+          }
+        }
+
         const newSig = computeChunkSignature(chunkBlocks);
         const newChunkData: ChunkData = {
           blocks: chunkBlocks,
@@ -2137,17 +2165,22 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     initialLoadDone.current = false;
     
     initLogStep('useChunkLoader.ts', 'Beginning chunk loader initialization...');
-    
+
     // C7: Use start/finish for collider removal
-    const colliderStepId = initLogStartStep('useChunkLoader.ts', 'Removing existing block colliders...');
-    let removedColliders = 0;
-    for (const [, chunkData] of loadedChunksRef.current) {
-      for (const block of chunkData.blocks) {
-        removeBlockCollider(block);
-        removedColliders++;
-      }
-    }
-    if (colliderStepId) initLogFinishStep(colliderStepId, removedColliders);
+    const colliderStepId = initLogStartStep('useChunkLoader.ts', 'Clearing collision grid...');
+    const prevGridSize = worldCollisionGrid.size;
+
+    // Cancel any pending collider removal jobs that might create orphans
+    clearPendingJobs();
+
+    // CRITICAL FIX: Clear the ENTIRE collision grid, not just tracked chunks.
+    // This prevents orphan colliders from accumulating (was causing 400K+ colliders).
+    worldCollisionGrid.clear();
+
+    // Clear the canonical collider cache
+    colliderByBlockId.clear();
+
+    if (colliderStepId) initLogFinishStep(colliderStepId, prevGridSize);
 
     loadedChunksRef.current.clear();
     clearAllHeightMaps();
@@ -2168,28 +2201,39 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     initLogStep('useChunkLoader.ts', 'Cleaning old cache entries...');
     blockDB.clearOldCachedChunks(CACHE_MAX_AGE_MS).catch(() => {});
 
-    // Phase 3C: Use progressive ring loading for smoother initial experience
+    // Phase 3C: Use parallel loading for faster initial load
+    // Load ring 0 first for immediate visual feedback, then all remaining in a single batch
     const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
     initLogStep('useChunkLoader.ts', `Loading ${totalChunks} chunks (radius ${LOAD_RADIUS})...`);
 
-    // C7: Track overall ring loading with start/finish
-    // Load ring 0 first and yield to let React render closest blocks
-    // PHASE 2: Build set of required chunk keys for verification
+    // Build all chunk coordinates and required keys upfront
     const requiredChunkKeys = new Set<string>();
+    const allChunksToLoad: Array<{ x: number; z: number }> = [];
     for (let ring = 0; ring <= LOAD_RADIUS; ring++) {
       const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
       for (const { x, z } of ringChunks) {
         requiredChunkKeys.add(`chunk_${x}_${z}`);
+        allChunksToLoad.push({ x, z });
       }
-      const ringStepId = initLogStartStep('useChunkLoader.ts', `Loading ring ${ring} (${ringChunks.length} chunks)...`);
-      await loadSpecificChunks(ringChunks);
-      if (ringStepId) initLogFinishStep(ringStepId, ringChunks.length);
+    }
 
-      // After ring 0 (center), yield to let React render the closest blocks
-      // This provides faster visual feedback while outer rings load
-      if (ring === 0) {
-        await new Promise(resolve => requestAnimationFrame(resolve));
-      }
+    // Load ring 0 first for immediate visual feedback
+    const ring0Chunks = getRingChunks(startChunkX, startChunkZ, 0);
+    const ring0StepId = initLogStartStep('useChunkLoader.ts', `Loading ring 0 (${ring0Chunks.length} chunks)...`);
+    await loadSpecificChunks(ring0Chunks);
+    if (ring0StepId) initLogFinishStep(ring0StepId, ring0Chunks.length);
+
+    // Yield to let React render the closest blocks
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    // Load all remaining chunks in a SINGLE batch (parallel) instead of ring-by-ring
+    const ring0Keys = new Set(ring0Chunks.map(c => `${c.x},${c.z}`));
+    const remainingChunks = allChunksToLoad.filter(c => !ring0Keys.has(`${c.x},${c.z}`));
+
+    if (remainingChunks.length > 0) {
+      const remainingStepId = initLogStartStep('useChunkLoader.ts', `Loading remaining ${remainingChunks.length} chunks (parallel)...`);
+      await loadSpecificChunks(remainingChunks);
+      if (remainingStepId) initLogFinishStep(remainingStepId, remainingChunks.length);
     }
 
     initLogStep('useChunkLoader.ts', 'All chunk rings loaded', totalChunks);
@@ -2280,15 +2324,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // B3: Cancel any pending collider removal jobs before clearing
     clearPendingJobs();
 
-    // CRITICAL: Remove all block colliders from the collision grid before clearing chunks
-    for (const [, chunkData] of loadedChunksRef.current) {
-      for (const block of chunkData.blocks) {
-        removeBlockCollider(block);
-      }
-    }
+    // CRITICAL FIX: Clear the ENTIRE collision grid, not just tracked chunks.
+    // Pending collider removal jobs may have orphaned colliders that aren't in loadedChunksRef.
+    // This prevents the grid from accumulating 400K+ orphan colliders over time.
+    worldCollisionGrid.clear();
 
-    // CRITICAL FIX: Clear the canonical collider cache to prevent memory leaks
-    // This ensures old colliders don't accumulate across world switches
+    // Clear the canonical collider cache (must be done AFTER grid clear since the
+    // collisionGridCleared event also clears this, but we do it explicitly for safety)
     colliderByBlockId.clear();
 
     loadedChunksRef.current.clear();

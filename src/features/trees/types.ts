@@ -3,6 +3,9 @@
 // Symmetry modes for tree generation
 export type SymmetryMode = 'none' | '2xs' | '4r' | '4x2';
 
+// Root styles for buttress roots
+export type RootStyle = 'none' | 'steep' | '45deg' | 'shallow';
+
 // Tree type modes
 export type TreeType = 'original' | 'wide' | 'fungal';
 
@@ -62,6 +65,8 @@ export interface SeedDefinition {
   wide_glow_color: string | null;
   // Whether this seed appears in the [ ] bracket key cycling menu
   in_bracket_menu: boolean;
+  // Root style for buttress roots
+  root_style?: RootStyle;
 }
 
 export interface PlantedTree {
@@ -122,7 +127,7 @@ export interface UserFruit {
 
 // Block types for decorations - allows future unique textures per type
 // 'invisiblock' = invisible collision block for walkways around decorations
-export type TreeBlockType = 'trunk' | 'branch' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fungal_stem' | 'fungal_cap_top' | 'fungal_cap_underside' | 'glow_bark' | 'fruit' | 'invisiblock' | 'shrine';
+export type TreeBlockType = 'trunk' | 'branch' | 'root' | 'spike' | 'nob' | 'cross' | 'shroom_stem' | 'shroom_cap' | 'fungal_stem' | 'fungal_cap_top' | 'fungal_cap_underside' | 'glow_bark' | 'fruit' | 'invisiblock' | 'shrine';
 
 // Blueprint types for generation algorithm
 export interface BlueprintBlock {
@@ -170,4 +175,5 @@ export interface TreeGrowthOptions {
   shroomCapDiameter?: number;
   shrineChance?: number;
   symmetry?: SymmetryMode;
+  rootStyle?: RootStyle;
 }

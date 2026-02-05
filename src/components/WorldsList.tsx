@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous, RefreshCw, Music, Volume2 } from 'lucide-react';
+import { Plus, Trash2, Check, Globe, Upload, Star, TreeDeciduous, RefreshCw, Music, Volume2, Droplets, Flame, Settings2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import { DEFAULT_TEXTURES } from '@/hooks/useCurrentWorldId';
 import { cn } from '@/lib/utils';
 import { blockDB } from '@/hooks/useIndexedDB';
 import { RarityTiersPanel } from './AdminPanel.RarityTiersPanel';
+import { SoundSettingsPanel } from './SoundSettingsPanel';
 
 const LOCAL_STORAGE_KEY = 'currentWorldId';
 
@@ -28,7 +29,7 @@ interface WorldsListProps {
 }
 
 export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsListProps) {
-  const { worlds, ambientTracks, isLoading, createWorld, updateWorld, setDefaultWorld, deleteWorld, uploadAmbientTrack } = useWorlds();
+  const { worlds, ambientTracks, isLoading, error, createWorld, updateWorld, setDefaultWorld, deleteWorld, uploadAmbientTrack } = useWorlds();
   const { toast } = useToast();
   
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -38,12 +39,35 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
   const [uploadingFor, setUploadingFor] = useState<{ worldId: string; type: 'fortress' | 'ground' | 'sky' } | null>(null);
   
   const [newWorld, setNewWorld] = useState({
-    name: ''
+    name: '',
+    // Water pond settings
+    water_pond_chance: 0,
+    water_pond_min_width: 5,
+    water_pond_max_width: 20,
+    water_pond_min_height: 5,
+    water_pond_max_height: 20,
+    water_pond_min_depth: 3,
+    water_pond_max_depth: 10,
+    water_surface_texture_url: '',
+    water_tint_color: '#88ddff',
+    // Lava pond settings
+    lava_pond_chance: 0,
+    lava_pond_min_width: 3,
+    lava_pond_max_width: 15,
+    lava_pond_min_height: 3,
+    lava_pond_max_height: 15,
+    lava_pond_min_depth: 3,
+    lava_pond_max_depth: 8,
+    lava_surface_texture_url: '',
+    lava_tint_color: '#ff6622',
   });
   const [isCleaningGhostTrees, setIsCleaningGhostTrees] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [isRestoringTrees, setIsRestoringTrees] = useState(false);
   const [isGrowingTrees, setIsGrowingTrees] = useState(false);
+  const [isRepairingTree, setIsRepairingTree] = useState(false);
+  const [treeRepairCoords, setTreeRepairCoords] = useState({ x: '', y: '', z: '' });
+  const [treeRepairResult, setTreeRepairResult] = useState<string | null>(null);
   const [uploadingAmbient, setUploadingAmbient] = useState(false);
   const [newTrackName, setNewTrackName] = useState('');
   const [showUploadTrackDialog, setShowUploadTrackDialog] = useState(false);
@@ -249,6 +273,127 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
     }
   };
 
+  // Repair a specific tree by position - diagnoses and fixes missing blueprint/blocks
+  const handleRepairTreeByPosition = async () => {
+    if (!currentWorldId) {
+      toast({ title: 'No world selected', description: 'Please select a world first', variant: 'destructive' });
+      return;
+    }
+
+    const x = parseInt(treeRepairCoords.x);
+    const y = parseInt(treeRepairCoords.y);
+    const z = parseInt(treeRepairCoords.z);
+
+    if (isNaN(x) || isNaN(y) || isNaN(z)) {
+      toast({ title: 'Invalid coordinates', description: 'Please enter valid X, Y, Z coordinates', variant: 'destructive' });
+      return;
+    }
+
+    setIsRepairingTree(true);
+    setTreeRepairResult(null);
+
+    try {
+      console.log(`[TreeRepair] Looking for tree at (${x}, ${y}, ${z})...`);
+      const results: string[] = [];
+
+      // 1. Find the tree by base position
+      const { data: tree, error: treeError } = await supabase
+        .from('planted_trees')
+        .select('*, seed_definitions(*)')
+        .eq('world_id', currentWorldId)
+        .eq('base_x', x)
+        .eq('base_y', y)
+        .eq('base_z', z)
+        .single();
+
+      if (treeError || !tree) {
+        results.push(`No tree found at (${x}, ${y}, ${z})`);
+        setTreeRepairResult(results.join('\n'));
+        return;
+      }
+
+      results.push(`Found tree: ${tree.id.slice(0, 8)}`);
+      results.push(`  Type: ${tree.seed_definitions?.tree_type || 'unknown'}`);
+      results.push(`  Tier: ${tree.seed_definitions?.tier || '?'}`);
+      results.push(`  Fully grown: ${tree.is_fully_grown}`);
+      results.push(`  Seed def: ${tree.seed_definition_id ? 'yes' : 'MISSING!'}`);
+
+      // 2. Check if blueprint exists
+      const { data: blueprint, error: bpError } = await supabase
+        .from('tree_blueprints')
+        .select('block_count, blueprint_data')
+        .eq('planted_tree_id', tree.id)
+        .single();
+
+      if (bpError || !blueprint) {
+        results.push(`  Blueprint: MISSING!`);
+
+        // Try to create blueprint if we have seed definition
+        if (tree.seed_definitions) {
+          results.push(`  Attempting to regenerate blueprint...`);
+          // Call server-side growth to regenerate
+          const { data: growResult, error: growError } = await supabase.rpc('process_tree_growth', {});
+          if (growError) {
+            results.push(`  Blueprint regeneration failed: ${growError.message}`);
+          } else {
+            results.push(`  Blueprint regeneration triggered. Re-run repair to check.`);
+          }
+        } else {
+          results.push(`  Cannot regenerate: seed_definition is missing!`);
+        }
+      } else {
+        results.push(`  Blueprint: ${blueprint.block_count} blocks`);
+
+        // 3. Check how many blocks exist in placed_blocks
+        const { count: blockCount, error: countError } = await supabase
+          .from('placed_blocks')
+          .select('*', { count: 'exact', head: true })
+          .eq('world_id', currentWorldId)
+          .gte('position_x', x - 50)
+          .lte('position_x', x + 50)
+          .gte('position_z', z - 50)
+          .lte('position_z', z + 50);
+
+        results.push(`  Blocks in area: ${blockCount ?? 'error'}`);
+
+        // 4. Try to sync missing blocks from blueprint
+        results.push(`  Syncing blocks from blueprint...`);
+        const { data: syncResult, error: syncError } = await supabase.rpc('sync_missing_tree_blocks', {
+          p_world_id: currentWorldId,
+          p_tree_id: tree.id
+        });
+
+        if (syncError) {
+          results.push(`  Sync error: ${syncError.message}`);
+        } else if (syncResult) {
+          results.push(`  Sync result: ${syncResult.blocks_inserted} inserted, ${syncResult.blocks_skipped} skipped`);
+
+          if (syncResult.blocks_inserted > 0) {
+            results.push(`\nBlocks restored! Clear cache and reload to see changes.`);
+            toast({
+              title: 'Blocks restored',
+              description: `Restored ${syncResult.blocks_inserted} blocks. Clear cache to see them.`
+            });
+          }
+        }
+      }
+
+      setTreeRepairResult(results.join('\n'));
+      console.log('[TreeRepair] Results:', results.join('\n'));
+
+    } catch (err) {
+      console.error('[TreeRepair] Error:', err);
+      setTreeRepairResult(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast({
+        title: 'Repair failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsRepairingTree(false);
+    }
+  };
+
   // Clear IndexedDB cache for current world and reload
   const handleClearCache = async () => {
     if (!currentWorldId) {
@@ -305,11 +450,58 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
         name: newWorld.name.trim(),
         fortress_texture_url: null,
         ground_texture_url: null,
-        sky_texture_url: null
+        sky_texture_url: null,
+        // Water pond settings
+        water_pond_chance: newWorld.water_pond_chance / 100, // Convert from % to 0-1
+        water_pond_min_width: newWorld.water_pond_min_width,
+        water_pond_max_width: newWorld.water_pond_max_width,
+        water_pond_min_height: newWorld.water_pond_min_height,
+        water_pond_max_height: newWorld.water_pond_max_height,
+        water_pond_min_depth: newWorld.water_pond_min_depth,
+        water_pond_max_depth: newWorld.water_pond_max_depth,
+        water_surface_texture_url: newWorld.water_surface_texture_url || null,
+        water_tint_color: newWorld.water_tint_color,
+        // Lava pond settings
+        lava_pond_chance: newWorld.lava_pond_chance / 100, // Convert from % to 0-1
+        lava_pond_min_width: newWorld.lava_pond_min_width,
+        lava_pond_max_width: newWorld.lava_pond_max_width,
+        lava_pond_min_height: newWorld.lava_pond_min_height,
+        lava_pond_max_height: newWorld.lava_pond_max_height,
+        lava_pond_min_depth: newWorld.lava_pond_min_depth,
+        lava_pond_max_depth: newWorld.lava_pond_max_depth,
+        lava_surface_texture_url: newWorld.lava_surface_texture_url || null,
+        lava_tint_color: newWorld.lava_tint_color,
       });
-      toast({ title: 'World created', description: `"${newWorld.name}" has been created with default textures` });
+
+      const hasPonds = newWorld.water_pond_chance > 0 || newWorld.lava_pond_chance > 0;
+      toast({
+        title: 'World created',
+        description: hasPonds
+          ? `"${newWorld.name}" has been created with ponds generating...`
+          : `"${newWorld.name}" has been created with default textures`
+      });
       setShowCreateDialog(false);
-      setNewWorld({ name: '' });
+      setNewWorld({
+        name: '',
+        water_pond_chance: 0,
+        water_pond_min_width: 5,
+        water_pond_max_width: 20,
+        water_pond_min_height: 5,
+        water_pond_max_height: 20,
+        water_pond_min_depth: 3,
+        water_pond_max_depth: 10,
+        water_surface_texture_url: '',
+        water_tint_color: '#88ddff',
+        lava_pond_chance: 0,
+        lava_pond_min_width: 3,
+        lava_pond_max_width: 15,
+        lava_pond_min_height: 3,
+        lava_pond_max_height: 15,
+        lava_pond_min_depth: 3,
+        lava_pond_max_depth: 8,
+        lava_surface_texture_url: '',
+        lava_tint_color: '#ff6622',
+      });
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to create world', variant: 'destructive' });
     } finally {
@@ -464,6 +656,16 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
     return <div className="p-4 text-muted-foreground">Loading worlds...</div>;
   }
 
+  if (error) {
+    return (
+      <div className="p-4 text-red-500">
+        <p className="font-semibold">Error loading worlds:</p>
+        <p className="text-sm mt-1">{error}</p>
+        <p className="text-xs mt-2 text-muted-foreground">Check browser console for details.</p>
+      </div>
+    );
+  }
+
   const fixPanel = (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Fix / Maintenance</h3>
@@ -506,6 +708,60 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
           <TreeDeciduous className="h-4 w-4 mr-1" />
           {isCleaningGhostTrees ? 'Clearing...' : 'Clear Ghost Trees'}
         </Button>
+      </div>
+
+      {/* Individual Tree Repair */}
+      <div className="pt-4 border-t">
+        <h4 className="text-sm font-medium mb-2">Repair Specific Tree</h4>
+        <div className="flex gap-2 items-end flex-wrap">
+          <div className="flex gap-1">
+            <div>
+              <label className="text-xs text-muted-foreground">X</label>
+              <input
+                type="number"
+                value={treeRepairCoords.x}
+                onChange={(e) => setTreeRepairCoords(prev => ({ ...prev, x: e.target.value }))}
+                className="w-16 px-2 py-1 border rounded text-sm"
+                placeholder="-26"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Y</label>
+              <input
+                type="number"
+                value={treeRepairCoords.y}
+                onChange={(e) => setTreeRepairCoords(prev => ({ ...prev, y: e.target.value }))}
+                className="w-16 px-2 py-1 border rounded text-sm"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Z</label>
+              <input
+                type="number"
+                value={treeRepairCoords.z}
+                onChange={(e) => setTreeRepairCoords(prev => ({ ...prev, z: e.target.value }))}
+                className="w-16 px-2 py-1 border rounded text-sm"
+                placeholder="-185"
+              />
+            </div>
+          </div>
+          <Button
+            onClick={handleRepairTreeByPosition}
+            size="sm"
+            variant="outline"
+            disabled={isRepairingTree}
+            className="text-amber-600 border-amber-600 hover:bg-amber-50"
+          >
+            <Settings2 className={cn("h-4 w-4 mr-1", isRepairingTree && "animate-spin")} />
+            {isRepairingTree ? 'Diagnosing...' : 'Repair Tree'}
+          </Button>
+        </div>
+        {treeRepairResult && (
+          <pre className="mt-2 p-2 bg-muted rounded text-xs whitespace-pre-wrap font-mono max-h-48 overflow-auto">
+            {treeRepairResult}
+          </pre>
+        )}
       </div>
     </div>
   );
@@ -740,11 +996,11 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
 
       {/* Create World Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New World</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-6 py-4">
             <div className="space-y-2">
               <Label htmlFor="world-name">World Name</Label>
               <Input
@@ -754,8 +1010,244 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
                 onChange={(e) => setNewWorld(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
+
+            {/* Water Ponds Section */}
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Droplets className="h-5 w-5 text-blue-500" />
+                <h4 className="font-medium">Water Ponds</h4>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">Spawn Chance (%)</Label>
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      value={[newWorld.water_pond_chance]}
+                      min={0}
+                      max={5}
+                      step={0.01}
+                      className="flex-1"
+                      onValueChange={([value]) => setNewWorld(prev => ({ ...prev, water_pond_chance: value }))}
+                    />
+                    <span className="text-xs w-12 text-right">{newWorld.water_pond_chance.toFixed(2)}%</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Tint Color</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={newWorld.water_tint_color}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_tint_color: e.target.value }))}
+                      className="w-8 h-8 rounded border cursor-pointer"
+                    />
+                    <Input
+                      value={newWorld.water_tint_color}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_tint_color: e.target.value }))}
+                      className="flex-1 h-8 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Width (min-max)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={newWorld.water_pond_min_width}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_pond_min_width: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                    <span className="text-xs">-</span>
+                    <Input
+                      type="number"
+                      value={newWorld.water_pond_max_width}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_pond_max_width: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Height (min-max)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={newWorld.water_pond_min_height}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_pond_min_height: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                    <span className="text-xs">-</span>
+                    <Input
+                      type="number"
+                      value={newWorld.water_pond_max_height}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_pond_max_height: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Depth (min-max)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={newWorld.water_pond_min_depth}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_pond_min_depth: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                    <span className="text-xs">-</span>
+                    <Input
+                      type="number"
+                      value={newWorld.water_pond_max_depth}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, water_pond_max_depth: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Surface Texture URL (optional)</Label>
+                  <Input
+                    value={newWorld.water_surface_texture_url}
+                    onChange={(e) => setNewWorld(prev => ({ ...prev, water_surface_texture_url: e.target.value }))}
+                    placeholder="https://..."
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Lava Ponds Section */}
+            <div className="border rounded-lg p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Flame className="h-5 w-5 text-orange-500" />
+                <h4 className="font-medium">Lava Ponds</h4>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">Spawn Chance (%)</Label>
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      value={[newWorld.lava_pond_chance]}
+                      min={0}
+                      max={5}
+                      step={0.01}
+                      className="flex-1"
+                      onValueChange={([value]) => setNewWorld(prev => ({ ...prev, lava_pond_chance: value }))}
+                    />
+                    <span className="text-xs w-12 text-right">{newWorld.lava_pond_chance.toFixed(2)}%</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Tint Color</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={newWorld.lava_tint_color}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_tint_color: e.target.value }))}
+                      className="w-8 h-8 rounded border cursor-pointer"
+                    />
+                    <Input
+                      value={newWorld.lava_tint_color}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_tint_color: e.target.value }))}
+                      className="flex-1 h-8 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Width (min-max)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={newWorld.lava_pond_min_width}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_pond_min_width: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                    <span className="text-xs">-</span>
+                    <Input
+                      type="number"
+                      value={newWorld.lava_pond_max_width}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_pond_max_width: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Height (min-max)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={newWorld.lava_pond_min_height}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_pond_min_height: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                    <span className="text-xs">-</span>
+                    <Input
+                      type="number"
+                      value={newWorld.lava_pond_max_height}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_pond_max_height: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Depth (min-max)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={newWorld.lava_pond_min_depth}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_pond_min_depth: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                    <span className="text-xs">-</span>
+                    <Input
+                      type="number"
+                      value={newWorld.lava_pond_max_depth}
+                      onChange={(e) => setNewWorld(prev => ({ ...prev, lava_pond_max_depth: parseInt(e.target.value) || 1 }))}
+                      className="w-16 h-8 text-xs"
+                      min={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Surface Texture URL (optional)</Label>
+                  <Input
+                    value={newWorld.lava_surface_texture_url}
+                    onChange={(e) => setNewWorld(prev => ({ ...prev, lava_surface_texture_url: e.target.value }))}
+                    placeholder="https://..."
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
             <p className="text-sm text-muted-foreground">
               New worlds use default textures. Upload custom textures after creation.
+              {(newWorld.water_pond_chance > 0 || newWorld.lava_pond_chance > 0) && (
+                <span className="block mt-1 text-amber-600">
+                  Note: Pond generation may take a moment for large spawn chances.
+                </span>
+              )}
             </p>
           </div>
           <DialogFooter>
@@ -831,9 +1323,7 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
         </TabsList>
 
         <TabsContent value="sounds" className="mt-0">
-          <Card className="p-4">
-            <p className="text-muted-foreground text-sm">Sound settings coming soon.</p>
-          </Card>
+          <SoundSettingsPanel />
         </TabsContent>
 
         <TabsContent value="css" className="mt-0">

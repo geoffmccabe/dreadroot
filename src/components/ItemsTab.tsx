@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useUserData } from '@/hooks/useUserData';
 import { toast } from 'sonner';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 
 interface ItemDef {
   id: string;
@@ -172,7 +173,7 @@ function ForgePanel({
     setAnimationStep(0);
 
     // Start background forge sound immediately
-    const bgSound = new Audio('/forge_bkgd_noise.mp3');
+    const bgSound = new Audio(getSoundUrl('forge_background', '/forge_bkgd_noise.mp3'));
     bgSound.volume = 0.4;
     bgSound.play().catch(() => {});
     bgSoundRef.current = bgSound;
@@ -182,7 +183,7 @@ function ForgePanel({
     for (let step = 1; step <= 4; step++) {
       timers.push(setTimeout(() => {
         setAnimationStep(step);
-        const hammer = new Audio('/forge_hammer.mp3');
+        const hammer = new Audio(getSoundUrl('forge_hammer', '/forge_hammer.mp3'));
         hammer.volume = 0.5;
         hammer.play().catch(() => {});
       }, step * 1000));

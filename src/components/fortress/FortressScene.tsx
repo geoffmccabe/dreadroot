@@ -52,6 +52,7 @@ import { getVisibleChunkKeys } from '@/lib/chunkManager';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 
 // Shwarm system imports
@@ -925,7 +926,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     initializeAudioElements(audioRefs.current as unknown as Record<string, HTMLAudioElement>);
     
     // Preload spatial audio sounds
-    preloadSpatialSounds(['/ricochet_sound.mp3']);
+    preloadSpatialSounds([getSoundUrl('ricochet', '/ricochet_sound.mp3')]);
 
     return () => {
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {

@@ -10,6 +10,7 @@ import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/comp
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 // B4: Removed canonicalizeTextureUrl - no longer needed after removing arraysShallowEqual
 import { preloadBlockDefinitions } from '@/hooks/useBlocksData';
+import { initializeSoundsCache } from '@/hooks/useGameSounds';
 import { CAMERA_START_X, CAMERA_START_Z } from '@/components/fortress/fortressScene.constants';
 import * as THREE from 'three';
 
@@ -136,6 +137,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // This ensures PlacedBlocks can render immediately when chunks load
       const blockDefsPromise = preloadBlockDefinitions();
 
+      // Initialize sounds cache in parallel
+      const soundsCachePromise = initializeSoundsCache();
+
       // C7: IndexedDB initialization with start/finish
       const dbStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing IndexedDB...');
       await initDB();
@@ -156,6 +160,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const blockDefsStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Loading block definitions...');
       await blockDefsPromise;
       initLogFinishStep(blockDefsStepId!);
+
+      // Wait for sounds cache (non-critical, won't block if it fails)
+      await soundsCachePromise;
 
       // ONE-TIME ATLAS CACHE MIGRATION: Clear stale atlas for fruit texture fix
       const ATLAS_CACHE_VERSION_KEY = 'fortress_atlas_cache_version';
@@ -574,17 +581,29 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         // Uses isTreeBlockType helper which handles encoded types like 'trunk_0_5'
         if (isTreeBlockType(block.block_type)) {
           activeGrowthChunks.current.add(chunkKey);
-          // Auto-clear after grace period AND invalidate IndexedDB cache
-          // This ensures fresh fetch on next page load
+          // Auto-clear after grace period AND update IndexedDB cache
+          // Instead of invalidating (deleting), we save the current chunk data to preserve cache
           setTimeout(() => {
             activeGrowthChunks.current.delete(chunkKey);
-            // Invalidate the IndexedDB cache for this chunk so it refetches on reload
+            // Update the IndexedDB cache with current chunk data (preserves blocks)
             if (worldId) {
               const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
               if (match) {
                 const chunkX = parseInt(match[1], 10);
                 const chunkZ = parseInt(match[2], 10);
-                blockDB.invalidateCachedChunk(worldId, chunkX, chunkZ).catch(() => {});
+                // Get current chunk data from memory and save to cache
+                const chunkData = chunkLoaderRef.current.loadedChunksRef?.current.get(chunkKey);
+                if (chunkData && chunkData.blocks.length > 0) {
+                  blockDB.saveCachedChunk({
+                    key: `${worldId}:${chunkX}:${chunkZ}`,
+                    worldId,
+                    chunkX,
+                    chunkZ,
+                    version: Date.now(), // Use timestamp as version (always > server version)
+                    blocks: chunkData.blocks,
+                    cachedAt: Date.now(),
+                  }).catch(() => {});
+                }
               }
             }
           }, TREE_GROWTH_GRACE_PERIOD);
@@ -691,13 +710,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // This keeps the chunk map in sync with rendered state
       chunkLoader.replaceBlockByPosition(data);
 
-      // CRITICAL FIX: Invalidate chunk cache for tree blocks after successful sync
-      // This ensures the IndexedDB cache doesn't serve stale data on page reload
-      if (isTreeBlockType(dbBlock.block_type) && blockData.world_id) {
-        const chunkX = Math.floor(dbBlock.position_x / 16);
-        const chunkZ = Math.floor(dbBlock.position_z / 16);
-        blockDB.invalidateCachedChunk(blockData.world_id, chunkX, chunkZ).catch(() => {});
-      }
+      // NOTE: Cache invalidation for tree blocks is handled by the grace period timeout
+      // in addBlocksBatch (after TREE_GROWTH_GRACE_PERIOD). Doing it here per-block
+      // was redundant and caused performance issues during tree growth.
 
       return data;
     } catch (error) {

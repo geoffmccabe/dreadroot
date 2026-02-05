@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-type PanelTab = 'user' | 'level' | 'wallet' | 'items' | 'kills' | 'blocks' | 'market' | 'trees';
+// 'market' is Block Store, 'p2p' is P2P Marketplace
+type PanelTab = 'user' | 'level' | 'wallet' | 'items' | 'kills' | 'blocks' | 'market' | 'p2p' | 'trees';
 
 interface UserPanelContextType {
   isOpen: boolean;
@@ -30,7 +31,13 @@ export const UserPanelProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   return (
-    <UserPanelContext.Provider value={{ isOpen, activeTab, openPanel, closePanel, setActiveTab }}>
+    <UserPanelContext.Provider value={{
+      isOpen,
+      activeTab,
+      openPanel,
+      closePanel,
+      setActiveTab,
+    }}>
       {children}
     </UserPanelContext.Provider>
   );

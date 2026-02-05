@@ -13,10 +13,12 @@ import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 import ChunkRenderer from '@/components/ChunkRenderer';
 import { ProceduralGround } from './ProceduralGround';
 import { FadeChunkBlocks } from '@/components/FadeChunkBlocks';
+import { WaterBlocks } from '@/components/WaterBlocks';
 import type { ViewSettings } from './FortressTypes';
 import { getAtlasVersion, useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { useBlocksData } from '@/hooks/useBlocksData';
+import { useWorldPonds } from '@/hooks/useWorldPonds';
 
 const FADE_EXTRA = 3;
 
@@ -38,7 +40,10 @@ export function CameraTrackedBlocks({
   viewSettings?: ViewSettings;
 }) {
   const { camera } = useThree();
-  const { blocksByChunk, visibleChunksRef, visualDistance, updatePlayerPosition, loadedChunksRef, worldRevision } = useBlocks();
+  const { blocksByChunk, visibleChunksRef, visualDistance, updatePlayerPosition, loadedChunksRef, worldRevision, currentWorldId } = useBlocks();
+
+  // Load pond data for water rendering
+  const worldPonds = useWorldPonds(currentWorldId);
 
   // Phase 1 optimization: Call expensive hooks ONCE here instead of 71× in PlacedBlocks
   // Results are passed down through ChunkRenderer → PlacedBlocks as hoisted props
@@ -140,7 +145,8 @@ export function CameraTrackedBlocks({
     const ref = loadedChunksRef?.current;
     if (!ref) return null;
     for (const [chunkKey, chunkData] of ref) {
-      const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
+      // NOTE: Must check length explicitly - `??` doesn't catch empty arrays
+      const blocks = (chunkData.visibleBlocks?.length) ? chunkData.visibleBlocks : chunkData.blocks;
       for (let i = 0; i < blocks.length; i++) {
         if (blocks[i].id === hoveredBlockId) return chunkKey;
       }
@@ -231,6 +237,14 @@ export function CameraTrackedBlocks({
     return { normalEntries: normal, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
 
+  // Generate water blocks for visible chunks
+  const waterBlocks = useMemo(() => {
+    if (!worldPonds.hasPonds || normalEntries.length === 0) return [];
+
+    const chunkKeys = normalEntries.map(e => e.key);
+    return worldPonds.getAllWaterBlocksForChunks(chunkKeys, CHUNK_SIZE);
+  }, [worldPonds, normalEntries]);
+
   // One-time pipeline diagnostic (fires once when normalEntries first has data)
   if (!debugLogRef.current && normalEntries.length > 0) {
     debugLogRef.current = true;
@@ -251,7 +265,7 @@ export function CameraTrackedBlocks({
         const nonTreeTypes = new Set<string>();
 
         for (const b of allBlocks) {
-          const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
+          const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('r_') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
           if (!isTree) {
             allNonTree++;
             nonTreeTypes.add(b.block_type);
@@ -260,7 +274,7 @@ export function CameraTrackedBlocks({
 
         if (visBlocks) {
           for (const b of visBlocks) {
-            const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
+            const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('r_') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
             if (!isTree) visNonTree++;
           }
         }
@@ -299,6 +313,14 @@ export function CameraTrackedBlocks({
           hoistedBlockDefsLoading={hoistedBlockDefsLoading}
         />
       ))}
+      {/* Water/Lava blocks - rendered after opaque blocks for transparency */}
+      {waterBlocks.length > 0 && (
+        <WaterBlocks
+          waterBlocks={waterBlocks}
+          waterTintColor={worldPonds.settings.waterTintColor}
+          lavaTintColor={worldPonds.settings.lavaTintColor}
+        />
+      )}
     </>
   );
 }

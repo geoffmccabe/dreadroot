@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { generatePondsForWorld, type WorldPondSettings, type PondSettings } from '@/lib/pondGenerator';
 
 export interface World {
   id: string;
@@ -13,6 +14,26 @@ export interface World {
   is_default: boolean;
   created_at: string;
   updated_at: string;
+  // Pond settings - water
+  water_pond_chance: number;
+  water_pond_min_width: number;
+  water_pond_max_width: number;
+  water_pond_min_height: number;
+  water_pond_max_height: number;
+  water_pond_min_depth: number;
+  water_pond_max_depth: number;
+  water_surface_texture_url: string | null;
+  water_tint_color: string;
+  // Pond settings - lava
+  lava_pond_chance: number;
+  lava_pond_min_width: number;
+  lava_pond_max_width: number;
+  lava_pond_min_height: number;
+  lava_pond_max_height: number;
+  lava_pond_min_depth: number;
+  lava_pond_max_depth: number;
+  lava_surface_texture_url: string | null;
+  lava_tint_color: string;
 }
 
 export interface AmbientMusicTrack {
@@ -103,6 +124,25 @@ export function useWorlds() {
     fortress_texture_url?: string | null;
     ground_texture_url?: string | null;
     sky_texture_url?: string | null;
+    // Pond settings
+    water_pond_chance?: number;
+    water_pond_min_width?: number;
+    water_pond_max_width?: number;
+    water_pond_min_height?: number;
+    water_pond_max_height?: number;
+    water_pond_min_depth?: number;
+    water_pond_max_depth?: number;
+    water_surface_texture_url?: string | null;
+    water_tint_color?: string;
+    lava_pond_chance?: number;
+    lava_pond_min_width?: number;
+    lava_pond_max_width?: number;
+    lava_pond_min_height?: number;
+    lava_pond_max_height?: number;
+    lava_pond_min_depth?: number;
+    lava_pond_max_depth?: number;
+    lava_surface_texture_url?: string | null;
+    lava_tint_color?: string;
   }): Promise<World | null> => {
     try {
       const { data, error } = await supabase
@@ -114,15 +154,70 @@ export function useWorlds() {
           sky_texture_url: worldData.sky_texture_url || null,
           ambient_music_url: DEFAULT_AMBIENT_TRACK.url,
           ambient_music_volume: 100,
-          is_default: false
+          is_default: false,
+          // Water pond settings
+          water_pond_chance: worldData.water_pond_chance ?? 0,
+          water_pond_min_width: worldData.water_pond_min_width ?? 5,
+          water_pond_max_width: worldData.water_pond_max_width ?? 20,
+          water_pond_min_height: worldData.water_pond_min_height ?? 5,
+          water_pond_max_height: worldData.water_pond_max_height ?? 20,
+          water_pond_min_depth: worldData.water_pond_min_depth ?? 3,
+          water_pond_max_depth: worldData.water_pond_max_depth ?? 10,
+          water_surface_texture_url: worldData.water_surface_texture_url || null,
+          water_tint_color: worldData.water_tint_color ?? '#88ddff',
+          // Lava pond settings
+          lava_pond_chance: worldData.lava_pond_chance ?? 0,
+          lava_pond_min_width: worldData.lava_pond_min_width ?? 3,
+          lava_pond_max_width: worldData.lava_pond_max_width ?? 15,
+          lava_pond_min_height: worldData.lava_pond_min_height ?? 3,
+          lava_pond_max_height: worldData.lava_pond_max_height ?? 15,
+          lava_pond_min_depth: worldData.lava_pond_min_depth ?? 3,
+          lava_pond_max_depth: worldData.lava_pond_max_depth ?? 8,
+          lava_surface_texture_url: worldData.lava_surface_texture_url || null,
+          lava_tint_color: worldData.lava_tint_color ?? '#ff6622',
         })
         .select()
         .single();
 
       if (error) throw error;
 
+      const newWorld = data as unknown as World;
+
+      // Generate ponds if any pond chance is set
+      if ((worldData.water_pond_chance ?? 0) > 0 || (worldData.lava_pond_chance ?? 0) > 0) {
+        const pondSettings: WorldPondSettings = {
+          water: {
+            chance: worldData.water_pond_chance ?? 0,
+            minWidth: worldData.water_pond_min_width ?? 5,
+            maxWidth: worldData.water_pond_max_width ?? 20,
+            minHeight: worldData.water_pond_min_height ?? 5,
+            maxHeight: worldData.water_pond_max_height ?? 20,
+            minDepth: worldData.water_pond_min_depth ?? 3,
+            maxDepth: worldData.water_pond_max_depth ?? 10,
+          },
+          lava: {
+            chance: worldData.lava_pond_chance ?? 0,
+            minWidth: worldData.lava_pond_min_width ?? 3,
+            maxWidth: worldData.lava_pond_max_width ?? 15,
+            minHeight: worldData.lava_pond_min_height ?? 3,
+            maxHeight: worldData.lava_pond_max_height ?? 15,
+            minDepth: worldData.lava_pond_min_depth ?? 3,
+            maxDepth: worldData.lava_pond_max_depth ?? 8,
+          },
+          seed: Date.now(), // Use current time as seed for randomness
+        };
+
+        try {
+          await generatePondsForWorld(newWorld.id, pondSettings);
+          console.log('[useWorlds] Generated ponds for world:', newWorld.id);
+        } catch (pondError) {
+          console.error('[useWorlds] Failed to generate ponds:', pondError);
+          // Don't fail world creation if pond generation fails
+        }
+      }
+
       await fetchWorlds();
-      return data as unknown as World;
+      return newWorld;
     } catch (err) {
       console.error('Error creating world:', err);
       throw err;

@@ -58,7 +58,8 @@ export function useFruitSpawning({
     const trees = plantedTreesRef.current;
     const fruits = treeFruitsRef.current;
 
-    console.log(`[FruitSpawning] Tick: ${trees.length} trees, ${fruits.length} existing fruits`);
+    // Debug logging disabled to reduce spam
+    // console.log(`[FruitSpawning] Tick: ${trees.length} trees, ${fruits.length} existing fruits`);
 
     // Build a set of occupied fruit positions for fast lookup
     const occupiedPositions = new Set<string>();
@@ -80,7 +81,7 @@ export function useFruitSpawning({
       return true;
     });
 
-    console.log(`[FruitSpawning] Eligible: ${eligibleTrees.length} | Rejected: notGrown=${rejectedNotGrown} notOwned=${rejectedNotOwned} noSeedDef=${rejectedNoSeedDef} fungal=${rejectedFungal} noFruiting=${rejectedNoFruiting}`);
+    // console.log(`[FruitSpawning] Eligible: ${eligibleTrees.length} | Rejected: notGrown=${rejectedNotGrown} notOwned=${rejectedNotOwned} noSeedDef=${rejectedNoSeedDef} fungal=${rejectedFungal} noFruiting=${rejectedNoFruiting}`);
     if (eligibleTrees.length === 0) return;
 
     // Process each eligible tree
