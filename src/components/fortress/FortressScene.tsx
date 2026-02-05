@@ -10,6 +10,7 @@ import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useWispBlock } from '@/hooks/useWispBlock';
+import { useWorldPonds } from '@/hooks/useWorldPonds';
 
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
@@ -25,6 +26,7 @@ import { FirstPersonControls } from './FortressControls';
 import { DynamicSky, SkyHandle } from './FortressSky';
 import { DynamicLighting, LightingHandle } from './FortressLighting';
 import { FortressStructure } from './FortressStructure';
+import { BlockInspectorHighlight } from './BlockInspectorHighlight';
 // import { FortressParticles } from './FortressParticles'; // Disabled for performance
 import { Waterfall } from './FortressWaterfall';
 import { Coins } from './FortressCoins';
@@ -115,6 +117,7 @@ export function FortressScene({
   onWideTreePlace,
   onModeChange,
   onOpenPanel,
+  onOpenMarketplace,
   onToggleInventory,
   crosshairsEnabled,
   getBlockQuantity,
@@ -183,6 +186,9 @@ export function FortressScene({
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition, blocks: allLoadedBlocks, isLoading: blocksLoading, worldRevision, loadedChunksRef: chunksRef, currentWorldId } = useBlocks();
+
+  // Pond system for swimming
+  const worldPonds = useWorldPonds(currentWorldId);
 
   // Delay enemy spawning until blocks are loaded (prevents enemies showing before trees)
   // Phase 2: Use worldRevision instead of flat blocks array length
@@ -1256,6 +1262,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onFungalTreePlace={onFungalTreePlace}
         onWideTreePlace={onWideTreePlace}
         onOpenPanel={onOpenPanel}
+        onOpenMarketplace={onOpenMarketplace}
         onToggleInventory={onToggleInventory}
         onModeChange={onModeChange}
         getBlockQuantity={getBlockQuantity}
@@ -1305,6 +1312,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onFlameStart={handleFlameStart}
         onFlameStop={handleFlameStop}
         onHarvestFruit={harvestNearest}
+        checkIsInWater={worldPonds.checkIsInWater}
+        getWaterType={worldPonds.getWaterType}
+        loadedChunksRef={chunksRef}
+        currentWorldId={currentWorldId}
       />
       
       <MultiplayerPlayers players={players} />
@@ -1406,6 +1417,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       /> */}
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
+
+      {/* Rainbow highlight for Block Inspector selected block */}
+      <BlockInspectorHighlight />
     </>
   );
 }
