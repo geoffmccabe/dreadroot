@@ -339,6 +339,13 @@ export function FirstPersonControls({
         event.preventDefault();
         onToggleInventory?.();
         break;
+      case 'KeyY':
+        // Ctrl+Y plays yodel if player is at Y>=50
+        if (event.ctrlKey && camera.position.y >= 50) {
+          event.preventDefault();
+          playSpatialSound('/yodel_1.mp3', 0, { baseVolume: 0.7 });
+        }
+        break;
       case 'KeyW':
       case 'ArrowUp':
         keys.current.w = true;
