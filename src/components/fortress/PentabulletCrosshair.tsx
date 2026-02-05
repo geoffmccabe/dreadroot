@@ -99,9 +99,6 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
   const isCharging = chargeProgress >= 1.0;
   const isFullyCharged = chargeProgress >= 5.0;
 
-  // Hide when in inspector mode (InspectorCrosshair shows instead)
-  if (inspectorMode) return null;
-
   // Color cycling when fully charged (10 cycles per second = 33ms per color)
   const cycleColors = [bulletColor, '#ffffff', '#000000'];
   const displayColor = isFullyCharged ? cycleColors[cycleColorIndex] : bulletColor;
@@ -142,7 +139,11 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
     animationId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationId);
   }, [isCharging, isFullyCharged]);
-  
+
+  // Hide when in inspector mode (InspectorCrosshair shows instead)
+  // NOTE: This must be AFTER all hooks to avoid "Rendered fewer hooks" error
+  if (inspectorMode) return null;
+
   // Don't show crosshair when inactive
   if (baseMode === 'inactive') return null;
   
