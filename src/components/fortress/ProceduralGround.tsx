@@ -158,14 +158,10 @@ export function ProceduralGround({
               ? Math.min(1.0, brightness + EDGE_HIGHLIGHT_BOOST)
               : brightness;
 
-            // Check if block is in Fortress Safe Zone - apply yellow tint
+            // Check if block is in Fortress Safe Zone - make 50% lighter
             if (isInFSZ(worldX, worldZ)) {
-              // Yellow tint: boost red/green, significantly reduce blue for visible yellow
-              blockColor.setRGB(
-                Math.min(1.0, finalBrightness * 1.15),  // More red for warm yellow
-                Math.min(1.0, finalBrightness * 1.1),   // Slightly more green
-                finalBrightness * 0.4                    // Much less blue for strong yellow tint
-              );
+              const lighterBrightness = Math.min(1.0, finalBrightness + (1.0 - finalBrightness) * 0.5);
+              blockColor.setRGB(lighterBrightness, lighterBrightness, lighterBrightness);
             } else {
               blockColor.setRGB(finalBrightness, finalBrightness, finalBrightness);
             }
@@ -215,12 +211,9 @@ export function ProceduralGround({
         if (distFromCamera <= visualDistance) {
           // Within visual range: use distance-from-center brightness
           if (chunkInFSZ) {
-            // Yellow tint for FSZ - strong yellow
-            farColor.setRGB(
-              Math.min(1.0, brightness * 1.15),
-              Math.min(1.0, brightness * 1.1),
-              brightness * 0.4
-            );
+            // FSZ is 50% lighter
+            const lighterBrightness = Math.min(1.0, brightness + (1.0 - brightness) * 0.5);
+            farColor.setRGB(lighterBrightness, lighterBrightness, lighterBrightness);
           } else {
             farColor.setRGB(brightness, brightness, brightness);
           }
@@ -230,14 +223,12 @@ export function ProceduralGround({
           // Blend from distance-darkened color toward muted grey
           const greyTarget = 0.6;
           if (chunkInFSZ) {
-            // Yellow-tinted fade for FSZ
-            const fszR = Math.min(1.0, brightness * 1.15);
-            const fszG = Math.min(1.0, brightness * 1.1);
-            const fszB = brightness * 0.4;
+            // FSZ is 50% lighter, then fades
+            const lighterBrightness = Math.min(1.0, brightness + (1.0 - brightness) * 0.5);
             farColor.setRGB(
-              fszR + lodT * (greyTarget - fszR),
-              fszG + lodT * (greyTarget - fszG),
-              fszB + lodT * (greyTarget - fszB)
+              lighterBrightness + lodT * (greyTarget - lighterBrightness),
+              lighterBrightness + lodT * (greyTarget - lighterBrightness),
+              lighterBrightness + lodT * (greyTarget - lighterBrightness)
             );
           } else {
             farColor.setRGB(
