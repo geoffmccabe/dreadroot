@@ -331,10 +331,14 @@ export function FirstPersonControls({
     switch (event.code) {
       case 'KeyI':
         // Ctrl+I toggles Inspector Mode (admin only)
-        if (event.ctrlKey && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
-          event.preventDefault();
-          toggleInspectorMode();
-          break;
+        if (event.ctrlKey) {
+          console.log('[FortressControls] Ctrl+I pressed, userRoles:', userRoles);
+          if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+            event.preventDefault();
+            console.log('[FortressControls] Toggling inspector mode');
+            toggleInspectorMode();
+            break;
+          }
         }
         // Regular I opens inventory
         event.preventDefault();
