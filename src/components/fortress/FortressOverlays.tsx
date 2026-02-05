@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 import { AdminPanel } from '@/components/AdminPanel';
 import { UserPanel } from '@/components/UserPanel';
@@ -7,14 +7,28 @@ import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { FungalTreeDiagnostics } from '@/components/FungalTreeDiagnostics';
 import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
 import { DeathOverlay } from '@/features/shwarm';
+import { inspectorModeEnabled } from '@/components/FPSCounter';
 
 import { PentabulletCrosshair } from './PentabulletCrosshair';
+import { InspectorCrosshair } from './InspectorCrosshair';
 
 // Intentionally loose typing: this file is an extraction of UI overlays
 // from a large component, and we want minimal friction during refactor.
 type FortressOverlaysProps = any;
 
 export function FortressOverlays(props: FortressOverlaysProps) {
+  // Track inspector mode state (polled since it's a module-level variable)
+  const [isInspectorMode, setIsInspectorMode] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (inspectorModeEnabled !== isInspectorMode) {
+        setIsInspectorMode(inspectorModeEnabled);
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, [isInspectorMode]);
+
   const {
     settings,
     handleSettingsChange,
@@ -74,15 +88,19 @@ export function FortressOverlays(props: FortressOverlaysProps) {
         onViewSettingsChange={handleViewSettingsChange}
       />
 
-      {/* User Panel */}
+      {/* User Panel (includes P2P Marketplace tab) */}
       <UserPanel onBlockPurchased={handleBlockPurchased} />
 
-      {/* Crosshair */}
+      {/* Crosshair - hidden when in Inspector Mode */}
       <PentabulletCrosshair
         chargeProgress={pentabulletCharge}
         baseMode={baseMode}
         bulletColor={bulletColor}
+        inspectorMode={isInspectorMode}
       />
+
+      {/* Inspector Mode Crosshair (rainbow "I") */}
+      <InspectorCrosshair visible={isInspectorMode} />
 
       {/* Death Overlay */}
       <DeathOverlay

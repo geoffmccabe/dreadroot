@@ -4,6 +4,7 @@ interface PentabulletCrosshairProps {
   chargeProgress: number; // 0-5+ seconds
   baseMode: 'inactive' | 'shooting' | 'building' | 'planting';
   bulletColor?: string; // Color from bullet tier definition
+  inspectorMode?: boolean; // Hide crosshair when in inspector mode
 }
 
 // Individual crosshair ring with + or X shape
@@ -82,7 +83,7 @@ function CrosshairRing({
   );
 }
 
-export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '#ff2431' }: PentabulletCrosshairProps) {
+export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '#ff2431', inspectorMode = false }: PentabulletCrosshairProps) {
   const [rotation, setRotation] = useState(0);
   const [cycleColorIndex, setCycleColorIndex] = useState(0);
 
@@ -97,6 +98,9 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
   // Start rotating as soon as charging begins (at 1 second)
   const isCharging = chargeProgress >= 1.0;
   const isFullyCharged = chargeProgress >= 5.0;
+
+  // Hide when in inspector mode (InspectorCrosshair shows instead)
+  if (inspectorMode) return null;
 
   // Color cycling when fully charged (10 cycles per second = 33ms per color)
   const cycleColors = [bulletColor, '#ffffff', '#000000'];

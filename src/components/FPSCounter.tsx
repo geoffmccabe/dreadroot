@@ -2,6 +2,7 @@ import { useThree } from '@react-three/fiber';
 import { useRef, useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { supabase } from '@/integrations/supabase/client';
 
 let globalFps = 0;
 let globalPlayerPos = { x: 0, y: 0, z: 0 };
@@ -73,12 +74,27 @@ export interface GlobalInspectData {
 
 export let globalInspectData: GlobalInspectData | null = null;
 
+// Inspector Mode state - toggled with Ctrl+I
+export let inspectorModeEnabled = false;
+
 export function setGlobalInspectData(data: GlobalInspectData | null) {
   globalInspectData = data;
 }
 
 export function clearGlobalInspectData() {
   globalInspectData = null;
+}
+
+export function setInspectorMode(enabled: boolean) {
+  inspectorModeEnabled = enabled;
+  if (!enabled) {
+    globalInspectData = null;
+  }
+}
+
+export function toggleInspectorMode() {
+  setInspectorMode(!inspectorModeEnabled);
+  return inspectorModeEnabled;
 }
 
 export interface FPSCounterHandle {
@@ -165,14 +181,41 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isInspectorMode, setIsInspectorMode] = useState(false);
+  const [isLookingAtSky, setIsLookingAtSky] = useState(false);
+  const [ownerName, setOwnerName] = useState<string | null>(null);
+  const lastOwnerId = useRef<string | null>(null);
 
   // Check if user can delete (admin or superadmin)
   const canDelete = userRoles.includes('admin') || userRoles.includes('superadmin');
 
+  // Fetch owner name when owner changes
+  useEffect(() => {
+    const ownerId = inspectData?.sources.state.userId;
+    if (!ownerId || ownerId === lastOwnerId.current) return;
+
+    lastOwnerId.current = ownerId;
+    setOwnerName(null); // Reset while loading
+
+    supabase
+      .from('user_profiles')
+      .select('display_name')
+      .eq('id', ownerId)
+      .single()
+      .then(({ data }) => {
+        if (data?.display_name) {
+          setOwnerName(data.display_name);
+        }
+      });
+  }, [inspectData?.sources.state.userId]);
+
   // Handler functions defined first so useEffects can reference them
   const handleDismiss = useCallback(() => {
+    setInspectorMode(false);
     clearGlobalInspectData();
     setInspectData(null);
+    setIsInspectorMode(false);
+    setIsLookingAtSky(false);
   }, []);
 
   const handleCopy = useCallback(async () => {
@@ -210,23 +253,39 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
     }
   }, [inspectData, onDeleteBlock]);
 
-  // Poll for inspect data changes (admin only)
+  // Poll for inspect data changes and inspector mode state (admin only)
   useEffect(() => {
     if (!isAdmin) return;
 
     const interval = setInterval(() => {
+      // Track inspector mode state
+      if (inspectorModeEnabled !== isInspectorMode) {
+        setIsInspectorMode(inspectorModeEnabled);
+        if (!inspectorModeEnabled) {
+          setIsLookingAtSky(false);
+        }
+      }
+
       if (globalInspectData && globalInspectData.timestamp !== inspectData?.timestamp) {
         setInspectData(globalInspectData);
+        setIsLookingAtSky(false);
         setCopied(false);
         setShowDeleteConfirm(false); // Reset delete confirmation when new block selected
       } else if (!globalInspectData && inspectData) {
         setInspectData(null);
         setShowDeleteConfirm(false); // Reset when inspector closed
+        // Check if we're in inspector mode but no block - means looking at sky
+        if (inspectorModeEnabled) {
+          setIsLookingAtSky(true);
+        }
+      } else if (inspectorModeEnabled && !globalInspectData) {
+        // In inspector mode but no data = looking at sky
+        setIsLookingAtSky(true);
       }
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isAdmin, inspectData?.timestamp]);
+  }, [isAdmin, inspectData?.timestamp, isInspectorMode]);
 
   // Keyboard handler for DELETE key when confirmation is showing
   useEffect(() => {
@@ -270,6 +329,50 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
             V:[0,0,0]
           </span>
         </div>
+        {/* Inspector Mode: Looking at sky */}
+        {isInspectorMode && isLookingAtSky && !inspectData && (
+          <div
+            style={{
+              borderRadius: '6px',
+              border: '1px solid hsla(200, 70%, 60%, 0.8)',
+              background: 'hsla(200, 30%, 20%, 0.98)',
+              color: 'hsl(200, 80%, 90%)',
+              fontFamily: 'monospace',
+              padding: '8px 10px',
+              fontSize: '11px',
+              lineHeight: '1.5',
+              position: 'relative',
+              minWidth: '280px',
+              maxWidth: '320px',
+            }}
+          >
+            {/* Header with close button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid hsla(200, 50%, 50%, 0.5)', paddingBottom: '4px' }}>
+              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>BLOCK INSPECTOR</span>
+              <button
+                onClick={handleDismiss}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'hsl(200, 60%, 70%)',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  lineHeight: '1',
+                  padding: '0 4px',
+                }}
+                title="Close (ESC or Ctrl+I)"
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ textAlign: 'center', padding: '12px 0', color: 'hsl(200, 60%, 75%)' }}>
+              You are highlighting the sky
+            </div>
+            <div style={{ fontSize: '10px', color: 'hsl(200, 40%, 60%)', textAlign: 'center' }}>
+              Press ESC or Ctrl+I to exit Inspector Mode
+            </div>
+          </div>
+        )}
         {inspectData && (
           <div
             style={{
@@ -302,7 +405,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
                   lineHeight: '1',
                   padding: '0 4px',
                 }}
-                title="Close"
+                title={isInspectorMode ? 'Close (ESC or Ctrl+I)' : 'Close'}
               >
                 ×
               </button>
@@ -427,7 +530,14 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
                 <div style={{ fontSize: '10px' }}>
                   <div>ID: {inspectData.sources.state.blockId}</div>
                   <div>Type: {inspectData.sources.state.blockType}</div>
-                  <div>Owner: {inspectData.sources.state.userId || 'unowned'}</div>
+                  <div>Owner: {inspectData.sources.state.userId ? (
+                    <span>
+                      {ownerName && <span style={{ color: 'hsl(120, 60%, 70%)', fontWeight: 'bold' }}>{ownerName}</span>}
+                      <div style={{ color: 'hsl(200, 50%, 65%)', fontSize: '9px', marginLeft: ownerName ? '0' : '0' }}>
+                        {inspectData.sources.state.userId}
+                      </div>
+                    </span>
+                  ) : 'unowned'}</div>
                   {inspectData.sources.state.createdAt && <div>Created: {new Date(inspectData.sources.state.createdAt).toLocaleDateString()}</div>}
                   {inspectData.sources.state.expiresAt && <div>Expires: {inspectData.sources.state.expiresAt}</div>}
                 </div>

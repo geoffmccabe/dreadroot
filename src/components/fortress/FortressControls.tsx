@@ -24,7 +24,10 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
-import { setGlobalInspectData, clearGlobalInspectData } from '@/components/FPSCounter';
+import { setGlobalInspectData, clearGlobalInspectData, toggleInspectorMode, setInspectorMode, inspectorModeEnabled, globalInspectData, type GlobalInspectData, type InspectSources } from '@/components/FPSCounter';
+import { blockDB } from '@/hooks/useIndexedDB';
+import { CHUNK_SIZE } from '@/lib/chunkManager';
+import { type WaterType } from '@/lib/pondGenerator';
 
 export function FirstPersonControls({
   onShoot,
@@ -40,6 +43,7 @@ export function FirstPersonControls({
   onFungalTreePlace,
   onWideTreePlace,
   onOpenPanel,
+  onOpenMarketplace,
   onToggleInventory,
   onModeChange,
   getBlockQuantity,
@@ -91,6 +95,14 @@ export function FirstPersonControls({
   onFlameStop,
   // Fruit harvest system (F-key)
   onHarvestFruit,
+  // Swimming system
+  checkIsInWater,
+  getWaterType,
+  onSwimmingStateChange,
+  onLavaDamage,
+  // Block Inspector
+  loadedChunksRef,
+  currentWorldId,
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
@@ -132,6 +144,12 @@ export function FirstPersonControls({
   const lastGroundCheck = useRef(0);
   const stuckTimer = useRef(0);
   const lastPositionLog = useRef(0);
+
+  // Swimming state
+  const isInWaterRef = useRef(false);
+  const waterTypeRef = useRef<WaterType | null>(null);
+  const lastSwimmingStateRef = useRef(false); // For detecting state changes
+  const lastLavaDamageTimeRef = useRef(0); // For lava damage timing (500ms ticks)
   
   // Knockback velocity for shwarm hits (decays over time)
   const knockbackVelRef = useRef(new THREE.Vector3());
@@ -162,7 +180,11 @@ export function FirstPersonControls({
   
   // Throttle ref for hover detection (avoid per-frame setState!)
   const lastHoverCheckRef = useRef(0);
-  
+
+  // Throttle ref for inspector mode raycasting (every 50ms = 20Hz)
+  const lastInspectorCheckRef = useRef(0);
+  const lastInspectorPosRef = useRef({ x: -9999, y: -9999, z: -9999 });
+
   // Throttle ref for position broadcast (every 50ms = 20Hz, not every frame)
   const lastBroadcastRef = useRef(0);
   const BROADCAST_INTERVAL = 50; // ms
@@ -307,6 +329,13 @@ export function FirstPersonControls({
     
     switch (event.code) {
       case 'KeyI':
+        // Ctrl+I toggles Inspector Mode (admin only)
+        if (event.ctrlKey && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
+          event.preventDefault();
+          toggleInspectorMode();
+          break;
+        }
+        // Regular I opens inventory
         event.preventDefault();
         onToggleInventory?.();
         break;
@@ -450,6 +479,10 @@ export function FirstPersonControls({
         event.preventDefault();
         onOpenPanel('market');
         break;
+      case 'KeyM':
+        event.preventDefault();
+        onOpenMarketplace?.();
+        break;
       case 'BracketLeft':
         if (blockPlacementMode) {
           event.preventDefault();
@@ -481,6 +514,11 @@ export function FirstPersonControls({
         }
         break;
       case 'Escape':
+        // Exit Inspector Mode if active
+        if (inspectorModeEnabled) {
+          setInspectorMode(false);
+          break;
+        }
         if (isLocked.current) {
           document.exitPointerLock();
         }
@@ -546,7 +584,7 @@ export function FirstPersonControls({
         }
         break;
     }
-  }, [crosshairsEnabled, onModeChange, onOpenPanel, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     if (panelOpen || 
@@ -979,14 +1017,56 @@ export function FirstPersonControls({
           meshName = mesh.name || '(unnamed)';
           instanceId = result.instanceId;
         } else {
-          // No placed block hit - check if looking at ground (y=0 plane)
-          // Calculate ray-plane intersection with y=0
+          // No placed block hit - ray march along LoS checking colliders
           const camDir = new THREE.Vector3();
           camera.getWorldDirection(camDir);
 
-          if (camDir.y < -0.01) { // Looking downward
+          // Ray march parameters
+          const maxDistance = 20;
+          const stepSize = 0.5; // Check every half-block
+          let foundViaCollider = false;
+          let lastCheckedX = -99999, lastCheckedY = -99999, lastCheckedZ = -99999;
+
+          // Walk along the ray checking for colliders
+          for (let dist = 1; dist < maxDistance && !foundViaCollider; dist += stepSize) {
+            const checkX = Math.floor(camera.position.x + camDir.x * dist);
+            const checkY = Math.floor(camera.position.y + camDir.y * dist);
+            const checkZ = Math.floor(camera.position.z + camDir.z * dist);
+
+            // Skip if we already checked this voxel (optimization)
+            if (checkX === lastCheckedX && checkY === lastCheckedY && checkZ === lastCheckedZ) continue;
+            lastCheckedX = checkX;
+            lastCheckedY = checkY;
+            lastCheckedZ = checkZ;
+
+            // Check collision grid for a collider at this position
+            const colliderCount = worldCollisionGrid.getNearbyFiltered(
+              checkX + 0.5, checkZ + 0.5, 1.0, checkY, checkY + 1
+            );
+
+            if (colliderCount > 0) {
+              const nearby = worldCollisionGrid.nearbyResult;
+              for (let i = 0; i < colliderCount; i++) {
+                const c = nearby[i];
+                if (c.min.x <= checkX + 0.9 && c.max.x >= checkX + 0.1 &&
+                    c.min.y <= checkY + 0.9 && c.max.y >= checkY + 0.1 &&
+                    c.min.z <= checkZ + 0.9 && c.max.z >= checkZ + 0.1) {
+                  // Found a collider - use this position
+                  bx = checkX;
+                  by = checkY;
+                  bz = checkZ;
+                  foundViaCollider = true;
+                  meshBlockType = 'unknown (collider only)';
+                  break;
+                }
+              }
+            }
+          }
+
+          // If no collider found, check for ground intersection
+          if (!foundViaCollider && camDir.y < -0.01) {
             const t = -camera.position.y / camDir.y;
-            if (t > 0 && t < 20) { // Within reasonable distance
+            if (t > 0 && t < maxDistance) {
               bx = Math.floor(camera.position.x + camDir.x * t);
               by = 0;
               bz = Math.floor(camera.position.z + camDir.z * t);
@@ -996,91 +1076,263 @@ export function FirstPersonControls({
           }
         }
 
-        // Only continue if we have a valid position
-        if (inMesh || isGround) {
-          // Search for matching PlacedBlock in state array
+        // Check if we found anything (mesh, collider via ray march, or ground)
+        const foundSomething = inMesh || isGround || meshBlockType !== undefined;
+
+        if (foundSomething) {
+          // Calculate LoS distance
+          const losDistance = camera.position.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+
+          // Calculate chunk key for this position
+          const chunkX = Math.floor(bx / CHUNK_SIZE);
+          const chunkZ = Math.floor(bz / CHUNK_SIZE);
+          const chunkKey = `chunk_${chunkX}_${chunkZ}`;
+
+          // === SOURCE: State Array ===
           const matchedInState = existingBlocks?.find((b: PlacedBlock) =>
             Math.floor(b.position_x) === bx &&
             Math.floor(b.position_y) === by &&
             Math.floor(b.position_z) === bz
           );
-          const inState = !!matchedInState;
 
-          // For now, chunks and indexedDB checks use same state (they're derived from same source)
-          // A block in state means it was loaded from chunks/cache
-          const inChunks = inState;
-          const inIndexedDB = inState; // Would need async call to check separately
+          // === SOURCE: Loaded Chunks (Memory) ===
+          let chunksFound = false;
+          let chunksBlockType: string | undefined;
+          let fromVisibleBlocks = false;
+          let chunkBlockCount = 0;
 
-          // Check if a collider exists at this position
+          if (loadedChunksRef?.current) {
+            const chunkData = loadedChunksRef.current.get(chunkKey);
+            if (chunkData) {
+              chunkBlockCount = chunkData.blocks.length;
+              // Check visibleBlocks first, then all blocks
+              const inVisible = chunkData.visibleBlocks?.find(b =>
+                Math.floor(b.position_x) === bx &&
+                Math.floor(b.position_y) === by &&
+                Math.floor(b.position_z) === bz
+              );
+              if (inVisible) {
+                chunksFound = true;
+                chunksBlockType = inVisible.block_type;
+                fromVisibleBlocks = true;
+              } else {
+                const inBlocks = chunkData.blocks.find(b =>
+                  Math.floor(b.position_x) === bx &&
+                  Math.floor(b.position_y) === by &&
+                  Math.floor(b.position_z) === bz
+                );
+                if (inBlocks) {
+                  chunksFound = true;
+                  chunksBlockType = inBlocks.block_type;
+                }
+              }
+            }
+          }
+
+          // === SOURCE: Collider ===
           const colliderCount = worldCollisionGrid.getNearbyFiltered(bx + 0.5, bz + 0.5, 1.0, by, by + 1);
-          let hasCollider = false;
+          let colliderFound = false;
+          let colliderBounds: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number } | undefined;
           const nearby = worldCollisionGrid.nearbyResult;
           for (let i = 0; i < colliderCount; i++) {
             const c = nearby[i];
             if (c.min.x <= bx + 0.9 && c.max.x >= bx + 0.1 &&
                 c.min.y <= by + 0.9 && c.max.y >= by + 0.1 &&
                 c.min.z <= bz + 0.9 && c.max.z >= bz + 0.1) {
-              hasCollider = true;
+              colliderFound = true;
+              colliderBounds = {
+                minX: c.min.x, minY: c.min.y, minZ: c.min.z,
+                maxX: c.max.x, maxY: c.max.y, maxZ: c.max.z
+              };
               break;
             }
           }
 
+          // === SOURCE: Tree Data ===
           const isTree = meshBlockType ? isTreeBlockType(meshBlockType) : false;
-          const matchedBlock = matchedInState;
+          let treeBaseType: string | undefined;
+          let treeDepth: number | undefined;
+          let treeTier: number | undefined;
 
-          // Determine primary source
-          let source = 'none';
-          if (isGround) source = 'ground';
-          else if (inMesh) source = 'mesh';
-          else if (inState) source = 'state';
+          if (isTree && meshBlockType) {
+            treeBaseType = getBaseTreeBlockType(meshBlockType);
+            // Parse depth and tier from encoded format (e.g., "trunk_0_5" or "t_2_3")
+            const parts = meshBlockType.split('_');
+            if (parts.length >= 3) {
+              treeDepth = parseInt(parts[parts.length - 2], 10);
+              treeTier = parseInt(parts[parts.length - 1], 10);
+            }
+          }
+
+          // Build sources object
+          const sources: InspectSources = {
+            mesh: {
+              found: inMesh,
+              instanceId: inMesh ? instanceId : undefined,
+              meshName: inMesh ? meshName : undefined,
+              blockType: meshBlockType || undefined
+            },
+            state: {
+              found: !!matchedInState,
+              blockId: matchedInState?.id,
+              blockType: matchedInState?.block_type,
+              userId: matchedInState?.user_id || undefined,
+              createdAt: matchedInState?.created_at,
+              expiresAt: matchedInState?.expires_at || undefined
+            },
+            chunks: {
+              found: chunksFound,
+              chunkKey: chunksFound ? chunkKey : undefined,
+              fromVisibleBlocks,
+              blockCount: chunkBlockCount
+            },
+            indexedDB: {
+              found: false,
+              loading: true // Will be updated async
+            },
+            collider: {
+              found: colliderFound,
+              bounds: colliderBounds
+            },
+            tree: {
+              found: isTree,
+              baseType: treeBaseType,
+              depth: treeDepth,
+              tier: treeTier
+            }
+          };
+
+          // Detect orphans (before async IDB check)
+          const orphanDetails: string[] = [];
+          if (inMesh && !matchedInState) orphanDetails.push('In mesh but not in state array');
+          if (inMesh && !chunksFound) orphanDetails.push('In mesh but not in loaded chunks');
+          if (matchedInState && !colliderFound && !isGround) orphanDetails.push('In state but missing collider');
+          if (colliderFound && !chunksFound) orphanDetails.push('Has collider but not in loaded chunks');
 
           // Build raw info for clipboard
-          const info = [
-            `=== BLOCK INSPECT ===`,
-            `Grid pos: (${bx}, ${by}, ${bz})`,
-            `Block type: ${meshBlockType || 'NONE'}`,
-            `Is ground: ${isGround}`,
-            `Is tree type: ${isTree}`,
-            `Has collider: ${hasCollider}`,
-            ``,
-            `--- Sources ---`,
-            `In mesh: ${inMesh}${inMesh ? ` (instanceId: ${instanceId}, name: ${meshName})` : ''}`,
-            `In state array: ${inState}`,
-            `In chunks: ${inChunks}`,
-            `In IndexedDB: ${inIndexedDB}`,
-            ``,
-            `--- DB Record ---`,
-            matchedBlock ? [
-              `ID: ${matchedBlock.id}`,
-              `block_type: ${matchedBlock.block_type}`,
-              `user_id: ${matchedBlock.user_id || 'null (unowned)'}`,
-              `created: ${matchedBlock.created_at}`,
-              `expires: ${matchedBlock.expires_at || 'never'}`,
-              `texture: ${matchedBlock.texture_url || 'default'}`,
-              `branch_depth: ${matchedBlock.branch_depth ?? 'N/A'}`,
-            ].join('\n') : 'NO MATCHING DB RECORD FOUND',
-          ].join('\n');
+          const buildRawInfo = (s: InspectSources, orphans: string[]): string => {
+            return [
+              `=== BLOCK INSPECTOR ===`,
+              `Position: (${bx}, ${by}, ${bz})`,
+              `LoS Distance: ${losDistance.toFixed(1)} blocks`,
+              `Is Ground: ${isGround}`,
+              ``,
+              `--- DATA SOURCES ---`,
+              `Mesh: ${s.mesh.found ? `YES (${s.mesh.blockType}, inst#${s.mesh.instanceId})` : 'NO'}`,
+              `State: ${s.state.found ? `YES (${s.state.blockType}, id:${s.state.blockId})` : 'NO'}`,
+              `Chunks: ${s.chunks.found ? `YES (${s.chunks.chunkKey}${s.chunks.fromVisibleBlocks ? ', visible' : ''})` : 'NO'}`,
+              `IndexedDB: ${s.indexedDB.loading ? 'LOADING...' : (s.indexedDB.found ? `YES (${s.indexedDB.blockType})` : 'NO')}`,
+              `Collider: ${s.collider.found ? 'YES' : 'NO'}`,
+              `Tree: ${s.tree.found ? `YES (${s.tree.baseType}, depth:${s.tree.depth}, tier:${s.tree.tier})` : 'NO'}`,
+              ``,
+              `--- CONSISTENCY ---`,
+              orphans.length > 0 ? `ORPHANED:\n${orphans.map(o => `  - ${o}`).join('\n')}` : 'All sources consistent',
+              ``,
+              s.state.found ? [
+                `--- BLOCK DETAILS ---`,
+                `ID: ${s.state.blockId}`,
+                `Type: ${s.state.blockType}`,
+                `Owner: ${s.state.userId || 'unowned'}`,
+                `Created: ${s.state.createdAt}`,
+                `Expires: ${s.state.expiresAt || 'never'}`,
+              ].join('\n') : '--- NO STATE RECORD ---',
+            ].join('\n');
+          };
 
-          console.log(info);
+          const timestamp = Date.now();
 
-          // Set global inspect data for HUD display
-          setGlobalInspectData({
-            gridPos: `${bx},${by},${bz}`,
-            meshBlockType: meshBlockType || 'NONE',
-            isTree,
-            hasCollider,
+          // Set initial inspect data (before async IDB check)
+          const inspectData: GlobalInspectData = {
+            gridPos: { x: bx, y: by, z: bz },
+            losDistance,
             isGround,
-            source,
-            inMesh,
-            inState,
-            inChunks,
-            inIndexedDB,
-            dbId: matchedBlock?.id || null,
-            dbBlockType: matchedBlock?.block_type || null,
-            dbUserId: matchedBlock?.user_id || null,
-            rawInfo: info,
-            timestamp: Date.now(),
-          });
+            sources,
+            isOrphaned: orphanDetails.length > 0,
+            orphanDetails,
+            rawInfo: buildRawInfo(sources, orphanDetails),
+            timestamp
+          };
+
+          setGlobalInspectData(inspectData);
+          console.log(inspectData.rawInfo);
+
+          // Async IndexedDB check
+          if (currentWorldId) {
+            blockDB.getCachedChunk(currentWorldId, chunkX, chunkZ).then(cached => {
+              if (cached) {
+                const match = cached.blocks.find(b =>
+                  Math.floor(b.position_x) === bx &&
+                  Math.floor(b.position_y) === by &&
+                  Math.floor(b.position_z) === bz
+                );
+
+                const updatedSources: InspectSources = {
+                  ...sources,
+                  indexedDB: {
+                    found: !!match,
+                    loading: false,
+                    chunkKey: `${currentWorldId}:${chunkX}:${chunkZ}`,
+                    blockType: match?.block_type,
+                    cachedAt: cached.cachedAt
+                  }
+                };
+
+                // Update orphan detection with IDB info
+                const updatedOrphans = [...orphanDetails];
+                if (chunksFound && !match) {
+                  updatedOrphans.push('In memory chunks but not in IndexedDB cache');
+                }
+                if (match && !chunksFound) {
+                  updatedOrphans.push('In IndexedDB but not loaded in memory');
+                }
+
+                const updatedData: GlobalInspectData = {
+                  ...inspectData,
+                  sources: updatedSources,
+                  isOrphaned: updatedOrphans.length > 0,
+                  orphanDetails: updatedOrphans,
+                  rawInfo: buildRawInfo(updatedSources, updatedOrphans)
+                };
+
+                setGlobalInspectData(updatedData);
+                console.log('[BlockInspector] IndexedDB check complete:', match ? 'FOUND' : 'NOT FOUND');
+              } else {
+                // No cached chunk - update loading state
+                const updatedSources: InspectSources = {
+                  ...sources,
+                  indexedDB: {
+                    found: false,
+                    loading: false,
+                    chunkKey: `${currentWorldId}:${chunkX}:${chunkZ}`
+                  }
+                };
+
+                setGlobalInspectData({
+                  ...inspectData,
+                  sources: updatedSources,
+                  rawInfo: buildRawInfo(updatedSources, orphanDetails)
+                });
+              }
+            }).catch(err => {
+              console.error('[BlockInspector] IndexedDB check failed:', err);
+              setGlobalInspectData({
+                ...inspectData,
+                sources: {
+                  ...sources,
+                  indexedDB: { found: false, loading: false }
+                }
+              });
+            });
+          } else {
+            // No world ID - mark IDB as not checked
+            setGlobalInspectData({
+              ...inspectData,
+              sources: {
+                ...sources,
+                indexedDB: { found: false, loading: false }
+              }
+            });
+          }
         }
       }
     }
@@ -1254,9 +1506,198 @@ export function FirstPersonControls({
         needsCameraUpdate.current = false;
       }
 
+      const now = performance.now();
+
+      // Inspector Mode: continuous raycasting to update block info as user looks around
+      if (inspectorModeEnabled && isLocked.current) {
+        if (now - lastInspectorCheckRef.current > 50) { // Throttle to 20fps
+          lastInspectorCheckRef.current = now;
+
+          const meshesArray = meshesArrayCache.current;
+          let bx = 0, by = 0, bz = 0;
+          let foundBlock = false;
+          let meshBlockType: string | undefined;
+          let isGround = false;
+          let instanceId = -1;
+
+          // Try raycast against placed block meshes first
+          const result = meshesArray.length > 0 ? raycastMeshes(meshesArray, 20) : null;
+
+          if (result && result.instanceId !== undefined) {
+            // Hit an instanced mesh
+            foundBlock = true;
+            meshBlockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
+            const mesh = result.object as THREE.InstancedMesh;
+            const matrix = new THREE.Matrix4();
+            mesh.getMatrixAt(result.instanceId, matrix);
+            const pos = new THREE.Vector3();
+            pos.setFromMatrixPosition(matrix);
+
+            bx = Math.floor(pos.x);
+            by = Math.floor(pos.y);
+            bz = Math.floor(pos.z);
+            instanceId = result.instanceId;
+          } else {
+            // No mesh hit - ray march along LoS checking colliders
+            const camDir = new THREE.Vector3();
+            camera.getWorldDirection(camDir);
+            const maxDistance = 20;
+            const stepSize = 0.5;
+            let lastCheckedX = -99999, lastCheckedY = -99999, lastCheckedZ = -99999;
+
+            for (let dist = 1; dist < maxDistance && !foundBlock; dist += stepSize) {
+              const checkX = Math.floor(camera.position.x + camDir.x * dist);
+              const checkY = Math.floor(camera.position.y + camDir.y * dist);
+              const checkZ = Math.floor(camera.position.z + camDir.z * dist);
+
+              if (checkX === lastCheckedX && checkY === lastCheckedY && checkZ === lastCheckedZ) continue;
+              lastCheckedX = checkX;
+              lastCheckedY = checkY;
+              lastCheckedZ = checkZ;
+
+              const colliderCount = worldCollisionGrid.getNearbyFiltered(
+                checkX + 0.5, checkZ + 0.5, 1.0, checkY, checkY + 1
+              );
+
+              if (colliderCount > 0) {
+                const nearby = worldCollisionGrid.nearbyResult;
+                for (let i = 0; i < colliderCount; i++) {
+                  const c = nearby[i];
+                  if (c.min.x <= checkX + 0.9 && c.max.x >= checkX + 0.1 &&
+                      c.min.y <= checkY + 0.9 && c.max.y >= checkY + 0.1 &&
+                      c.min.z <= checkZ + 0.9 && c.max.z >= checkZ + 0.1) {
+                    bx = checkX;
+                    by = checkY;
+                    bz = checkZ;
+                    foundBlock = true;
+                    meshBlockType = 'unknown (collider)';
+                    break;
+                  }
+                }
+              }
+            }
+
+            // Check for ground intersection
+            if (!foundBlock && camDir.y < -0.01) {
+              const t = -camera.position.y / camDir.y;
+              if (t > 0 && t < maxDistance) {
+                bx = Math.floor(camera.position.x + camDir.x * t);
+                by = 0;
+                bz = Math.floor(camera.position.z + camDir.z * t);
+                isGround = true;
+                foundBlock = true;
+                meshBlockType = 'grass_block';
+              }
+            }
+          }
+
+          // Only update if position changed or we went from block to sky
+          const posChanged = bx !== lastInspectorPosRef.current.x ||
+                            by !== lastInspectorPosRef.current.y ||
+                            bz !== lastInspectorPosRef.current.z;
+
+          if (posChanged || (!foundBlock && globalInspectData)) {
+            lastInspectorPosRef.current = { x: bx, y: by, z: bz };
+
+            if (foundBlock) {
+              // Look up block in state
+              const matchedInState = existingBlocks?.find((b: PlacedBlock) =>
+                Math.floor(b.position_x) === bx &&
+                Math.floor(b.position_y) === by &&
+                Math.floor(b.position_z) === bz
+              );
+
+              const losDistance = camera.position.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+
+              // Check for tree data
+              const isTree = meshBlockType ? isTreeBlockType(meshBlockType) : false;
+              let treeBaseType: string | undefined;
+              let treeDepth: number | undefined;
+              let treeTier: number | undefined;
+
+              if (isTree && meshBlockType) {
+                treeBaseType = getBaseTreeBlockType(meshBlockType);
+                const parts = meshBlockType.split('_');
+                if (parts.length >= 3) {
+                  treeDepth = parseInt(parts[parts.length - 2], 10);
+                  treeTier = parseInt(parts[parts.length - 1], 10);
+                }
+              }
+
+              const chunkX = Math.floor(bx / CHUNK_SIZE);
+              const chunkZ = Math.floor(bz / CHUNK_SIZE);
+
+              // Check collider
+              const colliderCount = worldCollisionGrid.getNearbyFiltered(bx + 0.5, bz + 0.5, 1.0, by, by + 1);
+              let colliderFound = false;
+              const nearby = worldCollisionGrid.nearbyResult;
+              for (let i = 0; i < colliderCount; i++) {
+                const c = nearby[i];
+                if (c.min.x <= bx + 0.9 && c.max.x >= bx + 0.1 &&
+                    c.min.y <= by + 0.9 && c.max.y >= by + 0.1 &&
+                    c.min.z <= bz + 0.9 && c.max.z >= bz + 0.1) {
+                  colliderFound = true;
+                  break;
+                }
+              }
+
+              const sources: InspectSources = {
+                mesh: {
+                  found: instanceId >= 0,
+                  instanceId: instanceId >= 0 ? instanceId : undefined,
+                  blockType: meshBlockType
+                },
+                state: {
+                  found: !!matchedInState,
+                  blockId: matchedInState?.id,
+                  blockType: matchedInState?.block_type,
+                  userId: matchedInState?.user_id || undefined,
+                  createdAt: matchedInState?.created_at,
+                  expiresAt: matchedInState?.expires_at || undefined
+                },
+                chunks: {
+                  found: false, // Skip detailed chunk check for performance
+                  chunkKey: `chunk_${chunkX}_${chunkZ}`
+                },
+                indexedDB: {
+                  found: false,
+                  loading: false
+                },
+                collider: {
+                  found: colliderFound
+                },
+                tree: {
+                  found: isTree,
+                  baseType: treeBaseType,
+                  depth: treeDepth,
+                  tier: treeTier
+                }
+              };
+
+              const orphanDetails: string[] = [];
+              if (instanceId >= 0 && !matchedInState) orphanDetails.push('In mesh but not in state');
+              if (matchedInState && !colliderFound && !isGround) orphanDetails.push('In state but missing collider');
+
+              setGlobalInspectData({
+                gridPos: { x: bx, y: by, z: bz },
+                losDistance,
+                isGround,
+                sources,
+                isOrphaned: orphanDetails.length > 0,
+                orphanDetails,
+                rawInfo: '',
+                timestamp: now
+              });
+            } else {
+              // Looking at sky - clear data
+              clearGlobalInspectData();
+            }
+          }
+        }
+      }
+
       // Block hover detection for removal - THROTTLED to avoid per-frame setState
       // Only check every 100ms and only call setState when value actually changes
-      const now = performance.now();
       if (blockPlacementModeRef.current && showOwnershipOutlineRef.current && keys.current.rightMouse) {
         if (now - lastHoverCheckRef.current > 100) { // Throttle to 10fps
           lastHoverCheckRef.current = now;
@@ -1518,10 +1959,49 @@ export function FirstPersonControls({
       const dt = Math.min(delta, MAX_PHYSICS_DELTA);
       const SURFACE_EPS = 0.005;
       
+      // === SWIMMING DETECTION ===
+      // Check if player is in water at current position
+      const feetY = camera.position.y - 1.6; // Player feet position
+      const wasInWater = isInWaterRef.current;
+
+      if (checkIsInWater) {
+        const inWater = checkIsInWater(camera.position.x, feetY, camera.position.z);
+        isInWaterRef.current = inWater;
+
+        if (inWater && getWaterType) {
+          waterTypeRef.current = getWaterType(camera.position.x, feetY, camera.position.z);
+        } else {
+          waterTypeRef.current = null;
+        }
+
+        // Notify swimming state change
+        if (inWater !== lastSwimmingStateRef.current) {
+          lastSwimmingStateRef.current = inWater;
+          onSwimmingStateChange?.(inWater, waterTypeRef.current);
+        }
+
+        // Lava damage - 10 HP every 500ms
+        if (waterTypeRef.current === 'lava' && onLavaDamage) {
+          if (now - lastLavaDamageTimeRef.current >= 500) {
+            lastLavaDamageTimeRef.current = now;
+            onLavaDamage(10);
+          }
+        }
+      }
+
+      const isSwimming = isInWaterRef.current;
+
       // Gliding: press G while falling to activate, auto-deactivates on landing
       // Glide is active as long as player is airborne (works during jet boosts too)
-      const isGliding = glideActiveRef.current && !onGround.current;
-      const effectiveGravity = isGliding ? 4.9 : 9.8; // Half gravity when gliding
+      const isGliding = glideActiveRef.current && !onGround.current && !isSwimming;
+
+      // Determine effective gravity based on state
+      let effectiveGravity = 9.8; // Normal gravity
+      if (isSwimming) {
+        effectiveGravity = 2.45; // 25% gravity in water (Minecraft-style)
+      } else if (isGliding) {
+        effectiveGravity = 4.9; // 50% gravity when gliding
+      }
 
       // Auto-deactivate glide only when landing on ground
       if (glideActiveRef.current && onGround.current) {
@@ -1797,17 +2277,40 @@ export function FirstPersonControls({
       let xBlocked = false;
       let zBlocked = false;
       
-      // Minecraft-like: jump only when grounded (continuous push-out handles overlap escape)
-      const canJump = onGround.current && !keys.current.ctrl;
+      // === SWIMMING MOVEMENT ===
+      // In water: Space = swim up, Shift = swim down, reduced movement speed
       const roles = userRolesRef.current;
-      
-      if (keys.current.space && canJump) {
-        let jumpHeight = 1.25;
-        if (roles.includes('admin') || roles.includes('superadmin')) {
-          jumpHeight = 2.5;
+
+      if (isSwimming) {
+        const swimSpeed = 4.0; // Swim up/down speed
+
+        // Space = swim up
+        if (keys.current.space) {
+          velocity.current.y = swimSpeed;
+          // Natural buoyancy - slight upward drift when not pressing anything
+        } else if (keys.current.shift) {
+          // Shift = swim down
+          velocity.current.y = -swimSpeed;
+        } else {
+          // Apply slight buoyancy (slow rise) when not actively swimming
+          velocity.current.y = Math.max(velocity.current.y, 0.5);
         }
-        velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
-        onGround.current = false;
+
+        // Reduce horizontal movement in water (60% speed)
+        deltaMovement.x *= 0.6;
+        deltaMovement.z *= 0.6;
+      } else {
+        // Normal ground-based jump logic
+        const canJump = onGround.current && !keys.current.ctrl;
+
+        if (keys.current.space && canJump) {
+          let jumpHeight = 1.25;
+          if (roles.includes('admin') || roles.includes('superadmin')) {
+            jumpHeight = 2.5;
+          }
+          velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
+          onGround.current = false;
+        }
       }
       // Use moveDt for vertical integration (consistent timestep)
       deltaMovement.y += velocity.current.y * moveDt;
