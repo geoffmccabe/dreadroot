@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
-import { Settings } from 'lucide-react';
-import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
+import { Settings, Store } from 'lucide-react';
+import { FPSDisplay, DFlowOutputPanel, BlockDeleteHandler } from '@/components/FPSCounter';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -71,7 +71,7 @@ function InstructionsPanel({
           : 'R for crosshairs • Click to shoot'}
       </div>
       <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '4px' }}>
-        B = Block mode • L = Line • O = Open Shop • I = Inventory
+        B = Block mode • L = Line • O = Shop • M = Market • I = Inventory
       </div>
     </div>
   );
@@ -98,15 +98,21 @@ export function FortressHUD(props: FortressHUDProps) {
     user,
     userRoles,
     openAdminPanel,
+    openMarketplace,
     jetBoostAvailable = 0,
     jetBoostMax = 0,
     isGliding = false,
+    // Oxygen system
+    oxygenSeconds = 0,
+    isUnderwater = false,
+    isOxygenCritical = false,
     equippedItems = [],
     updateEquippedSlot,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
     onSelectSlot,
+    onDeleteBlock,
   } = props;
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
@@ -399,7 +405,11 @@ export function FortressHUD(props: FortressHUDProps) {
         ))}
 
       {/* FPS Display */}
-      <FPSDisplay isAdmin={userRoles?.includes?.('admin') || userRoles?.includes?.('superadmin')} />
+      <FPSDisplay
+        isAdmin={userRoles?.includes?.('admin') || userRoles?.includes?.('superadmin')}
+        userRoles={userRoles || []}
+        onDeleteBlock={onDeleteBlock}
+      />
 
       {/* D-Flow Output Panel */}
       <DFlowOutputPanel />
@@ -531,8 +541,55 @@ export function FortressHUD(props: FortressHUDProps) {
                 className="!bg-transparent !border-0 !p-0"
               />
             </div>
+
+            {/* Oxygen/Bubbles display - only shows when underwater */}
+            {isUnderwater && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--hud-radius)',
+                  background: 'hsla(var(--hud-bg))',
+                  border: '1px solid hsla(var(--hud-border))',
+                  animation: isOxygenCritical ? 'pulse 0.5s ease-in-out infinite' : undefined,
+                }}
+              >
+                <span style={{ fontSize: '16px' }}>&#x25CF;</span>
+                <span style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: isOxygenCritical ? '#ff4444' : 'inherit',
+                }}>
+                  {oxygenSeconds}s
+                </span>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Marketplace button */}
+        {openMarketplace && (
+          <button
+            onClick={() => openMarketplace()}
+            title="Marketplace"
+            style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: 'var(--hud-radius)',
+              border: '1px solid hsla(var(--hud-border))',
+              background: 'hsla(var(--hud-bg))',
+              color: 'hsl(var(--hud-text))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <Store style={{ width: '18px', height: '18px' }} />
+          </button>
+        )}
 
         {/* Admin gear button — vertically centered with status panel */}
         {(userRoles?.includes?.('admin') || userRoles?.includes?.('superadmin')) && (

@@ -1,20 +1,24 @@
 /**
  * Fortress Safe Zone (FSZ) - Pure utility module for fortress boundary checks.
  *
- * The FSZ includes:
- * - Fortress interior: X = -20..20, Z = -38..-8
- * - Front safe area: X = -20..20, Z = -8..+8 (16 blocks forward, full width)
+ * The FSZ is a 4x6 chunk area (64x96 blocks) containing:
+ * - Fortress interior
+ * - Courtyard area in front
+ *
+ * Within this zone:
+ * - Players cannot fire weapons
+ * - Enemies cannot enter
+ * - Players inside are invisible to enemies
  *
  * Zero allocations in hot path - uses module-level reusable return object.
  */
 
-import { cliffW, frontZ, courtyardDepth } from '@/components/fortress/FortressCollision';
-
-// FSZ bounds derived from fortress geometry
-const FSZ_MIN_X = -(cliffW / 2);
-const FSZ_MAX_X = cliffW / 2;
-const FSZ_MIN_Z = frontZ - courtyardDepth;
-const FSZ_MAX_Z = -frontZ;  // 16 blocks forward from front wall
+// FSZ bounds: 4 chunks wide (64 blocks) x 6 chunks deep (96 blocks)
+// Centered on X=0, extending from back of fortress to courtyard in front
+export const FSZ_MIN_X = -32;  // 4 chunks wide centered on 0
+export const FSZ_MAX_X = 32;
+export const FSZ_MIN_Z = -64;  // Back of fortress area
+export const FSZ_MAX_Z = 32;   // Courtyard extends in front
 
 // Reusable return object for clampPositionOutsideFSZ (zero allocation)
 const _clampResult = { x: 0, z: 0 };

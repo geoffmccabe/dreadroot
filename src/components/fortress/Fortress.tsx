@@ -227,7 +227,7 @@ export function Fortress() {
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { isOpen: panelOpen, openPanel } = useUserPanel();
+  const { isOpen: panelOpen, openPanel, isMarketplaceOpen, openMarketplace, closeMarketplace } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
 
   // View settings — local state for immediate reactivity, synced from/to Supabase
@@ -690,6 +690,98 @@ export function Fortress() {
         description: "Block returned to inventory",
         duration: 2000
       });
+    }
+  }, [loadedChunksRef, removeBlock, toast]);
+
+  // Admin Block Inspector delete handler - removes block and returns to owner's inventory
+  const handleInspectorDeleteBlock = useCallback(async (
+    blockId: string,
+    blockType: string,
+    ownerId: string
+  ): Promise<boolean> => {
+    try {
+      // Find the block in loaded chunks
+      let block: PlacedBlock | undefined;
+      const chunksRef = loadedChunksRef?.current;
+      if (chunksRef) {
+        for (const chunkData of chunksRef.values()) {
+          block = chunkData.blocks.find(b => b.id === blockId);
+          if (block) break;
+        }
+      }
+
+      if (!block) {
+        console.warn('[InspectorDelete] Block not found:', blockId);
+        toast({
+          title: "Block not found",
+          description: "Could not find this block in loaded chunks",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      // Remove the block from the system
+      const success = await removeBlock(blockId);
+      if (!success) {
+        toast({
+          title: "Delete failed",
+          description: "Could not remove block from database",
+          variant: "destructive"
+        });
+        return false;
+      }
+
+      // Return block to owner's inventory (if owner exists)
+      if (ownerId) {
+        try {
+          // Check if owner already has this block type in inventory
+          const { data: existingItems, error: queryError } = await supabase
+            .from('user_inventory')
+            .select('id, quantity')
+            .eq('user_id', ownerId)
+            .eq('item_type', blockType)
+            .is('item_id', null);
+
+          if (queryError) {
+            console.warn('[InspectorDelete] Inventory query error:', queryError);
+          } else if (existingItems && existingItems.length > 0) {
+            // Update existing inventory entry
+            await supabase
+              .from('user_inventory')
+              .update({ quantity: existingItems[0].quantity + 1 })
+              .eq('id', existingItems[0].id);
+          } else {
+            // Create new inventory entry
+            await supabase
+              .from('user_inventory')
+              .insert({
+                user_id: ownerId,
+                item_type: blockType,
+                item_id: null,
+                quantity: 1
+              });
+          }
+        } catch (invError) {
+          console.warn('[InspectorDelete] Failed to return to inventory:', invError);
+          // Don't fail the whole operation - block is already deleted
+        }
+      }
+
+      toast({
+        title: "Block deleted",
+        description: ownerId ? "Block removed and returned to owner's inventory" : "Block removed (no owner)",
+        duration: 2000
+      });
+
+      return true;
+    } catch (error) {
+      console.error('[InspectorDelete] Error:', error);
+      toast({
+        title: "Delete failed",
+        description: "An error occurred while deleting the block",
+        variant: "destructive"
+      });
+      return false;
     }
   }, [loadedChunksRef, removeBlock, toast]);
 
@@ -1383,6 +1475,7 @@ export function Fortress() {
           onWideTreePlace={handleWideTreePlace}
           onModeChange={handleModeChange}
           onOpenPanel={handleOpenPanel}
+          onOpenMarketplace={openMarketplace}
           onToggleInventory={() => {
             setInventoryOpen(prev => {
               const next = !prev;
@@ -1685,6 +1778,7 @@ export function Fortress() {
         user={user}
         userRoles={userRoles}
         openAdminPanel={openAdminPanel}
+        openMarketplace={openMarketplace}
         jetBoostAvailable={jetBoostState.available}
         jetBoostMax={jetBoostState.max}
         isGliding={jetBoostState.isGliding}
@@ -1694,6 +1788,7 @@ export function Fortress() {
         setInventoryOpen={setInventoryOpen}
         selectedSlot={selectedSlot}
         onSelectSlot={setSelectedSlot}
+        onDeleteBlock={handleInspectorDeleteBlock}
       />
 
       <FortressOverlays

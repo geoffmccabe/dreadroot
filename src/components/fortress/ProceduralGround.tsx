@@ -5,6 +5,28 @@ import { useFrame } from '@react-three/fiber';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { TERRAIN_CONFIG } from '@/lib/terrainGenerator';
 
+// FSZ bounds: 4 chunks wide (64 blocks) x 6 chunks deep (96 blocks)
+// Must match values in fortressSafeZone.ts
+const FSZ_MIN_X = -32;
+const FSZ_MAX_X = 32;
+const FSZ_MIN_Z = -64;
+const FSZ_MAX_Z = 32;
+
+// Check if a world position is inside the FSZ
+const isInFSZ = (worldX: number, worldZ: number): boolean => {
+  return worldX >= FSZ_MIN_X && worldX < FSZ_MAX_X &&
+         worldZ >= FSZ_MIN_Z && worldZ < FSZ_MAX_Z;
+};
+
+// Check if a chunk is partially or fully inside the FSZ
+const isChunkInFSZ = (chunkX: number, chunkZ: number): boolean => {
+  const baseX = chunkX * CHUNK_SIZE;
+  const baseZ = chunkZ * CHUNK_SIZE;
+  // Check if any corner of chunk is in FSZ or FSZ is inside chunk
+  return baseX < FSZ_MAX_X && baseX + CHUNK_SIZE > FSZ_MIN_X &&
+         baseZ < FSZ_MAX_Z && baseZ + CHUNK_SIZE > FSZ_MIN_Z;
+};
+
 interface ProceduralGroundProps {
   visibleChunksRef: React.MutableRefObject<Set<string>>;
   renderTrigger: number;
@@ -14,6 +36,7 @@ interface ProceduralGroundProps {
 }
 
 const SURFACE_Y = TERRAIN_CONFIG.SURFACE_Y;
+const LAND_HALF_SIZE = TERRAIN_CONFIG.LAND_HALF_SIZE;
 
 // Extra chunks beyond visual distance rendered as LoD (single block per chunk)
 const GROUND_EXTRA_DISTANCE = 4;
@@ -61,18 +84,40 @@ export function ProceduralGround({
 
   const groundRadius = visualDistance + GROUND_EXTRA_DISTANCE;
 
-  // Colors for chunk boundary highlighting (dark edge between chunks)
-  const NORMAL_COLOR = useMemo(() => new THREE.Color(1, 1, 1), []);
-  const EDGE_COLOR = useMemo(() => new THREE.Color(0.85, 0.85, 0.85), []);
-  // Reusable color for far ground tinting
+  // Distance-based darkening: darkens in bands every 5 chunks from center
+  // 100%, 95%, 90%, 85%... down to 50% at edge
+  const BAND_SIZE = 5; // chunks per band
+  const DARKENING_PER_BAND = 0.05; // 5% darker each band
+  const MIN_BRIGHTNESS = 0.5; // floor at 50%
+  const EDGE_HIGHLIGHT_BOOST = 0.08; // Chunk edges are 8% lighter
+
+  // Reusable color objects
+  const blockColor = useMemo(() => new THREE.Color(), []);
   const farColor = useMemo(() => new THREE.Color(), []);
+
+  /**
+   * Calculate base color for a position based on distance from world center.
+   * Returns brightness multiplier stepped every 5 chunks:
+   * 0-4: 100%, 5-9: 95%, 10-14: 90%, etc. down to 50% minimum.
+   */
+  const getDistanceBrightness = (chunkX: number, chunkZ: number): number => {
+    // Distance from center in chunks (using max of X/Z for consistent square rings)
+    const distFromCenter = Math.max(Math.abs(chunkX), Math.abs(chunkZ));
+
+    // Which band are we in? (0-4 = band 0, 5-9 = band 1, etc.)
+    const band = Math.floor(distFromCenter / BAND_SIZE);
+
+    // Each band is 5% darker
+    const brightness = Math.max(MIN_BRIGHTNESS, 1.0 - (band * DARKENING_PER_BAND));
+
+    return brightness;
+  };
 
   // Rebuild ground instances
   const rebuildGround = (camChunkX: number, camChunkZ: number) => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    const { WORLD_HALF_SIZE } = TERRAIN_CONFIG;
     let instanceIdx = 0;
 
     // NEAR GROUND: individual blocks for closest chunks only (capped at NEAR_DETAIL_RADIUS)
@@ -82,16 +127,17 @@ export function ProceduralGround({
         const baseX = cx * CHUNK_SIZE;
         const baseZ = cz * CHUNK_SIZE;
 
-        if (baseX + CHUNK_SIZE - 1 < -WORLD_HALF_SIZE || baseX > WORLD_HALF_SIZE) continue;
-        if (baseZ + CHUNK_SIZE - 1 < -WORLD_HALF_SIZE || baseZ > WORLD_HALF_SIZE) continue;
+        // Valid range: -800 to 799 (50 full chunks each direction)
+        if (baseX + CHUNK_SIZE - 1 < -LAND_HALF_SIZE || baseX >= LAND_HALF_SIZE) continue;
+        if (baseZ + CHUNK_SIZE - 1 < -LAND_HALF_SIZE || baseZ >= LAND_HALF_SIZE) continue;
 
         for (let dx = 0; dx < CHUNK_SIZE; dx++) {
           const worldX = baseX + dx;
-          if (worldX < -WORLD_HALF_SIZE || worldX > WORLD_HALF_SIZE) continue;
+          if (worldX < -LAND_HALF_SIZE || worldX >= LAND_HALF_SIZE) continue;
 
           for (let dz = 0; dz < CHUNK_SIZE; dz++) {
             const worldZ = baseZ + dz;
-            if (worldZ < -WORLD_HALF_SIZE || worldZ > WORLD_HALF_SIZE) continue;
+            if (worldZ < -LAND_HALF_SIZE || worldZ >= LAND_HALF_SIZE) continue;
 
             if (instanceIdx >= MAX_NEAR_INSTANCES) break;
 
@@ -100,9 +146,30 @@ export function ProceduralGround({
             temp.updateMatrix();
             mesh.setMatrixAt(instanceIdx, temp.matrix);
 
+            // Calculate base brightness from distance to world center
+            const brightness = getDistanceBrightness(cx, cz);
+
+            // Check if this is a chunk edge block
             const isEdgeX = dx === 0 || dx === CHUNK_SIZE - 1;
             const isEdgeZ = dz === 0 || dz === CHUNK_SIZE - 1;
-            mesh.setColorAt(instanceIdx, (isEdgeX || isEdgeZ) ? EDGE_COLOR : NORMAL_COLOR);
+
+            // Edge blocks are slightly lighter, interior blocks use base brightness
+            const finalBrightness = (isEdgeX || isEdgeZ)
+              ? Math.min(1.0, brightness + EDGE_HIGHLIGHT_BOOST)
+              : brightness;
+
+            // Check if block is in Fortress Safe Zone - apply yellow tint
+            if (isInFSZ(worldX, worldZ)) {
+              // Yellow tint: boost red slightly, keep green high, reduce blue
+              blockColor.setRGB(
+                Math.min(1.0, finalBrightness * 1.05),  // Slightly more red
+                finalBrightness,                         // Keep green
+                finalBrightness * 0.7                    // Less blue for yellow tint
+              );
+            } else {
+              blockColor.setRGB(finalBrightness, finalBrightness, finalBrightness);
+            }
+            mesh.setColorAt(instanceIdx, blockColor);
 
             instanceIdx++;
           }
@@ -122,8 +189,9 @@ export function ProceduralGround({
         const baseX = cx * CHUNK_SIZE;
         const baseZ = cz * CHUNK_SIZE;
 
-        if (baseX + CHUNK_SIZE - 1 < -WORLD_HALF_SIZE || baseX > WORLD_HALF_SIZE) continue;
-        if (baseZ + CHUNK_SIZE - 1 < -WORLD_HALF_SIZE || baseZ > WORLD_HALF_SIZE) continue;
+        // Valid range: -800 to 799 (50 full chunks each direction)
+        if (baseX + CHUNK_SIZE - 1 < -LAND_HALF_SIZE || baseX >= LAND_HALF_SIZE) continue;
+        if (baseZ + CHUNK_SIZE - 1 < -LAND_HALF_SIZE || baseZ >= LAND_HALF_SIZE) continue;
         if (instanceIdx >= MAX_INSTANCES) break;
 
         // Place one large block at chunk center, scaled to cover entire chunk
@@ -136,21 +204,45 @@ export function ProceduralGround({
         temp.updateMatrix();
         mesh.setMatrixAt(instanceIdx, temp.matrix);
 
-        // Distance-based tinting:
-        // Within visualDistance: full green (textured look via color tint)
-        // Beyond visualDistance: fade from muted green to light grey
-        const dist = Math.max(dcx, dcz); // Chebyshev distance in chunks
-        if (dist <= visualDistance) {
-          // Still within visual range — use slightly muted normal color
-          farColor.setRGB(0.90, 0.95, 0.88);
+        // Distance-based darkening from world center
+        const brightness = getDistanceBrightness(cx, cz);
+
+        // Check if chunk is in Fortress Safe Zone
+        const chunkInFSZ = isChunkInFSZ(cx, cz);
+
+        // Additional fade for chunks beyond visual distance (LoD fade)
+        const distFromCamera = Math.max(dcx, dcz);
+        if (distFromCamera <= visualDistance) {
+          // Within visual range: use distance-from-center brightness
+          if (chunkInFSZ) {
+            // Yellow tint for FSZ
+            farColor.setRGB(
+              Math.min(1.0, brightness * 1.05),
+              brightness,
+              brightness * 0.7
+            );
+          } else {
+            farColor.setRGB(brightness, brightness, brightness);
+          }
         } else {
-          const t = Math.min(1, (dist - visualDistance) / GROUND_EXTRA_DISTANCE);
-          // Lerp from muted green (0.35, 0.50, 0.30) to light grey (0.80, 0.80, 0.80)
-          farColor.setRGB(
-            0.35 + t * 0.45,
-            0.50 + t * 0.30,
-            0.30 + t * 0.50
-          );
+          // Beyond visual range: additional fade toward grey
+          const lodT = Math.min(1, (distFromCamera - visualDistance) / GROUND_EXTRA_DISTANCE);
+          // Blend from distance-darkened color toward muted grey
+          const greyTarget = 0.6;
+          if (chunkInFSZ) {
+            // Yellow-tinted fade for FSZ
+            farColor.setRGB(
+              Math.min(1.0, brightness * 1.05) + lodT * (greyTarget - brightness * 1.05),
+              brightness + lodT * (greyTarget - brightness),
+              brightness * 0.7 + lodT * (greyTarget - brightness * 0.7)
+            );
+          } else {
+            farColor.setRGB(
+              brightness + lodT * (greyTarget - brightness),
+              brightness + lodT * (greyTarget - brightness),
+              brightness + lodT * (greyTarget - brightness)
+            );
+          }
         }
         mesh.setColorAt(instanceIdx, farColor);
         instanceIdx++;

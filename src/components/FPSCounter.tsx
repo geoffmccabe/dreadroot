@@ -1,5 +1,5 @@
 import { useThree } from '@react-three/fiber';
-import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { useRef, useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 
@@ -8,25 +8,72 @@ let globalPlayerPos = { x: 0, y: 0, z: 0 };
 let globalViewDir = { x: 0, y: 0, z: 0 };
 
 // Admin block inspect data - set from FortressControls on right-click
-export let globalInspectData: {
-  gridPos: string;
-  meshBlockType: string;
-  isTree: boolean;
-  hasCollider: boolean;
-  isGround: boolean;
-  source: string; // Where found: 'mesh', 'ground', 'state', 'chunks', 'indexedDB', 'none'
-  inMesh: boolean;
-  inState: boolean;
-  inChunks: boolean;
-  inIndexedDB: boolean;
-  dbId: string | null;
-  dbBlockType: string | null;
-  dbUserId: string | null;
-  rawInfo: string; // Full details for copy
-  timestamp: number;
-} | null = null;
+export interface InspectSourceMesh {
+  found: boolean;
+  instanceId?: number;
+  meshName?: string;
+  blockType?: string;
+}
 
-export function setGlobalInspectData(data: typeof globalInspectData) {
+export interface InspectSourceState {
+  found: boolean;
+  blockId?: string;
+  blockType?: string;
+  userId?: string;
+  createdAt?: string;
+  expiresAt?: string;
+}
+
+export interface InspectSourceChunks {
+  found: boolean;
+  chunkKey?: string;
+  fromVisibleBlocks?: boolean;
+  blockCount?: number;
+}
+
+export interface InspectSourceIndexedDB {
+  found: boolean;
+  loading: boolean;
+  chunkKey?: string;
+  blockType?: string;
+  cachedAt?: number;
+}
+
+export interface InspectSourceCollider {
+  found: boolean;
+  bounds?: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number };
+}
+
+export interface InspectSourceTree {
+  found: boolean;
+  baseType?: string;
+  depth?: number;
+  tier?: number;
+}
+
+export interface InspectSources {
+  mesh: InspectSourceMesh;
+  state: InspectSourceState;
+  chunks: InspectSourceChunks;
+  indexedDB: InspectSourceIndexedDB;
+  collider: InspectSourceCollider;
+  tree: InspectSourceTree;
+}
+
+export interface GlobalInspectData {
+  gridPos: { x: number; y: number; z: number };
+  losDistance: number;
+  isGround: boolean;
+  sources: InspectSources;
+  isOrphaned: boolean;
+  orphanDetails: string[];
+  rawInfo: string;
+  timestamp: number;
+}
+
+export let globalInspectData: GlobalInspectData | null = null;
+
+export function setGlobalInspectData(data: GlobalInspectData | null) {
   globalInspectData = data;
 }
 
@@ -41,6 +88,9 @@ export interface FPSCounterHandle {
 interface FPSCounterProps {
   isAdmin?: boolean;
 }
+
+// Delete handler type for Block Inspector
+export type BlockDeleteHandler = (blockId: string, blockType: string, ownerId: string) => Promise<boolean>;
 
 export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdmin = false }, ref) => {
   const frameCountRef = useRef(0);
@@ -106,11 +156,18 @@ FPSCounter.displayName = 'FPSCounter';
 
 interface FPSDisplayProps {
   isAdmin?: boolean;
+  userRoles?: string[];
+  onDeleteBlock?: BlockDeleteHandler;
 }
 
-export function FPSDisplay({ isAdmin = false }: FPSDisplayProps) {
-  const [inspectData, setInspectData] = useState<typeof globalInspectData>(null);
+export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: FPSDisplayProps) {
+  const [inspectData, setInspectData] = useState<GlobalInspectData | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Check if user can delete (admin or superadmin)
+  const canDelete = userRoles.includes('admin') || userRoles.includes('superadmin');
 
   // Poll for inspect data changes (admin only)
   useEffect(() => {
@@ -120,13 +177,33 @@ export function FPSDisplay({ isAdmin = false }: FPSDisplayProps) {
       if (globalInspectData && globalInspectData.timestamp !== inspectData?.timestamp) {
         setInspectData(globalInspectData);
         setCopied(false);
+        setShowDeleteConfirm(false); // Reset delete confirmation when new block selected
       } else if (!globalInspectData && inspectData) {
         setInspectData(null);
+        setShowDeleteConfirm(false); // Reset when inspector closed
       }
     }, 100);
 
     return () => clearInterval(interval);
   }, [isAdmin, inspectData?.timestamp]);
+
+  // Keyboard handler for DELETE key when confirmation is showing
+  useEffect(() => {
+    if (!showDeleteConfirm || isDeleting) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleDeleteConfirm();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowDeleteConfirm(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showDeleteConfirm, isDeleting, handleDeleteConfirm]);
 
   const handleDismiss = () => {
     clearGlobalInspectData();
@@ -139,6 +216,34 @@ export function FPSDisplay({ isAdmin = false }: FPSDisplayProps) {
       setCopied(true);
     }
   };
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+  };
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!inspectData?.sources.state.blockId || !onDeleteBlock) return;
+
+    setIsDeleting(true);
+    try {
+      const success = await onDeleteBlock(
+        inspectData.sources.state.blockId,
+        inspectData.sources.state.blockType || 'unknown',
+        inspectData.sources.state.userId || ''
+      );
+      if (success) {
+        setShowDeleteConfirm(false);
+        clearGlobalInspectData();
+        setInspectData(null);
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [inspectData, onDeleteBlock]);
 
   if (isAdmin) {
     return (
@@ -169,75 +274,253 @@ export function FPSDisplay({ isAdmin = false }: FPSDisplayProps) {
             style={{
               borderRadius: '6px',
               border: '1px solid hsla(40, 70%, 60%, 0.8)',
-              background: 'hsla(40, 30%, 25%, 0.95)',
+              background: 'hsla(40, 30%, 20%, 0.98)',
               color: 'hsl(40, 80%, 90%)',
               fontFamily: 'monospace',
-              padding: '6px 8px',
-              fontSize: '10px',
-              lineHeight: '1.4',
+              padding: '8px 10px',
+              fontSize: '11px',
+              lineHeight: '1.5',
               position: 'relative',
-              minWidth: '180px',
+              minWidth: '280px',
+              maxWidth: '320px',
+              maxHeight: '500px',
+              overflowY: 'auto',
             }}
           >
-            {/* X close button */}
-            <button
-              onClick={handleDismiss}
-              style={{
-                position: 'absolute',
-                top: '2px',
-                right: '2px',
-                background: 'transparent',
-                border: 'none',
-                color: 'hsl(40, 60%, 70%)',
-                cursor: 'pointer',
-                fontSize: '14px',
-                lineHeight: '1',
-                padding: '2px 4px',
-              }}
-              title="Close"
-            >
-              ×
-            </button>
-            <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>BLOCK INSPECT</div>
-            <div>Pos: [{inspectData.gridPos}]</div>
-            <div>Type: {inspectData.meshBlockType}</div>
-            <div>Ground: {inspectData.isGround ? 'YES' : 'NO'} | Tree: {inspectData.isTree ? 'YES' : 'NO'}</div>
-            <div>Collider: {inspectData.hasCollider ? 'YES' : 'NO'}</div>
-            <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', marginTop: '3px', paddingTop: '3px' }}>
-              Sources:
+            {/* Header with close button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid hsla(40, 50%, 50%, 0.5)', paddingBottom: '4px' }}>
+              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>BLOCK INSPECTOR</span>
+              <button
+                onClick={handleDismiss}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'hsl(40, 60%, 70%)',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  lineHeight: '1',
+                  padding: '0 4px',
+                }}
+                title="Close"
+              >
+                ×
+              </button>
             </div>
-            <div style={{ fontSize: '9px' }}>
-              Mesh: {inspectData.inMesh ? 'Y' : 'N'} | State: {inspectData.inState ? 'Y' : 'N'} | Chunks: {inspectData.inChunks ? 'Y' : 'N'} | IDB: {inspectData.inIndexedDB ? 'Y' : 'N'}
+
+            {/* Position & Basic Info */}
+            <div style={{ marginBottom: '6px' }}>
+              <div>Position: <span style={{ color: 'hsl(200, 80%, 70%)' }}>[{inspectData.gridPos.x}, {inspectData.gridPos.y}, {inspectData.gridPos.z}]</span></div>
+              <div>LoS Distance: <span style={{ color: 'hsl(200, 80%, 70%)' }}>{inspectData.losDistance.toFixed(1)} blocks</span></div>
+              {inspectData.isGround && <div style={{ color: 'hsl(120, 60%, 60%)' }}>Ground Block</div>}
             </div>
-            {inspectData.dbId ? (
-              <>
-                <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', marginTop: '3px', paddingTop: '3px' }}>DB Record:</div>
-                <div>ID: {inspectData.dbId.slice(0, 8)}...</div>
-                <div>Type: {inspectData.dbBlockType}</div>
-                <div>Owner: {inspectData.dbUserId ? inspectData.dbUserId.slice(0, 8) + '...' : 'unowned'}</div>
-              </>
-            ) : (
-              <div style={{ color: 'hsl(0, 60%, 70%)', marginTop: '3px' }}>NO DB RECORD</div>
+
+            {/* Sources Section */}
+            <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', paddingTop: '4px', marginBottom: '6px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>DATA SOURCES</div>
+
+              {/* Mesh */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: inspectData.sources.mesh.found ? 'hsl(120, 70%, 55%)' : 'hsl(0, 70%, 55%)', fontWeight: 'bold' }}>
+                  {inspectData.sources.mesh.found ? '✓' : '✗'}
+                </span>
+                <span>Mesh:</span>
+                <span style={{ color: 'hsl(200, 70%, 70%)', fontSize: '10px' }}>
+                  {inspectData.sources.mesh.found
+                    ? `${inspectData.sources.mesh.blockType || 'unknown'} (inst#${inspectData.sources.mesh.instanceId})`
+                    : 'Not found'}
+                </span>
+              </div>
+
+              {/* State Array */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: inspectData.sources.state.found ? 'hsl(120, 70%, 55%)' : 'hsl(0, 70%, 55%)', fontWeight: 'bold' }}>
+                  {inspectData.sources.state.found ? '✓' : '✗'}
+                </span>
+                <span>State:</span>
+                <span style={{ color: 'hsl(200, 70%, 70%)', fontSize: '10px' }}>
+                  {inspectData.sources.state.found
+                    ? `${inspectData.sources.state.blockType} (${inspectData.sources.state.blockId?.slice(0, 8)}...)`
+                    : 'Not found'}
+                </span>
+              </div>
+
+              {/* Loaded Chunks */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: inspectData.sources.chunks.found ? 'hsl(120, 70%, 55%)' : 'hsl(0, 70%, 55%)', fontWeight: 'bold' }}>
+                  {inspectData.sources.chunks.found ? '✓' : '✗'}
+                </span>
+                <span>Chunks:</span>
+                <span style={{ color: 'hsl(200, 70%, 70%)', fontSize: '10px' }}>
+                  {inspectData.sources.chunks.found
+                    ? `${inspectData.sources.chunks.chunkKey}${inspectData.sources.chunks.fromVisibleBlocks ? ' (visible)' : ''}`
+                    : 'Not loaded'}
+                </span>
+              </div>
+
+              {/* IndexedDB */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{
+                  color: inspectData.sources.indexedDB.loading
+                    ? 'hsl(45, 80%, 55%)'
+                    : (inspectData.sources.indexedDB.found ? 'hsl(120, 70%, 55%)' : 'hsl(0, 70%, 55%)'),
+                  fontWeight: 'bold'
+                }}>
+                  {inspectData.sources.indexedDB.loading ? '?' : (inspectData.sources.indexedDB.found ? '✓' : '✗')}
+                </span>
+                <span>IndexedDB:</span>
+                <span style={{ color: 'hsl(200, 70%, 70%)', fontSize: '10px' }}>
+                  {inspectData.sources.indexedDB.loading
+                    ? 'Loading...'
+                    : (inspectData.sources.indexedDB.found
+                        ? `${inspectData.sources.indexedDB.blockType} in ${inspectData.sources.indexedDB.chunkKey}`
+                        : 'Not cached')}
+                </span>
+              </div>
+
+              {/* Collider */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: inspectData.sources.collider.found ? 'hsl(120, 70%, 55%)' : 'hsl(0, 70%, 55%)', fontWeight: 'bold' }}>
+                  {inspectData.sources.collider.found ? '✓' : '✗'}
+                </span>
+                <span>Collider:</span>
+                <span style={{ color: 'hsl(200, 70%, 70%)', fontSize: '10px' }}>
+                  {inspectData.sources.collider.found
+                    ? `Yes`
+                    : 'None'}
+                </span>
+              </div>
+
+              {/* Tree */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: inspectData.sources.tree.found ? 'hsl(120, 70%, 55%)' : 'hsl(40, 30%, 50%)', fontWeight: 'bold' }}>
+                  {inspectData.sources.tree.found ? '✓' : '-'}
+                </span>
+                <span>Tree:</span>
+                <span style={{ color: 'hsl(200, 70%, 70%)', fontSize: '10px' }}>
+                  {inspectData.sources.tree.found
+                    ? `${inspectData.sources.tree.baseType} (d:${inspectData.sources.tree.depth}, t:${inspectData.sources.tree.tier})`
+                    : 'Not a tree block'}
+                </span>
+              </div>
+            </div>
+
+            {/* Orphan Check Section */}
+            <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', paddingTop: '4px', marginBottom: '6px' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>CONSISTENCY CHECK</div>
+              {inspectData.isOrphaned ? (
+                <div>
+                  <div style={{ color: 'hsl(0, 70%, 60%)', fontWeight: 'bold' }}>⚠ ORPHANED BLOCK</div>
+                  {inspectData.orphanDetails.map((detail, i) => (
+                    <div key={i} style={{ fontSize: '10px', color: 'hsl(0, 60%, 70%)', paddingLeft: '10px' }}>• {detail}</div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: 'hsl(120, 60%, 55%)' }}>✓ All sources consistent</div>
+              )}
+            </div>
+
+            {/* Block Details Section */}
+            {inspectData.sources.state.found && (
+              <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', paddingTop: '4px', marginBottom: '6px' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>BLOCK DETAILS</div>
+                <div style={{ fontSize: '10px' }}>
+                  <div>ID: {inspectData.sources.state.blockId}</div>
+                  <div>Type: {inspectData.sources.state.blockType}</div>
+                  <div>Owner: {inspectData.sources.state.userId || 'unowned'}</div>
+                  {inspectData.sources.state.createdAt && <div>Created: {new Date(inspectData.sources.state.createdAt).toLocaleDateString()}</div>}
+                  {inspectData.sources.state.expiresAt && <div>Expires: {inspectData.sources.state.expiresAt}</div>}
+                </div>
+              </div>
             )}
-            {/* Copy button icon */}
-            <button
-              onClick={handleCopy}
-              style={{
-                position: 'absolute',
-                bottom: '4px',
-                right: '4px',
-                background: copied ? 'hsl(120, 40%, 35%)' : 'hsl(40, 30%, 35%)',
-                border: '1px solid hsla(40, 50%, 50%, 0.5)',
-                borderRadius: '3px',
-                color: 'hsl(40, 80%, 90%)',
-                cursor: 'pointer',
-                fontSize: '10px',
-                padding: '2px 5px',
-              }}
-              title="Copy to clipboard"
-            >
-              {copied ? '✓' : '⧉'}
-            </button>
+
+            {/* Delete confirmation dialog */}
+            {showDeleteConfirm && (
+              <div style={{
+                borderTop: '1px solid hsla(0, 50%, 50%, 0.8)',
+                paddingTop: '8px',
+                marginTop: '4px',
+                marginBottom: '4px',
+              }}>
+                <div style={{ color: 'hsl(0, 70%, 70%)', fontWeight: 'bold', marginBottom: '6px' }}>
+                  Delete this block?
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleDeleteConfirm}
+                    disabled={isDeleting}
+                    style={{
+                      background: isDeleting ? 'hsl(0, 30%, 30%)' : 'hsl(0, 50%, 40%)',
+                      border: '1px solid hsla(0, 50%, 50%, 0.8)',
+                      borderRadius: '4px',
+                      color: 'hsl(0, 80%, 95%)',
+                      cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      fontSize: '10px',
+                      padding: '4px 12px',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                  </button>
+                  <button
+                    onClick={handleDeleteCancel}
+                    disabled={isDeleting}
+                    style={{
+                      background: 'hsl(40, 30%, 35%)',
+                      border: '1px solid hsla(40, 50%, 50%, 0.5)',
+                      borderRadius: '4px',
+                      color: 'hsl(40, 80%, 90%)',
+                      cursor: isDeleting ? 'not-allowed' : 'pointer',
+                      fontSize: '10px',
+                      padding: '4px 12px',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
+              {/* Delete button (admin/superadmin only) */}
+              {canDelete && inspectData.sources.state.found && onDeleteBlock && !showDeleteConfirm && (
+                <button
+                  onClick={handleDeleteClick}
+                  style={{
+                    background: 'hsl(0, 50%, 35%)',
+                    border: '1px solid hsla(0, 50%, 50%, 0.8)',
+                    borderRadius: '4px',
+                    color: 'hsl(0, 80%, 95%)',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    padding: '4px 10px',
+                  }}
+                  title="Delete this block (admin only)"
+                >
+                  Delete
+                </button>
+              )}
+              {/* Spacer when delete button not shown */}
+              {(!canDelete || !inspectData.sources.state.found || !onDeleteBlock || showDeleteConfirm) && (
+                <div />
+              )}
+              {/* Copy button */}
+              <button
+                onClick={handleCopy}
+                style={{
+                  background: copied ? 'hsl(120, 40%, 35%)' : 'hsl(40, 30%, 35%)',
+                  border: '1px solid hsla(40, 50%, 50%, 0.5)',
+                  borderRadius: '4px',
+                  color: 'hsl(40, 80%, 90%)',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  padding: '4px 10px',
+                }}
+                title="Copy full details to clipboard"
+              >
+                {copied ? '✓ Copied' : 'Copy Details'}
+              </button>
+            </div>
           </div>
         )}
       </div>
