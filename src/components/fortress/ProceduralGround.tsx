@@ -160,11 +160,11 @@ export function ProceduralGround({
 
             // Check if block is in Fortress Safe Zone - apply yellow tint
             if (isInFSZ(worldX, worldZ)) {
-              // Yellow tint: boost red slightly, keep green high, reduce blue
+              // Yellow tint: boost red/green, significantly reduce blue for visible yellow
               blockColor.setRGB(
-                Math.min(1.0, finalBrightness * 1.05),  // Slightly more red
-                finalBrightness,                         // Keep green
-                finalBrightness * 0.7                    // Less blue for yellow tint
+                Math.min(1.0, finalBrightness * 1.15),  // More red for warm yellow
+                Math.min(1.0, finalBrightness * 1.1),   // Slightly more green
+                finalBrightness * 0.4                    // Much less blue for strong yellow tint
               );
             } else {
               blockColor.setRGB(finalBrightness, finalBrightness, finalBrightness);
@@ -215,11 +215,11 @@ export function ProceduralGround({
         if (distFromCamera <= visualDistance) {
           // Within visual range: use distance-from-center brightness
           if (chunkInFSZ) {
-            // Yellow tint for FSZ
+            // Yellow tint for FSZ - strong yellow
             farColor.setRGB(
-              Math.min(1.0, brightness * 1.05),
-              brightness,
-              brightness * 0.7
+              Math.min(1.0, brightness * 1.15),
+              Math.min(1.0, brightness * 1.1),
+              brightness * 0.4
             );
           } else {
             farColor.setRGB(brightness, brightness, brightness);
@@ -231,10 +231,13 @@ export function ProceduralGround({
           const greyTarget = 0.6;
           if (chunkInFSZ) {
             // Yellow-tinted fade for FSZ
+            const fszR = Math.min(1.0, brightness * 1.15);
+            const fszG = Math.min(1.0, brightness * 1.1);
+            const fszB = brightness * 0.4;
             farColor.setRGB(
-              Math.min(1.0, brightness * 1.05) + lodT * (greyTarget - brightness * 1.05),
-              brightness + lodT * (greyTarget - brightness),
-              brightness * 0.7 + lodT * (greyTarget - brightness * 0.7)
+              fszR + lodT * (greyTarget - fszR),
+              fszG + lodT * (greyTarget - fszG),
+              fszB + lodT * (greyTarget - fszB)
             );
           } else {
             farColor.setRGB(

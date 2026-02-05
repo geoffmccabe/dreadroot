@@ -287,15 +287,21 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
     return () => clearInterval(interval);
   }, [isAdmin, inspectData?.timestamp, isInspectorMode]);
 
-  // Keyboard handler for DELETE key when confirmation is showing
+  // Keyboard handler for DELETE key - works both to initiate delete and confirm it
   useEffect(() => {
-    if (!showDeleteConfirm || isDeleting) return;
+    if (!canDelete || !inspectData?.sources.state.found || !onDeleteBlock || isDeleting) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
-        handleDeleteConfirm();
-      } else if (e.key === 'Escape') {
+        if (showDeleteConfirm) {
+          // Already showing confirmation - do the delete
+          handleDeleteConfirm();
+        } else {
+          // Not showing confirmation yet - show it (same as clicking Delete button)
+          handleDeleteClick();
+        }
+      } else if (e.key === 'Escape' && showDeleteConfirm) {
         e.preventDefault();
         setShowDeleteConfirm(false);
       }
@@ -303,7 +309,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showDeleteConfirm, isDeleting, handleDeleteConfirm]);
+  }, [canDelete, inspectData?.sources.state.found, onDeleteBlock, showDeleteConfirm, isDeleting, handleDeleteConfirm, handleDeleteClick]);
 
   if (isAdmin) {
     return (
