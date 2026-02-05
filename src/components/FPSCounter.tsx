@@ -169,6 +169,47 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
   // Check if user can delete (admin or superadmin)
   const canDelete = userRoles.includes('admin') || userRoles.includes('superadmin');
 
+  // Handler functions defined first so useEffects can reference them
+  const handleDismiss = useCallback(() => {
+    clearGlobalInspectData();
+    setInspectData(null);
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (inspectData?.rawInfo) {
+      await navigator.clipboard.writeText(inspectData.rawInfo);
+      setCopied(true);
+    }
+  }, [inspectData?.rawInfo]);
+
+  const handleDeleteClick = useCallback(() => {
+    setShowDeleteConfirm(true);
+  }, []);
+
+  const handleDeleteCancel = useCallback(() => {
+    setShowDeleteConfirm(false);
+  }, []);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!inspectData?.sources.state.blockId || !onDeleteBlock) return;
+
+    setIsDeleting(true);
+    try {
+      const success = await onDeleteBlock(
+        inspectData.sources.state.blockId,
+        inspectData.sources.state.blockType || 'unknown',
+        inspectData.sources.state.userId || ''
+      );
+      if (success) {
+        setShowDeleteConfirm(false);
+        clearGlobalInspectData();
+        setInspectData(null);
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [inspectData, onDeleteBlock]);
+
   // Poll for inspect data changes (admin only)
   useEffect(() => {
     if (!isAdmin) return;
@@ -204,46 +245,6 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showDeleteConfirm, isDeleting, handleDeleteConfirm]);
-
-  const handleDismiss = () => {
-    clearGlobalInspectData();
-    setInspectData(null);
-  };
-
-  const handleCopy = async () => {
-    if (inspectData?.rawInfo) {
-      await navigator.clipboard.writeText(inspectData.rawInfo);
-      setCopied(true);
-    }
-  };
-
-  const handleDeleteClick = () => {
-    setShowDeleteConfirm(true);
-  };
-
-  const handleDeleteCancel = () => {
-    setShowDeleteConfirm(false);
-  };
-
-  const handleDeleteConfirm = useCallback(async () => {
-    if (!inspectData?.sources.state.blockId || !onDeleteBlock) return;
-
-    setIsDeleting(true);
-    try {
-      const success = await onDeleteBlock(
-        inspectData.sources.state.blockId,
-        inspectData.sources.state.blockType || 'unknown',
-        inspectData.sources.state.userId || ''
-      );
-      if (success) {
-        setShowDeleteConfirm(false);
-        clearGlobalInspectData();
-        setInspectData(null);
-      }
-    } finally {
-      setIsDeleting(false);
-    }
-  }, [inspectData, onDeleteBlock]);
 
   if (isAdmin) {
     return (
