@@ -1214,7 +1214,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
             }
           } else {
             // Cache is stale - need to fetch from server
-            chunksToFetchFromServer.push({ x, z });
+            // BUT also load stale cache as fallback in case server fetch fails
+            const activeBlocks = cached.blocks.filter(block =>
+              !block.expires_at || new Date(block.expires_at) > now
+            );
+            chunksFromCache.push({ x, z, blocks: activeBlocks }); // Load stale as fallback
+            chunksToFetchFromServer.push({ x, z }); // Also try to fetch fresh
             staleCount++;
           }
         }
