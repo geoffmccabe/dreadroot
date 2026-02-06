@@ -106,7 +106,6 @@ export interface ShombieRendererHandle {
   update: (cameraPosition: THREE.Vector3, deltaTime: number) => void;
   getHeadPosition: (shombieId: string) => THREE.Vector3 | null;
   getHitbox: (shombieId: string) => { center: THREE.Vector3; radius: number; height: number } | null;
-  addFireToBodyPart: (shombieId: string, partName: string, duration: number, colors: string[]) => void;
 }
 
 interface ShombieRendererProps {
@@ -454,7 +453,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           }
         }
 
-        // Update universal flame body fire positions
+        // Update universal flame body fire positions (fires at hit positions track with shombie)
         const expiredBodyFlames: string[] = [];
         for (const [attachId, fireInfo] of universalBodyFlamesRef.current.entries()) {
           const elapsed = now - fireInfo.startTime;
@@ -463,9 +462,40 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             continue;
           }
 
-          const partPos = partPositionsRef.current.get(fireInfo.shombieId)?.get(fireInfo.partName);
-          if (partPos) {
-            universalFlameRef.current.updateAttachedPosition(attachId, partPos.clone());
+          // Find the shombie to get current position
+          const shombie = shombies.find(s => s.id === fireInfo.shombieId);
+          if (!shombie) {
+            expiredBodyFlames.push(attachId);
+            continue;
+          }
+
+          // Check if this is an offset-based fire (from addFireAtHitPosition)
+          if (fireInfo.partName.startsWith('offset_')) {
+            // Parse the offset from partName (format: "offset_X_Y_Z")
+            const parts = fireInfo.partName.split('_');
+            const offsetX = parseFloat(parts[1]) || 0;
+            const offsetY = parseFloat(parts[2]) || 0;
+            const offsetZ = parseFloat(parts[3]) || 0;
+
+            // Calculate new position based on shombie's current position + offset
+            // Apply rotation to the offset so fire stays relative to shombie orientation
+            const cosR = Math.cos(shombie.rotation);
+            const sinR = Math.sin(shombie.rotation);
+            const rotatedOffsetX = offsetX * cosR - offsetZ * sinR;
+            const rotatedOffsetZ = offsetX * sinR + offsetZ * cosR;
+
+            const newPos = new THREE.Vector3(
+              shombie.position.x + rotatedOffsetX,
+              shombie.position.y + offsetY,
+              shombie.position.z + rotatedOffsetZ
+            );
+            universalFlameRef.current.updateAttachedPosition(attachId, newPos);
+          } else {
+            // Legacy: lookup by part name
+            const partPos = partPositionsRef.current.get(fireInfo.shombieId)?.get(fireInfo.partName);
+            if (partPos) {
+              universalFlameRef.current.updateAttachedPosition(attachId, partPos.clone());
+            }
           }
         }
 
@@ -834,50 +864,6 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         };
       },
 
-      addFireToBodyPart: (shombieId: string, partName: string, duration: number, colors: string[]) => {
-        const partPos = partPositionsRef.current.get(shombieId)?.get(partName);
-
-        if (universalFlameRef?.current && partPos) {
-          const attachId = `shombie_body_${shombieId}_${partName}`;
-          const flameId = universalFlameRef.current.spawnFlame({
-            type: 'point',
-            position: partPos.clone(),
-            colors: colors,
-            size: BODY_FIRE_SIZE,
-            height: BODY_FIRE_HEIGHT,
-            duration: duration / 1000,
-            particleCount: 40,
-            attachTo: attachId,
-          });
-          // Track for position updates
-          universalBodyFlamesRef.current.set(attachId, {
-            flameId,
-            shombieId,
-            partName,
-            startTime: Date.now(),
-            duration,
-          });
-          return;
-        }
-
-        const existingFire = bodyFiresRef.current.find(
-          f => f.shombieId === shombieId && f.partName === partName
-        );
-        if (existingFire) {
-          existingFire.startTime = Date.now();
-          existingFire.duration = duration;
-          return;
-        }
-
-        const bodyFire = createBodyFire(shombieId, partName, duration, colors, partPos);
-        if (bodyFire) {
-          bodyFiresRef.current.push(bodyFire);
-
-          if (partPos) {
-            bodyFire.points.position.copy(partPos);
-          }
-        }
-      },
     }), [shombies, createHeadFire, createBodyFire]);
 
     return (

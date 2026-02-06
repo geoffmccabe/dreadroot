@@ -1003,27 +1003,27 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       lastProcessedSignatureRef.current = ''; // Force rebuild with new UVs
     }
 
-    // Build cheap signature by sampling up to 64 evenly-spaced blocks.
-    // Full O(N) hash on 150K blocks costs ~600ms across 400 calls — sampling
-    // reduces this to O(64) while still catching adds, removes, and boundary changes.
+    // B11: Order-independent signature using XOR of ALL block position hashes.
+    // XOR is commutative, so reordering blocks produces the same hash.
+    // Uses Math.imul for guaranteed 32-bit integer multiplication (no JS float overflow).
     let sig: string;
     if (blocks.length === 0) {
       sig = 'empty';
     } else {
-      let idHash = 0;
+      let posXor = 0;
+      let posSum = 0;
       const n = blocks.length;
-      const sampleCount = Math.min(n, 64);
-      const step = n <= 64 ? 1 : Math.floor(n / 64);
-      for (let i = 0; i < n; i += step) {
+      for (let i = 0; i < n; i++) {
         const b = blocks[i];
-        idHash ^= (b.position_x * 73856093) ^ (b.position_y * 19349663) ^ (b.position_z * 83492791);
+        // Use Math.imul for deterministic 32-bit multiplication
+        const hx = Math.imul(b.position_x | 0, 73856093);
+        const hy = Math.imul(b.position_y | 0, 19349663);
+        const hz = Math.imul(b.position_z | 0, 83492791);
+        const h = (hx ^ hy ^ hz) | 0;
+        posXor = (posXor ^ h) | 0;
+        posSum = (posSum + (h >>> 0)) >>> 0;
       }
-      // Always include last block for boundary sensitivity
-      if (n > 1) {
-        const last = blocks[n - 1];
-        idHash ^= (last.position_x * 73856093) ^ (last.position_y * 19349663) ^ (last.position_z * 83492791);
-      }
-      sig = `${n}:${idHash}`;
+      sig = `${n}:${(posXor >>> 0)}:${posSum}`;
     }
 
     if (sig === lastProcessedSignatureRef.current) {

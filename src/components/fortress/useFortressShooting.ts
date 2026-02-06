@@ -88,8 +88,6 @@ export function useFortressShooting({
     setBulletRenderTrigger((prev) => prev + 1);
     setShowCrosshairs(true);
 
-    console.log('[Shoot] Bullet created tier=', bullet.tier, 'speed=', bullet.speed, 'active=', bulletsRef.current.length);
-
     // Add initial tracer segment from camera position
     const tracerEnd = bullet.position.clone().addScaledVector(bullet.direction, 2);
     tracersRef.current?.addSegment(

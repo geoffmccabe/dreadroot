@@ -199,7 +199,9 @@ export const FruitRenderer = React.memo(function FruitRenderer({
     const promptGroup = promptGroupRef.current;
     if (promptGroup && findClosestFruitRef.current) {
       const closest = findClosestFruitRef.current();
-      if (closest) {
+      // Skip phantom/ghost fruit at origin (0,0,0) - known issue
+      const isPhantom = closest && closest.position_x === 0 && closest.position_y === 0 && closest.position_z === 0;
+      if (closest && !isPhantom) {
         promptGroup.visible = true;
         promptGroup.position.set(
           closest.position_x + 0.5,

@@ -63,6 +63,7 @@ export function CameraTrackedBlocks({
   const [renderTrigger, setRenderTrigger] = useState(0);
   const CHUNK_UPDATE_THROTTLE = 100; // ms
 
+
   // Track atlas version for chunk re-renders on atlas update
   const [atlasVersion, setAtlasVersion] = useState(() => getAtlasVersion());
   useEffect(() => {
@@ -163,6 +164,9 @@ export function CameraTrackedBlocks({
   // worldRevision/renderTrigger changes that don't actually change chunk data.
   const entryCacheRef = useRef<Map<string, { key: string; blocks: PlacedBlock[] }>>(new Map());
 
+  // One-time diagnostic for chunk exclusions
+  const chunkExclusionLogRef = useRef(false);
+
   const { normalEntries, fadeEntries } = useMemo(() => {
     const normal: { key: string; blocks: PlacedBlock[] }[] = [];
     const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
@@ -175,6 +179,9 @@ export function CameraTrackedBlocks({
 
     // Track which keys are still in use so we can prune stale cache entries
     const activeKeys = new Set<string>();
+
+    // Track excluded chunks for diagnostic
+    const excluded: { key: string; dist: number; blocks: number }[] = [];
 
     if (ref && ref.size > 0) {
       for (const [chunkKey, chunkData] of ref) {
@@ -212,7 +219,23 @@ export function CameraTrackedBlocks({
           const distanceFactor = (chunkDist - visualDistance) / FADE_EXTRA;
           activeKeys.add(chunkKey);
           fade.push({ key: chunkKey, blocks, distanceFactor });
+        } else {
+          // Track excluded chunk for diagnostic
+          excluded.push({ key: chunkKey, dist: chunkDist, blocks: chunkData.blocks.length });
         }
+      }
+    }
+
+    // One-time diagnostic: log excluded chunks
+    if (!chunkExclusionLogRef.current && excluded.length > 0) {
+      chunkExclusionLogRef.current = true;
+      console.log(`[ChunkVisibility] Camera chunk: (${camChunkX}, ${camChunkZ}), visualDistance: ${visualDistance}, FADE_EXTRA: ${FADE_EXTRA}`);
+      console.log(`[ChunkVisibility] Excluded ${excluded.length} chunks beyond range ${visualDistance + FADE_EXTRA}:`);
+      for (const e of excluded.slice(0, 10)) {
+        console.log(`  - ${e.key}: dist=${e.dist}, ${e.blocks} blocks (has colliders but won't render)`);
+      }
+      if (excluded.length > 10) {
+        console.log(`  ... and ${excluded.length - 10} more`);
       }
     }
 

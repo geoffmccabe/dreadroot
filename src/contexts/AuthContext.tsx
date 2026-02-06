@@ -5,6 +5,9 @@ import { toast } from 'sonner';
 import { useIndexedDB } from '@/hooks/useIndexedDB';
 import { initLogStep } from '@/contexts/InitializationContext';
 
+// Dedupe guard for init log - prevents duplicate "User: email" rows
+let lastInitLoggedEmail: string | null = null;
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -54,9 +57,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(newSession?.user ?? null);
         setIsLoading(false);
         
-        // Log user info for initialization overlay
+        // Log user info for initialization overlay (only once per email to avoid duplicates)
         if (newSession?.user) {
-          initLogStep('AuthContext.tsx', `User: ${newSession.user.email || 'unknown'}`);
+          const email = newSession.user.email || 'unknown';
+          if (email !== lastInitLoggedEmail) {
+            lastInitLoggedEmail = email;
+            initLogStep('AuthContext.tsx', `User: ${email}`);
+          }
         }
       }
     );

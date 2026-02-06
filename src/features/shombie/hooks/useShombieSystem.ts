@@ -10,20 +10,7 @@ import {
   SHOMBIE_SPAWN_BOUNDS,
   SHOMBIE_SCALE_VARIATION,
   SHOMBIE_GROUP_SPREAD_RADIUS,
-  SHOMBIE_CHASE_SPEED_MULTIPLIER,
-  KNOCKBACK_DECAY_RATE,
-  SHOMBIE_GRAVITY,
-  SHOMBIE_ATTACK_RANGE,
-  SHOMBIE_ATTACK_VERTICAL_REACH,
-  PLAYER_HEIGHT,
-  SHOMBIE_ATTACK_COOLDOWN_MS,
   KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL,
-  KNOCKDOWN_TOTAL_DURATION_MS,
-  KNOCKDOWN_TILT_DURATION_MS,
-  KNOCKDOWN_SLIDE_DURATION_MS,
-  SHOMBIE_COLLISION_RADIUS,
-  SHOMBIE_SEPARATION_FORCE,
-  SHOMBIE_HITBOX_HEIGHT,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 
@@ -44,8 +31,6 @@ interface UseShombieSystemOptions {
   /** Player's current level (for knockback distance calculation) */
   playerLevel?: number;
   onShombieKilled?: (tier: number) => void;
-  /** Callback when shombie attacks player */
-  onPlayerHit?: (damage: number, knockbackForce: number, direction: THREE.Vector3) => void;
 }
 
 // Pre-allocated vectors
@@ -71,12 +56,10 @@ export function useShombieSystem({
   userRoles,
   playerLevel = 1,
   onShombieKilled,
-  onPlayerHit,
 }: UseShombieSystemOptions) {
   const [shombies, setShombies] = useState<ShombieInstance[]>([]);
   const [spawningEnabled, setSpawningEnabled] = useState(false);
   const shombiesRef = useRef<ShombieInstance[]>([]);
-  const lastMovementDebugRef = useRef(0); // Debug: track last log time for movement
 
   // Keep ref in sync
   useEffect(() => {
@@ -224,8 +207,12 @@ export function useShombieSystem({
 
   /**
    * Spawn a group of shombies around player position (for admin spawn commands)
+   * If tier is 0, spawns 10 shombies of tier 10
    */
   const spawnShombieGroup = useCallback((tier: number, count: number) => {
+    // Tier 0 means tier 10 and always spawns 10
+    const spawnCount = tier === 0 ? 10 : count;
+
     const definition = getDefinitionByTier(tier);
     if (!definition) {
       console.warn(`[Shombie] No definition for tier ${tier}`);
@@ -247,18 +234,18 @@ export function useShombieSystem({
     const baseX = camera.position.x + forward.x * 8; // 8 blocks in front
     const baseZ = camera.position.z + forward.z * 8;
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < spawnCount; i++) {
       // Spread around the base position
       const angle = (Math.random() - 0.5) * Math.PI; // Semicircle in front
       const radius = Math.random() * SHOMBIE_GROUP_SPREAD_RADIUS;
-      
+
       const offsetX = Math.cos(angle) * radius;
       const offsetZ = Math.sin(angle) * radius;
-      
+
       spawnShombieAt(definition, baseX + offsetX, baseZ + offsetZ);
     }
-    
-    console.log(`[Shombie] Spawned group of ${count} tier ${tier} shombies`);
+
+    console.log(`[Shombie] Spawned group of ${spawnCount} tier ${definition.tier} shombies`);
   }, [cameraRef, getDefinitionByTier, spawnShombieAt]);
 
   /**
@@ -320,24 +307,25 @@ export function useShombieSystem({
       shombie.knockdownDirection.y = 0; // Horizontal only
       shombie.knockdownProgress = 0;
       shombie.knockdownStartTime = Date.now();
+      // Store slide distance: 50% of (1 block per player level)
+      shombie.knockdownSlideDistance = KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL * playerLevel * 0.5;
       // Clear velocity when knocked down
       shombie.velocity.set(0, 0, 0);
     } else if (knockbackDir) {
-      // Body shot: apply knockback
-      const knockbackForce = shombie.definition.knockback_received;
-      shombie.velocity.x += knockbackDir.x * knockbackForce;
-      shombie.velocity.z += knockbackDir.z * knockbackForce;
-      shombie.velocity.y += 2; // Small upward bounce
+      // Body shot: 1 block knockback + 1 second stun
+      shombie.velocity.x = knockbackDir.x * 1.0;
+      shombie.velocity.z = knockbackDir.z * 1.0;
+      shombie.stunUntil = Date.now() + 1000; // 1 second stun
     }
 
     if (shombie.currentHealth <= 0) {
       shombie.isActive = false;
       onShombieKilled?.(shombie.definition.tier);
-      
+
       // Remove from list
       shombiesRef.current = shombiesRef.current.filter(s => s.id !== shombieId);
       setShombies(shombiesRef.current);
-      
+
       console.log(`[Shombie] Killed ${shombieId}`);
       return true;
     }
@@ -345,7 +333,7 @@ export function useShombieSystem({
     // Update state
     setShombies([...shombiesRef.current]);
     return false;
-  }, [onShombieKilled]);
+  }, [onShombieKilled, playerLevel]);
 
   /**
    * Clear all shombies (e.g., on respawn)
@@ -355,182 +343,6 @@ export function useShombieSystem({
     setShombies([]);
   }, []);
 
-  /**
-   * Movement update - pathfind to player, apply physics, and avoid other shombies
-   * Called from frame loop
-   */
-  const updateMovement = useCallback((deltaTime: number) => {
-    const camera = cameraRef.current;
-    if (!camera) return;
-
-    let needsUpdate = false;
-    const allShombies = shombiesRef.current;
-
-    // Debug: Log movement updates once per second
-    const now = Date.now();
-    if (now - lastMovementDebugRef.current > 1000) {
-      lastMovementDebugRef.current = now;
-      if (allShombies.length > 0) {
-        const s = allShombies[0];
-        console.log(`[Shombie Movement] Count=${allShombies.length}, First: active=${s.isActive}, emerged=${s.emergenceProgress?.toFixed(2)}, pos=(${s.position.x.toFixed(1)}, ${s.position.z.toFixed(1)}), vel=${s.velocity?.length().toFixed(2)}`);
-      }
-    }
-
-    for (const shombie of allShombies) {
-      if (!shombie.isActive) continue;
-
-      // Don't move until fully emerged
-      if (shombie.emergenceProgress < 1) continue;
-      
-      // Handle knockdown animation (3 phases: tilt, slide, recovery)
-      if (shombie.isKnockedDown) {
-        const now = Date.now();
-        const elapsed = now - shombie.knockdownStartTime;
-        const progress = Math.min(1, elapsed / KNOCKDOWN_TOTAL_DURATION_MS);
-        shombie.knockdownProgress = progress;
-
-        // Phase 1: Tilt backward while sliding (0 to KNOCKDOWN_TILT_DURATION_MS)
-        // Phase 2: Lie flat while sliding (KNOCKDOWN_TILT_DURATION_MS to KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS)
-        // Phase 3: Recovery - no sliding (rest of time)
-
-        const slideEndTime = KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS;
-
-        // Slide during phases 1 and 2 (tilt and flat) - starts immediately
-        if (elapsed < slideEndTime && shombie.knockdownDirection) {
-          const slideProgress = elapsed / slideEndTime;
-          // Total slide distance = 1 block per player level
-          const totalSlideDistance = KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL * playerLevel;
-          // Decelerate: more speed at start, less at end
-          const slideSpeed = totalSlideDistance * (1 - slideProgress) * 3 * deltaTime;
-          shombie.position.x += shombie.knockdownDirection.x * slideSpeed;
-          shombie.position.z += shombie.knockdownDirection.z * slideSpeed;
-        }
-
-        // End knockdown when complete
-        if (progress >= 1) {
-          shombie.isKnockedDown = false;
-          shombie.knockdownProgress = 0;
-        }
-
-        needsUpdate = true;
-        continue; // Skip normal movement when knocked down
-      }
-      
-      // Calculate direction to player
-      const dx = camera.position.x - shombie.position.x;
-      const dz = camera.position.z - shombie.position.z;
-      const distSq = dx * dx + dz * dz;
-      const dist = Math.sqrt(distSq);
-      
-      // Shombie-to-shombie collision avoidance
-      let separationX = 0;
-      let separationZ = 0;
-      for (const other of allShombies) {
-        if (other.id === shombie.id || !other.isActive) continue;
-        
-        const ox = shombie.position.x - other.position.x;
-        const oz = shombie.position.z - other.position.z;
-        const distToOther = Math.sqrt(ox * ox + oz * oz);
-        
-        if (distToOther < SHOMBIE_COLLISION_RADIUS * 2 && distToOther > 0.01) {
-          // Push apart
-          const overlap = SHOMBIE_COLLISION_RADIUS * 2 - distToOther;
-          const pushForce = (overlap / distToOther) * SHOMBIE_SEPARATION_FORCE;
-          separationX += (ox / distToOther) * pushForce * deltaTime;
-          separationZ += (oz / distToOther) * pushForce * deltaTime;
-        }
-      }
-      
-      // Apply separation force
-      shombie.position.x += separationX;
-      shombie.position.z += separationZ;
-      
-      // Calculate vertical reach check
-      // Player feet position (camera is at eye level)
-      const playerFeetY = camera.position.y - PLAYER_HEIGHT;
-      // Shombie max reach (top of head + arm reach)
-      const shombieScale = shombie.scale || 1;
-      const shombieMaxReachY = shombie.position.y + (SHOMBIE_HITBOX_HEIGHT * shombieScale) + SHOMBIE_ATTACK_VERTICAL_REACH;
-      // Can the shombie reach the player vertically?
-      const canReachVertically = playerFeetY <= shombieMaxReachY;
-      
-      // Chase the player
-      if (dist > SHOMBIE_ATTACK_RANGE) {
-        shombie.isChasing = true;
-        
-        // Normalize direction
-        const invDist = 1 / dist;
-        const dirX = dx * invDist;
-        const dirZ = dz * invDist;
-        
-        // Move toward player at definition speed
-        const speed = shombie.definition.speed * SHOMBIE_CHASE_SPEED_MULTIPLIER;
-        shombie.velocity.x = dirX * speed;
-        shombie.velocity.z = dirZ * speed;
-        
-        // Face the player
-        shombie.rotation = Math.atan2(dirX, dirZ);
-      } else {
-        shombie.isChasing = false;
-        
-        // In attack range - stop moving horizontally
-        shombie.velocity.x *= 0.8;
-        shombie.velocity.z *= 0.8;
-        
-        // Attack check - must be in horizontal AND vertical range
-        if (canReachVertically) {
-          const now = Date.now();
-          if (now - shombie.lastAttackAt > SHOMBIE_ATTACK_COOLDOWN_MS) {
-            shombie.lastAttackAt = now;
-            
-            // Attack player!
-            if (onPlayerHit) {
-              const damage = shombie.definition.damage_per_hit;
-              // Knockback direction from shombie toward player (normalized)
-              const knockbackDir = new THREE.Vector3(
-                camera.position.x - shombie.position.x,
-                0,
-                camera.position.z - shombie.position.z
-              ).normalize();
-              
-              // Knockback force based on definition (default 3)
-              const knockbackForce = 3;
-              onPlayerHit(damage, knockbackForce, knockbackDir);
-              
-              console.log(`[Shombie] Attack! Dealt ${damage} damage`);
-            }
-          }
-        }
-      }
-      
-      // Apply knockback decay
-      const decayFactor = Math.exp(-KNOCKBACK_DECAY_RATE * deltaTime);
-      // Don't decay chase velocity, only knockback component would be decayed separately
-      
-      // Apply gravity
-      if (shombie.position.y > 0) {
-        shombie.velocity.y -= SHOMBIE_GRAVITY * deltaTime;
-      } else {
-        shombie.velocity.y = 0;
-        shombie.position.y = 0;
-      }
-      
-      // Apply velocity to position
-      shombie.position.x += shombie.velocity.x * deltaTime;
-      shombie.position.y += shombie.velocity.y * deltaTime;
-      shombie.position.z += shombie.velocity.z * deltaTime;
-      
-      // Clamp to ground
-      if (shombie.position.y < 0) {
-        shombie.position.y = 0;
-        shombie.velocity.y = 0;
-      }
-      
-      needsUpdate = true;
-    }
-    
-    // Only trigger React update if needed (not every frame - refs handle visual updates)
-  }, [cameraRef, onPlayerHit]);
 
   /**
    * Chunk-based natural spawn loop
@@ -608,6 +420,5 @@ export function useShombieSystem({
     getDefinitionByTier,
     damageShombie,
     clearAllShombies,
-    updateMovement,
   };
 }

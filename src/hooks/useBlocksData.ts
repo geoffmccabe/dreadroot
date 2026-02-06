@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { BlockType } from '@/types/blocks';
+import { initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 
 let cachedBlocks: BlockType[] | null = null;
 let cachedBlocksMap: Map<string, BlockType> | null = null;
@@ -31,6 +32,7 @@ export const preloadBlockDefinitions = async (): Promise<void> => {
   const { supabase } = await import('@/integrations/supabase/client');
 
   fetchPromise = (async () => {
+    const stepId = initLogStartStep('useBlocksData.ts', 'Fetching block definitions from Supabase...');
     try {
       const { data, error } = await supabase
         .from('blocks')
@@ -63,7 +65,10 @@ export const preloadBlockDefinitions = async (): Promise<void> => {
 
       cachedBlocks = typedBlocks;
       cachedBlocksMap = blockMap;
-    } catch (error) {
+
+      if (stepId) initLogFinishStep(stepId, typedBlocks.length);
+    } catch (error: any) {
+      if (stepId) initLogErrorStep(stepId, error?.message || 'Failed to load block definitions');
       console.error('Failed to preload block definitions:', error);
       throw error;
     } finally {

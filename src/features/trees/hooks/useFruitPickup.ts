@@ -83,6 +83,9 @@ export function useFruitPickup({
       const fy = fruit.position_y;
       const fz = fruit.position_z;
 
+      // Skip phantom/ghost fruit at origin (0,0,0) - known issue
+      if (fx === 0 && fy === 0 && fz === 0) continue;
+
       const chebyFeet = Math.max(Math.abs(fx - playerX), Math.abs(fy - playerFeetY), Math.abs(fz - playerZ));
       const chebyHead = Math.max(Math.abs(fx - playerX), Math.abs(fy - playerHeadY), Math.abs(fz - playerZ));
       const cheby = Math.min(chebyFeet, chebyHead);

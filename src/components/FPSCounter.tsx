@@ -111,18 +111,30 @@ export type BlockDeleteHandler = (blockId: string, blockType: string, ownerId: s
 export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdmin = false }, ref) => {
   const frameCountRef = useRef(0);
   const lastTimeRef = useRef(performance.now());
+  const lastFrameTimeRef = useRef(performance.now());
+  const instantFpsRef = useRef(0);
   const { camera } = useThree();
   const viewDirRef = useRef(new THREE.Vector3());
 
   // Expose update function instead of using useFrame
   useImperativeHandle(ref, () => ({
     update: () => {
-      frameCountRef.current++;
       const currentTime = performance.now();
+
+      // Track instantaneous FPS (1 / frame time) - not limited by vsync averaging
+      const frameTime = currentTime - lastFrameTimeRef.current;
+      lastFrameTimeRef.current = currentTime;
+      if (frameTime > 0) {
+        // Smooth instantaneous FPS with simple moving average to reduce jitter
+        const instantFps = 1000 / frameTime;
+        instantFpsRef.current = Math.round(instantFpsRef.current * 0.7 + instantFps * 0.3);
+      }
+
+      frameCountRef.current++;
       const elapsed = currentTime - lastTimeRef.current;
 
-      // Update FPS every 500ms
-      if (elapsed >= 500) {
+      // Update display every 200ms (was 500ms) for more responsive FPS reading
+      if (elapsed >= 200) {
         globalFps = Math.round((frameCountRef.current / elapsed) * 1000);
         frameCountRef.current = 0;
         lastTimeRef.current = currentTime;
@@ -143,13 +155,16 @@ export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdm
         };
 
         // Update DOM directly for better performance
+        // Show max of average and instantaneous FPS to capture true peak performance
+        const displayFps = Math.max(globalFps, instantFpsRef.current);
+
         if (isAdmin) {
           const fpsPvElement = document.getElementById('fps-pv-display');
           const vElement = document.getElementById('fps-v-display');
           const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
 
           if (fpsPvElement) {
-            fpsPvElement.textContent = `FPS: ${globalFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] `;
+            fpsPvElement.textContent = `FPS: ${displayFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] `;
           }
           if (vElement) {
             vElement.textContent = `V:[${globalViewDir.x},${globalViewDir.y},${globalViewDir.z}]`;
@@ -158,7 +173,7 @@ export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdm
           const fpsElement = document.getElementById('fps-display');
           if (fpsElement) {
             const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
-            fpsElement.textContent = `FPS: ${globalFps}${dflowText}`;
+            fpsElement.textContent = `FPS: ${displayFps}${dflowText}`;
           }
         }
       }

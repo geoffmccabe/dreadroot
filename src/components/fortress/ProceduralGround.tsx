@@ -89,7 +89,7 @@ export function ProceduralGround({
   const BAND_SIZE = 5; // chunks per band
   const DARKENING_PER_BAND = 0.05; // 5% darker each band
   const MIN_BRIGHTNESS = 0.5; // floor at 50%
-  const EDGE_HIGHLIGHT_BOOST = 0.08; // Chunk edges are 8% lighter
+  const EDGE_HIGHLIGHT_MULTIPLIER = 1.2; // Chunk edges are 20% lighter than base
 
   // Reusable color objects
   const blockColor = useMemo(() => new THREE.Color(), []);
@@ -98,7 +98,9 @@ export function ProceduralGround({
   /**
    * Calculate base color for a position based on distance from world center.
    * Returns brightness multiplier stepped every 5 chunks:
-   * 0-4: 100%, 5-9: 95%, 10-14: 90%, etc. down to 50% minimum.
+   * - Band 0 (center): 150% (50% brighter than standard)
+   * - Band 1-10: interpolates from 100% to 50%
+   * - Band 10+: 50% minimum
    */
   const getDistanceBrightness = (chunkX: number, chunkZ: number): number => {
     // Distance from center in chunks (using max of X/Z for consistent square rings)
@@ -107,8 +109,18 @@ export function ProceduralGround({
     // Which band are we in? (0-4 = band 0, 5-9 = band 1, etc.)
     const band = Math.floor(distFromCenter / BAND_SIZE);
 
-    // Each band is 5% darker
-    const brightness = Math.max(MIN_BRIGHTNESS, 1.0 - (band * DARKENING_PER_BAND));
+    // Band 0 (center): 50% brighter than standard
+    if (band === 0) {
+      return 1.5;
+    }
+
+    // Bands 1-10: interpolate from 1.0 to 0.5
+    // Band 1 gets same brightness as old band 0 (1.0)
+    // Band 10 stays at 0.5 (unchanged from before)
+    const MAX_BAND = 10;
+    const effectiveBand = Math.min(band, MAX_BAND);
+    const t = (effectiveBand - 1) / (MAX_BAND - 1); // 0 to 1 as band goes 1 to 10
+    const brightness = 1.0 - t * (1.0 - MIN_BRIGHTNESS); // 1.0 to 0.5
 
     return brightness;
   };
@@ -149,22 +161,21 @@ export function ProceduralGround({
             // Calculate base brightness from distance to world center
             const brightness = getDistanceBrightness(cx, cz);
 
+            // FSZ blocks stay at full brightness, non-FSZ blocks are darkened by 40%
+            const baseBrightness = isInFSZ(worldX, worldZ)
+              ? brightness
+              : brightness * 0.60;
+
             // Check if this is a chunk edge block
             const isEdgeX = dx === 0 || dx === CHUNK_SIZE - 1;
             const isEdgeZ = dz === 0 || dz === CHUNK_SIZE - 1;
 
-            // Edge blocks are slightly lighter, interior blocks use base brightness
+            // Edge blocks are 20% lighter than base (no cap - allow overbright for FSZ)
             const finalBrightness = (isEdgeX || isEdgeZ)
-              ? Math.min(1.0, brightness + EDGE_HIGHLIGHT_BOOST)
-              : brightness;
+              ? baseBrightness * EDGE_HIGHLIGHT_MULTIPLIER
+              : baseBrightness;
 
-            // Check if block is in Fortress Safe Zone - make 50% lighter
-            if (isInFSZ(worldX, worldZ)) {
-              const lighterBrightness = Math.min(1.0, finalBrightness + (1.0 - finalBrightness) * 0.5);
-              blockColor.setRGB(lighterBrightness, lighterBrightness, lighterBrightness);
-            } else {
-              blockColor.setRGB(finalBrightness, finalBrightness, finalBrightness);
-            }
+            blockColor.setRGB(finalBrightness, finalBrightness, finalBrightness);
             mesh.setColorAt(instanceIdx, blockColor);
 
             instanceIdx++;
@@ -206,37 +217,24 @@ export function ProceduralGround({
         // Check if chunk is in Fortress Safe Zone
         const chunkInFSZ = isChunkInFSZ(cx, cz);
 
+        // FSZ stays at full brightness, non-FSZ is darkened by 40%
+        const baseBrightness = chunkInFSZ ? brightness : brightness * 0.60;
+
         // Additional fade for chunks beyond visual distance (LoD fade)
         const distFromCamera = Math.max(dcx, dcz);
         if (distFromCamera <= visualDistance) {
-          // Within visual range: use distance-from-center brightness
-          if (chunkInFSZ) {
-            // FSZ is 50% lighter
-            const lighterBrightness = Math.min(1.0, brightness + (1.0 - brightness) * 0.5);
-            farColor.setRGB(lighterBrightness, lighterBrightness, lighterBrightness);
-          } else {
-            farColor.setRGB(brightness, brightness, brightness);
-          }
+          // Within visual range: use brightness (FSZ or darkened non-FSZ)
+          farColor.setRGB(baseBrightness, baseBrightness, baseBrightness);
         } else {
           // Beyond visual range: additional fade toward grey
           const lodT = Math.min(1, (distFromCamera - visualDistance) / GROUND_EXTRA_DISTANCE);
-          // Blend from distance-darkened color toward muted grey
+          // Blend from brightness toward muted grey
           const greyTarget = 0.6;
-          if (chunkInFSZ) {
-            // FSZ is 50% lighter, then fades
-            const lighterBrightness = Math.min(1.0, brightness + (1.0 - brightness) * 0.5);
-            farColor.setRGB(
-              lighterBrightness + lodT * (greyTarget - lighterBrightness),
-              lighterBrightness + lodT * (greyTarget - lighterBrightness),
-              lighterBrightness + lodT * (greyTarget - lighterBrightness)
-            );
-          } else {
-            farColor.setRGB(
-              brightness + lodT * (greyTarget - brightness),
-              brightness + lodT * (greyTarget - brightness),
-              brightness + lodT * (greyTarget - brightness)
-            );
-          }
+          farColor.setRGB(
+            baseBrightness + lodT * (greyTarget - baseBrightness),
+            baseBrightness + lodT * (greyTarget - baseBrightness),
+            baseBrightness + lodT * (greyTarget - baseBrightness)
+          );
         }
         mesh.setColorAt(instanceIdx, farColor);
         instanceIdx++;

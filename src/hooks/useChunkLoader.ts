@@ -15,7 +15,10 @@ import * as THREE from 'three';
 // Configuration for chunk loading
 // LOAD_RADIUS is now dynamic — derived from loadRadius prop (defaults to 4)
 const DEFAULT_LOAD_RADIUS = 4;
-const UNLOAD_HYSTERESIS = 4;          // Extra chunks beyond load radius before unloading
+// Hysteresis for chunk unloading - prevents thrashing when walking near boundaries.
+// Since LOAD_RADIUS already includes fade chunks (visual_distance + 3), we only need
+// minimal hysteresis. Previously 4, which caused orphaned colliders beyond render distance.
+const UNLOAD_HYSTERESIS = 1;
 const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
@@ -277,6 +280,11 @@ function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: Pla
     return blocks;
   }
 
+  // B10: Sort visible blocks deterministically to stabilize sampling-based signatures
+  // Without this, after culling removes different blocks, the sample indices shift and
+  // cheapGroupKey/InstancedAtlasBlockGroup signatures change, causing cache misses
+  sortBlocksDeterministic(visible);
+
   return visible;
 }
 
@@ -365,6 +373,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   const MAX_LOADED_CHUNKS = (2 * UNLOAD_RADIUS + 1) ** 2 + 50;
   // EMIT_RADIUS: Only flatten chunks within this radius for emit (reduces downstream processing)
   const EMIT_RADIUS = emitRadius ?? LOAD_RADIUS;
+
+  // Ref for use in interval callbacks (avoids stale closure captures)
+  const loadRadiusRef = useRef(LOAD_RADIUS);
+  loadRadiusRef.current = LOAD_RADIUS;
   // Loaded chunks: Map<chunkKey, ChunkData>
   const loadedChunksRef = useRef<Map<string, ChunkData>>(new Map());
 
@@ -493,6 +505,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       // Record zero flatten for diagnostics (flatten eliminated in Phase 2)
       diagnostics.recordFlattenEmit(0, 0);
+
+      // Log first meaningful emit during initialization (once only)
+      if (!initialLoadDone.current && visibleBlockCount > 0) {
+        initLogStep('useChunkLoader.ts', `First emit: ${visibleChunkCount} chunks, ${visibleBlockCount} visible blocks`);
+      }
     };
 
     if (immediate) {
@@ -646,6 +663,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         ensureBlockCollider(block);
         // Phase 1: Create new array reference so React.memo detects the change per-chunk
         chunkData.blocks = [...chunkData.blocks, block];
+        // B10: Re-sort to maintain deterministic order for stable sampling signatures
+        sortBlocksDeterministic(chunkData.blocks);
         // Phase 3A: Mark as having optimistic blocks (temp-*)
         if (block.id.startsWith('temp-')) {
           chunkData.hasOptimisticBlocks = true;
@@ -741,6 +760,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         if (chunkData) {
           // Phase 1: Create new array reference so React.memo detects the change
           chunkData.blocks = [...chunkData.blocks];
+          // B10: Re-sort to maintain deterministic order for stable sampling signatures
+          sortBlocksDeterministic(chunkData.blocks);
           const newSig = computeChunkSignature(chunkData.blocks);
           chunkData.signature = newSig;
           applyChunkSigChange(oldSig, newSig);
@@ -1103,13 +1124,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     let cachedChunks: Map<string, CachedChunk> = new Map();
     const USE_CHUNK_CACHE = true; // Re-enabled with fix
     if (USE_CHUNK_CACHE) {
+      const cacheStepId = initLogStartStep('useChunkLoader.ts', `Reading IndexedDB cache (${toLoad.length} chunks)...`);
       try {
-        initLogStep('useChunkLoader.ts', 'Reading IndexedDB cache...', toLoad.length);
         cachedChunks = await blockDB.getCachedChunksBatch(worldId, toLoad);
-        initLogStep('useChunkLoader.ts', 'IndexedDB cache read complete', cachedChunks.size);
+        if (cacheStepId) initLogFinishStep(cacheStepId, cachedChunks.size);
       } catch (err) {
         console.warn('Cache read failed, fetching from server:', err);
-        initLogStep('useChunkLoader.ts', 'Cache read failed, will fetch from server');
+        if (cacheStepId) initLogErrorStep(cacheStepId, 'Cache read failed');
       }
     }
 
@@ -1127,8 +1148,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
     }
 
-    if (chunksWithCache.length > 0 || chunksWithoutCache.length > 0) {
-      initLogStep('useChunkLoader.ts', `Cache hits: ${chunksWithCache.length}, misses: ${chunksWithoutCache.length}`);
+    // Log cache hit/miss summary (only during initialization when it matters)
+    if (!initialLoadDone.current && (chunksWithCache.length > 0 || chunksWithoutCache.length > 0)) {
+      initLogStep('useChunkLoader.ts', `Cache: ${chunksWithCache.length} hits, ${chunksWithoutCache.length} misses`);
     }
 
     // Fetch server versions for cached chunks to check staleness
@@ -1175,9 +1197,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       let staleCount = 0;
 
       if (needVersionCheck.length > 0) {
-        initLogStep('useChunkLoader.ts', 'Checking chunk versions...', needVersionCheck.length);
+        const verStepId = initLogStartStep('useChunkLoader.ts', `Checking ${needVersionCheck.length} chunk versions...`);
         const serverVersions = await fetchChunkVersions(needVersionCheck.map(c => ({ x: c.x, z: c.z })));
-        initLogStep('useChunkLoader.ts', 'Chunk versions fetched', serverVersions.size);
+        if (verStepId) initLogFinishStep(verStepId, serverVersions.size);
 
         for (const { x, z, cached } of needVersionCheck) {
           const chunkKey = `chunk_${x}_${z}`;
@@ -1284,7 +1306,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // Fetch remaining chunks from server - fetch EACH CHUNK INDIVIDUALLY to avoid bounding box explosion
     // Previous approach used bounding box which could fetch millions of unwanted blocks
     if (chunksToFetchFromServer.length > 0) {
-      initLogStep('useChunkLoader.ts', 'Fetching chunks from Supabase...', chunksToFetchFromServer.length);
+      const fetchStepId = initLogStartStep('useChunkLoader.ts', `Fetching ${chunksToFetchFromServer.length} chunks from Supabase...`);
 
       const wantedChunkKeys = new Set(chunksToFetchFromServer.map(c => `chunk_${c.x}_${c.z}`));
 
@@ -1364,27 +1386,30 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           const existing = failedChunksRef.current.get(key);
           failedChunksRef.current.set(key, { x, z, attempts: (existing?.attempts ?? 0) + 1 });
         }
-        initLogStep('useChunkLoader.ts', `${failedChunkCoords.length} chunks failed to fetch`);
+        // Log partial failure
+        if (fetchStepId) initLogErrorStep(fetchStepId, `${failedChunkCoords.length} chunks failed`);
       }
 
-      // If ALL chunks failed, bail early
+      // If ALL server chunks failed, bail early (cache may still be active)
       if (failedChunkCoords.length === chunksToFetchFromServer.length) {
         fetchFailed = true;
         console.error('[ChunkLoader] All chunk fetches failed');
-        initLogStep('useChunkLoader.ts', 'All chunk fetches failed');
+        initLogStep('useChunkLoader.ts', `All ${chunksToFetchFromServer.length} server chunks failed (cache: ${chunksFromCache.length} chunks loaded)`);
         if (chunksFromCache.length > 0) {
           scheduleEmit();
         }
         return;
       }
 
-      initLogStep('useChunkLoader.ts', 'Supabase query complete', blocks?.length || 0);
+      // Complete the fetch step (success or partial success)
+      if (fetchStepId && failedChunkCoords.length === 0) {
+        initLogFinishStep(fetchStepId, blocks.length);
+      }
 
       // Get current versions for caching (only for successful chunks)
       const successfulChunks = chunksToFetchFromServer.filter(
         c => !failedChunkCoords.some(f => f.x === c.x && f.z === c.z)
       );
-      initLogStep('useChunkLoader.ts', 'Fetching versions for caching...');
       const currentVersions = await fetchChunkVersions(successfulChunks);
 
       // D-Flow: Start build timing
@@ -1504,7 +1529,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     // FIX: Single consolidated emit after ALL data (cache + server) is loaded
     // Use immediate emit during initial load for faster rendering
-    initLogStep('useChunkLoader.ts', 'Emitting blocks to React state...');
+    // Note: First emit log happens inside doEmit() with actual counts
     const isInitialLoad = !initialLoadDone.current;
     scheduleEmit(isInitialLoad);
   }, [worldId, scheduleEmit, fetchChunkVersions]);
@@ -1789,9 +1814,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
   /**
    * Phase 3C: Get chunks for a specific ring around the center
-   * Ring 0 = center chunk only
-   * Ring 1 = 8 chunks surrounding center (3x3 minus center)
-   * Ring N = chunks at distance N from center
+   * Ring 1 = center chunk only (innermost)
+   * Ring 2 = 8 chunks surrounding center (3x3 minus center)
+   * Ring N = chunks at Chebyshev distance N-1 from center
    */
   const getRingChunks = useCallback((
     centerX: number,
@@ -1799,28 +1824,30 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     ring: number
   ): Array<{ x: number; z: number }> => {
     const chunks: Array<{ x: number; z: number }> = [];
-    
-    if (ring === 0) {
-      // Center chunk only
+    // Convert to 0-based distance for calculation
+    const distance = ring - 1;
+
+    if (distance === 0) {
+      // Center chunk only (ring 1)
       chunks.push({ x: centerX, z: centerZ });
-    } else {
-      // Ring N: all chunks at Chebyshev distance exactly N
-      for (let dx = -ring; dx <= ring; dx++) {
-        for (let dz = -ring; dz <= ring; dz++) {
-          // Only include if on the edge (max distance equals ring)
-          if (Math.max(Math.abs(dx), Math.abs(dz)) === ring) {
+    } else if (distance > 0) {
+      // Ring N: all chunks at Chebyshev distance exactly (N-1)
+      for (let dx = -distance; dx <= distance; dx++) {
+        for (let dz = -distance; dz <= distance; dz++) {
+          // Only include if on the edge (max distance equals ring distance)
+          if (Math.max(Math.abs(dx), Math.abs(dz)) === distance) {
             chunks.push({ x: centerX + dx, z: centerZ + dz });
           }
         }
       }
     }
-    
+
     return chunks;
   }, []);
 
   /**
    * Phase 3C: Load chunks progressively in rings (near-first)
-   * Loads ring 0 first for fast initial display, then remaining rings
+   * Loads ring 1 first for fast initial display, then remaining rings
    */
   const loadProgressiveRings = useCallback(async (
     centerX: number,
@@ -1829,12 +1856,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   ): Promise<void> => {
     if (!worldId) return;
 
-    // Load ring 0 first (immediate center chunk) for quick initial display
-    const ring0Chunks = getRingChunks(centerX, centerZ, 0);
-    await loadSpecificChunks(ring0Chunks);
+    // Load ring 1 first (center chunk) for quick initial display
+    const ring1Chunks = getRingChunks(centerX, centerZ, 1);
+    await loadSpecificChunks(ring1Chunks);
 
-    // Then load remaining rings
-    for (let ring = 1; ring <= maxRadius; ring++) {
+    // Then load remaining rings (starting from ring 2)
+    for (let ring = 2; ring <= maxRadius + 1; ring++) {
       const ringChunks = getRingChunks(centerX, centerZ, ring);
       await loadSpecificChunks(ringChunks);
     }
@@ -2095,23 +2122,43 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       }
 
-      // Phase 3B: Use incremental stripe loading for movement
+      // Phase 3B: Use incremental stripe loading for single-chunk movement
+      // For multi-chunk moves (teleport, fast travel, large jumps), load ALL missing chunks
       // ATOMIC TRANSITIONS: Load new chunks FIRST, then unload old ones.
-      // This prevents the intermediate "smaller world" state that caused
-      // unnecessary mesh rebuilds and visual pop-in at chunk boundaries.
       if (hadPrevChunk) {
-        // Calculate stripe chunks for the movement direction
-        const stripeChunks = getStripeChunks(
-          oldChunkX, oldChunkZ,
-          newChunkX, newChunkZ,
-          LOAD_RADIUS
-        );
+        const moveDistance = Math.max(Math.abs(newChunkX - oldChunkX), Math.abs(newChunkZ - oldChunkZ));
 
-        if (stripeChunks.length > 0) {
+        // Determine which chunks to load
+        let chunksToLoad: Array<{ x: number; z: number }>;
+
+        if (moveDistance <= 1) {
+          // Single chunk movement: use efficient stripe loading
+          chunksToLoad = getStripeChunks(
+            oldChunkX, oldChunkZ,
+            newChunkX, newChunkZ,
+            LOAD_RADIUS
+          );
+        } else {
+          // Multi-chunk movement: find ALL missing chunks in new radius
+          // This fixes the bug where teleporting/fast travel left chunks unloaded
+          chunksToLoad = [];
+          for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
+            for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+              const cx = newChunkX + dx;
+              const cz = newChunkZ + dz;
+              const key = `chunk_${cx}_${cz}`;
+              if (!loadedChunksRef.current.has(key)) {
+                chunksToLoad.push({ x: cx, z: cz });
+              }
+            }
+          }
+        }
+
+        if (chunksToLoad.length > 0) {
           // Increment transition ID so rapid crossings discard stale completions
           const transitionId = ++transitionIdRef.current;
 
-          loadSpecificChunks(stripeChunks)
+          loadSpecificChunks(chunksToLoad)
             .then(() => {
               // Only unload if this is still the latest transition
               if (transitionIdRef.current !== transitionId) return;
@@ -2124,9 +2171,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
               }
             })
             .catch(err => {
-              console.warn('Stripe chunk load error:', err);
-              // Track failed stripe chunks for retry
-              for (const { x, z } of stripeChunks) {
+              console.warn('Chunk load error:', err);
+              // Track failed chunks for retry
+              for (const { x, z } of chunksToLoad) {
                 const key = `chunk_${x}_${z}`;
                 if (!loadedChunksRef.current.has(key)) {
                   failedChunksRef.current.set(key, { x, z, attempts: 1 });
@@ -2168,53 +2215,35 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     setIsLoading(true);
     initialLoadDone.current = false;
-    
-    initLogStep('useChunkLoader.ts', 'Beginning chunk loader initialization...');
 
-    // C7: Use start/finish for collider removal
-    const colliderStepId = initLogStartStep('useChunkLoader.ts', 'Clearing collision grid...');
+    // Clear previous world state
     const prevGridSize = worldCollisionGrid.size;
-
-    // Cancel any pending collider removal jobs that might create orphans
     clearPendingJobs();
-
-    // CRITICAL FIX: Clear the ENTIRE collision grid, not just tracked chunks.
-    // This prevents orphan colliders from accumulating (was causing 400K+ colliders).
     worldCollisionGrid.clear();
-
-    // Clear the canonical collider cache
     colliderByBlockId.clear();
-
-    if (colliderStepId) initLogFinishStep(colliderStepId, prevGridSize);
-
     loadedChunksRef.current.clear();
     clearAllHeightMaps();
-    // B4: Reset world signature when clearing chunks for new world
     worldSigRef.current = { count: 0, xor: 0, sum: 0 };
     lastEmittedWorldKeyRef.current = '';
-    initLogStep('useChunkLoader.ts', 'Chunk cache cleared');
 
-    initLogStep('useChunkLoader.ts', 'Collision grid size after clear', worldCollisionGrid.size);
-    
     const startChunkX = Math.floor(startX / CHUNK_SIZE);
     const startChunkZ = Math.floor(startZ / CHUNK_SIZE);
     playerChunkRef.current = { x: startChunkX, z: startChunkZ };
 
-    initLogStep('useChunkLoader.ts', `Player start chunk: (${startChunkX}, ${startChunkZ})`);
+    initLogStep('useChunkLoader.ts', `Chunk loader ready (cleared ${prevGridSize} colliders, player at chunk ${startChunkX},${startChunkZ})`);
 
     // Phase 3D: Clean up old cache entries (fire and forget)
-    initLogStep('useChunkLoader.ts', 'Cleaning old cache entries...');
     blockDB.clearOldCachedChunks(CACHE_MAX_AGE_MS).catch(() => {});
 
     // Phase 3C: Use parallel loading for faster initial load
-    // Load ring 0 first for immediate visual feedback, then all remaining in a single batch
+    // Load ring 1 (center) first for immediate visual feedback, then all remaining in a single batch
     const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
-    initLogStep('useChunkLoader.ts', `Loading ${totalChunks} chunks (radius ${LOAD_RADIUS})...`);
 
     // Build all chunk coordinates and required keys upfront
+    // Rings are 1-based: ring 1 = center, ring N = distance N-1 from center
     const requiredChunkKeys = new Set<string>();
     const allChunksToLoad: Array<{ x: number; z: number }> = [];
-    for (let ring = 0; ring <= LOAD_RADIUS; ring++) {
+    for (let ring = 1; ring <= LOAD_RADIUS + 1; ring++) {
       const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
       for (const { x, z } of ringChunks) {
         requiredChunkKeys.add(`chunk_${x}_${z}`);
@@ -2222,26 +2251,31 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
     }
 
-    // Load ring 0 first for immediate visual feedback
-    const ring0Chunks = getRingChunks(startChunkX, startChunkZ, 0);
-    const ring0StepId = initLogStartStep('useChunkLoader.ts', `Loading ring 0 (${ring0Chunks.length} chunks)...`);
-    await loadSpecificChunks(ring0Chunks);
-    if (ring0StepId) initLogFinishStep(ring0StepId, ring0Chunks.length);
+    // Load ring 1 (center chunk) first for immediate visual feedback
+    const ring1Chunks = getRingChunks(startChunkX, startChunkZ, 1);
+    const ring1StepId = initLogStartStep('useChunkLoader.ts', `Loading ${totalChunks} chunks: ring 1 first...`);
+    await loadSpecificChunks(ring1Chunks);
+    if (ring1StepId) initLogFinishStep(ring1StepId, ring1Chunks.length);
 
     // Yield to let React render the closest blocks
-    await new Promise(resolve => requestAnimationFrame(resolve));
+    // Use setTimeout fallback (16ms ≈ 1 frame) since RAF is throttled when tab is hidden
+    await new Promise(resolve => {
+      const timeoutId = setTimeout(resolve, 16);
+      requestAnimationFrame(() => {
+        clearTimeout(timeoutId);
+        resolve(undefined);
+      });
+    });
 
     // Load all remaining chunks in a SINGLE batch (parallel) instead of ring-by-ring
-    const ring0Keys = new Set(ring0Chunks.map(c => `${c.x},${c.z}`));
-    const remainingChunks = allChunksToLoad.filter(c => !ring0Keys.has(`${c.x},${c.z}`));
+    const ring1Keys = new Set(ring1Chunks.map(c => `${c.x},${c.z}`));
+    const remainingChunks = allChunksToLoad.filter(c => !ring1Keys.has(`${c.x},${c.z}`));
 
     if (remainingChunks.length > 0) {
-      const remainingStepId = initLogStartStep('useChunkLoader.ts', `Loading remaining ${remainingChunks.length} chunks (parallel)...`);
+      const remainingStepId = initLogStartStep('useChunkLoader.ts', `Loading remaining ${remainingChunks.length} chunks...`);
       await loadSpecificChunks(remainingChunks);
       if (remainingStepId) initLogFinishStep(remainingStepId, remainingChunks.length);
     }
-
-    initLogStep('useChunkLoader.ts', 'All chunk rings loaded', totalChunks);
 
     // PHASE 2: Init barrier - check for failed required chunks and retry before completing
     const getFailedRequiredChunks = () => {
@@ -2287,10 +2321,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (failedRequired.length > 0) {
       console.error(`[ChunkLoader] INIT WARNING: ${failedRequired.length} required chunks could not be loaded after ${MAX_INIT_RETRIES} retries`);
       initLogStep('useChunkLoader.ts', `WARNING: ${failedRequired.length} chunks still failed after retries`);
-    } else {
-      initLogStep('useChunkLoader.ts', 'All required chunks verified loaded');
     }
-    
+
     // Count total blocks loaded
     let totalBlocks = 0;
     const blockTypeCounts = new Map<string, number>();
@@ -2301,19 +2333,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         blockTypeCounts.set(type, (blockTypeCounts.get(type) || 0) + 1);
       }
     }
-    initLogStep('useChunkLoader.ts', 'Total blocks in memory', totalBlocks);
 
-    // OPTIMIZATION: Limit block type logging to top 5 to prevent init panel spam
+    // Summarize blocks loaded with top types
     const sortedTypes = Array.from(blockTypeCounts.entries()).sort((a, b) => b[1] - a[1]);
-    const topTypes = sortedTypes.slice(0, 5);
-    for (const [type, count] of topTypes) {
-      initLogStep('useChunkLoader.ts', `Block type: ${type}`, count);
-    }
-    if (sortedTypes.length > 5) {
-      initLogStep('useChunkLoader.ts', `...and ${sortedTypes.length - 5} more block types`);
-    }
-    
-    initLogStep('useChunkLoader.ts', 'Collision grid populated', worldCollisionGrid.size);
+    const topTypes = sortedTypes.slice(0, 3).map(([t, c]) => `${t}:${c}`).join(', ');
+    initLogStep('useChunkLoader.ts', `Loaded ${totalBlocks} blocks (${blockTypeCounts.size} types: ${topTypes}...)`, worldCollisionGrid.size);
     
     initialLoadDone.current = true;
     setIsLoading(false);
@@ -2361,35 +2385,58 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   // World change handling is now done via initializeForWorld which clears chunks internally
   // Removed separate effect to prevent race conditions with initialization
 
-  // Periodic retry for failed chunks — ensures transient failures don't leave permanent holes
+  // Periodic integrity check — ensures NO chunks within player radius are missing
+  // Catches: failed chunks, chunks never attempted, chunks dropped due to race conditions
   useEffect(() => {
     if (!worldId) return;
 
     const intervalId = setInterval(() => {
-      const failed = failedChunksRef.current;
-      if (failed.size === 0) return;
+      const playerChunk = playerChunkRef.current;
+      if (!playerChunk) return;
 
-      // Collect chunks to retry (copy keys to avoid mutation during iteration)
-      const toRetry: Array<{ x: number; z: number }> = [];
+      // Use ref to get current LOAD_RADIUS (avoids stale closure)
+      const radius = loadRadiusRef.current;
+
+      // Collect ALL chunks that should be loaded but aren't
+      const toLoad: Array<{ x: number; z: number }> = [];
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          const cx = playerChunk.x + dx;
+          const cz = playerChunk.z + dz;
+          const key = `chunk_${cx}_${cz}`;
+          if (!loadedChunksRef.current.has(key)) {
+            toLoad.push({ x: cx, z: cz });
+          }
+        }
+      }
+
+      // Also collect failed chunks (which may be outside current radius)
+      const failed = failedChunksRef.current;
       for (const [key, info] of failed) {
-        // Skip chunks that are now loaded (e.g., by movement stripe loading)
         if (loadedChunksRef.current.has(key)) {
           failed.delete(key);
           continue;
         }
-        toRetry.push({ x: info.x, z: info.z });
+        // Only retry failed chunks if within range
+        const dist = Math.max(Math.abs(info.x - playerChunk.x), Math.abs(info.z - playerChunk.z));
+        if (dist <= radius) {
+          const alreadyQueued = toLoad.some(c => c.x === info.x && c.z === info.z);
+          if (!alreadyQueued) {
+            toLoad.push({ x: info.x, z: info.z });
+          }
+        }
       }
 
-      if (toRetry.length > 0) {
-        console.log(`[ChunkLoader] Retrying ${toRetry.length} failed chunks...`);
+      if (toLoad.length > 0) {
+        console.log(`[ChunkLoader] Integrity check: loading ${toLoad.length} missing chunks within radius`);
         // Clear from failed set — loadSpecificChunks will re-add if they fail again
-        for (const { x, z } of toRetry) {
+        for (const { x, z } of toLoad) {
           failed.delete(`chunk_${x}_${z}`);
         }
-        loadSpecificChunks(toRetry).catch(err => {
-          console.warn('[ChunkLoader] Failed chunk retry error:', err);
+        loadSpecificChunks(toLoad).catch(err => {
+          console.warn('[ChunkLoader] Integrity check load error:', err);
           // Re-add chunks that weren't loaded so they can be retried next cycle
-          for (const { x, z } of toRetry) {
+          for (const { x, z } of toLoad) {
             const key = `chunk_${x}_${z}`;
             if (!loadedChunksRef.current.has(key) && !failedChunksRef.current.has(key)) {
               failedChunksRef.current.set(key, { x, z, attempts: MAX_RETRY_ATTEMPTS });
@@ -2400,6 +2447,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     }, FAILED_CHUNK_RETRY_INTERVAL);
 
     return () => clearInterval(intervalId);
+  // Note: LOAD_RADIUS not in deps - it's read fresh on each interval tick
   }, [worldId, loadSpecificChunks]);
 
   // If the collision grid is cleared (debug key, hot reload, etc.), reinsert colliders

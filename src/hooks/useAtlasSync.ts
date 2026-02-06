@@ -24,7 +24,7 @@ import {
   getGlobalTextureId,
 } from '@/lib/atlasLookup';
 import { getGlobalAtlasTexture, incrementAtlasVersion } from '@/hooks/useTextureAtlas';
-import { initLogStartStep, initLogFinishStep, initLogStep } from '@/contexts/InitializationContext';
+import { initLogStartStep, initLogFinishStep, initLogStep, initLogErrorStep } from '@/contexts/InitializationContext';
 
 interface SyncResult {
   added: number;
@@ -342,7 +342,10 @@ export async function removeAtlasTexture(textureId: string): Promise<boolean> {
  * Call this during app initialization to ensure atlas is populated before rendering.
  */
 export async function syncAtlasOnInit(): Promise<void> {
-  await atlasManager.initialize();
+  const stepId = initLogStartStep('useAtlasSync.ts', 'Syncing textures to atlas...');
+
+  try {
+    await atlasManager.initialize();
 
   // Fetch all definitions in parallel
   const [
@@ -470,5 +473,15 @@ export async function syncAtlasOnInit(): Promise<void> {
     }
   }
 
+  // Log completion with texture count
+  const stats = atlasManager.getStats();
+  if (stepId) initLogFinishStep(stepId, stats.usedSlots);
+
   console.log('[AtlasSync] Initial sync complete');
+  } catch (error) {
+    console.error('[AtlasSync] Initial sync failed:', error);
+    if (stepId) initLogErrorStep(stepId, error instanceof Error ? error.message : 'Unknown error');
+    // Don't re-throw - atlas sync failure shouldn't block game loading
+    // Trees will just use fallback textures
+  }
 }

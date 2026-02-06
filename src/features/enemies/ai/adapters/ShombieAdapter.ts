@@ -15,7 +15,13 @@ import type {
 import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
 import { EnemyManager } from '../EnemyManager';
-import { KNOCKBACK_DECAY_RATE, SHOMBIE_GRAVITY } from '@/features/shombie/constants';
+import {
+  KNOCKBACK_DECAY_RATE,
+  SHOMBIE_GRAVITY,
+  KNOCKDOWN_TOTAL_DURATION_MS,
+  KNOCKDOWN_TILT_DURATION_MS,
+  KNOCKDOWN_SLIDE_DURATION_MS,
+} from '@/features/shombie/constants';
 import { isPointInFSZ, clampPositionOutsideFSZ } from '../fortressSafeZone';
 
 // Module-level locomotion context
@@ -119,18 +125,57 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
   },
   
   applyResult(
-    shombie: ShombieWithAI, 
-    result: BehaviorResult, 
+    shombie: ShombieWithAI,
+    result: BehaviorResult,
     deltaMs: number,
     shared?: SharedContext
   ): void {
     if (!EnemyManager.isAIControlled()) return;
-    
+
     const deltaSeconds = deltaMs / 1000;
-    
+
+    // Handle knockdown animation (3 phases: tilt, slide, recovery)
+    if (shombie.isKnockedDown) {
+      const now = Date.now();
+      const elapsed = now - shombie.knockdownStartTime;
+      const progress = Math.min(1, elapsed / KNOCKDOWN_TOTAL_DURATION_MS);
+      shombie.knockdownProgress = progress;
+
+      // Slide during phases 1 (tilt) and 2 (flat)
+      const slideEndTime = KNOCKDOWN_TILT_DURATION_MS + KNOCKDOWN_SLIDE_DURATION_MS;
+
+      if (elapsed < slideEndTime && shombie.knockdownDirection) {
+        const slideProgress = elapsed / slideEndTime;
+        // Use stored slide distance (1 block per player level, set in damageShombie)
+        const totalSlideDistance = shombie.knockdownSlideDistance ?? 1;
+        // Decelerate: more speed at start, less at end
+        const slideSpeed = totalSlideDistance * (1 - slideProgress) * 3 * deltaSeconds;
+        shombie.position.x += shombie.knockdownDirection.x * slideSpeed;
+        shombie.position.z += shombie.knockdownDirection.z * slideSpeed;
+      }
+
+      // End knockdown when complete
+      if (progress >= 1) {
+        shombie.isKnockedDown = false;
+        shombie.knockdownProgress = 0;
+      }
+
+      // Clamp to FSZ boundary after knockdown slide
+      const clamped = clampPositionOutsideFSZ(shombie.position.x, shombie.position.z);
+      shombie.position.x = clamped.x;
+      shombie.position.z = clamped.z;
+
+      // Skip normal movement when knocked down
+      return;
+    }
+
+    // Check if stunned (body shot stun - can't move for 1 second)
+    const now = Date.now();
+    const isStunned = shombie.stunUntil && now < shombie.stunUntil;
+
     // Apply gravity
     shombie.velocity.y -= SHOMBIE_GRAVITY * deltaSeconds;
-    
+
     // Apply velocity (knockback + gravity)
     shombie.position.x += shombie.velocity.x * deltaSeconds;
     shombie.position.y += shombie.velocity.y * deltaSeconds;
@@ -146,6 +191,14 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     const decay = Math.exp(-KNOCKBACK_DECAY_RATE * deltaSeconds);
     shombie.velocity.x *= decay;
     shombie.velocity.z *= decay;
+
+    // If stunned, skip AI movement but apply FSZ clamp
+    if (isStunned) {
+      const clamped = clampPositionOutsideFSZ(shombie.position.x, shombie.position.z);
+      shombie.position.x = clamped.x;
+      shombie.position.z = clamped.z;
+      return;
+    }
 
     if (result.kind === 'idle') {
       // Clamp to FSZ boundary even when idle (knockback may push into zone)
@@ -193,7 +246,7 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
 
     if (result.kind === 'attack') {
       shombie.lastAttackAt = performance.now();
-      
+
       // Apply damage to player
       if (locomotionContext?.onPlayerHit) {
         _knockbackDir.set(result.dirX, 0, result.dirZ).normalize();

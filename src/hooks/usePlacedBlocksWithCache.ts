@@ -157,12 +157,15 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       }
 
       // Wait for block definitions to finish (should be done by now since it ran in parallel)
-      const blockDefsStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Loading block definitions...');
+      // Timing is logged inside preloadBlockDefinitions() itself
       await blockDefsPromise;
-      initLogFinishStep(blockDefsStepId!);
 
       // Wait for sounds cache (non-critical, won't block if it fails)
-      await soundsCachePromise;
+      try {
+        await soundsCachePromise;
+      } catch (err) {
+        console.warn('[Init] Sounds cache init failed (non-critical):', err);
+      }
 
       // ONE-TIME ATLAS CACHE MIGRATION: Clear stale atlas for fruit texture fix
       const ATLAS_CACHE_VERSION_KEY = 'fortress_atlas_cache_version';
@@ -177,16 +180,18 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       // CRITICAL: Initialize texture atlas BEFORE chunk loading starts
       // Tree blocks require atlas to render - if atlas isn't ready, trees won't show
+      console.log('[Init] Starting texture atlas initialization...');
       const atlasStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing texture atlas...');
       const { initializeAtlasTexture } = await import('@/hooks/useTextureAtlas');
       await initializeAtlasTexture();
       initLogFinishStep(atlasStepId!);
+      console.log('[Init] Texture atlas initialized, starting atlas sync...');
 
       // Sync textures from database to atlas (ensures atlas is populated)
-      const syncStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Syncing textures to atlas...');
+      // Timing is logged inside syncAtlasOnInit() via useAtlasSync hooks
       const { syncAtlasOnInit } = await import('@/hooks/useAtlasSync');
       await syncAtlasOnInit();
-      initLogFinishStep(syncStepId!);
+      console.log('[Init] Atlas sync complete, fetching world settings...');
 
       // Fetch world's ambient music settings
       const { data: worldSettings } = await supabase
@@ -197,6 +202,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       const ambientUrl = worldSettings?.ambient_music_url || '/ambient_alien_planet_bkgd_1.mp3';
       const ambientVolume = worldSettings?.ambient_music_volume ?? 100;
+      console.log('[Init] World settings fetched, starting chunk loader...');
 
       // Load ambient audio (parallel with chunk loader)
       const ambientAudioPromise = (async () => {
@@ -240,17 +246,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       if (initStepId) initLogFinishStep(initStepId);
 
       // Wait for React to render the blocks before dismissing overlay
-      // Use requestAnimationFrame + timeout to ensure rendering is complete
+      // Use setTimeout as primary (works even when tab hidden) with RAF as optimization
       initLogStep('usePlacedBlocksWithCache.ts', 'Waiting for render...');
       await new Promise<void>(resolve => {
-        requestAnimationFrame(() => {
-          // Wait for two more frames to ensure blocks are visible
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              setTimeout(resolve, 100); // Small buffer for GPU upload
-            });
-          });
-        });
+        // 150ms is enough for 3 frames at 60fps + GPU upload buffer
+        // This completes quickly even when tab is hidden (RAF would block indefinitely)
+        setTimeout(resolve, 150);
       });
 
       // Finish initialization overlay

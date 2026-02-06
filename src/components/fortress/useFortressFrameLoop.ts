@@ -61,7 +61,6 @@ export function useFortressFrameLoop({
   shombiesRef,
   shombieRendererRef,
   damageShombie,
-  updateShombieMovement,
 
   walapasRef,
   updateWalapaMovement,
@@ -114,7 +113,6 @@ export function useFortressFrameLoop({
   shombiesRef: MutableRefObject<any[]>;
   shombieRendererRef: MutableRefObject<any>;
   damageShombie: (...args: any[]) => any;
-  updateShombieMovement: (...args: any[]) => any;
 
   walapasRef: MutableRefObject<any[]>;
   updateWalapaMovement: (delta: number) => void;
@@ -749,16 +747,20 @@ export function useFortressFrameLoop({
                   hitPartName = dx > 0 ? 'rightLowerLeg' : 'leftLowerLeg';
                 }
 
-                // Attach fire to the hit body part
-                if (shombieRendererRef.current) {
-                  const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
-                  const fireDuration = tierDef.burn_time * pentaMultiplier * 1000;
-                  shombieRendererRef.current.addFireToBodyPart(
-                    shombie.id,
-                    hitPartName,
-                    fireDuration,
-                    tierDef.colors
-                  );
+                // Spawn fire at hit position using same system as block impacts (NebulaImpacts)
+                // Fire size matches block impacts exactly (no size difference for headshot vs body)
+                const pentaMultiplier = bullet.isPentabullet ? 3.0 : 1.0;
+                const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                const fireConfig = {
+                  colors: tierDef.colors,
+                  size: tierDef.burn_width * pentaMultiplier,
+                  height: tierDef.burn_height * pentaMultiplier,
+                  duration: tierDef.burn_time * pentaMultiplier,
+                };
+                if (useNebulaForBulletImpacts && nebulaImpactsRef?.current) {
+                  nebulaImpactsRef.current.spawnImpact(hitPos, fireConfig);
+                } else if (bulletImpactsRef?.current) {
+                  bulletImpactsRef.current.spawnImpact(hitPos, fireConfig);
                 }
 
                 break;
@@ -1151,10 +1153,8 @@ export function useFortressFrameLoop({
   // Update shwarm renderer (always, since movement is continuous)
   shwarmRendererRef.current?.update();
 
-  // Update shombie movement (pathfinding to player) - skip if AI controls
-  if (!isAIControlled) {
-    updateShombieMovement(delta);
-  }
+  // Note: Shombie movement is now handled entirely by the AI system (ShombieAdapter.applyResult)
+  // The legacy updateShombieMovement has been removed
 
   // Update walapa movement - always run (walapas are friendly NPCs, not AI-controlled enemies)
   if (updateWalapaMovement) {

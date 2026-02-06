@@ -20,6 +20,13 @@ export const FSZ_MAX_X = 32;
 export const FSZ_MIN_Z = -64;  // Back of fortress area
 export const FSZ_MAX_Z = 32;   // Courtyard extends in front
 
+// No-fire zone extends 1 chunk (16 blocks) beyond FSZ in all directions
+const NO_FIRE_BUFFER = 16;
+export const NO_FIRE_MIN_X = FSZ_MIN_X - NO_FIRE_BUFFER;
+export const NO_FIRE_MAX_X = FSZ_MAX_X + NO_FIRE_BUFFER;
+export const NO_FIRE_MIN_Z = FSZ_MIN_Z - NO_FIRE_BUFFER;
+export const NO_FIRE_MAX_Z = FSZ_MAX_Z + NO_FIRE_BUFFER;
+
 // Reusable return object for clampPositionOutsideFSZ (zero allocation)
 const _clampResult = { x: 0, z: 0 };
 
@@ -31,6 +38,15 @@ const _clampResult = { x: 0, z: 0 };
 export function isPointInFSZ(x: number, _y: number, z: number): boolean {
   return x >= FSZ_MIN_X && x <= FSZ_MAX_X &&
          z >= FSZ_MIN_Z && z <= FSZ_MAX_Z;
+}
+
+/**
+ * Check if a point is inside the no-fire zone (FSZ + 1 chunk buffer).
+ * Players cannot fire weapons from inside this extended zone.
+ */
+export function isPointInNoFireZone(x: number, _y: number, z: number): boolean {
+  return x >= NO_FIRE_MIN_X && x <= NO_FIRE_MAX_X &&
+         z >= NO_FIRE_MIN_Z && z <= NO_FIRE_MAX_Z;
 }
 
 /**

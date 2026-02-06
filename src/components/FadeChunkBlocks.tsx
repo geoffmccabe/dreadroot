@@ -15,7 +15,9 @@ interface FadeChunkBlocksProps {
   viewSettings?: ViewSettings;
 }
 
-const MAX_INSTANCES_PER_RING = 5000;
+// Increased from 5000 to handle large trees (100K+ blocks, ~30K visible after culling).
+// Fade rendering uses simple solid shaders (no textures), so higher instance counts are safe.
+const MAX_INSTANCES_PER_RING = 20000;
 const FADE_IN_DURATION = 2.0; // seconds
 
 // Vertex shader: passes per-instance opacity to fragment, includes fog
@@ -66,7 +68,8 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
     return geo;
   }, []);
 
-  const ringSettings = ring === 0 ? viewSettings.ring1 : ring === 1 ? viewSettings.ring2 : viewSettings.ring3;
+  // Rings are 1-based: ring 1 = innermost fade, ring 2 = middle, ring 3 = outermost
+  const ringSettings = ring === 1 ? viewSettings.ring1 : ring === 2 ? viewSettings.ring2 : viewSettings.ring3;
 
   const material = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -94,11 +97,20 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
 
+  // Track if we've warned about truncation (one-time per ring)
+  const truncationWarnedRef = useRef(false);
+
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
     const count = Math.min(blocks.length, MAX_INSTANCES_PER_RING);
+
+    // Warn once if blocks are truncated
+    if (blocks.length > MAX_INSTANCES_PER_RING && !truncationWarnedRef.current) {
+      truncationWarnedRef.current = true;
+      console.warn(`[FadeChunkBlocks] Ring ${ring} truncated: ${blocks.length} blocks > ${MAX_INSTANCES_PER_RING} limit`);
+    }
     const prevMap = fadeMap.current;
     const newMap = new Map<string, number>();
     const fading: number[] = [];
@@ -133,7 +145,7 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
 
     // Update uniforms from live viewSettings (admin panel real-time tuning)
     const vs = viewSettingsRef.current;
-    const rs = ring === 0 ? vs.ring1 : ring === 1 ? vs.ring2 : vs.ring3;
+    const rs = ring === 1 ? vs.ring1 : ring === 2 ? vs.ring2 : vs.ring3;
     (mat.uniforms.baseColor.value as THREE.Color).set(vs.baseColor);
     mat.uniforms.baseOpacity.value = rs.opacity;
 
@@ -178,13 +190,14 @@ export function FadeChunkBlocks({ entries, viewSettings }: FadeChunkBlocksProps)
   const vs = viewSettings ?? DEFAULT_VIEW_SETTINGS;
 
   // Bucket entries into 3 rings by distanceFactor
+  // Using 1-based indexing: ringBlocks[1], ringBlocks[2], ringBlocks[3] (index 0 unused)
   const ringBlocks = useMemo(() => {
-    const rings: [PlacedBlock[], PlacedBlock[], PlacedBlock[]] = [[], [], []];
+    const rings: [never[], PlacedBlock[], PlacedBlock[], PlacedBlock[]] = [[], [], [], []];
     for (const entry of entries) {
-      const ringIdx = Math.min(2, Math.round(entry.distanceFactor * 3) - 1);
-      const idx = Math.max(0, ringIdx);
+      // Map distanceFactor (0-1) to ring 1, 2, or 3
+      const ring = Math.min(3, Math.max(1, Math.round(entry.distanceFactor * 3)));
       for (const block of entry.blocks) {
-        rings[idx].push(block);
+        rings[ring].push(block);
       }
     }
     return rings;
@@ -194,9 +207,9 @@ export function FadeChunkBlocks({ entries, viewSettings }: FadeChunkBlocksProps)
 
   return (
     <>
-      {ringBlocks[0].length > 0 && <FadeRing blocks={ringBlocks[0]} ring={0} viewSettings={vs} />}
       {ringBlocks[1].length > 0 && <FadeRing blocks={ringBlocks[1]} ring={1} viewSettings={vs} />}
       {ringBlocks[2].length > 0 && <FadeRing blocks={ringBlocks[2]} ring={2} viewSettings={vs} />}
+      {ringBlocks[3].length > 0 && <FadeRing blocks={ringBlocks[3]} ring={3} viewSettings={vs} />}
     </>
   );
 }

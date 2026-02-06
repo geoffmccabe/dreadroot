@@ -114,6 +114,10 @@ export interface ShombieInstance {
   knockdownProgress: number;
   /** Knockdown start time */
   knockdownStartTime: number;
+  /** Knockdown slide distance in blocks (1 per player level) */
+  knockdownSlideDistance?: number;
+  /** Stun end time (ms timestamp) - shombie doesn't move while stunned */
+  stunUntil?: number;
   /** Active fires on body parts */
   bodyFires: ShombieBodyFire[];
 }

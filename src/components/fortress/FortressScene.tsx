@@ -432,13 +432,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     spawnShombieAt,
     spawnShombieGroup,
     spawningEnabled: shombieSpawningEnabled,
-    updateMovement: updateShombieMovement,
   } = useShombieSystem({
     definitions: shombieDefinitions,
     cameraRef,
     isEnabled: enemiesEnabled,
     userRoles,
-    onPlayerHit: handleShombiePlayerHit,
     onShombieKilled,
     playerLevel,
   });
@@ -1073,7 +1071,6 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     shombiesRef,
     shombieRendererRef,
     damageShombie,
-    updateShombieMovement,
     walapasRef,
     updateWalapaMovement,
     shtickmenRef,

@@ -115,8 +115,20 @@ const BONE_CONNECTIONS: [string, string][] = [
   ['RightArm', 'RightForeArm'], ['RightForeArm', 'RightHand'],
 ];
 
-// Bamboo texture URLs per tier
-const BAMBOO_TEXTURE_URLS = Array.from({ length: NUM_TIERS }, (_, i) => `/Bamboo_Seamless_t${i + 1}.webp`);
+// Bamboo texture URLs per tier (1-indexed: index 0 is placeholder, indices 1-10 for tiers 1-10)
+const BAMBOO_TEXTURE_URLS: string[] = [
+  '/Bamboo_Seamless_t1.webp', // index 0 placeholder (loaded but unused)
+  '/Bamboo_Seamless_t1.webp',  // tier 1
+  '/Bamboo_Seamless_t2.webp',  // tier 2
+  '/Bamboo_Seamless_t3.webp',  // tier 3
+  '/Bamboo_Seamless_t4.webp',  // tier 4
+  '/Bamboo_Seamless_t5.webp',  // tier 5
+  '/Bamboo_Seamless_t6.webp',  // tier 6
+  '/Bamboo_Seamless_t7.webp',  // tier 7
+  '/Bamboo_Seamless_t8.webp',  // tier 8
+  '/Bamboo_Seamless_t9.webp',  // tier 9
+  '/Bamboo_Seamless_t10.webp', // tier 10
+];
 
 /**
  * Create a standard humanoid skeleton with Mixamo-compatible bone naming
@@ -263,9 +275,9 @@ function applyWalkAnimation(
  */
 export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRendererProps>(
   ({ shtickmenRef, cameraRef, universalFlameRef }, ref) => {
-    // Per-tier mesh refs (index 0 = tier 1, index 9 = tier 10)
-    const boneMeshRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(NUM_TIERS).fill(null));
-    const headMeshRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(NUM_TIERS).fill(null));
+    // Per-tier mesh refs (1-indexed: index 0 unused, indices 1-10 for tiers 1-10)
+    const boneMeshRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(NUM_TIERS + 1).fill(null));
+    const headMeshRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(NUM_TIERS + 1).fill(null));
     const eyesMeshRef = useRef<THREE.InstancedMesh>(null);
 
     const skeletonCache = useRef<Map<string, {
@@ -285,7 +297,7 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
     const headGeo = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 16), []);
     const eyeGeo = useMemo(() => new THREE.CircleGeometry(1, 16), []);
 
-    // Load all 10 bamboo textures
+    // Load bamboo textures (11 total: index 0 placeholder + tiers 1-10)
     const bambooTextures = useTexture(BAMBOO_TEXTURE_URLS);
 
     useEffect(() => {
@@ -306,9 +318,9 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
 
     const eyeMat = useMemo(() => new THREE.MeshBasicMaterial(), []);
 
-    // Per-tier instance counters (reset each frame)
-    const boneCountsRef = useRef(new Int32Array(NUM_TIERS));
-    const headCountsRef = useRef(new Int32Array(NUM_TIERS));
+    // Per-tier instance counters (1-indexed: index 0 unused, indices 1-10 for tiers 1-10)
+    const boneCountsRef = useRef(new Int32Array(NUM_TIERS + 1));
+    const headCountsRef = useRef(new Int32Array(NUM_TIERS + 1));
 
     useFrame((_, delta) => {
       const eyesMesh = eyesMeshRef.current;
@@ -340,9 +352,9 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
         const dz = s.position.z - camera.position.z;
         if (dx * dx + dz * dz > SHTICKMAN_RENDER_DISTANCE * SHTICKMAN_RENDER_DISTANCE) continue;
 
-        const tierIdx = Math.max(0, Math.min(NUM_TIERS - 1, s.tier - 1)); // tier 1 → index 0
-        const boneMesh = boneMeshRefs.current[tierIdx];
-        const headMesh = headMeshRefs.current[tierIdx];
+        const tier = Math.max(1, Math.min(NUM_TIERS, s.tier)); // clamp to valid tier 1-10
+        const boneMesh = boneMeshRefs.current[tier];
+        const headMesh = headMeshRefs.current[tier];
         if (!boneMesh || !headMesh) continue;
 
         const totalHeight = s.heightBlocks * s.scale;
@@ -379,7 +391,7 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
         };
 
         // === BONE CYLINDERS ===
-        let boneIdx = boneCountsRef.current[tierIdx];
+        let boneIdx = boneCountsRef.current[tier];
         for (const [startName, endName] of BONE_CONNECTIONS) {
           boneLocal(startName, _vec1);
           boneLocal(endName, _vec2);
@@ -404,7 +416,7 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
           boneMesh.setMatrixAt(boneIdx, _temp.matrix);
           boneIdx++;
         }
-        boneCountsRef.current[tierIdx] = boneIdx;
+        boneCountsRef.current[tier] = boneIdx;
 
         // === HEAD ===
         boneLocal('Head', _vec1);
@@ -426,9 +438,9 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
         _temp.scale.set(headRadius, headHeight, headRadius);
         _temp.rotation.set(0, s.rotationY, headBone ? headBone.rotation.z : 0);
         _temp.updateMatrix();
-        const headIdx = headCountsRef.current[tierIdx];
+        const headIdx = headCountsRef.current[tier];
         headMesh.setMatrixAt(headIdx, _temp.matrix);
-        headCountsRef.current[tierIdx] = headIdx + 1;
+        headCountsRef.current[tier] = headIdx + 1;
 
         // === EYES ===
         const eyeWidth = headDiameter * EYE_WIDTH_RATIO;
@@ -553,16 +565,16 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
         }
       }
 
-      // Set instance counts and mark updates for each tier
-      for (let t = 0; t < NUM_TIERS; t++) {
-        const bm = boneMeshRefs.current[t];
-        const hm = headMeshRefs.current[t];
+      // Set instance counts and mark updates for each tier (1-indexed)
+      for (let tier = 1; tier <= NUM_TIERS; tier++) {
+        const bm = boneMeshRefs.current[tier];
+        const hm = headMeshRefs.current[tier];
         if (bm) {
-          bm.count = boneCountsRef.current[t];
+          bm.count = boneCountsRef.current[tier];
           if (bm.count > 0) bm.instanceMatrix.needsUpdate = true;
         }
         if (hm) {
-          hm.count = headCountsRef.current[t];
+          hm.count = headCountsRef.current[tier];
           if (hm.count > 0) hm.instanceMatrix.needsUpdate = true;
         }
       }
@@ -583,18 +595,21 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
       }
     });
 
+    // Render meshes for tiers 1-10 (skip index 0)
+    const tierIndices = Array.from({ length: NUM_TIERS }, (_, i) => i + 1); // [1, 2, 3, ..., 10]
+
     return (
       <group>
-        {tierMaterials.map((mat, i) => (
-          <React.Fragment key={i}>
+        {tierIndices.map((tier) => (
+          <React.Fragment key={tier}>
             <instancedMesh
-              ref={(el) => { boneMeshRefs.current[i] = el; }}
-              args={[boneGeo, mat, MAX_BONE_INSTANCES_PER_TIER]}
+              ref={(el) => { boneMeshRefs.current[tier] = el; }}
+              args={[boneGeo, tierMaterials[tier], MAX_BONE_INSTANCES_PER_TIER]}
               frustumCulled={false}
             />
             <instancedMesh
-              ref={(el) => { headMeshRefs.current[i] = el; }}
-              args={[headGeo, mat, MAX_HEAD_INSTANCES_PER_TIER]}
+              ref={(el) => { headMeshRefs.current[tier] = el; }}
+              args={[headGeo, tierMaterials[tier], MAX_HEAD_INSTANCES_PER_TIER]}
               frustumCulled={false}
             />
           </React.Fragment>

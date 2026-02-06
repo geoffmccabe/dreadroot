@@ -29,6 +29,7 @@ import { setGlobalInspectData, clearGlobalInspectData, toggleInspectorMode, setI
 import { blockDB } from '@/hooks/useIndexedDB';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { type WaterType } from '@/lib/pondGenerator';
+import { isPointInNoFireZone } from '@/features/enemies/ai/fortressSafeZone';
 
 export function FirstPersonControls({
   onShoot,
@@ -858,13 +859,19 @@ export function FirstPersonControls({
         onWideTreePlace(position);
       }
     } else if (showCrosshairs && onShoot) {
-      console.log('[Controls] Shoot branch reached, showCrosshairs=', showCrosshairs, 'isFlameGlove=', isFlameGloveSelected);
       // Flame Glove uses continuous hold, not click-to-fire
       if (isFlameGloveSelected) return;
 
       // Skip normal shot if pentabullet is charging (>1s hold)
       if (pentabulletChargeRef.current >= 1.0) {
         return; // Will fire pentabullet or cancel on mouseup
+      }
+
+      // Check if player is in no-fire zone (FSZ + 1 chunk buffer)
+      if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
+        // Play empty gun click sound instead of shooting
+        playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
+        return;
       }
 
       const now = Date.now();
@@ -944,6 +951,14 @@ export function FirstPersonControls({
   const firePentabullet = useCallback(() => {
     if (!onShoot) return;
 
+    // Check if player is in no-fire zone (FSZ + 1 chunk buffer)
+    if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
+      // Play empty gun click sound and cancel the charge
+      playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
+      cancelPentabulletCharge();
+      return;
+    }
+
     // Stop charging sounds
     if (pentabulletPowerupAudioRef.current) {
       pentabulletPowerupAudioRef.current.pause();
@@ -989,7 +1004,7 @@ export function FirstPersonControls({
     pentabulletChargeRef.current = 0;
     pentabulletPhaseRef.current = 'idle';
     onPentabulletChargeChange?.(0);
-  }, [camera, calculateSpreadDirection, onShoot, onPentabulletChargeChange]);
+  }, [camera, calculateSpreadDirection, onShoot, onPentabulletChargeChange, cancelPentabulletCharge]);
   
   const handleRightClick = useCallback((event: MouseEvent) => {
     if (!isLocked.current) return;
@@ -1366,9 +1381,6 @@ export function FirstPersonControls({
       chopStartTimeRef.current = performance.now();
       chopCountRef.current = 0;
       choppingPositionRef.current = null;
-
-      // Debug: Log mouse down state for tree chopping
-      console.log(`[TreeChop] MouseDown: showCrosshairs=${showCrosshairs}, blockMode=${blockPlacementMode}, treeMode=${treePlacementMode}`);
 
       // Start flame glove or pentabullet charge if in shooting mode
       if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
@@ -1763,12 +1775,6 @@ export function FirstPersonControls({
       // Skip if actively harvesting a fruit
       // IMPORTANT: Must use showCrosshairsRef.current, not showCrosshairs, because this is in a frame loop
       // Debug: Log every 500ms when holding left mouse to trace chopping flow
-      if (leftMouseDownRef.current) {
-        // Log once per second for clarity
-        if (now % 1000 < 20) {
-          console.log(`[TreeChop] === HOLDING LEFT MOUSE === crosshairs=${showCrosshairsRef.current}, blockMode=${blockPlacementModeRef.current}, hasOwnerFn=${!!isOwnedTreeAtPositionRef.current}, meshCount=${meshesArrayCache.current.length}`);
-        }
-      }
       if (leftMouseDownRef.current && !showCrosshairsRef.current && !fruitHarvestActive && isOwnedTreeAtPositionRef.current) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
@@ -1777,7 +1783,6 @@ export function FirstPersonControls({
 
           if (result && result.instanceId !== undefined) {
             const blockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
-            console.log(`[TreeChop] Raycast hit blockType: ${blockType}, isTreeBlockType: ${blockType ? isTreeBlockType(blockType) : 'N/A'}`);
 
             // Determine what we're looking at
             const isTreeBlock = blockType && (isTreeBlockType(blockType) || blockType === 'tree_atlas' || blockType === 'tree_fallback');
@@ -1815,7 +1820,6 @@ export function FirstPersonControls({
               if (timeSinceLastChop >= CHOP_INTERVAL_MS) {
                 lastChopSoundTimeRef.current = now;
                 chopCountRef.current++;
-                console.log(`[TreeChop] Chop #${chopCountRef.current}/${CHOPS_REQUIRED}`);
 
                 playSpatialSound(getSoundUrl('axe_chop', '/axe_chop.mp3'), 0, { baseVolume: 0.6 });
 

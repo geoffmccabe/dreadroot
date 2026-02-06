@@ -279,8 +279,8 @@ function buildRings(
   const innerRadius = stemRadius;
   const outerRadius = stemRadius + FUNGAL_RING_PROTRUSION;
 
-  for (let ring = 0; ring < FUNGAL_RING_COUNT; ring++) {
-    const y = ringBaseY + (ring * FUNGAL_RING_SPACING);
+  for (let ring = 1; ring <= FUNGAL_RING_COUNT; ring++) {
+    const y = ringBaseY + ((ring - 1) * FUNGAL_RING_SPACING);
     const { offsetX, offsetZ } = getStemCenterOffset(y, baseY, height, shapeConfig);
     const ringCX = centerX + offsetX;
     const ringCZ = centerZ + offsetZ;
