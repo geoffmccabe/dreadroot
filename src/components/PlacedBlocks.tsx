@@ -75,30 +75,26 @@ export const fallingBlocksState = new Map<string, { currentY: number; velocity: 
 // Height map for O(1) stacking lookups
 export const heightMap = new Map<string, number>();
 
-// D2/B10/B11: Order-independent group key using XOR of ALL block position hashes.
-// XOR is commutative, so reordering the same blocks produces the same hash.
-// O(n) but eliminates the 91%+ cache miss rate from order-dependent sampling.
-// Uses Math.imul for guaranteed 32-bit integer multiplication (avoids JS float overflow).
+// D2/B10: Group key that detects content changes using sampled position hash
+// Samples blocks at regular intervals instead of hashing all 400K+ blocks.
+// Uses first, last, and evenly spaced samples for O(1) amortized detection.
 function cheapGroupKey(arr: PlacedBlock[]): string {
   const n = arr.length;
   if (n === 0) return '0';
-
-  // XOR all block position hashes - order doesn't matter due to XOR commutativity
-  // Math.imul ensures 32-bit integer multiplication (no floating point overflow)
-  let posXor = 0;
-  let posSum = 0;
-  for (let i = 0; i < n; i++) {
+  // Sample up to 64 blocks evenly distributed across the array
+  const SAMPLE_COUNT = 64;
+  const step = n <= SAMPLE_COUNT ? 1 : Math.floor(n / SAMPLE_COUNT);
+  let posHash = 0;
+  for (let i = 0; i < n; i += step) {
     const b = arr[i];
-    // Use Math.imul for deterministic 32-bit multiplication
-    const hx = Math.imul(b.position_x | 0, 73856093);
-    const hy = Math.imul(b.position_y | 0, 19349663);
-    const hz = Math.imul(b.position_z | 0, 83492791);
-    const h = (hx ^ hy ^ hz) | 0;
-    posXor = (posXor ^ h) | 0;
-    posSum = (posSum + (h >>> 0)) >>> 0;
+    posHash ^= (b.position_x * 73856093) ^ (b.position_y * 19349663) ^ (b.position_z * 83492791);
   }
-
-  return `${n}|${(posXor >>> 0)}|${posSum}`;
+  // Always include last block for boundary change detection
+  if (n > 1) {
+    const last = arr[n - 1];
+    posHash ^= (last.position_x * 73856093) ^ (last.position_y * 19349663) ^ (last.position_z * 83492791);
+  }
+  return `${n}|${posHash}`;
 }
 
 // C2: Visual signature helpers - order-insensitive, ID-independent (EXPENSIVE - only call when needed)
