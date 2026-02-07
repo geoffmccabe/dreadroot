@@ -72,7 +72,7 @@ function numPosKey(x: number, y: number, z: number): number {
 const AUTO_PERFORMANCE_MODE_THRESHOLD = 1000;
 
 // Blocks below this threshold use synchronous rebuild; above use Web Worker
-const WORKER_THRESHOLD = 500;
+const WORKER_THRESHOLD = 3000;
 
 interface InstancedAtlasBlockGroupProps {
   blocks: PlacedBlock[];
@@ -352,9 +352,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     lastRebuildTimeRef.current = performance.now();
     pendingRebuildRef.current = false;
 
-    // First paint: always sync so chunks appear immediately (no worker delay)
-    // Subsequent rebuilds: use workers for large groups to avoid blocking main thread
-    if (currentBlocks.length < WORKER_THRESHOLD || !initialBuildDoneRef.current) {
+    // Small block counts: synchronous on main thread (< 2ms)
+    if (currentBlocks.length < WORKER_THRESHOLD) {
       doRebuildSync(mesh, currentBlocks);
       return;
     }
