@@ -120,6 +120,26 @@ class DiagnosticsLogger {
   private meshRebuildMs = 0;
   private meshRebuildBlocks = 0;
 
+  // === Budgeted work queue diagnostics ===
+  private budgetQueueLength = 0;        // current queue length
+  private budgetQueueMax = 0;           // max queue length this sample
+  private budgetJobsAdded = 0;          // jobs added this sample
+  private budgetJobsCompleted = 0;      // jobs completed this sample
+  private budgetMs = 0;                 // time spent in tickBudgetedWork
+
+  // === Collider map diagnostics ===
+  colliderMapSize = 0;                  // current colliderByBlockId.size
+  colliderMapMax = 0;                   // max size during recording
+
+  // === Signature stability diagnostics ===
+  private sigChanges = 0;               // number of signature changes this sample
+  private sigChangeReasons: string[] = [];  // reasons for changes (limited to 5)
+
+  // === User data loading diagnostics ===
+  userDataStatus: 'pending' | 'loading' | 'success' | 'error' = 'pending';
+  userDataError: string | null = null;
+  userDataLoadMs = 0;
+
   // === Chunk rendering diagnostics (Phase 0) ===
   private chunkRenderCount = 0;      // ChunkRenderer components currently mounted
   private chunkRebuildCount = 0;     // chunks that re-rendered this sample interval
@@ -160,6 +180,14 @@ class DiagnosticsLogger {
   private meshRebuildCountTotal = 0;
   private meshRebuildMsTotal = 0;
   private meshRebuildBlocksTotal = 0;
+
+  // === Budgeted work queue totals ===
+  private budgetJobsAddedTotal = 0;
+  private budgetJobsCompletedTotal = 0;
+  private budgetMsTotal = 0;
+
+  // === Signature change totals ===
+  private sigChangesTotal = 0;
 
   // === Frame time analysis ===
   private frameTimes = new Float32Array(100);
@@ -279,6 +307,57 @@ class DiagnosticsLogger {
     this.globalFlattenMs += ms;
   }
 
+  // === Budgeted work queue diagnostics ===
+  recordBudgetTick(queueLength: number, jobsCompleted: number, ms: number): void {
+    if (!this.enabled) return;
+    this.budgetQueueLength = queueLength;
+    if (queueLength > this.budgetQueueMax) this.budgetQueueMax = queueLength;
+    this.budgetJobsCompleted += jobsCompleted;
+    this.budgetMs += ms;
+  }
+
+  recordBudgetJobAdded(): void {
+    if (!this.enabled) return;
+    this.budgetJobsAdded++;
+  }
+
+  // === Collider map diagnostics ===
+  recordColliderMapSize(size: number): void {
+    if (!this.enabled) return;
+    this.colliderMapSize = size;
+    if (size > this.colliderMapMax) this.colliderMapMax = size;
+  }
+
+  // === Signature stability diagnostics ===
+  recordSignatureChange(reason: string): void {
+    if (!this.enabled) return;
+    this.sigChanges++;
+    if (this.sigChangeReasons.length < 5) {
+      this.sigChangeReasons.push(reason);
+    }
+  }
+
+  // === User data loading diagnostics ===
+  recordUserDataStart(): void {
+    if (!this.enabled) return;
+    this.userDataStatus = 'loading';
+    this.userDataLoadMs = performance.now();
+  }
+
+  recordUserDataSuccess(): void {
+    if (!this.enabled) return;
+    this.userDataStatus = 'success';
+    this.userDataLoadMs = performance.now() - this.userDataLoadMs;
+    this.userDataError = null;
+  }
+
+  recordUserDataError(error: string): void {
+    if (!this.enabled) return;
+    this.userDataStatus = 'error';
+    this.userDataLoadMs = performance.now() - this.userDataLoadMs;
+    this.userDataError = error;
+  }
+
   // Get accumulated stall stats for report
   getExtraStats() {
     return {
@@ -315,6 +394,25 @@ class DiagnosticsLogger {
       meshRebuildCountTotal: this.meshRebuildCountTotal,
       meshRebuildMsTotal: this.meshRebuildMsTotal,
       meshRebuildBlocksTotal: this.meshRebuildBlocksTotal,
+
+      // Budgeted work queue
+      budgetQueueLength: this.budgetQueueLength,
+      budgetQueueMax: this.budgetQueueMax,
+      budgetJobsAddedTotal: this.budgetJobsAddedTotal,
+      budgetJobsCompletedTotal: this.budgetJobsCompletedTotal,
+      budgetMsTotal: this.budgetMsTotal,
+
+      // Collider map
+      colliderMapSize: this.colliderMapSize,
+      colliderMapMax: this.colliderMapMax,
+
+      // Signature stability
+      sigChangesTotal: this.sigChangesTotal,
+
+      // User data
+      userDataStatus: this.userDataStatus,
+      userDataError: this.userDataError,
+      userDataLoadMs: this.userDataLoadMs,
     };
   }
 
@@ -455,6 +553,30 @@ class DiagnosticsLogger {
       this.chunkRebuildCountTotal = 0;
       this.chunkRebuildMsTotal = 0;
       this.globalFlattenMsTotal = 0;
+
+      // Reset budgeted work diagnostics
+      this.budgetQueueLength = 0;
+      this.budgetQueueMax = 0;
+      this.budgetJobsAdded = 0;
+      this.budgetJobsCompleted = 0;
+      this.budgetMs = 0;
+      this.budgetJobsAddedTotal = 0;
+      this.budgetJobsCompletedTotal = 0;
+      this.budgetMsTotal = 0;
+
+      // Reset collider map diagnostics
+      this.colliderMapSize = 0;
+      this.colliderMapMax = 0;
+
+      // Reset signature diagnostics
+      this.sigChanges = 0;
+      this.sigChangesTotal = 0;
+      this.sigChangeReasons = [];
+
+      // Reset user data diagnostics
+      this.userDataStatus = 'pending';
+      this.userDataError = null;
+      this.userDataLoadMs = 0;
 
       // Start fallback timer - collects samples even if frame loop is frozen
       this.fallbackTimerId = window.setInterval(() => {
@@ -659,6 +781,21 @@ class DiagnosticsLogger {
     this.chunkRebuildCount = 0;
     this.chunkRebuildMs = 0;
     this.globalFlattenMs = 0;
+
+    // Budgeted work diagnostics
+    this.budgetJobsAddedTotal += this.budgetJobsAdded;
+    this.budgetJobsCompletedTotal += this.budgetJobsCompleted;
+    this.budgetMsTotal += this.budgetMs;
+
+    this.budgetJobsAdded = 0;
+    this.budgetJobsCompleted = 0;
+    this.budgetMs = 0;
+    this.budgetQueueMax = this.budgetQueueLength; // reset max to current
+
+    // Signature diagnostics
+    this.sigChangesTotal += this.sigChanges;
+    this.sigChanges = 0;
+    this.sigChangeReasons = [];
   }
   
   private tickCallCount = 0;
@@ -878,6 +1015,35 @@ class DiagnosticsLogger {
     lines.push(`Colliders: +${this.colliderAddsTotal} -${this.colliderRemovesTotal} (${this.colliderMsTotal.toFixed(1)}ms)`);
     lines.push(`Grouping: ${this.groupCacheHitsTotal} hits, ${this.groupCacheMissesTotal} misses (${this.groupMsTotal.toFixed(1)}ms for ${this.groupBlocksTotal} blocks)`);
     lines.push(`MeshRebuild: ${this.meshRebuildCountTotal} rebuilds (${this.meshRebuildMsTotal.toFixed(1)}ms for ${this.meshRebuildBlocksTotal} blocks)`);
+    lines.push('');
+    lines.push('--- Budgeted Work Queue ---');
+    lines.push(`Queue: ${this.budgetQueueLength} pending (max ${this.budgetQueueMax})`);
+    lines.push(`Jobs: +${this.budgetJobsAddedTotal} added, -${this.budgetJobsCompletedTotal} completed`);
+    const backlog = this.budgetJobsAddedTotal - this.budgetJobsCompletedTotal;
+    if (backlog > 0) {
+      lines.push(`⚠️ BACKLOG: ${backlog} jobs accumulating faster than processed!`);
+    }
+    lines.push(`Time: ${this.budgetMsTotal.toFixed(1)}ms total`);
+    lines.push('');
+    lines.push('--- Collider Map ---');
+    lines.push(`colliderByBlockId.size: ${this.colliderMapSize} (max ${this.colliderMapMax})`);
+    if (this.colliderMapMax > 100000) {
+      lines.push(`⚠️ BLOAT: Collider map exceeds 100K entries!`);
+    }
+    lines.push('');
+    lines.push('--- Signature Stability ---');
+    lines.push(`Signature changes: ${this.sigChangesTotal}`);
+    if (this.sigChangesTotal > 10) {
+      lines.push(`⚠️ INSTABILITY: High signature churn causing mesh rebuilds`);
+    }
+    lines.push('');
+    lines.push('--- User Data ---');
+    lines.push(`Status: ${this.userDataStatus}`);
+    if (this.userDataStatus === 'success') {
+      lines.push(`Load time: ${this.userDataLoadMs.toFixed(0)}ms`);
+    } else if (this.userDataStatus === 'error') {
+      lines.push(`Error: ${this.userDataError}`);
+    }
     lines.push('');
     lines.push('--- Chunk Rendering ---');
     lines.push(`ChunkRenderers: ${this.chunkRenderCountTotal}`);

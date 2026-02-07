@@ -310,6 +310,16 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     // D-Flow: Track grouping time when cache misses
     const groupT0 = performance.now();
 
+    // D-Flow: Track signature changes for debugging mesh rebuild churn
+    const prevKey = groupCacheRef.current?.key || 'none';
+    const prevCount = prevKey === 'none' ? 0 : parseInt(prevKey.split('|')[0], 10) || 0;
+    const currCount = blocks.length;
+    const delta = currCount - prevCount;
+    const reason = delta === 0
+      ? `hash changed (${currCount} blocks)`
+      : `count ${prevCount}→${currCount} (${delta > 0 ? '+' : ''}${delta})`;
+    diagnostics.recordSignatureChange(reason);
+
     // Key changed - must recompute grouping
     const groups = new Map<string, { blocks: PlacedBlock[]; textureOverride?: string }>();
     const invisibleBlocks: PlacedBlock[] = [];

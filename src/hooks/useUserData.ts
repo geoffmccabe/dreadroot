@@ -6,6 +6,7 @@ import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
 import { checkLevelUp, getLevelForPoints } from '@/lib/levelSystem';
 import { initLogStep } from '@/contexts/InitializationContext';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 export interface UserProfile {
   id: string;
@@ -90,7 +91,8 @@ export const useUserData = () => {
     try {
       loadingRef.current = true;
       setIsLoading(true);
-      
+      diagnostics.recordUserDataStart();
+
       // Load profile, token balance, inventory, roles, and all token balances in parallel
       const [
         { data: existingProfile, error: profileError },
@@ -281,9 +283,11 @@ export const useUserData = () => {
       }
 
       setAllTokenBalances(allBalancesData || []);
+      diagnostics.recordUserDataSuccess();
     } catch (error: any) {
       console.error('[useUserData] Load failed:', error);
       const errorMsg = error?.message || error?.code || 'Unknown error';
+      diagnostics.recordUserDataError(errorMsg);
       const isTimeout = errorMsg.includes('timeout') || errorMsg.includes('TIMEOUT');
       const isOverloaded = errorMsg.includes('CPU') || errorMsg.includes('overload') || errorMsg.includes('too many');
 

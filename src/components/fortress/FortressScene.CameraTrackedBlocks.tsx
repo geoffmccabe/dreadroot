@@ -63,6 +63,14 @@ export function CameraTrackedBlocks({
   const [renderTrigger, setRenderTrigger] = useState(0);
   const CHUNK_UPDATE_THROTTLE = 100; // ms
 
+  // === Chunk Mount Staggering ===
+  // Prevents 40+ new chunks from mounting simultaneously at boundary crossings.
+  // Each render cycle admits at most MAX_NEW_CHUNKS_PER_CYCLE new chunks.
+  // Already-rendered chunks pass through immediately (no throttle on re-renders).
+  const MAX_NEW_CHUNKS_PER_CYCLE = 4;
+  const STAGGER_DELAY_MS = 30; // ms between mount batches
+  const admittedChunksRef = useRef<Set<string>>(new Set());
+  const lastStaggerWorldRef = useRef<string | null>(null);
 
   // Track atlas version for chunk re-renders on atlas update
   const [atlasVersion, setAtlasVersion] = useState(() => getAtlasVersion());
@@ -260,6 +268,52 @@ export function CameraTrackedBlocks({
     return { normalEntries: normal, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
 
+  // === Stagger new chunk mounts ===
+  // On world change, reset admitted set
+  if (currentWorldId !== lastStaggerWorldRef.current) {
+    lastStaggerWorldRef.current = currentWorldId;
+    admittedChunksRef.current.clear();
+  }
+
+  const admitted = admittedChunksRef.current;
+  const staggeredEntries: { key: string; blocks: PlacedBlock[] }[] = [];
+  let pendingNewChunks = 0;
+
+  // Lazy prune: remove stale keys when set grows much larger than active chunks
+  if (admitted.size > normalEntries.length + 50) {
+    const activeKeys = new Set(normalEntries.map(e => e.key));
+    for (const key of admitted) {
+      if (!activeKeys.has(key)) admitted.delete(key);
+    }
+  }
+
+  let newAdmittedCount = 0;
+  for (const entry of normalEntries) {
+    if (admitted.has(entry.key)) {
+      staggeredEntries.push(entry);
+    } else if (newAdmittedCount < MAX_NEW_CHUNKS_PER_CYCLE) {
+      admitted.add(entry.key);
+      staggeredEntries.push(entry);
+      newAdmittedCount++;
+    } else {
+      pendingNewChunks++;
+    }
+  }
+
+  if (newAdmittedCount > 0 && pendingNewChunks > 0) {
+    console.log(`[ChunkStagger] Admitted ${newAdmittedCount} new chunks, ${pendingNewChunks} pending, ${staggeredEntries.length} rendering`);
+  }
+
+  // Schedule next mount batch if chunks are waiting
+  useEffect(() => {
+    if (pendingNewChunks > 0) {
+      const timer = setTimeout(() => {
+        setRenderTrigger(prev => prev + 1);
+      }, STAGGER_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+  }, [normalEntries]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Generate water blocks for visible chunks
   const waterBlocks = useMemo(() => {
     if (!worldPonds.hasPonds || normalEntries.length === 0) return [];
@@ -319,7 +373,7 @@ export function CameraTrackedBlocks({
         visualDistance={visualDistance}
         cameraRef={{ current: camera }}
       />
-      {normalEntries.map(({ key, blocks: chunkBlocks }) => (
+      {staggeredEntries.map(({ key, blocks: chunkBlocks }) => (
         <ChunkRenderer
           key={key}
           chunkKey={key}

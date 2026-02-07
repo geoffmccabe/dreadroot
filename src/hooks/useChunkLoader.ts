@@ -16,15 +16,15 @@ import * as THREE from 'three';
 // LOAD_RADIUS is now dynamic — derived from loadRadius prop (defaults to 4)
 const DEFAULT_LOAD_RADIUS = 4;
 // Hysteresis for chunk unloading - prevents thrashing when walking near boundaries.
-// Since LOAD_RADIUS already includes fade chunks (visual_distance + 3), we only need
-// minimal hysteresis. Previously 4, which caused orphaned colliders beyond render distance.
-const UNLOAD_HYSTERESIS = 1;
+// CRITICAL: Must be >= 4 to prevent constant load/unload churn at chunk boundaries.
+// Value of 1 caused 885 unloads/28s, 430 signature changes, and 313 mesh rebuilds.
+const UNLOAD_HYSTERESIS = 4;
 const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
 const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
-const COLLIDER_REMOVAL_BATCH = 200;   // Colliders to remove per frame during unload
 const COLLIDER_CREATION_BATCH = 200;  // Colliders to create per frame during load
+const COLLIDER_RADIUS = 3;            // Only maintain colliders within this chunk distance
 
 // B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
 const PREFETCH_ENABLED = false;
@@ -99,6 +99,10 @@ interface UseChunkLoaderProps {
  */
 const colliderByBlockId = new Map<string, THREE.Box3>();
 
+// Track which chunk keys currently have colliders in the grid.
+// Used to enforce COLLIDER_RADIUS — only nearby chunks get colliders.
+const chunksWithColliders = new Set<string>();
+
 // CRITICAL: Clear the collider cache when the collision grid is cleared.
 // This MUST be a module-level listener so it runs synchronously before any
 // chunk loading attempts to reuse stale collider references.
@@ -107,8 +111,8 @@ const GRID_CLEAR_LISTENER_KEY = '__chunkLoaderGridClearListener';
 if (typeof window !== 'undefined' && !(window as any)[GRID_CLEAR_LISTENER_KEY]) {
   (window as any)[GRID_CLEAR_LISTENER_KEY] = true;
   window.addEventListener('collisionGridCleared', () => {
-    // REMOVED: console.log spam
     colliderByBlockId.clear();
+    chunksWithColliders.clear();
   });
 }
 
@@ -396,6 +400,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   const [isLoading, setIsLoading] = useState(true);
   const initialLoadDone = useRef(false);
 
+  // Track chunks currently being fetched (prevents duplicate loads from integrity check)
+  const inFlightChunksRef = useRef<Set<string>>(new Set());
+
   // Track current world to clear on change
   const currentWorldRef = useRef<string | null>(null);
 
@@ -587,10 +594,16 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const chunkCount = loadedChunksRef.current.size;
     if (chunkCount <= MAX_LOADED_CHUNKS) return;
 
+    const now = Date.now();
+
     // Find non-pinned chunks sorted by lastAccessedAt (oldest first)
+    // Also respect MIN_RESIDENCY_MS - don't evict chunks loaded recently
     const evictionCandidates: Array<{ key: string; lastAccessedAt: number }> = [];
 
     for (const [key, data] of loadedChunksRef.current.entries()) {
+      // Skip chunks loaded less than MIN_RESIDENCY_MS ago (prevents thrashing)
+      if (now - data.loadedAt < MIN_RESIDENCY_MS) continue;
+
       if (!isChunkPinned(key)) {
         evictionCandidates.push({ key, lastAccessedAt: data.lastAccessedAt });
       }
@@ -607,6 +620,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         const chunkData = loadedChunksRef.current.get(key);
 
         if (chunkData) {
+          // D-Flow: Record chunk unload (was missing - caused undercount)
+          diagnostics.recordChunkUnload();
+
           // B4: Update world signature before removing chunk
           applyChunkSigChange(chunkData.signature, EMPTY_CHUNK_SIG);
         }
@@ -616,20 +632,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(key);
 
         if (chunkData && chunkData.blocks.length > 0) {
-          // B3: Enqueue budgeted job to remove colliders
-          const blocks = chunkData.blocks;
-          let idx = 0;
-
-          enqueueJob(`evict-colliders:${key}`, () => {
-            const end = Math.min(idx + COLLIDER_REMOVAL_BATCH, blocks.length);
-
-            for (; idx < end; idx++) {
-              removeBlockCollider(blocks[idx]);
-            }
-
-            return idx >= blocks.length;
-          });
+          // Synchronous collider removal (~1-3ms per chunk)
+          for (const block of chunkData.blocks) {
+            removeBlockCollider(block);
+          }
         }
+        chunksWithColliders.delete(key);
       }
       // Use batched emit
       scheduleEmit();
@@ -674,8 +682,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         const newSig = computeChunkSignature(chunkData.blocks);
         chunkData.signature = newSig;
         applyChunkSigChange(oldSig, newSig);
-        // Invalidate cached visibleBlocks — falls back to full blocks until next load/refetch.
-        chunkData.visibleBlocks = undefined;
+        // D-Flow FIX: Add block directly to visibleBlocks instead of invalidating.
+        // Newly placed blocks are always on surface. Non-tree blocks are never culled
+        // by computeSurfaceVisibleBlocks anyway, so no recompute needed.
+        if (chunkData.visibleBlocks) {
+          chunkData.visibleBlocks = [...chunkData.visibleBlocks, block];
+          sortBlocksDeterministic(chunkData.visibleBlocks);
+        }
         // Batched emit via RAF — prevents rebuild storms from rapid block placements
         scheduleEmit();
       }
@@ -702,7 +715,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   /**
    * BATCH: Add multiple blocks at once with a SINGLE React re-render.
    * Used by tree growth to prevent N re-renders when placing N blocks.
-   * 
+   *
    * PERFORMANCE: Uses scheduleEmit for batched RAF callback instead of
    * immediate onBlocksChanged per block.
    */
@@ -712,6 +725,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const now = Date.now();
     // B4: Track old signatures for chunks we'll modify
     const oldSigs = new Map<string, ChunkSignature>();
+    // D-Flow FIX: Track blocks added per chunk for visibleBlocks update
+    const blocksAddedByChunk = new Map<string, PlacedBlock[]>();
 
     for (const block of blocks) {
       const chunkKey = getChunkKey(block.position_x, block.position_z);
@@ -741,14 +756,21 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       );
 
       if (!existsAtPosition) {
-        // Create collider for new block
-        ensureBlockCollider(block);
+        // Only create collider if chunk is within collision range
+        if (chunksWithColliders.has(chunkKey)) {
+          ensureBlockCollider(block);
+        }
         // Phase 1: Create new array reference (batch — final copy done below in signature update)
         chunkData.blocks.push(block);
         if (block.id.startsWith('temp-')) {
           chunkData.hasOptimisticBlocks = true;
         }
         chunkData.lastAccessedAt = now;
+        // D-Flow FIX: Track added block for visibleBlocks update
+        if (!blocksAddedByChunk.has(chunkKey)) {
+          blocksAddedByChunk.set(chunkKey, []);
+        }
+        blocksAddedByChunk.get(chunkKey)!.push(block);
       }
     }
 
@@ -765,8 +787,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           const newSig = computeChunkSignature(chunkData.blocks);
           chunkData.signature = newSig;
           applyChunkSigChange(oldSig, newSig);
-          // Invalidate visibleBlocks — PlacedBlocks culling handles tree blocks at render time
-          chunkData.visibleBlocks = undefined;
+          // D-Flow FIX: Add new blocks directly to visibleBlocks (no deferred recompute)
+          // New blocks are on the surface. Some might become interior later, but
+          // that's handled on next chunk refetch.
+          const addedBlocks = blocksAddedByChunk.get(chunkKey);
+          if (addedBlocks && addedBlocks.length > 0) {
+            if (chunkData.visibleBlocks) {
+              chunkData.visibleBlocks = [...chunkData.visibleBlocks, ...addedBlocks];
+              sortBlocksDeterministic(chunkData.visibleBlocks);
+            }
+            // If visibleBlocks doesn't exist, blocks will be used as fallback
+          }
         }
       }
       // Single emit for ALL blocks via requestAnimationFrame
@@ -844,7 +875,18 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           const newSig = computeChunkSignature(chunkData.blocks);
           chunkData.signature = newSig;
           applyChunkSigChange(oldSig, newSig);
-          chunkData.visibleBlocks = undefined;
+          // D-Flow FIX: Update block in visibleBlocks at same position (no recompute needed)
+          if (chunkData.visibleBlocks) {
+            const visIdx = chunkData.visibleBlocks.findIndex(b =>
+              b.position_x === preservedBlock.position_x &&
+              b.position_y === preservedBlock.position_y &&
+              b.position_z === preservedBlock.position_z
+            );
+            if (visIdx >= 0) {
+              chunkData.visibleBlocks = [...chunkData.visibleBlocks];
+              chunkData.visibleBlocks[visIdx] = preservedBlock;
+            }
+          }
           scheduleEmit();
         }
       }
@@ -876,7 +918,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         const newSig = computeChunkSignature(chunkData.blocks);
         chunkData.signature = newSig;
         applyChunkSigChange(oldSig, newSig);
-        chunkData.visibleBlocks = undefined;
+        // D-Flow FIX: Filter block from visibleBlocks directly instead of expensive recompute.
+        // Minor risk: interior blocks might not become visible immediately after tree block
+        // removal, but this is rare and gets fixed on next chunk refetch.
+        if (chunkData.visibleBlocks) {
+          chunkData.visibleBlocks = chunkData.visibleBlocks.filter(b => b.id !== blockId);
+        }
 
         scheduleEmit();
         return;
@@ -1019,23 +1066,32 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
 
-        // Nearby chunks (within 2 of player): sync colliders for gravity/physics
-        // Distant chunks: defer to budgeted queue to avoid 1000ms+ stalls
+        // Only create colliders for chunks within COLLIDER_RADIUS (saves ~85% of collider memory)
         const chunkDist = Math.max(Math.abs(dx), Math.abs(dz));
-        if (chunkDist <= 2 || chunkBlocks.length < 200) {
-          for (const block of chunkBlocks) {
-            ensureBlockCollider(block);
-          }
-        } else if (chunkBlocks.length > 0) {
-          const blocksForColliders = chunkBlocks;
-          let colliderIdx = 0;
-          enqueueJob(`load-colliders:${chunkKey}`, () => {
-            const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
-            for (; colliderIdx < end; colliderIdx++) {
-              ensureBlockCollider(blocksForColliders[colliderIdx]);
+        if (chunkDist <= COLLIDER_RADIUS) {
+          if (chunkDist <= 2 || chunkBlocks.length < 200) {
+            // Nearby: sync colliders for immediate gravity/physics
+            for (const block of chunkBlocks) {
+              ensureBlockCollider(block);
             }
-            return colliderIdx >= blocksForColliders.length;
-          });
+            chunksWithColliders.add(chunkKey);
+          } else if (chunkBlocks.length > 0) {
+            // At COLLIDER_RADIUS edge: defer to budgeted queue
+            const blocksForColliders = chunkBlocks;
+            const capturedKey = chunkKey;
+            let colliderIdx = 0;
+            enqueueJob(`load-colliders:${chunkKey}`, () => {
+              const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
+              for (; colliderIdx < end; colliderIdx++) {
+                ensureBlockCollider(blocksForColliders[colliderIdx]);
+              }
+              if (colliderIdx >= blocksForColliders.length) {
+                chunksWithColliders.add(capturedKey);
+                return true;
+              }
+              return false;
+            });
+          }
         }
 
         // Store chunk data (even if empty - means we loaded it)
@@ -1110,12 +1166,18 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   ): Promise<void> => {
     if (!worldId || chunkCoords.length === 0) return;
 
-    // Filter out already loaded chunks
-    const toLoad = chunkCoords.filter(
-      ({ x, z }) => !loadedChunksRef.current.has(`chunk_${x}_${z}`)
-    );
-    
+    // Filter out already loaded AND in-flight chunks (prevents duplicate fetches)
+    const toLoad = chunkCoords.filter(({ x, z }) => {
+      const key = `chunk_${x}_${z}`;
+      return !loadedChunksRef.current.has(key) && !inFlightChunksRef.current.has(key);
+    });
+
     if (toLoad.length === 0) return;
+
+    // Mark chunks as in-flight to prevent integrity check from re-queuing them
+    for (const { x, z } of toLoad) {
+      inFlightChunksRef.current.add(`chunk_${x}_${z}`);
+    }
 
     const loadedAt = Date.now();
     const now = new Date();
@@ -1264,23 +1326,31 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       // Deterministic sort to prevent reorder churn
       sortBlocksDeterministic(blocks);
-      // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
+      // Only create colliders for chunks within COLLIDER_RADIUS
       const pChunk = playerChunkRef.current;
       const cDist = pChunk ? Math.max(Math.abs(x - pChunk.x), Math.abs(z - pChunk.z)) : 0;
-      if (cDist <= 2 || blocks.length < 200) {
-        for (const block of blocks) {
-          ensureBlockCollider(block);
-        }
-      } else if (blocks.length > 0) {
-        const blocksForColliders = blocks;
-        let colliderIdx = 0;
-        enqueueJob(`load-colliders:${chunkKey}`, () => {
-          const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
-          for (; colliderIdx < end; colliderIdx++) {
-            ensureBlockCollider(blocksForColliders[colliderIdx]);
+      if (cDist <= COLLIDER_RADIUS) {
+        if (cDist <= 2 || blocks.length < 200) {
+          for (const block of blocks) {
+            ensureBlockCollider(block);
           }
-          return colliderIdx >= blocksForColliders.length;
-        });
+          chunksWithColliders.add(chunkKey);
+        } else if (blocks.length > 0) {
+          const blocksForColliders = blocks;
+          const capturedKey = chunkKey;
+          let colliderIdx = 0;
+          enqueueJob(`load-colliders:${chunkKey}`, () => {
+            const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
+            for (; colliderIdx < end; colliderIdx++) {
+              ensureBlockCollider(blocksForColliders[colliderIdx]);
+            }
+            if (colliderIdx >= blocksForColliders.length) {
+              chunksWithColliders.add(capturedKey);
+              return true;
+            }
+            return false;
+          });
+        }
       }
       cacheBlockCount += blocks.length;
       const newSig = computeChunkSignature(blocks);
@@ -1457,26 +1527,6 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           console.log(`[ChunkLoader DEBUG] Chunk (3,1) from SERVER: ${chunkBlocks.length} blocks`);
         }
 
-        // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
-        const pChunkS = playerChunkRef.current;
-        const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : 0;
-        if (sDist <= 2 || chunkBlocks.length < 200) {
-          for (const block of chunkBlocks) {
-            ensureBlockCollider(block);
-          }
-        } else if (chunkBlocks.length > 0) {
-          const blocksForColliders = chunkBlocks;
-          let colliderIdx = 0;
-          enqueueJob(`load-colliders:${chunkKey}`, () => {
-            const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
-            for (; colliderIdx < end; colliderIdx++) {
-              ensureBlockCollider(blocksForColliders[colliderIdx]);
-            }
-            return colliderIdx >= blocksForColliders.length;
-          });
-        }
-        serverBlockCount += chunkBlocks.length;
-
         // CRITICAL: Remove old colliders before replacing chunk data
         const existingChunk = loadedChunksRef.current.get(chunkKey);
         if (existingChunk) {
@@ -1484,6 +1534,34 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
             removeBlockCollider(oldBlock);
           }
         }
+
+        // Only create colliders for chunks within COLLIDER_RADIUS
+        const pChunkS = playerChunkRef.current;
+        const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : 0;
+        if (sDist <= COLLIDER_RADIUS) {
+          if (sDist <= 2 || chunkBlocks.length < 200) {
+            for (const block of chunkBlocks) {
+              ensureBlockCollider(block);
+            }
+            chunksWithColliders.add(chunkKey);
+          } else if (chunkBlocks.length > 0) {
+            const blocksForColliders = chunkBlocks;
+            const capturedKey = chunkKey;
+            let colliderIdx = 0;
+            enqueueJob(`load-colliders:${chunkKey}`, () => {
+              const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
+              for (; colliderIdx < end; colliderIdx++) {
+                ensureBlockCollider(blocksForColliders[colliderIdx]);
+              }
+              if (colliderIdx >= blocksForColliders.length) {
+                chunksWithColliders.add(capturedKey);
+                return true;
+              }
+              return false;
+            });
+          }
+        }
+        serverBlockCount += chunkBlocks.length;
 
         const newSig = computeChunkSignature(chunkBlocks);
         const newChunkData: ChunkData = {
@@ -1525,6 +1603,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           console.warn('Failed to cache chunks:', err);
         });
       }
+    }
+
+    // Clear in-flight status for all chunks we attempted to load
+    for (const { x, z } of toLoad) {
+      inFlightChunksRef.current.delete(`chunk_${x}_${z}`);
     }
 
     // FIX: Single consolidated emit after ALL data (cache + server) is loaded
@@ -2008,15 +2091,61 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
-   * Unload chunks that are beyond UNLOAD_RADIUS from player
-   * Phase 3.0: Uses scheduleEmit for batched emission
-   * Phase 3A: Respects pinned chunks (those with optimistic blocks)
-   * B3: Uses budgeted work to spread collider removal across frames (prevents GC storms)
-   *
-   * CRITICAL FIX: All chunk data removals happen immediately with a SINGLE emit.
-   * Previously, deferred unloads each triggered separate emits, causing cascading
-   * O(N) incremental updates in InstancedAtlasBlockGroup (one per deferred chunk).
-   * Only collider removal is budgeted (the slow part), not the data/emit path.
+   * Synchronize collider radius: create/remove colliders as camera moves.
+   * Only chunks within COLLIDER_RADIUS get colliders. Called on camera chunk change.
+   */
+  const syncColliderRadius = useCallback(() => {
+    const pChunk = playerChunkRef.current;
+    if (!pChunk) return;
+
+    for (const [chunkKey, chunkData] of loadedChunksRef.current) {
+      const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
+      if (!match) continue;
+
+      const chunkX = parseInt(match[1], 10);
+      const chunkZ = parseInt(match[2], 10);
+      const dist = Math.max(Math.abs(chunkX - pChunk.x), Math.abs(chunkZ - pChunk.z));
+
+      if (dist <= COLLIDER_RADIUS && !chunksWithColliders.has(chunkKey)) {
+        // Chunk entered collider radius — create colliders
+        if (chunkData.blocks.length > 0) {
+          if (dist <= 2) {
+            // Very close: sync (immediate physics)
+            for (const block of chunkData.blocks) {
+              ensureBlockCollider(block);
+            }
+            chunksWithColliders.add(chunkKey);
+          } else {
+            // At radius edge: budgeted (player can't reach for ~2s)
+            const blocksForColliders = chunkData.blocks;
+            const capturedKey = chunkKey;
+            let colliderIdx = 0;
+            enqueueJob(`sync-colliders:${chunkKey}`, () => {
+              const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
+              for (; colliderIdx < end; colliderIdx++) {
+                ensureBlockCollider(blocksForColliders[colliderIdx]);
+              }
+              if (colliderIdx >= blocksForColliders.length) {
+                chunksWithColliders.add(capturedKey);
+                return true;
+              }
+              return false;
+            });
+          }
+        }
+      } else if (dist > COLLIDER_RADIUS && chunksWithColliders.has(chunkKey)) {
+        // Chunk left collider radius — remove colliders synchronously
+        for (const block of chunkData.blocks) {
+          removeBlockCollider(block);
+        }
+        chunksWithColliders.delete(chunkKey);
+      }
+    }
+  }, []);
+
+  /**
+   * Unload chunks that are beyond UNLOAD_RADIUS from player.
+   * Collider removal is now synchronous (~1-3ms per chunk).
    */
   const unloadDistantChunks = useCallback((centerChunkX: number, centerChunkZ: number) => {
     const now = Date.now();
@@ -2052,18 +2181,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(chunkKey);
         removedAny = true;
 
-        // Budget only the collider removal (the expensive part)
+        // Synchronous collider removal (~1-3ms per chunk, only on chunk change)
         if (chunkData.blocks.length > 0) {
-          const blocks = chunkData.blocks;
-          let idx = 0;
-          enqueueJob(`unload-colliders:${chunkKey}`, () => {
-            const end = Math.min(idx + COLLIDER_REMOVAL_BATCH, blocks.length);
-            for (; idx < end; idx++) {
-              removeBlockCollider(blocks[idx]);
-            }
-            return idx >= blocks.length;
-          });
+          for (const block of chunkData.blocks) {
+            removeBlockCollider(block);
+          }
         }
+        chunksWithColliders.delete(chunkKey);
       }
     }
 
@@ -2121,6 +2245,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           }
         }
       }
+
+      // Sync collider radius: create colliders for chunks entering range,
+      // remove for chunks leaving range
+      syncColliderRadius();
 
       // Phase 3B: Use incremental stripe loading for single-chunk movement
       // For multi-chunk moves (teleport, fast travel, large jumps), load ALL missing chunks
@@ -2200,7 +2328,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         evictLRUChunks();
       }
     }
-  }, [worldId, loadChunksInRadius, loadSpecificChunks, getStripeChunks, unloadDistantChunks, evictLRUChunks, addPositionSample, enqueuePrefetch]);
+  }, [worldId, loadChunksInRadius, loadSpecificChunks, getStripeChunks, unloadDistantChunks, evictLRUChunks, syncColliderRadius, addPositionSample, enqueuePrefetch]);
 
   /**
    * Force initial load when world changes
@@ -2221,7 +2349,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     clearPendingJobs();
     worldCollisionGrid.clear();
     colliderByBlockId.clear();
+    chunksWithColliders.clear();
     loadedChunksRef.current.clear();
+    inFlightChunksRef.current.clear();
     clearAllHeightMaps();
     worldSigRef.current = { count: 0, xor: 0, sum: 0 };
     lastEmittedWorldKeyRef.current = '';
@@ -2361,8 +2491,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // Clear the canonical collider cache (must be done AFTER grid clear since the
     // collisionGridCleared event also clears this, but we do it explicitly for safety)
     colliderByBlockId.clear();
+    chunksWithColliders.clear();
 
     loadedChunksRef.current.clear();
+    inFlightChunksRef.current.clear();
     clearAllHeightMaps();
     playerChunkRef.current = null;
     initialLoadDone.current = false;
@@ -2391,20 +2523,23 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (!worldId) return;
 
     const intervalId = setInterval(() => {
+      // Don't run integrity check during initial load (it's already loading everything)
+      if (!initialLoadDone.current) return;
+
       const playerChunk = playerChunkRef.current;
       if (!playerChunk) return;
 
       // Use ref to get current LOAD_RADIUS (avoids stale closure)
       const radius = loadRadiusRef.current;
 
-      // Collect ALL chunks that should be loaded but aren't
+      // Collect ALL chunks that should be loaded but aren't (skip in-flight chunks)
       const toLoad: Array<{ x: number; z: number }> = [];
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
           const cx = playerChunk.x + dx;
           const cz = playerChunk.z + dz;
           const key = `chunk_${cx}_${cz}`;
-          if (!loadedChunksRef.current.has(key)) {
+          if (!loadedChunksRef.current.has(key) && !inFlightChunksRef.current.has(key)) {
             toLoad.push({ x: cx, z: cz });
           }
         }
@@ -2459,12 +2594,24 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // CRITICAL: Clear the collider cache FIRST - old collider refs are now invalid
       // This prevents "collider.min.set is not a function" errors
       colliderByBlockId.clear();
+      chunksWithColliders.clear();
       
-      // Reinsert colliders for all loaded blocks (O(n) but only on rare clear events)
-      for (const chunkData of loadedChunksRef.current.values()) {
+      // Reinsert colliders only for chunks within COLLIDER_RADIUS
+      const pChunk = playerChunkRef.current;
+      for (const [chunkKey, chunkData] of loadedChunksRef.current) {
+        if (pChunk) {
+          const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
+          if (match) {
+            const cx = parseInt(match[1], 10);
+            const cz = parseInt(match[2], 10);
+            const dist = Math.max(Math.abs(cx - pChunk.x), Math.abs(cz - pChunk.z));
+            if (dist > COLLIDER_RADIUS) continue;
+          }
+        }
         for (const block of chunkData.blocks) {
           ensureBlockCollider(block);
         }
+        chunksWithColliders.add(chunkKey);
       }
     };
 
@@ -2533,7 +2680,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         const newSig = computeChunkSignature(chunkData.blocks);
         chunkData.signature = newSig;
         applyChunkSigChange(oldSig, newSig);
-        chunkData.visibleBlocks = undefined;
+        // D-Flow FIX: Filter visibleBlocks directly instead of expensive recompute
+        if (chunkData.visibleBlocks) {
+          chunkData.visibleBlocks = chunkData.visibleBlocks.filter(block => {
+            const posKey = `${block.position_x},${block.position_y},${block.position_z}`;
+            return !positionSet.has(posKey);
+          });
+        }
       }
     }
 
@@ -2603,4 +2756,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     removeBlockById,
     removeBlocksByPositions
   ]);
+}
+
+/**
+ * Get the current size of the collider map for diagnostics.
+ * Called each frame by the frame loop to track collider bloat.
+ */
+export function getColliderMapSize(): number {
+  return colliderByBlockId.size;
 }

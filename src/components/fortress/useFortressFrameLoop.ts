@@ -11,6 +11,7 @@ import { getSoundUrl } from '@/hooks/useGameSounds';
 import { entityCollisionGrid, worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 import { startPerfStallObservers, stopPerfStallObservers } from '@/lib/perfStallObservers';
+import { getColliderMapSize } from '@/hooks/useChunkLoader';
 
 import {
   BULLET_GRAVITY,
@@ -163,6 +164,9 @@ export function useFortressFrameLoop({
   
   // Capture grid stats for collision system monitoring
   diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
+
+  // Capture collider map size for bloat detection
+  diagnostics.recordColliderMapSize(getColliderMapSize());
   
   // Capture per-enemy-type stats for detailed performance tracking
   const activeShwarms = shwarmsRef.current;

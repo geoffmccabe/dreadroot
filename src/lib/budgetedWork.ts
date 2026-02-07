@@ -7,6 +7,8 @@
  * Jobs return true when complete, false to continue next frame.
  */
 
+import { diagnostics } from './diagnosticsLogger';
+
 type Job = {
   id: string;
   run: () => boolean; // return true when finished
@@ -29,6 +31,7 @@ export function enqueueJob(id: string, run: () => boolean): void {
   }
   activeJobs.add(id);
   queue.push({ id, run });
+  diagnostics.recordBudgetJobAdded();
 }
 
 /**
@@ -37,9 +40,13 @@ export function enqueueJob(id: string, run: () => boolean): void {
  * @param budgetMs Maximum milliseconds to spend (default 2ms)
  */
 export function tickBudgetedWork(budgetMs = 2.0): void {
-  if (queue.length === 0) return;
+  if (queue.length === 0) {
+    diagnostics.recordBudgetTick(0, 0, 0);
+    return;
+  }
 
   const start = performance.now();
+  let completed = 0;
 
   while (queue.length > 0 && performance.now() - start < budgetMs) {
     const job = queue[0];
@@ -48,8 +55,11 @@ export function tickBudgetedWork(budgetMs = 2.0): void {
     if (done) {
       queue.shift();
       activeJobs.delete(job.id);
+      completed++;
     }
   }
+
+  diagnostics.recordBudgetTick(queue.length, completed, performance.now() - start);
 }
 
 /**
