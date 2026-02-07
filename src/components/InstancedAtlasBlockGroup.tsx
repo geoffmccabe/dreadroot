@@ -352,8 +352,9 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     lastRebuildTimeRef.current = performance.now();
     pendingRebuildRef.current = false;
 
-    // Small block counts: synchronous on main thread (< 2ms)
-    if (currentBlocks.length < WORKER_THRESHOLD) {
+    // First paint: always sync so chunks appear immediately (no worker delay)
+    // Subsequent rebuilds: use workers for large groups to avoid blocking main thread
+    if (currentBlocks.length < WORKER_THRESHOLD || !initialBuildDoneRef.current) {
       doRebuildSync(mesh, currentBlocks);
       return;
     }
