@@ -1328,7 +1328,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       sortBlocksDeterministic(blocks);
       // Only create colliders for chunks within COLLIDER_RADIUS
       const pChunk = playerChunkRef.current;
-      const cDist = pChunk ? Math.max(Math.abs(x - pChunk.x), Math.abs(z - pChunk.z)) : 0;
+      const cDist = pChunk ? Math.max(Math.abs(x - pChunk.x), Math.abs(z - pChunk.z)) : Infinity;
       if (cDist <= COLLIDER_RADIUS) {
         if (cDist <= 2 || blocks.length < 200) {
           for (const block of blocks) {
@@ -1537,7 +1537,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         // Only create colliders for chunks within COLLIDER_RADIUS
         const pChunkS = playerChunkRef.current;
-        const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : 0;
+        const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : Infinity;
         if (sDist <= COLLIDER_RADIUS) {
           if (sDist <= 2 || chunkBlocks.length < 200) {
             for (const block of chunkBlocks) {

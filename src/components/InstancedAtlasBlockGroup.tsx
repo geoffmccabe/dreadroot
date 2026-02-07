@@ -72,7 +72,7 @@ function numPosKey(x: number, y: number, z: number): number {
 const AUTO_PERFORMANCE_MODE_THRESHOLD = 1000;
 
 // Blocks below this threshold use synchronous rebuild; above use Web Worker
-const WORKER_THRESHOLD = 3000;
+const WORKER_THRESHOLD = 500;
 
 interface InstancedAtlasBlockGroupProps {
   blocks: PlacedBlock[];
