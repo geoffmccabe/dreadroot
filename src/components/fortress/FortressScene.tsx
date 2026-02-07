@@ -183,6 +183,7 @@ export function FortressScene({
   selectedItemDef,
   addItem,
   lightningSettings,
+  cycleStateRef,
   viewSettings,
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
@@ -713,12 +714,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
   const shnakeRendererRef = useRef<ShnakeRendererHandle>(null);
   
-  // Shared cycle state ref for weather/sky/lighting
-  const cycleStateRef = useRef({
-    lightingPercentage: weatherSettings.lightingRange[0],
-    cyclePosition: 0,
-    isNight: false
-  });
+  // cycleStateRef is now passed in from Fortress.tsx (shared with LightningPanel)
   
   // Bullet system - use refs to avoid useFrame setState
   // Uses object pool to avoid GC allocations

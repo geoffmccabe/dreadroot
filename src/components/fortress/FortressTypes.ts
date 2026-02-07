@@ -215,6 +215,8 @@ export interface SceneProps {
   addItem?: (itemId: string, quantity: number) => Promise<boolean>;
   // Lightning Panel overrides
   lightningSettings?: LightningSettings;
+  // Shared cycle state ref (day/night) — owned by Fortress.tsx, updated by DynamicSky
+  cycleStateRef: React.MutableRefObject<CycleState>;
   // View settings for distant chunk rendering
   viewSettings?: ViewSettings;
 }

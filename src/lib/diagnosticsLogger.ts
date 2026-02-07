@@ -3,7 +3,7 @@
 // Toggle with Shift+3 (#) key
 
 const BUFFER_SIZE = 600; // 60 seconds at 10 samples/sec
-const METRICS = 50; // Expanded from 25 to track more systems
+const METRICS = 52; // Added: [50]=chunkUnloadsThisSample, [51]=colliderRemovesThisSample
 
 type TimingSystem = 
   | 'controls' | 'coins' | 'waterfall' | 'blocks' | 'frame'
@@ -676,6 +676,10 @@ class DiagnosticsLogger {
       this.buffer[i+48] = this.longFrameCount;
       this.buffer[i+49] = this.frameTimeMax;
 
+      // [50-51] Per-sample stall signals
+      this.buffer[i+50] = this.chunkUnloads;
+      this.buffer[i+51] = this.colliderRemoves;
+
       this.ticker++;
       this.masterFrameCount = 0;
       this.resetEventCounters();
@@ -879,7 +883,11 @@ class DiagnosticsLogger {
       // [48-49] Frame analysis: longFrameCount, frameTimeMax
       this.buffer[i+48] = this.longFrameCount;
       this.buffer[i+49] = this.frameTimeMax;
-      
+
+      // [50-51] Per-sample stall signals
+      this.buffer[i+50] = this.chunkUnloads;
+      this.buffer[i+51] = this.colliderRemoves;
+
       this.ticker++;
       this.masterFrameCount = 0;
       this.resetEventCounters();
@@ -906,6 +914,8 @@ class DiagnosticsLogger {
     let heapStart = 0, heapEnd = 0;
     let maxWorldGrid = 0, maxEntityGrid = 0;
     let totalLongFrames = 0, maxFrameTime = 0, totalFrames = 0;
+    let maxChunkUnloadsSample = 0, maxColliderRemovesSample = 0;
+    let maxChunkUnloadsAt = 0, maxColliderRemovesAt = 0;
 
     for (let s = 0; s < n; s++) {
       const i = s * METRICS;
@@ -933,6 +943,12 @@ class DiagnosticsLogger {
       totalLongFrames += this.buffer[i+48];
       if (this.buffer[i+49] > maxFrameTime) maxFrameTime = this.buffer[i+49];
       totalFrames += this.buffer[i+2];
+
+      const cUnld = this.buffer[i+50];
+      if (cUnld > maxChunkUnloadsSample) { maxChunkUnloadsSample = cUnld; maxChunkUnloadsAt = s; }
+
+      const cColRm = this.buffer[i+51];
+      if (cColRm > maxColliderRemovesSample) { maxColliderRemovesSample = cColRm; maxColliderRemovesAt = s; }
     }
 
     // Calculate average frame time
@@ -985,7 +1001,7 @@ class DiagnosticsLogger {
     }
 
     lines.push('--- Raw Data (last 20 samples) ---');
-    lines.push('sample fps frames wGrid eGrid drawCalls tCtrl tAI tBlk tRender');
+    lines.push('sample fps frames wGrid eGrid drawCalls tCtrl tAI tBlk tRender cUnld cColRm');
 
     const startSample = Math.max(0, n - 20);
     for (let s = startSample; s < n; s++) {
@@ -1000,7 +1016,9 @@ class DiagnosticsLogger {
         `${this.buffer[i+21].toFixed(1)} ` +
         `${this.buffer[i+25].toFixed(1)} ` +
         `${this.buffer[i+24].toFixed(1)} ` +
-        `${this.buffer[i+30].toFixed(1)}`
+        `${this.buffer[i+30].toFixed(1)} ` +
+        `${this.buffer[i+50].toFixed(0)} ` +
+        `${this.buffer[i+51].toFixed(0)}`
       );
     }
 
@@ -1013,6 +1031,8 @@ class DiagnosticsLogger {
     lines.push(`Chunk Fetch/Build: ${this.chunkFetchMsTotal.toFixed(1)}ms / ${this.chunkBuildMsTotal.toFixed(1)}ms`);
     lines.push(`Emits: ${this.emitsTotal}, Flatten: ${this.flattenMsTotal.toFixed(1)}ms (${this.flattenBlocksTotal} blocks)`);
     lines.push(`Colliders: +${this.colliderAddsTotal} -${this.colliderRemovesTotal} (${this.colliderMsTotal.toFixed(1)}ms)`);
+    lines.push(`Max chunk unloads/sample: ${maxChunkUnloadsSample.toFixed(0)} (sample ${maxChunkUnloadsAt})`);
+    lines.push(`Max collider removes/sample: ${maxColliderRemovesSample.toFixed(0)} (sample ${maxColliderRemovesAt})`);
     lines.push(`Grouping: ${this.groupCacheHitsTotal} hits, ${this.groupCacheMissesTotal} misses (${this.groupMsTotal.toFixed(1)}ms for ${this.groupBlocksTotal} blocks)`);
     lines.push(`MeshRebuild: ${this.meshRebuildCountTotal} rebuilds (${this.meshRebuildMsTotal.toFixed(1)}ms for ${this.meshRebuildBlocksTotal} blocks)`);
     lines.push('');

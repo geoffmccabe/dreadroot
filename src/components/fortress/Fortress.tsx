@@ -146,8 +146,14 @@ export function Fortress() {
           parsed.fogStartPct = 50;
           parsed.fogEndPct = 95;
           parsed.settingsVersion = 2;
-          localStorage.setItem('lightningSettings', JSON.stringify(parsed));
         }
+        // Clear stale lightingOverride that caused permanent darkness
+        if (parsed.settingsVersion < 3) {
+          parsed.lightingOverride = null;
+          parsed.freezeCycle = false;
+          parsed.settingsVersion = 3;
+        }
+        localStorage.setItem('lightningSettings', JSON.stringify(parsed));
         return parsed;
       } catch {}
     }
@@ -160,10 +166,10 @@ export function Fortress() {
       visualDistance: 4,
       lightingOverride: null,
       freezeCycle: false,
-      settingsVersion: 2,
+      settingsVersion: 3,
     };
   });
-  const cycleStateRef = useRef<CycleState>({ lightingPercentage: 0, cyclePosition: 0, isNight: false });
+  const cycleStateRef = useRef<CycleState>({ lightingPercentage: weatherSettings.lightingRange[1], cyclePosition: 0, isNight: false });
 
   const handleLightningSettingsChange = useCallback(<K extends keyof LightningSettings>(key: K, value: LightningSettings[K]) => {
     setLightningSettings(prev => {
@@ -1511,6 +1517,7 @@ export function Fortress() {
           onGodModeChange={setGodMode}
           performanceMode={performanceMode}
           lightningSettings={lightningSettings}
+          cycleStateRef={cycleStateRef}
           viewSettings={viewSettings}
           fortressTextureUrl={currentWorld?.fortress_texture_url}
           groundTextureUrl={currentWorld?.ground_texture_url}

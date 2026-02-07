@@ -2057,16 +2057,24 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     // FIX: Remove colliders for blocks that no longer exist (ghost collider cleanup)
     // This prevents invisible collision barriers from deleted blocks (e.g., chopped trees)
-    const mergedBlockIds = new Set(mergedBlocks.map(b => b.id));
-    for (const oldBlock of existingChunkData.blocks) {
-      if (!mergedBlockIds.has(oldBlock.id)) {
-        removeBlockCollider(oldBlock);
+    // Only needed if this chunk has active colliders
+    if (chunksWithColliders.has(chunkKey)) {
+      const mergedBlockIds = new Set(mergedBlocks.map(b => b.id));
+      for (const oldBlock of existingChunkData.blocks) {
+        if (!mergedBlockIds.has(oldBlock.id)) {
+          removeBlockCollider(oldBlock);
+        }
       }
     }
 
-    // Ensure colliders exist for all current blocks
-    for (const block of mergedBlocks) {
-      ensureBlockCollider(block);
+    // Only create/update colliders if chunk is within COLLIDER_RADIUS
+    const pChunkR = playerChunkRef.current;
+    const rDist = pChunkR ? Math.max(Math.abs(chunkX - pChunkR.x), Math.abs(chunkZ - pChunkR.z)) : Infinity;
+    if (rDist <= COLLIDER_RADIUS) {
+      for (const block of mergedBlocks) {
+        ensureBlockCollider(block);
+      }
+      chunksWithColliders.add(chunkKey);
     }
 
     // Update chunk data with Phase 3A fields (only if blocks changed)
@@ -2158,13 +2166,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
   /**
    * Unload chunks that are beyond UNLOAD_RADIUS from player.
-   * Collider removal is now synchronous (~1-3ms per chunk).
+   * Capped to UNLOAD_BATCH_MAX per call to prevent burst stalls.
+   * Returns true if more chunks remain beyond radius (caller should re-invoke next frame).
    */
+  const UNLOAD_BATCH_MAX = 20;
   const unloadDistantChunks = useCallback((centerChunkX: number, centerChunkZ: number) => {
     const now = Date.now();
-    let removedAny = false;
+    let removedCount = 0;
 
     for (const [chunkKey, chunkData] of loadedChunksRef.current) {
+      if (removedCount >= UNLOAD_BATCH_MAX) break;
+
       const parsed = fastParseChunkKey(chunkKey);
       if (!parsed) continue;
 
@@ -2192,7 +2204,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // Remove chunk data immediately (so next emit reflects removal)
         loadedChunksRef.current.delete(chunkKey);
         removeChunkHeightMap(chunkKey);
-        removedAny = true;
+        removedCount++;
 
         // Synchronous collider removal (~1-3ms per chunk, only on chunk change)
         if (chunkData.blocks.length > 0) {
@@ -2205,7 +2217,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     }
 
     // Single emit for ALL removals — prevents cascading incremental updates
-    if (removedAny) {
+    if (removedCount > 0) {
       scheduleEmit();
     }
   }, [scheduleEmit, applyChunkSigChange]);

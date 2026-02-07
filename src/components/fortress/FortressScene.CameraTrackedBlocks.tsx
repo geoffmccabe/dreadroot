@@ -110,14 +110,18 @@ export function CameraTrackedBlocks({
   }, [visualDistance, camera, visibleChunksRef, updatePlayerPosition]);
 
   // Track camera movement via the centralized frame loop
+  const lastHeartbeatRef = useRef(0);
+  const HEARTBEAT_INTERVAL = 2000; // Force useMemo re-eval every 2s for robustness
+
   useEffect(() => {
     const unregister = frameLoop.register('cameraChunks', () => {
       const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
       const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
       const now = Date.now();
 
-      if ((currentChunkX !== lastChunkRef.current.x || currentChunkZ !== lastChunkRef.current.z) &&
-          now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
+      const chunkChanged = currentChunkX !== lastChunkRef.current.x || currentChunkZ !== lastChunkRef.current.z;
+
+      if (chunkChanged && now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
         lastUpdateTime.current = now;
         lastChunkRef.current = { x: currentChunkX, z: currentChunkZ };
 
@@ -133,7 +137,13 @@ export function CameraTrackedBlocks({
         diagnostics.e4++;
 
         updatePlayerPosition(camera.position.x, camera.position.z);
+        lastHeartbeatRef.current = now;
 
+        requestAnimationFrame(() => setRenderTrigger(prev => prev + 1));
+      } else if (now - lastHeartbeatRef.current > HEARTBEAT_INTERVAL) {
+        // Periodic heartbeat: force useMemo re-evaluation with current camera position.
+        // Catches stale states where chunks are loaded but useMemo used a wrong camera position.
+        lastHeartbeatRef.current = now;
         requestAnimationFrame(() => setRenderTrigger(prev => prev + 1));
       }
     }, 100);
