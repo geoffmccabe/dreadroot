@@ -145,8 +145,6 @@ export function useFortressFrameLoop({
   lastFrameNowRef.current = now;
   diagnostics.recordFrameTime(frameMs);
 
-  const frameStart = now;
-
   // D1B: Reset per-frame diagnostic counters ONCE at start of frame
   // This allows InstancedBlockGroup to ACCUMULATE visibleBlocks
   diagnostics.visibleBlocks = 0;
@@ -1173,8 +1171,6 @@ export function useFortressFrameLoop({
   // Update shombie renderer
   shombieRendererRef.current?.update(camera.position, delta);
 
-  // Record total frame time for diagnostics
-  const frameTime = performance.now() - frameStart;
-  diagnostics.recordFrameTime(frameTime);
   });
+
 }

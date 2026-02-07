@@ -29,6 +29,16 @@ const COLLIDER_RADIUS = 3;            // Only maintain colliders within this chu
 // B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
 const PREFETCH_ENABLED = false;
 
+// Fast chunk key parser — avoids regex allocation overhead.
+// "chunk_X_Z" → { x, z } or null.
+function fastParseChunkKey(key: string): { x: number; z: number } | null {
+  // "chunk_" is 6 chars
+  if (key.length < 8 || key.charCodeAt(5) !== 95) return null; // key[5] === '_'
+  const i2 = key.indexOf('_', 6);
+  if (i2 === -1) return null;
+  return { x: +key.substring(6, i2), z: +key.substring(i2 + 1) };
+}
+
 // Phase 3A: Eviction configuration
 const EVICTION_BATCH_SIZE = 10;
 
@@ -559,11 +569,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
    * Pinned if: within UNLOAD_RADIUS of player OR has optimistic blocks
    */
   const isChunkPinned = useCallback((chunkKey: string): boolean => {
-    const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
-    if (!match) return true; // Don't evict malformed keys
-    
-    const chunkX = parseInt(match[1], 10);
-    const chunkZ = parseInt(match[2], 10);
+    const parsed = fastParseChunkKey(chunkKey);
+    if (!parsed) return true; // Don't evict malformed keys
+
+    const chunkX = parsed.x;
+    const chunkZ = parsed.z;
     const playerChunk = playerChunkRef.current;
     
     // If no player position, don't evict anything
@@ -2099,11 +2109,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (!pChunk) return;
 
     for (const [chunkKey, chunkData] of loadedChunksRef.current) {
-      const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
-      if (!match) continue;
+      const parsed = fastParseChunkKey(chunkKey);
+      if (!parsed) continue;
 
-      const chunkX = parseInt(match[1], 10);
-      const chunkZ = parseInt(match[2], 10);
+      const chunkX = parsed.x;
+      const chunkZ = parsed.z;
       const dist = Math.max(Math.abs(chunkX - pChunk.x), Math.abs(chunkZ - pChunk.z));
 
       if (dist <= COLLIDER_RADIUS && !chunksWithColliders.has(chunkKey)) {
@@ -2152,11 +2162,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     let removedAny = false;
 
     for (const [chunkKey, chunkData] of loadedChunksRef.current) {
-      const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
-      if (!match) continue;
+      const parsed = fastParseChunkKey(chunkKey);
+      if (!parsed) continue;
 
-      const chunkX = parseInt(match[1], 10);
-      const chunkZ = parseInt(match[2], 10);
+      const chunkX = parsed.x;
+      const chunkZ = parsed.z;
 
       // Use Chebyshev distance (max of dx, dz)
       const dx = Math.abs(chunkX - centerChunkX);
@@ -2600,11 +2610,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       const pChunk = playerChunkRef.current;
       for (const [chunkKey, chunkData] of loadedChunksRef.current) {
         if (pChunk) {
-          const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
-          if (match) {
-            const cx = parseInt(match[1], 10);
-            const cz = parseInt(match[2], 10);
-            const dist = Math.max(Math.abs(cx - pChunk.x), Math.abs(cz - pChunk.z));
+          const p = fastParseChunkKey(chunkKey);
+          if (p) {
+            const dist = Math.max(Math.abs(p.x - pChunk.x), Math.abs(p.z - pChunk.z));
             if (dist > COLLIDER_RADIUS) continue;
           }
         }
@@ -2708,12 +2716,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     const chunkKeys = Array.from(loadedChunksRef.current.keys());
     for (const chunkKey of chunkKeys) {
-      const match = chunkKey.match(/^chunk_(-?\d+)_(-?\d+)$/);
-      if (!match) continue;
+      const parsed = fastParseChunkKey(chunkKey);
+      if (!parsed) continue;
 
-      const chunkX = parseInt(match[1], 10);
-      const chunkZ = parseInt(match[2], 10);
-      await refetchSingleChunk(chunkX, chunkZ);
+      await refetchSingleChunk(parsed.x, parsed.z);
     }
   }, [worldId, refetchSingleChunk]);
 

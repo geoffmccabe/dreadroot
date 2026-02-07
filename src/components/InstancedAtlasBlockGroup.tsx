@@ -723,7 +723,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
       mesh.setMatrixAt(i, matrix);
 
-      const animInfo = getTreeBlockAnimationInfo(block.block_type);
+      const animInfo = getCachedAnimInfo(block.block_type);
       if (animInfo && animInfo.frameCount > 1) {
         animatedBlocks.push({
           blockIndex: i,
@@ -735,7 +735,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         uvOffsetData[i * 2] = uvs.uvOffsetX;
         uvOffsetData[i * 2 + 1] = uvs.uvOffsetY;
       } else {
-        const uvs = getInstanceUVsForTreeBlock(block.block_type);
+        const uvs = getCachedUVs(block.block_type);
         uvOffsetData[i * 2] = uvs.uvOffsetX;
         uvOffsetData[i * 2 + 1] = uvs.uvOffsetY;
       }
@@ -910,14 +910,14 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
           existing.blockType = block.block_type;
           existing.branchDepth = block.branch_depth;
 
-          const animInfo = getTreeBlockAnimationInfo(block.block_type);
+          const animInfo = getCachedAnimInfo(block.block_type);
           if (animInfo && animInfo.frameCount > 1) {
             animatedBlocks.push({ blockIndex: idx, frameCount: animInfo.frameCount, frameDelayMs: animInfo.frameDelayMs, baseSlotIndex: animInfo.baseSlotIndex });
             const uvs = getAnimatedUVOffset(animInfo.baseSlotIndex, 0);
             uvData[idx * 2] = uvs.uvOffsetX;
             uvData[idx * 2 + 1] = uvs.uvOffsetY;
           } else {
-            const uvs = getInstanceUVsForTreeBlock(block.block_type);
+            const uvs = getCachedUVs(block.block_type);
             uvData[idx * 2] = uvs.uvOffsetX;
             uvData[idx * 2 + 1] = uvs.uvOffsetY;
           }
@@ -946,7 +946,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
           changedCount++;
         } else {
           // Unchanged - just collect animation info
-          const animInfo = getTreeBlockAnimationInfo(block.block_type);
+          const animInfo = getCachedAnimInfo(block.block_type);
           if (animInfo && animInfo.frameCount > 1) {
             animatedBlocks.push({ blockIndex: existing.index, frameCount: animInfo.frameCount, frameDelayMs: animInfo.frameDelayMs, baseSlotIndex: animInfo.baseSlotIndex });
           }
@@ -978,14 +978,14 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         mesh.setMatrixAt(idx, matrix);
 
         // Set UV
-        const animInfo = getTreeBlockAnimationInfo(block.block_type);
+        const animInfo = getCachedAnimInfo(block.block_type);
         if (animInfo && animInfo.frameCount > 1) {
           animatedBlocks.push({ blockIndex: idx, frameCount: animInfo.frameCount, frameDelayMs: animInfo.frameDelayMs, baseSlotIndex: animInfo.baseSlotIndex });
           const uvs = getAnimatedUVOffset(animInfo.baseSlotIndex, 0);
           uvData[idx * 2] = uvs.uvOffsetX;
           uvData[idx * 2 + 1] = uvs.uvOffsetY;
         } else {
-          const uvs = getInstanceUVsForTreeBlock(block.block_type);
+          const uvs = getCachedUVs(block.block_type);
           uvData[idx * 2] = uvs.uvOffsetX;
           uvData[idx * 2 + 1] = uvs.uvOffsetY;
         }
