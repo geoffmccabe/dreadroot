@@ -32,10 +32,17 @@ export function useFruitSpawning({
 
   // Cache blueprints to avoid re-fetching every tick
   const blueprintCacheRef = useRef<Map<string, BlueprintBlock[]>>(new Map());
+  // Negative cache: don't re-query trees that failed recently (5 min cooldown)
+  const failedBlueprintCacheRef = useRef<Map<string, number>>(new Map());
+  const BLUEPRINT_FAIL_COOLDOWN_MS = 5 * 60 * 1000;
 
   const fetchBlueprint = useCallback(async (treeId: string): Promise<BlueprintBlock[] | null> => {
     const cached = blueprintCacheRef.current.get(treeId);
     if (cached) return cached;
+
+    // Skip if this tree failed recently
+    const failedAt = failedBlueprintCacheRef.current.get(treeId);
+    if (failedAt && Date.now() - failedAt < BLUEPRINT_FAIL_COOLDOWN_MS) return null;
 
     const { data, error } = await supabase
       .from('tree_blueprints' as any)
@@ -43,11 +50,18 @@ export function useFruitSpawning({
       .eq('planted_tree_id', treeId)
       .single();
 
-    if (error || !data) return null;
+    if (error || !data) {
+      failedBlueprintCacheRef.current.set(treeId, Date.now());
+      return null;
+    }
 
     const blocks = (data as any).blueprint_data?.blocks as BlueprintBlock[] | undefined;
-    if (!blocks) return null;
+    if (!blocks) {
+      failedBlueprintCacheRef.current.set(treeId, Date.now());
+      return null;
+    }
 
+    failedBlueprintCacheRef.current.delete(treeId);
     blueprintCacheRef.current.set(treeId, blocks);
     return blocks;
   }, []);

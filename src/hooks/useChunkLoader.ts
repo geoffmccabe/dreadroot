@@ -4,7 +4,7 @@ import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { initLogStep, initLogStartStep, initLogFinishStep } from '@/contexts/InitializationContext';
+import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
@@ -46,7 +46,7 @@ const EVICTION_BATCH_SIZE = 10;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 2000;     // 2s, 4s, 8s exponential backoff
 const FAILED_CHUNK_RETRY_INTERVAL = 5000; // Retry failed chunks every 5s
-const MAX_TOTAL_BLOCKS = 50000; // Safety limit for paginated fetches
+const MAX_TOTAL_BLOCKS = 250000; // Safety limit for paginated fetches (must accommodate LOAD_RADIUS=11 → 529 chunks × ~400 blocks)
 
 // Phase 3D: Cache configuration
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -959,17 +959,20 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const minChunkZ = centerChunkZ - radius;
     const maxChunkZ = centerChunkZ + radius;
 
-    // Paginated bounding query for all chunks in radius — with retry
+    // Paginated bounding query with retry.
+    // Retry once if first page fails. Keep partial data if later pages fail.
     const PAGE_SIZE = 1000;
-    let blocks: PlacedBlock[] | null = null;
+    const BULK_MAX_ATTEMPTS = 2;
+    let fetched: PlacedBlock[] = [];
     let hitSafetyLimit = false;
+    let partialData = false;
 
-    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-      const fetched: PlacedBlock[] = [];
+    for (let attempt = 0; attempt < BULK_MAX_ATTEMPTS; attempt++) {
+      fetched = [];
       hitSafetyLimit = false;
+      partialData = false;
       let offset = 0;
       let hasMore = true;
-      let pageError = false;
 
       while (hasMore) {
         const { data, error } = await supabase
@@ -983,9 +986,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           .range(offset, offset + PAGE_SIZE - 1);
 
         if (error) {
-          console.error(`[ChunkLoader] loadChunksInRadius page failed at offset ${offset} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, error.message);
-          pageError = true;
-          break;
+          console.error(`[ChunkLoader] loadChunksInRadius page failed at offset ${offset} (attempt ${attempt + 1}/${BULK_MAX_ATTEMPTS}):`, error.message);
+          partialData = true;
+          break; // keep data from successful pages
         }
 
         if (data && data.length > 0) {
@@ -1003,32 +1006,33 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       }
 
-      if (!pageError) {
-        blocks = fetched;
-        break;
-      }
+      // If we got data (even partial), use it — don't retry
+      if (fetched.length > 0) break;
 
-      // Retry entire fetch
-      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-        await new Promise(r => setTimeout(r, RETRY_BASE_DELAY_MS * (2 ** attempt)));
+      // First page failed with no data — retry once after delay
+      if (attempt < BULK_MAX_ATTEMPTS - 1) {
+        console.log(`[ChunkLoader] Retrying bulk query after ${RETRY_BASE_DELAY_MS}ms...`);
+        await new Promise(r => setTimeout(r, RETRY_BASE_DELAY_MS));
       }
     }
 
-    if (!blocks) {
-      console.error('All retry attempts failed for loadChunksInRadius');
-      // Track all chunks in radius as failed for periodic retry
+    // If all attempts got zero data, queue everything for individual retry
+    if (fetched.length === 0) {
+      console.error('[ChunkLoader] loadChunksInRadius got no data — queuing all chunks for individual retry');
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
           const cx = centerChunkX + dx;
           const cz = centerChunkZ + dz;
           const key = `chunk_${cx}_${cz}`;
           if (!loadedChunksRef.current.has(key)) {
-            failedChunksRef.current.set(key, { x: cx, z: cz, attempts: MAX_RETRY_ATTEMPTS });
+            failedChunksRef.current.set(key, { x: cx, z: cz, attempts: 0 });
           }
         }
       }
       return;
     }
+
+    const blocks = fetched;
 
     // Filter out expired blocks
     const now = new Date();
@@ -1055,10 +1059,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
 
-        // If we hit the safety limit and this chunk got zero blocks,
-        // it may have been truncated — queue for individual retry instead
-        // of storing as a loaded empty chunk
-        if (hitSafetyLimit && chunkBlocks.length === 0) {
+        // If we hit the safety limit or had partial data (page failure),
+        // chunks with zero blocks may be missing — queue for individual retry
+        if ((hitSafetyLimit || partialData) && chunkBlocks.length === 0) {
           failedChunksRef.current.set(chunkKey, { x: chunkX, z: chunkZ, attempts: 0 });
           continue;
         }
@@ -2529,15 +2532,25 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
   // Periodic integrity check — ensures NO chunks within player radius are missing
   // Catches: failed chunks, chunks never attempted, chunks dropped due to race conditions
+  // Uses adaptive interval: backs off when server is struggling, recovers when healthy
   useEffect(() => {
     if (!worldId) return;
 
-    const intervalId = setInterval(() => {
+    let consecutiveHighMissing = 0; // Track consecutive checks with many missing chunks
+    let timerId: ReturnType<typeof setTimeout>;
+
+    const runCheck = () => {
       // Don't run integrity check during initial load (it's already loading everything)
-      if (!initialLoadDone.current) return;
+      if (!initialLoadDone.current) {
+        timerId = setTimeout(runCheck, FAILED_CHUNK_RETRY_INTERVAL);
+        return;
+      }
 
       const playerChunk = playerChunkRef.current;
-      if (!playerChunk) return;
+      if (!playerChunk) {
+        timerId = setTimeout(runCheck, FAILED_CHUNK_RETRY_INTERVAL);
+        return;
+      }
 
       // Use ref to get current LOAD_RADIUS (avoids stale closure)
       const radius = loadRadiusRef.current;
@@ -2572,8 +2585,19 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       }
 
+      // Adaptive backoff: if many chunks are consistently missing, slow down to reduce server load
+      const totalInRadius = (2 * radius + 1) ** 2;
+      const missingRatio = toLoad.length / totalInRadius;
+      if (missingRatio > 0.3) {
+        consecutiveHighMissing++;
+      } else {
+        consecutiveHighMissing = 0;
+      }
+      // Back off: 5s → 10s → 15s (cap at 15s)
+      const nextInterval = FAILED_CHUNK_RETRY_INTERVAL + Math.min(consecutiveHighMissing, 2) * 5000;
+
       if (toLoad.length > 0) {
-        console.log(`[ChunkLoader] Integrity check: loading ${toLoad.length} missing chunks within radius`);
+        console.log(`[ChunkLoader] Integrity check: loading ${toLoad.length} missing chunks within radius (next check in ${nextInterval / 1000}s)`);
         // Clear from failed set — loadSpecificChunks will re-add if they fail again
         for (const { x, z } of toLoad) {
           failed.delete(`chunk_${x}_${z}`);
@@ -2589,9 +2613,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           }
         });
       }
-    }, FAILED_CHUNK_RETRY_INTERVAL);
 
-    return () => clearInterval(intervalId);
+      timerId = setTimeout(runCheck, nextInterval);
+    };
+
+    timerId = setTimeout(runCheck, FAILED_CHUNK_RETRY_INTERVAL);
+
+    return () => clearTimeout(timerId);
   // Note: LOAD_RADIUS not in deps - it's read fresh on each interval tick
   }, [worldId, loadSpecificChunks]);
 

@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { PurchaseResult } from '../types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
+import { playOneShot } from '@/components/fortress/FortressAudio';
 
 interface UsePurchaseReturn {
   purchase: (listingId: string, quantity?: number) => Promise<PurchaseResult>;
@@ -31,13 +32,7 @@ export function usePurchase(): UsePurchaseReturn {
 
       if (result.success) {
         // Play purchase sound
-        try {
-          const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
-          audio.volume = 0.3;
-          audio.play().catch(() => {});
-        } catch {
-          // Ignore audio errors
-        }
+        playOneShot(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'), 0.3);
       }
 
       return result;

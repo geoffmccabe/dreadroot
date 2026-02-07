@@ -36,6 +36,7 @@ import { WatchlistTab } from '@/features/marketplace/components/WatchlistTab';
 import { DiviBalance } from '@/features/marketplace/components/DiviBalance';
 import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
+import { playOneShot } from '@/components/fortress/FortressAudio';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -325,10 +326,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     const success = await buyBlock(itemKey, cost);
     if (success) {
       // Play single coin sound (allows interruption on rapid clicks)
-      const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
-      audio.volume = 0.3;
-      audio.currentTime = 0;
-      audio.play();
+      playOneShot(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'), 0.3);
 
       onBlockPurchased?.();
     }

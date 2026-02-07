@@ -1,5 +1,18 @@
 // Audio management utilities for the Fortress game
 
+/**
+ * Play a one-shot audio effect that auto-cleans up after playback.
+ * Prevents WebMediaPlayer accumulation (Chrome limits ~75-150 concurrent).
+ */
+export function playOneShot(url: string, volume: number = 0.3): void {
+  const audio = new Audio(url);
+  audio.volume = volume;
+  audio.play().catch(() => {});
+  // Auto-cleanup: release the WebMediaPlayer when done or on error
+  audio.onended = () => { audio.src = ''; };
+  audio.onerror = () => { audio.src = ''; };
+}
+
 // Create and initialize audio context
 export function createAudioContext(): AudioContext | null {
   try {
@@ -104,34 +117,47 @@ export function playRejectionSound(rejectionData: { audioContext: AudioContext |
   }
 }
 
+// Shared AudioContext for reversed audio (reused across calls)
+let sharedReversedCtx: AudioContext | null = null;
+// Cache decoded + reversed buffers to avoid re-fetching
+const reversedBufferCache = new Map<string, AudioBuffer>();
+
 // Play reversed audio for block removal
 export async function playReversedAudio(audioUrl: string): Promise<void> {
   try {
-    const audioContext = createAudioContext();
-    if (!audioContext) return;
-
-    const response = await fetch(audioUrl);
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-    // Create reversed buffer
-    const reversedBuffer = audioContext.createBuffer(
-      audioBuffer.numberOfChannels,
-      audioBuffer.length,
-      audioBuffer.sampleRate
-    );
-
-    for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-      const inputData = audioBuffer.getChannelData(channel);
-      const outputData = reversedBuffer.getChannelData(channel);
-      for (let i = 0; i < audioBuffer.length; i++) {
-        outputData[i] = inputData[audioBuffer.length - 1 - i];
-      }
+    if (!sharedReversedCtx || sharedReversedCtx.state === 'closed') {
+      sharedReversedCtx = createAudioContext();
+    }
+    if (!sharedReversedCtx) return;
+    if (sharedReversedCtx.state === 'suspended') {
+      await sharedReversedCtx.resume();
     }
 
-    const source = audioContext.createBufferSource();
+    let reversedBuffer = reversedBufferCache.get(audioUrl);
+    if (!reversedBuffer) {
+      const response = await fetch(audioUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await sharedReversedCtx.decodeAudioData(arrayBuffer);
+
+      reversedBuffer = sharedReversedCtx.createBuffer(
+        audioBuffer.numberOfChannels,
+        audioBuffer.length,
+        audioBuffer.sampleRate
+      );
+
+      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+        const inputData = audioBuffer.getChannelData(channel);
+        const outputData = reversedBuffer.getChannelData(channel);
+        for (let i = 0; i < audioBuffer.length; i++) {
+          outputData[i] = inputData[audioBuffer.length - 1 - i];
+        }
+      }
+      reversedBufferCache.set(audioUrl, reversedBuffer);
+    }
+
+    const source = sharedReversedCtx.createBufferSource();
     source.buffer = reversedBuffer;
-    source.connect(audioContext.destination);
+    source.connect(sharedReversedCtx.destination);
     source.start(0);
   } catch (error) {
     console.warn('Failed to play reversed sound:', error);

@@ -266,9 +266,21 @@ export function useTreeData(
     fetchData();
   }, [fetchData]);
 
-  // Real-time subscriptions
+  // Real-time subscriptions (debounced to prevent refetch storms)
+  const treeRefetchTimer = useRef<NodeJS.Timeout | null>(null);
+  const TREE_REFETCH_DEBOUNCE_MS = 500;
+
   useEffect(() => {
     if (!worldId || !TREE_CONFIG.ENABLED) return;
+
+    // Debounced fetchData — coalesces rapid INSERT/UPDATE events into one refetch
+    const debouncedFetchData = () => {
+      if (treeRefetchTimer.current) clearTimeout(treeRefetchTimer.current);
+      treeRefetchTimer.current = setTimeout(() => {
+        treeRefetchTimer.current = null;
+        fetchData();
+      }, TREE_REFETCH_DEBOUNCE_MS);
+    };
 
     // Subscribe to tree_fruits changes
     const fruitsChannel = supabase
@@ -285,7 +297,7 @@ export function useTreeData(
           if (payload.eventType === 'INSERT') {
             setTreeFruits(prev => [...prev, payload.new as TreeFruit]);
           } else if (payload.eventType === 'UPDATE') {
-            setTreeFruits(prev => 
+            setTreeFruits(prev =>
               prev.map(f => f.id === payload.new.id ? payload.new as TreeFruit : f)
             );
           } else if (payload.eventType === 'DELETE') {
@@ -311,23 +323,20 @@ export function useTreeData(
           if (payload.eventType === 'INSERT') {
             const newTree = payload.new as any;
             if (isTreeDeleted(newTree.id)) {
-              console.log(`[useTreeData] Ignoring INSERT for deleted tree: ${newTree.id.slice(0, 8)}`);
               return;
             }
-            // Refetch for any new tree (including user's own growing trees)
-            fetchData();
+            // Debounced refetch — coalesces rapid tree plants from multiple players
+            debouncedFetchData();
           } else if (payload.eventType === 'UPDATE') {
             const updatedTree = payload.new as any;
-            // Ignore updates for deleted trees
             if (isTreeDeleted(updatedTree.id)) {
-              console.log(`[useTreeData] Ignoring UPDATE for deleted tree: ${updatedTree.id.slice(0, 8)}`);
               return;
             }
-            // If a tree just became fully grown, add it to state
             if (updatedTree.is_fully_grown) {
-              fetchData(); // Refetch to include newly grown tree
+              // Debounced refetch — coalesces rapid growth completions
+              debouncedFetchData();
             } else {
-              // Otherwise just merge updates for trees already in state
+              // Lightweight local merge — no refetch needed
               setPlantedTrees(prev => prev.map(tree => {
                 if (tree.id === updatedTree.id) {
                   return {
@@ -340,8 +349,6 @@ export function useTreeData(
               }));
             }
           } else if (payload.eventType === 'DELETE') {
-            console.log(`[useTreeData] Received DELETE event for tree: ${payload.old.id?.slice(0, 8)}`);
-            // Mark as deleted (in case it wasn't already)
             markTreeDeleted(payload.old.id);
             setPlantedTrees(prev => prev.filter(t => t.id !== payload.old.id));
             setMyIncompleteTrees(prev => prev.filter(t => t.id !== payload.old.id));
@@ -351,6 +358,7 @@ export function useTreeData(
       .subscribe();
 
     return () => {
+      if (treeRefetchTimer.current) clearTimeout(treeRefetchTimer.current);
       supabase.removeChannel(fruitsChannel);
       supabase.removeChannel(treesChannel);
     };

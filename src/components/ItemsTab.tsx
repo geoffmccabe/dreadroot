@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useUserData } from '@/hooks/useUserData';
 import { toast } from 'sonner';
 import { getSoundUrl } from '@/hooks/useGameSounds';
+import { playOneShot } from '@/components/fortress/FortressAudio';
 
 interface ItemDef {
   id: string;
@@ -176,6 +177,7 @@ function ForgePanel({
     const bgSound = new Audio(getSoundUrl('forge_background', '/forge_bkgd_noise.mp3'));
     bgSound.volume = 0.4;
     bgSound.play().catch(() => {});
+    bgSound.onended = () => { bgSound.src = ''; };
     bgSoundRef.current = bgSound;
 
     // Start slide animation immediately (first hammer at 1s)
@@ -183,9 +185,7 @@ function ForgePanel({
     for (let step = 1; step <= 4; step++) {
       timers.push(setTimeout(() => {
         setAnimationStep(step);
-        const hammer = new Audio(getSoundUrl('forge_hammer', '/forge_hammer.mp3'));
-        hammer.volume = 0.5;
-        hammer.play().catch(() => {});
+        playOneShot(getSoundUrl('forge_hammer', '/forge_hammer.mp3'), 0.5);
       }, step * 1000));
     }
     timersRef.current = timers;

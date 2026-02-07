@@ -181,7 +181,10 @@ export function useMarketplaceData(options: UseMarketplaceDataOptions = {}): Use
     fetchListings(true);
   }, [fetchListings]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates (debounced to prevent refetch storms)
+  const listingsRefetchTimer = useRef<NodeJS.Timeout | null>(null);
+  const LISTINGS_REFETCH_DEBOUNCE_MS = 500;
+
   useEffect(() => {
     const channel = supabase
       .channel('marketplace_listings_changes')
@@ -194,8 +197,12 @@ export function useMarketplaceData(options: UseMarketplaceDataOptions = {}): Use
         },
         (payload) => {
           if (payload.eventType === 'INSERT') {
-            // Refetch to get joined data and maintain sort order
-            fetchListings(true);
+            // Debounce: coalesce rapid INSERTs into a single refetch
+            if (listingsRefetchTimer.current) clearTimeout(listingsRefetchTimer.current);
+            listingsRefetchTimer.current = setTimeout(() => {
+              listingsRefetchTimer.current = null;
+              fetchListings(true);
+            }, LISTINGS_REFETCH_DEBOUNCE_MS);
           } else if (payload.eventType === 'UPDATE') {
             const updated = payload.new as MarketplaceListing;
             setListings(prev =>
@@ -211,6 +218,7 @@ export function useMarketplaceData(options: UseMarketplaceDataOptions = {}): Use
       .subscribe();
 
     return () => {
+      if (listingsRefetchTimer.current) clearTimeout(listingsRefetchTimer.current);
       supabase.removeChannel(channel);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

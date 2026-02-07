@@ -12,6 +12,7 @@ import { getInventoryQuantity } from '@/lib/inventoryHelpers';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSoundUrl } from '@/hooks/useGameSounds';
+import { playOneShot } from '@/components/fortress/FortressAudio';
 
 interface BlockShopProps {
   isOpen: boolean;
@@ -146,10 +147,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     setIsPurchasing(false);
     
     if (success) {
-      const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
-      audio.volume = 0.3;
-      audio.currentTime = 0;
-      audio.play();
+      playOneShot(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'), 0.3);
       onBlockPurchased();
     }
   };
@@ -162,10 +160,7 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     setIsPurchasing(false);
     
     if (success) {
-      const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
-      audio.volume = 0.3;
-      audio.currentTime = 0;
-      audio.play();
+      playOneShot(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'), 0.3);
       onBlockPurchased();
     }
   };

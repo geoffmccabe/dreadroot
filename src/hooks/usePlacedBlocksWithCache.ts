@@ -156,16 +156,20 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         localStorage.setItem(CACHE_VERSION_KEY, String(CURRENT_CACHE_VERSION));
       }
 
-      // Wait for block definitions to finish (should be done by now since it ran in parallel)
-      // Timing is logged inside preloadBlockDefinitions() itself
-      await blockDefsPromise;
+      // Wait for block definitions (with timeout to prevent Supabase hang)
+      await Promise.race([
+        blockDefsPromise,
+        new Promise<void>(resolve => setTimeout(() => {
+          console.warn('[Init] Block definitions timed out after 8s');
+          resolve();
+        }, 8000))
+      ]);
 
-      // Wait for sounds cache (non-critical, won't block if it fails)
-      try {
-        await soundsCachePromise;
-      } catch (err) {
-        console.warn('[Init] Sounds cache init failed (non-critical):', err);
-      }
+      // Wait for sounds cache (non-critical, with timeout)
+      await Promise.race([
+        soundsCachePromise.catch((err: any) => console.warn('[Init] Sounds cache failed:', err)),
+        new Promise<void>(resolve => setTimeout(resolve, 5000))
+      ]);
 
       // ONE-TIME ATLAS CACHE MIGRATION: Clear stale atlas for fruit texture fix
       const ATLAS_CACHE_VERSION_KEY = 'fortress_atlas_cache_version';
@@ -188,17 +192,30 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       console.log('[Init] Texture atlas initialized, starting atlas sync...');
 
       // Sync textures from database to atlas (ensures atlas is populated)
-      // Timing is logged inside syncAtlasOnInit() via useAtlasSync hooks
+      // Timeout protects against Supabase hanging — cached atlas (253 slots) is already loaded
       const { syncAtlasOnInit } = await import('@/hooks/useAtlasSync');
-      await syncAtlasOnInit();
+      await Promise.race([
+        syncAtlasOnInit(),
+        new Promise<void>(resolve => setTimeout(() => {
+          console.warn('[Init] Atlas sync timed out after 10s, continuing with cached atlas');
+          resolve();
+        }, 10000))
+      ]);
       console.log('[Init] Atlas sync complete, fetching world settings...');
 
-      // Fetch world's ambient music settings
-      const { data: worldSettings } = await supabase
+      // Fetch world's ambient music settings (with timeout to prevent hanging)
+      const worldSettingsPromise = supabase
         .from('worlds')
         .select('ambient_music_url, ambient_music_volume')
         .eq('id', worldId)
         .single();
+      const { data: worldSettings } = await Promise.race([
+        worldSettingsPromise,
+        new Promise<{ data: null }>(resolve => setTimeout(() => {
+          console.warn('[Init] World settings query timed out after 8s, using defaults');
+          resolve({ data: null });
+        }, 8000))
+      ]) as { data: any };
 
       const ambientUrl = worldSettings?.ambient_music_url || '/ambient_alien_planet_bkgd_1.mp3';
       const ambientVolume = worldSettings?.ambient_music_volume ?? 100;

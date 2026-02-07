@@ -47,7 +47,7 @@ import { FortressScene } from './FortressScene';
 import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
 import { FortressOverlays } from './FortressOverlays';
-import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
+import { createMainAudioRefs, preloadRejectionSound, playReversedAudio, playOneShot } from './FortressAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef, LightningSettings, CycleState, ViewSettings, DEFAULT_VIEW_SETTINGS } from './FortressTypes';
@@ -809,9 +809,7 @@ export function Fortress() {
 
     setFlyingCoins(prev => [...prev, { id: coinId, startX, startY, startTime, imageUrl }]);
 
-    const audio = new Audio(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'));
-    audio.volume = 0.3;
-    audio.play();
+    playOneShot(getSoundUrl('coin_hit', '/coin_hit_sound.mp3'), 0.3);
 
     setTimeout(async () => {
       const success = await addCoins(1);
@@ -1533,9 +1531,7 @@ export function Fortress() {
             const { newLevel } = await addPoints(points);
             if (newLevel) {
               // Play level up sound
-              const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
-              audio.volume = 0.5;
-              audio.play().catch(() => {});
+              playOneShot(getSoundUrl('level_up', '/yay_sound.mp3'), 0.5);
               // Show toast
               toast({
                 title: `🎉 Level Up!`,
@@ -1589,9 +1585,7 @@ export function Fortress() {
             }
             
             // Play kill sound
-            const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
-            audio.volume = 0.3;
-            audio.play().catch(() => {});
+            playOneShot(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
             
             // Increment kill count in database
             const { data: existing, error: fetchError } = await supabase
@@ -1631,9 +1625,7 @@ export function Fortress() {
             }
             
             // Play kill sound
-            const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
-            audio.volume = 0.3;
-            audio.play().catch(() => {});
+            playOneShot(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
             
             // Increment kill count in database
             const { data: existing, error: fetchError } = await supabase
@@ -1673,9 +1665,7 @@ export function Fortress() {
             }
 
             // Play kill sound
-            const audio = new Audio(getSoundUrl('level_up', '/yay_sound.mp3'));
-            audio.volume = 0.3;
-            audio.play().catch(() => {});
+            playOneShot(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
 
             // Increment kill count in database
             const { data: existing, error: fetchError } = await supabase

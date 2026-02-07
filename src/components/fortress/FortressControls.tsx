@@ -254,6 +254,11 @@ export function FirstPersonControls({
     steady.preload = 'auto';
     steady.load(); // Force preload
     pentabulletSteadyAudioRef.current = steady;
+
+    return () => {
+      powerup.pause(); powerup.src = '';
+      steady.pause(); steady.src = '';
+    };
   }, []);
   
   // Keep player level ref updated

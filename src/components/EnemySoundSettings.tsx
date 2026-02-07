@@ -62,6 +62,8 @@ export function EnemySoundSettings({
     const audio = new Audio(url);
     audio.volume = volume / 100;
     audio.play().catch(() => {});
+    audio.onended = () => { audio.src = ''; };
+    audio.onerror = () => { audio.src = ''; };
   };
 
   return (
