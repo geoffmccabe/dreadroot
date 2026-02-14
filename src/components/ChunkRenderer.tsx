@@ -20,6 +20,8 @@ interface ChunkRendererProps {
   hoistedAtlasReady?: boolean;
   hoistedBlocksMap?: Map<string, BlockType>;
   hoistedBlockDefsLoading?: boolean;
+  // When true, tree blocks are rendered by MergedTreeMesh — skip IABG in PlacedBlocks
+  treeBlocksPreFiltered?: boolean;
 }
 
 const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
@@ -32,7 +34,8 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
   hoistedAtlasTexture,
   hoistedAtlasReady,
   hoistedBlocksMap,
-  hoistedBlockDefsLoading
+  hoistedBlockDefsLoading,
+  treeBlocksPreFiltered
 }) => {
   const t0 = performance.now();
 
@@ -49,6 +52,7 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
       hoistedAtlasReady={hoistedAtlasReady}
       hoistedBlocksMap={hoistedBlocksMap}
       hoistedBlockDefsLoading={hoistedBlockDefsLoading}
+      treeBlocksPreFiltered={treeBlocksPreFiltered}
     />
   );
 
@@ -70,7 +74,8 @@ const ChunkRenderer = React.memo(ChunkRendererInner, (prev, next) => {
     prev.hoistedAtlasTexture === next.hoistedAtlasTexture &&
     prev.hoistedAtlasReady === next.hoistedAtlasReady &&
     prev.hoistedBlocksMap === next.hoistedBlocksMap &&
-    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading
+    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading &&
+    prev.treeBlocksPreFiltered === next.treeBlocksPreFiltered
   );
 });
 

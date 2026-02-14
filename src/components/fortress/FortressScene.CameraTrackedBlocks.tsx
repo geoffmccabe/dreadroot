@@ -4,6 +4,7 @@ import * as THREE from 'three';
 
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
+import { getChunkMutationCounter } from '@/hooks/useChunkLoader';
 
 import { useBlocks } from '@/contexts/BlocksContext';
 import { PlacedBlock } from '@/types/blocks';
@@ -11,16 +12,31 @@ import { CHUNK_SIZE, getVisibleChunkKeys, parseChunkKey } from '@/lib/chunkManag
 import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 
 import ChunkRenderer from '@/components/ChunkRenderer';
+import { InstancedAtlasBlockGroup } from '@/components/InstancedAtlasBlockGroup';
 import { ProceduralGround } from './ProceduralGround';
 import { FadeChunkBlocks } from '@/components/FadeChunkBlocks';
 import { WaterBlocks } from '@/components/WaterBlocks';
 import type { ViewSettings } from './FortressTypes';
+import type { BlockType } from '@/types/blocks';
 import { getAtlasVersion, useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useWorldPonds } from '@/hooks/useWorldPonds';
+import { updateFrustum } from '@/lib/frustumCuller';
+import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { shrineTracker } from '@/lib/shrineTracker';
 
 const FADE_EXTRA = 3;
+
+// Shared geometry for merged tree mesh (created once, reused)
+const _sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+// Minimal block def for tree blocks (blockDef is vestigial in IABG but required by interface)
+const TREE_BLOCK_DEF: BlockType = {
+  id: -1, key: 'tree_block', name: 'Tree Block', description: '',
+  cost: 0, category: 'building', rarity: 'common', class: 'basic', tier: 1,
+  properties: { color: '#ffffff', emissive: false, transparent: false, glowFactor: 0 }
+};
 
 export function CameraTrackedBlocks({
   showOwnershipOutline,
@@ -58,6 +74,11 @@ export function CameraTrackedBlocks({
 
   const lastChunkRef = useRef({ x: 0, z: 0 });
   const lastUpdateTime = useRef(0);
+  const admittedKeysRef = useRef(new Set<string>());
+  const hasPendingMountsRef = useRef(false);
+  const drainScheduledRef = useRef(false);
+  const mutationRafRef = useRef(0); // Debounce: collapse rapid mutations into single render
+  const MOUNT_BUDGET = 4;
   const lastVisualDistance = useRef(visualDistance);
 
   const [renderTrigger, setRenderTrigger] = useState(0);
@@ -111,15 +132,27 @@ export function CameraTrackedBlocks({
 
   // Track camera movement via the centralized frame loop
   const lastHeartbeatRef = useRef(0);
-  const HEARTBEAT_INTERVAL = 2000; // Force useMemo re-eval every 2s for robustness
+  const lastKnownMutationRef = useRef(0);
+  const HEARTBEAT_INTERVAL = 500; // Recovery scan interval — detects and reloads missing chunks
 
   useEffect(() => {
+    // Update frustum every frame at priority 5 (before IABG at 60)
+    const unregisterFrustum = frameLoop.register('frustum-update', () => {
+      updateFrustum(camera);
+    }, 5);
+
     const unregister = frameLoop.register('cameraChunks', () => {
       const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
       const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
       const now = Date.now();
 
       const chunkChanged = currentChunkX !== lastChunkRef.current.x || currentChunkZ !== lastChunkRef.current.z;
+
+      // Detect chunk mutations — counter increments on every set/delete/clear
+      // of loadedChunksRef. Don't ack until we actually re-render, so throttled
+      // mutations retry on the next frame tick.
+      const currentMutation = getChunkMutationCounter();
+      const hasPendingMutations = currentMutation !== lastKnownMutationRef.current;
 
       if (chunkChanged && now - lastUpdateTime.current > CHUNK_UPDATE_THROTTLE) {
         lastUpdateTime.current = now;
@@ -137,18 +170,38 @@ export function CameraTrackedBlocks({
         diagnostics.e4++;
 
         updatePlayerPosition(camera.position.x, camera.position.z);
+        lastKnownMutationRef.current = getChunkMutationCounter();
         lastHeartbeatRef.current = now;
 
         requestAnimationFrame(() => setRenderTrigger(prev => prev + 1));
+      } else if (hasPendingMutations) {
+        lastKnownMutationRef.current = currentMutation;
+        diagnostics.recordMutationRender();
+        // Debounce: cancel pending RAF and schedule new one — collapses rapid
+        // mutations (e.g. multiple unload batches) into a single render trigger
+        cancelAnimationFrame(mutationRafRef.current);
+        mutationRafRef.current = requestAnimationFrame(() => setRenderTrigger(prev => prev + 1));
       } else if (now - lastHeartbeatRef.current > HEARTBEAT_INTERVAL) {
-        // Periodic heartbeat: force useMemo re-evaluation with current camera position.
-        // Catches stale states where chunks are loaded but useMemo used a wrong camera position.
+        // Recovery scan: reload missing nearby chunks. Don't force re-render —
+        // mutation detection handles it when chunks actually load.
         lastHeartbeatRef.current = now;
-        requestAnimationFrame(() => setRenderTrigger(prev => prev + 1));
+        updatePlayerPosition(camera.position.x, camera.position.z);
+      }
+
+      // Drain pending mounts: one request in flight at a time
+      if (hasPendingMountsRef.current && !drainScheduledRef.current) {
+        drainScheduledRef.current = true;
+        requestAnimationFrame(() => {
+          drainScheduledRef.current = false;
+          setRenderTrigger(prev => prev + 1);
+        });
       }
     }, 100);
 
-    return unregister;
+    return () => {
+      unregisterFrustum();
+      unregister();
+    };
   }, [camera, visibleChunksRef, updatePlayerPosition]);
 
   // Localize hoveredBlockId to the chunk that contains it
@@ -267,9 +320,36 @@ export function CameraTrackedBlocks({
       }
     }
 
-    diagnostics.setChunkRenderCount(normal.length);
+    // Budgeted mounting: limit new chunk mounts per eval to prevent frame spikes
+    const admitted = admittedKeysRef.current;
+    const normalKeys = new Set<string>();
+    let newAdmissions = 0;
+    let totalPending = 0;
+    for (const e of normal) {
+      normalKeys.add(e.key);
+      if (!admitted.has(e.key)) {
+        totalPending++;
+        if (newAdmissions < MOUNT_BUDGET) {
+          admitted.add(e.key);
+          newAdmissions++;
+        }
+      }
+    }
+    // Prune admitted keys for chunks that left visual range
+    for (const key of admitted) {
+      if (!normalKeys.has(key)) admitted.delete(key);
+    }
 
-    return { normalEntries: normal, fadeEntries: fade };
+    hasPendingMountsRef.current = totalPending > newAdmissions;
+
+    const budgeted = hasPendingMountsRef.current
+      ? normal.filter(e => admitted.has(e.key))
+      : normal;
+
+    diagnostics.setChunkRenderCount(budgeted.length);
+    diagnostics.recordNormalEntriesEval();
+
+    return { normalEntries: budgeted, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
 
   // Generate water blocks for visible chunks
@@ -280,45 +360,49 @@ export function CameraTrackedBlocks({
     return worldPonds.getAllWaterBlocksForChunks(chunkKeys, CHUNK_SIZE);
   }, [worldPonds, normalEntries]);
 
+  // Merged tree blocks: extract ALL tree blocks from ALL visible chunks into one array
+  // This enables rendering with a single InstancedMesh (1 draw call vs ~165)
+  const allTreeBlocks = useMemo(() => {
+    if (normalEntries.length === 0) return [];
+    const treeBlocks: PlacedBlock[] = [];
+    const shrinePositions: Array<{ x: number; y: number; z: number }> = [];
+
+    for (let c = 0; c < normalEntries.length; c++) {
+      const blocks = normalEntries[c].blocks;
+      for (let i = 0; i < blocks.length; i++) {
+        const block = blocks[i];
+        if (isTreeBlockType(block.block_type)) {
+          treeBlocks.push(block);
+          // Detect shrine blocks (fast char check: 'shr')
+          const bt = block.block_type;
+          if (bt.charCodeAt(0) === 115 && bt.charCodeAt(1) === 104 && bt.charCodeAt(2) === 114) {
+            shrinePositions.push({ x: block.position_x, y: block.position_y, z: block.position_z });
+          }
+        }
+      }
+    }
+
+    // Register shrine blocks for proximity tracking (moved from PlacedBlocks)
+    shrineTracker.clearBlocks();
+    if (shrinePositions.length > 0) {
+      shrineTracker.registerShrineBlocks(shrinePositions);
+    }
+
+    return treeBlocks;
+  }, [normalEntries]);
+
+  // One-time diagnostic: log when all chunks are admitted (mount drain complete)
+  const mountCompleteLogRef = useRef(false);
+  if (!mountCompleteLogRef.current && normalEntries.length > 0 && !hasPendingMountsRef.current && admittedKeysRef.current.size > 0) {
+    mountCompleteLogRef.current = true;
+    console.log(`[CameraTrackedBlocks] Mount complete: ${admittedKeysRef.current.size} chunks admitted, ${normalEntries.length} rendering`);
+  }
+
   // One-time pipeline diagnostic (fires once when normalEntries first has data)
   if (!debugLogRef.current && normalEntries.length > 0) {
     debugLogRef.current = true;
     const totalBlocks = normalEntries.reduce((sum, e) => sum + e.blocks.length, 0);
     console.log(`[CameraTrackedBlocks] Pipeline: ${normalEntries.length} chunks, ${totalBlocks} blocks, blockDefsLoading=${hoistedBlockDefsLoading}, atlasReady=${hoistedAtlasReady}, blocksMapSize=${hoistedBlocksMap.size}, fadeChunks=${fadeEntries.length}`);
-
-    // DEBUG: Compare chunkData.blocks vs chunkData.visibleBlocks for non-tree block loss
-    const ref = loadedChunksRef?.current;
-    if (ref) {
-      for (const [chunkKey, chunkData] of ref) {
-        if (!chunkData?.blocks || chunkData.blocks.length === 0) continue;
-        const allBlocks = chunkData.blocks;
-        const visBlocks = chunkData.visibleBlocks;
-
-        // Count non-tree blocks in both arrays
-        let allNonTree = 0;
-        let visNonTree = 0;
-        const nonTreeTypes = new Set<string>();
-
-        for (const b of allBlocks) {
-          const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('r_') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
-          if (!isTree) {
-            allNonTree++;
-            nonTreeTypes.add(b.block_type);
-          }
-        }
-
-        if (visBlocks) {
-          for (const b of visBlocks) {
-            const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('r_') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
-            if (!isTree) visNonTree++;
-          }
-        }
-
-        if (allNonTree > 0) {
-          console.log(`[PLACED BLOCKS DEBUG] ${chunkKey}: blocks=${allBlocks.length} (${allNonTree} placed), visibleBlocks=${visBlocks ? visBlocks.length + ' (' + visNonTree + ' placed)' : 'UNDEFINED (using blocks)'}, types: ${[...nonTreeTypes].join(', ')}`);
-        }
-      }
-    }
   }
 
   return (
@@ -331,6 +415,16 @@ export function CameraTrackedBlocks({
         visualDistance={visualDistance}
         cameraRef={{ current: camera }}
       />
+      {/* Merged tree mesh: 1 InstancedMesh for ALL tree blocks (1 draw call vs ~165) */}
+      {allTreeBlocks.length > 0 && hoistedAtlasReady && hoistedAtlasTexture && (
+        <InstancedAtlasBlockGroup
+          blocks={allTreeBlocks}
+          blockDef={TREE_BLOCK_DEF}
+          geometry={_sharedBoxGeometry}
+          atlasTexture={hoistedAtlasTexture}
+          performanceMode={performanceMode}
+        />
+      )}
       {normalEntries.map(({ key, blocks: chunkBlocks }) => (
         <ChunkRenderer
           key={key}
@@ -346,6 +440,7 @@ export function CameraTrackedBlocks({
           hoistedAtlasReady={hoistedAtlasReady}
           hoistedBlocksMap={hoistedBlocksMap}
           hoistedBlockDefsLoading={hoistedBlockDefsLoading}
+          treeBlocksPreFiltered
         />
       ))}
       {/* Water/Lava blocks - rendered after opaque blocks for transparency */}

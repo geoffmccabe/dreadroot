@@ -235,12 +235,19 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     return newMaterial;
   }, [texture, blockDef, cachedIsAnimated, textureOverride]);
 
-  // Cleanup material on unmount
+  // Cleanup material and mesh GPU resources on unmount
   useEffect(() => {
     return () => {
       if (materialRef.current) {
         materialRef.current.dispose();
+        diagnostics.recordDispose('material');
         materialRef.current = null;
+      }
+      // Dispose InstancedMesh GPU buffers (instanceMatrix, instanceColor)
+      const mesh = meshRef.current;
+      if (mesh) {
+        mesh.dispose();
+        diagnostics.recordDispose('mesh');
       }
     };
   }, []);
@@ -669,8 +676,14 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     return best.map(x => x.b);
   }, [blocks, shouldGlow, glowUpdateTrigger]);
   
+  // Track draw call mount/unmount for D-Flow breakdown
+  useEffect(() => {
+    diagnostics.mountDrawCall('nonTree');
+    return () => { diagnostics.unmountDrawCall('nonTree'); };
+  }, []);
+
   if (!material) return null;
-  
+
   // Pre-allocate buffer for more blocks to avoid remounting when blocks are added
   // Use MAX of current blocks.length + 50 or 100 to handle growth
   const bufferSize = Math.max(blocks.length + 50, 100);

@@ -11,7 +11,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { atlasManager } from '@/lib/atlasManager';
-import { ATLAS_GRID_SIZE } from '@/lib/textureAtlas';
 import {
   getTreeUVs,
   getTreeUVsWithAnimation,
@@ -19,14 +18,12 @@ import {
   getShombieUVs,
   getShnakeUVs,
   getWalapaUVs,
-  getBlockUVs,
   getGlobalUVs,
   getTreeTextureId,
   getShwarmTextureId,
   getShombieTextureId,
   getShnakeTextureId,
   getWalapaTextureId,
-  getBlockTextureId,
   getGlobalTextureId,
   mapTreeBlockTypeToTextureType,
   getFungalTreeUVs,
@@ -146,8 +143,7 @@ export function useTextureAtlas(): TextureAtlasState & {
   getShnakeUVs: (tier: number, part: 'head' | 'body' | 'face') => AnimatedAtlasUVs | null;
   getWalapaUVs: (tier: number, part: 'body' | 'belly' | 'eyes') => AtlasUVs | null;
 
-  // Block/global lookups
-  getBlockUVs: (blockType: string) => AtlasUVs | null;
+  // Global lookups
   getGlobalUVs: (name: string) => AtlasUVs | null;
 
   // Management
@@ -350,8 +346,7 @@ export function useTextureAtlas(): TextureAtlasState & {
     getShnakeUVs,
     getWalapaUVs,
 
-    // Block/global lookups
-    getBlockUVs,
+    // Global lookups
     getGlobalUVs,
 
     // Management
@@ -381,22 +376,29 @@ export function getInstanceUVsForTreeBlock(
 
   // Route fungal block types to fungal texture slots
   if (baseType === 'fungal_stem') {
-    const uvs = getFungalTreeUVs(tier, 'stem')!;
+    const uvs = getFungalTreeUVs(tier, 'stem');
+    if (!uvs) { const fb = slotIndexToUVs(0); return { uvOffsetX: fb.uvOffsetX, uvOffsetY: fb.uvOffsetY }; }
     return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
   }
   if (baseType === 'fungal_cap_top') {
-    const uvs = getFungalTreeUVs(tier, 'cap_top')!;
+    const uvs = getFungalTreeUVs(tier, 'cap_top');
+    if (!uvs) { const fb = slotIndexToUVs(0); return { uvOffsetX: fb.uvOffsetX, uvOffsetY: fb.uvOffsetY }; }
     return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
   }
   if (baseType === 'fungal_cap_underside') {
-    const uvs = getFungalTreeUVs(tier, 'cap_underside')!;
+    const uvs = getFungalTreeUVs(tier, 'cap_underside');
+    if (!uvs) { const fb = slotIndexToUVs(0); return { uvOffsetX: fb.uvOffsetX, uvOffsetY: fb.uvOffsetY }; }
     return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
   }
 
   const textureType = mapTreeBlockTypeToTextureType(baseType);
 
-  // getTreeUVs always returns valid UVs (uses deterministic slot calculation as fallback)
-  const uvs = getTreeUVs(tier, textureType)!;
+  const uvs = getTreeUVs(tier, textureType);
+  if (!uvs) {
+    // Atlas not yet synced — use slot 0 as placeholder
+    const fallback = slotIndexToUVs(0);
+    return { uvOffsetX: fallback.uvOffsetX, uvOffsetY: fallback.uvOffsetY };
+  }
 
   return {
     uvOffsetX: uvs.uvOffsetX,
@@ -416,10 +418,8 @@ export function getTreeBlockAnimationInfo(
   const baseType = decoded?.type ?? getBaseTreeBlockType(encodedBlockType) ?? 'trunk';
 
   const textureType = mapTreeBlockTypeToTextureType(baseType);
-  // getTreeUVsWithAnimation always returns valid data (uses deterministic fallback)
-  const animUVs = getTreeUVsWithAnimation(tier, textureType)!;
-
-  if (animUVs.frameCount <= 1) return null;
+  const animUVs = getTreeUVsWithAnimation(tier, textureType);
+  if (!animUVs || animUVs.frameCount <= 1) return null;
 
   return {
     frameCount: animUVs.frameCount,
@@ -451,14 +451,12 @@ export {
   getShombieUVs,
   getShnakeUVs,
   getWalapaUVs,
-  getBlockUVs,
   getGlobalUVs,
   getTreeTextureId,
   getShwarmTextureId,
   getShombieTextureId,
   getShnakeTextureId,
   getWalapaTextureId,
-  getBlockTextureId,
   getGlobalTextureId,
   mapTreeBlockTypeToTextureType,
   slotIndexToUVs,

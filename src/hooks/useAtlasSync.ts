@@ -20,7 +20,6 @@ import {
   getShombieTextureId,
   getShnakeTextureId,
   getWalapaTextureId,
-  getBlockTextureId,
   getGlobalTextureId,
 } from '@/lib/atlasLookup';
 import { getGlobalAtlasTexture, incrementAtlasVersion } from '@/hooks/useTextureAtlas';
@@ -114,20 +113,7 @@ export function useAtlasSync(options?: {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: blockTypes, isLoading: loadingBlocks } = useQuery({
-    queryKey: ['atlas-block-types'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('block_types')
-        .select('name, texture_url');
-      if (error) throw error;
-      return data;
-    },
-    enabled,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const isLoading = loadingSeeds || loadingShwarms || loadingShombies || loadingShnakes || loadingWalapas || loadingBlocks;
+  const isLoading = loadingSeeds || loadingShwarms || loadingShombies || loadingShnakes || loadingWalapas;
 
   // Sync all definitions to atlas
   const syncToAtlas = useCallback(async (): Promise<SyncResult> => {
@@ -151,17 +137,17 @@ export function useAtlasSync(options?: {
         slotIndex?: number;
       }> = [];
 
-      // Tree textures (30 tiers × 3 types) with deterministic slots
+      // Tree textures (30 tiers × 3 types) — dynamic allocation (no slotIndex)
+      // Animated textures auto-allocate N consecutive slots based on URL metadata
       // Filter to 'original' tree type to avoid using fungal definitions
       if (seedDefinitions) {
         const fruitDiag: string[] = [];
         for (let tier = 1; tier <= 30; tier++) {
           const def = seedDefinitions.find(d => d.tier === tier && (d.tree_type || 'original') === 'original');
-          const baseSlot = (tier - 1) * 3;
           const fruitUrl = def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null;
-          specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: baseSlot });
-          specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 1 });
-          specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: fruitUrl, slotIndex: baseSlot + 2 });
+          specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null });
+          specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null });
+          specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: fruitUrl });
           // Track which URL source was used for fruit
           const src = def?.fruit_texture_url ? 'fruit' : def?.branch_texture_url ? 'branch' : def?.trunk_texture_url ? 'trunk' : 'NONE';
           if (!def) fruitDiag.push(`T${tier}:NO_DEF`);
@@ -221,15 +207,6 @@ export function useAtlasSync(options?: {
         }
       }
 
-      // Block textures
-      if (blockTypes) {
-        for (const block of blockTypes) {
-          if (block.texture_url) {
-            specs.push({ textureId: getBlockTextureId(block.name), category: 'block', sourceUrl: block.texture_url });
-          }
-        }
-      }
-
       // Global textures
       specs.push({ textureId: getGlobalTextureId('coin'), category: 'global', sourceUrl: '/waterfall_coin.png' });
       specs.push({ textureId: getGlobalTextureId('cliff'), category: 'global', sourceUrl: '/cliff_texture_seamless.webp' });
@@ -239,18 +216,21 @@ export function useAtlasSync(options?: {
       const processed = await atlasManager.batchSetTextures(specs);
       initLogStep('useAtlasSync.ts', 'All textures synced (parallel)', processed);
 
-      // Save to IndexedDB
-      await atlasManager.save();
+      // Only save/upload/bump version if textures actually changed
+      if (processed > 0) {
+        // Save to IndexedDB
+        await atlasManager.save();
 
-      // Update THREE.js texture to reflect canvas changes
-      const atlasTexture = getGlobalAtlasTexture();
-      if (atlasTexture) {
-        const canvas = atlasManager.getCanvas();
-        if (canvas) {
-          atlasTexture.image = canvas;
-          atlasTexture.needsUpdate = true;
-          // Increment version to trigger UV offset recalculation in renderers
-          incrementAtlasVersion();
+        // Update THREE.js texture to reflect canvas changes
+        const atlasTexture = getGlobalAtlasTexture();
+        if (atlasTexture) {
+          const canvas = atlasManager.getCanvas();
+          if (canvas) {
+            atlasTexture.image = canvas;
+            atlasTexture.needsUpdate = true;
+            // Increment version to trigger UV offset recalculation in renderers
+            incrementAtlasVersion();
+          }
         }
       }
 
@@ -263,7 +243,7 @@ export function useAtlasSync(options?: {
     } finally {
       syncInProgressRef.current = false;
     }
-  }, [seedDefinitions, shwarmDefinitions, shombieDefinitions, shnakeDefinitions, walapaDefinitions, blockTypes]);
+  }, [seedDefinitions, shwarmDefinitions, shombieDefinitions, shnakeDefinitions, walapaDefinitions]);
 
   // Auto-sync when all definitions are loaded
   useEffect(() => {
@@ -286,7 +266,6 @@ export function useAtlasSync(options?: {
       shombies: shombieDefinitions,
       shnakes: shnakeDefinitions,
       walapas: walapaDefinitions,
-      blocks: blockTypes,
     },
   };
 }
@@ -295,7 +274,7 @@ export function useAtlasSync(options?: {
  * Update a single texture in the atlas (for admin panel use)
  */
 export async function updateAtlasTexture(
-  category: 'tree' | 'shwarm' | 'shombie' | 'shnake' | 'walapa' | 'block' | 'global',
+  category: 'tree' | 'shwarm' | 'shombie' | 'shnake' | 'walapa' | 'global',
   textureId: string,
   newUrl: string | null
 ): Promise<boolean> {
@@ -354,14 +333,12 @@ export async function syncAtlasOnInit(): Promise<void> {
     shombiesResult,
     shnakesResult,
     walapasResult,
-    blocksResult,
   ] = await Promise.all([
     supabase.from('seed_definitions').select('*').order('tier'),
     supabase.from('shwarm_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shombie_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url').order('tier'),
     supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
-    supabase.from('block_types').select('name, texture_url'),
   ]);
 
   const seedDefinitions = seedsResult.data;
@@ -369,7 +346,6 @@ export async function syncAtlasOnInit(): Promise<void> {
   const shombieDefinitions = shombiesResult.data;
   const shnakeDefinitions = shnakesResult.data;
   const walapaDefinitions = walapasResult.data;
-  const blockTypes = blocksResult.data;
 
   // Build batch of all texture specs for parallel loading
   const specs: Array<{
@@ -379,17 +355,16 @@ export async function syncAtlasOnInit(): Promise<void> {
     slotIndex?: number;
   }> = [];
 
-  // Tree textures (30 tiers × 3 types) with deterministic slots
+  // Tree textures (30 tiers × 3 types) — dynamic allocation (no slotIndex)
   // Filter to 'original' tree type to avoid using fungal definitions
   if (seedDefinitions) {
     const fruitDiag: string[] = [];
     for (let tier = 1; tier <= 30; tier++) {
       const def = seedDefinitions.find((d: any) => d.tier === tier && (d.tree_type || 'original') === 'original');
-      const baseSlot = (tier - 1) * 3;
       const fruitUrl = def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null;
-      specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: baseSlot });
-      specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 1 });
-      specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: fruitUrl, slotIndex: baseSlot + 2 });
+      specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null });
+      specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null });
+      specs.push({ textureId: getTreeTextureId(tier, 'fruit'), category: 'tree', sourceUrl: fruitUrl });
       const src = def?.fruit_texture_url ? 'fruit' : def?.branch_texture_url ? 'branch' : def?.trunk_texture_url ? 'trunk' : 'NONE';
       if (!def) fruitDiag.push(`T${tier}:NO_DEF`);
       else if (src === 'NONE') fruitDiag.push(`T${tier}:NULL`);
@@ -444,32 +419,27 @@ export async function syncAtlasOnInit(): Promise<void> {
     }
   }
 
-  if (blockTypes) {
-    for (const block of blockTypes) {
-      if (block.texture_url) {
-        specs.push({ textureId: getBlockTextureId(block.name), category: 'block', sourceUrl: block.texture_url });
-      }
-    }
-  }
-
   specs.push({ textureId: getGlobalTextureId('coin'), category: 'global', sourceUrl: '/waterfall_coin.png' });
   specs.push({ textureId: getGlobalTextureId('cliff'), category: 'global', sourceUrl: '/cliff_texture_seamless.webp' });
   specs.push({ textureId: getGlobalTextureId('grass'), category: 'global', sourceUrl: '/grass_texture_seamless.webp' });
 
   // Batch load all images in parallel and draw to atlas
-  await atlasManager.batchSetTextures(specs);
+  const processed = await atlasManager.batchSetTextures(specs);
 
-  // Save to IndexedDB
-  await atlasManager.save();
+  // Only save/upload/bump version if textures actually changed
+  if (processed > 0) {
+    // Save to IndexedDB
+    await atlasManager.save();
 
-  // Update THREE.js texture
-  const atlasTexture = getGlobalAtlasTexture();
-  if (atlasTexture) {
-    const canvas = atlasManager.getCanvas();
-    if (canvas) {
-      atlasTexture.image = canvas;
-      atlasTexture.needsUpdate = true;
-      incrementAtlasVersion();
+    // Update THREE.js texture
+    const atlasTexture = getGlobalAtlasTexture();
+    if (atlasTexture) {
+      const canvas = atlasManager.getCanvas();
+      if (canvas) {
+        atlasTexture.image = canvas;
+        atlasTexture.needsUpdate = true;
+        incrementAtlasVersion();
+      }
     }
   }
 

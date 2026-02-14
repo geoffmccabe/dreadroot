@@ -69,5 +69,11 @@ export function cullOccludedBlocks(blocks: PlacedBlock[]): PlacedBlock[] {
     }
   }
 
+  // Safety net: if all blocks were somehow culled, return original to prevent invisible chunks
+  if (exposed.length === 0 && blocks.length > 0) {
+    console.warn(`[OcclusionCulling] All ${blocks.length} blocks culled - returning original to prevent invisible chunk`);
+    return blocks;
+  }
+
   return exposed;
 }

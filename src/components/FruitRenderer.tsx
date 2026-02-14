@@ -6,16 +6,17 @@ import React, { useRef, useMemo, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import { TreeFruit } from '@/features/trees/types';
+import { TreeFruit, PlantedTree } from '@/features/trees/types';
 import { FRUIT_CONFIG, getFruitTier } from '@/features/trees/constants';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import type { UniversalFlameRendererHandle } from '@/components/fortress/UniversalFlameRenderer';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
-import { getTreeUVs } from '@/lib/atlasLookup';
+import { getTreeUVsWithAnimation, slotIndexToUVs } from '@/lib/atlasLookup';
 import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset } from '@/lib/atlasMaterial';
 
 interface FruitRendererProps {
   treeFruits: TreeFruit[];
+  plantedTrees: PlantedTree[];
   cameraRef: React.RefObject<THREE.Camera>;
   playerLevel: number;
   universalFlameRef: React.RefObject<UniversalFlameRendererHandle>;
@@ -42,6 +43,7 @@ const _color = new THREE.Color();
 
 export const FruitRenderer = React.memo(function FruitRenderer({
   treeFruits,
+  plantedTrees,
   cameraRef,
   playerLevel,
   universalFlameRef,
@@ -56,6 +58,17 @@ export const FruitRenderer = React.memo(function FruitRenderer({
   const promptGroupRef = useRef<THREE.Group>(null);
   const findClosestFruitRef = useRef(findClosestFruit);
   findClosestFruitRef.current = findClosestFruit;
+
+  // Map tree_id → tier for fruit texture display (use tree's tier, not fruit's)
+  const treeTierMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const tree of plantedTrees) {
+      map.set(tree.id, tree.seed_definition?.tier ?? 1);
+    }
+    return map;
+  }, [plantedTrees]);
+  const treeTierMapRef = useRef(treeTierMap);
+  treeTierMapRef.current = treeTierMap;
 
   // Track atlas readiness
   const [atlasReady, setAtlasReady] = useState(false);
@@ -173,6 +186,7 @@ export const FruitRenderer = React.memo(function FruitRenderer({
     const count = visibleCount;
 
     // Update instanced mesh
+    const now = performance.now(); // Hoist outside loop — same frame for all fruits
     for (let i = 0; i < count; i++) {
       const { fruit, dist } = buf[i];
       const fx = fruit.position_x + 0.5;
@@ -182,11 +196,18 @@ export const FruitRenderer = React.memo(function FruitRenderer({
       _mat4.makeTranslation(fx, fy, fz);
       mesh.setMatrixAt(i, _mat4);
 
-      // Set UV offset from atlas for this fruit's tier
+      // Set UV offset from atlas using the TREE's tier (fruit.tier is 0 until harvested)
       if (hasAtlas && uvAttr) {
-        const uvs = getTreeUVs(fruit.tier, 'fruit');
-        if (uvs) {
-          setInstanceUvOffset(uvAttr, i, uvs.uvOffsetX, uvs.uvOffsetY);
+        const treeTier = treeTierMapRef.current.get(fruit.tree_id) ?? 1;
+        const animUVs = getTreeUVsWithAnimation(treeTier, 'fruit');
+        if (animUVs) {
+          if (animUVs.frameCount > 1) {
+            const frameIndex = Math.floor(now / animUVs.frameDelayMs) % animUVs.frameCount;
+            const frameUV = slotIndexToUVs(animUVs.baseSlotIndex + frameIndex);
+            setInstanceUvOffset(uvAttr, i, frameUV.uvOffsetX, frameUV.uvOffsetY);
+          } else {
+            setInstanceUvOffset(uvAttr, i, animUVs.uvOffsetX, animUVs.uvOffsetY);
+          }
         }
       }
     }

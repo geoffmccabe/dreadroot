@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { ViewSettings, DEFAULT_VIEW_SETTINGS } from '@/components/fortress/FortressTypes';
+import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface FadeChunkEntry {
   key: string;
@@ -68,6 +69,12 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
     return geo;
   }, []);
 
+  // Dispose geometry GPU buffers on unmount
+  useEffect(() => {
+    const geo = geometry;
+    return () => { geo.dispose(); diagnostics.recordDispose('geometry'); };
+  }, [geometry]);
+
   // Rings are 1-based: ring 1 = innermost fade, ring 2 = middle, ring 3 = outermost
   const ringSettings = ring === 1 ? viewSettings.ring1 : ring === 2 ? viewSettings.ring2 : viewSettings.ring3;
 
@@ -86,6 +93,12 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Dispose material GPU program on unmount
+  useEffect(() => {
+    const mat = material;
+    return () => { mat.dispose(); diagnostics.recordDispose('material'); };
+  }, [material]);
 
   // Per-block fade progress tracking
   const fadeMap = useRef<Map<string, number>>(new Map());
@@ -133,6 +146,7 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
       if (progress < 1) fading.push(i);
     }
 
+    prevMap.clear(); // Free old map entries before replacing
     fadeMap.current = newMap;
     fadingIndices.current = fading;
     attr.needsUpdate = true;
@@ -173,6 +187,12 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
     fadingIndices.current = remaining;
     attr.needsUpdate = true;
   });
+
+  // Track draw call mount/unmount for D-Flow breakdown
+  useEffect(() => {
+    diagnostics.mountDrawCall('fade');
+    return () => { diagnostics.unmountDrawCall('fade'); };
+  }, []);
 
   if (blocks.length === 0) return null;
 

@@ -141,6 +141,8 @@ interface PlacedBlocksProps {
   hoistedAtlasReady?: boolean;
   hoistedBlocksMap?: Map<string, BlockType>;
   hoistedBlockDefsLoading?: boolean;
+  // When true, tree blocks are rendered by MergedTreeMesh — skip IABG rendering
+  treeBlocksPreFiltered?: boolean;
 }
 
 // F2.1: Wrap in React.memo with custom comparison to prevent cascade re-renders
@@ -155,7 +157,8 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   hoistedAtlasTexture,
   hoistedAtlasReady,
   hoistedBlocksMap,
-  hoistedBlockDefsLoading
+  hoistedBlockDefsLoading,
+  treeBlocksPreFiltered = false
 }) => {
   // B2.2: Auto-enable performance mode when total visible blocks exceed threshold
   const effectivePerformanceMode = performanceMode || blocks.length > GLOBAL_VISIBLE_BLOCKS_THRESHOLD;
@@ -184,7 +187,13 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
       }
     };
   }, []);
-  
+
+  // Dispose shared geometry GPU buffers on unmount (frees all attribute WebGL buffers)
+  useEffect(() => {
+    const geo = geometry;
+    return () => { geo.dispose(); diagnostics.recordDispose('geometry'); };
+  }, [geometry]);
+
   // Phase 1 optimization: use hoisted block definitions when provided
   const internalBlocksData = useBlocksData();
   const blocksMap = hoistedBlocksMap !== undefined ? hoistedBlocksMap : internalBlocksData.blocksMap;
@@ -334,7 +343,10 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     const nonTreeBlocks: PlacedBlock[] = [];
 
     // Clear shrine blocks and re-detect from loaded blocks
-    shrineTracker.clearBlocks();
+    // Skip when tree blocks are handled by MergedTreeMesh (it manages shrine tracking)
+    if (!treeBlocksPreFiltered) {
+      shrineTracker.clearBlocks();
+    }
     const shrineBlockPositions: Array<{ x: number; y: number; z: number }> = [];
 
     for (let i = 0; i < blocks.length; i++) {
@@ -346,15 +358,18 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
       }
 
       if (isTreeBlockType(block.block_type)) {
-        treeBlocksForAtlas.push(block);
-        // Detect shrine blocks for proximity tracking (fast char check: 'shr')
-        const bt = block.block_type;
-        if (bt.charCodeAt(0) === 115 && bt.charCodeAt(1) === 104 && bt.charCodeAt(2) === 114) {
-          shrineBlockPositions.push({
-            x: block.position_x,
-            y: block.position_y,
-            z: block.position_z,
-          });
+        // When MergedTreeMesh handles tree rendering, skip collection entirely
+        if (!treeBlocksPreFiltered) {
+          treeBlocksForAtlas.push(block);
+          // Detect shrine blocks for proximity tracking (fast char check: 'shr')
+          const bt = block.block_type;
+          if (bt.charCodeAt(0) === 115 && bt.charCodeAt(1) === 104 && bt.charCodeAt(2) === 114) {
+            shrineBlockPositions.push({
+              x: block.position_x,
+              y: block.position_y,
+              z: block.position_z,
+            });
+          }
         }
         continue;
       }
@@ -422,7 +437,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     groupCacheRef.current = { key: cheapKey, result };
 
     return result;
-  }, [blocks]);
+  }, [blocks, treeBlocksPreFiltered]);
   
   // NOTE: Invisiblock colliders are now handled by chunk loader (ensureBlockCollider)
   // This removes duplicate collider authority that was causing grid inflation
@@ -462,14 +477,6 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     _loggedNonTreeBlocks = true;
     const totalNonTreeBlocks = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
     initLogStep('PlacedBlocks.tsx', `Non-tree blocks rendering`, totalNonTreeBlocks);
-
-    // DEBUG: Log all non-tree block groups with their types and counts
-    for (const [groupKey, { blocks: gBlocks, textureOverride }] of groupedBlocks) {
-      const blockType = groupKey.split(':')[0];
-      const blockDef = blocksMap.get(blockType);
-      const texUrl = textureOverride || blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-      console.warn(`[PlacedBlocks GROUP] "${groupKey}": ${gBlocks.length} blocks, blockDef=${blockDef ? blockDef.key : 'MISSING→fallback'}, texture=${texUrl}, sample pos=(${gBlocks[0]?.position_x},${gBlocks[0]?.position_y},${gBlocks[0]?.position_z})`);
-    }
   }
 
   // Don't render if there are no blocks to show
@@ -480,18 +487,10 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     return null;
   }
 
-  // DEBUG: Log total blocks, tree blocks, non-tree blocks on first render per chunk
-  if (groupedBlocks.size > 0 || culledAtlasTreeBlocks.length > 0) {
-    const nonTreeTotal = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
-    if (nonTreeTotal > 0) {
-      console.warn(`[PlacedBlocks RENDER] total=${blocks.length}, tree=${culledAtlasTreeBlocks.length}, nonTree=${nonTreeTotal}, groups=${groupedBlocks.size}, atlasReady=${atlasReady}`);
-    }
-  }
-
   return (
     <>
-      {/* Render tree blocks with atlas (single draw call for ALL tree blocks) */}
-      {atlasReady && atlasTexture && culledAtlasTreeBlocks.length > 0 && (
+      {/* Render tree blocks with atlas — ONLY when MergedTreeMesh is NOT handling them */}
+      {!treeBlocksPreFiltered && atlasReady && atlasTexture && culledAtlasTreeBlocks.length > 0 && (
         <InstancedAtlasBlockGroup
           key="tree-atlas"
           blocks={culledAtlasTreeBlocks}
@@ -508,7 +507,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
       )}
 
       {/* Fallback: render tree blocks without atlas while loading */}
-      {(!atlasReady || !atlasTexture) && culledAtlasTreeBlocks.length > 0 && (
+      {!treeBlocksPreFiltered && (!atlasReady || !atlasTexture) && culledAtlasTreeBlocks.length > 0 && (
         <InstancedBlockGroup
           key="tree-fallback"
           blocks={culledAtlasTreeBlocks}
@@ -576,6 +575,7 @@ export const PlacedBlocks = React.memo(PlacedBlocksInner, (prev, next) => {
     prev.hoistedAtlasTexture === next.hoistedAtlasTexture &&
     prev.hoistedAtlasReady === next.hoistedAtlasReady &&
     prev.hoistedBlocksMap === next.hoistedBlocksMap &&
-    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading
+    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading &&
+    prev.treeBlocksPreFiltered === next.treeBlocksPreFiltered
   );
 });

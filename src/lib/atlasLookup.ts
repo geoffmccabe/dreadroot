@@ -6,7 +6,9 @@
  */
 
 import { ATLAS_GRID_SIZE } from './textureAtlas';
-import { atlasManager, getSlotPixelPosition } from './atlasManager';
+import { atlasManager, SLOT_RANGES } from './atlasManager';
+
+const _treeUvDiagLogged = new Set<string>();
 
 export interface AtlasUVs {
   uvOffsetX: number;
@@ -73,10 +75,6 @@ export function getFungalTreeTextureId(tier: number, type: 'stem' | 'cap_top' | 
   return `fungal_t${tier}_${type}`;
 }
 
-export function getBlockTextureId(blockType: string): string {
-  return `block_${blockType}`;
-}
-
 export function getGlobalTextureId(name: string): string {
   return `global_${name}`;
 }
@@ -86,54 +84,24 @@ export function getGlobalTextureId(name: string): string {
 // ============================================
 
 /**
- * Calculate the deterministic slot index for a tree texture.
- * Tree textures are allocated sequentially: tier N uses slots (N-1)*3 to (N-1)*3+2
- * Slot order within tier: trunk, branch, fruit
+ * Get UVs for a tree texture (dynamic allocation — no deterministic fallback)
  */
-function calculateTreeSlotIndex(tier: number, type: 'trunk' | 'branch' | 'fruit'): number {
-  const typeOffset = type === 'trunk' ? 0 : type === 'branch' ? 1 : 2;
-  return (tier - 1) * 3 + typeOffset;
-}
-
-/**
- * Get UVs for a tree texture
- */
-// Diagnostic: track which tree UV lookups have been logged (once per unique textureId)
-const _treeUvDiagLogged = new Set<string>();
-
 export function getTreeUVs(tier: number, type: 'trunk' | 'branch' | 'fruit'): AtlasUVs | null {
   const textureId = getTreeTextureId(tier, type);
   const slot = atlasManager.getSlotForTexture(textureId);
-
-  if (slot) {
-    if (!_treeUvDiagLogged.has(textureId)) {
-      _treeUvDiagLogged.add(textureId);
-      const det = calculateTreeSlotIndex(tier, type);
-      if (det !== slot.slotIndex) {
-        console.warn(`[AtlasUV] SLOT MISMATCH: ${textureId} atlas=${slot.slotIndex} deterministic=${det}`);
-      }
-    }
-    return slotIndexToUVs(slot.slotIndex);
-  }
-
-  // Fallback: use deterministic slot calculation if metadata lookup fails
-  // This handles race conditions where blocks render before sync completes
-  const calculatedSlot = calculateTreeSlotIndex(tier, type);
-  if (!_treeUvDiagLogged.has(textureId)) {
-    _treeUvDiagLogged.add(textureId);
-    console.warn(`[AtlasUV] FALLBACK: ${textureId} → deterministic slot ${calculatedSlot} (no atlas entry)`);
-  }
-  return slotIndexToUVs(calculatedSlot);
+  if (!slot) return null; // Atlas not yet synced; callers handle null (placeholder renders until sync)
+  return slotIndexToUVs(slot.slotIndex);
 }
 
 /**
  * Calculate the deterministic slot index for a fungal tree texture.
- * Fungal textures start at slot 840: tier N uses slots 840 + (N-1)*3 to 840 + (N-1)*3+2
+ * Fungal textures start at SLOT_RANGES.fungal_tree.start (710):
+ * tier N uses slots start + (N-1)*3 to start + (N-1)*3+2
  * Slot order within tier: stem, cap_top, cap_underside
  */
 export function calculateFungalTreeSlotIndex(tier: number, type: 'stem' | 'cap_top' | 'cap_underside'): number {
   const typeOffset = type === 'stem' ? 0 : type === 'cap_top' ? 1 : 2;
-  return 840 + (tier - 1) * 3 + typeOffset;
+  return SLOT_RANGES.fungal_tree.start + (tier - 1) * 3 + typeOffset;
 }
 
 /**
@@ -164,30 +132,19 @@ export function getFungalTreeUVs(tier: number, type: 'stem' | 'cap_top' | 'cap_u
 }
 
 /**
- * Get UVs for a tree texture with animation info
+ * Get UVs for a tree texture with animation info (dynamic allocation — no deterministic fallback)
  */
 export function getTreeUVsWithAnimation(tier: number, type: 'trunk' | 'branch' | 'fruit'): AnimatedAtlasUVs | null {
   const textureId = getTreeTextureId(tier, type);
   const slot = atlasManager.getSlotForTexture(textureId);
+  if (!slot) return null; // Atlas not yet synced; callers handle null
 
-  if (slot) {
-    const baseUVs = slotIndexToUVs(slot.slotIndex);
-    return {
-      ...baseUVs,
-      frameCount: slot.metadata.frameCount || 1,
-      frameDelayMs: slot.metadata.frameDelayMs || 100,
-      baseSlotIndex: slot.slotIndex,
-    };
-  }
-
-  // Fallback: use deterministic slot calculation (static, no animation)
-  const calculatedSlot = calculateTreeSlotIndex(tier, type);
-  const baseUVs = slotIndexToUVs(calculatedSlot);
+  const baseUVs = slotIndexToUVs(slot.slotIndex);
   return {
     ...baseUVs,
-    frameCount: 1,
-    frameDelayMs: 100,
-    baseSlotIndex: calculatedSlot,
+    frameCount: slot.metadata.frameCount || 1,
+    frameDelayMs: slot.metadata.frameDelayMs || 100,
+    baseSlotIndex: slot.slotIndex,
   };
 }
 
@@ -261,16 +218,6 @@ export function getShnakeUVs(tier: number, part: 'head' | 'body' | 'face'): Anim
  */
 export function getWalapaUVs(tier: number, part: 'body' | 'belly' | 'eyes'): AtlasUVs | null {
   const textureId = getWalapaTextureId(tier, part);
-  const slot = atlasManager.getSlotForTexture(textureId);
-  if (!slot) return null;
-  return slotIndexToUVs(slot.slotIndex);
-}
-
-/**
- * Get UVs for a block texture
- */
-export function getBlockUVs(blockType: string): AtlasUVs | null {
-  const textureId = getBlockTextureId(blockType);
   const slot = atlasManager.getSlotForTexture(textureId);
   if (!slot) return null;
   return slotIndexToUVs(slot.slotIndex);

@@ -16,7 +16,8 @@ import { PlacedBlock, BlockType } from '@/types/blocks';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
-import { ATLAS_GRID_SIZE } from '@/lib/textureAtlas';
+import { isBoxInFrustum } from '@/lib/frustumCuller';
+import { createTreeAtlasMaterial } from '@/lib/atlasMaterial';
 // enqueueJob no longer used — atlas rebuild uses its own RAF loop
 // to avoid being blocked by collider removal jobs in the shared queue
 import {
@@ -62,6 +63,38 @@ function getCachedAnimInfo(blockType: string) {
   return info;
 }
 
+// Shared atlas version polling: ONE timer for all IABG instances (replaces N×setInterval)
+type AtlasVersionListener = (version: number) => void;
+const _atlasListeners = new Set<AtlasVersionListener>();
+let _atlasPollingId: ReturnType<typeof setInterval> | null = null;
+let _lastPolledVersion = -1;
+
+function subscribeAtlasVersion(listener: AtlasVersionListener): () => void {
+  _atlasListeners.add(listener);
+  if (!_atlasPollingId) {
+    _lastPolledVersion = getAtlasVersion();
+    _atlasPollingId = setInterval(() => {
+      const v = getAtlasVersion();
+      if (v !== _lastPolledVersion) {
+        const cacheSize = uvLookupCache.size;
+        _lastPolledVersion = v;
+        uvLookupCache.clear();
+        animInfoCache.clear();
+        _uvDiagLogged.clear();
+        console.log(`[AtlasUV] Shared poll: atlas version changed to ${v}, cleared ${cacheSize} cached UVs`);
+        for (const cb of _atlasListeners) cb(v);
+      }
+    }, 500);
+  }
+  return () => {
+    _atlasListeners.delete(listener);
+    if (_atlasListeners.size === 0 && _atlasPollingId) {
+      clearInterval(_atlasPollingId);
+      _atlasPollingId = null;
+    }
+  };
+}
+
 // Numeric position key: collision-free for block coords in [-32768, 32767]
 // Eliminates string allocation that causes GC pressure during incremental updates
 function numPosKey(x: number, y: number, z: number): number {
@@ -86,76 +119,7 @@ interface InstancedAtlasBlockGroupProps {
   performanceMode?: boolean;
 }
 
-/**
- * Create a material with custom shader modifications for atlas UV offsets
- * and per-face directional shading for depth perception
- */
-function createAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMaterial {
-  const material = new THREE.MeshLambertMaterial({
-    map: atlasTexture,
-    color: 0xffffff,
-    transparent: false,  // Don't use alpha from texture
-    alphaTest: 0,        // Don't discard based on alpha
-  });
-
-  // Inject custom shader code to handle per-instance UV offsets and face shading
-  material.onBeforeCompile = (shader) => {
-    // Add attribute for UV offset and varying for face shading
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <common>',
-      `#include <common>
-      attribute vec2 instanceUvOffset;
-      varying vec2 vInstanceUvOffset;
-      varying float vFaceShade;`
-    );
-
-    // Pass UV offset and calculate face shading based on normal
-    // Top (+Y) = 1.0, Sides = 0.85, Bottom (-Y) = 0.65
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <uv_vertex>',
-      `#include <uv_vertex>
-      vInstanceUvOffset = instanceUvOffset;
-
-      // Per-face directional shading based on world normal
-      vec3 worldNormal = normalize(mat3(modelMatrix) * normal);
-      if (worldNormal.y > 0.5) {
-        vFaceShade = 1.0;        // Top face - full brightness
-      } else if (worldNormal.y < -0.5) {
-        vFaceShade = 0.65;       // Bottom face - darkest
-      } else if (abs(worldNormal.z) > 0.5) {
-        vFaceShade = 0.8;        // Front/back faces - medium
-      } else {
-        vFaceShade = 0.9;        // Left/right faces - slightly darker
-      }`
-    );
-
-    // Receive UV offset and face shade in fragment shader
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <common>',
-      `#include <common>
-      varying vec2 vInstanceUvOffset;
-      varying float vFaceShade;`
-    );
-
-    // Apply UV offset when sampling the texture and apply face shading
-    // The atlas has 32x32 slots, so each slot is 1/32 of the texture
-    const slotSize = 1.0 / ATLAS_GRID_SIZE;
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <map_fragment>',
-      `#ifdef USE_MAP
-        // Apply instance UV offset to map the correct atlas region
-        vec2 slotUv = clamp(fract(vMapUv), vec2(${(4.0/256).toFixed(6)}), vec2(${(1 - 4.0/256).toFixed(6)}));
-        vec2 atlasUv = vInstanceUvOffset + slotUv * ${slotSize.toFixed(6)};
-        vec4 sampledDiffuseColor = texture2D(map, atlasUv);
-        // Apply per-face directional shading for depth perception
-        sampledDiffuseColor.rgb *= vFaceShade;
-        diffuseColor *= sampledDiffuseColor;
-      #endif`
-    );
-  };
-
-  return material;
-}
+// createAtlasMaterial moved to src/lib/atlasMaterial.ts as createTreeAtlasMaterial
 
 export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> = ({
   blocks,
@@ -176,19 +140,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   const [atlasVersion, setAtlasVersion] = useState(() => getAtlasVersion());
   const lastAtlasVersionRef = useRef(atlasVersion);
 
-  // Check for atlas version changes periodically
-  useEffect(() => {
-    const checkVersion = () => {
-      const currentVersion = getAtlasVersion();
-      if (currentVersion !== lastAtlasVersionRef.current) {
-        lastAtlasVersionRef.current = currentVersion;
-        setAtlasVersion(currentVersion);
-      }
-    };
-
-    const interval = setInterval(checkVersion, 200);
-    return () => clearInterval(interval);
-  }, []);
+  // Shared atlas version polling (single timer for all IABG instances)
+  useEffect(() => subscribeAtlasVersion(setAtlasVersion), []);
 
   // Performance mode auto-enable for large block counts
   const effectivePerformanceMode = performanceMode || blocks.length > AUTO_PERFORMANCE_MODE_THRESHOLD;
@@ -216,7 +169,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     if (!atlasTexture) return null;
 
-    const mat = createAtlasMaterial(atlasTexture);
+    const mat = createTreeAtlasMaterial(atlasTexture);
     materialRef.current = mat;
     return mat;
   }, [atlasTexture]);
@@ -1194,7 +1147,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     };
   }, [blocks, atlasVersion, doRebuild, doIncrementalUpdate]);
 
-  // Cleanup RAF and worker on unmount only
+  // Cleanup RAF, worker, and GPU resources on unmount
   useEffect(() => {
     return () => {
       if (rebuildRafRef.current !== null) {
@@ -1206,6 +1159,17 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         workerPendingRef.current = false;
         rebuildVersionRef.current++;
       }
+      // Dispose InstancedMesh GPU buffers (instanceMatrix, instanceColor)
+      const mesh = meshRef.current;
+      if (mesh) {
+        mesh.dispose();
+        diagnostics.recordDispose('mesh');
+      }
+      // Release buffer refs so GC can reclaim typed arrays
+      uvOffsetAttrRef.current = null;
+      colorAttrRef.current = null;
+      uvBufferRef.current = null;
+      colorBufferRef.current = null;
     };
   }, []);
 
@@ -1238,6 +1202,14 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     const unregister = frameLoop.register(id, (delta) => {
       const mesh = meshRef.current;
       if (!mesh || blocks.length === 0) return;
+
+      // Box-based frustum culling: hide meshes entirely behind camera
+      const bbox = mesh.geometry.boundingBox;
+      if (bbox) {
+        const visible = isBoxInFrustum(bbox);
+        if (mesh.visible !== visible) mesh.visible = visible;
+        if (!visible) return;
+      }
 
       let matrixNeedsUpdate = false;
       let colorNeedsUpdate = false;
@@ -1366,6 +1338,12 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     return unregister;
   }, [blocks]);
+
+  // Track draw call mount/unmount for D-Flow breakdown
+  useEffect(() => {
+    diagnostics.mountDrawCall('treeAtlas');
+    return () => { diagnostics.unmountDrawCall('treeAtlas'); };
+  }, []);
 
   if (!material || blocks.length === 0) {
     return null;

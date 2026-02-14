@@ -20,11 +20,11 @@ interface UseFruitPickupOptions {
   onFruitRemoved?: (fruitId: string) => void; // Immediately remove from local state
 }
 
-// Roll a fruit tier: 50% chance to increase each step, 1-10
+// Roll a fruit tier: 50% chance to increase each step, 1-30
 function rollFruitTier(isOwnTree: boolean): number {
   const roll = () => {
     let t = 1;
-    while (Math.random() < 0.5 && t < 10) t++;
+    while (Math.random() < 0.5 && t < 30) t++;
     return t;
   };
   // Own-tree bonus: roll twice, take higher

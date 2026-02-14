@@ -181,7 +181,7 @@ export async function blobToImageBitmap(blob: Blob): Promise<ImageBitmap> {
  * Create empty atlas metadata
  */
 // Bump this when SLOT_RANGES in atlasManager.ts change to force atlas rebuild
-export const ATLAS_SCHEMA_VERSION = 7;
+export const ATLAS_SCHEMA_VERSION = 8;
 
 export function createEmptyMetadata(atlasId: number): AtlasMetadata {
   return {
@@ -191,14 +191,14 @@ export function createEmptyMetadata(atlasId: number): AtlasMetadata {
     lastModified: Date.now(),
     slots: {},
     nextFreeSlot: {
-      tree: 0,        // 0-149 (150 slots)
-      shwarm: 150,    // 150-399 (250 slots for animated textures)
-      shombie: 400,   // 400-429 (30 slots)
-      shnake: 430,    // 430-519 (90 slots)
-      walapa: 520,    // 520-549 (30 slots)
-      global: 550,    // 550-569 (20 slots)
-      block: 570,     // 570-839 (270 slots)
-      misc: 840,      // 840-1023 (184 slots)
+      tree: 0,            // 0-289 (290 slots, dynamic allocation)
+      shwarm: 290,        // 290-539 (250 slots)
+      shombie: 540,       // 540-569 (30 slots)
+      shnake: 570,        // 570-659 (90 slots)
+      walapa: 660,        // 660-689 (30 slots)
+      global: 690,        // 690-709 (20 slots)
+      fungal_tree: 710,   // 710-799 (90 slots)
+      misc: 800,          // 800-1023 (224 slots)
     },
   };
 }

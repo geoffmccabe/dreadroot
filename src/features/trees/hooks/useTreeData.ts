@@ -251,6 +251,8 @@ export function useTreeData(
         blueprintRepairDoneRef.current = true;
         repairMissingBlueprints(treesNeedingBlueprints).catch(err => {
           console.error('[TreeData] Blueprint repair error:', err);
+          // Allow retry on next fetchData — don't permanently block repair
+          blueprintRepairDoneRef.current = false;
         });
       }
     } catch (err) {

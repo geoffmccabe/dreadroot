@@ -1384,6 +1384,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Fruit Renderer - proximity-based fruit spheres with flame plumes */}
       <FruitRenderer
         treeFruits={treeFruits}
+        plantedTrees={plantedTrees}
         cameraRef={cameraRef}
         playerLevel={playerLevel}
         universalFlameRef={universalFlameRef}

@@ -2,7 +2,7 @@
  * Atlas Material Utilities
  *
  * Creates THREE.js materials with shader modifications for atlas UV offsets.
- * Used by enemy renderers to sample the correct region of the global atlas.
+ * Used by enemy renderers and tree blocks to sample the correct region of the global atlas.
  */
 
 import * as THREE from 'three';
@@ -12,6 +12,8 @@ const SLOT_UV_SIZE = 1 / ATLAS_GRID_SIZE;
 // Half-texel inset in slot-local UV space to prevent bilinear filtering bleed
 // Each slot is 256 texels, so half texel = 0.5/256
 const HALF_TEXEL = 0.5 / 256;
+// Larger inset for tree blocks (4 texels) — prevents visible bleed at block edges
+const TREE_TEXEL_INSET = 4.0 / 256;
 
 /**
  * Create a MeshLambertMaterial with atlas UV offset support
@@ -218,6 +220,70 @@ export function createAtlasHueShiftMaterial(
           sampledDiffuseColor.rgb += vec3(0.15, 0.12, 0.05); // Warm metallic tint
         }
 
+        diffuseColor *= sampledDiffuseColor;
+      #endif`
+    );
+  };
+
+  return material;
+}
+
+/**
+ * Create a MeshLambertMaterial with atlas UV offset + per-face directional shading.
+ * Used by tree block rendering (InstancedAtlasBlockGroup, MergedTreeMesh).
+ * Top face = full brightness, sides = 0.8-0.9, bottom = 0.65.
+ */
+export function createTreeAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMaterial {
+  const material = new THREE.MeshLambertMaterial({
+    map: atlasTexture,
+    color: 0xffffff,
+    transparent: false,
+    alphaTest: 0,
+  });
+
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+      attribute vec2 instanceUvOffset;
+      varying vec2 vInstanceUvOffset;
+      varying float vFaceShade;`
+    );
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <uv_vertex>',
+      `#include <uv_vertex>
+      vInstanceUvOffset = instanceUvOffset;
+
+      // Per-face directional shading based on world normal
+      vec3 worldNormal = normalize(mat3(modelMatrix) * normal);
+      if (worldNormal.y > 0.5) {
+        vFaceShade = 1.0;        // Top face - full brightness
+      } else if (worldNormal.y < -0.5) {
+        vFaceShade = 0.65;       // Bottom face - darkest
+      } else if (abs(worldNormal.z) > 0.5) {
+        vFaceShade = 0.8;        // Front/back faces - medium
+      } else {
+        vFaceShade = 0.9;        // Left/right faces - slightly darker
+      }`
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+      varying vec2 vInstanceUvOffset;
+      varying float vFaceShade;`
+    );
+
+    const slotSize = SLOT_UV_SIZE;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#ifdef USE_MAP
+        vec2 slotUv = clamp(fract(vMapUv), vec2(${TREE_TEXEL_INSET.toFixed(6)}), vec2(${(1 - TREE_TEXEL_INSET).toFixed(6)}));
+        vec2 atlasUv = vInstanceUvOffset + slotUv * ${slotSize.toFixed(6)};
+        vec4 sampledDiffuseColor = texture2D(map, atlasUv);
+        // Apply per-face directional shading for depth perception
+        sampledDiffuseColor.rgb *= vFaceShade;
         diffuseColor *= sampledDiffuseColor;
       #endif`
     );

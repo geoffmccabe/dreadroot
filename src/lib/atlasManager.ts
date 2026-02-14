@@ -80,21 +80,17 @@ export function generatePerSlotMipmaps(baseCanvas: HTMLCanvasElement): HTMLCanva
 }
 
 // Slot range allocations by category
-// Trees: 30 tiers × 3 textures + animations = 150
-// Shwarm: 10 tiers × 1 = 10
-// Shombie: 10 tiers × 1 + animations = 30
-// Shnake: 10 tiers × 3 + animations = 90
-// Walapa: 10 tiers × 3 = 30
+// Trees: 30 tiers × 3 textures (trunk/branch/fruit) — dynamic allocation for animated textures
+// Block textures removed (getBlockUVs never called from rendering) — reclaimed 270 slots for tree animation
 export const SLOT_RANGES: Record<string, { start: number; end: number }> = {
-  tree: { start: 0, end: 149 },        // 150 slots
-  shwarm: { start: 150, end: 399 },    // 250 slots (10 tiers × up to 24 animated frames)
-  shombie: { start: 400, end: 429 },   // 30 slots
-  shnake: { start: 430, end: 519 },    // 90 slots
-  walapa: { start: 520, end: 549 },    // 30 slots
-  global: { start: 550, end: 569 },    // 20 slots
-  block: { start: 570, end: 839 },     // 270 slots
-  fungal_tree: { start: 840, end: 929 }, // 90 slots (30 tiers × 3 types)
-  misc: { start: 930, end: 1023 },      // 94 slots
+  tree: { start: 0, end: 289 },          // 290 slots (dynamic: 90 static + up to 200 animated)
+  shwarm: { start: 290, end: 539 },      // 250 slots (10 tiers × up to 24 animated frames)
+  shombie: { start: 540, end: 569 },     // 30 slots
+  shnake: { start: 570, end: 659 },      // 90 slots
+  walapa: { start: 660, end: 689 },      // 30 slots
+  global: { start: 690, end: 709 },      // 20 slots
+  fungal_tree: { start: 710, end: 799 }, // 90 slots (30 tiers × 3 types, deterministic)
+  misc: { start: 800, end: 1023 },       // 224 slots
 };
 
 // Placeholder colors for missing textures — light tan so blocks are visible, not black
@@ -416,6 +412,26 @@ class AtlasManagerClass {
       this.ctx = this.canvas.getContext('2d')!;
       this.metadata = createEmptyMetadata(1);
       console.log('[AtlasManager] Created new empty atlas');
+    }
+
+    // Pre-fill uncached tree/fungal slots with visible placeholder color.
+    // Without this, empty slots are BLACK (from createEmptyAtlasCanvas) and
+    // blocks sampling those slots appear invisible until atlas sync completes.
+    if (this.ctx && this.metadata) {
+      let placeholderCount = 0;
+      for (const [category, range] of Object.entries(SLOT_RANGES)) {
+        if (category === 'tree' || category === 'fungal_tree') {
+          for (let slot = range.start; slot <= range.end; slot++) {
+            if (!this.metadata.slots[slot]) {
+              drawPlaceholderToSlot(this.ctx, slot);
+              placeholderCount++;
+            }
+          }
+        }
+      }
+      if (placeholderCount > 0) {
+        console.log(`[AtlasManager] Pre-filled ${placeholderCount} empty tree/fungal slots with placeholder`);
+      }
     }
 
     this.isInitialized = true;

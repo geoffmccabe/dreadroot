@@ -135,6 +135,14 @@ class DiagnosticsLogger {
   private sigChanges = 0;               // number of signature changes this sample
   private sigChangeReasons: string[] = [];  // reasons for changes (limited to 5)
 
+  // === Re-render pipeline diagnostics ===
+  private normalEntriesEvals = 0;       // normalEntries useMemo evaluations this sample
+  private normalEntriesEvalsTotal = 0;
+  private mutationRenderFires = 0;      // mutation-triggered re-renders this sample
+  private mutationRenderFiresTotal = 0;
+  private mutationRenderSkips = 0;      // mutation re-renders throttled this sample
+  private mutationRenderSkipsTotal = 0;
+
   // === User data loading diagnostics ===
   userDataStatus: 'pending' | 'loading' | 'success' | 'error' = 'pending';
   userDataError: string | null = null;
@@ -147,6 +155,23 @@ class DiagnosticsLogger {
   private globalFlattenMs = 0;       // time in CameraTrackedBlocks flatten/dedup/sort
   meshInstanceTotal = 0;             // sum of all InstancedMesh.count values
   gpuTextureMemMB = 0;              // estimated GPU texture memory
+
+  // === GPU object leak tracking ===
+  private geometriesStart = 0;       // geometries count at recording start
+  private texturesStart = 0;         // textures count at recording start
+
+  // === Dispose tracking ===
+  private disposeGeometry = 0;
+  private disposeMaterial = 0;
+  private disposeMesh = 0;
+  private disposeGeometryTotal = 0;
+  private disposeMaterialTotal = 0;
+  private disposeMeshTotal = 0;
+
+  // === Draw call breakdown ===
+  private drawCallsTreeAtlas = 0;    // InstancedAtlasBlockGroup mounted count
+  private drawCallsNonTree = 0;      // InstancedBlockGroup mounted count
+  private drawCallsFade = 0;         // FadeRing mounted count
 
   private chunkRenderCountTotal = 0;
   private chunkRebuildCountTotal = 0;
@@ -290,6 +315,27 @@ class DiagnosticsLogger {
     this.meshRebuildBlocks += blockCount;
   }
 
+  // === Dispose tracking ===
+  recordDispose(type: 'geometry' | 'material' | 'mesh'): void {
+    if (!this.enabled) return;
+    if (type === 'geometry') this.disposeGeometry++;
+    else if (type === 'material') this.disposeMaterial++;
+    else this.disposeMesh++;
+  }
+
+  // === Draw call breakdown (mount/unmount tracking — always active, not gated by enabled) ===
+  mountDrawCall(type: 'treeAtlas' | 'nonTree' | 'fade'): void {
+    if (type === 'treeAtlas') this.drawCallsTreeAtlas++;
+    else if (type === 'nonTree') this.drawCallsNonTree++;
+    else this.drawCallsFade++;
+  }
+
+  unmountDrawCall(type: 'treeAtlas' | 'nonTree' | 'fade'): void {
+    if (type === 'treeAtlas') this.drawCallsTreeAtlas--;
+    else if (type === 'nonTree') this.drawCallsNonTree--;
+    else this.drawCallsFade--;
+  }
+
   // === Chunk rendering diagnostics (Phase 0) ===
   setChunkRenderCount(count: number): void {
     if (!this.enabled) return;
@@ -335,6 +381,22 @@ class DiagnosticsLogger {
     if (this.sigChangeReasons.length < 5) {
       this.sigChangeReasons.push(reason);
     }
+  }
+
+  // === Re-render pipeline diagnostics ===
+  recordNormalEntriesEval(): void {
+    if (!this.enabled) return;
+    this.normalEntriesEvals++;
+  }
+
+  recordMutationRender(): void {
+    if (!this.enabled) return;
+    this.mutationRenderFires++;
+  }
+
+  recordMutationRenderSkip(): void {
+    if (!this.enabled) return;
+    this.mutationRenderSkips++;
   }
 
   // === User data loading diagnostics ===
@@ -408,6 +470,11 @@ class DiagnosticsLogger {
 
       // Signature stability
       sigChangesTotal: this.sigChangesTotal,
+
+      // Re-render pipeline
+      normalEntriesEvalsTotal: this.normalEntriesEvalsTotal,
+      mutationRenderFiresTotal: this.mutationRenderFiresTotal,
+      mutationRenderSkipsTotal: this.mutationRenderSkipsTotal,
 
       // User data
       userDataStatus: this.userDataStatus,
@@ -554,6 +621,18 @@ class DiagnosticsLogger {
       this.chunkRebuildMsTotal = 0;
       this.globalFlattenMsTotal = 0;
 
+      // Reset dispose tracking
+      this.disposeGeometry = 0;
+      this.disposeMaterial = 0;
+      this.disposeMesh = 0;
+      this.disposeGeometryTotal = 0;
+      this.disposeMaterialTotal = 0;
+      this.disposeMeshTotal = 0;
+
+      // Defer GPU object start capture to first tick (when captureRendererStats has run)
+      this.geometriesStart = -1;
+      this.texturesStart = -1;
+
       // Reset budgeted work diagnostics
       this.budgetQueueLength = 0;
       this.budgetQueueMax = 0;
@@ -572,6 +651,14 @@ class DiagnosticsLogger {
       this.sigChanges = 0;
       this.sigChangesTotal = 0;
       this.sigChangeReasons = [];
+
+      // Reset re-render pipeline diagnostics
+      this.normalEntriesEvals = 0;
+      this.normalEntriesEvalsTotal = 0;
+      this.mutationRenderFires = 0;
+      this.mutationRenderFiresTotal = 0;
+      this.mutationRenderSkips = 0;
+      this.mutationRenderSkipsTotal = 0;
 
       // Reset user data diagnostics
       this.userDataStatus = 'pending';
@@ -604,6 +691,12 @@ class DiagnosticsLogger {
 
     const now = performance.now();
     this.elapsedSeconds = Math.floor((now - this.startTime) / 1000);
+
+    // Deferred start capture (same as tick)
+    if (this.geometriesStart < 0 && this.geometries > 0) {
+      this.geometriesStart = this.geometries;
+      this.texturesStart = this.textures;
+    }
 
     // Only write a sample if the frame loop didn't already do it
     if (now - this.lastSampleTime >= 100) {
@@ -776,6 +869,14 @@ class DiagnosticsLogger {
     this.meshRebuildMs = 0;
     this.meshRebuildBlocks = 0;
 
+    // Dispose tracking
+    this.disposeGeometryTotal += this.disposeGeometry;
+    this.disposeMaterialTotal += this.disposeMaterial;
+    this.disposeMeshTotal += this.disposeMesh;
+    this.disposeGeometry = 0;
+    this.disposeMaterial = 0;
+    this.disposeMesh = 0;
+
     // Chunk rendering diagnostics
     this.chunkRenderCountTotal = this.chunkRenderCount; // snapshot, not accumulated
     this.chunkRebuildCountTotal += this.chunkRebuildCount;
@@ -800,6 +901,14 @@ class DiagnosticsLogger {
     this.sigChangesTotal += this.sigChanges;
     this.sigChanges = 0;
     this.sigChangeReasons = [];
+
+    // Re-render pipeline diagnostics
+    this.normalEntriesEvalsTotal += this.normalEntriesEvals;
+    this.mutationRenderFiresTotal += this.mutationRenderFires;
+    this.mutationRenderSkipsTotal += this.mutationRenderSkips;
+    this.normalEntriesEvals = 0;
+    this.mutationRenderFires = 0;
+    this.mutationRenderSkips = 0;
   }
   
   private tickCallCount = 0;
@@ -814,6 +923,12 @@ class DiagnosticsLogger {
     
     // Capture memory stats each frame
     this.captureMemoryStats();
+
+    // Deferred start capture: snapshot GPU counts once renderer stats are available
+    if (this.geometriesStart < 0 && this.geometries > 0) {
+      this.geometriesStart = this.geometries;
+      this.texturesStart = this.textures;
+    }
     
     if (now - this.lastSampleTime >= 100) {
       const i = (this.ticker % BUFFER_SIZE) * METRICS;
@@ -979,7 +1094,18 @@ class DiagnosticsLogger {
     lines.push('');
     lines.push('GPU/Memory:');
     lines.push(`  Draw Calls: avg ${(drawCallsSum/n).toFixed(0)}, max ${maxDrawCalls}`);
+    lines.push(`  Draw Call Breakdown: tree=${this.drawCallsTreeAtlas}, nonTree=${this.drawCallsNonTree}, fade=${this.drawCallsFade}, other=${Math.max(0, Math.round(drawCallsSum/n) - this.drawCallsTreeAtlas - this.drawCallsNonTree - this.drawCallsFade)}`);
     lines.push(`  JS Heap: ${heapStart.toFixed(0)}MB -> ${heapEnd.toFixed(0)}MB (${heapEnd > heapStart ? '+' : ''}${(heapEnd-heapStart).toFixed(0)}MB)`);
+    const geoStart = Math.max(0, this.geometriesStart);
+    const texStart = Math.max(0, this.texturesStart);
+    const geoDelta = this.geometries - geoStart;
+    const texDelta = this.textures - texStart;
+    lines.push(`  GPU Geometries: ${geoStart} -> ${this.geometries} (${geoDelta > 0 ? '+' : ''}${geoDelta})`);
+    lines.push(`  GPU Textures: ${texStart} -> ${this.textures} (${texDelta > 0 ? '+' : ''}${texDelta})`);
+    if (geoDelta > 20) {
+      lines.push(`  ⚠️ GEOMETRY LEAK: ${geoDelta} geometries accumulated!`);
+    }
+    lines.push(`  Disposes: ${this.disposeGeometryTotal} geo, ${this.disposeMaterialTotal} mat, ${this.disposeMeshTotal} mesh`);
     lines.push('');
     lines.push('Collision Grids:');
     lines.push(`  World Grid max: ${maxWorldGrid}`);
@@ -1056,6 +1182,10 @@ class DiagnosticsLogger {
     if (this.sigChangesTotal > 10) {
       lines.push(`⚠️ INSTABILITY: High signature churn causing mesh rebuilds`);
     }
+    lines.push('');
+    lines.push('--- Re-Render Pipeline ---');
+    lines.push(`normalEntries evals: ${this.normalEntriesEvalsTotal}`);
+    lines.push(`Mutation renders: ${this.mutationRenderFiresTotal} fired, ${this.mutationRenderSkipsTotal} throttled`);
     lines.push('');
     lines.push('--- User Data ---');
     lines.push(`Status: ${this.userDataStatus}`);

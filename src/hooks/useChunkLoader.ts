@@ -19,7 +19,7 @@ const DEFAULT_LOAD_RADIUS = 4;
 // CRITICAL: Must be >= 4 to prevent constant load/unload churn at chunk boundaries.
 // Value of 1 caused 885 unloads/28s, 430 signature changes, and 313 mesh rebuilds.
 const UNLOAD_HYSTERESIS = 4;
-const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
+const POSITION_UPDATE_THROTTLE = 100; // ms between position updates
 
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
 const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
@@ -45,12 +45,12 @@ const EVICTION_BATCH_SIZE = 10;
 // Retry configuration for failed chunk loads
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 2000;     // 2s, 4s, 8s exponential backoff
-const FAILED_CHUNK_RETRY_INTERVAL = 5000; // Retry failed chunks every 5s
+const FAILED_CHUNK_RETRY_INTERVAL = 30000; // Retry failed chunks every 30s
 const MAX_TOTAL_BLOCKS = 250000; // Safety limit for paginated fetches (must accommodate LOAD_RADIUS=11 → 529 chunks × ~400 blocks)
 
 // Phase 3D: Cache configuration
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const CACHE_TRUST_WINDOW_MS = 30000; // 30 seconds - skip version check for very fresh cache
+const CACHE_TRUST_WINDOW_MS = 300000; // 5 minutes - skip version check for fresh cache (realtime subscription handles multiplayer sync)
 
 // Phase 3E: Velocity-based prefetch configuration
 const PREFETCH_DISTANCE = 2;         // Chunks beyond LOAD_RADIUS to prefetch
@@ -112,6 +112,11 @@ const colliderByBlockId = new Map<string, THREE.Box3>();
 // Track which chunk keys currently have colliders in the grid.
 // Used to enforce COLLIDER_RADIUS — only nearby chunks get colliders.
 const chunksWithColliders = new Set<string>();
+
+// Mutation counter for loadedChunksRef — incremented on every set/delete/clear.
+// CameraTrackedBlocks polls this to detect content changes even when map size stays the same.
+let chunkMutationCounter = 0;
+export function getChunkMutationCounter(): number { return chunkMutationCounter; }
 
 // CRITICAL: Clear the collider cache when the collision grid is cleared.
 // This MUST be a module-level listener so it runs synchronously before any
@@ -413,6 +418,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   // Track chunks currently being fetched (prevents duplicate loads from integrity check)
   const inFlightChunksRef = useRef<Set<string>>(new Set());
 
+  // Track chunk positions confirmed empty from Supabase — prevents re-query loop
+  // (empty chunks get unloaded → integrity check re-queries → Supabase returns 0 → repeat)
+  const knownEmptyPositionsRef = useRef<Set<string>>(new Set());
+
   // Track current world to clear on change
   const currentWorldRef = useRef<string | null>(null);
 
@@ -639,6 +648,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         // Remove from map immediately (visuals disappear)
         loadedChunksRef.current.delete(key);
+        chunkMutationCounter++;
         removeChunkHeightMap(key);
 
         if (chunkData && chunkData.blocks.length > 0) {
@@ -716,6 +726,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         signature: newSig
         // visibleBlocks intentionally undefined — tiny chunk, not worth culling
       });
+      chunkMutationCounter++;
       // B4: Update world signature for new chunk
       applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
       scheduleEmit();
@@ -752,6 +763,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           signature: EMPTY_CHUNK_SIG
         };
         loadedChunksRef.current.set(chunkKey, chunkData);
+        chunkMutationCounter++;
         oldSigs.set(chunkKey, EMPTY_CHUNK_SIG);
       } else if (!oldSigs.has(chunkKey)) {
         // First modification to existing chunk - save old signature
@@ -1119,6 +1131,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         };
         newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, chunkBlocks);
         loadedChunksRef.current.set(chunkKey, newChunkData);
+        chunkMutationCounter++;
         // B4: Update world signature for new chunk
         applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
         // Update height map for pathfinding
@@ -1231,6 +1244,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // Fetch server versions for cached chunks to check staleness
     const chunksToFetchFromServer: Array<{ x: number; z: number }> = [...chunksWithoutCache];
     const chunksFromCache: Array<{ x: number; z: number; blocks: PlacedBlock[] }> = [];
+    // Hoisted version map — reused for caching to avoid double fetchChunkVersions query
+    let versionCheckResults: Map<string, number> = new Map();
 
     if (chunksWithCache.length > 0) {
       // Performance optimization: Split cached chunks into "trustable" (very fresh) vs "need version check"
@@ -1275,6 +1290,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         const verStepId = initLogStartStep('useChunkLoader.ts', `Checking ${needVersionCheck.length} chunk versions...`);
         const serverVersions = await fetchChunkVersions(needVersionCheck.map(c => ({ x: c.x, z: c.z })));
         if (verStepId) initLogFinishStep(verStepId, serverVersions.size);
+        // Save for reuse when caching server-fetched chunks (avoids duplicate query)
+        versionCheckResults = serverVersions;
 
         for (const { x, z, cached } of needVersionCheck) {
           const chunkKey = `chunk_${x}_${z}`;
@@ -1366,6 +1383,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       }
       cacheBlockCount += blocks.length;
+
+      // Track confirmed-empty positions from cache
+      if (blocks.length === 0) {
+        knownEmptyPositionsRef.current.add(chunkKey);
+      } else {
+        knownEmptyPositionsRef.current.delete(chunkKey);
+      }
+
       const newSig = computeChunkSignature(blocks);
       const newChunkData: ChunkData = {
         blocks,
@@ -1376,6 +1401,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       };
       newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(x, z, blocks);
       loadedChunksRef.current.set(chunkKey, newChunkData);
+      chunkMutationCounter++;
       // B4: Update world signature for new chunk
       applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
       // Update height map for pathfinding
@@ -1490,10 +1516,19 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
 
       // Get current versions for caching (only for successful chunks)
+      // Reuse versions already fetched during cache staleness check to avoid duplicate query
       const successfulChunks = chunksToFetchFromServer.filter(
         c => !failedChunkCoords.some(f => f.x === c.x && f.z === c.z)
       );
-      const currentVersions = await fetchChunkVersions(successfulChunks);
+      const chunksNeedingVersions = successfulChunks.filter(
+        c => !versionCheckResults.has(`chunk_${c.x}_${c.z}`)
+      );
+      let currentVersions = versionCheckResults;
+      if (chunksNeedingVersions.length > 0) {
+        const freshVersions = await fetchChunkVersions(chunksNeedingVersions);
+        // Merge with existing version check results
+        currentVersions = new Map([...versionCheckResults, ...freshVersions]);
+      }
 
       // D-Flow: Start build timing
       const buildT0 = performance.now();
@@ -1576,6 +1611,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
         serverBlockCount += chunkBlocks.length;
 
+        // Track confirmed-empty positions to prevent integrity check re-query loop
+        if (chunkBlocks.length === 0) {
+          knownEmptyPositionsRef.current.add(chunkKey);
+        } else {
+          knownEmptyPositionsRef.current.delete(chunkKey);
+        }
+
         const newSig = computeChunkSignature(chunkBlocks);
         const newChunkData: ChunkData = {
           blocks: chunkBlocks,
@@ -1586,6 +1628,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         };
         newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(x, z, chunkBlocks);
         loadedChunksRef.current.set(chunkKey, newChunkData);
+        chunkMutationCounter++;
         // B4: Update world signature for new chunk from server
         applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
         // Update height map for pathfinding
@@ -2087,6 +2130,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     };
     refetchedChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, mergedBlocks);
     loadedChunksRef.current.set(chunkKey, refetchedChunkData);
+    chunkMutationCounter++;
     // Update height map for pathfinding
     updateChunkHeightMap(chunkKey, mergedBlocks);
 
@@ -2110,6 +2154,30 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // Phase 3.0: Use batched emit instead of synchronous callback (only if blocks changed)
     scheduleEmit();
   }, [worldId, scheduleEmit, fetchChunkVersions]);
+
+  // Compact collider cache when it bloats beyond expected size
+  // Called from syncColliderRadius AND integrity check (covers both moving and stationary)
+  const MAX_COLLIDER_CACHE = 50000;
+  const compactColliderCache = () => {
+    if (colliderByBlockId.size <= MAX_COLLIDER_CACHE) return;
+    const validIds = new Set<string>();
+    for (const ck of chunksWithColliders) {
+      const cd = loadedChunksRef.current.get(ck);
+      if (cd) {
+        for (const block of cd.blocks) validIds.add(block.id);
+      }
+    }
+    let pruned = 0;
+    for (const blockId of colliderByBlockId.keys()) {
+      if (!validIds.has(blockId)) {
+        colliderByBlockId.delete(blockId);
+        pruned++;
+      }
+    }
+    if (pruned > 0) {
+      console.log(`[ChunkLoader] Compacted collider cache: pruned ${pruned} orphaned entries (${colliderByBlockId.size} remain)`);
+    }
+  };
 
   /**
    * Synchronize collider radius: create/remove colliders as camera moves.
@@ -2162,6 +2230,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         chunksWithColliders.delete(chunkKey);
       }
     }
+
+    compactColliderCache();
   }, []);
 
   /**
@@ -2206,18 +2276,21 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(chunkKey);
         removedCount++;
 
-        // Synchronous collider removal (~1-3ms per chunk, only on chunk change)
-        if (chunkData.blocks.length > 0) {
+        // Only remove colliders if this chunk actually had them (most unloaded
+        // chunks are beyond COLLIDER_RADIUS and never had colliders created)
+        if (chunksWithColliders.has(chunkKey)) {
           for (const block of chunkData.blocks) {
             removeBlockCollider(block);
           }
+          chunksWithColliders.delete(chunkKey);
         }
-        chunksWithColliders.delete(chunkKey);
       }
     }
 
-    // Single emit for ALL removals — prevents cascading incremental updates
+    // Single mutation counter increment + emit for entire batch
+    // (prevents per-chunk counter churn → fewer normalEntries re-evals)
     if (removedCount > 0) {
+      chunkMutationCounter++;
       scheduleEmit();
     }
   }, [scheduleEmit, applyChunkSigChange]);
@@ -2307,6 +2380,22 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           }
         }
 
+        // Sort chunks by movement direction: forward chunks loaded first
+        if (chunksToLoad.length > 1) {
+          const moveDX = newChunkX - oldChunkX;
+          const moveDZ = newChunkZ - oldChunkZ;
+          const moveLen = Math.sqrt(moveDX * moveDX + moveDZ * moveDZ);
+          if (moveLen > 0.001) {
+            const fwdX = moveDX / moveLen;
+            const fwdZ = moveDZ / moveLen;
+            chunksToLoad.sort((a, b) => {
+              const dotA = (a.x - newChunkX) * fwdX + (a.z - newChunkZ) * fwdZ;
+              const dotB = (b.x - newChunkX) * fwdX + (b.z - newChunkZ) * fwdZ;
+              return dotB - dotA; // Higher dot = more forward = load first
+            });
+          }
+        }
+
         if (chunksToLoad.length > 0) {
           // Increment transition ID so rapid crossings discard stale completions
           const transitionId = ++transitionIdRef.current;
@@ -2352,6 +2441,39 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         unloadDistantChunks(newChunkX, newChunkZ);
         evictLRUChunks();
       }
+    } else {
+      // Player is in the same chunk — verify ALL nearby chunks are still loaded.
+      // Fast movement can cause chunks to be evicted or their loads discarded
+      // (transitionId discards stale completions). This scan reloads ANY missing
+      // chunks within LOAD_RADIUS, not just the current chunk.
+      const missingChunks: Array<{ x: number; z: number }> = [];
+      for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
+        for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+          const key = `chunk_${newChunkX + dx}_${newChunkZ + dz}`;
+          if (!loadedChunksRef.current.has(key) && !inFlightChunksRef.current.has(key)) {
+            missingChunks.push({ x: newChunkX + dx, z: newChunkZ + dz });
+          }
+        }
+      }
+      // Sort by distance: closer chunks loaded first
+      if (missingChunks.length > 1) {
+        missingChunks.sort((a, b) => {
+          const distA = Math.abs(a.x - newChunkX) + Math.abs(a.z - newChunkZ);
+          const distB = Math.abs(b.x - newChunkX) + Math.abs(b.z - newChunkZ);
+          return distA - distB;
+        });
+      }
+      if (missingChunks.length > 0) {
+        loadSpecificChunks(missingChunks)
+          .then(() => {
+            const currentChunk = playerChunkRef.current;
+            if (currentChunk) {
+              unloadDistantChunks(currentChunk.x, currentChunk.z);
+              evictLRUChunks();
+            }
+          })
+          .catch(err => console.warn('[ChunkLoader] Reload error:', err));
+      }
     }
   }, [worldId, loadChunksInRadius, loadSpecificChunks, getStripeChunks, unloadDistantChunks, evictLRUChunks, syncColliderRadius, addPositionSample, enqueuePrefetch]);
 
@@ -2376,7 +2498,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     colliderByBlockId.clear();
     chunksWithColliders.clear();
     loadedChunksRef.current.clear();
+    chunkMutationCounter++;
     inFlightChunksRef.current.clear();
+    knownEmptyPositionsRef.current.clear();
     clearAllHeightMaps();
     worldSigRef.current = { count: 0, xor: 0, sum: 0 };
     lastEmittedWorldKeyRef.current = '';
@@ -2519,6 +2643,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     chunksWithColliders.clear();
 
     loadedChunksRef.current.clear();
+    chunkMutationCounter++;
     inFlightChunksRef.current.clear();
     clearAllHeightMaps();
     playerChunkRef.current = null;
@@ -2531,6 +2656,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     // Clear failed chunks tracker
     failedChunksRef.current.clear();
+
+    // Clear known empty positions (new world may have blocks in previously empty positions)
+    knownEmptyPositionsRef.current.clear();
 
     // Phase 3E: Reset prefetch state
     resetPrefetchState();
@@ -2567,14 +2695,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // Use ref to get current LOAD_RADIUS (avoids stale closure)
       const radius = loadRadiusRef.current;
 
-      // Collect ALL chunks that should be loaded but aren't (skip in-flight chunks)
+      // Collect ALL chunks that should be loaded but aren't
+      // Skip in-flight chunks AND known-empty positions (confirmed 0 blocks from Supabase)
       const toLoad: Array<{ x: number; z: number }> = [];
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dz = -radius; dz <= radius; dz++) {
           const cx = playerChunk.x + dx;
           const cz = playerChunk.z + dz;
           const key = `chunk_${cx}_${cz}`;
-          if (!loadedChunksRef.current.has(key) && !inFlightChunksRef.current.has(key)) {
+          if (!loadedChunksRef.current.has(key) && !inFlightChunksRef.current.has(key) && !knownEmptyPositionsRef.current.has(key)) {
             toLoad.push({ x: cx, z: cz });
           }
         }
@@ -2597,6 +2726,21 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       }
 
+      // Prune known-empty positions far from player to prevent unbounded growth
+      const EMPTY_PRUNE_RADIUS = radius + UNLOAD_HYSTERESIS + 2;
+      for (const key of knownEmptyPositionsRef.current) {
+        const parsed = fastParseChunkKey(key);
+        if (parsed) {
+          const dist = Math.max(Math.abs(parsed.x - playerChunk.x), Math.abs(parsed.z - playerChunk.z));
+          if (dist > EMPTY_PRUNE_RADIUS) {
+            knownEmptyPositionsRef.current.delete(key);
+          }
+        }
+      }
+
+      // Compact collider cache on every integrity tick (covers stationary player case)
+      compactColliderCache();
+
       // Adaptive backoff: if many chunks are consistently missing, slow down to reduce server load
       const totalInRadius = (2 * radius + 1) ** 2;
       const missingRatio = toLoad.length / totalInRadius;
@@ -2605,8 +2749,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       } else {
         consecutiveHighMissing = 0;
       }
-      // Back off: 5s → 10s → 15s (cap at 15s)
-      const nextInterval = FAILED_CHUNK_RETRY_INTERVAL + Math.min(consecutiveHighMissing, 2) * 5000;
+      // Back off: 30s → 60s → 90s (cap at 90s)
+      const nextInterval = FAILED_CHUNK_RETRY_INTERVAL + Math.min(consecutiveHighMissing, 2) * 30000;
 
       if (toLoad.length > 0) {
         console.log(`[ChunkLoader] Integrity check: loading ${toLoad.length} missing chunks within radius (next check in ${nextInterval / 1000}s)`);
