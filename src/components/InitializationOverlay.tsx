@@ -80,6 +80,13 @@ export function InitializationOverlay() {
     }
   }, [isInitializing, dismissOverlay]);
 
+  // Auto-dismiss in perftest mode once initialization completes
+  useEffect(() => {
+    if (!isInitializing && isOverlayVisible && typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('perftest')) {
+      dismissOverlay();
+    }
+  }, [isInitializing, isOverlayVisible, dismissOverlay]);
+
   if (!isOverlayVisible) return null;
 
   const displayTime = isInitializing ? (elapsedMs / 1000).toFixed(1) : totalDurationSecs.toFixed(1);
@@ -111,9 +118,9 @@ export function InitializationOverlay() {
             className="text-3xl md:text-4xl font-bold text-center mb-4 drop-shadow-lg"
             style={{ color: 'hsl(211, 32%, 90%)', fontFamily: 'Inter, sans-serif' }}
           >
-            {isInitializing
-              ? `Initializing World... ${displayTime}s`
-              : `World Initialized in ${displayTime} Seconds!`
+            {typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('perftest')
+              ? (isInitializing ? `AUTO TEST MODE — Loading... ${displayTime}s` : `AUTO TEST MODE — Ready!`)
+              : (isInitializing ? `Initializing World... ${displayTime}s` : `World Initialized in ${displayTime} Seconds!`)
             }
           </h1>
 

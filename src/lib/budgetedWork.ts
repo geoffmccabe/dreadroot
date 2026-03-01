@@ -14,7 +14,8 @@ type Job = {
   run: () => boolean; // return true when finished
 };
 
-const queue: Job[] = [];
+let queue: Job[] = [];
+let queueHead = 0;
 
 // Track active job IDs to prevent duplicates
 const activeJobs = new Set<string>();
@@ -40,7 +41,8 @@ export function enqueueJob(id: string, run: () => boolean): void {
  * @param budgetMs Maximum milliseconds to spend (default 2ms)
  */
 export function tickBudgetedWork(budgetMs = 2.0): void {
-  if (queue.length === 0) {
+  const pending = queue.length - queueHead;
+  if (pending === 0) {
     diagnostics.recordBudgetTick(0, 0, 0);
     return;
   }
@@ -48,38 +50,45 @@ export function tickBudgetedWork(budgetMs = 2.0): void {
   const start = performance.now();
   let completed = 0;
 
-  while (queue.length > 0 && performance.now() - start < budgetMs) {
-    const job = queue[0];
+  while (queueHead < queue.length && performance.now() - start < budgetMs) {
+    const job = queue[queueHead];
     const done = job.run();
 
     if (done) {
-      queue.shift();
+      queueHead++;
       activeJobs.delete(job.id);
       completed++;
     }
   }
 
-  diagnostics.recordBudgetTick(queue.length, completed, performance.now() - start);
+  // Compact when half the array is consumed
+  if (queueHead > 64 && queueHead > queue.length / 2) {
+    queue = queue.slice(queueHead);
+    queueHead = 0;
+  }
+
+  diagnostics.recordBudgetTick(queue.length - queueHead, completed, performance.now() - start);
 }
 
 /**
  * Check if there are pending jobs
  */
 export function hasPendingWork(): boolean {
-  return queue.length > 0;
+  return queueHead < queue.length;
 }
 
 /**
  * Get pending job count (for diagnostics)
  */
 export function getPendingJobCount(): number {
-  return queue.length;
+  return queue.length - queueHead;
 }
 
 /**
  * Clear all pending jobs (use on world switch)
  */
 export function clearPendingJobs(): void {
-  queue.length = 0;
+  queue = [];
+  queueHead = 0;
   activeJobs.clear();
 }

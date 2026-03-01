@@ -177,8 +177,7 @@ export function CameraTrackedBlocks({
       } else if (hasPendingMutations) {
         lastKnownMutationRef.current = currentMutation;
         diagnostics.recordMutationRender();
-        // Debounce: cancel pending RAF and schedule new one — collapses rapid
-        // mutations (e.g. multiple unload batches) into a single render trigger
+        // Debounce: collapse mutations within the same frame into one render trigger
         cancelAnimationFrame(mutationRafRef.current);
         mutationRafRef.current = requestAnimationFrame(() => setRenderTrigger(prev => prev + 1));
       } else if (now - lastHeartbeatRef.current > HEARTBEAT_INTERVAL) {
@@ -188,7 +187,7 @@ export function CameraTrackedBlocks({
         updatePlayerPosition(camera.position.x, camera.position.z);
       }
 
-      // Drain pending mounts: one request in flight at a time
+      // Drain pending mounts: schedule next batch on next frame
       if (hasPendingMountsRef.current && !drainScheduledRef.current) {
         drainScheduledRef.current = true;
         requestAnimationFrame(() => {
@@ -201,6 +200,7 @@ export function CameraTrackedBlocks({
     return () => {
       unregisterFrustum();
       unregister();
+      cancelAnimationFrame(mutationRafRef.current);
     };
   }, [camera, visibleChunksRef, updatePlayerPosition]);
 
@@ -362,8 +362,22 @@ export function CameraTrackedBlocks({
 
   // Merged tree blocks: extract ALL tree blocks from ALL visible chunks into one array
   // This enables rendering with a single InstancedMesh (1 draw call vs ~165)
+  //
+  // PERF: During mount drain (hasPendingMountsRef=true), return cached tree blocks
+  // to avoid triggering an IABG rebuild on every admission batch. This reduces
+  // rebuilds from ~19 (one per 4-chunk batch) to 2 (first batch + drain complete).
+  const stableTreeBlocksRef = useRef<PlacedBlock[]>([]);
   const allTreeBlocks = useMemo(() => {
-    if (normalEntries.length === 0) return [];
+    if (normalEntries.length === 0) {
+      stableTreeBlocksRef.current = [];
+      return [];
+    }
+
+    // During mount drain, reuse cached tree blocks to avoid IABG rebuild storm
+    if (hasPendingMountsRef.current && stableTreeBlocksRef.current.length > 0) {
+      return stableTreeBlocksRef.current;
+    }
+
     const treeBlocks: PlacedBlock[] = [];
     const shrinePositions: Array<{ x: number; y: number; z: number }> = [];
 
@@ -388,6 +402,7 @@ export function CameraTrackedBlocks({
       shrineTracker.registerShrineBlocks(shrinePositions);
     }
 
+    stableTreeBlocksRef.current = treeBlocks;
     return treeBlocks;
   }, [normalEntries]);
 

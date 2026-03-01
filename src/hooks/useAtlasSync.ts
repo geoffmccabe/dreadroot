@@ -25,6 +25,9 @@ import {
 import { getGlobalAtlasTexture, incrementAtlasVersion } from '@/hooks/useTextureAtlas';
 import { initLogStartStep, initLogFinishStep, initLogStep, initLogErrorStep } from '@/contexts/InitializationContext';
 
+// Module-level flag: once syncAtlasOnInit() completes, the hook can skip its sync
+let _initSyncDone = false;
+
 interface SyncResult {
   added: number;
   updated: number;
@@ -245,9 +248,9 @@ export function useAtlasSync(options?: {
     }
   }, [seedDefinitions, shwarmDefinitions, shombieDefinitions, shnakeDefinitions, walapaDefinitions]);
 
-  // Auto-sync when all definitions are loaded
+  // Auto-sync when all definitions are loaded (skip if syncAtlasOnInit already ran)
   useEffect(() => {
-    if (!enabled || isLoading || hasSyncedRef.current) return;
+    if (!enabled || isLoading || hasSyncedRef.current || _initSyncDone) return;
 
     // All definitions loaded, sync to atlas
     syncToAtlas().then(result => {
@@ -447,6 +450,7 @@ export async function syncAtlasOnInit(): Promise<void> {
   const stats = atlasManager.getStats();
   if (stepId) initLogFinishStep(stepId, stats.usedSlots);
 
+  _initSyncDone = true;
   console.log('[AtlasSync] Initial sync complete');
   } catch (error) {
     console.error('[AtlasSync] Initial sync failed:', error);

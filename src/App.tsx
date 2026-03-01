@@ -40,8 +40,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Auth route wrapper (redirect if already authenticated)
 function AuthRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, session } = useAuth();
-  
+  const { user, isLoading, session, isRecoveryMode } = useAuth();
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -49,12 +49,17 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  
+
+  // Stay on auth page during password recovery even though user has a session
+  if (isRecoveryMode) {
+    return <>{children}</>;
+  }
+
   // Only redirect if user has a valid email (not anonymous)
   if (user && session?.user?.email) {
     return <Navigate to="/" replace />;
   }
-  
+
   return <>{children}</>;
 }
 

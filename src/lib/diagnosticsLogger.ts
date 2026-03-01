@@ -401,20 +401,19 @@ class DiagnosticsLogger {
 
   // === User data loading diagnostics ===
   recordUserDataStart(): void {
-    if (!this.enabled) return;
+    // Always record (no enabled guard) — user data loads before D-Flow is toggled on,
+    // so gating on this.enabled would leave status stuck at 'pending' forever.
     this.userDataStatus = 'loading';
     this.userDataLoadMs = performance.now();
   }
 
   recordUserDataSuccess(): void {
-    if (!this.enabled) return;
     this.userDataStatus = 'success';
     this.userDataLoadMs = performance.now() - this.userDataLoadMs;
     this.userDataError = null;
   }
 
   recordUserDataError(error: string): void {
-    if (!this.enabled) return;
     this.userDataStatus = 'error';
     this.userDataLoadMs = performance.now() - this.userDataLoadMs;
     this.userDataError = error;
@@ -660,10 +659,13 @@ class DiagnosticsLogger {
       this.mutationRenderSkips = 0;
       this.mutationRenderSkipsTotal = 0;
 
-      // Reset user data diagnostics
-      this.userDataStatus = 'pending';
-      this.userDataError = null;
-      this.userDataLoadMs = 0;
+      // DO NOT reset userDataStatus — it is recorded without the enabled guard,
+      // so it already reflects the true state from the initial load.
+      // Resetting it here would overwrite 'success' with 'pending' since
+      // user data loads once at startup and doesn't re-run when D-Flow toggles.
+      // this.userDataStatus = 'pending';  // <-- was the bug: overwrote already-loaded status
+      // this.userDataError = null;
+      // this.userDataLoadMs = 0;
 
       // Start fallback timer - collects samples even if frame loop is frozen
       this.fallbackTimerId = window.setInterval(() => {

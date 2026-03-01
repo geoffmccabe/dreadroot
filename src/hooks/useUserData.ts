@@ -207,82 +207,114 @@ export const useUserData = () => {
       setInventory(inventoryData || []);
       setUserRoles(roles);
 
-      // Consolidate duplicate inventory rows (same user + item_type + item_id)
-      const inv = inventoryData || [];
-      const seen = new Map<string, typeof inv[0]>();
-      for (const row of inv) {
-        if (row.item_type !== 'item' || !row.item_id) continue;
-        const key = `${row.item_type}:${row.item_id}`;
-        const prev = seen.get(key);
-        if (prev) {
-          // Merge: add quantity to first row, delete duplicate
-          const newQty = prev.quantity + row.quantity;
-          await supabase.from('user_inventory').update({ quantity: newQty }).eq('id', prev.id);
-          await supabase.from('user_inventory').delete().eq('id', row.id);
-          prev.quantity = newQty;
-        } else {
-          seen.set(key, row);
-        }
-      }
-
-      // Ensure starter items (#15 Pistol, #193 Flame Glove) with quantity >= 4
-      const { data: starterDefs } = await supabase
-        .from('items')
-        .select('id, item_number')
-        .in('item_number', [15, 193]);
-
-      if (starterDefs && starterDefs.length > 0) {
-        for (const sd of starterDefs) {
-          const existing = inv.find(i => i.item_type === 'item' && i.item_id === sd.id);
-          if (!existing) {
-            // Insert new starter item
-            const { data: inserted } = await supabase
-              .from('user_inventory')
-              .insert({ user_id: user.id, item_type: 'item', item_id: sd.id, quantity: 4 })
-              .select();
-            if (inserted) setInventory(prev => [...prev, ...inserted]);
-          } else if (existing.quantity < 4) {
-            // Bump up to 4
-            await supabase
-              .from('user_inventory')
-              .update({ quantity: 4 })
-              .eq('id', existing.id);
-            setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: 4 } : i));
-          }
-        }
-      }
-
-      // Load equipped items (hotbar slots 1-6)
-      const { data: equippedData } = await supabase
+      // Load equipped items in parallel with setting state (fast query)
+      const equippedPromise = supabase
         .from('user_equipped_items')
         .select('slot_type, item_id')
         .eq('user_id', user.id)
         .like('slot_type', 'hotbar_%');
+
+      const { data: equippedData } = await equippedPromise;
 
       if (equippedData && equippedData.length > 0) {
         setEquippedItems(equippedData.map(e => ({
           slot: parseInt(e.slot_type.replace('hotbar_', '')),
           itemId: e.item_id,
         })));
-      } else {
-        // First time: equip starter items — #15 Pistol in slot 1, #193 Flame Glove in slot 2
-        if (starterDefs && starterDefs.length > 0) {
-          const pistol = starterDefs.find(d => d.item_number === 15);
-          const glove = starterDefs.find(d => d.item_number === 193);
-          const starterEquips: Array<{ user_id: string; item_id: string; slot_type: string }> = [];
-          if (pistol) starterEquips.push({ user_id: user.id, item_id: pistol.id, slot_type: 'hotbar_1' });
-          if (glove) starterEquips.push({ user_id: user.id, item_id: glove.id, slot_type: 'hotbar_2' });
-          if (starterEquips.length > 0) {
-            await supabase.from('user_equipped_items').insert(starterEquips);
-            setEquippedItems(starterEquips.map(e => ({
-              slot: parseInt(e.slot_type.replace('hotbar_', '')),
-              itemId: e.item_id,
-            })));
-          }
-        }
       }
 
       setAllTokenBalances(allBalancesData || []);
+
+      // === DEFERRED: Move inventory housekeeping out of the critical path ===
+      // These operations (consolidation, starter items, first-time equip) are
+      // non-blocking for gameplay. Running them sequentially during init caused
+      // 2+ second event loop lag spikes from sequential Supabase awaits.
+      const userId = user.id;
+      const inv = inventoryData || [];
+      const hasEquipped = equippedData && equippedData.length > 0;
+      const setInv = setInventory;
+      const setEquip = setEquippedItems;
+
+      setTimeout(async () => {
+        try {
+          // Consolidate duplicate inventory rows (same user + item_type + item_id)
+          const seen = new Map<string, typeof inv[0]>();
+          const consolidateOps: Promise<any>[] = [];
+          for (const row of inv) {
+            if (row.item_type !== 'item' || !row.item_id) continue;
+            const key = `${row.item_type}:${row.item_id}`;
+            const prev = seen.get(key);
+            if (prev) {
+              const newQty = prev.quantity + row.quantity;
+              consolidateOps.push(
+                supabase.from('user_inventory').update({ quantity: newQty }).eq('id', prev.id),
+                supabase.from('user_inventory').delete().eq('id', row.id)
+              );
+              prev.quantity = newQty;
+            } else {
+              seen.set(key, row);
+            }
+          }
+          if (consolidateOps.length > 0) {
+            await Promise.all(consolidateOps);
+          }
+
+          // Ensure starter items (#15 Pistol, #193 Flame Glove) with quantity >= 4
+          const { data: starterDefs } = await supabase
+            .from('items')
+            .select('id, item_number')
+            .in('item_number', [15, 193]);
+
+          if (starterDefs && starterDefs.length > 0) {
+            const starterOps: Promise<any>[] = [];
+            for (const sd of starterDefs) {
+              const existing = inv.find(i => i.item_type === 'item' && i.item_id === sd.id);
+              if (!existing) {
+                starterOps.push(
+                  supabase
+                    .from('user_inventory')
+                    .insert({ user_id: userId, item_type: 'item', item_id: sd.id, quantity: 4 })
+                    .select()
+                    .then(({ data: inserted }) => {
+                      if (inserted) setInv(prev => [...prev, ...inserted]);
+                    })
+                );
+              } else if (existing.quantity < 4) {
+                starterOps.push(
+                  supabase
+                    .from('user_inventory')
+                    .update({ quantity: 4 })
+                    .eq('id', existing.id)
+                    .then(() => {
+                      setInv(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: 4 } : i));
+                    })
+                );
+              }
+            }
+            if (starterOps.length > 0) {
+              await Promise.all(starterOps);
+            }
+
+            // First time: equip starter items
+            if (!hasEquipped) {
+              const pistol = starterDefs.find(d => d.item_number === 15);
+              const glove = starterDefs.find(d => d.item_number === 193);
+              const starterEquips: Array<{ user_id: string; item_id: string; slot_type: string }> = [];
+              if (pistol) starterEquips.push({ user_id: userId, item_id: pistol.id, slot_type: 'hotbar_1' });
+              if (glove) starterEquips.push({ user_id: userId, item_id: glove.id, slot_type: 'hotbar_2' });
+              if (starterEquips.length > 0) {
+                await supabase.from('user_equipped_items').insert(starterEquips);
+                setEquip(starterEquips.map(e => ({
+                  slot: parseInt(e.slot_type.replace('hotbar_', '')),
+                  itemId: e.item_id,
+                })));
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[useUserData] Background inventory housekeeping failed:', err);
+        }
+      }, 100);
       diagnostics.recordUserDataSuccess();
     } catch (error: any) {
       console.error('[useUserData] Load failed:', error);

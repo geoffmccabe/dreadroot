@@ -12,9 +12,12 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
+  isRecoveryMode: boolean;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
+  updatePassword: (newPassword: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const { saveUserSession, getUserSession, clearUserSession } = useIndexedDB();
 
   // Separate effect for IndexedDB sync - reacts to session changes
@@ -56,6 +60,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(newSession);
         setUser(newSession?.user ?? null);
         setIsLoading(false);
+
+        // Detect password recovery flow
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecoveryMode(true);
+        }
         
         // Log user info for initialization overlay (only once per email to avoid duplicates)
         if (newSession?.user) {
@@ -128,13 +137,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updatePassword = async (newPassword: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) return { error };
+      setIsRecoveryMode(false);
+      return { error: null };
+    } catch (error) {
+      console.error('Error updating password:', error);
+      return { error };
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth`
+      });
+      if (error) return { error };
+      return { error: null };
+    } catch (error) {
+      console.error('Error sending reset email:', error);
+      return { error };
+    }
+  };
+
   const signOut = async () => {
     // Force navigate to clear session page which will handle cleanup
     window.location.href = '/clear-session';
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, isLoading, isRecoveryMode, signUp, signIn, signOut, resetPassword, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );

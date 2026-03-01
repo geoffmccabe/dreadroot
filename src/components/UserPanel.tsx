@@ -86,7 +86,8 @@ interface UserPanelProps {
 
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateDisplayName, updateAvatarUrl, updateVisualDistance, updateFogEnabled, refreshData, userRoles } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const { currentTheme } = useCoinTheme();
@@ -423,7 +424,17 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-sm font-medium">Email</Label>
-                    <div className="text-sm font-semibold">{user?.email || 'Not logged in'}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold">{user?.email || 'Not logged in'}</div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setShowLogoutConfirm(true)}
+                      >
+                        LOG OUT
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -936,6 +947,59 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           }}
         />
       </DialogContent>
+
+      {/* Logout confirmation dialog */}
+      {showLogoutConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.6)',
+          }}
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'hsla(211, 30%, 25%, 0.95)',
+              border: '1px solid hsla(211, 34%, 73%, 0.8)',
+              borderRadius: '8px',
+              padding: '24px',
+              minWidth: '300px',
+              textAlign: 'center',
+              color: 'white',
+            }}
+          >
+            <p style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>Log Out?</p>
+            <p style={{ fontSize: '13px', opacity: 0.8, marginBottom: '20px' }}>
+              You will be signed out and returned to the login screen.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  signOut();
+                }}
+              >
+                Yes, Log Out
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Dialog>
   );
 };

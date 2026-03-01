@@ -312,27 +312,20 @@ export function FortressScene({
   
   // Player hit callback for shwarm collisions - uses universal damage system
   const handleShwarmPlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
-    // Defer to avoid render loop issues
-    setTimeout(() => {
-      // Use universal damage system if available (includes STEADY, armor, i-frames)
-      if (applyDamageWithKnockback) {
-        applyDamageWithKnockback(
-          damage,
-          direction.clone(),
-          knockbackForce,
-          { type: 'enemy', entityName: 'Shwarm' }
-        );
-      } else if (takeDamage) {
-        // Fallback to legacy function
-        takeDamage(damage, direction.clone(), knockbackForce);
-      }
-      
-      // Play player hit sound
-      if (audioRefs.current.playerHit) {
-        audioRefs.current.playerHit.currentTime = 0;
-        audioRefs.current.playerHit.play().catch(() => {});
-      }
-    }, 0);
+    if (applyDamageWithKnockback) {
+      applyDamageWithKnockback(
+        damage,
+        direction.clone(),
+        knockbackForce,
+        { type: 'enemy', entityName: 'Shwarm' }
+      );
+    } else if (takeDamage) {
+      takeDamage(damage, direction.clone(), knockbackForce);
+    }
+    if (audioRefs.current.playerHit) {
+      audioRefs.current.playerHit.currentTime = 0;
+      audioRefs.current.playerHit.play().catch(() => {});
+    }
   }, [applyDamageWithKnockback, takeDamage]);
   
 // Universal Enemy AI system control flag
@@ -403,27 +396,20 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const shombieRendererRef = useRef<ShombieRendererHandle>(null);
   
   const handleShombiePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
-    // Defer to avoid render loop issues
-    setTimeout(() => {
-      // Use universal damage system if available (includes STEADY, armor, i-frames)
-      if (applyDamageWithKnockback) {
-        applyDamageWithKnockback(
-          damage,
-          direction.clone(),
-          knockbackForce,
-          { type: 'enemy', entityName: 'Shombie' }
-        );
-      } else if (takeDamage) {
-        // Fallback to legacy function
-        takeDamage(damage, direction.clone(), knockbackForce);
-      }
-      
-      // Play player hit sound
-      if (audioRefs.current.playerHit) {
-        audioRefs.current.playerHit.currentTime = 0;
-        audioRefs.current.playerHit.play().catch(() => {});
-      }
-    }, 0);
+    if (applyDamageWithKnockback) {
+      applyDamageWithKnockback(
+        damage,
+        direction.clone(),
+        knockbackForce,
+        { type: 'enemy', entityName: 'Shombie' }
+      );
+    } else if (takeDamage) {
+      takeDamage(damage, direction.clone(), knockbackForce);
+    }
+    if (audioRefs.current.playerHit) {
+      audioRefs.current.playerHit.currentTime = 0;
+      audioRefs.current.playerHit.play().catch(() => {});
+    }
   }, [applyDamageWithKnockback, takeDamage]);
   
   const {
@@ -511,33 +497,24 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // Shnake player hit callback - uses universal damage system
   // shnakeId is optional for compatibility with legacy system
   const handleShnakePlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3, shnakeId?: string) => {
-    // Defer to avoid render loop issues
-    setTimeout(() => {
-      // Use universal damage system if available (includes STEADY, armor, i-frames)
-      if (applyDamageWithKnockback) {
-        applyDamageWithKnockback(
-          damage,
-          direction.clone(),
-          knockbackForce,
-          { type: 'enemy', entityName: 'Shnake' }
-        );
-      } else if (takeDamage) {
-        // Fallback to legacy function
-        takeDamage(damage, direction.clone(), knockbackForce);
-      }
-      
-      // Record revenge damage dealt by this shnake
-      if (shnakeId) {
-        recordShnakeRevengeDamage(shnakeId, damage);
-        console.log(`[Shnake Attack] Shnake ${shnakeId} dealt ${damage} revenge damage`);
-      }
-      
-      // Play player hit sound
-      if (audioRefs.current.playerHit) {
-        audioRefs.current.playerHit.currentTime = 0;
-        audioRefs.current.playerHit.play().catch(() => {});
-      }
-    }, 0);
+    if (applyDamageWithKnockback) {
+      applyDamageWithKnockback(
+        damage,
+        direction.clone(),
+        knockbackForce,
+        { type: 'enemy', entityName: 'Shnake' }
+      );
+    } else if (takeDamage) {
+      takeDamage(damage, direction.clone(), knockbackForce);
+    }
+    if (shnakeId) {
+      recordShnakeRevengeDamage(shnakeId, damage);
+      console.log(`[Shnake Attack] Shnake ${shnakeId} dealt ${damage} revenge damage`);
+    }
+    if (audioRefs.current.playerHit) {
+      audioRefs.current.playerHit.currentTime = 0;
+      audioRefs.current.playerHit.play().catch(() => {});
+    }
   }, [applyDamageWithKnockback, takeDamage]);
 
   // Fire propagation callback - when shnake head moves, propagate fire toward head

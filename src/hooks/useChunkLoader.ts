@@ -393,9 +393,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   // EMIT_RADIUS: Only flatten chunks within this radius for emit (reduces downstream processing)
   const EMIT_RADIUS = emitRadius ?? LOAD_RADIUS;
 
-  // Ref for use in interval callbacks (avoids stale closure captures)
+  // Refs for use in callbacks (avoids stale closure captures when radius changes)
   const loadRadiusRef = useRef(LOAD_RADIUS);
   loadRadiusRef.current = LOAD_RADIUS;
+  const unloadRadiusRef = useRef(UNLOAD_RADIUS);
+  unloadRadiusRef.current = UNLOAD_RADIUS;
+  const maxLoadedChunksRef = useRef(MAX_LOADED_CHUNKS);
+  maxLoadedChunksRef.current = MAX_LOADED_CHUNKS;
+  const emitRadiusRef = useRef(EMIT_RADIUS);
+  emitRadiusRef.current = EMIT_RADIUS;
   // Loaded chunks: Map<chunkKey, ChunkData>
   const loadedChunksRef = useRef<Map<string, ChunkData>>(new Map());
 
@@ -496,8 +502,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       let sigXor = 0 >>> 0;
       let sigSum = 0 >>> 0;
 
-      for (let dx = -EMIT_RADIUS; dx <= EMIT_RADIUS; dx++) {
-        for (let dz = -EMIT_RADIUS; dz <= EMIT_RADIUS; dz++) {
+      const currentEmitRadius = emitRadiusRef.current;
+      for (let dx = -currentEmitRadius; dx <= currentEmitRadius; dx++) {
+        for (let dz = -currentEmitRadius; dz <= currentEmitRadius; dz++) {
           const key = `chunk_${centerX + dx}_${centerZ + dz}`;
           const chunkData = loadedChunksRef.current.get(key);
           if (!chunkData) continue;
@@ -593,12 +600,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const dz = Math.abs(chunkZ - playerChunk.z);
     const distance = Math.max(dx, dz);
     
-    if (distance <= UNLOAD_RADIUS) return true;
-    
+    if (distance <= unloadRadiusRef.current) return true;
+
     // Check for optimistic blocks
     const chunkData = loadedChunksRef.current.get(chunkKey);
     if (chunkData?.hasOptimisticBlocks) return true;
-    
+
     return false;
   }, []);
 
@@ -611,7 +618,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
    */
   const evictLRUChunks = useCallback(() => {
     const chunkCount = loadedChunksRef.current.size;
-    if (chunkCount <= MAX_LOADED_CHUNKS) return;
+    if (chunkCount <= maxLoadedChunksRef.current) return;
 
     const now = Date.now();
 
@@ -1776,19 +1783,20 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (stepX === 0 && stepZ === 0) return coords;
 
     // Prefetch stripes at LOAD_RADIUS+1 up to LOAD_RADIUS+PREFETCH_DISTANCE
+    const currentLoadRadius = loadRadiusRef.current;
     for (let d = 1; d <= PREFETCH_DISTANCE; d++) {
-      const r = LOAD_RADIUS + d;
+      const r = currentLoadRadius + d;
 
       if (stepX !== 0) {
         const stripeX = playerChunkX + stepX * r;
-        for (let z = playerChunkZ - LOAD_RADIUS; z <= playerChunkZ + LOAD_RADIUS; z++) {
+        for (let z = playerChunkZ - currentLoadRadius; z <= playerChunkZ + currentLoadRadius; z++) {
           coords.push({ x: stripeX, z });
         }
       }
 
       if (stepZ !== 0) {
         const stripeZ = playerChunkZ + stepZ * r;
-        for (let x = playerChunkX - LOAD_RADIUS; x <= playerChunkX + LOAD_RADIUS; x++) {
+        for (let x = playerChunkX - currentLoadRadius; x <= playerChunkX + currentLoadRadius; x++) {
           // Avoid duplicating corner if also moving in X
           if (stepX !== 0) {
             const cornerX = playerChunkX + stepX * r;
@@ -1893,7 +1901,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     now: number
   ) => {
     // Guard: Don't prefetch if near memory limit
-    if (loadedChunksRef.current.size > MAX_LOADED_CHUNKS - PREFETCH_HEADROOM) {
+    if (loadedChunksRef.current.size > maxLoadedChunksRef.current - PREFETCH_HEADROOM) {
       return;
     }
 
@@ -2158,7 +2166,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   // Compact collider cache when it bloats beyond expected size
   // Called from syncColliderRadius AND integrity check (covers both moving and stationary)
   const MAX_COLLIDER_CACHE = 50000;
+  let lastCompactTime = 0;
   const compactColliderCache = () => {
+    const now = performance.now();
+    if (now - lastCompactTime < 1000) return;
+    lastCompactTime = now;
     if (colliderByBlockId.size <= MAX_COLLIDER_CACHE) return;
     const validIds = new Set<string>();
     for (const ck of chunksWithColliders) {
@@ -2258,7 +2270,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       const dz = Math.abs(chunkZ - centerChunkZ);
       const distance = Math.max(dx, dz);
 
-      if (distance > UNLOAD_RADIUS) {
+      if (distance > unloadRadiusRef.current) {
         // Phase 3A: Don't unload chunks with optimistic blocks
         if (chunkData.hasOptimisticBlocks) continue;
 
@@ -2276,13 +2288,19 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(chunkKey);
         removedCount++;
 
-        // Only remove colliders if this chunk actually had them (most unloaded
-        // chunks are beyond COLLIDER_RADIUS and never had colliders created)
+        // Budget collider removal — chunks being unloaded are beyond interaction
+        // distance, so spreading removal across frames is safe
         if (chunksWithColliders.has(chunkKey)) {
-          for (const block of chunkData.blocks) {
-            removeBlockCollider(block);
-          }
           chunksWithColliders.delete(chunkKey);
+          const blocksToRemove = chunkData.blocks;
+          let removeIdx = 0;
+          enqueueJob(`unload-colliders:${chunkKey}`, () => {
+            const end = Math.min(removeIdx + COLLIDER_CREATION_BATCH, blocksToRemove.length);
+            for (; removeIdx < end; removeIdx++) {
+              removeBlockCollider(blocksToRemove[removeIdx]);
+            }
+            return removeIdx >= blocksToRemove.length;
+          });
         }
       }
     }
@@ -2334,8 +2352,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       // Phase 3A: Update lastAccessedAt for all pinned (nearby) chunks
       const accessTime = Date.now();
-      for (let dx = -UNLOAD_RADIUS; dx <= UNLOAD_RADIUS; dx++) {
-        for (let dz = -UNLOAD_RADIUS; dz <= UNLOAD_RADIUS; dz++) {
+      for (let dx = -unloadRadiusRef.current; dx <= unloadRadiusRef.current; dx++) {
+        for (let dz = -unloadRadiusRef.current; dz <= unloadRadiusRef.current; dz++) {
           const chunkKey = `chunk_${newChunkX + dx}_${newChunkZ + dz}`;
           const chunkData = loadedChunksRef.current.get(chunkKey);
           if (chunkData) {
@@ -2362,14 +2380,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           chunksToLoad = getStripeChunks(
             oldChunkX, oldChunkZ,
             newChunkX, newChunkZ,
-            LOAD_RADIUS
+            loadRadiusRef.current
           );
         } else {
           // Multi-chunk movement: find ALL missing chunks in new radius
           // This fixes the bug where teleporting/fast travel left chunks unloaded
           chunksToLoad = [];
-          for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
-            for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+          for (let dx = -loadRadiusRef.current; dx <= loadRadiusRef.current; dx++) {
+            for (let dz = -loadRadiusRef.current; dz <= loadRadiusRef.current; dz++) {
               const cx = newChunkX + dx;
               const cz = newChunkZ + dz;
               const key = `chunk_${cx}_${cz}`;
@@ -2436,7 +2454,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       } else {
         // No previous chunk - do full initial load (this one can block as it's startup)
-        await loadChunksInRadius(newChunkX, newChunkZ, LOAD_RADIUS);
+        await loadChunksInRadius(newChunkX, newChunkZ, loadRadiusRef.current);
         // After initial load, clean up any stale chunks
         unloadDistantChunks(newChunkX, newChunkZ);
         evictLRUChunks();
@@ -2447,8 +2465,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // (transitionId discards stale completions). This scan reloads ANY missing
       // chunks within LOAD_RADIUS, not just the current chunk.
       const missingChunks: Array<{ x: number; z: number }> = [];
-      for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
-        for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+      for (let dx = -loadRadiusRef.current; dx <= loadRadiusRef.current; dx++) {
+        for (let dz = -loadRadiusRef.current; dz <= loadRadiusRef.current; dz++) {
           const key = `chunk_${newChunkX + dx}_${newChunkZ + dz}`;
           if (!loadedChunksRef.current.has(key) && !inFlightChunksRef.current.has(key)) {
             missingChunks.push({ x: newChunkX + dx, z: newChunkZ + dz });
@@ -2516,13 +2534,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     // Phase 3C: Use parallel loading for faster initial load
     // Load ring 1 (center) first for immediate visual feedback, then all remaining in a single batch
-    const totalChunks = (2 * LOAD_RADIUS + 1) ** 2;
+    const initLoadRadius = loadRadiusRef.current;
+    const totalChunks = (2 * initLoadRadius + 1) ** 2;
 
     // Build all chunk coordinates and required keys upfront
     // Rings are 1-based: ring 1 = center, ring N = distance N-1 from center
     const requiredChunkKeys = new Set<string>();
     const allChunksToLoad: Array<{ x: number; z: number }> = [];
-    for (let ring = 1; ring <= LOAD_RADIUS + 1; ring++) {
+    for (let ring = 1; ring <= initLoadRadius + 1; ring++) {
       const ringChunks = getRingChunks(startChunkX, startChunkZ, ring);
       for (const { x, z } of ringChunks) {
         requiredChunkKeys.add(`chunk_${x}_${z}`);

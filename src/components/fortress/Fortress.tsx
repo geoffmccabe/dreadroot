@@ -231,8 +231,12 @@ export function Fortress() {
   
   // Hooks
   const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, updateVisualDistance, updateFogEnabled } = useUserData();
-  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef } = useBlocks();
+  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, isLoading: chunksLoading } = useBlocks();
   const { user } = useAuth();
+  // Expose ready signal for automated perf testing
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('perftest')) {
+    (window as any).__perfTestReady = !chunksLoading;
+  }
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel, isMarketplaceOpen, openMarketplace, closeMarketplace } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();

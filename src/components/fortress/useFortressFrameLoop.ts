@@ -21,6 +21,10 @@ import {
   type BulletLocal,
 } from './fortressScene.constants';
 
+// Module-level scratch vectors — reused each frame to avoid GC pressure
+const _scratchVec3A = new THREE.Vector3();
+const _scratchVec3B = new THREE.Vector3();
+
 export function useFortressFrameLoop({
   camera,
   skyRef,
@@ -157,34 +161,32 @@ export function useFortressFrameLoop({
   diagnostics.cameraZ = camera.position.z;
   diagnostics.particleCount = wispParticlesRef.current.length;
   
-  // Capture renderer stats for GPU metrics (draw calls, triangles, memory)
-  diagnostics.captureRendererStats(state.gl);
-  
-  // Capture grid stats for collision system monitoring
-  diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
+  // Gate expensive diagnostic captures to sample window (~10Hz, not 60Hz)
+  const sampleDue = now - diagnostics.lastSampleTime >= 90;
+  if (sampleDue) {
+    diagnostics.captureRendererStats(state.gl);
+    diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
+    diagnostics.recordColliderMapSize(getColliderMapSize());
 
-  // Capture collider map size for bloat detection
-  diagnostics.recordColliderMapSize(getColliderMapSize());
-  
-  // Capture per-enemy-type stats for detailed performance tracking
-  const activeShwarms = shwarmsRef.current;
-  let shwarmBlockCount = 0;
-  for (let i = 0; i < activeShwarms.length; i++) {
-    const shwarm = activeShwarms[i];
-    for (let j = 0; j < shwarm.blocks.length; j++) {
-      if (shwarm.blocks[j].isAlive) shwarmBlockCount++;
+    const activeShwarms = shwarmsRef.current;
+    let shwarmBlockCount = 0;
+    for (let i = 0; i < activeShwarms.length; i++) {
+      const shwarm = activeShwarms[i];
+      for (let j = 0; j < shwarm.blocks.length; j++) {
+        if (shwarm.blocks[j].isAlive) shwarmBlockCount++;
+      }
     }
+    diagnostics.captureShwarmStats(activeShwarms.length, shwarmBlockCount);
+
+    const activeShnakes = shnakesRef.current;
+    let shnakeSegmentCount = 0;
+    for (let i = 0; i < activeShnakes.length; i++) {
+      shnakeSegmentCount += activeShnakes[i].segments.length;
+    }
+    diagnostics.captureShnakeStats(activeShnakes.length, shnakeSegmentCount);
+
+    diagnostics.captureShombieStats(shombiesRef.current.length);
   }
-  diagnostics.captureShwarmStats(activeShwarms.length, shwarmBlockCount);
-  
-  const activeShnakes = shnakesRef.current;
-  let shnakeSegmentCount = 0;
-  for (let i = 0; i < activeShnakes.length; i++) {
-    shnakeSegmentCount += activeShnakes[i].segments.length;
-  }
-  diagnostics.captureShnakeStats(activeShnakes.length, shnakeSegmentCount);
-  
-  diagnostics.captureShombieStats(shombiesRef.current.length);
   
   // Call consolidated component updates (eliminates 5 separate useFrame hooks)
   diagnostics.startTiming('render');
@@ -398,7 +400,7 @@ export function useFortressFrameLoop({
                 // Create particle effect at hit position using the shwarm's texture
                 if (shwarmRendererRef.current) {
                   shwarmRendererRef.current.createHitEffect(
-                    block.position.clone(),
+                    block.position,
                     shwarm.definition.texture_url
                   );
                 }
@@ -985,7 +987,7 @@ export function useFortressFrameLoop({
               // Ricochet off building blocks if scale is still meaningful
               if (isBuilding && bullet.ricochetScale > 0.1) {
                 // Calculate distance from camera for spatial audio
-                const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                const hitPos = _scratchVec3A.set(hitX, hitY, hitZ);
                 const distToCamera = hitPos.distanceTo(camera.position);
                 
                 // Play ricochet sound with distance-based falloff
@@ -1001,7 +1003,7 @@ export function useFortressFrameLoop({
                 
                 // Spawn scaled impact effect
                 // Spawn scaled impact effect - use Nebula for sky-friendly alpha blending
-                const ricochetHitPos = new THREE.Vector3(hitX, hitY, hitZ);
+                const ricochetHitPos = _scratchVec3B.set(hitX, hitY, hitZ);
                 const tierDefRicochet = getDefinitionRef.current(bullet.tier);
                 const pentaMultiplierRicochet = bullet.isPentabullet ? 3.0 : 1.0;
                 const ricochetBlockConfig = {

@@ -666,7 +666,20 @@ export function FirstPersonControls({
   // Euler for camera rotation
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
   const needsCameraUpdate = useRef(true); // Start true to apply initial rotation on first frame
-  
+  const isPerfTest = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('perftest');
+  if (isPerfTest) {
+    (window as any).__perfTestControls = {
+      setYaw: (v: number) => { yaw.current = v; needsCameraUpdate.current = true; },
+      setPitch: (v: number) => { pitch.current = v; needsCameraUpdate.current = true; },
+      enableGodMode: () => { godModeRef.current = true; setGodModeEnabled(true); onGodModeChange?.(true); },
+      disableGodMode: () => { godModeRef.current = false; setGodModeEnabled(false); onGodModeChange?.(false); },
+      isGodMode: () => godModeRef.current,
+      getPosition: () => ({ x: camera.position.x, y: camera.position.y, z: camera.position.z }),
+      setPositionY: (y: number) => { camera.position.y = y; },
+      setPosition: (x: number, y: number, z: number) => { camera.position.set(x, y, z); },
+    };
+  }
+
   // Handler refs to prevent event listener re-attachment
   const handleMouseMoveRef = useRef<(event: MouseEvent) => void>();
   const handleWheelRef = useRef<(event: WheelEvent) => void>();
