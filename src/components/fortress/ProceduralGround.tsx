@@ -29,7 +29,6 @@ const isChunkInFSZ = (chunkX: number, chunkZ: number): boolean => {
 
 interface ProceduralGroundProps {
   visibleChunksRef: React.MutableRefObject<Set<string>>;
-  renderTrigger: number;
   textureUrl?: string;
   visualDistance?: number;
   cameraRef?: React.RefObject<THREE.Camera>;
@@ -55,7 +54,6 @@ const MAX_INSTANCES = MAX_NEAR_INSTANCES + MAX_FAR_CHUNKS;
 
 export function ProceduralGround({
   visibleChunksRef,
-  renderTrigger,
   textureUrl = '/grass_texture_seamless.webp',
   visualDistance = 4,
   cameraRef,
@@ -255,7 +253,7 @@ export function ProceduralGround({
     const camZ = cam ? Math.floor(cam.position.z / CHUNK_SIZE) : 0;
     lastCameraChunkRef.current = { x: camX, z: camZ };
     rebuildGround(camX, camZ);
-  }, [renderTrigger, visualDistance]);
+  }, [visualDistance]);
 
   // Track camera movement to rebuild ground when camera changes chunk
   useFrame(() => {

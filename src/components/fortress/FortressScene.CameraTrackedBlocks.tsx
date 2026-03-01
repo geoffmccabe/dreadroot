@@ -74,11 +74,7 @@ export function CameraTrackedBlocks({
 
   const lastChunkRef = useRef({ x: 0, z: 0 });
   const lastUpdateTime = useRef(0);
-  const admittedKeysRef = useRef(new Set<string>());
-  const hasPendingMountsRef = useRef(false);
-  const drainScheduledRef = useRef(false);
   const mutationRafRef = useRef(0); // Debounce: collapse rapid mutations into single render
-  const MOUNT_BUDGET = 4;
   const lastVisualDistance = useRef(visualDistance);
 
   const [renderTrigger, setRenderTrigger] = useState(0);
@@ -187,14 +183,6 @@ export function CameraTrackedBlocks({
         updatePlayerPosition(camera.position.x, camera.position.z);
       }
 
-      // Drain pending mounts: schedule next batch on next frame
-      if (hasPendingMountsRef.current && !drainScheduledRef.current) {
-        drainScheduledRef.current = true;
-        requestAnimationFrame(() => {
-          drainScheduledRef.current = false;
-          setRenderTrigger(prev => prev + 1);
-        });
-      }
     }, 100);
 
     return () => {
@@ -320,36 +308,10 @@ export function CameraTrackedBlocks({
       }
     }
 
-    // Budgeted mounting: limit new chunk mounts per eval to prevent frame spikes
-    const admitted = admittedKeysRef.current;
-    const normalKeys = new Set<string>();
-    let newAdmissions = 0;
-    let totalPending = 0;
-    for (const e of normal) {
-      normalKeys.add(e.key);
-      if (!admitted.has(e.key)) {
-        totalPending++;
-        if (newAdmissions < MOUNT_BUDGET) {
-          admitted.add(e.key);
-          newAdmissions++;
-        }
-      }
-    }
-    // Prune admitted keys for chunks that left visual range
-    for (const key of admitted) {
-      if (!normalKeys.has(key)) admitted.delete(key);
-    }
-
-    hasPendingMountsRef.current = totalPending > newAdmissions;
-
-    const budgeted = hasPendingMountsRef.current
-      ? normal.filter(e => admitted.has(e.key))
-      : normal;
-
-    diagnostics.setChunkRenderCount(budgeted.length);
+    diagnostics.setChunkRenderCount(normal.length);
     diagnostics.recordNormalEntriesEval();
 
-    return { normalEntries: budgeted, fadeEntries: fade };
+    return { normalEntries: normal, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
 
   // Generate water blocks for visible chunks
@@ -362,21 +324,8 @@ export function CameraTrackedBlocks({
 
   // Merged tree blocks: extract ALL tree blocks from ALL visible chunks into one array
   // This enables rendering with a single InstancedMesh (1 draw call vs ~165)
-  //
-  // PERF: During mount drain (hasPendingMountsRef=true), return cached tree blocks
-  // to avoid triggering an IABG rebuild on every admission batch. This reduces
-  // rebuilds from ~19 (one per 4-chunk batch) to 2 (first batch + drain complete).
-  const stableTreeBlocksRef = useRef<PlacedBlock[]>([]);
   const allTreeBlocks = useMemo(() => {
-    if (normalEntries.length === 0) {
-      stableTreeBlocksRef.current = [];
-      return [];
-    }
-
-    // During mount drain, reuse cached tree blocks to avoid IABG rebuild storm
-    if (hasPendingMountsRef.current && stableTreeBlocksRef.current.length > 0) {
-      return stableTreeBlocksRef.current;
-    }
+    if (normalEntries.length === 0) return [];
 
     const treeBlocks: PlacedBlock[] = [];
     const shrinePositions: Array<{ x: number; y: number; z: number }> = [];
@@ -402,16 +351,8 @@ export function CameraTrackedBlocks({
       shrineTracker.registerShrineBlocks(shrinePositions);
     }
 
-    stableTreeBlocksRef.current = treeBlocks;
     return treeBlocks;
   }, [normalEntries]);
-
-  // One-time diagnostic: log when all chunks are admitted (mount drain complete)
-  const mountCompleteLogRef = useRef(false);
-  if (!mountCompleteLogRef.current && normalEntries.length > 0 && !hasPendingMountsRef.current && admittedKeysRef.current.size > 0) {
-    mountCompleteLogRef.current = true;
-    console.log(`[CameraTrackedBlocks] Mount complete: ${admittedKeysRef.current.size} chunks admitted, ${normalEntries.length} rendering`);
-  }
 
   // One-time pipeline diagnostic (fires once when normalEntries first has data)
   if (!debugLogRef.current && normalEntries.length > 0) {
@@ -425,7 +366,6 @@ export function CameraTrackedBlocks({
       <FadeChunkBlocks entries={fadeEntries} viewSettings={viewSettings} />
       <ProceduralGround
         visibleChunksRef={visibleChunksRef}
-        renderTrigger={renderTrigger}
         textureUrl={groundTextureUrl || '/grass_texture_seamless.webp'}
         visualDistance={visualDistance}
         cameraRef={{ current: camera }}
