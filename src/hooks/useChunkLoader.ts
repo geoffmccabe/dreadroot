@@ -2165,7 +2165,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
   // Compact collider cache when it bloats beyond expected size
   // Called from syncColliderRadius AND integrity check (covers both moving and stationary)
-  const MAX_COLLIDER_CACHE = 50000;
+  const MAX_COLLIDER_CACHE = 35000;
   let lastCompactTime = 0;
   const compactColliderCache = () => {
     const now = performance.now();
@@ -2180,8 +2180,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
     }
     let pruned = 0;
-    for (const blockId of colliderByBlockId.keys()) {
+    for (const [blockId, collider] of colliderByBlockId) {
       if (!validIds.has(blockId)) {
+        // CRITICAL: Remove from spatial grid BEFORE deleting from map
+        // Without this, orphaned Box3 objects stay in the grid forever
+        if (collider) worldCollisionGrid.remove(collider);
         colliderByBlockId.delete(blockId);
         pruned++;
       }
