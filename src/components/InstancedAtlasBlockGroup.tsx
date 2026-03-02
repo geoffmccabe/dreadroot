@@ -16,7 +16,7 @@ import { PlacedBlock, BlockType } from '@/types/blocks';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
-import { isBoxInFrustum } from '@/lib/frustumCuller';
+// isBoxInFrustum removed — IABG mega-mesh doesn't need frustum culling
 import { createTreeAtlasMaterial } from '@/lib/atlasMaterial';
 // enqueueJob no longer used — atlas rebuild uses its own RAF loop
 // to avoid being blocked by collider removal jobs in the shared queue
@@ -1203,16 +1203,12 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       const mesh = meshRef.current;
       if (!mesh || blocks.length === 0) return;
 
-      // Box-based frustum culling: hide meshes entirely behind camera
-      const bbox = mesh.geometry.boundingBox;
-      if (bbox) {
-        const visible = isBoxInFrustum(bbox);
-        if (mesh.visible !== visible) {
-          console.log(`[IABG-Frustum] visibility changed: ${visible}, bbox=(${bbox.min.x.toFixed(0)},${bbox.min.y.toFixed(0)},${bbox.min.z.toFixed(0)})-(${bbox.max.x.toFixed(0)},${bbox.max.y.toFixed(0)},${bbox.max.z.toFixed(0)}), count=${mesh.count}`);
-          mesh.visible = visible;
-        }
-        if (!visible) return;
-      }
+      // Frustum culling removed for IABG: the tree mega-mesh spans many chunks
+      // and is nearly always visible. The geometry.boundingBox is in local space
+      // which doesn't match world-space instance positions, causing the mesh
+      // to be incorrectly hidden. frustumCulled={false} already disables Three.js
+      // built-in culling; this removes the custom box-based cull that was wrong.
+      if (!mesh.visible) mesh.visible = true;
 
       let matrixNeedsUpdate = false;
       let colorNeedsUpdate = false;
