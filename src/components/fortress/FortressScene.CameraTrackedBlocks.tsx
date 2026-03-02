@@ -284,6 +284,11 @@ export function CameraTrackedBlocks({
       }
     }
 
+    // Sort by chunk key for deterministic iteration order.
+    // Without this, Map insertion order changes on load/unload cause different
+    // block concatenation order in allTreeBlocks → IABG signature churn → rebuilds.
+    normal.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+
     diagnostics.setChunkRenderCount(normal.length);
     diagnostics.recordNormalEntriesEval();
 

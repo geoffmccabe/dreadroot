@@ -64,10 +64,25 @@ let _loggedTreeBlocksReady = false;
 let _loggedAtlasRendering = false;
 let _loggedNonTreeBlocks = false;
 
-// Shared geometry for performance
-const SharedBlockGeometry = () => {
-  return useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
-};
+// Module-level shared geometry — one BoxGeometry for ALL PlacedBlocks instances.
+// Never disposed; lives for app lifetime. Eliminates 153+ geometry create/dispose per session.
+const _sharedBlockGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+// Module-level shared audio — one Audio instance for block placement sounds.
+// Eliminates per-chunk Audio() creation (expensive: decode, resource mgmt, GC).
+let _sharedBlockAudio: HTMLAudioElement | null = null;
+let _sharedBlockAudioLastTime = 0;
+function playBlockPlaceSound() {
+  const now = performance.now();
+  if (now - _sharedBlockAudioLastTime < 200) return; // debounce
+  _sharedBlockAudioLastTime = now;
+  if (!_sharedBlockAudio) {
+    _sharedBlockAudio = new Audio(getSoundUrl('block_place', '/wooden_thud_sound.mp3'));
+    _sharedBlockAudio.volume = 0.3;
+  }
+  _sharedBlockAudio.currentTime = 0;
+  _sharedBlockAudio.play().catch(() => {});
+}
 
 // Track falling blocks with their current Y position - exported for stacking calculations
 export const fallingBlocksState = new Map<string, { currentY: number; velocity: number; targetY: number }>();
@@ -162,9 +177,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
 }) => {
   // B2.2: Auto-enable performance mode when total visible blocks exceed threshold
   const effectivePerformanceMode = performanceMode || blocks.length > GLOBAL_VISIBLE_BLOCKS_THRESHOLD;
-  const geometry = SharedBlockGeometry();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const lastThudTime = useRef(0);
+  const geometry = _sharedBlockGeometry;
 
   // Phase 1 optimization: use hoisted hooks when provided (per-chunk rendering),
   // fall back to internal hooks for standalone usage
@@ -176,23 +189,8 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   useAtlasSync({ enabled: hoistedAtlasTexture === undefined });
 
   
-  // Initialize audio
-  useEffect(() => {
-    audioRef.current = new Audio(getSoundUrl('block_place', '/wooden_thud_sound.mp3'));
-    audioRef.current.volume = 0.3;
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
-  // Dispose shared geometry GPU buffers on unmount (frees all attribute WebGL buffers)
-  useEffect(() => {
-    const geo = geometry;
-    return () => { geo.dispose(); diagnostics.recordDispose('geometry'); };
-  }, [geometry]);
+  // Geometry is module-level — no per-instance creation or disposal needed.
+  // Audio is module-level — no per-instance creation needed.
 
   // Phase 1 optimization: use hoisted block definitions when provided
   const internalBlocksData = useBlocksData();
@@ -269,12 +267,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
         if (fallState.currentY <= landingY) {
           fallState.currentY = block.position_y;
           
-          const now = Date.now();
-          if (audioRef.current && now - lastThudTime.current > 50) {
-            audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(() => {});
-            lastThudTime.current = now;
-          }
+          playBlockPlaceSound();
           
           fallingBlocksState.delete(blockId);
         }

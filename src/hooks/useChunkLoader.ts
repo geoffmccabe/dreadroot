@@ -7,7 +7,7 @@ import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
-import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
+import { enqueueJob, cancelJob, clearPendingJobs } from '@/lib/budgetedWork';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { updateChunkHeightMap, removeChunkHeightMap, clearAllHeightMaps } from '@/lib/chunkHeightMap';
 import * as THREE from 'three';
@@ -1112,7 +1112,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
             const blocksForColliders = chunkBlocks;
             const capturedKey = chunkKey;
             let colliderIdx = 0;
-            enqueueJob(`load-colliders:${chunkKey}`, () => {
+            enqueueJob(`load-colliders:${capturedKey}`, () => {
+              // Guard: if chunk was unloaded while job was pending, bail out
+              if (!loadedChunksRef.current.has(capturedKey)) return true;
               const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
               for (; colliderIdx < end; colliderIdx++) {
                 ensureBlockCollider(blocksForColliders[colliderIdx]);
@@ -1211,6 +1213,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     for (const { x, z } of toLoad) {
       inFlightChunksRef.current.add(`chunk_${x}_${z}`);
     }
+
+    // CRITICAL: Use try/finally to guarantee in-flight cleanup on ALL code paths.
+    // Without this, an early return (e.g. all server fetches fail) permanently
+    // poisons inFlightChunksRef, preventing those chunks from ever loading again.
+    try {
 
     const loadedAt = Date.now();
     const now = new Date();
@@ -1376,7 +1383,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           const blocksForColliders = blocks;
           const capturedKey = chunkKey;
           let colliderIdx = 0;
-          enqueueJob(`load-colliders:${chunkKey}`, () => {
+          enqueueJob(`load-colliders:${capturedKey}`, () => {
+            // Guard: if chunk was unloaded while job was pending, bail out
+            if (!loadedChunksRef.current.has(capturedKey)) return true;
             const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
             for (; colliderIdx < end; colliderIdx++) {
               ensureBlockCollider(blocksForColliders[colliderIdx]);
@@ -1603,7 +1612,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
             const blocksForColliders = chunkBlocks;
             const capturedKey = chunkKey;
             let colliderIdx = 0;
-            enqueueJob(`load-colliders:${chunkKey}`, () => {
+            enqueueJob(`load-colliders:${capturedKey}`, () => {
+              // Guard: if chunk was unloaded while job was pending, bail out
+              if (!loadedChunksRef.current.has(capturedKey)) return true;
               const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
               for (; colliderIdx < end; colliderIdx++) {
                 ensureBlockCollider(blocksForColliders[colliderIdx]);
@@ -1668,16 +1679,20 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
     }
 
-    // Clear in-flight status for all chunks we attempted to load
-    for (const { x, z } of toLoad) {
-      inFlightChunksRef.current.delete(`chunk_${x}_${z}`);
-    }
-
     // FIX: Single consolidated emit after ALL data (cache + server) is loaded
     // Use immediate emit during initial load for faster rendering
     // Note: First emit log happens inside doEmit() with actual counts
     const isInitialLoad = !initialLoadDone.current;
     scheduleEmit(isInitialLoad);
+
+    } finally {
+      // Clear in-flight status for all chunks we attempted to load.
+      // This MUST run on every exit path (including early returns, exceptions)
+      // or chunks get permanently stuck in inFlightChunksRef and never load again.
+      for (const { x, z } of toLoad) {
+        inFlightChunksRef.current.delete(`chunk_${x}_${z}`);
+      }
+    }
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
@@ -2226,7 +2241,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
             const blocksForColliders = chunkData.blocks;
             const capturedKey = chunkKey;
             let colliderIdx = 0;
-            enqueueJob(`sync-colliders:${chunkKey}`, () => {
+            enqueueJob(`sync-colliders:${capturedKey}`, () => {
+              // Guard: if chunk was unloaded while job was pending, bail out
+              if (!loadedChunksRef.current.has(capturedKey)) return true;
               const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
               for (; colliderIdx < end; colliderIdx++) {
                 ensureBlockCollider(blocksForColliders[colliderIdx]);
@@ -2239,12 +2256,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
             });
           }
         }
-      } else if (dist > COLLIDER_RADIUS && chunksWithColliders.has(chunkKey)) {
-        // Chunk left collider radius — remove colliders synchronously
-        for (const block of chunkData.blocks) {
-          removeBlockCollider(block);
+      } else if (dist > COLLIDER_RADIUS) {
+        // Cancel pending collider creation before removing
+        cancelJob(`load-colliders:${chunkKey}`);
+        cancelJob(`sync-colliders:${chunkKey}`);
+        if (chunksWithColliders.has(chunkKey)) {
+          // Chunk left collider radius — remove colliders synchronously
+          for (const block of chunkData.blocks) {
+            removeBlockCollider(block);
+          }
+          chunksWithColliders.delete(chunkKey);
         }
-        chunksWithColliders.delete(chunkKey);
       }
     }
 
@@ -2293,11 +2315,20 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(chunkKey);
         removedCount++;
 
+        // Cancel any pending collider creation job FIRST to prevent orphan colliders.
+        // If a load-colliders job is still in the budget queue, it would create colliders
+        // for a chunk that's been deleted from loadedChunksRef — permanent orphans.
+        cancelJob(`load-colliders:${chunkKey}`);
+        cancelJob(`sync-colliders:${chunkKey}`);
+
         // Budget collider removal — chunks being unloaded are beyond interaction
-        // distance, so spreading removal across frames is safe
-        if (chunksWithColliders.has(chunkKey)) {
-          chunksWithColliders.delete(chunkKey);
-          const blocksToRemove = chunkData.blocks;
+        // distance, so spreading removal across frames is safe.
+        // Always attempt removal (not just when chunksWithColliders.has), because
+        // a partially-completed budgeted job may have created some colliders before
+        // the chunk was added to chunksWithColliders.
+        chunksWithColliders.delete(chunkKey);
+        const blocksToRemove = chunkData.blocks;
+        if (blocksToRemove.length > 0) {
           let removeIdx = 0;
           enqueueJob(`unload-colliders:${chunkKey}`, () => {
             const end = Math.min(removeIdx + COLLIDER_CREATION_BATCH, blocksToRemove.length);

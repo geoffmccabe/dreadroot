@@ -85,6 +85,25 @@ export function getPendingJobCount(): number {
 }
 
 /**
+ * Cancel a specific pending job by ID.
+ * Returns true if found and removed, false if not found or already running.
+ */
+export function cancelJob(id: string): boolean {
+  if (!activeJobs.has(id)) return false;
+  // Mark the job as cancelled by removing from activeJobs.
+  // The job entry stays in the queue but will be skipped on next tick.
+  activeJobs.delete(id);
+  // Find and neutralize the job in the queue so it doesn't run
+  for (let i = queueHead; i < queue.length; i++) {
+    if (queue[i].id === id) {
+      queue[i].run = () => true; // no-op, completes immediately
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Clear all pending jobs (use on world switch)
  */
 export function clearPendingJobs(): void {
