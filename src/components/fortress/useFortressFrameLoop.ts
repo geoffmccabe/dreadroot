@@ -528,7 +528,7 @@ export function useFortressFrameLoop({
                       shnake.id, 0, tierDef.burn_time * shnakePentaMultiplier * 1000, tierDef.colors
                     );
                     
-                    console.log(`[Shnake Hit] Head hit! damage=${scaledDamage} killed=${killedHead} revenge=${scaledDamage}`);
+                    // [Shnake Hit] Head hit — log removed from hot path
                   } else {
                     // BODY: ricochet like building block
                     if (bullet.ricochetScale > 0.1) {
@@ -566,7 +566,7 @@ export function useFortressFrameLoop({
                       needsBulletRender = true;
                       // Mark shnake as indignant - will trigger wiggle animation and 2x volume roar
                       markShnakeIndignant(shnake.id);
-                      console.log(`[Shnake Hit] Body ricochet at segment ${segIdx} - shnake indignant!`);
+                      // [Shnake Hit] Body ricochet — log removed from hot path
                     } else {
                       // Too weak to ricochet, just destroy bullet
                       hit = true;

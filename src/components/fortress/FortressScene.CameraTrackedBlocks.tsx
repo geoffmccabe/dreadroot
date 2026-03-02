@@ -14,7 +14,7 @@ import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 import ChunkRenderer from '@/components/ChunkRenderer';
 import { InstancedAtlasBlockGroup } from '@/components/InstancedAtlasBlockGroup';
 import { ProceduralGround } from './ProceduralGround';
-import { FadeChunkBlocks } from '@/components/FadeChunkBlocks';
+// FadeChunkBlocks disabled — per-frame string/array allocations caused GC thrash at scale
 import { WaterBlocks } from '@/components/WaterBlocks';
 import type { ViewSettings } from './FortressTypes';
 import type { BlockType } from '@/types/blocks';
@@ -26,7 +26,7 @@ import { updateFrustum } from '@/lib/frustumCuller';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { shrineTracker } from '@/lib/shrineTracker';
 
-const FADE_EXTRA = 3;
+const FADE_EXTRA = 0; // Disabled: FadeChunkBlocks per-frame string/array allocations caused GC thrash
 
 // Shared geometry for merged tree mesh (created once, reused)
 const _sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -69,8 +69,9 @@ export function CameraTrackedBlocks({
   useAtlasSync(); // Single sync instead of 71× (each fires 6 React Query fetches)
   const { blocksMap: hoistedBlocksMap, isLoading: hoistedBlockDefsLoading } = useBlocksData();
 
-  // One-time diagnostic: log rendering pipeline state to confirm blocks flow through
-  const debugLogRef = useRef(false);
+  // Stable camera ref — avoids creating new object every render for ProceduralGround
+  const cameraRefStable = useRef(camera);
+  cameraRefStable.current = camera;
 
   const lastChunkRef = useRef({ x: 0, z: 0 });
   const lastUpdateTime = useRef(0);
@@ -217,9 +218,6 @@ export function CameraTrackedBlocks({
   // worldRevision/renderTrigger changes that don't actually change chunk data.
   const entryCacheRef = useRef<Map<string, { key: string; blocks: PlacedBlock[] }>>(new Map());
 
-  // One-time diagnostic for chunk exclusions
-  const chunkExclusionLogRef = useRef(false);
-
   const { normalEntries, fadeEntries } = useMemo(() => {
     const normal: { key: string; blocks: PlacedBlock[] }[] = [];
     const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
@@ -232,9 +230,6 @@ export function CameraTrackedBlocks({
 
     // Track which keys are still in use so we can prune stale cache entries
     const activeKeys = new Set<string>();
-
-    // Track excluded chunks for diagnostic
-    const excluded: { key: string; dist: number; blocks: number }[] = [];
 
     if (ref && ref.size > 0) {
       for (const [chunkKey, chunkData] of ref) {
@@ -268,27 +263,8 @@ export function CameraTrackedBlocks({
           cache.set(chunkKey, entry);
           activeKeys.add(chunkKey);
           normal.push(entry);
-        } else if (chunkDist <= visualDistance + FADE_EXTRA) {
-          const distanceFactor = (chunkDist - visualDistance) / FADE_EXTRA;
-          activeKeys.add(chunkKey);
-          fade.push({ key: chunkKey, blocks, distanceFactor });
-        } else {
-          // Track excluded chunk for diagnostic
-          excluded.push({ key: chunkKey, dist: chunkDist, blocks: chunkData.blocks.length });
         }
-      }
-    }
-
-    // One-time diagnostic: log excluded chunks
-    if (!chunkExclusionLogRef.current && excluded.length > 0) {
-      chunkExclusionLogRef.current = true;
-      console.log(`[ChunkVisibility] Camera chunk: (${camChunkX}, ${camChunkZ}), visualDistance: ${visualDistance}, FADE_EXTRA: ${FADE_EXTRA}`);
-      console.log(`[ChunkVisibility] Excluded ${excluded.length} chunks beyond range ${visualDistance + FADE_EXTRA}:`);
-      for (const e of excluded.slice(0, 10)) {
-        console.log(`  - ${e.key}: dist=${e.dist}, ${e.blocks} blocks (has colliders but won't render)`);
-      }
-      if (excluded.length > 10) {
-        console.log(`  ... and ${excluded.length - 10} more`);
+        // FADE_EXTRA=0: fade rendering disabled for performance
       }
     }
 
@@ -310,29 +286,6 @@ export function CameraTrackedBlocks({
 
     diagnostics.setChunkRenderCount(normal.length);
     diagnostics.recordNormalEntriesEval();
-
-    // Diagnostic: track tree blocks in normalEntries to debug disappearing trees
-    let _totalTreeBlocks = 0;
-    let _chunksWithTrees = 0;
-    let _chunksUsingVisibleBlocks = 0;
-    for (let i = 0; i < normal.length; i++) {
-      const blks = normal[i].blocks;
-      let chunkHasTrees = false;
-      for (let j = 0; j < blks.length; j++) {
-        if (isTreeBlockType(blks[j].block_type)) {
-          _totalTreeBlocks++;
-          chunkHasTrees = true;
-        }
-      }
-      if (chunkHasTrees) _chunksWithTrees++;
-      // Check if this chunk used visibleBlocks
-      const parsed = parseChunkKey(normal[i].key);
-      if (parsed && ref) {
-        const cd = ref.get(normal[i].key);
-        if (cd?.visibleBlocks?.length) _chunksUsingVisibleBlocks++;
-      }
-    }
-    console.log(`[NormalEntries] eval: ${normal.length} chunks, ${_totalTreeBlocks} tree blocks in ${_chunksWithTrees} chunks, ${_chunksUsingVisibleBlocks} using visibleBlocks, fallback=${normal.length > 0 && blocksByChunk.size > 0 && ref?.size === 0 ? 'YES' : 'no'}, camChunk=(${camChunkX},${camChunkZ})`);
 
     return { normalEntries: normal, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
@@ -374,30 +327,21 @@ export function CameraTrackedBlocks({
       shrineTracker.registerShrineBlocks(shrinePositions);
     }
 
-    console.log(`[AllTreeBlocks] ${treeBlocks.length} tree blocks from ${normalEntries.length} normalEntries`);
-
     return treeBlocks;
   }, [normalEntries]);
 
-  // One-time pipeline diagnostic (fires once when normalEntries first has data)
-  if (!debugLogRef.current && normalEntries.length > 0) {
-    debugLogRef.current = true;
-    const totalBlocks = normalEntries.reduce((sum, e) => sum + e.blocks.length, 0);
-    console.log(`[CameraTrackedBlocks] Pipeline: ${normalEntries.length} chunks, ${totalBlocks} blocks, blockDefsLoading=${hoistedBlockDefsLoading}, atlasReady=${hoistedAtlasReady}, blocksMapSize=${hoistedBlocksMap.size}, fadeChunks=${fadeEntries.length}`);
-  }
+  // Pipeline diagnostic removed — was O(N blocks) scan every render
 
   return (
     <>
-      <FadeChunkBlocks entries={fadeEntries} viewSettings={viewSettings} />
+      {/* FadeChunkBlocks disabled for performance — re-enable with allocation-free ring fade */}
       <ProceduralGround
         visibleChunksRef={visibleChunksRef}
         textureUrl={groundTextureUrl || '/grass_texture_seamless.webp'}
         visualDistance={visualDistance}
-        cameraRef={{ current: camera }}
+        cameraRef={cameraRefStable}
       />
       {/* Merged tree mesh: 1 InstancedMesh for ALL tree blocks (1 draw call vs ~165) */}
-      {/* DEBUG: log IABG mount condition */}
-      {(() => { if (allTreeBlocks.length === 0) console.log('[IABG] NOT mounting: allTreeBlocks empty'); else if (!hoistedAtlasReady) console.log('[IABG] NOT mounting: atlas not ready'); else if (!hoistedAtlasTexture) console.log('[IABG] NOT mounting: no atlas texture'); return null; })()}
       {allTreeBlocks.length > 0 && hoistedAtlasReady && hoistedAtlasTexture && (
         <InstancedAtlasBlockGroup
           blocks={allTreeBlocks}

@@ -279,7 +279,7 @@ export function FortressScene({
     }
     // Look up current definition by tier so admin panel changes apply to existing shwarms
     const currentDef = shwarmDefinitions?.find(d => d.tier === definition.tier) ?? definition;
-    console.log(`[Loot] Block killed T${currentDef.tier}, drop_rate=${currentDef.drop_rate}, table=${currentDef.drop_table_code}`);
+    // Loot drop roll — log removed from hot path
     const drop = rollDrop(currentDef.drop_rate, currentDef.drop_table_code);
     if (drop) {
       if (!currentUserId) {
@@ -296,7 +296,7 @@ export function FortressScene({
         killerUserId: currentUserId,
         pickedUp: false,
       };
-      console.log(`[Loot] Spawning world item: ${drop.itemName} at (${blockPosition.x.toFixed(1)}, ${blockPosition.y.toFixed(1)}, ${blockPosition.z.toFixed(1)})`);
+      // Loot spawn — log removed from hot path
       setDroppedItems(prev => [...prev, worldItem]);
     }
   }, [rollDrop, currentUserId, dropTablesLoaded, shwarmDefinitions]);
@@ -382,7 +382,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         // Tree was removed - find and remove all shnakes on this tree
         const shnakesToRemove = shnakesRef.current.filter(s => s.treeId === prevId);
         for (const shnake of shnakesToRemove) {
-          console.log(`[FortressScene] Removing shnake ${shnake.id.slice(-6)} from chopped tree ${prevId.slice(0, 8)}`);
+          // Shnake removal from chopped tree — log removed
           removeShnake(shnake.id);
         }
       }
@@ -509,7 +509,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     }
     if (shnakeId) {
       recordShnakeRevengeDamage(shnakeId, damage);
-      console.log(`[Shnake Attack] Shnake ${shnakeId} dealt ${damage} revenge damage`);
+      // Shnake revenge damage — log removed from hot path
     }
     if (audioRefs.current.playerHit) {
       audioRefs.current.playerHit.currentTime = 0;
@@ -535,7 +535,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const handleTriggerWiggle = useCallback((shnakeId: string) => {
     // Trigger S-formation wiggle animation in ShnakeRenderer
     shnakeRendererRef.current?.triggerWiggle(shnakeId);
-    console.log(`[Shnake] Trigger wiggle for ${shnakeId}`);
+    // Wiggle trigger — log removed from hot path
   }, []);
 
   useShnakeMovement({
@@ -554,7 +554,6 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // Admin spawn callback: spawn shnake on nearest tree
   const handleSpawnShnake = useCallback((tier: number) => {
     if (!plantedTrees || plantedTrees.length === 0) {
-      console.log('[SpawnShnake] No trees available');
       return;
     }
     
@@ -594,15 +593,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     
     if (nearestTree) {
       const treeTier = (nearestTree as any).seed_tier ?? nearestTree.seed_definition?.tier ?? 1;
-      console.log(`[SpawnShnake] Spawning shnake on T${treeTier} tree at (${nearestTree.base_x}, ${nearestTree.base_z})`);
       const result = spawnOnTree(nearestTree);
       if (result) {
-        console.log(`[SpawnShnake] Success! Shnake ${result.id} with ${result.segments.length} segments`);
-      } else {
-        console.log('[SpawnShnake] Failed - no valid spawn position');
+        // Spawn success
       }
     } else {
-      console.log('[SpawnShnake] No trees found');
+      // No trees found
     }
   }, [plantedTrees, cameraRef, spawnOnTree]);
   
@@ -610,26 +606,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
   
   const spawnCallbacks = useMemo(() => ({
-    onSpawnShwarm: (tier: number) => {
-      console.log(`[SpawnCommands] Spawning shwarm tier ${tier}`);
-      spawnShwarmByTier(tier);
-    },
-    onSpawnShnake: (tier: number) => {
-      console.log(`[SpawnCommands] Spawning shnake tier ${tier}`);
-      handleSpawnShnake(tier);
-    },
-    onSpawnShombie: (tier: number, count: number) => {
-      console.log(`[SpawnCommands] Spawning ${count} shombie(s) tier ${tier}`);
-      spawnShombieGroup(tier, count);
-    },
-    onSpawnWalapa: (tier: number) => {
-      console.log(`[SpawnCommands] Spawning walapa tier ${tier}`);
-      spawnWalapa(tier);
-    },
-    onSpawnShtickman: (tier: number) => {
-      console.log(`[SpawnCommands] Spawning shtickman tier ${tier}`);
-      spawnShtickmanByTier(tier);
-    },
+    onSpawnShwarm: (tier: number) => { spawnShwarmByTier(tier); },
+    onSpawnShnake: (tier: number) => { handleSpawnShnake(tier); },
+    onSpawnShombie: (tier: number, count: number) => { spawnShombieGroup(tier, count); },
+    onSpawnWalapa: (tier: number) => { spawnWalapa(tier); },
+    onSpawnShtickman: (tier: number) => { spawnShtickmanByTier(tier); },
   }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup, spawnWalapa, spawnShtickmanByTier]);
   
   useSpawnCommands({
@@ -1182,7 +1163,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       if (!shombie.isActive) continue;
       const shombieCenter = _flameTmpPos.current.set(shombie.position.x, shombie.position.y + 1.1, shombie.position.z);
       if (isInCone(shombieCenter)) {
-        console.log(`[FlameGlove] Hit shombie ${shombie.id} for ${tickDamage} dmg`);
+        // FlameGlove hit — log removed from hot path
         damageShombie(shombie.id, tickDamage, undefined as any, false, undefined as any);
         burnSystem.applyBurn('shombie', shombie.id, undefined, tier, colors, colorMode, tickDamage, 0, shombieCenter);
       }
