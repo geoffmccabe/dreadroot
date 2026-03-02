@@ -2165,7 +2165,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
   // Compact collider cache when it bloats beyond expected size
   // Called from syncColliderRadius AND integrity check (covers both moving and stationary)
-  const MAX_COLLIDER_CACHE = 35000;
+  // COLLIDER_RADIUS=3 → 49 chunks × ~2000 blocks/chunk = ~98K expected colliders.
+  // Set threshold well above that so compaction only fires on actual orphan buildup.
+  const MAX_COLLIDER_CACHE = 130000;
   let lastCompactTime = 0;
   const compactColliderCache = () => {
     const now = performance.now();
