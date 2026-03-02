@@ -300,14 +300,24 @@ export function CameraTrackedBlocks({
 
   // Merged tree blocks: extract ALL tree blocks from ALL visible chunks into one array
   // This enables rendering with a single InstancedMesh (1 draw call vs ~165)
+  // IMPORTANT: Scan full chunkData.blocks (not visibleBlocks) because surface culling
+  // can exclude interior tree blocks that the IABG needs to render.
   const allTreeBlocks = useMemo(() => {
     if (normalEntries.length === 0) return [];
+
+    const ref = loadedChunksRef?.current;
+    if (!ref) return [];
 
     const treeBlocks: PlacedBlock[] = [];
     const shrinePositions: Array<{ x: number; y: number; z: number }> = [];
 
     for (let c = 0; c < normalEntries.length; c++) {
-      const blocks = normalEntries[c].blocks;
+      const chunkKey = normalEntries[c].key;
+      // Use full blocks array (not visibleBlocks) to ensure all tree blocks are found
+      const chunkData = ref.get(chunkKey);
+      const blocks = chunkData?.blocks;
+      if (!blocks) continue;
+
       for (let i = 0; i < blocks.length; i++) {
         const block = blocks[i];
         if (isTreeBlockType(block.block_type)) {
@@ -328,7 +338,7 @@ export function CameraTrackedBlocks({
     }
 
     return treeBlocks;
-  }, [normalEntries]);
+  }, [normalEntries, loadedChunksRef]);
 
   // Pipeline diagnostic removed — was O(N blocks) scan every render
 
