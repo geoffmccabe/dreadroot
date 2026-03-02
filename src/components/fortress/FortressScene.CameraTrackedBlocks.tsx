@@ -311,6 +311,29 @@ export function CameraTrackedBlocks({
     diagnostics.setChunkRenderCount(normal.length);
     diagnostics.recordNormalEntriesEval();
 
+    // Diagnostic: track tree blocks in normalEntries to debug disappearing trees
+    let _totalTreeBlocks = 0;
+    let _chunksWithTrees = 0;
+    let _chunksUsingVisibleBlocks = 0;
+    for (let i = 0; i < normal.length; i++) {
+      const blks = normal[i].blocks;
+      let chunkHasTrees = false;
+      for (let j = 0; j < blks.length; j++) {
+        if (isTreeBlockType(blks[j].block_type)) {
+          _totalTreeBlocks++;
+          chunkHasTrees = true;
+        }
+      }
+      if (chunkHasTrees) _chunksWithTrees++;
+      // Check if this chunk used visibleBlocks
+      const parsed = parseChunkKey(normal[i].key);
+      if (parsed && ref) {
+        const cd = ref.get(normal[i].key);
+        if (cd?.visibleBlocks?.length) _chunksUsingVisibleBlocks++;
+      }
+    }
+    console.log(`[NormalEntries] eval: ${normal.length} chunks, ${_totalTreeBlocks} tree blocks in ${_chunksWithTrees} chunks, ${_chunksUsingVisibleBlocks} using visibleBlocks, fallback=${normal.length > 0 && blocksByChunk.size > 0 && ref?.size === 0 ? 'YES' : 'no'}, camChunk=(${camChunkX},${camChunkZ})`);
+
     return { normalEntries: normal, fadeEntries: fade };
   }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
 
@@ -351,6 +374,8 @@ export function CameraTrackedBlocks({
       shrineTracker.registerShrineBlocks(shrinePositions);
     }
 
+    console.log(`[AllTreeBlocks] ${treeBlocks.length} tree blocks from ${normalEntries.length} normalEntries`);
+
     return treeBlocks;
   }, [normalEntries]);
 
@@ -371,6 +396,8 @@ export function CameraTrackedBlocks({
         cameraRef={{ current: camera }}
       />
       {/* Merged tree mesh: 1 InstancedMesh for ALL tree blocks (1 draw call vs ~165) */}
+      {/* DEBUG: log IABG mount condition */}
+      {(() => { if (allTreeBlocks.length === 0) console.log('[IABG] NOT mounting: allTreeBlocks empty'); else if (!hoistedAtlasReady) console.log('[IABG] NOT mounting: atlas not ready'); else if (!hoistedAtlasTexture) console.log('[IABG] NOT mounting: no atlas texture'); return null; })()}
       {allTreeBlocks.length > 0 && hoistedAtlasReady && hoistedAtlasTexture && (
         <InstancedAtlasBlockGroup
           blocks={allTreeBlocks}

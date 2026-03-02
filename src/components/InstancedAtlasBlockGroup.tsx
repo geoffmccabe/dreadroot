@@ -1207,7 +1207,10 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       const bbox = mesh.geometry.boundingBox;
       if (bbox) {
         const visible = isBoxInFrustum(bbox);
-        if (mesh.visible !== visible) mesh.visible = visible;
+        if (mesh.visible !== visible) {
+          console.log(`[IABG-Frustum] visibility changed: ${visible}, bbox=(${bbox.min.x.toFixed(0)},${bbox.min.y.toFixed(0)},${bbox.min.z.toFixed(0)})-(${bbox.max.x.toFixed(0)},${bbox.max.y.toFixed(0)},${bbox.max.z.toFixed(0)}), count=${mesh.count}`);
+          mesh.visible = visible;
+        }
         if (!visible) return;
       }
 
