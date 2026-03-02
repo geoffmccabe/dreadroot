@@ -422,7 +422,7 @@ export function CameraTrackedBlocks({
           hoistedAtlasReady={hoistedAtlasReady}
           hoistedBlocksMap={hoistedBlocksMap}
           hoistedBlockDefsLoading={hoistedBlockDefsLoading}
-          treeBlocksPreFiltered
+          treeBlocksPreFiltered={allTreeBlocks.length > 0 && hoistedAtlasReady && !!hoistedAtlasTexture}
         />
       ))}
       {/* Water/Lava blocks - rendered after opaque blocks for transparency */}
