@@ -345,14 +345,8 @@ export function CameraTrackedBlocks({
     return treeBlocks;
   }, [normalEntries, loadedChunksRef]);
 
-  // Diagnostic: log when tree blocks change to debug rendering issues
-  const prevTreeCountRef = useRef(0);
-  useEffect(() => {
-    if (allTreeBlocks.length !== prevTreeCountRef.current) {
-      console.log(`[TreeBlocks] ${prevTreeCountRef.current} → ${allTreeBlocks.length} tree blocks from ${normalEntries.length} chunks`);
-      prevTreeCountRef.current = allTreeBlocks.length;
-    }
-  }, [allTreeBlocks, normalEntries.length]);
+  // D-Flow: Track tree block count
+  diagnostics.setTreeBlockCount(allTreeBlocks.length);
 
   return (
     <>

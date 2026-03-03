@@ -1207,11 +1207,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       return !loadedChunksRef.current.has(key) && !inFlightChunksRef.current.has(key);
     });
 
-    if (toLoad.length === 0) {
-      console.log(`[ChunkLoader] loadSpecificChunks: all ${chunkCoords.length} chunks already loaded/in-flight (loaded=${loadedChunksRef.current.size}, inFlight=${inFlightChunksRef.current.size})`);
-      return;
-    }
-    console.log(`[ChunkLoader] loadSpecificChunks: loading ${toLoad.length}/${chunkCoords.length} chunks (${toLoad.map(c => `${c.x},${c.z}`).slice(0, 5).join(' ')}${toLoad.length > 5 ? '...' : ''})`);
+    // D-Flow: Track chunks requested vs filtered
+    diagnostics.recordChunksRequested(chunkCoords.length, chunkCoords.length - toLoad.length);
+
+    if (toLoad.length === 0) return;
 
     // Mark chunks as in-flight to prevent integrity check from re-queuing them
     for (const { x, z } of toLoad) {
@@ -2454,7 +2453,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           }
         }
 
-        console.log(`[ChunkLoader] updatePlayerPosition: chunk ${oldChunkX},${oldChunkZ}→${newChunkX},${newChunkZ}, chunksToLoad=${chunksToLoad.length}, loaded=${loadedChunksRef.current.size}, loadRadius=${loadRadiusRef.current}`);
+        // D-Flow: Track chunk position changes
+        diagnostics.recordChunkPosChange(loadRadiusRef.current, loadedChunksRef.current.size, inFlightChunksRef.current.size);
 
         if (chunksToLoad.length > 0) {
           // Increment transition ID so rapid crossings discard stale completions

@@ -143,6 +143,18 @@ class DiagnosticsLogger {
   private mutationRenderSkips = 0;      // mutation re-renders throttled this sample
   private mutationRenderSkipsTotal = 0;
 
+  // === Chunk loading pipeline diagnostics ===
+  private chunkPosChanges = 0;           // player chunk position changes
+  private chunkPosChangesTotal = 0;
+  private chunksRequested = 0;           // total chunks requested for loading
+  private chunksRequestedTotal = 0;
+  private chunksFiltered = 0;            // chunks filtered (already loaded/in-flight)
+  private chunksFilteredTotal = 0;
+  inFlightSize = 0;                      // current inFlightChunksRef.size
+  loadedChunkCount = 0;                  // current loadedChunksRef.size
+  treeBlockCount = 0;                    // current allTreeBlocks count
+  private loadRadiusVal = 0;             // current load radius
+
   // === User data loading diagnostics ===
   userDataStatus: 'pending' | 'loading' | 'success' | 'error' = 'pending';
   userDataError: string | null = null;
@@ -334,6 +346,25 @@ class DiagnosticsLogger {
     if (type === 'treeAtlas') this.drawCallsTreeAtlas--;
     else if (type === 'nonTree') this.drawCallsNonTree--;
     else this.drawCallsFade--;
+  }
+
+  // === Chunk loading pipeline diagnostics ===
+  recordChunkPosChange(loadRadius: number, loadedSize: number, inFlightSize: number): void {
+    if (!this.enabled) return;
+    this.chunkPosChanges++;
+    this.loadRadiusVal = loadRadius;
+    this.loadedChunkCount = loadedSize;
+    this.inFlightSize = inFlightSize;
+  }
+
+  recordChunksRequested(requested: number, filtered: number): void {
+    if (!this.enabled) return;
+    this.chunksRequested += requested;
+    this.chunksFiltered += filtered;
+  }
+
+  setTreeBlockCount(count: number): void {
+    this.treeBlockCount = count;
   }
 
   // === Chunk rendering diagnostics (Phase 0) ===
@@ -659,6 +690,14 @@ class DiagnosticsLogger {
       this.mutationRenderSkips = 0;
       this.mutationRenderSkipsTotal = 0;
 
+      // Reset chunk loading pipeline diagnostics
+      this.chunkPosChanges = 0;
+      this.chunkPosChangesTotal = 0;
+      this.chunksRequested = 0;
+      this.chunksRequestedTotal = 0;
+      this.chunksFiltered = 0;
+      this.chunksFilteredTotal = 0;
+
       // DO NOT reset userDataStatus — it is recorded without the enabled guard,
       // so it already reflects the true state from the initial load.
       // Resetting it here would overwrite 'success' with 'pending' since
@@ -911,6 +950,14 @@ class DiagnosticsLogger {
     this.normalEntriesEvals = 0;
     this.mutationRenderFires = 0;
     this.mutationRenderSkips = 0;
+
+    // Chunk loading pipeline diagnostics
+    this.chunkPosChangesTotal += this.chunkPosChanges;
+    this.chunksRequestedTotal += this.chunksRequested;
+    this.chunksFilteredTotal += this.chunksFiltered;
+    this.chunkPosChanges = 0;
+    this.chunksRequested = 0;
+    this.chunksFiltered = 0;
   }
   
   private tickCallCount = 0;
@@ -1184,6 +1231,11 @@ class DiagnosticsLogger {
     if (this.sigChangesTotal > 10) {
       lines.push(`⚠️ INSTABILITY: High signature churn causing mesh rebuilds`);
     }
+    lines.push('');
+    lines.push('--- Chunk Loading Pipeline ---');
+    lines.push(`Chunk pos changes: ${this.chunkPosChangesTotal}`);
+    lines.push(`Chunks requested: ${this.chunksRequestedTotal}, filtered: ${this.chunksFilteredTotal} (loaded=${this.loadedChunkCount}, inFlight=${this.inFlightSize}, loadRadius=${this.loadRadiusVal})`);
+    lines.push(`Tree blocks: ${this.treeBlockCount}`);
     lines.push('');
     lines.push('--- Re-Render Pipeline ---');
     lines.push(`normalEntries evals: ${this.normalEntriesEvalsTotal}`);
