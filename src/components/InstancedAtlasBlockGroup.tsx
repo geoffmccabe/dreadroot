@@ -448,10 +448,15 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       // D-Flow diagnostics
       diagnostics.recordMeshRebuild(performance.now() - startTime, blocksAtDispatch.length);
 
-      // Process queued rebuild if any
+      // Process queued rebuild if any — use incremental after initial build
+      // to avoid chaining expensive full worker rebuilds (each 100-200ms)
       if (rebuildQueuedRef.current) {
         rebuildQueuedRef.current = false;
-        requestAnimationFrame(() => doRebuild());
+        if (initialBuildDoneRef.current) {
+          doIncrementalUpdate();
+        } else {
+          requestAnimationFrame(() => doRebuild());
+        }
       }
     }).catch((err) => {
       // Worker error — fall back to synchronous rebuild
@@ -1082,18 +1087,13 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
     lastProcessedSignatureRef.current = sig;
 
-    // Use incremental updates when possible — avoids full O(N) rebuild on every
-    // chunk load/unload. Only fall back to full rebuild when the mesh hasn't been
-    // built yet or a budgeted rebuild is already in progress (to avoid data races
-    // between incremental writes to GPU attributes and budgeted staging buffers).
-    const canIncremental = initialBuildDoneRef.current
-      && rebuildRafRef.current === null
-      && rebuildStateRef.current === null
-      && !workerPendingRef.current;
+    // After initial build: ALWAYS use incremental updates for chunk visibility changes.
+    // Full rebuilds cost 100-200ms for 100K+ blocks; incremental is <10ms (just hash diffs).
+    // Only fall back to full rebuild for the initial build or when a worker rebuild is pending
+    // (to avoid data races between incremental writes and worker staging buffers).
+    const canIncremental = initialBuildDoneRef.current && !workerPendingRef.current;
 
     if (canIncremental) {
-      // Throttle incremental updates — each one is O(N) for all blocks,
-      // so 381 calls × 150K blocks = 57M iterations without throttling
       const now = performance.now();
       const timeSinceLastIncremental = now - lastIncrementalTimeRef.current;
 

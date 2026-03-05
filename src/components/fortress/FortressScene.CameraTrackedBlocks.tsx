@@ -293,7 +293,11 @@ export function CameraTrackedBlocks({
     diagnostics.recordNormalEntriesEval();
 
     return { normalEntries: normal, fadeEntries: fade };
-  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
+    // blocksByChunk removed from deps: it's only used in the fallback path when
+    // loadedChunksRef is empty, and its identity changes on every worldRevision
+    // (causing redundant re-evaluations). worldRevision already triggers re-eval.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderTrigger, loadedChunksRef, worldRevision, visualDistance, camera]);
 
   // Generate water blocks for visible chunks
   const waterBlocks = useMemo(() => {

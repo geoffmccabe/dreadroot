@@ -24,7 +24,7 @@ const POSITION_UPDATE_THROTTLE = 100; // ms between position updates
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
 const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
 const COLLIDER_CREATION_BATCH = 200;  // Colliders to create per frame during load
-const COLLIDER_RADIUS = 3;            // Only maintain colliders within this chunk distance
+const COLLIDER_RADIUS = 2;            // Only maintain colliders within this chunk distance (was 3 — 113K colliders too many)
 
 // B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
 const PREFETCH_ENABLED = false;
@@ -1505,8 +1505,6 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // D-Flow: End fetch timing
       const fetchMs = performance.now() - fetchT0;
 
-      console.log(`[ChunkLoader DEBUG] Individual chunk fetch complete: ${blocks.length} total blocks, ${failedChunkCoords.length} failed chunks, ${fetchMs.toFixed(0)}ms`);
-
       // Track failed chunks for retry
       if (failedChunkCoords.length > 0) {
         for (const { x, z } of failedChunkCoords) {
@@ -1588,11 +1586,6 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
-
-        // DEBUG: Log chunk (3,1) specifically
-        if (x === 3 && z === 1) {
-          console.log(`[ChunkLoader DEBUG] Chunk (3,1) from SERVER: ${chunkBlocks.length} blocks`);
-        }
 
         // CRITICAL: Remove old colliders before replacing chunk data
         const existingChunk = loadedChunksRef.current.get(chunkKey);
