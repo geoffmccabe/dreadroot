@@ -40,18 +40,11 @@ const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 
 // 44K lookups per rebuild hit this cache instead of decoding strings.
 const uvLookupCache = new Map<string, { uvOffsetX: number; uvOffsetY: number }>();
 const animInfoCache = new Map<string, ReturnType<typeof getTreeBlockAnimationInfo>>();
-// Diagnostic: track which block types have been logged (fires once per unique type, ~30 max)
-const _uvDiagLogged = new Set<string>();
-
 function getCachedUVs(blockType: string): { uvOffsetX: number; uvOffsetY: number } {
   let cached = uvLookupCache.get(blockType);
   if (!cached) {
     cached = getInstanceUVsForTreeBlock(blockType);
     uvLookupCache.set(blockType, cached);
-    if (!_uvDiagLogged.has(blockType)) {
-      _uvDiagLogged.add(blockType);
-      console.log(`[AtlasUV] ${blockType} → uv(${cached.uvOffsetX.toFixed(4)}, ${cached.uvOffsetY.toFixed(4)})`);
-    }
   }
   return cached;
 }
@@ -76,12 +69,9 @@ function subscribeAtlasVersion(listener: AtlasVersionListener): () => void {
     _atlasPollingId = setInterval(() => {
       const v = getAtlasVersion();
       if (v !== _lastPolledVersion) {
-        const cacheSize = uvLookupCache.size;
         _lastPolledVersion = v;
         uvLookupCache.clear();
         animInfoCache.clear();
-        _uvDiagLogged.clear();
-        console.log(`[AtlasUV] Shared poll: atlas version changed to ${v}, cleared ${cacheSize} cached UVs`);
         for (const cb of _atlasListeners) cb(v);
       }
     }, 500);
@@ -400,8 +390,11 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         m.boundingBox.max.set(result.maxX, result.maxY, result.maxZ);
         m.boundingSphere ??= new THREE.Sphere();
         m.boundingBox.getBoundingSphere(m.boundingSphere);
-        m.geometry.boundingBox = m.boundingBox.clone();
-        m.geometry.boundingSphere = m.boundingSphere.clone();
+        // Reuse geometry bounding objects (clone() leaked new objects every rebuild)
+        if (!m.geometry.boundingBox) m.geometry.boundingBox = new THREE.Box3();
+        m.geometry.boundingBox.copy(m.boundingBox);
+        if (!m.geometry.boundingSphere) m.geometry.boundingSphere = new THREE.Sphere();
+        m.geometry.boundingSphere.copy(m.boundingSphere);
       }
 
       // 5. Set count LAST — GPU now has complete data
@@ -613,8 +606,10 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         mesh.boundingBox.max.set(state.maxX, state.maxY, state.maxZ);
         mesh.boundingSphere ??= new THREE.Sphere();
         mesh.boundingBox.getBoundingSphere(mesh.boundingSphere);
-        mesh.geometry.boundingBox = mesh.boundingBox.clone();
-        mesh.geometry.boundingSphere = mesh.boundingSphere.clone();
+        if (!mesh.geometry.boundingBox) mesh.geometry.boundingBox = new THREE.Box3();
+        mesh.geometry.boundingBox.copy(mesh.boundingBox);
+        if (!mesh.geometry.boundingSphere) mesh.geometry.boundingSphere = new THREE.Sphere();
+        mesh.geometry.boundingSphere.copy(mesh.boundingSphere);
       }
 
       // 4. Set count LAST — GPU now has complete matrix + UV + color data
@@ -778,8 +773,10 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       mesh.boundingBox.max.set(maxX, maxY, maxZ);
       mesh.boundingSphere ??= new THREE.Sphere();
       mesh.boundingBox.getBoundingSphere(mesh.boundingSphere);
-      mesh.geometry.boundingBox = mesh.boundingBox.clone();
-      mesh.geometry.boundingSphere = mesh.boundingSphere.clone();
+      if (!mesh.geometry.boundingBox) mesh.geometry.boundingBox = new THREE.Box3();
+      mesh.geometry.boundingBox.copy(mesh.boundingBox);
+      if (!mesh.geometry.boundingSphere) mesh.geometry.boundingSphere = new THREE.Sphere();
+      mesh.geometry.boundingSphere.copy(mesh.boundingSphere);
     }
 
     // Populate stable index map for subsequent incremental updates
@@ -998,29 +995,33 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     animatedBlocksRef.current = animatedBlocks;
 
-    if (changedCount > 0) {
-      mesh.instanceMatrix.needsUpdate = true;
+    // Early-out: skip GPU upload entirely if nothing changed
+    if (changedCount === 0) {
+      mesh.count = highWaterMarkRef.current;
+      return;
+    }
 
-      // Update UV attribute (full buffer upload - THREE.js limitation)
-      if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= meshCapacity) {
-        uvOffsetAttrRef.current.needsUpdate = true;
+    mesh.instanceMatrix.needsUpdate = true;
+
+    // Update UV attribute (full buffer upload - THREE.js limitation)
+    if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= meshCapacity) {
+      uvOffsetAttrRef.current.needsUpdate = true;
+    } else {
+      const attr = new THREE.InstancedBufferAttribute(uvData, 2);
+      attr.needsUpdate = true;
+      mesh.geometry.setAttribute('instanceUvOffset', attr);
+      uvOffsetAttrRef.current = attr;
+    }
+
+    // Update color attribute if needed
+    if (hasBranchDepth) {
+      if (colorAttrRef.current && colorAttrRef.current.count >= meshCapacity) {
+        colorAttrRef.current.needsUpdate = true;
       } else {
-        const attr = new THREE.InstancedBufferAttribute(uvData, 2);
+        const attr = new THREE.InstancedBufferAttribute(colorData, 3);
         attr.needsUpdate = true;
-        mesh.geometry.setAttribute('instanceUvOffset', attr);
-        uvOffsetAttrRef.current = attr;
-      }
-
-      // Update color attribute if needed
-      if (hasBranchDepth) {
-        if (colorAttrRef.current && colorAttrRef.current.count >= meshCapacity) {
-          colorAttrRef.current.needsUpdate = true;
-        } else {
-          const attr = new THREE.InstancedBufferAttribute(colorData, 3);
-          attr.needsUpdate = true;
-          mesh.geometry.setAttribute('instanceColor', attr);
-          colorAttrRef.current = attr;
-        }
+        mesh.geometry.setAttribute('instanceColor', attr);
+        colorAttrRef.current = attr;
       }
     }
 
@@ -1051,10 +1052,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     // Track atlas version — clear UV cache if atlas changed (slots may have moved)
     // This forces a rebuild by resetting the signature
     if (atlasVersion !== lastAtlasVersionRef.current) {
-      console.log(`[AtlasUV] Atlas version changed ${lastAtlasVersionRef.current} → ${atlasVersion}, clearing ${uvLookupCache.size} cached UVs`);
       uvLookupCache.clear();
       animInfoCache.clear();
-      _uvDiagLogged.clear();
       lastAtlasVersionRef.current = atlasVersion;
       lastProcessedSignatureRef.current = ''; // Force rebuild with new UVs
     }
@@ -1068,7 +1067,6 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     } else {
       let idHash = 0;
       const n = blocks.length;
-      const sampleCount = Math.min(n, 64);
       const step = n <= 64 ? 1 : Math.floor(n / 64);
       for (let i = 0; i < n; i += step) {
         const b = blocks[i];

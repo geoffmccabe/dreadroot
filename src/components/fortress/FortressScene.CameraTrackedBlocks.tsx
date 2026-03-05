@@ -28,6 +28,11 @@ import { shrineTracker } from '@/lib/shrineTracker';
 
 const FADE_EXTRA = 0; // Disabled: FadeChunkBlocks per-frame string/array allocations caused GC thrash
 
+// Tree blocks are the most expensive rendering (single IABG mega-mesh).
+// Cap tree rendering distance below visualDistance to reduce block count.
+// Ground/stone blocks still render at full visualDistance.
+const TREE_RENDER_RADIUS = 5;
+
 // Shared geometry for merged tree mesh (created once, reused)
 const _sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
 
@@ -79,7 +84,7 @@ export function CameraTrackedBlocks({
   const lastVisualDistance = useRef(visualDistance);
 
   const [renderTrigger, setRenderTrigger] = useState(0);
-  const CHUNK_UPDATE_THROTTLE = 200; // ms (was 100 — reduce normalEntries re-eval frequency)
+  const CHUNK_UPDATE_THROTTLE = 400; // ms (was 200 — reduce normalEntries re-eval frequency)
 
   // Stagger removed: web workers now handle mesh rebuilds off main thread,
   // so mounting all visible chunks at once is no longer a bottleneck.
@@ -130,7 +135,7 @@ export function CameraTrackedBlocks({
   // Track camera movement via the centralized frame loop
   const lastHeartbeatRef = useRef(0);
   const lastKnownMutationRef = useRef(0);
-  const HEARTBEAT_INTERVAL = 500; // Recovery scan interval — detects and reloads missing chunks
+  const HEARTBEAT_INTERVAL = 2000; // Recovery scan interval — detects and reloads missing chunks
 
   useEffect(() => {
     // Update frustum every frame at priority 5 (before IABG at 60)
@@ -317,10 +322,23 @@ export function CameraTrackedBlocks({
   const allTreeBlocks = useMemo(() => {
     if (normalEntries.length === 0) return [];
 
+    // Compute camera chunk for tree distance filtering
+    const camChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+    const camChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+    const treeRadius = Math.min(visualDistance, TREE_RENDER_RADIUS);
+
     const treeBlocks: PlacedBlock[] = [];
     const shrinePositions: Array<{ x: number; y: number; z: number }> = [];
 
     for (let c = 0; c < normalEntries.length; c++) {
+      // Skip distant chunks for tree rendering (ground still renders at full distance)
+      const parsed = parseChunkKey(normalEntries[c].key);
+      if (parsed) {
+        const dcx = Math.abs(parsed.chunkX - camChunkX);
+        const dcz = Math.abs(parsed.chunkZ - camChunkZ);
+        if (Math.max(dcx, dcz) > treeRadius) continue;
+      }
+
       const blocks = normalEntries[c].blocks;
       if (!blocks) continue;
 
