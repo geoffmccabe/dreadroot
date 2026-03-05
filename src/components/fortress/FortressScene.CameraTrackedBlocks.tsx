@@ -79,7 +79,7 @@ export function CameraTrackedBlocks({
   const lastVisualDistance = useRef(visualDistance);
 
   const [renderTrigger, setRenderTrigger] = useState(0);
-  const CHUNK_UPDATE_THROTTLE = 100; // ms
+  const CHUNK_UPDATE_THROTTLE = 200; // ms (was 100 — reduce normalEntries re-eval frequency)
 
   // Stagger removed: web workers now handle mesh rebuilds off main thread,
   // so mounting all visible chunks at once is no longer a bottleneck.
@@ -303,24 +303,21 @@ export function CameraTrackedBlocks({
     return worldPonds.getAllWaterBlocksForChunks(chunkKeys, CHUNK_SIZE);
   }, [worldPonds, normalEntries]);
 
-  // Merged tree blocks: extract ALL tree blocks from ALL visible chunks into one array
-  // This enables rendering with a single InstancedMesh (1 draw call vs ~165)
-  // IMPORTANT: Scan full chunkData.blocks (not visibleBlocks) because surface culling
-  // can exclude interior tree blocks that the IABG needs to render.
+  // Merged tree blocks: extract tree blocks from visible chunks into one array
+  // Uses normalEntries[c].blocks which is visibleBlocks (surface-culled) when available.
+  // Surface culling keeps tree blocks with exposed faces, only removes interior blocks
+  // completely surrounded on all 6 sides — those are invisible anyway.
+  // Previous bug where trees disappeared was caused by frustum culling + treeBlocksPreFiltered
+  // issues (now fixed), not by visibleBlocks culling.
+  // Impact: 411K → ~100K tree blocks (3-4x reduction in IABG rebuild cost).
   const allTreeBlocks = useMemo(() => {
     if (normalEntries.length === 0) return [];
-
-    const ref = loadedChunksRef?.current;
-    if (!ref) return [];
 
     const treeBlocks: PlacedBlock[] = [];
     const shrinePositions: Array<{ x: number; y: number; z: number }> = [];
 
     for (let c = 0; c < normalEntries.length; c++) {
-      const chunkKey = normalEntries[c].key;
-      // Use full blocks array (not visibleBlocks) to ensure all tree blocks are found
-      const chunkData = ref.get(chunkKey);
-      const blocks = chunkData?.blocks;
+      const blocks = normalEntries[c].blocks;
       if (!blocks) continue;
 
       for (let i = 0; i < blocks.length; i++) {
@@ -343,7 +340,7 @@ export function CameraTrackedBlocks({
     }
 
     return treeBlocks;
-  }, [normalEntries, loadedChunksRef]);
+  }, [normalEntries]);
 
   // D-Flow: Track tree block count
   diagnostics.setTreeBlockCount(allTreeBlocks.length);

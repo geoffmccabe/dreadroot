@@ -203,11 +203,11 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   const lastRebuildTimeRef = useRef<number>(0);
   const pendingRebuildRef = useRef<boolean>(false);
   const rebuildTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const REBUILD_THROTTLE_MS = 50; // Max one rebuild per 50ms
+  const REBUILD_THROTTLE_MS = 250; // Max one rebuild per 250ms (was 50 — too frequent for 100K+ blocks)
   const lastIncrementalTimeRef = useRef<number>(0);
   const pendingIncrementalRef = useRef<boolean>(false);
   const incrementalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const INCREMENTAL_THROTTLE_MS = 50; // Max one incremental per 50ms
+  const INCREMENTAL_THROTTLE_MS = 250; // Max one incremental per 250ms (was 50)
   const rebuildRafRef = useRef<number | null>(null);
 
   // CRITICAL: Use stable mesh capacity to prevent mesh recreation on chunk boundaries
