@@ -31,7 +31,8 @@ const FADE_EXTRA = 0; // Disabled: FadeChunkBlocks per-frame string/array alloca
 // Tree blocks are the most expensive rendering (single IABG mega-mesh).
 // Cap tree rendering distance below visualDistance to reduce block count.
 // Ground/stone blocks still render at full visualDistance.
-const TREE_RENDER_RADIUS = 5;
+// Set to Infinity to disable filtering (render at full visualDistance).
+const TREE_RENDER_RADIUS = Infinity;
 
 // Shared geometry for merged tree mesh (created once, reused)
 const _sharedBoxGeometry = new THREE.BoxGeometry(1, 1, 1);

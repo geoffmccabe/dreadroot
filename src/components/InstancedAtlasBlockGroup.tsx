@@ -325,7 +325,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     pool.rebuild(
       blocksAtDispatch,
-      meshCapacity,
+      meshCapacityRef.current,
       resolveUV,
       (bt) => bt.charCodeAt(0) === 103 && bt.charCodeAt(1) === 98, // 'gb' = glow bark
       (bt) => bt.charCodeAt(0) === 115 && bt.charCodeAt(1) === 104 && bt.charCodeAt(2) === 114, // 'shr' = shrine
@@ -354,7 +354,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       m.instanceMatrix.needsUpdate = true;
 
       // 2. UV offset attribute
-      if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= meshCapacity) {
+      const cap = meshCapacityRef.current;
+      if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= cap) {
         (uvOffsetAttrRef.current.array as Float32Array).set(
           result.uvOffsetData.subarray(0, result.blockCount * 2)
         );
@@ -369,7 +370,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
       // 3. Color attribute (branch depth lightening + glow bark)
       if (result.hasBranchDepth) {
-        if (colorAttrRef.current && colorAttrRef.current.count >= meshCapacity) {
+        if (colorAttrRef.current && colorAttrRef.current.count >= cap) {
           (colorAttrRef.current.array as Float32Array).set(
             result.colorData.subarray(0, result.blockCount * 3)
           );
@@ -464,7 +465,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         requestAnimationFrame(() => doRebuild());
       }
     });
-  }, [meshCapacity]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Stable ref: uses meshCapacityRef.current instead of meshCapacity closure
 
   // B9: Process a batch of blocks in the budgeted rebuild
   const processBudgetedRebuild = useCallback((mesh: THREE.InstancedMesh): boolean => {
@@ -574,7 +576,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       mesh.instanceMatrix.needsUpdate = true;
 
       // 2. UV offset attribute — copy staging buffer into attribute array
-      if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= meshCapacity) {
+      const cap = meshCapacityRef.current;
+      if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= cap) {
         const arr = uvOffsetAttrRef.current.array as Float32Array;
         arr.set(state.uvOffsetData.subarray(0, blocks.length * 2));
         uvOffsetAttrRef.current.needsUpdate = true;
@@ -587,7 +590,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
       // 3. Color attribute (branch depth lightening)
       if (state.hasBranchDepth) {
-        if (colorAttrRef.current && colorAttrRef.current.count >= meshCapacity) {
+        if (colorAttrRef.current && colorAttrRef.current.count >= cap) {
           const arr = colorAttrRef.current.array as Float32Array;
           arr.set(state.colorData.subarray(0, blocks.length * 3));
           colorAttrRef.current.needsUpdate = true;
@@ -637,7 +640,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
 
     return false; // More work to do
-  }, [meshCapacity]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Stable ref: uses meshCapacityRef.current
 
   // B9: Synchronous rebuild for small block counts (no budgeting overhead)
   const doRebuildSync = useCallback((mesh: THREE.InstancedMesh, currentBlocks: PlacedBlock[]) => {
@@ -645,7 +649,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     const matrix = matrixRef.current;
 
     // Reuse or grow UV buffer
-    const requiredSize = meshCapacity * 2;
+    const cap = meshCapacityRef.current;
+    const requiredSize = cap * 2;
     if (!uvBufferRef.current || uvBufferRef.current.length < requiredSize) {
       uvBufferRef.current = new Float32Array(requiredSize);
     }
@@ -656,7 +661,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     const shrineBlocks: Array<{ index: number; x: number; y: number; z: number }> = [];
 
     // Reuse or grow color buffer
-    const colorRequiredSize = meshCapacity * 3;
+    const colorRequiredSize = cap * 3;
     if (!colorBufferRef.current || colorBufferRef.current.length < colorRequiredSize) {
       colorBufferRef.current = new Float32Array(colorRequiredSize);
     }
@@ -739,7 +744,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     // Update colors
     if (hasBranchDepth) {
-      if (colorAttrRef.current && colorAttrRef.current.count >= meshCapacity) {
+      if (colorAttrRef.current && colorAttrRef.current.count >= cap) {
         const arr = colorAttrRef.current.array as Float32Array;
         arr.set(colorData.subarray(0, currentBlocks.length * 3));
         colorAttrRef.current.needsUpdate = true;
@@ -752,7 +757,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
 
     // Update UVs
-    if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= meshCapacity) {
+    if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= cap) {
       const arr = uvOffsetAttrRef.current.array as Float32Array;
       arr.set(uvOffsetData.subarray(0, currentBlocks.length * 2));
       uvOffsetAttrRef.current.needsUpdate = true;
@@ -795,7 +800,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     // D-Flow: Record rebuild time
     diagnostics.recordMeshRebuild(performance.now() - rebuildT0, currentBlocks.length);
-  }, [meshCapacity]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Stable ref: uses meshCapacityRef.current
 
   // Delta-based incremental update: only processes added/removed/modified blocks
   // Uses numeric position keys (zero string allocation) and two-pass approach
@@ -834,7 +840,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
 
     const uvData = uvAttrArray;
-    const colorData = colorAttrArray ?? colorBufferRef.current ?? new Float32Array(meshCapacity * 3);
+    const colorData = colorAttrArray ?? colorBufferRef.current ?? new Float32Array(meshCapacityRef.current * 3);
 
     lastIncrementalTimeRef.current = performance.now();
     pendingIncrementalRef.current = false;
@@ -916,7 +922,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
           idx = freeIndices.pop()!;
         } else {
           // Safety: if high water mark would exceed mesh capacity, fall back to full rebuild
-          if (highWaterMarkRef.current >= meshCapacity) {
+          if (highWaterMarkRef.current >= meshCapacityRef.current) {
             initialBuildDoneRef.current = false;
             doRebuild();
             return;
@@ -1004,7 +1010,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     mesh.instanceMatrix.needsUpdate = true;
 
     // Update UV attribute (full buffer upload - THREE.js limitation)
-    if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= meshCapacity) {
+    const cap = meshCapacityRef.current;
+    if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= cap) {
       uvOffsetAttrRef.current.needsUpdate = true;
     } else {
       const attr = new THREE.InstancedBufferAttribute(uvData, 2);
@@ -1015,7 +1022,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     // Update color attribute if needed
     if (hasBranchDepth) {
-      if (colorAttrRef.current && colorAttrRef.current.count >= meshCapacity) {
+      if (colorAttrRef.current && colorAttrRef.current.count >= cap) {
         colorAttrRef.current.needsUpdate = true;
       } else {
         const attr = new THREE.InstancedBufferAttribute(colorData, 3);
@@ -1029,7 +1036,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
     // D-Flow: Record rebuild with changed count (not total) to show delta efficiency
     diagnostics.recordMeshRebuild(performance.now() - t0, changedCount);
-  }, [meshCapacity, doRebuild]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Stable ref: uses meshCapacityRef.current, doRebuild via doRebuildRef pattern
 
   // Update instance matrices and UV offsets when blocks change
   useEffect(() => {
@@ -1143,7 +1151,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         incrementalTimeoutRef.current = null;
       }
     };
-  }, [blocks, atlasVersion, doRebuild, doIncrementalUpdate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks, atlasVersion]); // doRebuild/doIncrementalUpdate are stable refs ([] deps)
 
   // Cleanup RAF, worker, and GPU resources on unmount
   useEffect(() => {
