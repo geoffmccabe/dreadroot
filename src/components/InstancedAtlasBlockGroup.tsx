@@ -200,11 +200,13 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   const INCREMENTAL_THROTTLE_MS = 250; // Max one incremental per 250ms (was 50)
   const rebuildRafRef = useRef<number | null>(null);
 
-  // CRITICAL: Use stable mesh capacity to prevent mesh recreation on chunk boundaries
-  // Capacity only grows, never shrinks - this keeps the same mesh instance
-  const meshCapacityRef = useRef<number>(Math.max(blocks.length, 100));
+  // CRITICAL: Pre-allocate large capacity to prevent mesh recreation cascade.
+  // Starting at 100 and growing 1.5x caused 18+ mesh recreations during initial load,
+  // each triggering a full worker rebuild that got discarded (stale version) when the
+  // next growth occurred. This cascade blocked tree rendering for seconds.
+  // 250K instances × ~84 bytes = 21MB GPU memory — acceptable tradeoff.
+  const meshCapacityRef = useRef<number>(Math.max(blocks.length, 250000));
   if (blocks.length > meshCapacityRef.current) {
-    // Grow capacity with some headroom to reduce future reallocations
     meshCapacityRef.current = Math.ceil(blocks.length * 1.5);
   }
   const meshCapacity = meshCapacityRef.current;
@@ -1066,26 +1068,40 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       lastProcessedSignatureRef.current = ''; // Force rebuild with new UVs
     }
 
-    // Build cheap signature by sampling up to 64 evenly-spaced blocks.
-    // Full O(N) hash on 150K blocks costs ~600ms across 400 calls — sampling
-    // reduces this to O(64) while still catching adds, removes, and boundary changes.
+    // Build cheap signature from first 16 + last 16 blocks using DJB2 hash.
+    // Previous XOR-based signature was commutative (A^B = B^A) and missed changes
+    // when chunk add/remove swapped blocks at sampled positions — causing trees
+    // to stop rendering after walking away from spawn. DJB2 is order-dependent
+    // and non-commutative. First/last blocks are most likely to change because
+    // normalEntries is sorted by chunk key, so chunk add/remove shifts edges.
     let sig: string;
     if (blocks.length === 0) {
       sig = 'empty';
     } else {
-      let idHash = 0;
       const n = blocks.length;
-      const step = n <= 64 ? 1 : Math.floor(n / 64);
+      let h = n;
+      // Hash first 16 blocks (leading edge changes on chunk add/remove)
+      const headSamples = Math.min(16, n);
+      for (let i = 0; i < headSamples; i++) {
+        const b = blocks[i];
+        h = ((h << 5) - h + b.position_x) | 0;
+        h = ((h << 5) - h + b.position_z) | 0;
+      }
+      // Hash last 16 blocks (trailing edge changes on chunk add/remove)
+      const tailStart = Math.max(headSamples, n - 16);
+      for (let i = tailStart; i < n; i++) {
+        const b = blocks[i];
+        h = ((h << 5) - h + b.position_x) | 0;
+        h = ((h << 5) - h + b.position_z) | 0;
+      }
+      // Hash 32 evenly-spaced samples for middle coverage
+      const step = n <= 32 ? 1 : Math.floor(n / 32);
       for (let i = 0; i < n; i += step) {
         const b = blocks[i];
-        idHash ^= (b.position_x * 73856093) ^ (b.position_y * 19349663) ^ (b.position_z * 83492791);
+        h = ((h << 5) - h + b.position_x) | 0;
+        h = ((h << 5) - h + b.position_z) | 0;
       }
-      // Always include last block for boundary sensitivity
-      if (n > 1) {
-        const last = blocks[n - 1];
-        idHash ^= (last.position_x * 73856093) ^ (last.position_y * 19349663) ^ (last.position_z * 83492791);
-      }
-      sig = `${n}:${idHash}`;
+      sig = `${n}:${h}`;
     }
 
     if (sig === lastProcessedSignatureRef.current) {
