@@ -125,12 +125,12 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   // Get fog enabled from user profile, default to true
   const fogEnabled = profile?.fog_enabled ?? true;
   
-  const contextValue: BlocksContextType = {
-    blocks, // Phase 2: Derived from loadedChunksRef for legacy consumers (enemy AI, etc.)
+  const contextValue: BlocksContextType = useMemo(() => ({
+    blocks,
     blocksByChunk,
     visibleChunksRef,
-    worldRevision: blocksHook.worldRevision, // Phase 4: For dependency tracking
-    loadedChunksRef: blocksHook.loadedChunksRef as MutableRefObject<Map<string, { blocks: PlacedBlock[]; visibleBlocks?: PlacedBlock[] }>>, // Phase 4: Direct chunk access
+    worldRevision: blocksHook.worldRevision,
+    loadedChunksRef: blocksHook.loadedChunksRef as MutableRefObject<Map<string, { blocks: PlacedBlock[]; visibleBlocks?: PlacedBlock[] }>>,
     visualDistance,
     fogEnabled,
     isLoading: blocksHook.isLoading,
@@ -145,7 +145,6 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     removeBlock: blocksHook.removeBlock,
     refreshBlocks: blocksHook.refreshBlocks,
     setBlockMode: blocksHook.setBlockMode,
-    // Phase 2B: Chunk loading functions
     updatePlayerPosition: blocksHook.updatePlayerPosition,
     initializeForWorld: blocksHook.initializeForWorld,
     getLoadedChunkKeys: blocksHook.getLoadedChunkKeys,
@@ -154,8 +153,19 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
     removeBlocksByPositions: blocksHook.removeBlocksByPositions,
     LOAD_RADIUS: blocksHook.LOAD_RADIUS,
     UNLOAD_RADIUS: blocksHook.UNLOAD_RADIUS
-  };
-  
+  }), [
+    blocks, blocksByChunk, blocksHook.worldRevision, visualDistance, fogEnabled,
+    blocksHook.isLoading, currentWorldId, currentWorld, worlds, worldIndex,
+    // Functions are stable (useCallback) so they don't trigger re-renders
+    setCurrentWorldId, navigateWorld,
+    blocksHook.placeBlock, blocksHook.placeBlocksBatch, blocksHook.removeBlock,
+    blocksHook.refreshBlocks, blocksHook.setBlockMode,
+    blocksHook.updatePlayerPosition, blocksHook.initializeForWorld,
+    blocksHook.getLoadedChunkKeys, blocksHook.isChunkLoaded,
+    blocksHook.refetchSingleChunk, blocksHook.removeBlocksByPositions,
+    blocksHook.LOAD_RADIUS, blocksHook.UNLOAD_RADIUS
+  ]);
+
   return (
     <BlocksContext.Provider value={contextValue}>
       {children}

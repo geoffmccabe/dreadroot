@@ -60,9 +60,9 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
 
 const ChunkRenderer = React.memo(ChunkRendererInner, (prev, next) => {
   // Re-render only when blocks reference changes or visual props change
-  // Atlas version changes are detected internally by InstancedAtlasBlockGroup's polling
   return (
     prev.blocks === next.blocks &&
+    prev.atlasVersion === next.atlasVersion &&
     prev.hoveredBlockId === next.hoveredBlockId &&
     prev.showOwnershipOutline === next.showOwnershipOutline &&
     prev.currentUserId === next.currentUserId &&

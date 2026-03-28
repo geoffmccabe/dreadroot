@@ -125,7 +125,7 @@ export function InitializationOverlay() {
               backgroundColor: 'hsla(208, 85%, 8%, 0.65)',
               border: '1px solid hsla(208, 85%, 20%, 0.5)',
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={handleDismiss}
           >
             {steps.length === 0 ? (
               <p className="text-center py-4" style={{ color: 'hsla(211, 32%, 90%, 0.6)' }}>Starting initialization...</p>
@@ -173,7 +173,7 @@ export function InitializationOverlay() {
           {/* Copy button - bottom right */}
           <div className="flex justify-end mt-3">
             <button
-              onClick={handleCopy}
+              onClick={(e) => { e.stopPropagation(); handleCopy(); }}
               className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors"
               style={{
                 backgroundColor: 'hsla(211, 30%, 51%, 0.35)',

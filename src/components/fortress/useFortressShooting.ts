@@ -1,6 +1,9 @@
 import { useCallback, type Dispatch, type SetStateAction, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 
+// Pre-allocated scratch for tracer calculation
+const _scratchTracerEnd = new THREE.Vector3();
+
 import { MAX_BULLETS, type BulletLocal } from './fortressScene.constants';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 
@@ -89,10 +92,10 @@ export function useFortressShooting({
     setShowCrosshairs(true);
 
     // Add initial tracer segment from camera position
-    const tracerEnd = bullet.position.clone().addScaledVector(bullet.direction, 2);
+    _scratchTracerEnd.copy(bullet.position).addScaledVector(bullet.direction, 2);
     tracersRef.current?.addSegment(
       bullet.position.x, bullet.position.y, bullet.position.z,
-      tracerEnd.x, tracerEnd.y, tracerEnd.z,
+      _scratchTracerEnd.x, _scratchTracerEnd.y, _scratchTracerEnd.z,
       bullet.color
     );
   }, [

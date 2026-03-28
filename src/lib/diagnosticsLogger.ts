@@ -3,7 +3,7 @@
 // Toggle with Shift+3 (#) key
 
 const BUFFER_SIZE = 600; // 60 seconds at 10 samples/sec
-const METRICS = 50; // Expanded from 25 to track more systems
+const METRICS = 58; // Expanded to track chunk pipeline metrics
 
 type TimingSystem = 
   | 'controls' | 'coins' | 'waterfall' | 'blocks' | 'frame'
@@ -12,6 +12,7 @@ type TimingSystem =
 class DiagnosticsLogger {
   enabled = false;
   buffer = new Float32Array(BUFFER_SIZE * METRICS);
+  metricsPerSample = METRICS;
   ticker = 0;
   frameCount = 0;
   masterFrameCount = 0;
@@ -82,6 +83,16 @@ class DiagnosticsLogger {
   shombieCount = 0;
   shombieTickTime = 0;
   
+  // === Chunk pipeline metrics (set by components each frame) ===
+  loadedChunkCount = 0;       // chunks in loadedChunksRef
+  visibleChunkCount = 0;      // chunks passing distance filter in CameraTrackedBlocks
+  renderedChunkCount = 0;     // ChunkRenderer components that actually rendered blocks
+  totalLoadedBlocks = 0;      // total blocks across all loaded chunks
+  totalVisibleBlocks = 0;     // total blocks across visible chunks (after surface culling)
+  playerChunkX = 0;           // player's current chunk X
+  playerChunkZ = 0;           // player's current chunk Z
+  chunksInFlight = 0;         // chunks currently being fetched
+
   // === Collision grid metrics ===
   worldGridSize = 0;
   entityGridSize = 0;
@@ -266,6 +277,7 @@ class DiagnosticsLogger {
   setChunkRenderCount(count: number): void {
     if (!this.enabled) return;
     this.chunkRenderCount = count;
+    this.renderedChunkCount = count;
   }
 
   recordChunkRebuild(ms: number): void {
@@ -554,6 +566,16 @@ class DiagnosticsLogger {
       this.buffer[i+48] = this.longFrameCount;
       this.buffer[i+49] = this.frameTimeMax;
 
+      // Chunk pipeline
+      this.buffer[i+50] = this.loadedChunkCount;
+      this.buffer[i+51] = this.visibleChunkCount;
+      this.buffer[i+52] = this.renderedChunkCount;
+      this.buffer[i+53] = this.totalLoadedBlocks;
+      this.buffer[i+54] = this.totalVisibleBlocks;
+      this.buffer[i+55] = this.playerChunkX;
+      this.buffer[i+56] = this.playerChunkZ;
+      this.buffer[i+57] = this.chunksInFlight;
+
       this.ticker++;
       this.masterFrameCount = 0;
       this.resetEventCounters();
@@ -742,7 +764,17 @@ class DiagnosticsLogger {
       // [48-49] Frame analysis: longFrameCount, frameTimeMax
       this.buffer[i+48] = this.longFrameCount;
       this.buffer[i+49] = this.frameTimeMax;
-      
+
+      // Chunk pipeline
+      this.buffer[i+50] = this.loadedChunkCount;
+      this.buffer[i+51] = this.visibleChunkCount;
+      this.buffer[i+52] = this.renderedChunkCount;
+      this.buffer[i+53] = this.totalLoadedBlocks;
+      this.buffer[i+54] = this.totalVisibleBlocks;
+      this.buffer[i+55] = this.playerChunkX;
+      this.buffer[i+56] = this.playerChunkZ;
+      this.buffer[i+57] = this.chunksInFlight;
+
       this.ticker++;
       this.masterFrameCount = 0;
       this.resetEventCounters();
@@ -847,22 +879,25 @@ class DiagnosticsLogger {
       (window as any).frameLoop?.resetTiming?.();
     }
 
-    lines.push('--- Raw Data (last 20 samples) ---');
-    lines.push('sample fps frames wGrid eGrid drawCalls tCtrl tAI tBlk tRender');
+    lines.push('--- Raw Data (last 50 samples) ---');
+    lines.push('sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid tCtrl tAI tRender');
 
-    const startSample = Math.max(0, n - 20);
+    const startSample = Math.max(0, n - 50);
     for (let s = startSample; s < n; s++) {
       const i = s * METRICS;
       lines.push(
         `${this.buffer[i].toFixed(0)} ` +
         `${this.buffer[i+1].toFixed(0)} ` +
         `${this.buffer[i+2].toFixed(0)} ` +
-        `${this.buffer[i+44].toFixed(0)} ` +
-        `${this.buffer[i+45].toFixed(0)} ` +
         `${this.buffer[i+32].toFixed(0)} ` +
+        `${this.buffer[i+50].toFixed(0)} ` +
+        `${this.buffer[i+51].toFixed(0)} ` +
+        `${this.buffer[i+52].toFixed(0)} ` +
+        `${this.buffer[i+55].toFixed(0)} ` +
+        `${this.buffer[i+56].toFixed(0)} ` +
+        `${this.buffer[i+44].toFixed(0)} ` +
         `${this.buffer[i+21].toFixed(1)} ` +
         `${this.buffer[i+25].toFixed(1)} ` +
-        `${this.buffer[i+24].toFixed(1)} ` +
         `${this.buffer[i+30].toFixed(1)}`
       );
     }
@@ -874,16 +909,19 @@ class DiagnosticsLogger {
     lines.push(`EventLoopLag: ${this.eventLoopLagCountTotal} spikes (max ${this.eventLoopLagMaxMsTotal.toFixed(1)}ms)`);
     lines.push(`Chunk Loads/Unloads: ${this.chunkLoadsTotal}/${this.chunkUnloadsTotal}`);
     lines.push(`Chunk Fetch/Build: ${this.chunkFetchMsTotal.toFixed(1)}ms / ${this.chunkBuildMsTotal.toFixed(1)}ms`);
-    lines.push(`Emits: ${this.emitsTotal}, Flatten: ${this.flattenMsTotal.toFixed(1)}ms (${this.flattenBlocksTotal} blocks)`);
+    lines.push(`Emits: ${this.emitsTotal}, WorldRevision bumps: ${this.emitsTotal}`);
     lines.push(`Colliders: +${this.colliderAddsTotal} -${this.colliderRemovesTotal} (${this.colliderMsTotal.toFixed(1)}ms)`);
     lines.push(`Grouping: ${this.groupCacheHitsTotal} hits, ${this.groupCacheMissesTotal} misses (${this.groupMsTotal.toFixed(1)}ms for ${this.groupBlocksTotal} blocks)`);
     lines.push(`MeshRebuild: ${this.meshRebuildCountTotal} rebuilds (${this.meshRebuildMsTotal.toFixed(1)}ms for ${this.meshRebuildBlocksTotal} blocks)`);
     lines.push('');
-    lines.push('--- Chunk Rendering ---');
-    lines.push(`ChunkRenderers: ${this.chunkRenderCountTotal}`);
+    lines.push('--- Chunk Pipeline (current) ---');
+    lines.push(`Player Chunk: (${this.playerChunkX}, ${this.playerChunkZ})`);
+    lines.push(`Loaded Chunks: ${this.loadedChunkCount} (${this.totalLoadedBlocks} blocks)`);
+    lines.push(`Visible Chunks: ${this.visibleChunkCount} (${this.totalVisibleBlocks} surface blocks)`);
+    lines.push(`Rendered Chunks: ${this.renderedChunkCount}`);
+    lines.push(`Chunks In Flight: ${this.chunksInFlight}`);
     lines.push(`ChunkRebuilds: ${this.chunkRebuildCountTotal} (${this.chunkRebuildMsTotal.toFixed(1)}ms)`);
-    lines.push(`GlobalFlatten: ${this.globalFlattenMsTotal.toFixed(1)}ms`);
-    lines.push(`MeshInstances: ${this.meshInstanceTotal}`);
+    lines.push(`MeshRebuild: ${this.meshRebuildCountTotal} (${this.meshRebuildMsTotal.toFixed(1)}ms for ${this.meshRebuildBlocksTotal} blocks)`);
     lines.push(`GPU Texture Mem: ${this.gpuTextureMemMB.toFixed(1)}MB`);
 
     this.lastOutput = lines.join('\n');

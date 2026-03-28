@@ -22,6 +22,9 @@ const tmpPosition = new THREE.Vector3();
 const tmpQuaternion = new THREE.Quaternion();
 const tmpColor = new THREE.Color();
 const tmpEuler = new THREE.Euler();
+const _scratchBoxMin = new THREE.Vector3();
+const _scratchBoxMax = new THREE.Vector3();
+const _scratchBox = new THREE.Box3();
 
 // Shared box geometry for all block parts (1x1x1 meter)
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -76,7 +79,6 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
     const bellyMaterialRef = useRef<THREE.MeshLambertMaterial | null>(null);
     const eyesMaterialRef = useRef<THREE.MeshLambertMaterial | null>(null);
 
-    const collisionBoxesRef = useRef<Map<string, THREE.Box3[]>>(new Map());
     const collidersRef = useRef<Map<string, WalapaCollider[]>>(new Map());
     const prevWalapaIdsRef = useRef<Set<string>>(new Set());
 
@@ -202,7 +204,8 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
         };
       },
       getCollisionBoxes: (walapaId: string) => {
-        return collisionBoxesRef.current.get(walapaId) || null;
+        const colliders = collidersRef.current.get(walapaId);
+        return colliders ? colliders.map(c => c.box) : null;
       },
     }), [walapas]);
 
@@ -220,7 +223,6 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
             }
             collidersRef.current.delete(id);
           }
-          collisionBoxesRef.current.delete(id);
         }
       }
 
@@ -249,8 +251,6 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
       const bodyUvAttr = bodyUvAttrRef.current;
       const bellyUvAttr = bellyUvAttrRef.current;
       const eyesUvAttr = eyesUvAttrRef.current;
-
-      collisionBoxesRef.current.clear();
 
       if (walapas.length === 0) {
         bodyMesh.count = 0;
@@ -288,7 +288,7 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
         const hasBellyTexture = bellyUvs !== null;
         const hasEyesTexture = eyesUvs !== null;
 
-        const walapaCollisionBoxes: THREE.Box3[] = [];
+        let collisionBoxCount = 0;
         const walapaColliders: WalapaCollider[] = collidersRef.current.get(walapa.id) || [];
         let colliderIndex = 0;
 
@@ -374,25 +374,24 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
           // Add collision box for body and belly blocks
           if (part.textureType === 'body' || part.textureType === 'belly') {
             const halfSize = walapa.scale / 2;
-            const box = new THREE.Box3(
-              new THREE.Vector3(
-                tmpPosition.x - halfSize,
-                tmpPosition.y - halfSize,
-                tmpPosition.z - halfSize
-              ),
-              new THREE.Vector3(
-                tmpPosition.x + halfSize,
-                tmpPosition.y + halfSize,
-                tmpPosition.z + halfSize
-              )
+            _scratchBoxMin.set(
+              tmpPosition.x - halfSize,
+              tmpPosition.y - halfSize,
+              tmpPosition.z - halfSize
             );
-            walapaCollisionBoxes.push(box);
+            _scratchBoxMax.set(
+              tmpPosition.x + halfSize,
+              tmpPosition.y + halfSize,
+              tmpPosition.z + halfSize
+            );
+            _scratchBox.set(_scratchBoxMin, _scratchBoxMax);
+            collisionBoxCount++;
 
             if (colliderIndex < walapaColliders.length) {
-              walapaColliders[colliderIndex].box.copy(box);
+              walapaColliders[colliderIndex].box.copy(_scratchBox);
               worldCollisionGrid.update(walapaColliders[colliderIndex].box);
             } else {
-              const newBox = box.clone() as WalapaTaggedBox3;
+              const newBox = _scratchBox.clone() as WalapaTaggedBox3;
               newBox.__walapaId = walapa.id;
               newBox.__isWalapaCollider = true;
               worldCollisionGrid.insert(newBox);
@@ -407,7 +406,6 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
           worldCollisionGrid.remove(removed.box);
         }
 
-        collisionBoxesRef.current.set(walapa.id, walapaCollisionBoxes);
         collidersRef.current.set(walapa.id, walapaColliders);
       }
 

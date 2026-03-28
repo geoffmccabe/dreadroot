@@ -3,5 +3,4 @@
 
 export * from './types';
 export * from './presets';
-export { useParticleSystem } from './hooks/useParticleSystem';
 export { ParticleEffect } from './components/ParticleEffect';

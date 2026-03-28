@@ -22,6 +22,9 @@ import {
 } from '../constants';
 import { playerTracker } from '@/lib/playerTracker';
 
+// Pre-allocated Set reused each frame (avoid per-frame Set allocation)
+const _activeIdsSet = new Set<string>();
+
 export interface ShtickmanRendererHandle {
   // Currently no exposed methods needed
 }
@@ -335,12 +338,16 @@ export const ShtickmanRenderer = forwardRef<ShtickmanRendererHandle, ShtickmanRe
       headCountsRef.current.fill(0);
       let eyeIdx = 0;
 
-      const activeIds = new Set<string>();
+      _activeIdsSet.clear();
+      const activeIds = _activeIdsSet;
 
-      // Clean up skeleton cache for dead shtickmen
-      const liveIds = new Set(shtickmen.filter(s => s.isActive).map(s => s.id));
+      // Clean up skeleton cache for dead shtickmen (avoid Set/filter/map allocations)
       for (const cachedId of skeletonCache.current.keys()) {
-        if (!liveIds.has(cachedId)) skeletonCache.current.delete(cachedId);
+        let found = false;
+        for (let si = 0; si < shtickmen.length; si++) {
+          if (shtickmen[si].id === cachedId && shtickmen[si].isActive) { found = true; break; }
+        }
+        if (!found) skeletonCache.current.delete(cachedId);
       }
 
       for (const s of shtickmen) {

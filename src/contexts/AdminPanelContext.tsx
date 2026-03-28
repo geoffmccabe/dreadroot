@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback, useMemo, ReactNode } from 'react';
 import type { FlameDemoHandle } from '@/components/fortress/FlameDemoSpawner';
 
 type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'npcs' | 'items' | 'effects';
@@ -34,21 +34,25 @@ export const AdminPanelProvider: React.FC<{ children: ReactNode }> = ({ children
   const flameDemoRef = useRef<FlameDemoHandle | null>(null);
   const [fruitVisibility, setFruitVisibility] = useState(true);
 
-  const openPanel = (tab: AdminTab = 'coins') => {
+  const openPanel = useCallback((tab: AdminTab = 'coins') => {
     setActiveTab(tab);
     setIsOpen(true);
     // Exit pointer lock when opening panel so user can interact with it
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
-  };
+  }, []);
 
-  const closePanel = () => {
+  const closePanel = useCallback(() => {
     setIsOpen(false);
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    isOpen, activeTab, openPanel, closePanel, setActiveTab, flameDemoRef, fruitVisibility, setFruitVisibility,
+  }), [isOpen, activeTab, openPanel, closePanel, fruitVisibility]);
 
   return (
-    <AdminPanelContext.Provider value={{ isOpen, activeTab, openPanel, closePanel, setActiveTab, flameDemoRef, fruitVisibility, setFruitVisibility }}>
+    <AdminPanelContext.Provider value={value}>
       {children}
     </AdminPanelContext.Provider>
   );

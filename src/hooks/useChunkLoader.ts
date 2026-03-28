@@ -189,9 +189,12 @@ const removeBlockCollider = (block: PlacedBlock): void => {
 };
 
 // Reusable occupancy buffer for surface culling — avoids allocating a new
-// Uint8Array per chunk (up to 512KB each for tall trees, causing GC storms)
-let _occBuf: Uint8Array | null = null;
-let _occBufSize = 0;
+// Uint8Array per chunk (up to 512KB each for tall trees, causing GC storms).
+// Pre-allocate for 300-block-tall chunks (300 * 256 = 76800 bytes) to avoid
+// first-use allocation stall. Buffer grows on demand for taller chunks.
+const INITIAL_OCC_BUF_SIZE = 300 * 256;
+let _occBuf: Uint8Array = new Uint8Array(INITIAL_OCC_BUF_SIZE);
+let _occBufSize = INITIAL_OCC_BUF_SIZE;
 
 /**
  * Surface-only culling: removes fully-surrounded interior blocks per chunk.
@@ -219,7 +222,7 @@ function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: Pla
   const stride = 256; // 16 * 16 per Y layer
   const needed = ySpan * stride;
   // Reuse buffer if large enough, otherwise grow
-  if (!_occBuf || _occBufSize < needed) {
+  if (_occBufSize < needed) {
     _occBuf = new Uint8Array(needed);
     _occBufSize = needed;
   }
@@ -399,6 +402,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   // Track current world to clear on change
   const currentWorldRef = useRef<string | null>(null);
 
+  // No mutex needed: JS is single-threaded, per-chunk cap check in the
+  // processing loop sees accurate state between async yield points.
+
+  // Ref for post-load eviction (avoids circular useCallback dependency)
+  const evictAfterLoadRef = useRef<(() => void) | null>(null);
+
   // Phase 3.0: Single emit per frame batching
   const emitScheduledRef = useRef(false);
 
@@ -503,8 +512,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         onRevisionChanged(worldRevisionRef.current);
       }
 
-      // Record zero flatten for diagnostics (flatten eliminated in Phase 2)
+      // Record flatten diagnostics and update chunk pipeline metrics
       diagnostics.recordFlattenEmit(0, 0);
+      diagnostics.chunksInFlight = 0;
+      if (playerChunkRef.current) {
+        diagnostics.playerChunkX = playerChunkRef.current.x;
+        diagnostics.playerChunkZ = playerChunkRef.current.z;
+      }
 
       // Log first meaningful emit during initialization (once only)
       if (!initialLoadDone.current && visibleBlockCount > 0) {
@@ -867,7 +881,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeBlockCollider(block);
 
         // Phase 1: Create new array reference so React.memo detects the change per-chunk
-        chunkData.blocks = [...chunkData.blocks.slice(0, index), ...chunkData.blocks.slice(index + 1)];
+        // Single copy + splice is cheaper than two slices + spread
+        const newBlocks = chunkData.blocks.slice();
+        newBlocks.splice(index, 1);
+        chunkData.blocks = newBlocks;
         chunkData.lastAccessedAt = Date.now();
 
         // Phase 3A: Recompute hasOptimisticBlocks after removal
@@ -1019,10 +1036,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
 
-        // Nearby chunks (within 2 of player): sync colliders for gravity/physics
-        // Distant chunks: defer to budgeted queue to avoid 1000ms+ stalls
+        // Sync colliders for player's chunk + immediate neighbors (distance ≤ 1)
+        // so physics/collision works when walking into adjacent chunks.
+        // Cap at 2000 blocks to avoid massive stalls on huge fungal tree chunks.
+        // Distance 2+ always goes through budgeted queue.
         const chunkDist = Math.max(Math.abs(dx), Math.abs(dz));
-        if (chunkDist <= 2 || chunkBlocks.length < 200) {
+        if (chunkDist <= 1 && chunkBlocks.length <= 2000) {
           for (const block of chunkBlocks) {
             ensureBlockCollider(block);
           }
@@ -1110,11 +1129,22 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   ): Promise<void> => {
     if (!worldId || chunkCoords.length === 0) return;
 
+    try {
+
+    // Evict distant chunks before loading to make room for new ones
+    if (playerChunkRef.current) {
+      evictAfterLoadRef.current?.();
+    }
+
+    // Guard: don't load if over chunk limit after eviction
+    if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) return;
+
     // Filter out already loaded chunks
-    const toLoad = chunkCoords.filter(
-      ({ x, z }) => !loadedChunksRef.current.has(`chunk_${x}_${z}`)
-    );
-    
+    const toLoad = chunkCoords.filter(({ x, z }) => {
+      const key = `chunk_${x}_${z}`;
+      return !loadedChunksRef.current.has(key);
+    });
+
     if (toLoad.length === 0) return;
 
     const loadedAt = Date.now();
@@ -1252,7 +1282,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // Load chunks from cache into memory (NO emit yet - wait for server data)
     let cacheBlockCount = 0;
     for (const { x, z, blocks } of chunksFromCache) {
+      // Cap check: stop loading if at limit
+      if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) break;
       const chunkKey = `chunk_${x}_${z}`;
+      if (loadedChunksRef.current.has(chunkKey)) continue;
 
       // CRITICAL: Remove old colliders before replacing chunk data
       const existingChunk = loadedChunksRef.current.get(chunkKey);
@@ -1313,63 +1346,89 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // D-Flow: Start timing fetch phase
       const fetchT0 = performance.now();
 
-
-      // Fetch chunks in parallel, but individually (avoids bounding box explosion)
-      // Each chunk query is fast; parallel execution keeps total time low
-      const PARALLEL_FETCH_LIMIT = 10; // Limit concurrent requests to avoid overwhelming server
       let blocks: PlacedBlock[] = [];
       let fetchFailed = false;
       const failedChunkCoords: Array<{ x: number; z: number }> = [];
 
-      // Process chunks in batches of PARALLEL_FETCH_LIMIT
-      for (let i = 0; i < chunksToFetchFromServer.length; i += PARALLEL_FETCH_LIMIT) {
-        const batch = chunksToFetchFromServer.slice(i, i + PARALLEL_FETCH_LIMIT);
+      // Batched RPC fetch: 1-3 calls instead of 100-200 individual queries
+      const RPC_BATCH_SIZE = 50;
+      let useRpcFallback = false;
 
-        const batchPromises = batch.map(async ({ x, z }) => {
-          const PAGE_SIZE = 1000;
-          let chunkBlocks: PlacedBlock[] = [];
-          let offset = 0;
-          let hasMore = true;
+      for (let i = 0; i < chunksToFetchFromServer.length; i += RPC_BATCH_SIZE) {
+        const batch = chunksToFetchFromServer.slice(i, i + RPC_BATCH_SIZE);
+        const chunkParams = batch.map(({ x, z }) => ({ x, z }));
 
-          while (hasMore) {
-            const { data, error } = await supabase
-              .from('placed_blocks')
-              .select('*')
-              .eq('world_id', worldId)
-              .eq('chunk_x', x)
-              .eq('chunk_z', z)
-              .range(offset, offset + PAGE_SIZE - 1);
-
-            if (error) {
-              console.error(`[ChunkLoader] Chunk (${x},${z}) fetch failed:`, error.message);
-              return { x, z, blocks: null as PlacedBlock[] | null, failed: true };
-            }
-
-            if (data && data.length > 0) {
-              chunkBlocks = chunkBlocks.concat(data);
-              offset += data.length;
-              hasMore = data.length === PAGE_SIZE;
-            } else {
-              hasMore = false;
-            }
-
-            // Safety limit per chunk
-            if (offset >= 10000) {
-              console.warn(`[ChunkLoader] Chunk (${x},${z}) safety limit reached at ${offset} blocks`);
-              hasMore = false;
-            }
-          }
-
-          return { x, z, blocks: chunkBlocks, failed: false };
+        const { data, error } = await supabase.rpc('fetch_chunks_batch', {
+          p_world_id: worldId,
+          p_chunks: chunkParams,
         });
 
-        const batchResults = await Promise.all(batchPromises);
+        if (error) {
+          // RPC not available (migration not applied yet) — fall back to per-chunk queries
+          if (error.code === '42883' || error.message?.includes('function') || error.code === 'PGRST202') {
+            console.warn('[ChunkLoader] Batched RPC not available, falling back to per-chunk fetch');
+            useRpcFallback = true;
+            break;
+          }
+          console.error('[ChunkLoader] Batched RPC error:', error.message);
+          // Mark all chunks in this batch as failed
+          for (const { x, z } of batch) {
+            failedChunkCoords.push({ x, z });
+          }
+          continue;
+        }
 
-        for (const result of batchResults) {
-          if (result.failed || result.blocks === null) {
-            failedChunkCoords.push({ x: result.x, z: result.z });
-          } else {
-            blocks = blocks.concat(result.blocks);
+        if (data && data.length > 0) {
+          // RPC returns rows without created_at/updated_at — add defaults for PlacedBlock compatibility
+          for (let j = 0; j < data.length; j++) {
+            const row = data[j];
+            row.created_at = row.created_at ?? '';
+            row.updated_at = row.updated_at ?? '';
+          }
+          blocks = blocks.concat(data as PlacedBlock[]);
+        }
+      }
+
+      // Fallback: per-chunk individual queries (if RPC not available)
+      if (useRpcFallback) {
+        blocks = [];
+        const PARALLEL_FETCH_LIMIT = 10;
+        for (let i = 0; i < chunksToFetchFromServer.length; i += PARALLEL_FETCH_LIMIT) {
+          const batch = chunksToFetchFromServer.slice(i, i + PARALLEL_FETCH_LIMIT);
+          const batchPromises = batch.map(async ({ x, z }) => {
+            const PAGE_SIZE = 1000;
+            let chunkBlocks: PlacedBlock[] = [];
+            let offset = 0;
+            let hasMore = true;
+            while (hasMore) {
+              const { data: pageData, error: pageErr } = await supabase
+                .from('placed_blocks')
+                .select('*')
+                .eq('world_id', worldId)
+                .eq('chunk_x', x)
+                .eq('chunk_z', z)
+                .range(offset, offset + PAGE_SIZE - 1);
+              if (pageErr) {
+                return { x, z, blocks: null as PlacedBlock[] | null, failed: true };
+              }
+              if (pageData && pageData.length > 0) {
+                chunkBlocks = chunkBlocks.concat(pageData);
+                offset += pageData.length;
+                hasMore = pageData.length === PAGE_SIZE;
+              } else {
+                hasMore = false;
+              }
+              if (offset >= 10000) { hasMore = false; }
+            }
+            return { x, z, blocks: chunkBlocks, failed: false };
+          });
+          const batchResults = await Promise.all(batchPromises);
+          for (const result of batchResults) {
+            if (result.failed || result.blocks === null) {
+              failedChunkCoords.push({ x: result.x, z: result.z });
+            } else {
+              blocks = blocks.concat(result.blocks);
+            }
           }
         }
       }
@@ -1377,7 +1436,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // D-Flow: End fetch timing
       const fetchMs = performance.now() - fetchT0;
 
-      console.log(`[ChunkLoader DEBUG] Individual chunk fetch complete: ${blocks.length} total blocks, ${failedChunkCoords.length} failed chunks, ${fetchMs.toFixed(0)}ms`);
+      console.log(`[ChunkLoader] Fetch complete: ${blocks.length} blocks, ${failedChunkCoords.length} failed, ${fetchMs.toFixed(0)}ms${useRpcFallback ? ' (fallback)' : ' (RPC)'}`);
 
       // Track failed chunks for retry
       if (failedChunkCoords.length > 0) {
@@ -1386,7 +1445,6 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           const existing = failedChunksRef.current.get(key);
           failedChunksRef.current.set(key, { x, z, attempts: (existing?.attempts ?? 0) + 1 });
         }
-        // Log partial failure
         if (fetchStepId) initLogErrorStep(fetchStepId, `${failedChunkCoords.length} chunks failed`);
       }
 
@@ -1439,11 +1497,38 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       const chunksToCache: CachedChunk[] = [];
       let serverBlockCount = 0;
 
-      for (const { x, z } of chunksToFetchFromServer) {
-        const chunkKey = `chunk_${x}_${z}`;
-        const chunkBlocks = chunkGroups.get(chunkKey) || [];
+      // Priority queue: sort chunks by distance to player (closest first)
+      const pChunkSort = playerChunkRef.current;
+      const sortedServerChunks = [...chunksToFetchFromServer];
+      if (pChunkSort) {
+        sortedServerChunks.sort((a, b) => {
+          const distA = Math.max(Math.abs(a.x - pChunkSort.x), Math.abs(a.z - pChunkSort.z));
+          const distB = Math.max(Math.abs(b.x - pChunkSort.x), Math.abs(b.z - pChunkSort.z));
+          return distA - distB;
+        });
+      }
 
-        // Individual chunk fetching has per-chunk safety limits (10,000 blocks)
+      // Process chunks in yielding batches: closest first, emit after each batch
+      // so the renderer can progressively display chunks without stalling
+      const PROCESS_BATCH_SIZE = 10;
+
+      for (let batchStart = 0; batchStart < sortedServerChunks.length; batchStart += PROCESS_BATCH_SIZE) {
+        // Hard cap: stop processing if we've hit the chunk limit
+        if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) break;
+
+        const batchEnd = Math.min(batchStart + PROCESS_BATCH_SIZE, sortedServerChunks.length);
+        let batchChanged = false;
+
+        for (let ci = batchStart; ci < batchEnd; ci++) {
+          // Per-chunk cap check (concurrent calls may have added chunks)
+          if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) break;
+
+          const { x, z } = sortedServerChunks[ci];
+          const chunkKey = `chunk_${x}_${z}`;
+          // Skip if already loaded (another concurrent call may have loaded it)
+          if (loadedChunksRef.current.has(chunkKey)) continue;
+          const chunkBlocks = chunkGroups.get(chunkKey) || [];
+
         // Empty chunks are valid - only skip if fetch explicitly failed
         if (failedChunkCoords.some(f => f.x === x && f.z === z)) {
           continue;
@@ -1452,15 +1537,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
 
-        // DEBUG: Log chunk (3,1) specifically
-        if (x === 3 && z === 1) {
-          console.log(`[ChunkLoader DEBUG] Chunk (3,1) from SERVER: ${chunkBlocks.length} blocks`);
-        }
-
         // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
         const pChunkS = playerChunkRef.current;
         const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : 0;
-        if (sDist <= 2 || chunkBlocks.length < 200) {
+        if (sDist <= 1 && chunkBlocks.length <= 2000) {
           for (const block of chunkBlocks) {
             ensureBlockCollider(block);
           }
@@ -1497,6 +1577,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         loadedChunksRef.current.set(chunkKey, newChunkData);
         // B4: Update world signature for new chunk from server
         applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
+
+        batchChanged = true;
         // Update height map for pathfinding
         updateChunkHeightMap(chunkKey, chunkBlocks);
 
@@ -1510,13 +1592,29 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           blocks: chunkBlocks,
           cachedAt: loadedAt
         });
-      }
+        } // end inner per-chunk loop
+
+        // After each batch: emit so renderer can display these chunks, then yield
+        // to let the frame loop run (prevents stalling)
+        if (batchChanged) {
+          const isInit = !initialLoadDone.current;
+          scheduleEmit(isInit);
+        }
+
+        // Yield to event loop between batches so game stays interactive
+        // Skip yield for very first batch during init (player needs ground immediately)
+        if (batchStart > 0 || initialLoadDone.current) {
+          await new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        }
+      } // end batch loop
 
       // D-Flow: End build timing, record chunk load
       const buildMs = performance.now() - buildT0;
       diagnostics.recordChunkLoad(fetchMs, buildMs);
 
-      initLogStep('useChunkLoader.ts', `Loaded from server: ${chunksToFetchFromServer.length} chunks, ${serverBlockCount} blocks`);
+      initLogStep('useChunkLoader.ts', `Loaded from server: ${sortedServerChunks.length} chunks, ${serverBlockCount} blocks`);
 
       // Batch save to cache (fire and forget)
       if (chunksToCache.length > 0) {
@@ -1527,11 +1625,21 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
     }
 
+    // Evict excess chunks if we're over the limit after loading.
+    // Uses evictRef to avoid circular useCallback dependency.
+    if (loadedChunksRef.current.size > MAX_LOADED_CHUNKS && playerChunkRef.current) {
+      evictAfterLoadRef.current?.();
+    }
+
     // FIX: Single consolidated emit after ALL data (cache + server) is loaded
     // Use immediate emit during initial load for faster rendering
     // Note: First emit log happens inside doEmit() with actual counts
     const isInitialLoad = !initialLoadDone.current;
     scheduleEmit(isInitialLoad);
+
+    } catch (err) {
+      console.error('[ChunkLoader] loadSpecificChunks error:', err);
+    }
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
@@ -2073,6 +2181,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     }
   }, [scheduleEmit, applyChunkSigChange]);
 
+  // Wire up eviction ref now that both functions are defined
+  evictAfterLoadRef.current = () => {
+    if (playerChunkRef.current) {
+      unloadDistantChunks(playerChunkRef.current.x, playerChunkRef.current.z);
+      evictLRUChunks();
+    }
+  };
+
   /**
    * Update player position - called by game controller
    * Phase 3B: Uses incremental stripe loading instead of full square reload
@@ -2081,6 +2197,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
    */
   const updatePlayerPosition = useCallback(async (worldX: number, worldZ: number) => {
     if (!worldId) return;
+    // Don't load/unload chunks until initial load is complete
+    if (!initialLoadDone.current) return;
 
     const now = Date.now();
     if (now - lastPositionUpdateRef.current < POSITION_UPDATE_THROTTLE) {
@@ -2109,6 +2227,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       const oldChunkZ = prevChunk?.z ?? newChunkZ;
       
       playerChunkRef.current = { x: newChunkX, z: newChunkZ };
+
+      // D-Flow: Track player chunk position and in-flight count
+      diagnostics.playerChunkX = newChunkX;
+      diagnostics.playerChunkZ = newChunkZ;
+      diagnostics.chunksInFlight = 0;
 
       // Phase 3A: Update lastAccessedAt for all pinned (nearby) chunks
       const accessTime = Date.now();
@@ -2222,6 +2345,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     worldCollisionGrid.clear();
     colliderByBlockId.clear();
     loadedChunksRef.current.clear();
+    // chunksInFlightRef no longer used for dedup (caused chunks to get stuck)
     clearAllHeightMaps();
     worldSigRef.current = { count: 0, xor: 0, sum: 0 };
     lastEmittedWorldKeyRef.current = '';
@@ -2391,6 +2515,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (!worldId) return;
 
     const intervalId = setInterval(() => {
+      // Don't run integrity check until initial load is complete
+      if (!initialLoadDone.current) return;
+
       const playerChunk = playerChunkRef.current;
       if (!playerChunk) return;
 

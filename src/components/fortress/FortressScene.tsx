@@ -442,26 +442,21 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   });
 
   // Walapa system - floating whale creatures that travel between tall trees
-  const getEligibleTrees = useCallback(() => {
-    // Get all planted trees - walapas will filter by their own min_tree_tier setting
-    // Add defensive checks for all values to prevent NaN/infinity issues
+  // Memoized: only recomputes when plantedTrees changes (not on every call)
+  const eligibleTrees = useMemo(() => {
     return plantedTrees
       .filter(t => {
-        // Skip trees with invalid base coordinates
         if (typeof t.base_x !== 'number' || isNaN(t.base_x)) return false;
         if (typeof t.base_y !== 'number' || isNaN(t.base_y)) return false;
         if (typeof t.base_z !== 'number' || isNaN(t.base_z)) return false;
-        // Skip trees with extreme coordinates
         if (Math.abs(t.base_x) > 10000 || Math.abs(t.base_y) > 1000 || Math.abs(t.base_z) > 10000) return false;
         return true;
       })
       .map(t => {
         const baseY = t.base_y ?? 0;
         const blockCount = t.current_block_count ?? 0;
-        // Estimate tree height - assume ~5 blocks vertical per growth unit, minimum 10, max 500
         const treeHeight = Math.min(500, Math.max(10, Math.floor(blockCount / 5)));
         const topY = baseY + treeHeight;
-
         return {
           id: t.id,
           position: new THREE.Vector3(t.base_x, baseY, t.base_z),
@@ -470,6 +465,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         };
       });
   }, [plantedTrees]);
+  const getEligibleTrees = useCallback(() => eligibleTrees, [eligibleTrees]);
 
   const {
     walapas,
@@ -583,36 +579,30 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     const camPos = cameraRef.current?.position;
     if (!camPos) return;
     
-    // Find nearest tree matching the requested tier (or any tree if none match)
-    let nearestTree: typeof plantedTrees[0] | null = null;
-    let nearestDist = Infinity;
-    
-    // First try to find a tree matching the exact tier
+    // Single-pass: find nearest tree matching tier, and nearest any tree as fallback
+    let nearestTierTree: typeof plantedTrees[0] | null = null;
+    let nearestTierDist = Infinity;
+    let nearestAnyTree: typeof plantedTrees[0] | null = null;
+    let nearestAnyDist = Infinity;
+
     for (const tree of plantedTrees) {
-      const treeTier = (tree as any).seed_tier ?? tree.seed_definition?.tier ?? 1;
-      if (treeTier !== tier) continue;
-      
       const dx = tree.base_x - camPos.x;
       const dz = tree.base_z - camPos.z;
       const dist = dx * dx + dz * dz;
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestTree = tree;
+
+      if (dist < nearestAnyDist) {
+        nearestAnyDist = dist;
+        nearestAnyTree = tree;
+      }
+
+      const treeTier = (tree as any).seed_tier ?? tree.seed_definition?.tier ?? 1;
+      if (treeTier === tier && dist < nearestTierDist) {
+        nearestTierDist = dist;
+        nearestTierTree = tree;
       }
     }
-    
-    // If no tree of exact tier found, find any nearest tree
-    if (!nearestTree) {
-      for (const tree of plantedTrees) {
-        const dx = tree.base_x - camPos.x;
-        const dz = tree.base_z - camPos.z;
-        const dist = dx * dx + dz * dz;
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestTree = tree;
-        }
-      }
-    }
+
+    const nearestTree = nearestTierTree ?? nearestAnyTree;
     
     if (nearestTree) {
       const treeTier = (nearestTree as any).seed_tier ?? nearestTree.seed_definition?.tier ?? 1;

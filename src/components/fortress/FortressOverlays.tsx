@@ -4,6 +4,7 @@ import { AdminPanel } from '@/components/AdminPanel';
 import { UserPanel } from '@/components/UserPanel';
 import { Toaster } from '@/components/ui/toaster';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
+import { HeartbeatPanel } from '@/components/HeartbeatPanel';
 import { FungalTreeDiagnostics } from '@/components/FungalTreeDiagnostics';
 import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
 import { DeathOverlay } from '@/features/shwarm';
@@ -154,6 +155,9 @@ export function FortressOverlays(props: FortressOverlaysProps) {
 
       {/* Performance Overlay - Toggle with Shift+3 */}
       <PerformanceOverlay />
+
+      {/* Heartbeat Panel - Toggle with Ctrl+H */}
+      <HeartbeatPanel />
 
       {/* Tree Growth Diagnostics - Toggle with Shift+4 */}
       <FungalTreeDiagnostics plantedTrees={plantedTrees} />

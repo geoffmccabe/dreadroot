@@ -38,6 +38,7 @@ const tmpPosition = new THREE.Vector3();
 const tmpQuaternion = new THREE.Quaternion();
 const tmpColor = new THREE.Color();
 const tmpEuler = new THREE.Euler();
+const _scratchFlamePos = new THREE.Vector3();
 
 // Shared geometry for body parts
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -434,10 +435,8 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
 
       // Update legacy head fires
       for (const headFire of headFiresRef.current.values()) {
-        try {
+        if (headFire.material && typeof headFire.material.update === 'function') {
           headFire.material.update(delta);
-        } catch (e) {
-          // Ignore
         }
       }
 
@@ -446,26 +445,29 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         for (const [shombieId] of universalHeadFlamesRef.current.entries()) {
           const headPos = partPositionsRef.current.get(shombieId)?.get('head');
           if (headPos) {
+            _scratchFlamePos.copy(headPos);
+            _scratchFlamePos.y += 0.3;
             universalFlameRef.current.updateAttachedPosition(
               `shombie_head_${shombieId}`,
-              headPos.clone().add(new THREE.Vector3(0, 0.3, 0))
+              _scratchFlamePos
             );
           }
         }
 
         // Update universal flame body fire positions (fires at hit positions track with shombie)
-        const expiredBodyFlames: string[] = [];
         for (const [attachId, fireInfo] of universalBodyFlamesRef.current.entries()) {
           const elapsed = now - fireInfo.startTime;
           if (elapsed >= fireInfo.duration) {
-            expiredBodyFlames.push(attachId);
+            universalFlameRef.current.removeFlame(fireInfo.flameId);
+            universalBodyFlamesRef.current.delete(attachId);
             continue;
           }
 
           // Find the shombie to get current position
           const shombie = shombies.find(s => s.id === fireInfo.shombieId);
           if (!shombie) {
-            expiredBodyFlames.push(attachId);
+            universalFlameRef.current.removeFlame(fireInfo.flameId);
+            universalBodyFlamesRef.current.delete(attachId);
             continue;
           }
 
@@ -484,60 +486,49 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             const rotatedOffsetX = offsetX * cosR - offsetZ * sinR;
             const rotatedOffsetZ = offsetX * sinR + offsetZ * cosR;
 
-            const newPos = new THREE.Vector3(
+            _scratchFlamePos.set(
               shombie.position.x + rotatedOffsetX,
               shombie.position.y + offsetY,
               shombie.position.z + rotatedOffsetZ
             );
-            universalFlameRef.current.updateAttachedPosition(attachId, newPos);
+            universalFlameRef.current.updateAttachedPosition(attachId, _scratchFlamePos);
           } else {
             // Legacy: lookup by part name
             const partPos = partPositionsRef.current.get(fireInfo.shombieId)?.get(fireInfo.partName);
             if (partPos) {
-              universalFlameRef.current.updateAttachedPosition(attachId, partPos.clone());
+              _scratchFlamePos.copy(partPos);
+              universalFlameRef.current.updateAttachedPosition(attachId, _scratchFlamePos);
             }
           }
         }
 
-        // Clean up expired body flames
-        for (const attachId of expiredBodyFlames) {
-          const fireInfo = universalBodyFlamesRef.current.get(attachId);
-          if (fireInfo) {
-            universalFlameRef.current.removeFlame(fireInfo.flameId);
-            universalBodyFlamesRef.current.delete(attachId);
-          }
-        }
       }
 
-      // Update body fires (legacy internal system)
-      const expiredFires: BodyFire[] = [];
-      for (const bodyFire of bodyFiresRef.current) {
-        try {
+      // Update body fires (legacy internal system) — in-place removal to avoid allocations
+      let bodyFireWriteIdx = 0;
+      for (let bfi = 0; bfi < bodyFiresRef.current.length; bfi++) {
+        const bodyFire = bodyFiresRef.current[bfi];
+
+        if (bodyFire.material && typeof bodyFire.material.update === 'function') {
           bodyFire.material.update(delta);
-
-          if (now - bodyFire.startTime > bodyFire.duration) {
-            expiredFires.push(bodyFire);
-            continue;
-          }
-
-          const shombiePartPositions = partPositionsRef.current.get(bodyFire.shombieId);
-          const partPos = shombiePartPositions?.get(bodyFire.partName);
-          if (partPos) {
-            bodyFire.points.position.copy(partPos);
-          }
-        } catch (e) {
-          // Ignore
         }
-      }
 
-      for (const fire of expiredFires) {
-        scene.remove(fire.points);
-        fire.geometry.dispose();
-        fire.material.dispose();
+        if (now - bodyFire.startTime > bodyFire.duration) {
+          scene.remove(bodyFire.points);
+          bodyFire.geometry.dispose();
+          bodyFire.material.dispose();
+          continue;
+        }
+
+        const shombiePartPositions = partPositionsRef.current.get(bodyFire.shombieId);
+        const partPos = shombiePartPositions?.get(bodyFire.partName);
+        if (partPos) {
+          bodyFire.points.position.copy(partPos);
+        }
+
+        bodyFiresRef.current[bodyFireWriteIdx++] = bodyFire;
       }
-      if (expiredFires.length > 0) {
-        bodyFiresRef.current = bodyFiresRef.current.filter(f => !expiredFires.includes(f));
-      }
+      bodyFiresRef.current.length = bodyFireWriteIdx;
     });
 
     useImperativeHandle(ref, () => ({

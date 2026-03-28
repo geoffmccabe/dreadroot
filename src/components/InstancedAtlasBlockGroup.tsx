@@ -29,6 +29,8 @@ import {
 } from '@/hooks/useTextureAtlas';
 import { playerTracker } from '@/lib/playerTracker';
 import { shrineTracker } from '@/lib/shrineTracker';
+// Web Worker mesh pool available for future use when data transfer is optimized
+// import { meshWorkerPool } from '@/lib/meshWorker/meshWorkerPool';
 
 // Shared geometry for all block instances
 const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
@@ -325,9 +327,12 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   // current one finishes. This keeps the visual state consistent throughout.
   const rebuildQueuedRef = useRef(false);
 
+  // Web Worker mesh pool: kept for future use once data transfer is optimized
+  // (structured clone of block objects was the bottleneck, needs TypedArray encoding)
+
   // B9: Batch size for budgeted rebuild (process this many blocks per RAF tick)
-  // Each batch of 5000 blocks takes ~3-4ms. The rebuild runs in its own RAF loop
-  // (separate from the collider removal queue), so it doesn't compete for budget.
+  // Each batch of 5000 blocks takes ~3-4ms. Only used for 5000+ block chunks (fungal trees).
+  // The rebuild runs in its own RAF loop, separate from the collider removal queue.
   const REBUILD_BATCH_SIZE = 5000;
 
   // B9: The actual rebuild function - now uses budgeted work for large block counts
@@ -347,14 +352,15 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     lastRebuildTimeRef.current = performance.now();
     pendingRebuildRef.current = false;
 
-    // For small block counts, do it synchronously (no overhead)
-    if (currentBlocks.length < REBUILD_BATCH_SIZE * 2) {
+    // Sync rebuild for chunks under 2000 blocks (~4-6ms, within frame budget).
+    // Larger chunks (fungal trees) use budgeted RAF loop to prevent stalls.
+    if (currentBlocks.length < 2000) {
       doRebuildSync(mesh, currentBlocks);
       return;
     }
 
+    // Fallback: budgeted RAF loop for chunks too large for sync
     // B9: For large block counts, use budgeted work to spread across frames
-    // This prevents 500ms+ stalls when chunks load/unload with 200K+ blocks
     const version = ++rebuildVersionRef.current;
 
     // Initialize rebuild state
@@ -391,8 +397,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     // The budgeted work queue is FIFO and shared with collider removal jobs.
     // Using a separate RAF loop guarantees the rebuild runs independently.
     //
-    // Time-limited: process multiple batches per frame within an 8ms budget.
-    const REBUILD_BUDGET_MS = 8;
+    // Time-limited: process multiple batches per frame within 6ms budget.
+    const REBUILD_BUDGET_MS = 6;
     const runBatch = () => {
       const frameStart = performance.now();
       while (performance.now() - frameStart < REBUILD_BUDGET_MS) {

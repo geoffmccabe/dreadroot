@@ -292,7 +292,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     invisiblocks: PlacedBlock[];
     atlasTreeBlocks: PlacedBlock[];
   };
-  const groupCacheRef = useRef<{ key: string; result: GroupedResult } | null>(null);
+  const groupCacheRef = useRef<{ key: string; blocksRef: PlacedBlock[]; result: GroupedResult } | null>(null);
 
   // B10: Cache variant counts across re-groupings. Block types/textures don't change
   // on chunk boundary crossings (only positions change), so we can reuse variant counts.
@@ -302,11 +302,17 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   } | null>(null);
 
   const { groupedBlocks, invisiblocks, atlasTreeBlocks } = useMemo(() => {
-    // B6: Compute cheap key to detect if blocks have changed
-    const cheapKey = cheapGroupKey(blocks);
+    // Fast O(1) reference check — if blocks array ref is identical, skip the O(n) hash
+    if (groupCacheRef.current && groupCacheRef.current.blocksRef === blocks) {
+      diagnostics.recordGroupCacheHit();
+      return groupCacheRef.current.result;
+    }
 
-    // If cheap key matches cached result, return cached without doing any work
+    // B6: Compute cheap key to detect if blocks content changed (different ref, same data)
+    const cheapKey = cheapGroupKey(blocks);
     if (groupCacheRef.current && groupCacheRef.current.key === cheapKey) {
+      // Update stored ref so next check is O(1)
+      groupCacheRef.current.blocksRef = blocks;
       diagnostics.recordGroupCacheHit();
       return groupCacheRef.current.result;
     }
@@ -413,7 +419,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     diagnostics.recordGrouping(performance.now() - groupT0, blocks.length);
 
     // B6: Cache the result for next render
-    groupCacheRef.current = { key: cheapKey, result };
+    groupCacheRef.current = { key: cheapKey, blocksRef: blocks, result };
 
     return result;
   }, [blocks]);

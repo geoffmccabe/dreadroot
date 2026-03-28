@@ -20,6 +20,12 @@ import {
   type BulletLocal,
 } from './fortressScene.constants';
 
+// Pre-allocated scratch objects for per-frame use (avoid GC stutter)
+const _scratchBulletDir = new THREE.Vector3();
+const _scratchHitPos = new THREE.Vector3();
+const _scratchCoinPos = new THREE.Vector3();
+const _scratchGroundPos = new THREE.Vector3();
+
 export function useFortressFrameLoop({
   camera,
   skyRef,
@@ -276,7 +282,8 @@ export function useFortressFrameLoop({
             const distance = bullet.position.distanceTo(coin.position);
             if (distance < 0.8) {
               if ((window as any).createCoinExplosion) {
-                (window as any).createCoinExplosion(coin.position.clone(), coin.velocity);
+                _scratchCoinPos.copy(coin.position);
+              (window as any).createCoinExplosion(_scratchCoinPos, coin.velocity);
               }
               coin.visible = false;
               if (coin.mesh) coin.mesh.visible = false;
@@ -395,8 +402,9 @@ export function useFortressFrameLoop({
                 
                 // Create particle effect at hit position using the shwarm's texture
                 if (shwarmRendererRef.current) {
+                  _scratchHitPos.copy(block.position);
                   shwarmRendererRef.current.createHitEffect(
-                    block.position.clone(),
+                    _scratchHitPos,
                     shwarm.definition.texture_url
                   );
                 }
@@ -713,11 +721,11 @@ export function useFortressFrameLoop({
                 const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
 
                 // Calculate bullet direction for knockback
-                const bulletDir = bullet.direction.clone().normalize();
-                bulletDir.y = 0; // Horizontal only
+                _scratchBulletDir.copy(bullet.direction).normalize();
+                _scratchBulletDir.y = 0; // Horizontal only
 
                 // Apply damage with knockback info
-                damageShombie(shombie.id, finalDamage, bulletDir, isHeadshot, bulletDir);
+                damageShombie(shombie.id, finalDamage, _scratchBulletDir, isHeadshot, _scratchBulletDir);
 
                 // Award points
                 if (onPointsEarned) {
@@ -862,11 +870,11 @@ export function useFortressFrameLoop({
               const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
 
               // Calculate bullet direction for knockback
-              const bulletDir = bullet.direction.clone().normalize();
-              bulletDir.y = 0;
+              _scratchBulletDir.copy(bullet.direction).normalize();
+              _scratchBulletDir.y = 0;
 
               // Apply damage
-              damageShtickman(shtickman.id, finalDamage, bulletDir);
+              damageShtickman(shtickman.id, finalDamage, _scratchBulletDir);
 
               // Award points
               if (onPointsEarned) {
@@ -1075,8 +1083,9 @@ export function useFortressFrameLoop({
             
             // Spawn impact effect at ground level with bullet tier settings from context
             // Spawn impact effect at ground level - use Nebula for sky-friendly alpha blending
-            const groundPos = bullet.position.clone();
-            groundPos.y = 0.1; // Slightly above ground
+            _scratchGroundPos.copy(bullet.position);
+            _scratchGroundPos.y = 0.1; // Slightly above ground
+            const groundPos = _scratchGroundPos;
             const tierDefGround = getDefinitionRef.current(bullet.tier);
             const pentaMultiplierGround = bullet.isPentabullet ? 3.0 : 1.0;
             const groundConfig = {
@@ -1139,16 +1148,10 @@ export function useFortressFrameLoop({
     particles.length = writeIndex;
   }
   
-  // Throttled render triggers - only when something changed
-  if (needsBulletRender && nowMs - lastBulletRender.current > BULLET_RENDER_THROTTLE) {
-    lastBulletRender.current = nowMs;
-    setBulletRenderTrigger(prev => prev + 1);
-  }
-
-  if (needsWispRender && nowMs - lastWispRender.current > WISP_RENDER_THROTTLE) {
-    lastWispRender.current = nowMs;
-    setWispRenderTrigger(prev => prev + 1);
-  }
+  // NOTE: Render triggers removed — bullets and wisps update via imperative handles
+  // (bulletsComponentRef.current.update() and wispParticlesMeshRef.current.update())
+  // called directly from the frame loop. The setState triggers only caused unnecessary
+  // React re-renders of FortressScene (~20/sec).
   
   // Update shwarm renderer (always, since movement is continuous)
   shwarmRendererRef.current?.update();

@@ -86,6 +86,20 @@ const WIGGLE_DURATION = 2000;
 const WIGGLE_FREQUENCY = 3;
 const WIGGLE_AMPLITUDE = 1.2;
 
+// Pre-allocated scratch objects for per-frame use (avoid GC stutter)
+const _scratchMatrix = new THREE.Matrix4();
+const _scratchFaceMatrix = new THREE.Matrix4();
+const _scratchColor = new THREE.Color();
+const _scratchFlashColor = new THREE.Color(0xff00ff);
+const _scratchWhite = new THREE.Color(0xffffff);
+const _scratchFacePos = new THREE.Vector3();
+const _scratchFaceQuat = new THREE.Quaternion();
+const _scratchDefaultDir = new THREE.Vector3(0, 0, 1);
+const _scratchTargetDir = new THREE.Vector3();
+const _scratchUnitScale = new THREE.Vector3(1, 1, 1);
+const _scratchFirePos = new THREE.Vector3();
+const _scratchFaceErrorColor = new THREE.Color(0xff4444);
+
 // Per-tier rendering component
 interface TierRendererProps {
   tier: number;
@@ -234,7 +248,6 @@ const TierRenderer: React.FC<TierRendererProps> = ({
   useFrame(() => {
     const now = performance.now();
     const shnakes = shnakesRef.current || [];
-    const tierShnakes = shnakes.filter(s => s.isActive && s.tier === tier);
 
     let headCount = 0;
     let bodyCount = 0;
@@ -249,10 +262,11 @@ const TierRenderer: React.FC<TierRendererProps> = ({
     const bodyUvAttr = bodyUvAttrRef.current;
     const faceUvAttr = faceUvAttrRef.current;
 
-    const m = new THREE.Matrix4();
-    const white = new THREE.Color(0xffffff);
-    const flashColor = new THREE.Color(0xff00ff);
-    const tierFallbackColor = new THREE.Color(getTierColor(tier));
+    const m = _scratchMatrix;
+    const white = _scratchWhite;
+    const flashColor = _scratchFlashColor;
+    _scratchColor.setHex(getTierColor(tier));
+    const tierFallbackColor = _scratchColor;
 
     // Get UV offsets from atlas
     const headUvs = getShnakeUVs(tier, 'head');
@@ -277,8 +291,8 @@ const TierRenderer: React.FC<TierRendererProps> = ({
       faceUvOffsetY = faceUvs.uvOffsetY;
     }
 
-    for (const s of tierShnakes) {
-      if (s.segments.length === 0) continue;
+    for (const s of shnakes) {
+      if (!s.isActive || s.tier !== tier || s.segments.length === 0) continue;
 
       const flashing = isFlashing(s.id, now);
       const instanceColor = flashing ? flashColor : (hasHeadTexture ? white : tierFallbackColor);
@@ -298,21 +312,19 @@ const TierRenderer: React.FC<TierRendererProps> = ({
       headCount++;
 
       // Face on head
-      const faceMatrix = new THREE.Matrix4();
-      const facePos = new THREE.Vector3(h.x + 0.5 + headWiggle.x, h.y + 0.5 + headWiggle.y, h.z + 0.5 + headWiggle.z);
+      _scratchFacePos.set(h.x + 0.5 + headWiggle.x, h.y + 0.5 + headWiggle.y, h.z + 0.5 + headWiggle.z);
 
       if (s.headDir.lengthSq() > 0.01) {
-        const targetDir = s.headDir.clone().normalize();
-        const faceQuat = new THREE.Quaternion();
-        const defaultDir = new THREE.Vector3(0, 0, 1);
-        faceQuat.setFromUnitVectors(defaultDir, targetDir);
-        faceMatrix.compose(facePos, faceQuat, new THREE.Vector3(1, 1, 1));
+        _scratchTargetDir.copy(s.headDir).normalize();
+        _scratchDefaultDir.set(0, 0, 1);
+        _scratchFaceQuat.setFromUnitVectors(_scratchDefaultDir, _scratchTargetDir);
+        _scratchFaceMatrix.compose(_scratchFacePos, _scratchFaceQuat, _scratchUnitScale);
       } else {
-        faceMatrix.makeTranslation(facePos.x, facePos.y, facePos.z);
+        _scratchFaceMatrix.makeTranslation(_scratchFacePos.x, _scratchFacePos.y, _scratchFacePos.z);
       }
 
-      faceMesh.setMatrixAt(faceCount, faceMatrix);
-      faceMesh.setColorAt(faceCount, flashing ? flashColor : (hasFaceTexture ? white : new THREE.Color(0xff4444)));
+      faceMesh.setMatrixAt(faceCount, _scratchFaceMatrix);
+      faceMesh.setColorAt(faceCount, flashing ? flashColor : (hasFaceTexture ? white : _scratchFaceErrorColor));
 
       // Set UV offset for face (with animation)
       if (faceUvAttr && hasFaceTexture) {
@@ -445,7 +457,14 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
   // Clean up flashes and update attached flame positions
   useFrame(() => {
     const now = performance.now();
-    flashesRef.current = flashesRef.current.filter(f => now - f.startTime < f.duration);
+    // In-place removal of expired flashes (avoid .filter() array allocation)
+    let writeIdx = 0;
+    for (let i = 0; i < flashesRef.current.length; i++) {
+      if (now - flashesRef.current[i].startTime < flashesRef.current[i].duration) {
+        flashesRef.current[writeIdx++] = flashesRef.current[i];
+      }
+    }
+    flashesRef.current.length = writeIdx;
 
     // Update attached flame positions for moving shnakes
     if (universalFlameRef?.current) {
@@ -461,15 +480,20 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
 
         const seg = shnake.segments[fire.segmentIndex];
         const attachId = `shnake_${fire.shnakeId}_seg${fire.segmentIndex}`;
+        _scratchFirePos.set(seg.x + 0.5, seg.y + 0.7, seg.z + 0.5);
         universalFlameRef.current.updateAttachedPosition(
           attachId,
-          new THREE.Vector3(seg.x + 0.5, seg.y + 0.7, seg.z + 0.5)
+          _scratchFirePos
         );
       }
 
-      // Clean up flames for expired fires or dead shnakes
-      firesRef.current = firesRef.current.filter(fire => {
+      // Clean up flames for expired fires or dead shnakes (in-place to avoid .filter() allocation)
+      let fireWriteIdx = 0;
+      for (let fi = 0; fi < firesRef.current.length; fi++) {
+        const fire = firesRef.current[fi];
         const elapsed = now - fire.startTime;
+        let keep = true;
+
         if (elapsed >= fire.duration) {
           const attachId = `shnake_${fire.shnakeId}_seg${fire.segmentIndex}`;
           const flameId = universalFlameIdsRef.current.get(attachId);
@@ -477,22 +501,25 @@ export const ShnakeRenderer = React.forwardRef<ShnakeRendererHandle, Props>(({ s
             universalFlameRef.current?.removeFlame(flameId);
             universalFlameIdsRef.current.delete(attachId);
           }
-          return false;
-        }
-
-        const shnake = shnakes.find(s => s.id === fire.shnakeId && s.isActive);
-        if (!shnake) {
-          const attachId = `shnake_${fire.shnakeId}_seg${fire.segmentIndex}`;
-          const flameId = universalFlameIdsRef.current.get(attachId);
-          if (flameId) {
-            universalFlameRef.current?.removeFlame(flameId);
-            universalFlameIdsRef.current.delete(attachId);
+          keep = false;
+        } else {
+          const shnake = shnakes.find(s => s.id === fire.shnakeId && s.isActive);
+          if (!shnake) {
+            const attachId = `shnake_${fire.shnakeId}_seg${fire.segmentIndex}`;
+            const flameId = universalFlameIdsRef.current.get(attachId);
+            if (flameId) {
+              universalFlameRef.current?.removeFlame(flameId);
+              universalFlameIdsRef.current.delete(attachId);
+            }
+            keep = false;
           }
-          return false;
         }
 
-        return true;
-      });
+        if (keep) {
+          firesRef.current[fireWriteIdx++] = fire;
+        }
+      }
+      firesRef.current.length = fireWriteIdx;
     }
   });
 

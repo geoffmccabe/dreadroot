@@ -31,6 +31,12 @@ import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { type WaterType } from '@/lib/pondGenerator';
 import { isPointInNoFireZone } from '@/features/enemies/ai/fortressSafeZone';
 
+// Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
+const _inspectorMatrix = new THREE.Matrix4();
+const _inspectorPos = new THREE.Vector3();
+const _inspectorDir = new THREE.Vector3();
+const _inspectorDistVec = new THREE.Vector3();
+
 export function FirstPersonControls({
   onShoot,
   showCrosshairs,
@@ -1121,7 +1127,7 @@ export function FirstPersonControls({
 
         if (foundSomething) {
           // Calculate LoS distance
-          const losDistance = camera.position.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+          const losDistance = (_inspectorDistVec.set(bx + 0.5, by + 0.5, bz + 0.5), camera.position.distanceTo(_inspectorDistVec));
 
           // Calculate chunk key for this position
           const chunkX = Math.floor(bx / CHUNK_SIZE);
@@ -1565,19 +1571,17 @@ export function FirstPersonControls({
             foundBlock = true;
             meshBlockType = meshToBlockTypeCache.current.get(result.object as THREE.InstancedMesh);
             const mesh = result.object as THREE.InstancedMesh;
-            const matrix = new THREE.Matrix4();
-            mesh.getMatrixAt(result.instanceId, matrix);
-            const pos = new THREE.Vector3();
-            pos.setFromMatrixPosition(matrix);
+            mesh.getMatrixAt(result.instanceId, _inspectorMatrix);
+            _inspectorPos.setFromMatrixPosition(_inspectorMatrix);
 
-            bx = Math.floor(pos.x);
-            by = Math.floor(pos.y);
-            bz = Math.floor(pos.z);
+            bx = Math.floor(_inspectorPos.x);
+            by = Math.floor(_inspectorPos.y);
+            bz = Math.floor(_inspectorPos.z);
             instanceId = result.instanceId;
           } else {
             // No mesh hit - ray march along LoS checking colliders
-            const camDir = new THREE.Vector3();
-            camera.getWorldDirection(camDir);
+            camera.getWorldDirection(_inspectorDir);
+            const camDir = _inspectorDir;
             const maxDistance = 20;
             const stepSize = 0.5;
             let lastCheckedX = -99999, lastCheckedY = -99999, lastCheckedZ = -99999;
@@ -1644,7 +1648,7 @@ export function FirstPersonControls({
                 Math.floor(b.position_z) === bz
               );
 
-              const losDistance = camera.position.distanceTo(new THREE.Vector3(bx + 0.5, by + 0.5, bz + 0.5));
+              const losDistance = (_inspectorDistVec.set(bx + 0.5, by + 0.5, bz + 0.5), camera.position.distanceTo(_inspectorDistVec));
 
               // Check for tree data
               const isTree = meshBlockType ? isTreeBlockType(meshBlockType) : false;
@@ -1790,15 +1794,13 @@ export function FirstPersonControls({
 
             // Get block position from instanced mesh matrix
             const mesh = result.object as THREE.InstancedMesh;
-            const matrix = new THREE.Matrix4();
-            mesh.getMatrixAt(result.instanceId, matrix);
-            const position = new THREE.Vector3();
-            position.setFromMatrixPosition(matrix);
+            mesh.getMatrixAt(result.instanceId, _inspectorMatrix);
+            _inspectorPos.setFromMatrixPosition(_inspectorMatrix);
 
             // Instanced meshes are centered at +0.5, so subtract before rounding
-            const blockX = Math.floor(position.x);
-            const blockY = Math.floor(position.y);
-            const blockZ = Math.floor(position.z);
+            const blockX = Math.floor(_inspectorPos.x);
+            const blockY = Math.floor(_inspectorPos.y);
+            const blockZ = Math.floor(_inspectorPos.z);
 
             // Check ownership for tree blocks
             const isOwnedTree = isTreeBlock && isOwnedTreeAtPositionRef.current(blockX, blockY, blockZ);

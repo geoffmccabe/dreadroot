@@ -157,9 +157,10 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
     const map = fadeMap.current;
     const attr = geometry.getAttribute('instanceOpacity') as THREE.InstancedBufferAttribute;
     const arr = attr.array as Float32Array;
-    const remaining: number[] = [];
-
-    for (const i of indices) {
+    // In-place compaction to avoid allocating a new array each frame
+    let writeIdx = 0;
+    for (let j = 0; j < indices.length; j++) {
+      const i = indices[j];
       const block = curBlocks[i];
       if (!block) continue;
       const key = blockKey(block);
@@ -167,10 +168,11 @@ function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring:
       progress = Math.min(1, progress + delta / FADE_IN_DURATION);
       map.set(key, progress);
       arr[i] = progress;
-      if (progress < 1) remaining.push(i);
+      if (progress < 1) {
+        indices[writeIdx++] = i;
+      }
     }
-
-    fadingIndices.current = remaining;
+    indices.length = writeIdx;
     attr.needsUpdate = true;
   });
 

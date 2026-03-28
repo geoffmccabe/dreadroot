@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { frameLoop } from '@/lib/frameLoop';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import * as THREE from 'three';
@@ -432,30 +433,37 @@ export function usePlayerHealth() {
   }, [applyDamage]);
 
   /**
-   * DoT tick loop - processes status effect damage
+   * DoT tick loop - processes status effect damage via frameLoop
+   * Throttled to DOT_TICK_INTERVAL_MS using internal timer
    */
+  const lastDotTickRef = useRef(0);
   useEffect(() => {
-    const tickInterval = setInterval(() => {
+    const unregister = frameLoop.register('dot-ticks', () => {
       const now = Date.now();
+      if (now - lastDotTickRef.current < DOT_TICK_INTERVAL_MS) return;
+      lastDotTickRef.current = now;
+
       const effects = activeEffectsRef.current;
-      
-      // Filter expired effects
-      activeEffectsRef.current = effects.filter(e => isEffectActive(e));
-      
+
+      // In-place removal of expired effects (avoid .filter() allocation)
+      let writeIdx = 0;
+      for (let i = 0; i < effects.length; i++) {
+        if (isEffectActive(effects[i])) {
+          effects[writeIdx++] = effects[i];
+        }
+      }
+      effects.length = writeIdx;
+
       // Process DoT ticks
-      for (const effect of activeEffectsRef.current) {
+      for (const effect of effects) {
         if (!shouldEffectTick(effect)) continue;
-        
-        // Update last tick time
         effect.lastTickTime = now;
-        
-        // Apply DoT damage directly (bypasses i-frames, already processed)
         const dotDamage = effect.intensity ?? 1;
         takeDamageInternal(dotDamage);
       }
-    }, DOT_TICK_INTERVAL_MS);
-    
-    return () => clearInterval(tickInterval);
+    }, 80); // Priority 80 - after game logic
+
+    return unregister;
   }, [takeDamageInternal]);
 
   /**

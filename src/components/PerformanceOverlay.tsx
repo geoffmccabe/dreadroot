@@ -167,7 +167,7 @@ export function PerformanceOverlay() {
         let longFrameTotal = 0, maxFrameTime = 0;
 
         for (let s = 0; s < n; s++) {
-          const i = s * 50;
+          const i = s * d.metricsPerSample;
           const sampleFps = d.buffer[i + 1];
           fpsSum += sampleFps;
           if (sampleFps < fpsMin) fpsMin = sampleFps;
@@ -353,6 +353,36 @@ CHUNK RENDERING
   MeshRebuilds:     ${extra.meshRebuildCountTotal} (${extra.meshRebuildMsTotal.toFixed(1)}ms for ${extra.meshRebuildBlocksTotal} blocks)
   MeshInstances:    ${extra.meshInstanceTotal}
   GPU Texture Mem:  ${extra.gpuTextureMemMB.toFixed(1)}MB`;
+
+    // Add chunk pipeline current state
+    text += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CHUNK PIPELINE (current)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Player Chunk:     (${diagnostics.playerChunkX}, ${diagnostics.playerChunkZ})
+  Loaded Chunks:    ${diagnostics.loadedChunkCount} (${diagnostics.totalLoadedBlocks} blocks)
+  Visible Chunks:   ${diagnostics.visibleChunkCount} (${diagnostics.totalVisibleBlocks} surface blocks)
+  Rendered Chunks:  ${diagnostics.renderedChunkCount}
+  Chunks In Flight: ${diagnostics.chunksInFlight}`;
+
+    // Add per-sample FPS data (last 20 samples)
+    const d = diagnostics;
+    const sampleN = Math.min(d.ticker, 600);
+    const stride = d.metricsPerSample;
+    if (sampleN > 0) {
+      text += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RAW DATA (last 50 samples)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid`;
+      const start = Math.max(0, sampleN - 50);
+      for (let s = start; s < sampleN; s++) {
+        const bi = s * stride;
+        text += `\n${d.buffer[bi].toFixed(0)} ${d.buffer[bi+1].toFixed(0)} ${d.buffer[bi+2].toFixed(0)} ${d.buffer[bi+32].toFixed(0)} ${d.buffer[bi+50].toFixed(0)} ${d.buffer[bi+51].toFixed(0)} ${d.buffer[bi+52].toFixed(0)} ${d.buffer[bi+55].toFixed(0)} ${d.buffer[bi+56].toFixed(0)} ${d.buffer[bi+44].toFixed(0)}`;
+      }
+    }
 
     navigator.clipboard.writeText(text);
     setCopied(true);

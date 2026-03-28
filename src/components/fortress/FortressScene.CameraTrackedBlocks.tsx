@@ -139,21 +139,32 @@ export function CameraTrackedBlocks({
     return unregister;
   }, [camera, visibleChunksRef, updatePlayerPosition]);
 
-  // Localize hoveredBlockId to the chunk that contains it
-  // This prevents memo busting across all chunks when hover changes
+  // Lazy blockId → chunkKey index: only rebuilt when hoveredBlockId is set AND chunks changed
+  const blockIdToChunkRef = useRef<Map<string, string>>(new Map());
+  const blockIdMapRevisionRef = useRef(-1);
+
+  // O(1) lookup for hovered block's chunk (was O(chunks × blocks))
   const hoveredChunkKey = useMemo(() => {
     if (!hoveredBlockId) return null;
-    const ref = loadedChunksRef?.current;
-    if (!ref) return null;
-    for (const [chunkKey, chunkData] of ref) {
-      // NOTE: Must check length explicitly - `??` doesn't catch empty arrays
-      const blocks = (chunkData.visibleBlocks?.length) ? chunkData.visibleBlocks : chunkData.blocks;
-      for (let i = 0; i < blocks.length; i++) {
-        if (blocks[i].id === hoveredBlockId) return chunkKey;
+
+    // Rebuild map only when worldRevision changed since last build
+    if (blockIdMapRevisionRef.current !== worldRevision) {
+      const ref = loadedChunksRef?.current;
+      const map = blockIdToChunkRef.current;
+      map.clear();
+      if (ref) {
+        for (const [chunkKey, chunkData] of ref) {
+          const blocks = (chunkData.visibleBlocks?.length) ? chunkData.visibleBlocks : chunkData.blocks;
+          for (let i = 0; i < blocks.length; i++) {
+            map.set(blocks[i].id, chunkKey);
+          }
+        }
       }
+      blockIdMapRevisionRef.current = worldRevision;
     }
-    return null;
-  }, [hoveredBlockId, loadedChunksRef]);
+
+    return blockIdToChunkRef.current.get(hoveredBlockId) ?? null;
+  }, [hoveredBlockId, worldRevision, loadedChunksRef]);
 
   // Phase 1: Per-chunk rendering — iterate loaded chunks, classify into normal vs fade
   // Normal chunks: within visualDistance, full atlas rendering
@@ -257,21 +268,88 @@ export function CameraTrackedBlocks({
 
     diagnostics.setChunkRenderCount(normal.length);
 
+    // D-Flow: Track chunk pipeline metrics
+    diagnostics.visibleChunkCount = normal.length + fade.length;
+    let visBlkTotal = 0;
+    for (const entry of normal) visBlkTotal += entry.blocks.length;
+    for (const entry of fade) visBlkTotal += entry.blocks.length;
+    diagnostics.totalVisibleBlocks = visBlkTotal;
+
+    // Track loaded chunk stats
+    if (ref) {
+      diagnostics.loadedChunkCount = ref.size;
+      let loadedTotal = 0;
+      for (const chunkData of ref.values()) {
+        const blks = chunkData.visibleBlocks?.length ? chunkData.visibleBlocks : chunkData.blocks;
+        loadedTotal += blks.length;
+      }
+      diagnostics.totalLoadedBlocks = loadedTotal;
+    }
+
     return { normalEntries: normal, fadeEntries: fade };
-  }, [renderTrigger, blocksByChunk, loadedChunksRef, worldRevision, visualDistance, camera]);
+  // Note: blocksByChunk intentionally excluded — it's a new Map on every worldRevision
+  // which would bust all ChunkRenderer memos. loadedChunksRef + worldRevision is sufficient.
+  }, [renderTrigger, loadedChunksRef, worldRevision, visualDistance, camera]);
+
+  // Progressive render budget: don't hand all new chunks to React at once.
+  // Feed up to CHUNKS_PER_FRAME new chunks per frame (nearest first).
+  // Chunks already rendered stay stable (memo prevents re-render).
+  const CHUNKS_PER_FRAME = 5;
+  const renderedKeysRef = useRef(new Set<string>());
+  const [progressiveTrigger, setProgressiveTrigger] = useState(0);
+
+  // Track which normalEntries are ready to render
+  const progressiveEntries = useMemo(() => {
+    const rendered = renderedKeysRef.current;
+
+    // Remove keys no longer in normalEntries (chunks that moved out of range)
+    const currentKeys = new Set(normalEntries.map(e => e.key));
+    for (const key of rendered) {
+      if (!currentKeys.has(key)) rendered.delete(key);
+    }
+
+    // Count how many new chunks need to be added
+    let newCount = 0;
+    for (const entry of normalEntries) {
+      if (!rendered.has(entry.key)) newCount++;
+    }
+
+    if (newCount === 0) {
+      // All chunks already rendered — return full list
+      return normalEntries;
+    }
+
+    // Add up to CHUNKS_PER_FRAME new entries (they're already sorted by distance)
+    let added = 0;
+    for (const entry of normalEntries) {
+      if (!rendered.has(entry.key)) {
+        rendered.add(entry.key);
+        added++;
+        if (added >= CHUNKS_PER_FRAME) break;
+      }
+    }
+
+    // Schedule next frame to add more if there are still pending chunks
+    if (added < newCount) {
+      requestAnimationFrame(() => setProgressiveTrigger(v => v + 1));
+    }
+
+    // Return only entries that are in the rendered set
+    return normalEntries.filter(e => rendered.has(e.key));
+  }, [normalEntries, progressiveTrigger]);
 
   // Generate water blocks for visible chunks
   const waterBlocks = useMemo(() => {
-    if (!worldPonds.hasPonds || normalEntries.length === 0) return [];
+    if (!worldPonds.hasPonds || progressiveEntries.length === 0) return [];
 
-    const chunkKeys = normalEntries.map(e => e.key);
+    const chunkKeys = progressiveEntries.map(e => e.key);
     return worldPonds.getAllWaterBlocksForChunks(chunkKeys, CHUNK_SIZE);
-  }, [worldPonds, normalEntries]);
+  }, [worldPonds, progressiveEntries]);
 
   // One-time pipeline diagnostic (fires once when normalEntries first has data)
-  if (!debugLogRef.current && normalEntries.length > 0) {
+  if (!debugLogRef.current && progressiveEntries.length > 0) {
     debugLogRef.current = true;
-    const totalBlocks = normalEntries.reduce((sum, e) => sum + e.blocks.length, 0);
+    const totalBlocks = progressiveEntries.reduce((sum, e) => sum + e.blocks.length, 0);
     console.log(`[CameraTrackedBlocks] Pipeline: ${normalEntries.length} chunks, ${totalBlocks} blocks, blockDefsLoading=${hoistedBlockDefsLoading}, atlasReady=${hoistedAtlasReady}, blocksMapSize=${hoistedBlocksMap.size}, fadeChunks=${fadeEntries.length}`);
 
     // DEBUG: Compare chunkData.blocks vs chunkData.visibleBlocks for non-tree block loss
@@ -319,7 +397,7 @@ export function CameraTrackedBlocks({
         visualDistance={visualDistance}
         cameraRef={{ current: camera }}
       />
-      {normalEntries.map(({ key, blocks: chunkBlocks }) => (
+      {progressiveEntries.map(({ key, blocks: chunkBlocks }) => (
         <ChunkRenderer
           key={key}
           chunkKey={key}
