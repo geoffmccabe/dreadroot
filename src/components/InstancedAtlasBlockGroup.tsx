@@ -107,12 +107,25 @@ const AUTO_PERFORMANCE_MODE_THRESHOLD = 1000;
 // attributes, not material state, so sharing is safe. WeakMap so a retired
 // atlas texture's material is GC'd with it.
 const _sharedAtlasMaterialByTexture = new WeakMap<THREE.Texture, THREE.MeshLambertMaterial>();
+let _lastSharedTex: THREE.Texture | null = null;
+let _lastSharedMat: THREE.MeshLambertMaterial | null = null;
 function getSharedAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMaterial {
   let m = _sharedAtlasMaterialByTexture.get(atlasTexture);
   if (!m) {
+    // Atlas texture changed (e.g. atlas version bump → new texture object).
+    // Dispose the previous shared material's GPU program: WeakMap GC frees
+    // the JS entry but NOT the WebGL program — THREE needs explicit dispose()
+    // or it leaks one program per atlas rebuild. All instances use the same
+    // current atlas texture, so the old material is safe to drop here.
+    if (_lastSharedMat && _lastSharedTex && _lastSharedTex !== atlasTexture) {
+      _lastSharedMat.dispose();
+      _sharedAtlasMaterialByTexture.delete(_lastSharedTex);
+    }
     m = createAtlasMaterial(atlasTexture);
     _sharedAtlasMaterialByTexture.set(atlasTexture, m);
   }
+  _lastSharedTex = atlasTexture;
+  _lastSharedMat = m;
   return m;
 }
 
