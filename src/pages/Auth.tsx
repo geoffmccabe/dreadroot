@@ -68,7 +68,7 @@ export default function Auth() {
           className="w-[80%] md:w-[60%] h-auto block"
         />
         <img
-          src="/lw+awc_presents_1600px.webp"
+          src="/lw_awc_presents_1600px.webp"
           alt="Lightningworks + AWC presents"
           className="w-[55%] md:w-[40%] h-auto block"
         />
