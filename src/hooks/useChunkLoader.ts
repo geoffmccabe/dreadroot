@@ -1209,14 +1209,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           !block.expires_at || new Date(block.expires_at) > now
         );
 
-        // Still check for truncation heuristic
-        const possiblyTruncated = activeBlocks.length === 1000;
-        if (possiblyTruncated) {
-          chunksToFetchFromServer.push({ x, z });
-        } else {
-          chunksFromCache.push({ x, z, blocks: activeBlocks });
-          trustedCount++;
-        }
+        // Truncation heuristic removed: the fetch_chunks_batch RPC now
+        // returns full chunks (jsonb, no 1000-row cap), so a cached chunk
+        // is complete — trust it.
+        chunksFromCache.push({ x, z, blocks: activeBlocks });
+        trustedCount++;
       }
 
       if (trustedCount > 0) {
@@ -1253,18 +1250,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
               !block.expires_at || new Date(block.expires_at) > now
             );
 
-            // HEURISTIC: Detect potentially truncated cache
-            // If cache has exactly 1000 blocks (Supabase default limit), it was likely truncated
-            // Force refetch for any chunk with exactly 1000 blocks
-            const possiblyTruncated = activeBlocks.length === 1000;
-
-            if (possiblyTruncated) {
-              chunksToFetchFromServer.push({ x, z });
-              staleCount++;
-            } else {
-              chunksFromCache.push({ x, z, blocks: activeBlocks });
-              freshCount++;
-            }
+            // Truncation heuristic removed (RPC no longer caps at 1000) —
+            // a fresh cached chunk is complete; use it.
+            chunksFromCache.push({ x, z, blocks: activeBlocks });
+            freshCount++;
           } else {
             // Cache is stale - need to fetch from server
             // BUT also load stale cache as fallback in case server fetch fails
