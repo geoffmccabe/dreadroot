@@ -55,6 +55,7 @@ export default function Auth() {
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
+          opacity: 0.5,
           mixBlendMode: 'screen',
         }}
       />
