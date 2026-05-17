@@ -63,15 +63,19 @@ export default function Auth() {
 
       {/* 4. Content */}
       <div className="relative z-10 min-h-screen w-full flex flex-col items-center justify-center gap-6 p-6">
+        {/* TOP: "present" logo. NOTE: still pointing at the old "presents"
+            file — replace src once the new singular-"present" image is in
+            public/ (see message). */}
+        <img
+          src="/lw_awc_presents_1600px.webp"
+          alt="Lightningworks + AWC present"
+          className="w-[55%] md:w-[40%] h-auto block"
+        />
+        {/* BELOW: Dreadroot wordmark */}
         <img
           src="/Dreadroot_words_logo_horiz_2400px.webp"
           alt="Dreadroot"
           className="w-[80%] md:w-[60%] h-auto block"
-        />
-        <img
-          src="/lw_awc_presents_1600px.webp"
-          alt="Lightningworks + AWC presents"
-          className="w-[55%] md:w-[40%] h-auto block"
         />
         <Button
           type="button"
