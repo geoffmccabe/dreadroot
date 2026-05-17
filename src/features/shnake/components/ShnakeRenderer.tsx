@@ -99,6 +99,10 @@ const _scratchTargetDir = new THREE.Vector3();
 const _scratchUnitScale = new THREE.Vector3(1, 1, 1);
 const _scratchFirePos = new THREE.Vector3();
 const _scratchFaceErrorColor = new THREE.Color(0xff4444);
+// Reused by getWiggleOffset — consumed immediately by the caller (x/y/z read
+// in the same synchronous loop iteration), never retained. Avoids ~15k
+// Vector3 allocations/sec (per head + per body segment per frame).
+const _scratchWiggle = new THREE.Vector3();
 
 // Per-tier rendering component
 interface TierRendererProps {
@@ -231,10 +235,10 @@ const TierRenderer: React.FC<TierRendererProps> = ({
   // Get wiggle offset for a segment
   const getWiggleOffset = (shnakeId: string, segmentIndex: number, totalSegments: number, now: number): THREE.Vector3 => {
     const wiggle = wigglesRef.current?.find(w => w.shnakeId === shnakeId);
-    if (!wiggle) return new THREE.Vector3(0, 0, 0);
+    if (!wiggle) return _scratchWiggle.set(0, 0, 0);
 
     const elapsed = now - wiggle.startTime;
-    if (elapsed >= wiggle.duration) return new THREE.Vector3(0, 0, 0);
+    if (elapsed >= wiggle.duration) return _scratchWiggle.set(0, 0, 0);
 
     const progress = elapsed / wiggle.duration;
     const fadeOut = 1 - progress;
@@ -242,7 +246,7 @@ const TierRenderer: React.FC<TierRendererProps> = ({
     const timePhase = progress * WIGGLE_FREQUENCY * Math.PI * 2;
     const offset = Math.sin(timePhase + phaseOffset) * WIGGLE_AMPLITUDE * fadeOut;
 
-    return new THREE.Vector3(offset, 0, 0);
+    return _scratchWiggle.set(offset, 0, 0);
   };
 
   useFrame(() => {

@@ -72,6 +72,22 @@ function numPosKey(x: number, y: number, z: number): number {
 // Threshold for auto-enabling performance mode
 const AUTO_PERFORMANCE_MODE_THRESHOLD = 1000;
 
+// One shared material per atlas texture. Each material with onBeforeCompile
+// compiles its own GPU shader program; creating one per chunk recompiled
+// shaders on every chunk stream-in during flight (profile: getProgramInfoLog
+// ~3.7% self-time + long-frame hitches). Per-instance data is via instance
+// attributes, not material state, so sharing is safe. WeakMap so a retired
+// atlas texture's material is GC'd with it.
+const _sharedAtlasMaterialByTexture = new WeakMap<THREE.Texture, THREE.MeshLambertMaterial>();
+function getSharedAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMaterial {
+  let m = _sharedAtlasMaterialByTexture.get(atlasTexture);
+  if (!m) {
+    m = createAtlasMaterial(atlasTexture);
+    _sharedAtlasMaterialByTexture.set(atlasTexture, m);
+  }
+  return m;
+}
+
 interface InstancedAtlasBlockGroupProps {
   blocks: PlacedBlock[];
   blockDef: BlockType;
@@ -206,28 +222,15 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   const effectiveShowOwnershipOutlineRef = useRef(effectiveShowOwnershipOutline);
   effectiveShowOwnershipOutlineRef.current = effectiveShowOwnershipOutline;
 
-  // Create atlas material
+  // Use the shared per-texture material (compiled once, reused by every
+  // chunk) instead of one material per component. Do NOT dispose it here —
+  // it is shared; disposing on one chunk's unmount would break all others.
   const material = useMemo(() => {
-    if (materialRef.current) {
-      materialRef.current.dispose();
-    }
-
     if (!atlasTexture) return null;
-
-    const mat = createAtlasMaterial(atlasTexture);
+    const mat = getSharedAtlasMaterial(atlasTexture);
     materialRef.current = mat;
     return mat;
   }, [atlasTexture]);
-
-  // Cleanup material on unmount
-  useEffect(() => {
-    return () => {
-      if (materialRef.current) {
-        materialRef.current.dispose();
-        materialRef.current = null;
-      }
-    };
-  }, []);
 
   // Notify parent when mesh is ready (material gates mesh creation)
   useEffect(() => {

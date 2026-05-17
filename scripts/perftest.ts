@@ -391,10 +391,31 @@ async function main(): Promise<void> {
     });
     console.log('[perftest] D-Flow recording started.');
 
+    // CPU profile the measurement window only — opt-in (PERF_PROFILE=1),
+    // since the profiler itself adds overhead that skews KPI runs.
+    const cdp = process.env.PERF_PROFILE ? await context.newCDPSession(page) : null;
+    if (cdp) {
+      await cdp.send('Profiler.enable');
+      await cdp.send('Profiler.setSamplingInterval', { interval: 200 });
+      await cdp.send('Profiler.start');
+    }
+
     // Run movement phases (both use direct position control in god mode)
     // Start at angle=0: player at (spawn, spawn) heading outward from fortress
     const endAngle = await runCirclePhase(page, 'Phase 1: Ground level', GROUND_PHASE_SEC, 1.6, 0);
     await runCirclePhase(page, 'Phase 2: Aerial flight', GOD_PHASE_SEC, 50, endAngle);
+
+    if (cdp) {
+      try {
+        const { profile } = await cdp.send('Profiler.stop');
+        const cpuProfilePath = path.join(RESULTS_DIR, `cpuprofile-${new Date().toISOString().replace(/[:.]/g, '-')}.cpuprofile`);
+        ensureDir(RESULTS_DIR);
+        fs.writeFileSync(cpuProfilePath, JSON.stringify(profile));
+        console.log('[perftest] CPU profile written:', cpuProfilePath);
+      } catch (e) {
+        console.warn('[perftest] CPU profile capture failed:', (e as Error).message);
+      }
+    }
 
     // Extract results
     console.log('[perftest] Extracting D-Flow data...');
