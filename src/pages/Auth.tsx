@@ -17,7 +17,7 @@ export default function Auth() {
         backgroundRepeat: 'no-repeat',
       }}
     >
-      <style>{`@keyframes authBlackPulse{0%,100%{opacity:.85}50%{opacity:.70}}`}</style>
+      <style>{`@keyframes authBlackPulse{0%,100%{opacity:.80}50%{opacity:.60}}`}</style>
 
       {/* Black filter between background and content */}
       <div
