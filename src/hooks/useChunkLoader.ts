@@ -1131,12 +1131,13 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     try {
 
-    // Evict distant chunks before loading to make room for new ones
-    if (playerChunkRef.current) {
+    // Only evict when at/over the cap — prevents the load→evict→refetch
+    // oscillation (chunks evicted then immediately re-fetched every call).
+    if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS && playerChunkRef.current) {
       evictAfterLoadRef.current?.();
     }
 
-    // Guard: don't load if over chunk limit after eviction
+    // Guard: don't load if still over chunk limit after eviction
     if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) return;
 
     // Filter out already loaded chunks
