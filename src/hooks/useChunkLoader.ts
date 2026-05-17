@@ -4,7 +4,7 @@ import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { initLogStep, initLogStartStep, initLogFinishStep } from '@/contexts/InitializationContext';
+import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
