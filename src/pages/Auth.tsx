@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 
 // SSO-only login gate. Layers, back -> front:
 //  1. YouTube video (muted autoplay loop, full-bleed cover) — streamed in
-//     an iframe so it never blocks first paint; page renders immediately.
-//  2. Pulsing black scrim (80% <-> 60% / 10s).
-//  3. Background art, mix-blend-mode:screen so its black areas go
-//     transparent and the video shows through them.
+//     an iframe so it never blocks first paint.
+//  2. Background art, mix-blend-mode:screen (its black areas go transparent
+//     so the video shows through them).
+//  3. Pulsing black filter (60% <-> 75% / 10s) OVER the whole background and
+//     UNDER the logos — must sit above the screen-blend layer or it cancels.
 //  4. Content (logo / presents / LOGIN).
 // Email/password still exists in AuthContext (no UI) as a break-glass path.
 const YT_ID = 'roFE8vJHi-A';
@@ -20,7 +21,7 @@ export default function Auth() {
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-black">
-      <style>{`@keyframes authBlackPulse{0%,100%{opacity:.80}50%{opacity:.60}}`}</style>
+      <style>{`@keyframes authBlackPulse{0%,100%{opacity:.75}50%{opacity:.60}}`}</style>
 
       {/* 1. Streamed YouTube background, scaled to cover */}
       <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -41,13 +42,7 @@ export default function Auth() {
         />
       </div>
 
-      {/* 2. Pulsing black scrim over the video */}
-      <div
-        className="absolute inset-0 bg-black pointer-events-none"
-        style={{ animation: 'authBlackPulse 10s ease-in-out infinite' }}
-      />
-
-      {/* 3. Background art — screen blend turns its black transparent */}
+      {/* 2. Background art — screen blend turns its black transparent over video */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -58,6 +53,12 @@ export default function Auth() {
           opacity: 0.5,
           mixBlendMode: 'screen',
         }}
+      />
+
+      {/* 3. Pulsing black filter between background and logos (60% <-> 75%) */}
+      <div
+        className="absolute inset-0 bg-black pointer-events-none"
+        style={{ animation: 'authBlackPulse 10s ease-in-out infinite' }}
       />
 
       {/* 4. Content */}
