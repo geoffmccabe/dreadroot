@@ -1,47 +1,42 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 
-// SSO-only login gate. The fully-branded login (logo + side image + theme)
-// lives on the Lightningworks SSO page itself (set in the SSO admin panel,
-// integration-doc Step 4). This is just an in-game-styled hand-off screen.
-// Email/password still exists in AuthContext (no UI) as a break-glass path.
+// SSO-only login gate. Email/password still exists in AuthContext (no UI)
+// as a break-glass path. Branded artwork per Geoff's spec.
 export default function Auth() {
   const { signInWithSSO } = useAuth();
 
   return (
     <div
-      className="min-h-screen w-full flex items-center justify-center p-4 bg-cover bg-center"
+      className="min-h-screen w-full flex flex-col items-center justify-center gap-6 p-6"
       style={{
-        backgroundImage:
-          "linear-gradient(hsla(208,85%,6%,0.72), hsla(208,85%,6%,0.86)), url('/space_night_sky.webp')",
-        fontFamily: 'Inter, sans-serif',
+        backgroundImage: "url('/UserPanel_bkgd_2400px.webp')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
       }}
     >
-      <div
-        className="w-full max-w-md rounded-xl px-8 py-10 text-center shadow-2xl"
-        style={{
-          backgroundColor: 'hsla(211, 30%, 51%, 0.18)',
-          border: '1px solid hsla(211, 34%, 73%, 0.45)',
-          backdropFilter: 'blur(6px)',
-        }}
+      {/* Main banner: 80% width on mobile, 60% on desktop */}
+      <img
+        src="/Dreadroot_words_logo_horiz_2400px.webp"
+        alt="Dreadroot"
+        className="w-[80%] md:w-[60%] h-auto block"
+      />
+
+      {/* Presents: 55% width on mobile, 40% on desktop */}
+      <img
+        src="/lw+awc_presents_1600px.webp"
+        alt="Lightningworks + AWC presents"
+        className="w-[55%] md:w-[40%] h-auto block"
+      />
+
+      <Button
+        type="button"
+        onClick={signInWithSSO}
+        className="h-12 px-10 text-lg font-bold tracking-widest"
       >
-        <h1
-          className="mb-2 text-5xl font-extrabold tracking-[0.2em]"
-          style={{ color: 'hsl(211, 32%, 92%)', textShadow: '0 2px 18px hsla(211,80%,60%,0.5)' }}
-        >
-          DREADROOT
-        </h1>
-        <p className="mb-8 text-sm" style={{ color: 'hsl(211, 24%, 75%)' }}>
-          Sign in with your Lightningworks account to enter the world.
-        </p>
-        <Button
-          type="button"
-          className="w-full h-11 text-base font-semibold"
-          onClick={signInWithSSO}
-        >
-          Sign in with Lightningworks
-        </Button>
-      </div>
+        LOGIN
+      </Button>
     </div>
   );
 }
