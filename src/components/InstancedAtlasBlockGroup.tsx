@@ -70,6 +70,34 @@ function numPosKey(x: number, y: number, z: number): number {
 }
 
 // Threshold for auto-enabling performance mode
+// ── Cross-chunk frame-budgeted rebuild scheduler ──────────────────────────────
+// On region entry many chunks request a sync rebuild in the same few frames.
+// Run them per-instance-synchronously but spread ACROSS frames within a time
+// budget, so a burst can't stack into one 0.3–2.9s main-thread stall (it
+// becomes a brief progressive fill instead). Keyed per instance (latest wins).
+const _pendingRebuilds = new Map<object, () => void>();
+let _rebuildDriverScheduled = false;
+const REBUILD_FRAME_BUDGET_MS = 8;
+function _runRebuildDriver() {
+  _rebuildDriverScheduled = false;
+  const start = performance.now();
+  for (const [key, fn] of _pendingRebuilds) {
+    _pendingRebuilds.delete(key);
+    try { fn(); } catch { /* one bad chunk must not block the rest */ }
+    if (performance.now() - start >= REBUILD_FRAME_BUDGET_MS) break;
+  }
+  if (_pendingRebuilds.size > 0) _ensureRebuildDriver();
+}
+function _ensureRebuildDriver() {
+  if (_rebuildDriverScheduled) return;
+  _rebuildDriverScheduled = true;
+  requestAnimationFrame(_runRebuildDriver);
+}
+function scheduleSyncRebuild(key: object, fn: () => void) {
+  _pendingRebuilds.set(key, fn); // dedup per instance — newest data wins
+  _ensureRebuildDriver();
+}
+
 const AUTO_PERFORMANCE_MODE_THRESHOLD = 1000;
 
 // One shared material per atlas texture. Each material with onBeforeCompile
@@ -355,10 +383,16 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     lastRebuildTimeRef.current = performance.now();
     pendingRebuildRef.current = false;
 
-    // Sync rebuild for chunks under 2000 blocks (~4-6ms, within frame budget).
-    // Larger chunks (fungal trees) use budgeted RAF loop to prevent stalls.
+    // Chunks under 2000 blocks: still a full sync rebuild, but routed through
+    // the cross-chunk frame-budgeted scheduler so a burst of new chunks on
+    // region entry spreads over a few frames instead of one stacked stall.
+    // Re-reads refs at run time so it always rebuilds the latest data.
     if (currentBlocks.length < 2000) {
-      doRebuildSync(mesh, currentBlocks);
+      scheduleSyncRebuild(meshRef, () => {
+        const m = meshRef.current;
+        const b = blocksRef.current;
+        if (m && b.length > 0) doRebuildSync(m, b);
+      });
       return;
     }
 
