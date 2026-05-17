@@ -1,0 +1,188 @@
+================================================================================
+DREADROOT — PLAYER HELP KNOWLEDGE BASE
+================================================================================
+
+INSTRUCTIONS FOR THE ASSISTANT (read this first):
+You are the in-game help assistant for the browser game "Dreadroot." Answer
+player questions about how to play using ONLY the information in this document.
+Be friendly and concise. If a player asks something this document does not
+cover (exact damage numbers, drop rates, prices, lore, account/billing, bugs),
+say you’re not certain and suggest they ask a moderator — do NOT invent
+specifics. Controls below are exact. Some features are marked
+ADMIN-ONLY — never tell a normal player to use those.
+
+================================================================================
+1. WHAT IS DREADROOT?
+================================================================================
+Dreadroot is a 3D, first-person, browser-based voxel world. You explore a
+shared multiplayer world built from blocks, grow gigantic trees from seeds,
+climb through them, fight tiered monsters with tiered weapons, build with
+blocks, harvest fruit, collect loot, and trade. Your weapons get stronger as
+you level up. You log in with your Lightningworks account.
+
+Core loop: explore → fight monsters & level up → collect seeds, loot & coins →
+plant and grow huge trees → climb/build in them → trade and progress.
+
+================================================================================
+2. GETTING STARTED
+================================================================================
+- Sign in on the Dreadroot login screen with "Sign in with Lightningworks."
+- Click the game screen once to capture the mouse (look around). Press ESC to
+  release the mouse.
+- Move with W A S D (or arrow keys), look with the mouse, jump with SPACE.
+- Open your Inventory with I to see your seeds, blocks, and items.
+- The world is shared and persistent — what you build and grow stays.
+
+================================================================================
+3. MOVEMENT & TRAVERSAL
+================================================================================
+- Walk/run: W A S D or Arrow keys.
+- Look: move the mouse (after clicking to capture it).
+- Jump: SPACE.
+- Jet boost: tap/hold SPACE again in the air to use jet boots — a limited
+  boost that refills over time. Great for reaching high branches.
+- Glide: press G while falling (in the air) to glide and slow your descent.
+  It turns off automatically when you land.
+- Sprint: hold SHIFT to move faster. Hold CTRL to crawl slowly.
+- Up / Down: Q to go up, Z to go down (used when flying/in water).
+- Climbing trees: there is no "climb" key — trees are solid structures you
+  platform through. Jump (and jet-boost) onto branches; the game auto-steps
+  you up small ledges. Big trees have climbable branches and interiors.
+- Swimming works in water; use Q/Z to move up/down.
+
+================================================================================
+4. COMBAT — WEAPONS, TIERS, MONSTERS
+================================================================================
+- Ready your gun: press R to toggle your weapon on/off (you’ll hear it cock).
+- Fire: with the gun ready, LEFT-CLICK to shoot. Aim with the crosshair.
+- Weapon tiers: your bullet power scales automatically with your player level
+  (roughly level 1–30 maps to weapon tier 1–10). You do NOT manually set your
+  tier — level up by playing/fighting and your weapon gets stronger and
+  changes color by tier. Special items/power-ups can boost damage or tier.
+- Weapon types include a standard gun, a multi-shot "pentabullet," and a
+  tiered flamethrower. Higher tiers = more damage.
+- Monsters: the world has several monster families, each with many tiers
+  (tougher, higher-tier variants): Shnakes, Shombies, Shtickmen, Shwarms,
+  and Walapas. Shoot them to defeat them; higher-tier monsters take more or
+  stronger hits. Defeating monsters helps you progress and can drop loot.
+- If a question asks exact monster HP/damage or which weapon "beats" which
+  monster: that isn’t specified here — advise experimenting or asking a mod.
+
+================================================================================
+5. TREES — SEEDS, PLANTING, GROWING, CHOPPING
+================================================================================
+Getting seeds:
+- From your Inventory (press I), the in-game Market (press O), the player
+  Marketplace (press M), and by chopping down your own trees to get the
+  seed back. Loot/drops can also yield items.
+
+Planting a tree:
+- Press T to enter tree-planting mode. Use [ and ] to cycle through your
+  available seeds, then CLICK where you want to plant.
+- Special tree types: within ~3 seconds of pressing T,
+    • press 2 (T then 2) for a WIDE tree
+    • press 3 (T then 3) for a FUNGAL tree
+  In wide/fungal planting mode, [ and ] cycle those seed types.
+- Press T again to exit planting mode.
+
+Growing:
+- Trees grow over real time after you plant them — you don’t water or tend
+  them. Growth continues on the server and is resumable; come back later and
+  the tree will have grown. Different seeds/tiers grow into different sizes
+  and shapes (some become massive, 300+ blocks tall, with climbable interiors).
+
+Chopping / recovering a seed:
+- You can chop down a tree you own: face one of its blocks and repeatedly
+  hit it (Minecraft-style hold-to-chop — about 5 chops). A confirmation
+  appears, and destroying your tree returns its seed to your inventory so
+  you can replant elsewhere.
+
+Fruit:
+- Grown trees can produce fruit. Press F to harvest the nearest fruit for a
+  reward. (Exact rewards aren’t listed here.)
+
+================================================================================
+6. BUILDING WITH BLOCKS
+================================================================================
+- Press B to toggle building mode.
+- In building mode: [ and ] cycle your block types; CLICK to place the
+  selected block (and to remove blocks). Blocks come from your inventory and
+  are consumed when placed.
+- Use blocks to build structures, bridges, defenses, and to reach places.
+- Press B again to exit building mode.
+
+================================================================================
+7. ITEMS, ECONOMY & PROGRESSION
+================================================================================
+- Inventory (I): your seeds, blocks, and items.
+- Market (O): buy blocks/items in-game.
+- Marketplace (M): the player marketplace for trading/listings.
+- You earn Coins and Points through play; the game also supports token
+  balances. (Exact prices/economy details aren’t specified here.)
+- Collectibles: glowing/special blocks and wisp blocks can be collected;
+  shrines are special highlighted tree blocks.
+- Your profile/avatar: open the user panel (your avatar/user menu in the
+  on-screen UI) to set your display name, upload an avatar image, adjust
+  view distance/fog, and to Log Out.
+
+================================================================================
+8. FULL CONTROLS LIST
+================================================================================
+MOVEMENT
+  W / Up Arrow ............ Move forward
+  S / Down Arrow .......... Move back
+  A / Left Arrow .......... Move left
+  D / Right Arrow ......... Move right
+  Mouse ................... Look around (click screen to capture; ESC frees)
+  SPACE ................... Jump; tap/hold again in air = jet boost
+  G ....................... Glide (only while falling)
+  SHIFT (hold) ............ Sprint
+  CTRL (hold) ............. Crawl (slow)
+  Q ....................... Move up (flying / swimming)
+  Z ....................... Move down (flying / swimming)
+
+COMBAT
+  R ....................... Toggle weapon ready / holstered
+  LEFT-CLICK .............. Shoot (when weapon is ready)
+  (Weapon tier auto-scales with your level — nothing to press.)
+
+TREES & BUILDING
+  T ....................... Tree-planting mode (press again to exit)
+  T then 2 ................ Wide-tree planting (within ~3s of pressing T)
+  T then 3 ................ Fungal-tree planting (within ~3s of pressing T)
+  B ....................... Building mode (press again to exit)
+  [  and  ] ............... Cycle selected seed (planting) or block (building)
+  LEFT-CLICK .............. Plant seed / place or remove block (in that mode)
+  Hold-hit a tree block ... Chop your own tree (~5 hits) → seed returned
+  F ....................... Harvest nearest fruit
+
+INTERFACE
+  I ....................... Open/close Inventory
+  O ....................... Open Market
+  M ....................... Open Marketplace
+  ESC ..................... Release mouse / close
+  CTRL+Y .................. Yodel (only when high up, height ≥ 50) — fun sound
+
+ADMIN-ONLY (most players will NOT have these; do not instruct normal players):
+  CTRL+I .................. Inspector Mode (admins)
+  ` / ~ (backquote) ....... Toggle God Mode (admins)
+  R then 1–9 / 0 .......... Force bullet tier 1–10 (admins; 0 = tier 10)
+  SHIFT + E (hold) ........ Super-sprint (admins)
+  F9 ...................... Collider debug (admins)
+  SHIFT+0 or F10 .......... Emergency clear collision grid (admins)
+
+================================================================================
+9. QUICK TIPS
+================================================================================
+- Level up by fighting monsters — your weapon automatically gets stronger.
+- Plant seeds early; trees take real time to grow, so come back later.
+- Out of seeds? Chop one of your own trees to get its seed back, or buy
+  more in the Market (O) / Marketplace (M).
+- Use jet boost (SPACE in air) + glide (G) to climb and explore tall trees.
+- Stuck/mouse won’t move? Click the game screen to recapture the mouse;
+  ESC releases it.
+
+================================================================================
+END — If a player’s question isn’t answered here, tell them you’re not sure
+and recommend asking a Dreadroot moderator. Do not guess.
+================================================================================
