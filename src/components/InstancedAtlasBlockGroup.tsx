@@ -991,6 +991,10 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     // Detect mesh recreation (meshCapacity growth) - reset for full rebuild
     if (mesh !== lastMeshObjRef.current) {
       lastMeshObjRef.current = mesh;
+      // Instance matrix is re-uploaded on every rebuild; tell the driver it
+      // changes often (default STATIC_DRAW causes per-upload reallocation
+      // stalls — the bufferSubData spikes that show as long frames).
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       initialBuildDoneRef.current = false;
       positionIndexMapRef.current.clear();
       freeIndicesRef.current.length = 0;
