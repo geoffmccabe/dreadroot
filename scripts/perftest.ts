@@ -147,7 +147,9 @@ async function extractDFlow(page: Page): Promise<{
     d.toggle();
     d.print();
 
-    const METRICS = 52;
+    // MUST match diagnosticsLogger.ts METRICS (was 52 → mis-strided every
+    // sample, producing the corrupt 975272ms values). The app uses 58.
+    const METRICS = 58;
     const ticker = d.ticker;
     const samples: any[] = [];
 
