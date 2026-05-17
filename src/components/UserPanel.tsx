@@ -85,7 +85,7 @@ interface UserPanelProps {
 
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateDisplayName, updateAvatarUrl, updateVisualDistance, updateFogEnabled, refreshData, userRoles } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
   const { currentTheme } = useCoinTheme();
@@ -425,7 +425,17 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-sm font-medium">Email</Label>
-                    <div className="text-sm font-semibold">{user?.email || 'Not logged in'}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-semibold truncate">{user?.email || 'Not logged in'}</div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 shrink-0"
+                        onClick={signOut}
+                      >
+                        Log out
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
