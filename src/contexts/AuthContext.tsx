@@ -14,8 +14,14 @@ interface AuthContextType {
   isLoading: boolean;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signInWithSSO: () => void;
   signOut: () => Promise<void>;
 }
+
+// Lightningworks SSO base URL (override per-env via VITE_SSO_BASE_URL).
+const SSO_BASE_URL = (
+  (import.meta.env.VITE_SSO_BASE_URL as string | undefined) || 'https://sso.lightningworks.io'
+).replace(/\/$/, '');
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -128,13 +134,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Lightningworks SSO: hand off to the SSO login page. It returns to
+  // /auth/callback with the token in the URL fragment (handled by AuthCallback).
+  const signInWithSSO = () => {
+    const redirect = `${window.location.origin}/auth/callback`;
+    window.location.href =
+      `${SSO_BASE_URL}/login?app=dreadroot&redirect=${encodeURIComponent(redirect)}`;
+  };
+
   const signOut = async () => {
     // Force navigate to clear session page which will handle cleanup
     window.location.href = '/clear-session';
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, isLoading, signUp, signIn, signInWithSSO, signOut }}>
       {children}
     </AuthContext.Provider>
   );

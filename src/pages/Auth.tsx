@@ -17,7 +17,7 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithSSO } = useAuth();
   const navigate = useNavigate();
 
   const validateForm = () => {
@@ -93,6 +93,20 @@ export default function Auth() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            onClick={signInWithSSO}
+            disabled={isLoading}
+          >
+            Sign in with Lightningworks
+          </Button>
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or use email
+            <span className="h-px flex-1 bg-border" />
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

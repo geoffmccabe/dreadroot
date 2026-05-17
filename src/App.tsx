@@ -16,6 +16,7 @@ import { InitializationOverlay } from "@/components/InitializationOverlay";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ClearSession from "./pages/ClearSession";
+import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
 
 // Protected route wrapper
@@ -78,6 +79,9 @@ const App = () => (
                       <BrowserRouter>
                         <Routes>
                           <Route path="/clear-session" element={<ClearSession />} />
+                          {/* Public: SSO returns here with token in URL fragment.
+                              Must NOT be wrapped in Auth/ProtectedRoute. */}
+                          <Route path="/auth/callback" element={<AuthCallback />} />
                           <Route 
                             path="/" 
                             element={
