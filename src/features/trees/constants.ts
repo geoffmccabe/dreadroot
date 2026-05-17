@@ -21,8 +21,10 @@ export const TREE_CONFIG: {
   // Master toggle - set to false to disable trees entirely
   ENABLED: true,
   
-  // Testing mode - speeds up everything 100x
-  TESTING_MODE: true,
+  // Testing mode - speeds up everything (fruit spawn every 3.6s instead of
+  // hourly = O(trees x 100k-block blueprint) scan + a doomed tree_fruits
+  // insert every 3.6s). Off for any real/playable build.
+  TESTING_MODE: false,
   
   // Speed multipliers when TESTING_MODE is true
   SPEED_MULTIPLIER: 10000,
