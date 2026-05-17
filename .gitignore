@@ -28,3 +28,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# perftest auth/session state — never commit
+.perftest/
+perftest-results/

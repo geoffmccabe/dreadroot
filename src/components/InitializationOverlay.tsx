@@ -80,6 +80,16 @@ export function InitializationOverlay() {
     }
   }, [isInitializing, dismissOverlay]);
 
+  // Test-only (gated on ?perftest — no production effect): expose readiness
+  // for the perf harness and auto-dismiss the overlay, since headless
+  // automation cannot click "Ready to Play".
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!new URLSearchParams(window.location.search).has('perftest')) return;
+    (window as any).__perfTestReady = !isInitializing;
+    if (!isInitializing && isOverlayVisible) dismissOverlay();
+  }, [isInitializing, isOverlayVisible, dismissOverlay]);
+
   if (!isOverlayVisible) return null;
 
   const displayTime = isInitializing ? (elapsedMs / 1000).toFixed(1) : totalDurationSecs.toFixed(1);
