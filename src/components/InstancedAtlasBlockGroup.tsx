@@ -633,6 +633,10 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       }
       highWaterMarkRef.current = blocks.length;
       initialBuildDoneRef.current = true;
+      // Per-chunk bounds are valid now — safe to frustum-cull this mesh so
+      // off-screen tree chunks stop costing a draw call. (Culling is off
+      // pre-build because the default unit-cube bounds mis-cull tall trees.)
+      mesh.frustumCulled = true;
 
       // D-Flow: Record rebuild time
       diagnostics.recordMeshRebuild(performance.now() - state.startTime, blocks.length);
@@ -795,6 +799,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     }
     highWaterMarkRef.current = currentBlocks.length;
     initialBuildDoneRef.current = true;
+    // Per-chunk bounds are valid now — safe to frustum-cull (see budgeted path).
+    mesh.frustumCulled = true;
 
     // D-Flow: Record rebuild time
     diagnostics.recordMeshRebuild(performance.now() - rebuildT0, currentBlocks.length);
@@ -1331,7 +1337,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     <instancedMesh
       ref={meshRef}
       args={[geometry, material, meshCapacity]}
-      frustumCulled={false} // Disabled: tall trees have bounding spheres that get culled incorrectly when player is close
+      frustumCulled={false} // Initial only — flipped to true after the first rebuild sets valid per-chunk bounds (pre-build bounds mis-cull tall trees)
       castShadow
       receiveShadow
     />
