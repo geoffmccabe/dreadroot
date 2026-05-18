@@ -23,7 +23,6 @@ const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
 const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
-const COLLIDER_REMOVAL_BATCH = 200;   // Colliders to remove per frame during unload
 const COLLIDER_CREATION_BATCH = 200;  // Colliders to create per frame during load
 
 // B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
@@ -630,19 +629,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(key);
 
         if (chunkData && chunkData.blocks.length > 0) {
-          // B3: Enqueue budgeted job to remove colliders
-          const blocks = chunkData.blocks;
-          let idx = 0;
-
-          enqueueJob(`evict-colliders:${key}`, () => {
-            const end = Math.min(idx + COLLIDER_REMOVAL_BATCH, blocks.length);
-
-            for (; idx < end; idx++) {
-              removeBlockCollider(blocks[idx]);
-            }
-
-            return idx >= blocks.length;
-          });
+          // Synchronous removal: budgeted removal "can't keep pace" with
+          // loading, leaving orphaned colliders that balloon the grid + heap.
+          // Removing the surface set (exactly what got colliders) is bounded
+          // and fast (O(1-4 cells) each); the full-list fallback is a safe
+          // no-op for blocks that never had a collider.
+          const evictBlocks = chunkData.visibleBlocks?.length
+            ? chunkData.visibleBlocks
+            : chunkData.blocks;
+          for (let i = 0; i < evictBlocks.length; i++) {
+            removeBlockCollider(evictBlocks[i]);
+          }
         }
       }
       // Use batched emit
@@ -1036,17 +1033,26 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
 
+        // Surface-only set for BOTH collision and rendering. Interior tree
+        // blocks are unreachable, so they need neither. computeSurfaceVisibleBlocks
+        // keeps every user-placed block, every chunk-edge block, and any tree
+        // block with an exposed face (incl. the inner walls of navigable tree
+        // interiors) — so physics/builds are unaffected. Colliding only this
+        // set is what stops complete trees exploding the grid ~30x. Computed
+        // once here, reused for visibleBlocks below.
+        const surfaceBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, chunkBlocks);
+
         // Sync colliders for player's chunk + immediate neighbors (distance ≤ 1)
         // so physics/collision works when walking into adjacent chunks.
         // Cap at 2000 blocks to avoid massive stalls on huge fungal tree chunks.
         // Distance 2+ always goes through budgeted queue.
         const chunkDist = Math.max(Math.abs(dx), Math.abs(dz));
-        if (chunkDist <= 1 && chunkBlocks.length <= 2000) {
-          for (const block of chunkBlocks) {
+        if (chunkDist <= 1 && surfaceBlocks.length <= 2000) {
+          for (const block of surfaceBlocks) {
             ensureBlockCollider(block);
           }
-        } else if (chunkBlocks.length > 0) {
-          const blocksForColliders = chunkBlocks;
+        } else if (surfaceBlocks.length > 0) {
+          const blocksForColliders = surfaceBlocks;
           let colliderIdx = 0;
           enqueueJob(`load-colliders:${chunkKey}`, () => {
             const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
@@ -1067,7 +1073,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-')),
           signature: newSig
         };
-        newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, chunkBlocks);
+        newChunkData.visibleBlocks = surfaceBlocks;
         loadedChunksRef.current.set(chunkKey, newChunkData);
         // B4: Update world signature for new chunk
         applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
@@ -1287,15 +1293,18 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       // Deterministic sort to prevent reorder churn
       sortBlocksDeterministic(blocks);
+      // Surface-only set for collision + rendering (see canonical note in the
+      // server-load path). Computed once, reused for visibleBlocks below.
+      const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, blocks);
       // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
       const pChunk = playerChunkRef.current;
       const cDist = pChunk ? Math.max(Math.abs(x - pChunk.x), Math.abs(z - pChunk.z)) : 0;
-      if (cDist <= 2 || blocks.length < 200) {
-        for (const block of blocks) {
+      if (cDist <= 2 || surfaceBlocks.length < 200) {
+        for (const block of surfaceBlocks) {
           ensureBlockCollider(block);
         }
-      } else if (blocks.length > 0) {
-        const blocksForColliders = blocks;
+      } else if (surfaceBlocks.length > 0) {
+        const blocksForColliders = surfaceBlocks;
         let colliderIdx = 0;
         enqueueJob(`load-colliders:${chunkKey}`, () => {
           const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
@@ -1314,7 +1323,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         hasOptimisticBlocks: blocks.some(b => b.id.startsWith('temp-')),
         signature: newSig
       };
-      newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(x, z, blocks);
+      newChunkData.visibleBlocks = surfaceBlocks;
       loadedChunksRef.current.set(chunkKey, newChunkData);
       // B4: Update world signature for new chunk
       applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
@@ -1527,15 +1536,19 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // Deterministic sort to prevent reorder churn
         sortBlocksDeterministic(chunkBlocks);
 
+        // Surface-only set for collision + rendering (see canonical note in
+        // the server-load path). Computed once, reused for visibleBlocks below.
+        const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, chunkBlocks);
+
         // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
         const pChunkS = playerChunkRef.current;
         const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : 0;
-        if (sDist <= 1 && chunkBlocks.length <= 2000) {
-          for (const block of chunkBlocks) {
+        if (sDist <= 1 && surfaceBlocks.length <= 2000) {
+          for (const block of surfaceBlocks) {
             ensureBlockCollider(block);
           }
-        } else if (chunkBlocks.length > 0) {
-          const blocksForColliders = chunkBlocks;
+        } else if (surfaceBlocks.length > 0) {
+          const blocksForColliders = surfaceBlocks;
           let colliderIdx = 0;
           enqueueJob(`load-colliders:${chunkKey}`, () => {
             const end = Math.min(colliderIdx + COLLIDER_CREATION_BATCH, blocksForColliders.length);
@@ -1563,7 +1576,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           hasOptimisticBlocks: chunkBlocks.some(b => b.id.startsWith('temp-')),
           signature: newSig
         };
-        newChunkData.visibleBlocks = computeSurfaceVisibleBlocks(x, z, chunkBlocks);
+        newChunkData.visibleBlocks = surfaceBlocks;
         loadedChunksRef.current.set(chunkKey, newChunkData);
         // B4: Update world signature for new chunk from server
         applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
@@ -2150,17 +2163,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(chunkKey);
         removedAny = true;
 
-        // Budget only the collider removal (the expensive part)
+        // Synchronous removal (see eviction note): bounded + fast on the
+        // surface set, prevents orphaned colliders accumulating in the grid.
         if (chunkData.blocks.length > 0) {
-          const blocks = chunkData.blocks;
-          let idx = 0;
-          enqueueJob(`unload-colliders:${chunkKey}`, () => {
-            const end = Math.min(idx + COLLIDER_REMOVAL_BATCH, blocks.length);
-            for (; idx < end; idx++) {
-              removeBlockCollider(blocks[idx]);
-            }
-            return idx >= blocks.length;
-          });
+          const unloadBlocks = chunkData.visibleBlocks?.length
+            ? chunkData.visibleBlocks
+            : chunkData.blocks;
+          for (let i = 0; i < unloadBlocks.length; i++) {
+            removeBlockCollider(unloadBlocks[i]);
+          }
         }
       }
     }
