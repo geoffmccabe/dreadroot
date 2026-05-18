@@ -74,8 +74,23 @@ Deno.serve(async (req) => {
 
   // 3. Find-or-create the DreadRoot auth user BY EMAIL (1:1 mapping —
   //    existing accounts keep their world; new SSO users auto-provision).
+  //    This runs on EVERY login, so "user already exists" is the NORMAL
+  //    case and must never 500. We also don't hard-fail on other createUser
+  //    problems: step 4's generateLink(magiclink) creates a missing user
+  //    anyway, so generateLink is the only legitimate login blocker.
+  //    (Detect "exists" by status/code/message — supabase-js error shapes
+  //    vary by version; the old single-regex check was the bug.)
+  const looksLikeUserExists = (
+    msg?: string | null,
+    code?: string | null,
+    status?: number | null,
+  ): boolean =>
+    status === 422 ||
+    code === 'email_exists' ||
+    (!!msg && /already.*(regist|been|exist)|email.*exist|exists/i.test(msg))
+
   try {
-    const created = await admin.auth.admin.createUser({
+    const { error } = await admin.auth.admin.createUser({
       email,
       email_confirm: true,
       user_metadata: {
@@ -84,12 +99,19 @@ Deno.serve(async (req) => {
         display_name: profile.display_name ?? null,
       },
     })
-    // "already registered" => the user (and their world) already exists. Fine.
-    if (created.error && !/already.*regist|already.*been/i.test(created.error.message)) {
-      return json({ error: `User provisioning failed: ${created.error.message}` }, 500)
+    if (
+      error &&
+      !looksLikeUserExists(error.message, (error as { code?: string }).code, (error as { status?: number }).status)
+    ) {
+      // Unexpected — but generateLink below creates the user if missing,
+      // so log and continue rather than block a legitimate login.
+      console.warn('[sso-exchange] createUser non-fatal error:', error.message)
     }
   } catch (e) {
-    return json({ error: `User provisioning error: ${(e as Error).message}` }, 500)
+    const err = e as { message?: string; code?: string; status?: number }
+    if (!looksLikeUserExists(err.message, err.code, err.status)) {
+      console.warn('[sso-exchange] createUser threw (non-fatal):', err.message)
+    }
   }
 
   // 4. Mint a real DreadRoot session: generate a magiclink and return its
