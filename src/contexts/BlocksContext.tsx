@@ -50,9 +50,13 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   const { profile } = useUserData();
   const { currentWorldId, currentWorld, worlds, setCurrentWorldId, navigateWorld, worldIndex } = useCurrentWorldId();
   // B5: Pass visual_distance as emitRadius to reduce flatten scope and GC pressure
-  // loadRadius = visualDistance + 2 extra rings for fade chunks (grey depth silhouettes)
+  // loadRadius = visualDistance + N extra rings (preload buffer for fade chunks).
+  // Lowered 3->1: with COMPLETE trees each retained chunk is ~30x heavier, and
+  // load=visualDist+3 kept ~225 chunks resident (most never rendered) -> the
+  // 650MB-1GB heap + GC churn that now caps FPS. Render/emit distance is
+  // unchanged; this only shrinks the loaded-but-unrendered retain ring.
   const visualDistanceForEmit = profile?.visual_distance || 4;
-  const FADE_EXTRA_CHUNKS = 3;
+  const FADE_EXTRA_CHUNKS = 1;
   const blocksHook = usePlacedBlocksWithCache(user?.id || null, currentWorldId, visualDistanceForEmit, visualDistanceForEmit + FADE_EXTRA_CHUNKS);
   
   // Visible chunks ref - updated imperatively by CameraTrackedBlocks, read by InstancedBlockGroup
