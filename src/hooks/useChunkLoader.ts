@@ -24,6 +24,7 @@ const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
 const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
 const COLLIDER_CREATION_BATCH = 200;  // Colliders to create per frame during load
+const SYNC_COLLIDER_CAP = 350;        // Max blocks colliderized synchronously on chunk load; bigger chunks (complete trees) go through the budgeted queue — prevents multi-second freezes when trees stream in while moving
 
 // B4: Disable prefetch to isolate stutter sources - re-enable with frame budget later
 const PREFETCH_ENABLED = false;
@@ -1042,12 +1043,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // once here, reused for visibleBlocks below.
         const surfaceBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, chunkBlocks);
 
-        // Sync colliders for player's chunk + immediate neighbors (distance ≤ 1)
-        // so physics/collision works when walking into adjacent chunks.
-        // Cap at 2000 blocks to avoid massive stalls on huge fungal tree chunks.
-        // Distance 2+ always goes through budgeted queue.
-        const chunkDist = Math.max(Math.abs(dx), Math.abs(dz));
-        if (chunkDist <= 1 && surfaceBlocks.length <= 2000) {
+        // Only SMALL chunks get synchronous colliders (instant ground, ~ms).
+        // Bigger chunks (complete trees) go through the budgeted queue —
+        // mass-sync creation of a big tree's colliders in one frame was the
+        // multi-second freeze when streaming in while moving.
+        if (surfaceBlocks.length <= SYNC_COLLIDER_CAP) {
           for (const block of surfaceBlocks) {
             ensureBlockCollider(block);
           }
@@ -1296,10 +1296,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // Surface-only set for collision + rendering (see canonical note in the
       // server-load path). Computed once, reused for visibleBlocks below.
       const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, blocks);
-      // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
-      const pChunk = playerChunkRef.current;
-      const cDist = pChunk ? Math.max(Math.abs(x - pChunk.x), Math.abs(z - pChunk.z)) : 0;
-      if (cDist <= 2 || surfaceBlocks.length < 200) {
+      // Small chunks sync (instant ground); big chunks → budgeted queue
+      // (mass-sync collider creation on big trees = the freeze).
+      if (surfaceBlocks.length <= SYNC_COLLIDER_CAP) {
         for (const block of surfaceBlocks) {
           ensureBlockCollider(block);
         }
@@ -1540,10 +1539,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // the server-load path). Computed once, reused for visibleBlocks below.
         const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, chunkBlocks);
 
-        // Nearby chunks: sync colliders for gravity. Distant: defer to budgeted queue.
-        const pChunkS = playerChunkRef.current;
-        const sDist = pChunkS ? Math.max(Math.abs(x - pChunkS.x), Math.abs(z - pChunkS.z)) : 0;
-        if (sDist <= 1 && surfaceBlocks.length <= 2000) {
+        // Small chunks sync (instant ground); big chunks → budgeted queue
+        // (mass-sync collider creation on big trees = the freeze).
+        if (surfaceBlocks.length <= SYNC_COLLIDER_CAP) {
           for (const block of surfaceBlocks) {
             ensureBlockCollider(block);
           }
