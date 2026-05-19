@@ -351,6 +351,8 @@ CHUNK RENDERING
   GlobalFlatten:    ${extra.globalFlattenMsTotal.toFixed(1)}ms
   Grouping:         ${extra.groupCacheMissesTotal} misses (${extra.groupMsTotal.toFixed(1)}ms for ${extra.groupBlocksTotal} blocks)
   MeshRebuilds:     ${extra.meshRebuildCountTotal} (${extra.meshRebuildMsTotal.toFixed(1)}ms for ${extra.meshRebuildBlocksTotal} blocks)
+  Incremental:      ${extra.incrementalCountTotal ?? 0} (${(extra.incrementalMsTotal ?? 0).toFixed(1)}ms for ${extra.incrementalBlocksTotal ?? 0} blocks)
+  WorkerApply:      ${extra.workerApplyCountTotal ?? 0} (${(extra.workerApplyMsTotal ?? 0).toFixed(1)}ms for ${extra.workerApplyBlocksTotal ?? 0} blocks), fallbacks: ${extra.workerFallbackCountTotal ?? 0}
   MeshInstances:    ${extra.meshInstanceTotal}
   GPU Texture Mem:  ${extra.gpuTextureMemMB.toFixed(1)}MB`;
 

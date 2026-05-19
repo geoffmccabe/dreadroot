@@ -32,16 +32,17 @@ import { shrineTracker } from '@/lib/shrineTracker';
 import { meshWorkerPool } from '@/lib/meshWorker/meshWorkerPool';
 import { packChunkBlocks } from '@/lib/meshWorker/blockPack';
 
-// #2 Phase 2a: off-thread mesh build — DEFAULT ON (2026-May-19).
-// Heavy tree-chunk mesh builds run in a Web Worker via the SAME shared
-// resolveBlockDraw the sync path uses, so output is parity-identical by
-// construction (line-by-line audit + headless smoke: 97 real chunks
-// applied, 0 fallbacks, 0 worker errors). Any error/timeout/supersede
-// silently falls back to the existing budgeted sync rebuild — the
-// fallback IS the regression guard, no flag theater needed. If a real
-// visual issue ever surfaces, set WORKER_MESH_ENABLED=false (or
-// `window.__WORKER_MESH = false` then reload) for an instant revert.
-const WORKER_MESH_ENABLED = true;
+// #2 Phase 2a: off-thread mesh build — TEMPORARILY OFF (2026-May-19).
+// First real-world DF report after enabling showed a regression: 16.5fps
+// avg, 1720ms max frame, 9103ms in long tasks / 15s. Root cause: the
+// worker BUILDS off-thread but the APPLY (Float32Array copies, attribute
+// updates, posMap rebuild) runs all-at-once on the main thread, whereas
+// the pre-#2 sync path BUDGETED that work across many frames at 2ms each.
+// We traded many small stutters for fewer big ones. Reverting until the
+// apply is itself budgeted (chunked across frames) OR limited to small
+// chunks. Diagnostics now record real apply ms (no more 0ms lies),
+// fallback count, and incremental vs full rebuild separately.
+const WORKER_MESH_ENABLED = false;
 
 // Shared geometry for all block instances
 const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
@@ -522,6 +523,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
           if (settled) return;
           settled = true;
           clearPending();
+          diagnostics.recordWorkerFallback();
           const w = window as { __workerMeshFallbacks?: number };
           w.__workerMeshFallbacks = (w.__workerMeshFallbacks ?? 0) + 1;
           if (rebuildVersionRef.current === myVersion && meshRef.current) startBudgeted();
@@ -534,6 +536,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             clearTimeout(to);
             clearPending();
             if (rebuildVersionRef.current !== myVersion) return; // superseded
+            const applyT0 = performance.now();
             const m = meshRef.current;
             if (!m) return; // unmounted
             const n = res.blockCount;
@@ -596,7 +599,11 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             lastShrineGlowState.current = false;
             initialBuildDoneRef.current = true;
             m.frustumCulled = true;
-            diagnostics.recordMeshRebuild(0, n); // ~0ms main-thread (off-thread)
+            // Real main-thread apply cost (matrix copy + attr update +
+            // posMap rebuild + bounds recompute). Earlier we recorded
+            // 0ms here, which hid the regression that motivated rolling
+            // the flag back. Now separated from sync MeshRebuilds.
+            diagnostics.recordWorkerApply(performance.now() - applyT0, n);
             const w = window as { __workerMeshApplies?: number };
             w.__workerMeshApplies = (w.__workerMeshApplies ?? 0) + 1;
           })
@@ -605,6 +612,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             settled = true;
             clearTimeout(to);
             clearPending();
+            diagnostics.recordWorkerFallback();
             const w = window as { __workerMeshFallbacks?: number };
             w.__workerMeshFallbacks = (w.__workerMeshFallbacks ?? 0) + 1;
             startBudgeted();
@@ -1176,7 +1184,9 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     mesh.count = highWaterMarkRef.current;
 
     // D-Flow: Record rebuild with changed count (not total) to show delta efficiency
-    diagnostics.recordMeshRebuild(performance.now() - t0, changedCount);
+    // Incremental delta update — separated from full MeshRebuilds so DF
+    // reports show the full-vs-delta ratio honestly.
+    diagnostics.recordIncremental(performance.now() - t0, changedCount);
   }, [meshCapacity, doRebuild]);
 
   // Update instance matrices and UV offsets when blocks change

@@ -131,6 +131,19 @@ class DiagnosticsLogger {
   private meshRebuildMs = 0;
   private meshRebuildBlocks = 0;
 
+  // === Off-thread worker-apply diagnostics (real main-thread time spent
+  // copying worker results into the live mesh; previously hidden as 0). ===
+  private workerApplyCount = 0;
+  private workerApplyMs = 0;
+  private workerApplyBlocks = 0;
+  private workerFallbackCount = 0;
+
+  // === Incremental update diagnostics (delta path — separated from full
+  // rebuilds so we can see how often the cheap path runs vs the heavy one). ===
+  private incrementalCount = 0;
+  private incrementalMs = 0;
+  private incrementalBlocks = 0;
+
   // === Chunk rendering diagnostics (Phase 0) ===
   private chunkRenderCount = 0;      // ChunkRenderer components currently mounted
   private chunkRebuildCount = 0;     // chunks that re-rendered this sample interval
@@ -171,6 +184,15 @@ class DiagnosticsLogger {
   private meshRebuildCountTotal = 0;
   private meshRebuildMsTotal = 0;
   private meshRebuildBlocksTotal = 0;
+
+  private workerApplyCountTotal = 0;
+  private workerApplyMsTotal = 0;
+  private workerApplyBlocksTotal = 0;
+  private workerFallbackCountTotal = 0;
+
+  private incrementalCountTotal = 0;
+  private incrementalMsTotal = 0;
+  private incrementalBlocksTotal = 0;
 
   // === Frame time analysis ===
   private frameTimes = new Float32Array(100);
@@ -273,6 +295,29 @@ class DiagnosticsLogger {
     this.meshRebuildBlocks += blockCount;
   }
 
+  // Real main-thread time of an off-thread worker result being applied to
+  // the live mesh (matrix copy + uv/color attribute update + posMap rebuild).
+  recordWorkerApply(ms: number, blockCount: number): void {
+    if (!this.enabled) return;
+    this.workerApplyCount++;
+    this.workerApplyMs += ms;
+    this.workerApplyBlocks += blockCount;
+  }
+
+  recordWorkerFallback(): void {
+    if (!this.enabled) return;
+    this.workerFallbackCount++;
+  }
+
+  // Incremental delta updates (cheap path) — was previously conflated with
+  // full rebuilds under recordMeshRebuild, hiding the full-vs-delta ratio.
+  recordIncremental(ms: number, blockCount: number): void {
+    if (!this.enabled) return;
+    this.incrementalCount++;
+    this.incrementalMs += ms;
+    this.incrementalBlocks += blockCount;
+  }
+
   // === Chunk rendering diagnostics (Phase 0) ===
   setChunkRenderCount(count: number): void {
     if (!this.enabled) return;
@@ -327,6 +372,15 @@ class DiagnosticsLogger {
       meshRebuildCountTotal: this.meshRebuildCountTotal,
       meshRebuildMsTotal: this.meshRebuildMsTotal,
       meshRebuildBlocksTotal: this.meshRebuildBlocksTotal,
+
+      workerApplyCountTotal: this.workerApplyCountTotal,
+      workerApplyMsTotal: this.workerApplyMsTotal,
+      workerApplyBlocksTotal: this.workerApplyBlocksTotal,
+      workerFallbackCountTotal: this.workerFallbackCountTotal,
+
+      incrementalCountTotal: this.incrementalCountTotal,
+      incrementalMsTotal: this.incrementalMsTotal,
+      incrementalBlocksTotal: this.incrementalBlocksTotal,
     };
   }
 
@@ -455,6 +509,13 @@ class DiagnosticsLogger {
       this.meshRebuildCountTotal = 0;
       this.meshRebuildMsTotal = 0;
       this.meshRebuildBlocksTotal = 0;
+      this.workerApplyCountTotal = 0;
+      this.workerApplyMsTotal = 0;
+      this.workerApplyBlocksTotal = 0;
+      this.workerFallbackCountTotal = 0;
+      this.incrementalCountTotal = 0;
+      this.incrementalMsTotal = 0;
+      this.incrementalBlocksTotal = 0;
 
       // Reset chunk rendering diagnostics
       this.chunkRenderCount = 0;
@@ -643,6 +704,15 @@ class DiagnosticsLogger {
     this.meshRebuildMsTotal += this.meshRebuildMs;
     this.meshRebuildBlocksTotal += this.meshRebuildBlocks;
 
+    this.workerApplyCountTotal += this.workerApplyCount;
+    this.workerApplyMsTotal += this.workerApplyMs;
+    this.workerApplyBlocksTotal += this.workerApplyBlocks;
+    this.workerFallbackCountTotal += this.workerFallbackCount;
+
+    this.incrementalCountTotal += this.incrementalCount;
+    this.incrementalMsTotal += this.incrementalMs;
+    this.incrementalBlocksTotal += this.incrementalBlocks;
+
     // Reset per-sample
     this.longTaskCount = 0;
     this.longTaskMs = 0;
@@ -671,6 +741,15 @@ class DiagnosticsLogger {
     this.meshRebuildCount = 0;
     this.meshRebuildMs = 0;
     this.meshRebuildBlocks = 0;
+
+    this.workerApplyCount = 0;
+    this.workerApplyMs = 0;
+    this.workerApplyBlocks = 0;
+    this.workerFallbackCount = 0;
+
+    this.incrementalCount = 0;
+    this.incrementalMs = 0;
+    this.incrementalBlocks = 0;
 
     // Chunk rendering diagnostics
     this.chunkRenderCountTotal = this.chunkRenderCount; // snapshot, not accumulated
