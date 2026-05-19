@@ -311,8 +311,17 @@ export const useUserData = () => {
   useEffect(() => {
     if (!user?.id || !currentTheme?.id) return;
 
+    // Unique channel name per effect run. supabase.channel() resolves a
+    // channel by topic name; removeChannel() is async, so when this effect
+    // re-runs (user id + theme settling right after sign-in, or re-auth)
+    // the previous, still-subscribing channel was returned and .on() after
+    // subscribe() threw "cannot add postgres_changes callbacks ... after
+    // subscribe()" — an UNCAUGHT error that white-screened the whole app
+    // on login. A fresh name each run can never collide with a channel
+    // whose async teardown is still in flight.
+    const channelName = `user-data-changes-${user.id}-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel('user-data-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
