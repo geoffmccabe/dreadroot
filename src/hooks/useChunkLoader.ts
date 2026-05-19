@@ -15,14 +15,19 @@ import * as THREE from 'three';
 // Configuration for chunk loading
 // LOAD_RADIUS is now dynamic — derived from loadRadius prop (defaults to 4)
 const DEFAULT_LOAD_RADIUS = 4;
-// Hysteresis for chunk unloading - prevents thrashing when walking near boundaries.
-// Since LOAD_RADIUS already includes fade chunks (visual_distance + 3), we only need
-// minimal hysteresis. Previously 4, which caused orphaned colliders beyond render distance.
-const UNLOAD_HYSTERESIS = 1;
+// Hysteresis for chunk unloading — prevents the load<->evict oscillation near
+// boundaries. Was 1: only kept minimal because the OLD per-block Box3 collider
+// model orphaned colliders in a wide ring (a memory problem). The voxel-field
+// collision makes retained colliders ~free, while hysteresis=1 caused a severe
+// thrash (474 unloads on a 2-chunk move) — and every unload bumps worldRevision
+// which re-meshes ALL rendered chunks (the ~9s MeshRebuild stalls). Widening it
+// keeps the near ring stable across small moves; the obsolete orphan concern
+// no longer applies.
+const UNLOAD_HYSTERESIS = 3;
 const POSITION_UPDATE_THROTTLE = 200; // ms between position updates
 
 // Budgeted unload configuration - prevents GC storms at chunk boundaries
-const MIN_RESIDENCY_MS = 8000;        // Don't unload chunks loaded less than 8s ago
+const MIN_RESIDENCY_MS = 20000;       // Don't unload chunks loaded <20s ago — kills the load->evict->reload thrash on micro-moves (was 8000)
 const COLLIDER_CREATION_BATCH = 200;  // Colliders to create per frame during load
 const SYNC_COLLIDER_CAP = 350;        // Max blocks colliderized synchronously on chunk load; bigger chunks (complete trees) go through the budgeted queue — prevents multi-second freezes when trees stream in while moving
 
