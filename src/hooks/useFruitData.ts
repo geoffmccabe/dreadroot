@@ -77,7 +77,7 @@ export function useFruitData(userId: string | null): UseFruitDataResult {
     if (!userId) return;
 
     const channel = supabase
-      .channel(`user_fruits_${userId}`)
+      .channel(`user_fruits_${userId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

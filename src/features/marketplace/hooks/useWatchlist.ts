@@ -69,7 +69,7 @@ export function useWatchlist(userId: string | null): UseWatchlistReturn {
     if (!userId) return;
 
     const channel = supabase
-      .channel(`watchlist_${userId}`)
+      .channel(`watchlist_${userId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

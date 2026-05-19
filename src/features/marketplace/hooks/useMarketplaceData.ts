@@ -184,7 +184,7 @@ export function useMarketplaceData(options: UseMarketplaceDataOptions = {}): Use
   // Subscribe to realtime updates
   useEffect(() => {
     const channel = supabase
-      .channel('marketplace_listings_changes')
+      .channel(`marketplace_listings_changes-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

@@ -171,7 +171,7 @@ export function usePlayerHealth() {
     if (!user?.id) return;
     
     const channel = supabase
-      .channel('player-health-changes')
+      .channel(`player-health-changes-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

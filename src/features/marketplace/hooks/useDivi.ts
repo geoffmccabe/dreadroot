@@ -74,7 +74,7 @@ export function useDivi(userId: string | null): UseDiviReturn {
     if (!userId) return;
 
     const channel = supabase
-      .channel(`divi_balance_${userId}`)
+      .channel(`divi_balance_${userId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

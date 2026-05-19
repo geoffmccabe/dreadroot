@@ -272,7 +272,7 @@ export function useTreeData(
 
     // Subscribe to tree_fruits changes
     const fruitsChannel = supabase
-      .channel(`tree_fruits_${worldId}`)
+      .channel(`tree_fruits_${worldId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {
@@ -298,7 +298,7 @@ export function useTreeData(
     // Subscribe to planted_trees changes
     // Only care about trees becoming fully grown or being deleted
     const treesChannel = supabase
-      .channel(`planted_trees_${worldId}`)
+      .channel(`planted_trees_${worldId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {
@@ -361,7 +361,7 @@ export function useTreeData(
     if (!TREE_CONFIG.ENABLED) return;
 
     const seedsChannel = supabase
-      .channel('seed_definitions_global')
+      .channel(`seed_definitions_global-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

@@ -60,7 +60,7 @@ export function useStore(userId: string | null): UseStoreReturn {
     if (!userId) return;
 
     const channel = supabase
-      .channel(`store_${userId}`)
+      .channel(`store_${userId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

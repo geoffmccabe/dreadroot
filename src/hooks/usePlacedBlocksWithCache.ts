@@ -289,7 +289,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     // Phase 2C: Subscribe to chunk_versions instead of placed_blocks
     // This is more efficient as we only get notified per-chunk, not per-block
     const channel = supabase
-      .channel(`chunk_versions_${worldId}`)
+      .channel(`chunk_versions_${worldId}-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {

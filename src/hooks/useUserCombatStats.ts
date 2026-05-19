@@ -169,7 +169,7 @@ export function useUserCombatStats() {
 
     // Subscribe to real-time updates
     const channel = supabase
-      .channel('combat-stats-changes')
+      .channel(`combat-stats-changes-${Math.random().toString(36).slice(2)}`)
       .on(
         'postgres_changes',
         {
