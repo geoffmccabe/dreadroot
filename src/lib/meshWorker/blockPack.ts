@@ -1,14 +1,8 @@
-// #2 Phase 2a — Step 1 (isolated, NOT wired into rendering yet).
-//
-// Packs a chunk's blocks into transferable typed arrays so the mesh build
-// can be moved to a worker WITHOUT the structured-clone GC cost that got
-// the worker abandoned. Parity with the main-thread sync rebuild
-// (InstancedAtlasBlockGroup.doRebuildSync) is guaranteed BY CONSTRUCTION:
-// per distinct block_type we precompute uv/anim here using the SAME
-// canonical functions the sync path uses, and the worker only does
-// arithmetic + table lookups (it never re-derives atlas logic). The
-// `resolveBlockDraw` reference below is exactly what the worker will
-// reproduce in Step 2, and is the self-audit contract for Step 1.
+// #2 Phase 2a — main-thread packer. Uses the canonical atlas helpers to bake
+// uv/anim/color into a tiny per-build table + transferable typed arrays, so
+// the worker (which imports the SAME resolveBlockDraw from ./blockPackShared)
+// produces byte-identical output to InstancedAtlasBlockGroup.doRebuildSync.
+// NOT wired into rendering yet (Step 4).
 
 import type { PlacedBlock } from '@/types/blocks';
 import {
@@ -16,37 +10,21 @@ import {
   getTreeBlockAnimationInfo,
   getAnimatedUVOffset,
 } from '@/hooks/useTextureAtlas';
+import {
+  BRANCH_DEPTH_NONE,
+  type DrawTableEntry,
+  type PackedChunk,
+  resolveBlockDraw,
+} from './blockPackShared';
 
-/** Int8 sentinel meaning "block has no branch_depth" (undefined/null). */
-export const BRANCH_DEPTH_NONE = 127;
-
-export interface DrawTableEntry {
-  uvOffsetX: number;
-  uvOffsetY: number;
-  /** 1 when static; >1 identifies an animated texture. */
-  animFrameCount: number;
-  animFrameDelayMs: number;
-  /** -1 when static. */
-  animBaseSlotIndex: number;
-  /** block_type starts with "gb" (glow-bark fixed bright color). */
-  isGlowBark: boolean;
-}
-
-export interface PackedChunk {
-  /** n*3 ints: block min-corner (the worker adds +0.5 for the cube center). */
-  positions: Int32Array;
-  /** n: index into `table`. */
-  typeIndex: Uint16Array;
-  /** n: branch_depth, or BRANCH_DEPTH_NONE. */
-  branchDepth: Int8Array;
-  /** Small (~#distinct block types) — cloned, not transferred. */
-  table: DrawTableEntry[];
-  count: number;
-}
+// Re-export so existing/import sites can use one entry point.
+export { BRANCH_DEPTH_NONE, resolveBlockDraw };
+export type { DrawTableEntry, PackedChunk };
 
 /**
  * Pure. Main-thread only (uses the atlas helpers). Produces transferables
- * (positions/typeIndex/branchDepth .buffer) + a tiny per-build draw table.
+ * (positions/typeIndex/branchDepth .buffer) + a tiny per-build draw table
+ * computed with the SAME canonical fns the sync rebuild uses.
  */
 export function packChunkBlocks(blocks: PlacedBlock[]): PackedChunk {
   const n = blocks.length;
@@ -89,6 +67,8 @@ export function packChunkBlocks(blocks: PlacedBlock[]): PackedChunk {
 
       const bt = b.block_type;
       const isGlowBark = bt.charCodeAt(0) === 103 && bt.charCodeAt(1) === 98; // 'gb'
+      const isShrine =
+        bt.charCodeAt(0) === 115 && bt.charCodeAt(1) === 104 && bt.charCodeAt(2) === 114; // 'shr'
       table.push({
         uvOffsetX,
         uvOffsetY,
@@ -96,6 +76,7 @@ export function packChunkBlocks(blocks: PlacedBlock[]): PackedChunk {
         animFrameDelayMs,
         animBaseSlotIndex,
         isGlowBark,
+        isShrine,
       });
     }
     typeIndex[i] = idx;
@@ -108,43 +89,4 @@ export function packChunkBlocks(blocks: PlacedBlock[]): PackedChunk {
   }
 
   return { positions, typeIndex, branchDepth, table, count: n };
-}
-
-/**
- * Reference resolver = EXACTLY what the sync rebuild computes per block
- * (position center, atlas uv, branch-depth/glow-bark color). The worker
- * in Step 2 must reproduce this byte-for-byte. Kept here so Step 1 is
- * self-auditable in isolation.
- */
-export function resolveBlockDraw(
-  pk: PackedChunk,
-  i: number,
-): { cx: number; cy: number; cz: number; uvX: number; uvY: number; r: number; g: number; b: number } {
-  const e = pk.table[pk.typeIndex[i]];
-  let r = 1;
-  let g = 1;
-  let bcol = 1;
-  if (e.isGlowBark) {
-    r = 1.4;
-    g = 2.0;
-    bcol = 1.5;
-  } else {
-    const d = pk.branchDepth[i];
-    if (d !== BRANCH_DEPTH_NONE) {
-      const lf = 1.0 + Math.max(0, d + 1) * 0.12;
-      r = lf;
-      g = lf;
-      bcol = lf;
-    }
-  }
-  return {
-    cx: pk.positions[i * 3] + 0.5,
-    cy: pk.positions[i * 3 + 1] + 0.5,
-    cz: pk.positions[i * 3 + 2] + 0.5,
-    uvX: e.uvOffsetX,
-    uvY: e.uvOffsetY,
-    r,
-    g,
-    b: bcol,
-  };
 }

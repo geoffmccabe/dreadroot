@@ -1,45 +1,31 @@
 /**
- * Shared types for mesh worker messages.
- * Used by both main thread (pool) and worker thread.
+ * Shared types for mesh worker messages. Used by main thread (pool) and
+ * the worker. Transport is now PACKED TRANSFERABLES (no structured-clone
+ * of block-object arrays — that's what got the worker abandoned). The tiny
+ * per-build draw table travels with each job so the worker needs no
+ * atlas/UV-table sync (it runs the same resolveBlockDraw).
  */
 
-// Minimal block data sent to worker (no unused fields)
-export interface WorkerBlock {
-  position_x: number;
-  position_y: number;
-  position_z: number;
-  block_type: string;
-  branch_depth?: number;
-}
-
-// UV lookup entry (serialized from main thread's cache)
-export interface UVEntry {
-  uvOffsetX: number;
-  uvOffsetY: number;
-}
-
-// Animation info entry
-export interface AnimEntry {
-  frameCount: number;
-  frameDelayMs: number;
-  baseSlotIndex: number;
-}
+import type { DrawTableEntry } from './blockPackShared';
 
 // ---- Messages: Main → Worker ----
 
+/** Handshake only — worker replies 'ready'. No payload needed anymore. */
 export interface InitMessage {
   type: 'init';
-  uvTable: Record<string, UVEntry>;         // block_type → UV offset
-  animTable: Record<string, AnimEntry>;     // block_type → animation info
-  atlasGridSize: number;                     // 32
 }
 
 export interface BuildMeshMessage {
   type: 'buildMesh';
   jobId: number;
   chunkKey: string;
-  blocks: WorkerBlock[];
-  priority: number;  // lower = higher priority (distance to player)
+  priority: number; // lower = higher priority (distance to player)
+  count: number;
+  // Transferred (zero-copy): ownership moves to the worker.
+  positions: Int32Array; // count*3 block min-corner
+  typeIndex: Uint16Array; // count -> index into table
+  branchDepth: Int8Array; // count, or BRANCH_DEPTH_NONE
+  table: DrawTableEntry[]; // small, structured-cloned (cheap)
 }
 
 export interface CancelMessage {
@@ -47,13 +33,7 @@ export interface CancelMessage {
   jobId: number;
 }
 
-export interface UpdateUVTableMessage {
-  type: 'updateUVTable';
-  uvTable: Record<string, UVEntry>;
-  animTable: Record<string, AnimEntry>;
-}
-
-export type MainToWorkerMessage = InitMessage | BuildMeshMessage | CancelMessage | UpdateUVTableMessage;
+export type MainToWorkerMessage = InitMessage | BuildMeshMessage | CancelMessage;
 
 // ---- Messages: Worker → Main ----
 
@@ -61,16 +41,19 @@ export interface MeshResultMessage {
   type: 'meshResult';
   jobId: number;
   chunkKey: string;
-  // Transferable Float32Arrays (zero-copy)
-  positions: Float32Array;    // 3 floats per block (x+0.5, y+0.5, z+0.5)
-  uvOffsets: Float32Array;    // 2 floats per block (uvOffsetX, uvOffsetY)
-  colors: Float32Array;       // 3 floats per block (r, g, b)
+  // Transferable Float32Arrays (zero-copy back to main thread).
+  matrices: Float32Array; // count*16 translation matrices (column-major)
+  uvOffsets: Float32Array; // count*2 (uvOffsetX, uvOffsetY)
+  colors: Float32Array; // count*3 (r, g, b)
   blockCount: number;
-  // Bounding box
   boundsMin: [number, number, number];
   boundsMax: [number, number, number];
-  // Special blocks
-  animatedBlocks: Array<{ blockIndex: number; frameCount: number; frameDelayMs: number; baseSlotIndex: number }>;
+  animatedBlocks: Array<{
+    blockIndex: number;
+    frameCount: number;
+    frameDelayMs: number;
+    baseSlotIndex: number;
+  }>;
   shrineBlocks: Array<{ index: number; x: number; y: number; z: number }>;
   hasBranchDepth: boolean;
 }
