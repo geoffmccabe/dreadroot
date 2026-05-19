@@ -372,6 +372,13 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     startTime: number;
   } | null>(null);
   const rebuildVersionRef = useRef(0);
+  // #2: build-version of an in-flight off-thread worker job (0 = none).
+  // While set, the blocks-change effect must route to a full doRebuild
+  // (which bumps rebuildVersionRef → cleanly supersedes the stale job)
+  // instead of doIncrementalUpdate, which does NOT bump the version and
+  // would desync posMap vs the matrices the worker is about to apply.
+  // Stays 0 forever when WORKER_MESH is OFF → zero behavior change.
+  const workerPendingVersionRef = useRef(0);
 
   // Queued rebuild: when a budgeted rebuild is in progress and new blocks arrive,
   // we DON'T cancel the current rebuild (which causes flickering from stale data
@@ -495,13 +502,23 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       }
       if (meshWorkerPool.isInitialized) {
         const myVersion = ++rebuildVersionRef.current;
+        workerPendingVersionRef.current = myVersion;
         const packed = packChunkBlocks(currentBlocks);
         let settled = false;
+        // Clear the pending token iff WE are still the awaited job. A newer
+        // doRebuild overwrites it with its own version, so a superseded
+        // job won't reopen the incremental gate out from under the new one.
+        const clearPending = () => {
+          if (workerPendingVersionRef.current === myVersion) {
+            workerPendingVersionRef.current = 0;
+          }
+        };
         // Main-side timeout: the pool drops stale jobs without rejecting,
         // so guarantee a sync fallback if the worker never responds.
         const to = setTimeout(() => {
           if (settled) return;
           settled = true;
+          clearPending();
           const w = window as { __workerMeshFallbacks?: number };
           w.__workerMeshFallbacks = (w.__workerMeshFallbacks ?? 0) + 1;
           if (rebuildVersionRef.current === myVersion && meshRef.current) startBudgeted();
@@ -512,6 +529,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             if (settled) return;
             settled = true;
             clearTimeout(to);
+            clearPending();
             if (rebuildVersionRef.current !== myVersion) return; // superseded
             const m = meshRef.current;
             if (!m) return; // unmounted
@@ -557,7 +575,11 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             const posMap = positionIndexMapRef.current;
             posMap.clear();
             freeIndicesRef.current.length = 0;
-            const cb = blocksRef.current;
+            // MUST be the SAME array the worker meshed (packChunkBlocks’
+            // currentBlocks snapshot), not blocksRef.current — otherwise
+            // posMap maps newer blocks onto stale matrix indices. Mirrors
+            // doRebuildSync, which builds posMap from its own snapshot.
+            const cb = currentBlocks;
             for (let i = 0; i < n && i < cb.length; i++) {
               const b = cb[i];
               posMap.set(numPosKey(b.position_x, b.position_y, b.position_z), {
@@ -579,6 +601,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             if (settled) return;
             settled = true;
             clearTimeout(to);
+            clearPending();
             const w = window as { __workerMeshFallbacks?: number };
             w.__workerMeshFallbacks = (w.__workerMeshFallbacks ?? 0) + 1;
             startBudgeted();
@@ -1220,7 +1243,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     // between incremental writes to GPU attributes and budgeted staging buffers).
     const canIncremental = initialBuildDoneRef.current
       && rebuildRafRef.current === null
-      && rebuildStateRef.current === null;
+      && rebuildStateRef.current === null
+      && workerPendingVersionRef.current === 0; // #2: don't incremental over a pending off-thread apply
 
     if (canIncremental) {
       // Throttle incremental updates — each one is O(N) for all blocks,

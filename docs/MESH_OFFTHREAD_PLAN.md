@@ -92,6 +92,22 @@ blocks (5× harder); only revisit if a real DF shows 2a insufficient.
   same-world GPU framebuffer diff; streaming is non-deterministic)
   — so the FINAL gate is the user's visual confirmation. Per
   "never regress without permission," the default is NOT flipped.
+- Post-wire self-audit (found + fixed 2 ON-path-only bugs the smoke
+  cannot catch — no crash, renders fine, but misaligned indices):
+  1. Worker `.then` rebuilt `posMap` from `blocksRef.current`
+     instead of the `currentBlocks` snapshot the worker actually
+     meshed → posMap could map newer blocks onto stale matrix
+     indices. Now uses `currentBlocks` (mirrors doRebuildSync).
+  2. `canIncremental` gated only on rebuildRaf/rebuildState (neither
+     set by the worker path); a small blocks delta in the
+     submit→.then window could run doIncrementalUpdate (which does
+     NOT bump rebuildVersionRef) under a pending worker apply →
+     desync. Added `workerPendingVersionRef` token: while a worker
+     job is in flight the effect routes to a (throttled, off-thread)
+     full doRebuild that cleanly supersedes it. Token is
+     version-scoped so a superseded job can't reopen the gate.
+  Both are zero-effect when WORKER_MESH is OFF (token stays 0).
+  Re-smoke after fix: PASS (applies=97, fallbacks=0, errors NONE).
 - Step 5 (enable): BLOCKED on user. Mechanics + construction proven;
   default stays OFF until the user enables and visually + DF-confirms.
 
