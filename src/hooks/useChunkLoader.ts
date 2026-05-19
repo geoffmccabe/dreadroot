@@ -753,26 +753,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           branch_depth: newBlock.branch_depth ?? (oldBlock as any).branch_depth,
         };
         
-        // Transfer the collider reference from old block to new block
-        // The collider is already in the grid, we just need to maintain the reference
-        const oldCollider = (oldBlock as any).__collider as THREE.Box3 | undefined;
-        if (oldCollider) {
-          (preservedBlock as any).__collider = oldCollider;
-          
-          // CRITICAL FIX: Re-key the collider cache when block ID changes (temp -> real)
-          // This prevents orphan colliders when temp-* IDs are replaced with server IDs
-          if (oldBlock.id !== preservedBlock.id) {
-            const cached = colliderByBlockId.get(oldBlock.id);
-            if (cached === oldCollider) {
-              colliderByBlockId.delete(oldBlock.id);
-            }
-            colliderByBlockId.set(preservedBlock.id, oldCollider);
-          }
-          
-          // Clear old block's reference to prevent double-removal
-          (oldBlock as any).__collider = null;
-        }
-        
+        // Collision is a position-keyed voxel field now — a block that
+        // persists at the same position keeps its voxel automatically
+        // (idempotent add), so there is no per-block collider to transfer.
+
         // Phase 1: Create new array reference so React.memo detects the change per-chunk
         const newBlocks = [...chunkData.blocks];
         newBlocks[index] = preservedBlock;
@@ -2275,7 +2259,6 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const prevGridSize = worldCollisionGrid.size;
     clearPendingJobs();
     worldCollisionGrid.clear();
-    colliderByBlockId.clear();
     loadedChunksRef.current.clear();
     // chunksInFlightRef no longer used for dedup (caused chunks to get stuck)
     clearAllHeightMaps();
@@ -2414,10 +2397,6 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // This prevents the grid from accumulating 400K+ orphan colliders over time.
     worldCollisionGrid.clear();
 
-    // Clear the canonical collider cache (must be done AFTER grid clear since the
-    // collisionGridCleared event also clears this, but we do it explicitly for safety)
-    colliderByBlockId.clear();
-
     loadedChunksRef.current.clear();
     clearAllHeightMaps();
     playerChunkRef.current = null;
@@ -2515,13 +2494,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (typeof window === 'undefined') return;
 
     const onGridCleared = () => {
-      // CRITICAL: Clear the collider cache FIRST - old collider refs are now invalid
-      // This prevents "collider.min.set is not a function" errors
-      colliderByBlockId.clear();
-      
-      // Reinsert colliders for all loaded blocks (O(n) but only on rare clear events)
+      // Grid (incl. its voxel field) was wiped — re-add the voxel for every
+      // loaded block. Use the surface set (same as the load path) so a clear
+      // doesn't re-bloat collision with buried interior blocks.
       for (const chunkData of loadedChunksRef.current.values()) {
-        for (const block of chunkData.blocks) {
+        const blocks = chunkData.visibleBlocks?.length
+          ? chunkData.visibleBlocks
+          : chunkData.blocks;
+        for (const block of blocks) {
           ensureBlockCollider(block);
         }
       }
