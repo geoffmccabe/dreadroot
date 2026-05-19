@@ -49,20 +49,34 @@ export default function AuthCallback() {
     })();
   }, [navigate]);
 
+  const arialBlack = {
+    fontFamily: '"Arial Black", "Arial Bold", Gadget, Arial, sans-serif',
+    fontWeight: 900 as const,
+    color: '#ffffff',
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 text-center">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-8 p-6 text-center bg-black">
+      <img
+        src="/Dreadroot_words_logo_horiz_2400px.webp"
+        alt="Dreadroot"
+        className="w-[80%] max-w-md h-auto block"
+      />
       {error ? (
-        <div className="space-y-3">
-          <p className="text-destructive">{error}</p>
+        <div className="space-y-4">
+          <p style={arialBlack} className="text-base">{error}</p>
           <button
-            className="text-primary hover:underline"
+            style={arialBlack}
+            className="underline text-base"
             onClick={() => navigate('/auth', { replace: true })}
           >
             Back to sign in
           </button>
         </div>
       ) : (
-        <p className="text-muted-foreground">Signing you in…</p>
+        <p style={arialBlack} className="text-xl tracking-wide">
+          Logging you in…
+        </p>
       )}
     </div>
   );
