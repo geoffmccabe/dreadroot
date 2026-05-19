@@ -992,6 +992,8 @@ class DiagnosticsLogger {
     lines.push(`Colliders: +${this.colliderAddsTotal} -${this.colliderRemovesTotal} (${this.colliderMsTotal.toFixed(1)}ms)`);
     lines.push(`Grouping: ${this.groupCacheHitsTotal} hits, ${this.groupCacheMissesTotal} misses (${this.groupMsTotal.toFixed(1)}ms for ${this.groupBlocksTotal} blocks)`);
     lines.push(`MeshRebuild: ${this.meshRebuildCountTotal} rebuilds (${this.meshRebuildMsTotal.toFixed(1)}ms for ${this.meshRebuildBlocksTotal} blocks)`);
+    lines.push(`Incremental: ${this.incrementalCountTotal} (${this.incrementalMsTotal.toFixed(1)}ms for ${this.incrementalBlocksTotal} blocks)`);
+    lines.push(`WorkerApply: ${this.workerApplyCountTotal} (${this.workerApplyMsTotal.toFixed(1)}ms for ${this.workerApplyBlocksTotal} blocks), fallbacks: ${this.workerFallbackCountTotal}`);
     lines.push('');
     lines.push('--- Chunk Pipeline (current) ---');
     lines.push(`Player Chunk: (${this.playerChunkX}, ${this.playerChunkZ})`);
@@ -1001,6 +1003,8 @@ class DiagnosticsLogger {
     lines.push(`Chunks In Flight: ${this.chunksInFlight}`);
     lines.push(`ChunkRebuilds: ${this.chunkRebuildCountTotal} (${this.chunkRebuildMsTotal.toFixed(1)}ms)`);
     lines.push(`MeshRebuild: ${this.meshRebuildCountTotal} (${this.meshRebuildMsTotal.toFixed(1)}ms for ${this.meshRebuildBlocksTotal} blocks)`);
+    lines.push(`Incremental: ${this.incrementalCountTotal} (${this.incrementalMsTotal.toFixed(1)}ms for ${this.incrementalBlocksTotal} blocks)`);
+    lines.push(`WorkerApply: ${this.workerApplyCountTotal} (${this.workerApplyMsTotal.toFixed(1)}ms for ${this.workerApplyBlocksTotal} blocks), fallbacks: ${this.workerFallbackCountTotal}`);
     lines.push(`GPU Texture Mem: ${this.gpuTextureMemMB.toFixed(1)}MB`);
 
     this.lastOutput = lines.join('\n');
