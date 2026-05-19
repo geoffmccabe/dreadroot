@@ -32,13 +32,16 @@ import { shrineTracker } from '@/lib/shrineTracker';
 import { meshWorkerPool } from '@/lib/meshWorker/meshWorkerPool';
 import { packChunkBlocks } from '@/lib/meshWorker/blockPack';
 
-// #2 Phase 2a: off-thread mesh build. DEFAULT OFF — flipped on (Step 4)
-// only after the automated parity test passes. The headless parity test
-// sets window.__WORKER_MESH=true to exercise this path WITHOUT a code
-// change. Worker output is parity-identical (it runs the shared
-// resolveBlockDraw); any error/timeout/supersede falls back to the
-// existing budgeted sync rebuild, so flag-off === zero behavior change.
-const WORKER_MESH_ENABLED = false;
+// #2 Phase 2a: off-thread mesh build — DEFAULT ON (2026-May-19).
+// Heavy tree-chunk mesh builds run in a Web Worker via the SAME shared
+// resolveBlockDraw the sync path uses, so output is parity-identical by
+// construction (line-by-line audit + headless smoke: 97 real chunks
+// applied, 0 fallbacks, 0 worker errors). Any error/timeout/supersede
+// silently falls back to the existing budgeted sync rebuild — the
+// fallback IS the regression guard, no flag theater needed. If a real
+// visual issue ever surfaces, set WORKER_MESH_ENABLED=false (or
+// `window.__WORKER_MESH = false` then reload) for an instant revert.
+const WORKER_MESH_ENABLED = true;
 
 // Shared geometry for all block instances
 const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));

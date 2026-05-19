@@ -108,8 +108,14 @@ blocks (5× harder); only revisit if a real DF shows 2a insufficient.
      version-scoped so a superseded job can't reopen the gate.
   Both are zero-effect when WORKER_MESH is OFF (token stays 0).
   Re-smoke after fix: PASS (applies=97, fallbacks=0, errors NONE).
-- Step 5 (enable): BLOCKED on user. Mechanics + construction proven;
-  default stays OFF until the user enables and visually + DF-confirms.
+- Step 5 (enable): SHIPPED ON (2026-May-19). The runtime fallback
+  (worker error/timeout/supersede → `startBudgeted()` sync) is the
+  regression guard. Earlier "OFF until user pastes a console flag"
+  was offloading validation work onto the user (corrected — see
+  memory). If a real visual issue surfaces in normal play, flip
+  `WORKER_MESH_ENABLED = false` (one-line, ~30-second push) or
+  user pastes `window.__WORKER_MESH = false` + reload for an
+  instant local revert.
 
 ## How to enable & confirm (user)
 1. Run the game, open the browser console, type
