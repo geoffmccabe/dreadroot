@@ -173,13 +173,13 @@ export function CameraTrackedBlocks({
   // PERF: Cache entry objects per chunk key. Only create a new entry when the blocks
   // ref changes. This prevents ChunkRenderer React.memo from being busted by
   // worldRevision/renderTrigger changes that don't actually change chunk data.
-  const entryCacheRef = useRef<Map<string, { key: string; blocks: PlacedBlock[] }>>(new Map());
+  const entryCacheRef = useRef<Map<string, { key: string; blocks: PlacedBlock[]; sig?: string }>>(new Map());
 
   // One-time diagnostic for chunk exclusions
   const chunkExclusionLogRef = useRef(false);
 
   const { normalEntries, fadeEntries } = useMemo(() => {
-    const normal: { key: string; blocks: PlacedBlock[] }[] = [];
+    const normal: { key: string; blocks: PlacedBlock[]; sig?: string }[] = [];
     const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
     const ref = loadedChunksRef?.current;
     const cache = entryCacheRef.current;
@@ -220,9 +220,25 @@ export function CameraTrackedBlocks({
         const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
 
         if (chunkDist <= visualDistance) {
-          // Reuse cached entry if blocks ref is the same — prevents ChunkRenderer re-render
+          // Reuse the cached entry (keeping its OLD blocks ref) when the
+          // chunk's CONTENT signature is unchanged, even if the
+          // visibleBlocks/blocks array ref rotated (refetch / surface
+          // recompute). Same old ref => ChunkRenderer.memo skips =>
+          // no regroup, no mesh rebuild for chunks that didn't change.
+          // This was the 0%-grouping-cache / ~10s MeshRebuild stall: refs
+          // rotated far more often than block content actually changed.
+          const sig = chunkData.signature
+            ? `${chunkData.signature.count}:${chunkData.signature.xor}:${chunkData.signature.sum}`
+            : '';
           const cached = cache.get(chunkKey);
-          const entry = (cached && cached.blocks === blocks) ? cached : { key: chunkKey, blocks };
+          let entry: { key: string; blocks: PlacedBlock[]; sig?: string };
+          if (cached && cached.blocks === blocks) {
+            entry = cached;
+          } else if (cached && sig !== '' && cached.sig === sig) {
+            entry = cached; // ref changed but content identical — keep old
+          } else {
+            entry = { key: chunkKey, blocks, sig };
+          }
           cache.set(chunkKey, entry);
           activeKeys.add(chunkKey);
           normal.push(entry);
