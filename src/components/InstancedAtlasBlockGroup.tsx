@@ -29,8 +29,16 @@ import {
 } from '@/hooks/useTextureAtlas';
 import { playerTracker } from '@/lib/playerTracker';
 import { shrineTracker } from '@/lib/shrineTracker';
-// Web Worker mesh pool available for future use when data transfer is optimized
-// import { meshWorkerPool } from '@/lib/meshWorker/meshWorkerPool';
+import { meshWorkerPool } from '@/lib/meshWorker/meshWorkerPool';
+import { packChunkBlocks } from '@/lib/meshWorker/blockPack';
+
+// #2 Phase 2a: off-thread mesh build. DEFAULT OFF — flipped on (Step 4)
+// only after the automated parity test passes. The headless parity test
+// sets window.__WORKER_MESH=true to exercise this path WITHOUT a code
+// change. Worker output is parity-identical (it runs the shared
+// resolveBlockDraw); any error/timeout/supersede falls back to the
+// existing budgeted sync rebuild, so flag-off === zero behavior change.
+const WORKER_MESH_ENABLED = false;
 
 // Shared geometry for all block instances
 const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
@@ -409,68 +417,171 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
       return;
     }
 
-    // Fallback: budgeted RAF loop for chunks too large for sync
-    // B9: For large block counts, use budgeted work to spread across frames
-    const version = ++rebuildVersionRef.current;
+    // Existing budgeted RAF rebuild, verbatim, extracted so it can be both
+    // the default path AND the off-thread fallback. With WORKER_MESH off
+    // this is the ONLY path that runs — identical behavior to before.
+    const startBudgeted = () => {
+      // B9: For large block counts, use budgeted work to spread across frames
+      const version = ++rebuildVersionRef.current;
 
-    // Initialize rebuild state
-    const requiredUvSize = meshCapacity * 2;
-    const requiredColorSize = meshCapacity * 3;
+      // Initialize rebuild state
+      const requiredUvSize = meshCapacity * 2;
+      const requiredColorSize = meshCapacity * 3;
 
-    // Save previous mesh.count so we don't render uninitialized indices during rebuild
-    const prevCount = mesh.count;
+      // Save previous mesh.count so we don't render uninitialized indices during rebuild
+      const prevCount = mesh.count;
 
-    rebuildStateRef.current = {
-      blocks: currentBlocks,
-      idx: 0,
-      version,
-      prevCount,
-      uvOffsetData: uvBufferRef.current?.length >= requiredUvSize
-        ? uvBufferRef.current
-        : new Float32Array(requiredUvSize),
-      colorData: colorBufferRef.current?.length >= requiredColorSize
-        ? colorBufferRef.current
-        : new Float32Array(requiredColorSize),
-      animatedBlocks: [],
-      shrineBlocks: [],
-      hasBranchDepth: false,
-      minX: Infinity, minY: Infinity, minZ: Infinity,
-      maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity,
-      startTime: performance.now()
-    };
+      rebuildStateRef.current = {
+        blocks: currentBlocks,
+        idx: 0,
+        version,
+        prevCount,
+        uvOffsetData: uvBufferRef.current?.length >= requiredUvSize
+          ? uvBufferRef.current
+          : new Float32Array(requiredUvSize),
+        colorData: colorBufferRef.current?.length >= requiredColorSize
+          ? colorBufferRef.current
+          : new Float32Array(requiredColorSize),
+        animatedBlocks: [],
+        shrineBlocks: [],
+        hasBranchDepth: false,
+        minX: Infinity, minY: Infinity, minZ: Infinity,
+        maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity,
+        startTime: performance.now()
+      };
 
-    // Update buffer refs
-    uvBufferRef.current = rebuildStateRef.current.uvOffsetData;
-    colorBufferRef.current = rebuildStateRef.current.colorData;
+      // Update buffer refs
+      uvBufferRef.current = rebuildStateRef.current.uvOffsetData;
+      colorBufferRef.current = rebuildStateRef.current.colorData;
 
-    // CRITICAL: Use dedicated RAF loop instead of enqueueJob.
-    // The budgeted work queue is FIFO and shared with collider removal jobs.
-    // Using a separate RAF loop guarantees the rebuild runs independently.
-    //
-    // Time-limited: process multiple batches per frame within 6ms budget.
-    const REBUILD_BUDGET_MS = 6;
-    const runBatch = () => {
-      const frameStart = performance.now();
-      while (performance.now() - frameStart < REBUILD_BUDGET_MS) {
-        const done = processBudgetedRebuild(mesh);
-        if (done) {
-          rebuildRafRef.current = null;
-          // If a rebuild was queued while this one ran, start it now.
-          // Track the RAF so any new requests during the gap still queue properly.
-          if (rebuildQueuedRef.current) {
-            rebuildQueuedRef.current = false;
-            rebuildRafRef.current = requestAnimationFrame(() => {
-              rebuildRafRef.current = null;
-              rebuildStateRef.current = null;
-              doRebuild();
-            });
+      // CRITICAL: Use dedicated RAF loop instead of enqueueJob.
+      // The budgeted work queue is FIFO and shared with collider removal jobs.
+      // Using a separate RAF loop guarantees the rebuild runs independently.
+      //
+      // Time-limited: process multiple batches per frame within 6ms budget.
+      const REBUILD_BUDGET_MS = 6;
+      const runBatch = () => {
+        const frameStart = performance.now();
+        while (performance.now() - frameStart < REBUILD_BUDGET_MS) {
+          const done = processBudgetedRebuild(mesh);
+          if (done) {
+            rebuildRafRef.current = null;
+            // If a rebuild was queued while this one ran, start it now.
+            // Track the RAF so any new requests during the gap still queue properly.
+            if (rebuildQueuedRef.current) {
+              rebuildQueuedRef.current = false;
+              rebuildRafRef.current = requestAnimationFrame(() => {
+                rebuildRafRef.current = null;
+                rebuildStateRef.current = null;
+                doRebuild();
+              });
+            }
+            return;
           }
-          return;
         }
-      }
+        rebuildRafRef.current = requestAnimationFrame(runBatch);
+      };
       rebuildRafRef.current = requestAnimationFrame(runBatch);
     };
-    rebuildRafRef.current = requestAnimationFrame(runBatch);
+
+    const workerOn =
+      WORKER_MESH_ENABLED ||
+      (typeof window !== 'undefined' &&
+        (window as { __WORKER_MESH?: boolean }).__WORKER_MESH === true);
+
+    if (workerOn) {
+      if (!meshWorkerPool.isInitialized) {
+        try { meshWorkerPool.init(); } catch { /* fall through to sync */ }
+      }
+      if (meshWorkerPool.isInitialized) {
+        const myVersion = ++rebuildVersionRef.current;
+        const packed = packChunkBlocks(currentBlocks);
+        let settled = false;
+        // Main-side timeout: the pool drops stale jobs without rejecting,
+        // so guarantee a sync fallback if the worker never responds.
+        const to = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          if (rebuildVersionRef.current === myVersion && meshRef.current) startBudgeted();
+        }, 8000);
+        meshWorkerPool
+          .buildMesh('atlas', packed, 0)
+          .then((res) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(to);
+            if (rebuildVersionRef.current !== myVersion) return; // superseded
+            const m = meshRef.current;
+            if (!m) return; // unmounted
+            const n = res.blockCount;
+            if (n > meshCapacity) { startBudgeted(); return; } // sync handles growth
+
+            // Apply atomically — mirrors processBudgetedRebuild's finalize.
+            (m.instanceMatrix.array as Float32Array).set(res.matrices.subarray(0, n * 16));
+            m.instanceMatrix.needsUpdate = true;
+
+            if (uvOffsetAttrRef.current && uvOffsetAttrRef.current.count >= meshCapacity) {
+              (uvOffsetAttrRef.current.array as Float32Array).set(res.uvOffsets.subarray(0, n * 2));
+              uvOffsetAttrRef.current.needsUpdate = true;
+            } else {
+              const a = new THREE.InstancedBufferAttribute(res.uvOffsets.slice(0, n * 2), 2);
+              a.needsUpdate = true;
+              m.geometry.setAttribute('instanceUvOffset', a);
+              uvOffsetAttrRef.current = a;
+            }
+
+            if (res.hasBranchDepth) {
+              if (colorAttrRef.current && colorAttrRef.current.count >= meshCapacity) {
+                (colorAttrRef.current.array as Float32Array).set(res.colors.subarray(0, n * 3));
+                colorAttrRef.current.needsUpdate = true;
+              } else {
+                const c = new THREE.InstancedBufferAttribute(res.colors.slice(0, n * 3), 3);
+                c.needsUpdate = true;
+                m.geometry.setAttribute('instanceColor', c);
+                colorAttrRef.current = c;
+              }
+            }
+
+            m.boundingBox ??= new THREE.Box3();
+            m.boundingBox.min.set(res.boundsMin[0], res.boundsMin[1], res.boundsMin[2]);
+            m.boundingBox.max.set(res.boundsMax[0], res.boundsMax[1], res.boundsMax[2]);
+            m.boundingSphere ??= new THREE.Sphere();
+            m.boundingBox.getBoundingSphere(m.boundingSphere);
+            m.geometry.boundingBox = m.boundingBox.clone();
+            m.geometry.boundingSphere = m.boundingSphere.clone();
+
+            m.count = n; // LAST — GPU now has complete matrix + UV + color
+
+            const posMap = positionIndexMapRef.current;
+            posMap.clear();
+            freeIndicesRef.current.length = 0;
+            const cb = blocksRef.current;
+            for (let i = 0; i < n && i < cb.length; i++) {
+              const b = cb[i];
+              posMap.set(numPosKey(b.position_x, b.position_y, b.position_z), {
+                index: i, blockType: b.block_type, branchDepth: b.branch_depth,
+                x: b.position_x, y: b.position_y, z: b.position_z,
+              });
+            }
+            highWaterMarkRef.current = n;
+            animatedBlocksRef.current = res.animatedBlocks;
+            shrineBlocksRef.current = res.shrineBlocks;
+            lastShrineGlowState.current = false;
+            initialBuildDoneRef.current = true;
+            m.frustumCulled = true;
+            diagnostics.recordMeshRebuild(0, n); // ~0ms main-thread (off-thread)
+          })
+          .catch(() => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(to);
+            startBudgeted();
+          });
+        return;
+      }
+    }
+
+    startBudgeted();
   }, [meshCapacity]);
 
   // B9: Process a batch of blocks in the budgeted rebuild
@@ -1168,6 +1279,9 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         cancelAnimationFrame(rebuildRafRef.current);
         rebuildRafRef.current = null;
       }
+      // Invalidate any in-flight off-thread mesh result so its async
+      // .then is discarded (version mismatch) after unmount.
+      rebuildVersionRef.current++;
     };
   }, []);
 
