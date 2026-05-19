@@ -5,6 +5,24 @@ import { diagnostics } from './diagnosticsLogger';
 const CELL_SIZE = 2;
 const MAX_NEARBY_RESULTS = 128;
 
+// ── Voxel-field block collision ───────────────────────────────────────────
+// Static 1×1×1 world blocks (placed + tree) are NOT stored as Box3 objects
+// in the spatial hash anymore (240k+ Box3 + hash cell arrays + insert/remove
+// churn was the ~1GB heap + multi-second GC freeze). Instead they live as
+// integer voxel coords in a column index (xz -> Set<y>). Queries materialize
+// a Box3 only for voxels actually returned, cached with STABLE identity
+// (never mutated after creation, freed when the block unloads) so any
+// consumer holding a collider reference within a frame stays correct.
+// Same proven scheme as the codebase's numPosKey: coords in [-32768, 32767]
+// (= 2048 chunks of 16 in every direction — far beyond any real world here),
+// keys stay well under Number.MAX_SAFE_INTEGER.
+const xzColKey = (x: number, z: number): number =>
+  (Math.floor(x) + 32768) * 65536 + (Math.floor(z) + 32768);
+const voxKey = (x: number, y: number, z: number): number =>
+  (Math.floor(x) + 32768) * 4294967296 +
+  (Math.floor(y) + 32768) * 65536 +
+  (Math.floor(z) + 32768);
+
 // NOTE: Cache variables are now PER-INSTANCE (see private fields in class)
 // This is critical when using multiple grids to prevent cross-grid cache pollution.
 
@@ -43,7 +61,14 @@ class SpatialHashGrid {
   private _cachedQueryMaxY = NaN;
   private _cachedQueryCount = 0;
   private _cachedQueryGeneration = 0;
-  
+
+  // Voxel-field block store: xz column key -> Set of occupied integer y's.
+  private voxelCols: Map<number, Set<number>> = new Map();
+  // Lazy, stable Box3 per occupied voxel (created on first query, freed on
+  // removeVoxel/clear). Stable identity = safe for ref-holding consumers.
+  private voxelBoxes: Map<number, THREE.Box3> = new Map();
+  private _voxelCount = 0;
+
   constructor(private opts?: SpatialHashGridOptions) {}
   
   private cellCoord(v: number): number {
@@ -167,6 +192,11 @@ class SpatialHashGrid {
    * Searches nearby colliders and removes the one containing this position
    */
   removeByPosition(x: number, y: number, z: number): boolean {
+    // Blocks are voxels now — remove directly if present.
+    if (this.hasVoxel(x, y, z)) {
+      this.removeVoxel(x, y, z);
+      return true;
+    }
     const count = this.getNearby(x, z, 1);
     for (let i = 0; i < count; i++) {
       const collider = this.nearbyResult[i];
@@ -188,6 +218,9 @@ class SpatialHashGrid {
     console.log(`[${name}] Clearing ${this.colliderCells.size} colliders`);
     this.cells.clear();
     this.colliderCells.clear();
+    this.voxelCols.clear();
+    this.voxelBoxes.clear();
+    this._voxelCount = 0;
     this.generation++;
     this.invalidateCache();
 
@@ -250,9 +283,10 @@ class SpatialHashGrid {
       }
     }
     
+    count = this.collectVoxels(x, z, radius, -Infinity, Infinity, count);
     return count;
   }
-  
+
   /**
    * Get nearby colliders with Y-filtering - ZERO ALLOCATIONS
    * Filters colliders by vertical overlap before returning.
@@ -334,6 +368,9 @@ class SpatialHashGrid {
       }
     }
     
+    // Static world blocks live in the voxel field, not the hash.
+    count = this.collectVoxels(x, z, radius, minY, maxY, count);
+
     // Cache the results for subsequent queries at same position
     this._cachedQueryX = qx;
     this._cachedQueryZ = qz;
@@ -341,7 +378,7 @@ class SpatialHashGrid {
     this._cachedQueryMaxY = qMaxY;
     this._cachedQueryCount = count;
     this._cachedQueryGeneration = this.generation;
-    
+
     return count;
   }
   
@@ -358,10 +395,77 @@ class SpatialHashGrid {
     this._cachedQueryCount = 0;
   }
   
-  get size(): number {
-    return this.colliderCells.size;
+  // ── Voxel-field block API (used by the chunk loader instead of per-block
+  //    Box3 + insert/remove). Cheap: a Set entry, no Box3, no hash cells. ──
+  addVoxel(x: number, y: number, z: number): void {
+    const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
+    const ck = xzColKey(fx, fz);
+    let s = this.voxelCols.get(ck);
+    if (!s) { s = new Set(); this.voxelCols.set(ck, s); }
+    if (!s.has(fy)) {
+      s.add(fy);
+      this._voxelCount++;
+      this.generation++;
+      this.invalidateCache();
+    }
   }
-  
+
+  removeVoxel(x: number, y: number, z: number): void {
+    const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
+    const ck = xzColKey(fx, fz);
+    const s = this.voxelCols.get(ck);
+    if (s && s.has(fy)) {
+      s.delete(fy);
+      if (s.size === 0) this.voxelCols.delete(ck);
+      this.voxelBoxes.delete(voxKey(fx, fy, fz)); // free the lazy box
+      this._voxelCount--;
+      this.generation++;
+      this.invalidateCache();
+    }
+  }
+
+  hasVoxel(x: number, y: number, z: number): boolean {
+    return this.voxelCols.get(xzColKey(x, z))?.has(Math.floor(y)) ?? false;
+  }
+
+  // Append occupied voxels in the query region to nearbyResult. Materializes
+  // a STABLE Box3 per voxel on first touch (cached until the block unloads),
+  // so consumers that hold a reference within a frame stay correct.
+  private collectVoxels(
+    x: number, z: number, radius: number,
+    minY: number, maxY: number, count: number,
+  ): number {
+    if (count >= MAX_NEARBY_RESULTS || this._voxelCount === 0) return count;
+    const bxMin = Math.floor(x - radius) - 1;
+    const bxMax = Math.floor(x + radius) + 1;
+    const bzMin = Math.floor(z - radius) - 1;
+    const bzMax = Math.floor(z + radius) + 1;
+    for (let bx = bxMin; bx <= bxMax; bx++) {
+      for (let bz = bzMin; bz <= bzMax; bz++) {
+        const col = this.voxelCols.get(xzColKey(bx, bz));
+        if (!col) continue;
+        for (const by of col) {
+          if (by + 1 < minY || by > maxY) continue; // vertical overlap
+          const vk = voxKey(bx, by, bz);
+          let box = this.voxelBoxes.get(vk);
+          if (!box) {
+            box = new THREE.Box3();
+            box.min.set(bx, by, bz);
+            box.max.set(bx + 1, by + 1, bz + 1);
+            this.voxelBoxes.set(vk, box);
+          }
+          this.nearbyResult[count++] = box;
+          if (count >= MAX_NEARBY_RESULTS) return count;
+        }
+      }
+    }
+    return count;
+  }
+
+  get size(): number {
+    return this.colliderCells.size + this._voxelCount;
+  }
+
   has(collider: THREE.Box3): boolean {
     return this.colliderCells.has(collider);
   }

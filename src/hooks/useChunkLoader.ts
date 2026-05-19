@@ -92,100 +92,33 @@ interface UseChunkLoaderProps {
   loadRadius?: number; // Chunk load radius — matches user's visual distance setting
 }
 
-/**
- * CANONICAL collider cache keyed by block.id.
- * This prevents collider duplication when blocks are refetched/replaced,
- * which was causing the collisionGrid to inflate with stale colliders.
- */
-const colliderByBlockId = new Map<string, THREE.Box3>();
-
-// CRITICAL: Clear the collider cache when the collision grid is cleared.
-// This MUST be a module-level listener so it runs synchronously before any
-// chunk loading attempts to reuse stale collider references.
-// Use a flag to prevent duplicate listeners on hot reloads.
-const GRID_CLEAR_LISTENER_KEY = '__chunkLoaderGridClearListener';
-if (typeof window !== 'undefined' && !(window as any)[GRID_CLEAR_LISTENER_KEY]) {
-  (window as any)[GRID_CLEAR_LISTENER_KEY] = true;
-  window.addEventListener('collisionGridCleared', () => {
-    // REMOVED: console.log spam
-    colliderByBlockId.clear();
-  });
-}
+// Static world blocks are now stored in worldCollisionGrid as a VOXEL FIELD
+// (integer coords + lazily-materialized stable boxes), NOT per-block Box3 +
+// spatial-hash insert. Per-block Box3 (240k+) + hash cells + insert/remove
+// churn was the ~1GB heap + multi-second GC freeze once trees came back
+// complete. addVoxel/removeVoxel are O(1) Set ops, no Box3, no hash cell
+// thrash. The grid clears its own voxels on world switch (clear()), so no
+// module-level cache or collisionGridCleared listener is needed here.
 
 /**
- * Update collider bounds to match block position
- */
-const updateBlockColliderBounds = (block: PlacedBlock, collider: THREE.Box3): void => {
-  collider.min.set(block.position_x, block.position_y, block.position_z);
-  collider.max.set(block.position_x + 1, block.position_y + 1, block.position_z + 1);
-};
-
-/**
- * Create a collider for a block and insert it into the collision grid.
- * Uses canonical cache to prevent collider duplication/leaks.
- * 
- * CRITICAL FIX: Previously, when blocks were refetched and the object identity
- * changed, a new Box3 was created, but the old one stayed in collisionGrid
- * (orphaned). This caused e5 to spike even with few blocks.
+ * Mark a block solid for collision (voxel add — O(1), no allocation).
+ * Same name/signature as before so all call sites are unchanged.
  */
 const ensureBlockCollider = (block: PlacedBlock): void => {
-  const existing = (block as any).__collider as THREE.Box3 | null | undefined;
-  let collider = colliderByBlockId.get(block.id);
-
-  if (!collider) {
-    // No cached collider for this block ID
-    // CRITICAL: Only adopt existing collider if it's a valid THREE.Box3
-    // After grid clear, existing colliders may be corrupted/invalid
-    if (existing && typeof existing.min?.set === 'function') {
-      // Adopt the block's existing collider into the cache
-      collider = existing;
-      colliderByBlockId.set(block.id, collider);
-    } else {
-      // Create a new collider (existing is null, undefined, or corrupted)
-      collider = new THREE.Box3();
-      colliderByBlockId.set(block.id, collider);
-      // Clear the invalid reference from the block
-      if (existing) {
-        (block as any).__collider = null;
-      }
-    }
-  } else if (existing && existing !== collider) {
-    // Block has a different collider than cached - remove the orphan
-    worldCollisionGrid.remove(existing);
-  }
-
-  // Update bounds (in case position changed, though blocks don't move)
-  updateBlockColliderBounds(block, collider);
-
-  // Ensure collider is in the grid (may have been cleared by hot reload/world switch)
-  if (!worldCollisionGrid.has(collider)) {
-    // D-Flow: Sample 1/32 collider ops for timing (keeps overhead low)
-    const shouldTime = (Math.random() * 32) < 1;
-    const t0 = shouldTime ? performance.now() : 0;
-    worldCollisionGrid.insert(collider);
-    if (shouldTime) diagnostics.recordColliderOp('add', performance.now() - t0);
-  }
-
-  (block as any).__collider = collider;
+  const shouldTime = (Math.random() * 32) < 1;
+  const t0 = shouldTime ? performance.now() : 0;
+  worldCollisionGrid.addVoxel(block.position_x, block.position_y, block.position_z);
+  if (shouldTime) diagnostics.recordColliderOp('add', performance.now() - t0);
 };
 
 /**
- * Remove a block's collider from the collision grid and cache.
+ * Remove a block's solidity from the collision grid (voxel remove).
  */
 const removeBlockCollider = (block: PlacedBlock): void => {
-  const cached = colliderByBlockId.get(block.id);
-  const collider = cached ?? ((block as any).__collider as THREE.Box3 | null | undefined);
-
-  if (collider) {
-    // D-Flow: Sample 1/32 collider ops for timing (keeps overhead low)
-    const shouldTime = (Math.random() * 32) < 1;
-    const t0 = shouldTime ? performance.now() : 0;
-    worldCollisionGrid.remove(collider);
-    if (shouldTime) diagnostics.recordColliderOp('remove', performance.now() - t0);
-  }
-
-  colliderByBlockId.delete(block.id);
-  (block as any).__collider = null;
+  const shouldTime = (Math.random() * 32) < 1;
+  const t0 = shouldTime ? performance.now() : 0;
+  worldCollisionGrid.removeVoxel(block.position_x, block.position_y, block.position_z);
+  if (shouldTime) diagnostics.recordColliderOp('remove', performance.now() - t0);
 };
 
 // Reusable occupancy buffer for surface culling — avoids allocating a new
