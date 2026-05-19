@@ -32,17 +32,18 @@ import { shrineTracker } from '@/lib/shrineTracker';
 import { meshWorkerPool } from '@/lib/meshWorker/meshWorkerPool';
 import { packChunkBlocks } from '@/lib/meshWorker/blockPack';
 
-// #2 Phase 2a: off-thread mesh build — TEMPORARILY OFF (2026-May-19).
-// First real-world DF report after enabling showed a regression: 16.5fps
-// avg, 1720ms max frame, 9103ms in long tasks / 15s. Root cause: the
-// worker BUILDS off-thread but the APPLY (Float32Array copies, attribute
-// updates, posMap rebuild) runs all-at-once on the main thread, whereas
-// the pre-#2 sync path BUDGETED that work across many frames at 2ms each.
-// We traded many small stutters for fewer big ones. Reverting until the
-// apply is itself budgeted (chunked across frames) OR limited to small
-// chunks. Diagnostics now record real apply ms (no more 0ms lies),
-// fallback count, and incremental vs full rebuild separately.
-const WORKER_MESH_ENABLED = false;
+// #2 Phase 2a: off-thread mesh build — ON, with budgeted apply (2026-May-19).
+// Worker builds matrices/uv/color off-thread. The .then handler does the
+// fast finalize (Float32Array.set / bounds / count / frustumCulled) inline
+// so the mesh is visible immediately, then BUDGETS the posMap rebuild
+// across RAF frames for big chunks (>2000 blocks) so a 10k-block chunk
+// doesn't stall main for ~20ms. The previous flip-on regressed because
+// posMap was rebuilt all-at-once after the worker finished — that step
+// is now spread at ~500 entries/frame, matching the spirit of the
+// budgeted sync path. Any worker error/timeout/supersede silently falls
+// back to startBudgeted(). To revert: set this to false (one-line push)
+// or `window.__WORKER_MESH = false` for an instant local revert.
+const WORKER_MESH_ENABLED = true;
 
 // Shared geometry for all block instances
 const sharedEdgesGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
@@ -578,6 +579,14 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
             m.count = n; // LAST — GPU now has complete matrix + UV + color
 
+            // Mesh is fully visible from here. The remaining work below
+            // (posMap rebuild for incremental-update lookups) is BUDGETED
+            // across frames for big chunks — it's only consulted later by
+            // doIncrementalUpdate, so progressive construction is fine.
+            animatedBlocksRef.current = res.animatedBlocks;
+            shrineBlocksRef.current = res.shrineBlocks;
+            lastShrineGlowState.current = false;
+
             const posMap = positionIndexMapRef.current;
             posMap.clear();
             freeIndicesRef.current.length = 0;
@@ -586,18 +595,46 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             // posMap maps newer blocks onto stale matrix indices. Mirrors
             // doRebuildSync, which builds posMap from its own snapshot.
             const cb = currentBlocks;
-            for (let i = 0; i < n && i < cb.length; i++) {
-              const b = cb[i];
-              posMap.set(numPosKey(b.position_x, b.position_y, b.position_z), {
-                index: i, blockType: b.block_type, branchDepth: b.branch_depth,
-                x: b.position_x, y: b.position_y, z: b.position_z,
-              });
+            const POSMAP_INLINE_LIMIT = 2000; // ~2ms inline @ n=2000
+            const POSMAP_BATCH = 500;          // ~0.5ms per frame slice
+            const buildPosMapRange = (from: number, to: number) => {
+              const end = Math.min(to, n, cb.length);
+              for (let i = from; i < end; i++) {
+                const b = cb[i];
+                posMap.set(numPosKey(b.position_x, b.position_y, b.position_z), {
+                  index: i, blockType: b.block_type, branchDepth: b.branch_depth,
+                  x: b.position_x, y: b.position_y, z: b.position_z,
+                });
+              }
+            };
+            if (n <= POSMAP_INLINE_LIMIT) {
+              buildPosMapRange(0, n);
+              highWaterMarkRef.current = n;
+              initialBuildDoneRef.current = true;
+            } else {
+              // Big-chunk apply: spread posMap construction across frames
+              // so a 10k-block chunk doesn't stall main for ~20ms. Until
+              // it's done, initialBuildDoneRef stays false (incremental
+              // updates fall back to full rebuild — same as first-paint).
+              let idx = 0;
+              const stepPosMap = () => {
+                if (rebuildVersionRef.current !== myVersion) return; // superseded
+                if (!meshRef.current) return; // unmounted
+                const next = idx + POSMAP_BATCH;
+                buildPosMapRange(idx, next);
+                idx = next;
+                if (idx < n) {
+                  requestAnimationFrame(stepPosMap);
+                } else {
+                  highWaterMarkRef.current = n;
+                  initialBuildDoneRef.current = true;
+                }
+              };
+              requestAnimationFrame(stepPosMap);
             }
-            highWaterMarkRef.current = n;
-            animatedBlocksRef.current = res.animatedBlocks;
-            shrineBlocksRef.current = res.shrineBlocks;
-            lastShrineGlowState.current = false;
-            initialBuildDoneRef.current = true;
+            // initialBuildDoneRef is set inside the branches above — small
+            // chunks immediately, big chunks after the budgeted posMap
+            // completes. Do NOT set it unconditionally here.
             m.frustumCulled = true;
             // Real main-thread apply cost (matrix copy + attr update +
             // posMap rebuild + bounds recompute). Earlier we recorded
