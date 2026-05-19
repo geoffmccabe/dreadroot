@@ -416,11 +416,16 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     lastRebuildTimeRef.current = performance.now();
     pendingRebuildRef.current = false;
 
-    // Chunks under 2000 blocks: still a full sync rebuild, but routed through
-    // the cross-chunk frame-budgeted scheduler so a burst of new chunks on
-    // region entry spreads over a few frames instead of one stacked stall.
-    // Re-reads refs at run time so it always rebuilds the latest data.
-    if (currentBlocks.length < 2000) {
+    // Tiny chunks (<200 blocks): sync is faster than worker round-trip
+    // overhead (~0.5ms pack+post+post-back vs <3ms sync per-block compute).
+    // Routed through the cross-chunk frame-budgeted scheduler so a burst
+    // of tiny chunks on region entry spreads over a few frames instead of
+    // one stacked stall. The 2000-block threshold was a pre-#2
+    // optimization that's now obsolete: with budgeted-apply in the worker
+    // path (a556099), chunks of any size apply cheaply (~0.1ms main).
+    // Last DF report: 190 sync rebuilds totaling 3313ms — almost all
+    // were mid-size chunks that should have been on the worker.
+    if (currentBlocks.length < 200) {
       scheduleSyncRebuild(meshRef, () => {
         const m = meshRef.current;
         const b = blocksRef.current;
