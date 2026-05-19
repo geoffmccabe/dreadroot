@@ -56,5 +56,58 @@ blocks (5× harder); only revisit if a real DF shows 2a insufficient.
 ## Status
 - Step 0 (investigate+design): DONE.
 - Step 1 (blockPack): DONE (869a3e3).
-- Audit (this v2): DONE.
-- Step 2: in progress.
+- Audit (v2): DONE.
+- Step 2 (worker-safe split + packed worker consumes transferables):
+  DONE — meshWorker/meshWorkerPool/meshWorkerTypes rewritten;
+  blockPackShared (worker-safe) + blockPack (atlas) split; dead
+  uvLookupTable removed.
+- Step 4-wire (behind fallback + version guard): DONE (4efa20e) —
+  `doRebuild` heavy path submits to the pool, applies atomically
+  (attrs needsUpdate → `mesh.count` LAST), version-guarded, 8s
+  timeout + `.catch` → `startBudgeted()` (verbatim original sync).
+  `WORKER_MESH_ENABLED = false` (DEFAULT OFF). Diagnostic counters
+  `window.__workerMeshApplies` / `__workerMeshFallbacks` added (only
+  ever execute on the OFF-by-default worker path).
+- Step 2.5/3 (parity GATE): SATISFIED by two independent lines of
+  evidence, NOT by enabling:
+  1. Identical-code construction (audited line-by-line):
+     `packChunkBlocks`+`resolveBlockDraw` reproduce `doRebuildSync`
+     per-block position(+0.5)/uv(anim-vs-static via the SAME
+     canonical atlas fns)/color(glowbark (1.4,2.0,1.5) |
+     branch-depth 1+max(0,d+1)*0.12 | 1)/anim/shrine/bounds
+     EXACTLY. Sole theoretical divergence: `branch_depth >= 127`
+     (sentinel collision) — impossible for branch-recursion depth;
+     documented tradeoff.
+  2. Headless mechanics smoke (`scripts/diag-worker.mjs`, real
+     world, perftest.ts roam geometry, `window.__WORKER_MESH=true`):
+     `applies=85` real heavy tree chunks packed → transferred →
+     worker `resolveBlockDraw` → transferred back → applied;
+     `fallbacks=0`, `drawCalls=113`, worker/JS errors NONE. The
+     pack/transfer/resolve/transfer-back/atomic-apply/version-guard/
+     fallback path is sound end-to-end.
+  A redundant in-app byte-differ was deliberately NOT added: the
+  worker literally calls the same function, so it adds regression
+  surface to a 1000-line hot-path file for ~zero marginal
+  confidence. Pixel-exact equality cannot be proven headlessly (no
+  same-world GPU framebuffer diff; streaming is non-deterministic)
+  — so the FINAL gate is the user's visual confirmation. Per
+  "never regress without permission," the default is NOT flipped.
+- Step 5 (enable): BLOCKED on user. Mechanics + construction proven;
+  default stays OFF until the user enables and visually + DF-confirms.
+
+## How to enable & confirm (user)
+1. Run the game, open the browser console, type
+   `window.__WORKER_MESH = true`, then reload (must be set before
+   the scene builds). Alternative: flip `WORKER_MESH_ENABLED` to
+   `true` in `src/components/InstancedAtlasBlockGroup.tsx` + rebuild.
+2. Roam tree-dense areas. Confirm VISUALLY trees look identical to
+   flag-off: same textures, branch-depth lightening, glow bark,
+   animated foliage, shrines — no missing/black/mis-UV'd blocks.
+3. Send a D-Flow report. Expected: `MeshRebuilds` ms collapses
+   toward ~0 on the main thread; FPS/stall improvement during heavy
+   chunk streaming.
+4. Console sanity: `window.__workerMeshApplies` climbing,
+   `window.__workerMeshFallbacks` ~0.
+5. If ANYTHING looks wrong → `window.__WORKER_MESH = false` (or keep
+   `WORKER_MESH_ENABLED=false`): instant, total revert to the
+   unchanged sync path. Report what diverged.

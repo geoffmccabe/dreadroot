@@ -502,6 +502,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
         const to = setTimeout(() => {
           if (settled) return;
           settled = true;
+          const w = window as { __workerMeshFallbacks?: number };
+          w.__workerMeshFallbacks = (w.__workerMeshFallbacks ?? 0) + 1;
           if (rebuildVersionRef.current === myVersion && meshRef.current) startBudgeted();
         }, 8000);
         meshWorkerPool
@@ -570,11 +572,15 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
             initialBuildDoneRef.current = true;
             m.frustumCulled = true;
             diagnostics.recordMeshRebuild(0, n); // ~0ms main-thread (off-thread)
+            const w = window as { __workerMeshApplies?: number };
+            w.__workerMeshApplies = (w.__workerMeshApplies ?? 0) + 1;
           })
           .catch(() => {
             if (settled) return;
             settled = true;
             clearTimeout(to);
+            const w = window as { __workerMeshFallbacks?: number };
+            w.__workerMeshFallbacks = (w.__workerMeshFallbacks ?? 0) + 1;
             startBudgeted();
           });
         return;
