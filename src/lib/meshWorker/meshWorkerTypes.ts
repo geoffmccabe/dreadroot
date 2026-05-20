@@ -26,6 +26,15 @@ export interface BuildMeshMessage {
   typeIndex: Uint16Array; // count -> index into table
   branchDepth: Int8Array; // count, or BRANCH_DEPTH_NONE
   table: DrawTableEntry[]; // small, structured-cloned (cheap)
+  // Optional output buffers — if provided AND big enough for count, the
+  // worker reuses them instead of allocating fresh. The ping-pong saves
+  // ~150KB of garbage per chunk-rebuild (matrices + uv + color), which
+  // was the dominant heap-churn source on the previous low-threshold
+  // attempt (commit fe83cb1 reverted in 003b99c). Sized for count*16 /
+  // count*2 / count*3; worker re-allocates if too small or absent.
+  outMatrices?: Float32Array;
+  outUvOffsets?: Float32Array;
+  outColors?: Float32Array;
 }
 
 export interface CancelMessage {

@@ -377,6 +377,18 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     startTime: number;
   } | null>(null);
   const rebuildVersionRef = useRef(0);
+  // #2 buffer-pool: per-chunk reusable typed arrays that ping-pong between
+  // main and worker via transferable. After a chunk's first rebuild, these
+  // grow to the chunk's max-ever-seen size and are reused on every rebuild
+  // → zero output-buffer garbage. Eliminates the ~150KB/job allocation
+  // churn that made the low-threshold attempt (fe83cb1) regress.
+  // If null/too-small, worker allocates fresh and we capture those instead.
+  const workerBufPoolRef = useRef<{
+    matrices: Float32Array | null;
+    uvOffsets: Float32Array | null;
+    colors: Float32Array | null;
+  }>({ matrices: null, uvOffsets: null, colors: null });
+
   // #2: build-version of an in-flight off-thread worker job (0 = none).
   // While set, the blocks-change effect must route to a full doRebuild
   // (which bumps rebuildVersionRef → cleanly supersedes the stale job)
@@ -416,19 +428,16 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     lastRebuildTimeRef.current = performance.now();
     pendingRebuildRef.current = false;
 
-    // Threshold tuning (2026-May-19): set high (2000) so small/mid chunks
-    // ride the cross-chunk frame-budgeted scheduler instead of the worker.
-    // Going low (200, commit fe83cb1) DID collapse mesh time (3313 → 130ms
-    // per real-world DF) but DOUBLED heap-growth rate (6 → 15 MB/s) and
-    // dropped FPS 21.4 → 18.7: the worker round-trip allocates fresh
-    // typed arrays on each job and they become garbage after main-thread
-    // .set, so 4× more applies = 4× more alloc churn = more GC pauses
-    // (the user's "grey flashes"). The cross-chunk scheduleSyncRebuild
-    // spreads sync-rebuild bursts across frames AND avoids the per-job
-    // allocation tax, so it wins for mid-size chunks under current
-    // conditions. Real fix is a worker-side buffer pool to recycle the
-    // transfer typed arrays — until then, keep the threshold high.
-    if (currentBlocks.length < 2000) {
+    // Threshold tuning (2026-May-19 v3): worker buffer-pool now eliminates
+    // the per-job alloc churn (matrices/uv/color Float32Arrays ping-pong
+    // between main and worker via transferable — see workerBufPoolRef).
+    // That was the reason 200 regressed (fe83cb1 → 003b99c). With the
+    // alloc cost gone, the worker should win for any chunk above the
+    // round-trip cost (~0.5ms postMessage + worker pool latency).
+    // Tiny chunks still ride scheduleSyncRebuild (cross-chunk burst
+    // spreader) — both because sync is <1ms there AND scheduleSyncRebuild
+    // interleaves multiple chunks across frames.
+    if (currentBlocks.length < 200) {
       scheduleSyncRebuild(meshRef, () => {
         const m = meshRef.current;
         const b = blocksRef.current;
@@ -537,9 +546,39 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
           w.__workerMeshFallbacks = (w.__workerMeshFallbacks ?? 0) + 1;
           if (rebuildVersionRef.current === myVersion && meshRef.current) startBudgeted();
         }, 8000);
+        // Hand the worker our pooled output buffers (transferable). If big
+        // enough they're reused — saves the ~150KB Float32Array trio that
+        // would otherwise be created in the worker and thrown away after
+        // the main-thread .set. If too small or null, worker allocates
+        // fresh and we capture those buffers into the pool from the
+        // result. Either way the pool ends up holding the correct-sized
+        // arrays from rebuild #2 onward → zero output garbage.
+        const pool = workerBufPoolRef.current;
+        const need16 = packed.count * 16;
+        const need2 = packed.count * 2;
+        const need3 = packed.count * 3;
+        const pooledOut = {
+          matrices: pool.matrices && pool.matrices.length >= need16 ? pool.matrices : undefined,
+          uvOffsets: pool.uvOffsets && pool.uvOffsets.length >= need2 ? pool.uvOffsets : undefined,
+          colors: pool.colors && pool.colors.length >= need3 ? pool.colors : undefined,
+        };
+        // Buffers are about to transfer out — clear refs so a concurrent
+        // submit (e.g. a superseding rebuild) doesn't try to use detached
+        // buffers. They'll be repopulated from the result in .then.
+        if (pooledOut.matrices) pool.matrices = null;
+        if (pooledOut.uvOffsets) pool.uvOffsets = null;
+        if (pooledOut.colors) pool.colors = null;
         meshWorkerPool
-          .buildMesh('atlas', packed, 0)
+          .buildMesh('atlas', packed, 0, pooledOut)
           .then((res) => {
+            // Capture output buffers into the pool FIRST, before any early-
+            // return — keeps the ping-pong intact even on supersede / unmount
+            // / timeout-then-late-arrival paths. The buffers stay usable
+            // below (res still references them) until this turn ends.
+            workerBufPoolRef.current.matrices = res.matrices;
+            workerBufPoolRef.current.uvOffsets = res.uvOffsets;
+            workerBufPoolRef.current.colors = res.colors;
+
             if (settled) return;
             settled = true;
             clearTimeout(to);

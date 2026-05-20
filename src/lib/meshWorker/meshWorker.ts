@@ -46,9 +46,20 @@ function buildMesh(msg: BuildMeshMessage): MeshResultMessage | null {
     };
   }
 
-  const matrices = new Float32Array(n * 16);
-  const uvOffsets = new Float32Array(n * 2);
-  const colors = new Float32Array(n * 3);
+  // Reuse caller-supplied buffers when they fit (saves ~150KB/job of
+  // garbage that would otherwise be created here and discarded on main
+  // after the .set copy). Worker doesn't track its own pool — the
+  // InstancedAtlasBlockGroup that submitted owns the pool and sends
+  // these buffers back via transferable on each job.
+  const matrices = msg.outMatrices && msg.outMatrices.length >= n * 16
+    ? msg.outMatrices
+    : new Float32Array(n * 16);
+  const uvOffsets = msg.outUvOffsets && msg.outUvOffsets.length >= n * 2
+    ? msg.outUvOffsets
+    : new Float32Array(n * 2);
+  const colors = msg.outColors && msg.outColors.length >= n * 3
+    ? msg.outColors
+    : new Float32Array(n * 3);
 
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;

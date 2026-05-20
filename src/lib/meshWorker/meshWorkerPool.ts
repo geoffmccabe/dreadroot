@@ -23,11 +23,15 @@ interface PendingJob {
 
 const JOB_TIMEOUT_MS = 10000;
 
-const transferList = (m: BuildMeshMessage): Transferable[] => [
-  m.positions.buffer,
-  m.typeIndex.buffer,
-  m.branchDepth.buffer,
-];
+const transferList = (m: BuildMeshMessage): Transferable[] => {
+  const list: Transferable[] = [m.positions.buffer, m.typeIndex.buffer, m.branchDepth.buffer];
+  // Optional caller-supplied output buffers (ping-pong pool) — also
+  // transferred zero-copy so worker can write into them.
+  if (m.outMatrices) list.push(m.outMatrices.buffer);
+  if (m.outUvOffsets) list.push(m.outUvOffsets.buffer);
+  if (m.outColors) list.push(m.outColors.buffer);
+  return list;
+};
 
 class MeshWorkerPool {
   private workers: Worker[] = [];
@@ -70,7 +74,12 @@ class MeshWorkerPool {
    * Submit a packed chunk build. Resolves with computed buffers; rejects
    * if the pool isn't initialized so the caller can use the sync path.
    */
-  buildMesh(chunkKey: string, packed: PackedChunk, priority: number): Promise<MeshBuildResult> {
+  buildMesh(
+    chunkKey: string,
+    packed: PackedChunk,
+    priority: number,
+    pooledOut?: { matrices?: Float32Array; uvOffsets?: Float32Array; colors?: Float32Array },
+  ): Promise<MeshBuildResult> {
     if (!this.initialized) {
       return Promise.reject(new Error('MeshWorkerPool not initialized'));
     }
@@ -85,6 +94,11 @@ class MeshWorkerPool {
       typeIndex: packed.typeIndex,
       branchDepth: packed.branchDepth,
       table: packed.table,
+      // Pass caller pool buffers through if provided; worker reuses them
+      // when big enough and transfers them back in the result.
+      outMatrices: pooledOut?.matrices,
+      outUvOffsets: pooledOut?.uvOffsets,
+      outColors: pooledOut?.colors,
     };
     return new Promise<MeshBuildResult>((resolve) => {
       const freeWorker = this.findFreeWorker();
