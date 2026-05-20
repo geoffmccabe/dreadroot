@@ -826,17 +826,26 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       meshToBlockTypeCache.current.set(mesh, blockType);
       meshesArrayCache.current = Array.from(instancedMeshesRef.current.values());
     } else {
-      // When removing, we need to find and remove by mesh reference
+      // Unmount (mesh=null). Previously this only cleaned the string-
+      // keyed `instancedMeshesRef` map, leaving `meshToBlockTypeCache`
+      // (Mesh-KEYED Map) holding strong refs to the unmounted meshes
+      // forever → each mesh's Float32Arrays (~300KB) couldn't be GC'd.
+      // With 500+ unmounts per session that alone leaked ~150MB.
+      // Now: collect all matching stale meshes, then purge from BOTH
+      // maps (and the WeakMap, explicitly, even though it'd clear when
+      // the mesh becomes unreachable).
+      const stale: THREE.InstancedMesh[] = [];
+      const staleKeys: string[] = [];
       for (const [key, storedMesh] of instancedMeshesRef.current.entries()) {
-        if (storedMesh === mesh || !mesh) {
-          // If mesh is null, we need to find by blockType prefix
-          if (!mesh && key.startsWith(blockType + '_')) {
-            instancedMeshesRef.current.delete(key);
-          } else if (storedMesh === mesh) {
-            instancedMeshesRef.current.delete(key);
-            break;
-          }
+        if (key.startsWith(blockType + '_')) {
+          stale.push(storedMesh);
+          staleKeys.push(key);
         }
+      }
+      for (const k of staleKeys) instancedMeshesRef.current.delete(k);
+      for (const m of stale) {
+        meshToBlockTypeCache.current.delete(m);
+        meshToIdRef.current.delete(m);
       }
       meshesArrayCache.current = Array.from(instancedMeshesRef.current.values());
     }
