@@ -416,16 +416,19 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
     lastRebuildTimeRef.current = performance.now();
     pendingRebuildRef.current = false;
 
-    // Tiny chunks (<200 blocks): sync is faster than worker round-trip
-    // overhead (~0.5ms pack+post+post-back vs <3ms sync per-block compute).
-    // Routed through the cross-chunk frame-budgeted scheduler so a burst
-    // of tiny chunks on region entry spreads over a few frames instead of
-    // one stacked stall. The 2000-block threshold was a pre-#2
-    // optimization that's now obsolete: with budgeted-apply in the worker
-    // path (a556099), chunks of any size apply cheaply (~0.1ms main).
-    // Last DF report: 190 sync rebuilds totaling 3313ms — almost all
-    // were mid-size chunks that should have been on the worker.
-    if (currentBlocks.length < 200) {
+    // Threshold tuning (2026-May-19): set high (2000) so small/mid chunks
+    // ride the cross-chunk frame-budgeted scheduler instead of the worker.
+    // Going low (200, commit fe83cb1) DID collapse mesh time (3313 → 130ms
+    // per real-world DF) but DOUBLED heap-growth rate (6 → 15 MB/s) and
+    // dropped FPS 21.4 → 18.7: the worker round-trip allocates fresh
+    // typed arrays on each job and they become garbage after main-thread
+    // .set, so 4× more applies = 4× more alloc churn = more GC pauses
+    // (the user's "grey flashes"). The cross-chunk scheduleSyncRebuild
+    // spreads sync-rebuild bursts across frames AND avoids the per-job
+    // allocation tax, so it wins for mid-size chunks under current
+    // conditions. Real fix is a worker-side buffer pool to recycle the
+    // transfer typed arrays — until then, keep the threshold high.
+    if (currentBlocks.length < 2000) {
       scheduleSyncRebuild(meshRef, () => {
         const m = meshRef.current;
         const b = blocksRef.current;
