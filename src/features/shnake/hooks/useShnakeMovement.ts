@@ -9,8 +9,11 @@ const DEBUG_SHNAKE = false;
 
 const CHUNK_SIZE = 16;
 
-function key(x: number, y: number, z: number) {
-  return `${x},${y},${z}`;
+// Numeric position key — same as useShnakeSystem.ts. Eliminates per-call
+// string allocation in the per-frame shnake movement path (occupied-set
+// rebuild for each shnake's path-find lookahead).
+function key(x: number, y: number, z: number): number {
+  return (x + 32768) * 4294967296 + (y + 32768) * 65536 + (z + 32768);
 }
 
 function chunkKey(x: number, z: number) {
@@ -82,8 +85,8 @@ interface UseShnakeMovementOptions {
   isEnabled: boolean;
   /** When true, AI system controls movement - legacy loop is disabled */
   aiControlled?: boolean;
-  treeBlocksByTierRef: React.RefObject<Map<number, Map<string, string>>>;
-  nonInvisTreeBlocksByTierRef: React.RefObject<Map<number, Set<string>>>;
+  treeBlocksByTierRef: React.RefObject<Map<number, Map<number, string>>>;
+  nonInvisTreeBlocksByTierRef: React.RefObject<Map<number, Set<number>>>;
   onPlayerHit?: (damage: number, knockback: number, direction: THREE.Vector3) => void;
   onHeadMoved?: (shnakeId: string) => void; // For fire propagation
 }
@@ -317,7 +320,7 @@ export function useShnakeMovement({
           const headSeg = s.segments[0];
           const length = s.segments.length;
           const tail = s.segments[length - 1];
-          const occupied = new Set<string>(s.segments.map(seg => key(seg.x, seg.y, seg.z)));
+          const occupied = new Set<number>(s.segments.map(seg => key(seg.x, seg.y, seg.z)));
 
           // Allow moving into current tail cell because it vacates this step
           occupied.delete(key(tail.x, tail.y, tail.z));

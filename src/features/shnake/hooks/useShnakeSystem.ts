@@ -13,8 +13,14 @@ const CHUNK_SIZE = 16;
 const SPAWN_COOLDOWN_MS = 30000; // 30 second cooldown after failed spawn
 const REBUILD_INTERVAL_MS = 5000; // Rebuild index every 5 seconds (was 1s)
 
-function key(x: number, y: number, z: number) {
-  return `${x},${y},${z}`;
+// Numeric position key — eliminates per-block template-literal string
+// allocation. Real-world trace 2026-May-19 (Trace-20260519T210931): the
+// rebuild() function below took 679ms × 7 fires (2.0s/22s = 9%) because
+// it iterates ~290k blocks and previously allocated 2-3 fresh strings
+// per block as Map/Set keys. Matches the +32768 offset used by
+// InstancedAtlasBlockGroup.numPosKey for consistency.
+function key(x: number, y: number, z: number): number {
+  return (x + 32768) * 4294967296 + (y + 32768) * 65536 + (z + 32768);
 }
 
 function chunkKey(x: number, z: number) {
@@ -120,12 +126,12 @@ export function useShnakeSystem({
   }, [definitions, defsByTier, defKey]);
 
   /** Global per-tier tree block index for movement cling checks */
-  const treeBlocksByTierRef = useRef<Map<number, Map<string, string>>>(new Map());
-  const nonInvisTreeBlocksByTierRef = useRef<Map<number, Set<string>>>(new Map());
+  const treeBlocksByTierRef = useRef<Map<number, Map<number, string>>>(new Map());
+  const nonInvisTreeBlocksByTierRef = useRef<Map<number, Set<number>>>(new Map());
   /** All tree block positions by tier for spawn adjacency check */
-  const allTreeBlockPositionsByTierRef = useRef<Map<number, Set<string>>>(new Map());
+  const allTreeBlockPositionsByTierRef = useRef<Map<number, Set<number>>>(new Map());
   /** O(1) world occupancy check - rebuilt with tree block indices */
-  const worldOccupiedSetRef = useRef<Set<string>>(new Set());
+  const worldOccupiedSetRef = useRef<Set<number>>(new Set());
   /** Failed spawn tracking for cooldown */
   const failedSpawnAttemptsRef = useRef<Map<string, number>>(new Map());
   /** Last block count for change detection */
@@ -144,10 +150,10 @@ export function useShnakeSystem({
       if (blocks.length === lastBlockCountRef.current) return;
       lastBlockCountRef.current = blocks.length;
       
-      const byTier = new Map<number, Map<string, string>>();
-      const nonInvisByTier = new Map<number, Set<string>>();
-      const allPosByTier = new Map<number, Set<string>>();
-      const occupied = new Set<string>();
+      const byTier = new Map<number, Map<number, string>>();
+      const nonInvisByTier = new Map<number, Set<number>>();
+      const allPosByTier = new Map<number, Set<number>>();
+      const occupied = new Set<number>();
 
       for (let i = 0; i < blocks.length; i++) {
         const b = blocks[i] as any;
@@ -295,7 +301,7 @@ export function useShnakeSystem({
 
     // Extend segments
     const segments: ShnakeSegment[] = [head];
-    const occupied = new Set<string>([key(head.x, head.y, head.z)]);
+    const occupied = new Set<number>([key(head.x, head.y, head.z)]);
     
     for (let i = 1; i < len; i++) {
       const prev = segments[i - 1];
@@ -369,11 +375,23 @@ export function useShnakeSystem({
     if (!plantedTrees || plantedTrees.length === 0) return;
     if (!definitions || definitions.length === 0) return;
 
+    // Stagger spawn attempts across calls — at most N spawns per tick.
+    // Previously this synchronously called spawnOnTree() for every empty
+    // tree in one tick, which caused 826ms main-thread blocking when the
+    // player walked into new territory and many trees had no shnakes
+    // (real-world trace 2026-May-19, Trace-20260519T210931, timerId=2399).
+    // Capping at MAX_SPAWNS_PER_TICK means the cost spreads over multiple
+    // 3-second ticks; trees not spawned this tick are still iterated next
+    // tick (failedSpawnAttempts cooldown handles re-tries naturally).
+    const MAX_SPAWNS_PER_TICK = 3;
     const ensureOneShnakePerTree = () => {
       const trees = treesRef.current || [];
       const now = Date.now();
-      
+      let spawnedThisTick = 0;
+
       for (const tree of trees) {
+        if (spawnedThisTick >= MAX_SPAWNS_PER_TICK) break;
+
         // Skip fungal trees - shnakes only spawn on ordinary trees
         if (tree.seed_definition?.tree_type === 'fungal') continue;
 
@@ -384,10 +402,11 @@ export function useShnakeSystem({
           if (now - lastFail < SPAWN_COOLDOWN_MS) {
             continue; // Still in cooldown, skip
           }
-          
+
           if (DEBUG_SHNAKE) console.log(`[Shnake Ensure] Tree ${tree.id} has no shnake, spawning...`);
           const result = spawnOnTree(tree);
-          
+          spawnedThisTick++;
+
           if (!result) {
             // Spawn failed, set cooldown
             failedSpawnAttemptsRef.current.set(tree.id, now);
