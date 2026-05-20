@@ -1459,6 +1459,13 @@ export function Fortress() {
         shadows={false}
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         dpr={1}
+        onCreated={({ gl }) => {
+          // Three.js calls gl.getProgramInfoLog after every shader compile, which
+          // synchronously blocks the main thread until the GPU is done compiling.
+          // Real-world trace 2026-May-19: ~1.6s/48s of main-thread stalls came
+          // from getProgramInfoLog. Disabling shader-error checks skips it.
+          gl.debug.checkShaderErrors = false;
+        }}
       >
         {showPerfMonitor && <Perf position="top-left" minimal={true} />}
         <FortressScene

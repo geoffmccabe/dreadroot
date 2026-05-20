@@ -343,10 +343,22 @@ export function useFortressFrameLoop({
           
           for (const shwarm of activeShwarms) {
             if (!shwarm.isActive || hit) break;
-            
+
+            // Broad-phase: skip whole shwarm if no block can be reached this frame.
+            // Real-world trace 2026-May-19: bullet x enemy x part inner loops were
+            // dominating useFrame self-time. Use first alive block as representative;
+            // bail if bullet is farther than shwarm spread + dispLen.
+            const rep0 = shwarm.blocks.find(b => b.isAlive);
+            if (!rep0) continue;
+            const BAIL = 15 + dispLen; // shwarm groups span ~5-10 blocks
+            const bdx = bullet.position.x - rep0.position.x;
+            const bdy = bullet.position.y - rep0.position.y;
+            const bdz = bullet.position.z - rep0.position.z;
+            if (bdx*bdx + bdy*bdy + bdz*bdz > BAIL*BAIL) continue;
+
             for (const block of shwarm.blocks) {
               if (!block.isAlive) continue;
-              
+
               // AABB bounds centered on block
               const bx = block.position.x;
               const by = block.position.y;
@@ -466,7 +478,17 @@ export function useFortressFrameLoop({
             const shnakes = shnakesRef.current || [];
             for (const shnake of shnakes) {
               if (!shnake.isActive || hit) break;
-              
+
+              // Broad-phase: distance from bullet to head, bail with segments+dispLen.
+              // Real-world trace 2026-May-19: this inner loop was a hot spot.
+              const head = shnake.segments[0];
+              if (!head) continue;
+              const SHNAKE_BAIL = shnake.segments.length + dispLen + 2;
+              const sdx = bullet.position.x - head.x;
+              const sdy = bullet.position.y - head.y;
+              const sdz = bullet.position.z - head.z;
+              if (sdx*sdx + sdy*sdy + sdz*sdz > SHNAKE_BAIL*SHNAKE_BAIL) continue;
+
               for (let segIdx = 0; segIdx < shnake.segments.length; segIdx++) {
                 const seg = shnake.segments[segIdx];
                 const isHead = segIdx === 0;
@@ -641,6 +663,13 @@ export function useFortressFrameLoop({
               const minBulletY = Math.min(prevY, by);
               const maxBulletY = Math.max(prevY, by);
               if (maxBulletY < cylBottom - 0.5 || minBulletY > cylTop + 0.5) continue;
+
+              // Broad-phase XZ bail (real-world trace 2026-May-19): skip the
+              // ray-cylinder math entirely if bullet path is too far horizontally.
+              const xzdx = bx - cylX;
+              const xzdz = bz - cylZ;
+              const SHOMBIE_BAIL_XZ = hitRadius + rayLen + 0.5;
+              if (xzdx*xzdx + xzdz*xzdz > SHOMBIE_BAIL_XZ*SHOMBIE_BAIL_XZ) continue;
 
               // Distance from ray to cylinder axis (in XZ plane)
               // Parametric line: P = prevPos + t * rayDir, t in [0, 1]
@@ -828,6 +857,13 @@ export function useFortressFrameLoop({
             const minBulletY = Math.min(prevY, by);
             const maxBulletY = Math.max(prevY, by);
             if (maxBulletY < cylBottom - 0.5 || minBulletY > cylTop + 0.5) continue;
+
+            // Broad-phase XZ bail (real-world trace 2026-May-19): skip the
+            // ray-cylinder math entirely if bullet path is too far horizontally.
+            const xzdx = bx - cylX;
+            const xzdz = bz - cylZ;
+            const SHT_BAIL_XZ = hitRadius + rayLen + 0.5;
+            if (xzdx*xzdx + xzdz*xzdz > SHT_BAIL_XZ*SHT_BAIL_XZ) continue;
 
             // Ray-cylinder intersection
             let hitT = -1;
