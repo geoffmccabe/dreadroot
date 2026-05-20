@@ -136,6 +136,9 @@ export function useFortressFrameLoop({
 
   // Track previous frame time for real frame time measurement
   const lastFrameNowRef = useRef<number>(performance.now());
+  // Throttle expensive diagnostics captures to the DF sample interval (100ms)
+  // instead of running them every frame. See useFrame body below.
+  const lastDiagCaptureRef = useRef<number>(0);
 
   // Start/stop performance stall observers (longtask, event loop lag)
   useEffect(() => {
@@ -158,37 +161,51 @@ export function useFortressFrameLoop({
   diagnostics.particleCount = 0;
   diagnostics.coinCount = 0;
   
-  // Update diagnostics metrics
+  // Update diagnostics metrics (per-frame counter resets stay above; these
+  // are cheap reads of position/length so leave them per-frame).
   diagnostics.cameraX = camera.position.x;
   diagnostics.cameraY = camera.position.y;
   diagnostics.cameraZ = camera.position.z;
   diagnostics.particleCount = wispParticlesRef.current.length;
-  
-  // Capture renderer stats for GPU metrics (draw calls, triangles, memory)
-  diagnostics.captureRendererStats(state.gl);
-  
-  // Capture grid stats for collision system monitoring
-  diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
-  
-  // Capture per-enemy-type stats for detailed performance tracking
-  const activeShwarms = shwarmsRef.current;
-  let shwarmBlockCount = 0;
-  for (let i = 0; i < activeShwarms.length; i++) {
-    const shwarm = activeShwarms[i];
-    for (let j = 0; j < shwarm.blocks.length; j++) {
-      if (shwarm.blocks[j].isAlive) shwarmBlockCount++;
+
+  // EXPENSIVE captures — throttled to the DF sample interval (~100ms).
+  // Real-world trace 2026-May-19 (Trace-20260519T204124): this useFrame
+  // callback was the #1 hot spot at 4.3s/12% of profile time, with the
+  // per-enemy-type iteration loops + renderer/grid stat reads burning
+  // CPU every frame even though `diagnostics.tick()` only WRITES a
+  // sample every 100ms. At 60fps that's ~5/6 frames of pure waste. Also
+  // bypass entirely when DF isn't recording — the enemy for-loops below
+  // ran unconditionally before, which is why FPS was bad even without
+  // a DF report being captured.
+  const nowDiag = now;
+  if (
+    diagnostics.enabled &&
+    nowDiag - (lastDiagCaptureRef.current || 0) >= 100
+  ) {
+    lastDiagCaptureRef.current = nowDiag;
+
+    diagnostics.captureRendererStats(state.gl);
+    diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
+
+    const activeShwarms = shwarmsRef.current;
+    let shwarmBlockCount = 0;
+    for (let i = 0; i < activeShwarms.length; i++) {
+      const shwarm = activeShwarms[i];
+      for (let j = 0; j < shwarm.blocks.length; j++) {
+        if (shwarm.blocks[j].isAlive) shwarmBlockCount++;
+      }
     }
+    diagnostics.captureShwarmStats(activeShwarms.length, shwarmBlockCount);
+
+    const activeShnakes = shnakesRef.current;
+    let shnakeSegmentCount = 0;
+    for (let i = 0; i < activeShnakes.length; i++) {
+      shnakeSegmentCount += activeShnakes[i].segments.length;
+    }
+    diagnostics.captureShnakeStats(activeShnakes.length, shnakeSegmentCount);
+
+    diagnostics.captureShombieStats(shombiesRef.current.length);
   }
-  diagnostics.captureShwarmStats(activeShwarms.length, shwarmBlockCount);
-  
-  const activeShnakes = shnakesRef.current;
-  let shnakeSegmentCount = 0;
-  for (let i = 0; i < activeShnakes.length; i++) {
-    shnakeSegmentCount += activeShnakes[i].segments.length;
-  }
-  diagnostics.captureShnakeStats(activeShnakes.length, shnakeSegmentCount);
-  
-  diagnostics.captureShombieStats(shombiesRef.current.length);
   
   // Call consolidated component updates (eliminates 5 separate useFrame hooks)
   diagnostics.startTiming('render');
