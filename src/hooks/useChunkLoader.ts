@@ -1197,9 +1197,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
     }
 
-    // Load chunks from cache into memory (NO emit yet - wait for server data)
+    // Load chunks from cache into memory (NO emit yet - wait for server data).
+    // Yielding batches: a large integrity-check load (~299 cached chunks)
+    // used to apply in ONE synchronous pass — the 2026-May-21 trace showed
+    // that as a 1461ms main-thread freeze. Mirror the server-load path.
     let cacheBlockCount = 0;
-    for (const { x, z, blocks } of chunksFromCache) {
+    const CACHE_PROCESS_BATCH = 8;
+    for (let cacheBatchStart = 0; cacheBatchStart < chunksFromCache.length; cacheBatchStart += CACHE_PROCESS_BATCH) {
+      if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) break;
+      const cacheBatchEnd = Math.min(cacheBatchStart + CACHE_PROCESS_BATCH, chunksFromCache.length);
+      for (let ci = cacheBatchStart; ci < cacheBatchEnd; ci++) {
+      const { x, z, blocks } = chunksFromCache[ci];
       // Cap check: stop loading if at limit
       if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) break;
       const chunkKey = `chunk_${x}_${z}`;
@@ -1250,7 +1258,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       applyChunkSigChange(EMPTY_CHUNK_SIG, newSig);
       // Update height map for pathfinding
       updateChunkHeightMap(chunkKey, blocks);
+      } // end inner per-chunk loop
 
+      // Yield to the frame loop between batches so a big cached load can't
+      // freeze the main thread (skip on the first batch during init).
+      if (cacheBatchStart > 0 || initialLoadDone.current) {
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      }
     }
     if (chunksFromCache.length > 0) {
       initLogStep('useChunkLoader.ts', `Loaded from cache: ${chunksFromCache.length} chunks, ${cacheBlockCount} blocks`);
