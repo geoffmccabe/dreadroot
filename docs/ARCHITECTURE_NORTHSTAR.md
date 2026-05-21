@@ -11,21 +11,27 @@ Legend — STATUS: ✅ done & verified · 🟡 done, needs hardening · 🔴 not
 
 ---
 
-## Where we are right now (2026-May-20)
+## Where we are right now (2026-May-21)
 
-- **~14 FPS average** in the 2026-May-19 21:38 trace (680 frames / 48.6 s),
-  with worst frame **864 ms**. Main thread blocked 53 % of wall clock.
-- **Heap oscillates 476–990 MB**, one **122 ms MajorGC** during the
-  recording → these are the "grey flash" stalls.
-- Recent fixes (just shipped — should help the next trace):
-  - Shader-error sync stall removed (saves ~1.6 s / 48 s).
-  - Bullet × enemy × body-part collision now has a broad-phase distance
-    bail per enemy (was the #1 main-thread hot spot at 12.3 s / 48 s).
+- **61 FPS average** in the 2026-May-21 11:58 trace (2234 frames / 36.5 s),
+  **median frame 4 ms** (p95 8 ms — i.e. steady state is 120fps-capable).
+  Up from ~14 FPS the day before — the broad-phase + shader-error fixes
+  landed hard.
+- Remaining problem is **pure stalls**, not steady-state cost:
+  - One **1461 ms** freeze — the IndexedDB cache-apply loop processing a
+    ~299-chunk integrity-check load in a single synchronous pass. FIXED
+    in #6 part 6 (cache path now batches + yields like the server path).
+  - A timer firing 54–293 ms repeatedly — same root cause.
+- Two correctness bugs found in the console and fixed:
+  - WebMediaPlayer leak — per-event `new Audio()` piling up past Chrome's
+    ~1000 cap. FIXED in #6 part 7 (Web Audio buffer playback).
+  - `Y.split is not a function` crash — parse utilities throwing on a
+    non-string block_type. FIXED in #6 part 8 (type guards).
 
-To go from 14 → 60 we need to **kill stalls + cut steady-state work in
-half**. To go from 60 → 90–120 we need real architecture wins (greedy
-meshing, Y-sectioning, texture array, fog-gates-loading). The plan
-below is ordered by FPS impact, not subsystem.
+Next: a fresh trace to confirm the 1461 ms freeze is gone. With steady
+state already at a 4 ms median, **Phase A is mostly about eliminating
+the last stalls**; once frames are consistently < 16 ms the 90–120 FPS
+target is largely an architecture-headroom question (Phase B).
 
 ---
 
