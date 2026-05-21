@@ -121,6 +121,38 @@ export async function playSpatialSound(
 }
 
 /**
+ * Play a non-spatial UI/feedback sound at a flat volume.
+ *
+ * Uses a Web Audio buffer source — this does NOT create an HTMLAudioElement
+ * (WebMediaPlayer), so it cannot leak against Chrome's ~1000-player cap the
+ * way per-event `new Audio()` does. The buffer is fetched+decoded once and
+ * cached; subsequent plays are allocation-light.
+ */
+export async function playSound(url: string, volume: number = 0.5): Promise<void> {
+  if (volume <= 0.01) return;
+
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const buffer = await loadAudioBuffer(url);
+    if (!buffer) return;
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = volume;
+
+    source.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    source.start(0);
+  } catch (e) {
+    // Silently fail - audio is non-critical
+  }
+}
+
+/**
  * Play a true 3D positional sound using PannerNode
  * Listeners with headphones can hear directionality
  * Used for long-range sounds like yodels that need to carry far
