@@ -65,6 +65,10 @@ export function encodeBlockType(type: string, depth: number, tier: number): stri
  * Uses string split (not regex) for performance in render loops
  */
 export function decodeBlockType(encoded: string): DecodedBlockType | null {
+  // Guard: a non-string block_type (e.g. a numeric value from malformed data)
+  // would throw "split is not a function" — a parse utility must return null
+  // on bad input, never crash the render pass.
+  if (typeof encoded !== 'string') return null;
   const parts = encoded.split('_');
   
   // Handle simple block types that aren't encoded (e.g., 'fortress_block')
@@ -141,7 +145,7 @@ const _isTreeCache = new Map<string, boolean>();
  * Handles both simple types ('trunk'), short codes ('t'), and encoded types ('t_-1_5', 'trunk_-1_5')
  */
 export function isTreeBlockType(blockType: string): boolean {
-  if (!blockType) return false;
+  if (!blockType || typeof blockType !== 'string') return false;
 
   const cached = _isTreeCache.get(blockType);
   if (cached !== undefined) return cached;
@@ -189,7 +193,7 @@ function _isTreeBlockTypeUncached(blockType: string): boolean {
  * Handles both short codes (ib) and full names
  */
 export function getBaseTreeBlockType(blockType: string): string | null {
-  if (!blockType) return null;
+  if (!blockType || typeof blockType !== 'string') return null;
   
   // Check if it's a short code directly
   if (blockType in TREE_BLOCK_TYPE_MAP) {
@@ -229,7 +233,7 @@ export function getBaseTreeBlockType(blockType: string): string | null {
  * Handles short code 'ib' and full name 'invisiblock'
  */
 export function isInvisiblock(blockType: string): boolean {
-  if (!blockType) return false;
+  if (!blockType || typeof blockType !== 'string') return false;
   // Quick check for short code or full name
   if (blockType === 'ib' || blockType === 'invisiblock') return true;
   if (blockType.startsWith('ib_') || blockType.startsWith('invisiblock_')) return true;

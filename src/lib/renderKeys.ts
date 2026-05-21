@@ -19,7 +19,7 @@ export function fnv1a32(input: string): string {
  * This prevents signed URL churn from causing cache misses
  */
 export function canonicalizeTextureUrl(url: string | null | undefined): string {
-  if (!url) return '';
+  if (!url || typeof url !== 'string') return '';
   const q = url.split('#')[0].split('?')[0];
   try {
     const u = new URL(q, window.location.origin);

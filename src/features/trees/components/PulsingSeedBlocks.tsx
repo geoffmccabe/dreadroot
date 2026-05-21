@@ -18,6 +18,7 @@ const seedGeometry = new THREE.BoxGeometry(1, 1, 1);
 
 // Extract tier from block_type like 'f_0_29' -> 29
 function getTierFromBlockType(blockType: string): number {
+  if (typeof blockType !== 'string') return 0;
   const parts = blockType.split('_');
   if (parts.length >= 3) {
     const tier = parseInt(parts[parts.length - 1], 10);
