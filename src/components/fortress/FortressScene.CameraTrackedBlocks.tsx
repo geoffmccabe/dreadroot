@@ -8,6 +8,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE, getVisibleChunkKeys, parseChunkKey } from '@/lib/chunkManager';
+import { FOG_DISTANCE_CHUNKS } from '@/lib/fogConfig';
 import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 
 import ChunkRenderer from '@/components/ChunkRenderer';
@@ -20,7 +21,6 @@ import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useWorldPonds } from '@/hooks/useWorldPonds';
 
-const FADE_EXTRA = 3;
 
 export function CameraTrackedBlocks({
   showOwnershipOutline,
@@ -219,7 +219,7 @@ export function CameraTrackedBlocks({
         const dcz = Math.abs(parsed.chunkZ - camChunkZ);
         const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
 
-        if (chunkDist <= visualDistance) {
+        if (chunkDist <= FOG_DISTANCE_CHUNKS) {
           // Reuse the cached entry (keeping its OLD blocks ref) when the
           // chunk's CONTENT signature is unchanged, even if the
           // visibleBlocks/blocks array ref rotated (refetch / surface
@@ -244,12 +244,8 @@ export function CameraTrackedBlocks({
           cache.set(chunkKey, entry);
           activeKeys.add(chunkKey);
           normal.push(entry);
-        } else if (chunkDist <= visualDistance + FADE_EXTRA) {
-          const distanceFactor = (chunkDist - visualDistance) / FADE_EXTRA;
-          activeKeys.add(chunkKey);
-          fade.push({ key: chunkKey, blocks, distanceFactor });
         } else {
-          // Track excluded chunk for diagnostic
+          // Beyond the fog wall — don't render; fog has fully hidden it.
           excluded.push({ key: chunkKey, dist: chunkDist, blocks: chunkData.blocks.length });
         }
       }
@@ -258,8 +254,8 @@ export function CameraTrackedBlocks({
     // One-time diagnostic: log excluded chunks
     if (!chunkExclusionLogRef.current && excluded.length > 0) {
       chunkExclusionLogRef.current = true;
-      console.log(`[ChunkVisibility] Camera chunk: (${camChunkX}, ${camChunkZ}), visualDistance: ${visualDistance}, FADE_EXTRA: ${FADE_EXTRA}`);
-      console.log(`[ChunkVisibility] Excluded ${excluded.length} chunks beyond range ${visualDistance + FADE_EXTRA}:`);
+      console.log(`[ChunkVisibility] Camera chunk: (${camChunkX}, ${camChunkZ}), fog render distance: ${FOG_DISTANCE_CHUNKS} chunks`);
+      console.log(`[ChunkVisibility] Excluded ${excluded.length} chunks beyond ${FOG_DISTANCE_CHUNKS}:`);
       for (const e of excluded.slice(0, 10)) {
         console.log(`  - ${e.key}: dist=${e.dist}, ${e.blocks} blocks (has colliders but won't render)`);
       }

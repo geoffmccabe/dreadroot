@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
+import { FOG_DISTANCE_CHUNKS } from '@/lib/fogConfig';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { useBlocksData } from '@/hooks/useBlocksData';
@@ -879,11 +880,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   useEffect(() => {
     if (fogEnabled) {
-      const FADE_EXTRA_CHUNKS = 3;
-      const maxDist = (visualDistance + FADE_EXTRA_CHUNKS) * CHUNK_SIZE;
-      const fogStart = maxDist * (lsFogStartPct / 100);
-      const fogEnd = maxDist * (lsFogEndPct / 100);
-      scene.fog = new THREE.Fog(fogColorCurrent.current, fogStart, fogEnd);
+      // Fog overhaul Phase 1 (docs/FOG_PLAN.md): dense fog fully opaque exactly
+      // at the chunk render edge, so the render cutoff is invisible.
+      const fogDist = FOG_DISTANCE_CHUNKS * CHUNK_SIZE;
+      scene.fog = new THREE.Fog(fogColorCurrent.current, fogDist * 0.35, fogDist);
       scene.background = fogColorCurrent.current.clone();
     } else {
       scene.fog = null;
@@ -893,7 +893,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       scene.fog = null;
       scene.background = null;
     };
-  }, [scene, visualDistance, fogEnabled, lsFogStartPct, lsFogEndPct]);
+  }, [scene, fogEnabled]);
 
   // Update fog color based on day/night cycle (low frequency — every 500ms)
   useEffect(() => {
