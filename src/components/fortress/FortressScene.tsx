@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
-import { FOG_DISTANCE_CHUNKS } from '@/lib/fogConfig';
+import { FOG_DISTANCE_CHUNKS, FOG_DENSITY } from '@/lib/fogConfig';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { useBlocksData } from '@/hooks/useBlocksData';
@@ -880,10 +880,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   useEffect(() => {
     if (fogEnabled) {
-      // Fog overhaul Phase 1 (docs/FOG_PLAN.md): dense fog fully opaque exactly
-      // at the chunk render edge, so the render cutoff is invisible.
-      const fogDist = FOG_DISTANCE_CHUNKS * CHUNK_SIZE;
-      scene.fog = new THREE.Fog(fogColorCurrent.current, fogDist * 0.35, fogDist);
+      // Fog overhaul Phase 1 (docs/FOG_PLAN.md): dense exponential fog. The
+      // chunk render radius (FOG_DISTANCE_CHUNKS) is just outside where this
+      // density is effectively opaque, so the render cutoff is invisible.
+      scene.fog = new THREE.FogExp2(fogColorCurrent.current, FOG_DENSITY);
       scene.background = fogColorCurrent.current.clone();
     } else {
       scene.fog = null;
