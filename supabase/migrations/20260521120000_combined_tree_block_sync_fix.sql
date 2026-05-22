@@ -1,22 +1,24 @@
 -- ============================================================================
--- COMBINED FIX: tree-block sync RPC ("sync_all_missing_tree_blocks")
+-- FIX: tree-block sync RPC ("sync_all_missing_tree_blocks") — FUNCTIONS ONLY
 -- ============================================================================
 -- The game calls supabase.rpc('sync_all_missing_tree_blocks', { p_world_id })
 -- to restore tree blocks for fully-grown trees from their stored blueprints.
 -- In production that function does not exist, so the call 500s and the console
 -- logs "[TreeSync] Function not available yet - run migration first".
 --
--- This single script:
+-- This script (fast — runs in well under a second):
 --   1. (re)creates sync_missing_tree_blocks()      — per-tree restore
 --      (the fungal-aware version: handles fungal_stem / fungal_cap_* /
 --       glow_bark / root / shrine block types and their textures)
 --   2. (re)creates sync_all_missing_tree_blocks()  — per-world restore
 --   3. grants EXECUTE to authenticated users
---   4. runs a ONE-TIME backfill across every world so missing tree blocks
---      are restored immediately
 --
--- Safe to run more than once: the functions use CREATE OR REPLACE and every
--- INSERT uses ON CONFLICT DO NOTHING, so re-running inserts nothing new.
+-- That alone clears the 500 error. The game then calls the per-world function
+-- itself whenever a world loads, so missing blocks get restored naturally.
+-- To force an immediate bulk restore instead, run the companion file
+-- 20260521130000_tree_block_backfill.sql (slow — see notes in that file).
+--
+-- Safe to run more than once: CREATE OR REPLACE replaces the functions cleanly.
 -- Run it in the Supabase dashboard SQL editor.
 -- ============================================================================
 
@@ -220,35 +222,5 @@ $$;
 GRANT EXECUTE ON FUNCTION public.sync_missing_tree_blocks(uuid, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_all_missing_tree_blocks(uuid) TO authenticated;
 
--- ---------------------------------------------------------------------------
--- 4. One-time backfill: restore missing tree blocks for every world now
--- ---------------------------------------------------------------------------
-DO $$
-DECLARE
-  v_world RECORD;
-  v_result JSON;
-  v_total_blocks INTEGER := 0;
-  v_total_trees INTEGER := 0;
-BEGIN
-  RAISE NOTICE 'Starting sync of missing tree blocks for all worlds...';
-
-  FOR v_world IN
-    SELECT DISTINCT w.id, w.name
-    FROM worlds w
-    JOIN planted_trees pt ON pt.world_id = w.id
-    WHERE pt.is_fully_grown = true
-  LOOP
-    RAISE NOTICE 'Syncing world: % (%)', v_world.name, v_world.id;
-
-    v_result := sync_all_missing_tree_blocks(v_world.id);
-
-    v_total_blocks := v_total_blocks + COALESCE((v_result->>'total_blocks_inserted')::int, 0);
-    v_total_trees := v_total_trees + COALESCE((v_result->>'trees_processed')::int, 0);
-
-    RAISE NOTICE '  Result: % blocks inserted for % trees',
-      COALESCE((v_result->>'total_blocks_inserted')::int, 0),
-      COALESCE((v_result->>'trees_processed')::int, 0);
-  END LOOP;
-
-  RAISE NOTICE 'Sync complete. Total: % blocks inserted across % trees', v_total_blocks, v_total_trees;
-END $$;
+-- Done. The 500 error is now cleared. Bulk backfill (optional) lives in
+-- 20260521130000_tree_block_backfill.sql.
