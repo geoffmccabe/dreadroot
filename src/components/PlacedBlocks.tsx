@@ -1,5 +1,6 @@
 import React, { useRef, useMemo, useEffect, MutableRefObject } from 'react';
 import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
@@ -175,6 +176,18 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
 
   // Only run atlas sync if not hoisted (parent handles it)
   useAtlasSync({ enabled: hoistedAtlasTexture === undefined });
+
+  // Force the 256MB atlas onto the GPU as soon as it's ready, instead of
+  // letting Three.js upload it lazily on first draw (which freezes a frame
+  // mid-game — the "grey screen"). Runs once.
+  const { gl } = useThree();
+  const atlasUploadedRef = useRef(false);
+  useEffect(() => {
+    if (atlasReady && atlasTexture && !atlasUploadedRef.current) {
+      atlasUploadedRef.current = true;
+      gl.initTexture(atlasTexture);
+    }
+  }, [atlasReady, atlasTexture, gl]);
 
   
   // Initialize audio
