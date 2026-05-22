@@ -1,18 +1,30 @@
 /**
  * Wide Tree Lights
  *
- * Manages sparse point lights near wide trees for glow bark illumination.
+ * Manages point lights near wide trees for glow bark illumination.
  * Each wide tree gets 1-3 dim point lights depending on tier.
- * Capped at 20 active lights scene-wide. Trees beyond camera threshold skip lights
- * (emissive blocks still glow, just no light casting).
+ *
+ * CRITICAL: a FIXED number of <pointLight>s is always rendered. Three.js
+ * bakes the point-light count into every material's shader program
+ * (NUM_POINT_LIGHTS), so changing the count forces a full shader recompile
+ * of the whole scene — a multi-second main-thread freeze. Earlier this
+ * component mounted a variable 0-20 lights recalculated every 500ms, which
+ * recompiled shaders constantly while moving (trace 2026-05-22: repeated
+ * multi-second stalls, screen flashing the clear colour). Now exactly
+ * LIGHT_SLOTS lights always exist; unused slots are just set to intensity 0.
+ *
  * Position check updates every 500ms (not per frame).
  */
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import { PlantedTree } from '../types';
 
-const MAX_SCENE_LIGHTS = 20;
+// Fixed number of point-light slots. Constant => shader compiles once, never
+// recompiles. The closest wide-tree lights fill real slots; the rest sit at
+// intensity 0. 8 nearby glow-casters is ample; distant ones contributed
+// almost nothing at the old cap of 20 anyway (point-light range is only 20).
+const LIGHT_SLOTS = 8;
 const UPDATE_INTERVAL_MS = 500;
 
 interface TreeLight {
@@ -23,6 +35,16 @@ interface TreeLight {
   color: string;
   intensity: number;
   distance: number;
+}
+
+// An inert slot: intensity 0 contributes nothing, but the light still counts
+// toward NUM_POINT_LIGHTS so the shader program stays stable.
+const OFF_LIGHT: TreeLight = {
+  treeId: '', x: 0, y: -10000, z: 0, color: '#000000', intensity: 0, distance: 1,
+};
+
+function makeOffSlots(): TreeLight[] {
+  return Array.from({ length: LIGHT_SLOTS }, () => ({ ...OFF_LIGHT }));
 }
 
 function getLightCountForTier(tier: number): number {
@@ -37,7 +59,8 @@ interface WideTreeLightsProps {
 
 export function WideTreeLights({ plantedTrees }: WideTreeLightsProps) {
   const { camera } = useThree();
-  const [activeLights, setActiveLights] = useState<TreeLight[]>([]);
+  // Always exactly LIGHT_SLOTS entries — never grows or shrinks.
+  const [lightSlots, setLightSlots] = useState<TreeLight[]>(makeOffSlots);
   const treesRef = useRef(plantedTrees);
   treesRef.current = plantedTrees;
 
@@ -49,7 +72,7 @@ export function WideTreeLights({ plantedTrees }: WideTreeLightsProps) {
       );
 
       if (wideTrees.length === 0) {
-        setActiveLights([]);
+        setLightSlots(makeOffSlots());
         return;
       }
 
@@ -85,11 +108,13 @@ export function WideTreeLights({ plantedTrees }: WideTreeLightsProps) {
         }
       }
 
-      // Sort by distance and take closest up to MAX_SCENE_LIGHTS
+      // Closest lights fill the fixed slots; remaining slots stay inert.
       allLights.sort((a, b) => a.distSq - b.distSq);
-      const selected = allLights.slice(0, MAX_SCENE_LIGHTS);
-
-      setActiveLights(selected);
+      const slots: TreeLight[] = [];
+      for (let i = 0; i < LIGHT_SLOTS; i++) {
+        slots.push(allLights[i] ?? { ...OFF_LIGHT });
+      }
+      setLightSlots(slots);
     };
 
     update();
@@ -97,13 +122,14 @@ export function WideTreeLights({ plantedTrees }: WideTreeLightsProps) {
     return () => clearInterval(interval);
   }, [camera]);
 
-  if (activeLights.length === 0) return null;
-
+  // Always render exactly LIGHT_SLOTS lights, keyed by slot index so React
+  // never mounts/unmounts a light — it only updates props. The count is
+  // therefore constant and the scene's shaders never recompile.
   return (
     <>
-      {activeLights.map((light, i) => (
+      {lightSlots.map((light, i) => (
         <pointLight
-          key={`${light.treeId}-${i}`}
+          key={i}
           position={[light.x + 0.5, light.y + 0.5, light.z + 0.5]}
           color={light.color}
           intensity={light.intensity}
