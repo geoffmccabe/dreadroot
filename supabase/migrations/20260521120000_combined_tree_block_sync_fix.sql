@@ -72,9 +72,11 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Blueprint not found for tree');
   END IF;
 
-  -- Iterate through blueprint blocks and insert any that are missing
+  -- Iterate through blueprint blocks and insert any that are missing.
+  -- json_array_elements() emits a column named "value"; alias it to "b" so
+  -- the v_block.b->>'...' accessors below resolve.
   FOR v_block IN
-    SELECT * FROM json_array_elements(v_blueprint_data->'blocks') AS b
+    SELECT value AS b FROM json_array_elements(v_blueprint_data->'blocks')
   LOOP
     v_raw_type := v_block.b->>'type';
 

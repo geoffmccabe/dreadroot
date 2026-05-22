@@ -44,7 +44,7 @@ BEGIN
 
   -- Iterate through blueprint blocks and insert any that are missing
   FOR v_block IN
-    SELECT * FROM json_array_elements(v_blueprint_data->'blocks') AS b
+    SELECT value AS b FROM json_array_elements(v_blueprint_data->'blocks')
   LOOP
     -- Determine block type encoding (short code format: t=trunk, b=branch, l=leaf, etc.)
     v_block_type := CASE (v_block.b->>'type')
