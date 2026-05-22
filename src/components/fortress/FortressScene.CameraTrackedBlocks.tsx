@@ -173,13 +173,13 @@ export function CameraTrackedBlocks({
   // PERF: Cache entry objects per chunk key. Only create a new entry when the blocks
   // ref changes. This prevents ChunkRenderer React.memo from being busted by
   // worldRevision/renderTrigger changes that don't actually change chunk data.
-  const entryCacheRef = useRef<Map<string, { key: string; blocks: PlacedBlock[]; sig?: string }>>(new Map());
+  const entryCacheRef = useRef<Map<string, { key: string; blocks: PlacedBlock[]; sig?: string; dist?: number }>>(new Map());
 
   // One-time diagnostic for chunk exclusions
   const chunkExclusionLogRef = useRef(false);
 
   const { normalEntries, fadeEntries } = useMemo(() => {
-    const normal: { key: string; blocks: PlacedBlock[]; sig?: string }[] = [];
+    const normal: { key: string; blocks: PlacedBlock[]; sig?: string; dist?: number }[] = [];
     const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
     const ref = loadedChunksRef?.current;
     const cache = entryCacheRef.current;
@@ -231,7 +231,7 @@ export function CameraTrackedBlocks({
             ? `${chunkData.signature.count}:${chunkData.signature.xor}:${chunkData.signature.sum}`
             : '';
           const cached = cache.get(chunkKey);
-          let entry: { key: string; blocks: PlacedBlock[]; sig?: string };
+          let entry: { key: string; blocks: PlacedBlock[]; sig?: string; dist?: number };
           if (cached && cached.blocks === blocks) {
             entry = cached;
           } else if (cached && sig !== '' && cached.sig === sig) {
@@ -239,6 +239,8 @@ export function CameraTrackedBlocks({
           } else {
             entry = { key: chunkKey, blocks, sig };
           }
+          // Refresh distance every pass — the progressive renderer sorts on it.
+          entry.dist = chunkDist;
           cache.set(chunkKey, entry);
           activeKeys.add(chunkKey);
           normal.push(entry);
@@ -282,6 +284,13 @@ export function CameraTrackedBlocks({
       }
     }
 
+    // Sort visible chunks nearest-first. The progressive renderer below feeds
+    // chunks to React in this order, and the mesh worker is fed in that same
+    // order downstream — so the closest chunks build first. Without this the
+    // list was in chunk-LOAD order: running fast past a region left the chunk
+    // under your feet waiting behind far chunks that loaded earlier.
+    normal.sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
+
     diagnostics.setChunkRenderCount(normal.length);
 
     // D-Flow: Track chunk pipeline metrics
@@ -308,9 +317,10 @@ export function CameraTrackedBlocks({
   }, [renderTrigger, loadedChunksRef, worldRevision, visualDistance, camera]);
 
   // Progressive render budget: don't hand all new chunks to React at once.
-  // Feed up to CHUNKS_PER_FRAME new chunks per frame (nearest first).
-  // Chunks already rendered stay stable (memo prevents re-render).
-  const CHUNKS_PER_FRAME = 5;
+  // Feed up to CHUNKS_PER_FRAME new chunks per frame (nearest first — see the
+  // distance sort on `normal` above). Chunks already rendered stay stable
+  // (memo prevents re-render).
+  const CHUNKS_PER_FRAME = 8;
   const renderedKeysRef = useRef(new Set<string>());
   const [progressiveTrigger, setProgressiveTrigger] = useState(0);
 
