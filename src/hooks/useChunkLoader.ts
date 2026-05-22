@@ -1203,6 +1203,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // that as a 1461ms main-thread freeze. Mirror the server-load path.
     let cacheBlockCount = 0;
     const CACHE_PROCESS_BATCH = 8;
+    // Closest-first ordering: render chunks the player can actually see before
+    // distant ones. Re-sorted each batch (below) so turning around mid-load
+    // re-prioritizes toward the new heading.
+    {
+      const p0 = playerChunkRef.current;
+      if (p0) chunksFromCache.sort((a, b) =>
+        Math.max(Math.abs(a.x - p0.x), Math.abs(a.z - p0.z)) -
+        Math.max(Math.abs(b.x - p0.x), Math.abs(b.z - p0.z)));
+    }
     for (let cacheBatchStart = 0; cacheBatchStart < chunksFromCache.length; cacheBatchStart += CACHE_PROCESS_BATCH) {
       if (loadedChunksRef.current.size >= MAX_LOADED_CHUNKS) break;
       const cacheBatchEnd = Math.min(cacheBatchStart + CACHE_PROCESS_BATCH, chunksFromCache.length);
@@ -1266,6 +1275,21 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         await new Promise<void>(resolve => {
           requestAnimationFrame(() => resolve());
         });
+      }
+
+      // Re-prioritize not-yet-processed chunks against the CURRENT player
+      // position — if the player turned around mid-load, load what's nearest
+      // NOW, not what was nearest when the load started.
+      {
+        const nextStart = cacheBatchStart + CACHE_PROCESS_BATCH;
+        const pNow = playerChunkRef.current;
+        if (pNow && nextStart < chunksFromCache.length) {
+          const tail = chunksFromCache.slice(nextStart);
+          tail.sort((a, b) =>
+            Math.max(Math.abs(a.x - pNow.x), Math.abs(a.z - pNow.z)) -
+            Math.max(Math.abs(b.x - pNow.x), Math.abs(b.z - pNow.z)));
+          for (let i = 0; i < tail.length; i++) chunksFromCache[nextStart + i] = tail[i];
+        }
       }
     }
     if (chunksFromCache.length > 0) {
@@ -1546,6 +1570,20 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           await new Promise<void>(resolve => {
             requestAnimationFrame(() => resolve());
           });
+        }
+
+        // Re-prioritize remaining server chunks against the CURRENT player
+        // position so turning around mid-load loads the new-nearest first.
+        {
+          const nextStart = batchStart + PROCESS_BATCH_SIZE;
+          const pNow = playerChunkRef.current;
+          if (pNow && nextStart < sortedServerChunks.length) {
+            const tail = sortedServerChunks.slice(nextStart);
+            tail.sort((a, b) =>
+              Math.max(Math.abs(a.x - pNow.x), Math.abs(a.z - pNow.z)) -
+              Math.max(Math.abs(b.x - pNow.x), Math.abs(b.z - pNow.z)));
+            for (let i = 0; i < tail.length; i++) sortedServerChunks[nextStart + i] = tail[i];
+          }
         }
       } // end batch loop
 
