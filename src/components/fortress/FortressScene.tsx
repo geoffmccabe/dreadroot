@@ -767,8 +767,24 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioRefs = useRef(createAudioRefs());
   
-  const { scene } = useThree();
+  const { scene, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
+
+  // Shader pre-warm. Trace 2026-May-21 caught getProgramParameter blocking the
+  // main thread 1165ms while a shader program linked on its first draw (the
+  // big tree-block atlas material). renderer.compileAsync() links programs in
+  // the BACKGROUND via KHR_parallel_shader_compile, so by the time a material
+  // is first drawn its program is already linked and the draw never stalls.
+  // Throttled to once/second: runs immediately on first content, then keeps
+  // catching newly-appearing material variants during chunk streaming.
+  const lastShaderPrewarmRef = useRef(0);
+  useEffect(() => {
+    if (worldRevision <= 0) return;
+    const now = performance.now();
+    if (now - lastShaderPrewarmRef.current < 1000) return;
+    lastShaderPrewarmRef.current = now;
+    gl.compileAsync(scene, camera).catch(() => {});
+  }, [worldRevision, gl, scene, camera]);
   
   // Instanced mesh refs for raycasting
   const instancedMeshesRef = useRef<Map<string, THREE.InstancedMesh>>(new Map());
