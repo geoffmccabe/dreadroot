@@ -66,6 +66,7 @@ import { getHeightBlocks } from '@/features/shtickman/types';
 // Tree system imports
 import { TreeInfoLabels } from '@/features/trees/components/TreeInfoLabels';
 import { WideTreeLights } from '@/features/trees/components/WideTreeLights';
+import { GlowLightPool } from '@/components/GlowLightPool';
 import { FruitRenderer } from '@/components/FruitRenderer';
 import { useTreePlanterNames } from '@/features/trees/hooks/useTreePlanterNames';
 import { useFruitSpawning } from '@/features/trees/hooks/useFruitSpawning';
@@ -1397,6 +1398,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Wide Tree Glow Lights */}
       <WideTreeLights plantedTrees={plantedTrees} />
+
+      {/* Glowing-block point lights — single fixed-count pool */}
+      <GlowLightPool />
 
       {/* Tree Info Labels */}
       <TreeInfoLabels

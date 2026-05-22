@@ -585,89 +585,12 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
     };
   }, [hoveredBlock, texture, blockDef]);
 
-  // Get glow properties
-  const glowFactor = blockDef?.properties?.glowFactor || 0;
-  const shouldGlow = fxEnabled && blockDef?.properties?.emissive && glowFactor > 0;
-  
-  // Track camera position for glow updates - only update when camera moves significantly
-  const lastGlowCameraPos = useRef(new THREE.Vector3());
-  const [glowUpdateTrigger, setGlowUpdateTrigger] = useState(0);
-  
-  // Stable loop id for this instanced group - uses blockDef.key and textureOverride
-  const glowLoopId = useMemo(
-    () => `glow-check:${blockDef.key}:${textureOverride ?? ''}`,
-    [blockDef.key, textureOverride]
-  );
-
-  // Check camera movement via frameLoop - only trigger glow recalc when moved 5+ units
-  useEffect(() => {
-    if (!shouldGlow) return;
-
-    let accMs = 0;
-
-    const unregister = frameLoop.register(
-      glowLoopId,
-      (delta) => {
-        accMs += delta * 1000;
-        if (accMs < 500) return;
-        accMs = 0;
-
-        const distMoved = camera.position.distanceToSquared(lastGlowCameraPos.current);
-        if (distMoved > 25) {
-          lastGlowCameraPos.current.copy(camera.position);
-          setGlowUpdateTrigger(v => v + 1);
-        }
-      },
-      80
-    );
-
-    return () => {
-      unregister();
-    };
-  }, [shouldGlow, glowLoopId, camera]);
-  
-  // B2.3: Limit point lights to nearest MAX_GLOW_LIGHTS blocks for performance
-  // OPTIMIZATION: Single-pass "top K" selection instead of sort (O(n) vs O(n log n))
-  // Safety cap: Skip glow entirely for very large groups
-  const MAX_GLOW_LIGHTS = 8; // B2.3: Cap dynamic lights
-  const MAX_GLOW_DISTANCE = 50;
-  const GLOW_BLOCK_LIMIT = 2000; // Skip glow for groups larger than this
-  
-  const glowingBlocks = useMemo(() => {
-    if (!shouldGlow) return [];
-    if (blocks.length > GLOW_BLOCK_LIMIT) return []; // Safety cap for large groups
-    
-    const cam = lastGlowCameraPos.current;
-    const maxDistSq = MAX_GLOW_DISTANCE * MAX_GLOW_DISTANCE;
-    
-    // Single-pass top-K selection (no sort, no allocations per block)
-    const best: { b: PlacedBlock; d2: number }[] = [];
-    
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      const dx = b.position_x + 0.5 - cam.x;
-      const dy = b.position_y + 0.5 - cam.y;
-      const dz = b.position_z + 0.5 - cam.z;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      
-      if (d2 > maxDistSq) continue;
-      
-      if (best.length < MAX_GLOW_LIGHTS) {
-        best.push({ b, d2 });
-        continue;
-      }
-      
-      // Find worst in best array and replace if current is better
-      let worstIdx = 0;
-      let worstD2 = best[0].d2;
-      for (let j = 1; j < best.length; j++) {
-        if (best[j].d2 > worstD2) { worstD2 = best[j].d2; worstIdx = j; }
-      }
-      if (d2 < worstD2) best[worstIdx] = { b, d2 };
-    }
-    
-    return best.map(x => x.b);
-  }, [blocks, shouldGlow, glowUpdateTrigger]);
+  // NOTE: per-block glow point lights were removed here. They mounted a
+  // VARIABLE number of <pointLight>s (recomputed on camera move), which
+  // changed NUM_POINT_LIGHTS and forced a full-scene shader recompile —
+  // a recurring multi-second stall. Glow point lights now live in the
+  // single fixed-count GlowLightPool. Blocks still self-glow via their
+  // emissive material; only the light-casting moved.
   
   if (!material) return null;
   
@@ -684,16 +607,6 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
         receiveShadow={fxEnabled}
         frustumCulled={true}
       />
-      {glowingBlocks.map((block) => (
-        <pointLight
-          key={block.id}
-          position={[block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5]}
-          color={blockDef?.properties?.color || '#FFE135'}
-          intensity={glowFactor * 2}
-          distance={glowFactor * 3}
-          decay={2}
-        />
-      ))}
       {/* Render hovered block with animated opacity */}
       {hoveredBlock && hoveredMaterialRef.current && (
         <mesh
