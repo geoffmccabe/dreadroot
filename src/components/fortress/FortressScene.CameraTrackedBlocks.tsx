@@ -8,7 +8,8 @@ import { frameLoop } from '@/lib/frameLoop';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE, getVisibleChunkKeys, parseChunkKey } from '@/lib/chunkManager';
-import { FOG_DISTANCE_CHUNKS } from '@/lib/fogConfig';
+import { fogState } from '@/lib/fogConfig';
+import { renderedChunkKeys } from '@/lib/renderedChunks';
 import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 
 import ChunkRenderer from '@/components/ChunkRenderer';
@@ -219,7 +220,7 @@ export function CameraTrackedBlocks({
         const dcz = Math.abs(parsed.chunkZ - camChunkZ);
         const chunkDist = Math.max(dcx, dcz); // Chebyshev distance
 
-        if (chunkDist <= FOG_DISTANCE_CHUNKS) {
+        if (chunkDist <= fogState.distChunks) {
           // Reuse the cached entry (keeping its OLD blocks ref) when the
           // chunk's CONTENT signature is unchanged, even if the
           // visibleBlocks/blocks array ref rotated (refetch / surface
@@ -254,8 +255,8 @@ export function CameraTrackedBlocks({
     // One-time diagnostic: log excluded chunks
     if (!chunkExclusionLogRef.current && excluded.length > 0) {
       chunkExclusionLogRef.current = true;
-      console.log(`[ChunkVisibility] Camera chunk: (${camChunkX}, ${camChunkZ}), fog render distance: ${FOG_DISTANCE_CHUNKS} chunks`);
-      console.log(`[ChunkVisibility] Excluded ${excluded.length} chunks beyond ${FOG_DISTANCE_CHUNKS}:`);
+      console.log(`[ChunkVisibility] Camera chunk: (${camChunkX}, ${camChunkZ}), fog render distance: ${fogState.distChunks} chunks`);
+      console.log(`[ChunkVisibility] Excluded ${excluded.length} chunks beyond ${fogState.distChunks}:`);
       for (const e of excluded.slice(0, 10)) {
         console.log(`  - ${e.key}: dist=${e.dist}, ${e.blocks} blocks (has colliders but won't render)`);
       }
@@ -317,7 +318,9 @@ export function CameraTrackedBlocks({
   // distance sort on `normal` above). Chunks already rendered stay stable
   // (memo prevents re-render).
   const CHUNKS_PER_FRAME = 8;
-  const renderedKeysRef = useRef(new Set<string>());
+  // Shared with FruitRenderer (and anything else that needs to know which
+  // chunks are actually on-screen) — see src/lib/renderedChunks.ts.
+  const renderedKeysRef = useRef(renderedChunkKeys);
   const [progressiveTrigger, setProgressiveTrigger] = useState(0);
 
   // Track which normalEntries are ready to render

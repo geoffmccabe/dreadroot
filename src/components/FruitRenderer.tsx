@@ -13,6 +13,7 @@ import type { UniversalFlameRendererHandle } from '@/components/fortress/Univers
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
 import { getTreeUVs } from '@/lib/atlasLookup';
 import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset } from '@/lib/atlasMaterial';
+import { renderedChunkKeys } from '@/lib/renderedChunks';
 
 interface FruitRendererProps {
   treeFruits: TreeFruit[];
@@ -135,12 +136,13 @@ export const FruitRenderer = React.memo(function FruitRenderer({
     let visibleCount = 0;
 
     for (const fruit of treeFruits) {
-      // Skip fruits whose chunk hasn't loaded yet (not in map at all)
-      // Only check if chunk is absent — don't skip on empty blocks (could be mid-refresh)
-      if (chunksMap && !adminSeeAll) {
+      // Skip fruits whose host chunk is not RENDERED yet — just loaded into
+      // memory isn't enough; otherwise the fruit pops in mid-air before the
+      // tree appears around it.
+      if (!adminSeeAll) {
         const cx = Math.floor(fruit.position_x / CHUNK_SIZE);
         const cz = Math.floor(fruit.position_z / CHUNK_SIZE);
-        if (!chunksMap.has(`chunk_${cx}_${cz}`)) continue;
+        if (!renderedChunkKeys.has(`chunk_${cx}_${cz}`)) continue;
       }
 
       const fx = fruit.position_x + 0.5;

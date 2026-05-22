@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
-import { FOG_DISTANCE_CHUNKS, FOG_DENSITY } from '@/lib/fogConfig';
+import { FOG_DISTANCE_CHUNKS, FOG_DENSITY, fogState, updateFogForHeight } from '@/lib/fogConfig';
 // Side-effect import: patches THREE's fog falloff to linear-d exponential
 // so per-chunk visibility decays geometrically (see fogShaderPatch.ts).
 import '@/lib/fogShaderPatch';
@@ -883,10 +883,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   useEffect(() => {
     if (fogEnabled) {
-      // Fog overhaul Phase 1 (docs/FOG_PLAN.md): dense exponential fog. The
-      // chunk render radius (FOG_DISTANCE_CHUNKS) is just outside where this
-      // density is effectively opaque, so the render cutoff is invisible.
-      scene.fog = new THREE.FogExp2(fogColorCurrent.current, FOG_DENSITY);
+      // Fog overhaul Phase 1+2 (docs/FOG_PLAN.md): dense exponential fog,
+      // height-aware. fogState.density is updated each frame by the
+      // height-fog callback below.
+      scene.fog = new THREE.FogExp2(fogColorCurrent.current, fogState.density);
       scene.background = fogColorCurrent.current.clone();
     } else {
       scene.fog = null;
@@ -897,6 +897,24 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       scene.background = null;
     };
   }, [scene, fogEnabled]);
+
+  // Height-aware fog: recompute density + render distance from camera.y
+  // (throttled ~200ms via frameLoop). The chunk-visibility memo picks up
+  // fogState.distChunks on its own re-runs.
+  useEffect(() => {
+    if (!fogEnabled) return;
+    let lastUpdate = 0;
+    const unregister = frameLoop.register('fogHeight', () => {
+      const now = performance.now();
+      if (now - lastUpdate < 200) return;
+      lastUpdate = now;
+      updateFogForHeight(camera.position.y);
+      if (scene.fog && 'density' in scene.fog) {
+        (scene.fog as THREE.FogExp2).density = fogState.density;
+      }
+    }, 50);
+    return unregister;
+  }, [scene, camera, fogEnabled]);
 
   // Update fog color based on day/night cycle (low frequency — every 500ms)
   useEffect(() => {
