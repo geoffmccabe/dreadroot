@@ -83,7 +83,13 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
   const { camera } = useThree();
   const { avatarConfig, currentAnimation } = useAvatar();
 
-  const fbx = useFBX(avatarConfig.model);
+  // Defense-in-depth: never hand useFBX a bad URL (would 404 → FBXLoader
+  // throws → Suspense retry loop). AvatarContext already guards model_url.
+  const safeModel =
+    typeof avatarConfig.model === 'string' && avatarConfig.model.trim()
+      ? avatarConfig.model
+      : '/y-bot.fbx';
+  const fbx = useFBX(safeModel);
 
   // Configure avatar materials and shadows (Effect 1: Cheap operations)
   useEffect(() => {

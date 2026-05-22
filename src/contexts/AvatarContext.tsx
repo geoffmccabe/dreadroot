@@ -47,8 +47,15 @@ export function AvatarProvider({ children }: { children: React.ReactNode }) {
         scale: yBotModel.default_scale,
         animations: yBotModel.animations?.map(a => a.name)
       });
+      // Guard: a null/empty/non-string model_url from the DB would feed
+      // useFBX() a bad URL → 404 → SPA index.html → FBXLoader throws →
+      // Suspense retries every frame (the "split is not a function" flood).
+      const safeModelUrl =
+        typeof yBotModel.model_url === 'string' && yBotModel.model_url.trim()
+          ? yBotModel.model_url
+          : '/y-bot.fbx';
       setAvatarConfig({
-        model: yBotModel.model_url,
+        model: safeModelUrl,
         scale: yBotModel.default_scale,
         scaleX: yBotModel.default_scale_x,
         scaleY: yBotModel.default_scale_y,

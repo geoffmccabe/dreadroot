@@ -17,7 +17,10 @@ interface AvatarModelPreviewProps {
 function Model({ modelPath, color, scale, scaleX, scaleY, scaleZ, animationPath }: AvatarModelPreviewProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const fbx = useFBX(modelPath);
+  // Guard: a bad modelPath would 404 → FBXLoader throws → Suspense retry loop.
+  const safeModelPath =
+    typeof modelPath === 'string' && modelPath.trim() ? modelPath : '/y-bot.fbx';
+  const fbx = useFBX(safeModelPath);
 
   useEffect(() => {
     if (!fbx) return;
