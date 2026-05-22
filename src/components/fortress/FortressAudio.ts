@@ -19,8 +19,14 @@ export function initializeAudioElements(audioElements: Record<string, HTMLAudioE
   });
 }
 
-// Create audio refs object
-export function createAudioRefs() {
+// Create audio refs object.
+// SINGLETON: callers do `useRef(createAudioRefs())`, which re-evaluates this
+// function on EVERY render (useRef keeps only the first value, but the arg
+// still runs). Each call used to mint 18 fresh HTMLAudioElements — at ~900
+// re-renders that leaked ~16k WebMediaPlayers and tripped Chrome's ~1000 cap.
+// Returning a cached object makes every call idempotent: created exactly once.
+let _audioRefsSingleton: ReturnType<typeof buildAudioRefs> | null = null;
+function buildAudioRefs() {
   return {
     pistolCocking: new Audio('/pistol_cocking_sound.mp3'),
     pistolHolster: new Audio('/holster_pistol_sound.mp3'),
@@ -44,12 +50,18 @@ export function createAudioRefs() {
     pentabulletPowerdown: new Audio('/pentabullet_powerdown.mp3')
   };
 }
+export function createAudioRefs() {
+  if (!_audioRefsSingleton) _audioRefsSingleton = buildAudioRefs();
+  return _audioRefsSingleton;
+}
 
-// Create main audio refs (for placement sounds)
+// Create main audio refs (for placement sounds). Singleton — same reason.
+let _mainAudioRefsSingleton: { woodenThud: HTMLAudioElement } | null = null;
 export function createMainAudioRefs() {
-  return {
-    woodenThud: new Audio('/wooden_thud_sound.mp3')
-  };
+  if (!_mainAudioRefsSingleton) {
+    _mainAudioRefsSingleton = { woodenThud: new Audio('/wooden_thud_sound.mp3') };
+  }
+  return _mainAudioRefsSingleton;
 }
 
 // Preload rejection sound for instant playback
