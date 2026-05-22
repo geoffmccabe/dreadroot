@@ -7,6 +7,7 @@ import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { FOG_DISTANCE_CHUNKS, FOG_DENSITY, fogState, updateFogForHeight } from '@/lib/fogConfig';
+import { registerWarmupContext } from '@/lib/shaderWarmup';
 // Side-effect import: patches THREE's fog falloff to linear-d exponential
 // so per-chunk visibility decays geometrically (see fogShaderPatch.ts).
 import '@/lib/fogShaderPatch';
@@ -772,7 +773,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioRefs = useRef(createAudioRefs());
   
-  const { scene } = useThree();
+  const { scene, gl } = useThree();
+  // Make the renderer/scene/camera available to shaderWarmup, which is
+  // triggered from usePlacedBlocksWithCache before the loading screen
+  // dismisses.
+  useEffect(() => {
+    registerWarmupContext(gl, scene, camera);
+  }, [gl, scene, camera]);
   const { raycastMeshes } = useRaycaster();
   
   // Instanced mesh refs for raycasting

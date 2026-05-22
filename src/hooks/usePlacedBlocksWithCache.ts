@@ -7,6 +7,8 @@ import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
 import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/components/fortress/FortressAudio';
+import { warmUpShaders } from '@/lib/shaderWarmup';
+import { getGlobalAtlasTexture } from '@/hooks/useTextureAtlas';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 // B4: Removed canonicalizeTextureUrl - no longer needed after removing arraysShallowEqual
 import { preloadBlockDefinitions } from '@/hooks/useBlocksData';
@@ -253,6 +255,14 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         // This completes quickly even when tab is hidden (RAF would block indefinitely)
         setTimeout(resolve, 150);
       });
+
+      // Pre-compile shader programs for every material flavour the game uses
+      // (atlas variants + non-tree block flavours including the expensive
+      // PhysicalMaterial). Without this, each first appearance mid-game
+      // freezes for ~0.5-1s while macOS compiles the shader.
+      const warmStep = initLogStartStep('usePlacedBlocksWithCache.ts', 'Pre-compiling shaders...');
+      warmUpShaders(getGlobalAtlasTexture());
+      if (warmStep) initLogFinishStep(warmStep);
 
       // Finish initialization overlay
       initLogStep('usePlacedBlocksWithCache.ts', 'World initialization complete!');
