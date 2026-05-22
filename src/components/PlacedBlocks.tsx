@@ -1,5 +1,7 @@
-import React, { useRef, useMemo, useEffect, MutableRefObject } from 'react';
+import React, { useRef, useMemo, useEffect, useLayoutEffect, MutableRefObject } from 'react';
 import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
+import { warmUpShaders } from '@/lib/shaderWarmup';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
@@ -175,6 +177,19 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
 
   // Only run atlas sync if not hoisted (parent handles it)
   useAtlasSync({ enabled: hoistedAtlasTexture === undefined });
+
+  // Shader warm-up: the moment the atlas texture is ready (still under the
+  // loading screen), compile the heavy material programs once into an
+  // offscreen target. useLayoutEffect runs synchronously before the next
+  // frame, so the warm-up beats the first cold chunk draw. Without this,
+  // each material's first draw blocks the main thread for 1-2s while macOS
+  // compiles the shader (trace 2026-05-22: a 2767ms freeze).
+  const { gl } = useThree();
+  useLayoutEffect(() => {
+    if (atlasReady && atlasTexture) {
+      warmUpShaders(gl, atlasTexture);
+    }
+  }, [atlasReady, atlasTexture, gl]);
 
   
   // Initialize audio
