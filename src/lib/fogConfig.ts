@@ -11,10 +11,11 @@
 export const FOG_DISTANCE_CHUNKS = 4;
 
 /**
- * Density for THREE.FogExp2. Tuned for a thick fog with a steep falloff —
- * roughly visibility 100% / 66% / 19% / 3% / 0% at chunk distances 0..4.
- * Render-edge (chunk 4) is effectively 0%, so the chunk cutoff is invisible.
- * Phase 2 (custom fog shader) will let us match an arbitrary visibility
- * curve exactly; this is the closest stock-fog approximation.
+ * Density for FogExp2 *combined with the patched fog formula in
+ * fogShaderPatch.ts* — visibility = exp(-density · d). Per-chunk
+ * visibility ratio r = exp(-density · CHUNK_SIZE).
+ *
+ * Tuned so r ≈ 0.6: visibility multiplies by 0.6 each chunk.
+ * Curve: 100% / 60% / 36% / 22% / 13% at chunk distances 0..4.
  */
-export const FOG_DENSITY = 0.04;
+export const FOG_DENSITY = 0.0319; // -ln(0.6) / 16

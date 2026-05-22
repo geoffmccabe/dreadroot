@@ -7,6 +7,9 @@ import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { FOG_DISTANCE_CHUNKS, FOG_DENSITY } from '@/lib/fogConfig';
+// Side-effect import: patches THREE's fog falloff to linear-d exponential
+// so per-chunk visibility decays geometrically (see fogShaderPatch.ts).
+import '@/lib/fogShaderPatch';
 import { useMultiplayer } from '@/hooks/useMultiplayer';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { useBlocksData } from '@/hooks/useBlocksData';
