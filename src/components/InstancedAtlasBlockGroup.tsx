@@ -122,7 +122,7 @@ const AUTO_PERFORMANCE_MODE_THRESHOLD = 1000;
 const _sharedAtlasMaterialByTexture = new WeakMap<THREE.Texture, THREE.MeshLambertMaterial>();
 let _lastSharedTex: THREE.Texture | null = null;
 let _lastSharedMat: THREE.MeshLambertMaterial | null = null;
-export function getSharedAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMaterial {
+function getSharedAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMaterial {
   let m = _sharedAtlasMaterialByTexture.get(atlasTexture);
   if (!m) {
     // Atlas texture changed (e.g. atlas version bump → new texture object).

@@ -769,9 +769,6 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   
   const { scene } = useThree();
   const { raycastMeshes } = useRaycaster();
-  // Shader warm-up now happens in PlacedBlocks (see warmUpShaders) — compiled
-  // up front against an offscreen target instead of reactively mid-game,
-  // because Three.js's live render path blocks on a cold shader compile.
   
   // Instanced mesh refs for raycasting
   const instancedMeshesRef = useRef<Map<string, THREE.InstancedMesh>>(new Map());
