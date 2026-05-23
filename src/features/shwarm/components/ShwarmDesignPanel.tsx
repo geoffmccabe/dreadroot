@@ -16,6 +16,7 @@ import { ShwarmDefinition } from '../types';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
+import { convertTextureToKtx2 } from '@/lib/ktx2';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9ca3af',
@@ -299,6 +300,18 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
         d.tier === targetTier ? { ...d, texture_url: publicUrl } : d
       ));
       setHasChanges(true);
+
+      // Fire-and-forget KTX2 sibling.
+      void convertTextureToKtx2(publicUrl, 'standard').then((ktx2Url) => {
+        if (!ktx2Url) return;
+        setDefinitions(prev => prev.map(d =>
+          d.tier === targetTier ? { ...d, texture_url_ktx2: ktx2Url } : d
+        ));
+        const rowId = definitions.find(d => d.tier === targetTier)?.id;
+        if (rowId) {
+          void (supabase.from('shwarm_definitions' as any).update({ texture_url_ktx2: ktx2Url }).eq('id', rowId) as any);
+        }
+      });
 
       toast({
         title: 'Face texture uploaded',

@@ -8,6 +8,10 @@ export interface ShnakeDefinitionRow {
   head_texture_url: string | null;
   body_texture_url: string | null;
   face_texture_url: string | null;
+  head_texture_url_ktx2?: string | null;
+  body_texture_url_ktx2?: string | null;
+  face_texture_url_ktx2?: string | null;
+  texture_tier?: 'standard' | 'premium';
   health_per_segment: number;
   damage_per_hit: number;
   knockback: number;
@@ -38,6 +42,10 @@ export interface ShnakeDefinition {
   head_texture_url: string | null;
   body_texture_url: string | null;
   face_texture_url: string | null;
+  head_texture_url_ktx2?: string | null;
+  body_texture_url_ktx2?: string | null;
+  face_texture_url_ktx2?: string | null;
+  texture_tier?: 'standard' | 'premium';
   health_per_segment: number;
   damage_per_hit: number;
   knockback: number;

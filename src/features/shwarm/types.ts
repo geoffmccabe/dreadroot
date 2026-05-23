@@ -8,6 +8,8 @@ export interface ShwarmDefinition {
   tier: number;
   name: string;
   texture_url: string | null;
+  texture_url_ktx2?: string | null;
+  texture_tier?: 'standard' | 'premium';
   speed: number; // blocks per second
   min_blocks: number;
   max_blocks: number;
@@ -84,6 +86,8 @@ export interface ShwarmDefinitionRow {
   tier: number;
   name: string;
   texture_url: string | null;
+  texture_url_ktx2?: string | null;
+  texture_tier?: 'standard' | 'premium';
   speed: number;
   min_blocks: number;
   max_blocks: number;

@@ -12,6 +12,7 @@ import { Save, Upload, X, User } from 'lucide-react';
 import { AnimatedTexturePreview } from '@/components/AnimatedTexturePreview';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
+import { convertTextureToKtx2 } from '@/lib/ktx2';
 import type { ShtickmanDefinition } from '../types';
 import { getHeightBlocks, getHeadSizeBlocks } from '../types';
 
@@ -204,6 +205,15 @@ export function ShtickmanDesignPanel({ className }: ShtickmanDesignPanelProps) {
 
       updateDef(field, publicUrl);
       toast.success('Texture uploaded');
+
+      // Fire-and-forget KTX2 sibling.
+      const rowId = currentDef.id;
+      void convertTextureToKtx2(publicUrl, 'standard').then((ktx2Url) => {
+        if (!ktx2Url) return;
+        const ktx2Field = `${field}_ktx2` as keyof ShtickmanDefinition;
+        updateDef(ktx2Field, ktx2Url);
+        void (supabase.from('shtickman_definitions' as any).update({ [ktx2Field]: ktx2Url }).eq('id', rowId) as any);
+      });
     } catch (err) {
       console.error('[ShtickmanDesign] Upload error:', err);
       toast.error('Failed to upload texture');

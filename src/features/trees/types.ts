@@ -16,6 +16,13 @@ export interface SeedDefinition {
   trunk_texture_url: string | null;
   branch_texture_url: string | null;
   fruit_texture_url: string | null;
+  trunk_texture_url_ktx2?: string | null;
+  branch_texture_url_ktx2?: string | null;
+  fruit_texture_url_ktx2?: string | null;
+  fungal_stem_texture_url_ktx2?: string | null;
+  fungal_cap_top_texture_url_ktx2?: string | null;
+  fungal_cap_underside_texture_url_ktx2?: string | null;
+  texture_tier?: 'standard' | 'premium';
   width_factor: number;
   branching_factor: number;
   fruiting_factor: number;

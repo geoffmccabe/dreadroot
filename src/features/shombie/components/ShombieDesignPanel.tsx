@@ -13,6 +13,7 @@ import { AnimatedTexturePreview } from '@/components/AnimatedTexturePreview';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
+import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { rotateTexture } from '@/lib/textureRotation';
 import type { ShombieDefinition } from '../types';
 
@@ -303,6 +304,22 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
 
     setHasChanges(true);
     toast.success(`Texture uploaded for Tier ${uploadingForTier}!`);
+
+    // Fire-and-forget KTX2 sibling.
+    const tierForKtx2 = uploadingForTier;
+    void convertTextureToKtx2(urlData.publicUrl, 'standard').then((ktx2Url) => {
+      if (!ktx2Url) return;
+      setDefinitions(prev => prev.map(d =>
+        d.tier === tierForKtx2 ? { ...d, texture_url_ktx2: ktx2Url } : d
+      ));
+      setCurrentDef(prev =>
+        prev && prev.tier === tierForKtx2 ? { ...prev, texture_url_ktx2: ktx2Url } : prev
+      );
+      const rowId = definitions.find(d => d.tier === tierForKtx2)?.id;
+      if (rowId) {
+        void (supabase.from('shombie_definitions' as any).update({ texture_url_ktx2: ktx2Url }).eq('id', rowId) as any);
+      }
+    });
   };
 
   const handleTextureRotate = async () => {
@@ -328,6 +345,16 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
 
       updateDef('texture_url', urlData.publicUrl);
       toast.success('Texture rotated 90° clockwise');
+
+      const rotatedTier = currentDef.tier;
+      void convertTextureToKtx2(urlData.publicUrl, 'standard').then((ktx2Url) => {
+        if (!ktx2Url) return;
+        updateDef('texture_url_ktx2', ktx2Url);
+        const rowId = definitions.find(d => d.tier === rotatedTier)?.id;
+        if (rowId) {
+          void (supabase.from('shombie_definitions' as any).update({ texture_url_ktx2: ktx2Url }).eq('id', rowId) as any);
+        }
+      });
     } catch (err) {
       console.error('[ShombieDesign] Rotate error:', err);
       toast.error('Rotation failed');

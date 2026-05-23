@@ -9,6 +9,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AdminBlock, BlocksListProps } from './adminPanel.types';
@@ -158,6 +159,13 @@ export function BlocksList({ userRoles }: BlocksListProps) {
         description: "Texture uploaded successfully"
       });
 
+      // Fire-and-forget KTX2 conversion (don't block UI).
+      void convertTextureToKtx2(urlData.publicUrl, 'standard').then((ktx2Url) => {
+        if (ktx2Url) {
+          void supabase.from('blocks').update({ texture_url_ktx2: ktx2Url }).eq('id', blockId);
+        }
+      });
+
       loadBlocks();
     } catch (error: any) {
       console.error('Failed to upload texture:', error);
@@ -255,6 +263,16 @@ export function BlocksList({ userRoles }: BlocksListProps) {
         title: "Success",
         description: "Block created successfully"
       });
+
+      // Fire-and-forget KTX2 conversion for the new block.
+      const newBlockId = data?.[0]?.id;
+      if (textureUrl && newBlockId) {
+        void convertTextureToKtx2(textureUrl, 'standard').then((ktx2Url) => {
+          if (ktx2Url) {
+            void supabase.from('blocks').update({ texture_url_ktx2: ktx2Url }).eq('id', newBlockId);
+          }
+        });
+      }
 
       setShowNewBlockDialog(false);
       setNewBlockData({ name: '', description: '', cost: 10, key: '', tier: 0, rarity: 'common', texture: null });

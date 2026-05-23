@@ -14,6 +14,7 @@ import { AnimatedTexturePreview } from '@/components/AnimatedTexturePreview';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
+import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { rotateTexture } from '@/lib/textureRotation';
 import { SeedDefinition, SymmetryMode, TreeType, RootStyle } from '../types';
 import { RARITY_COLORS, TREE_CONFIG } from '../constants';
@@ -354,6 +355,22 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
 
       updateSeed(`${type}_texture_url` as keyof SeedDefinition, publicUrl);
 
+      // Fire-and-forget KTX2 conversion. On success: update local state AND
+      // patch the DB row directly so we don't lose it if the user saves
+      // before the conversion completes.
+      const seedId = currentSeed?.id;
+      void convertTextureToKtx2(publicUrl, 'standard').then((ktx2Url) => {
+        if (!ktx2Url) return;
+        const ktx2Field = `${type}_texture_url_ktx2` as keyof SeedDefinition;
+        updateSeed(ktx2Field, ktx2Url);
+        if (seedId) {
+          void (supabase
+            .from('seed_definitions' as any)
+            .update({ [ktx2Field]: ktx2Url })
+            .eq('id', seedId) as any);
+        }
+      });
+
       toast({
         title: 'Texture uploaded',
         description: `${type} texture has been set`,
@@ -397,6 +414,20 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
         .getPublicUrl(result.fileName);
 
       updateSeed(urlField, publicUrl);
+
+      // Re-convert KTX2 sibling for the rotated texture.
+      const seedId = currentSeed?.id;
+      void convertTextureToKtx2(publicUrl, 'standard').then((ktx2Url) => {
+        if (!ktx2Url) return;
+        const ktx2Field = `${type}_texture_url_ktx2` as keyof SeedDefinition;
+        updateSeed(ktx2Field, ktx2Url);
+        if (seedId) {
+          void (supabase
+            .from('seed_definitions' as any)
+            .update({ [ktx2Field]: ktx2Url })
+            .eq('id', seedId) as any);
+        }
+      });
 
       toast({
         title: 'Texture rotated',

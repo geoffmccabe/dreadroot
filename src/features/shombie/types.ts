@@ -8,6 +8,8 @@ export interface ShombieDefinition {
   tier: number;
   name: string;
   texture_url: string | null;
+  texture_url_ktx2?: string | null;
+  texture_tier?: 'standard' | 'premium';
   speed: number; // blocks per second (default: 2 = half player speed)
   health: number;
   damage_per_hit: number;

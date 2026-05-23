@@ -12,6 +12,7 @@ import { Upload, Save, Bug, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { convertAnimationToStrip, isAnimatedFile } from '@/lib/animationToStrip';
+import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import type { ShnakeDefinition } from '../types';
@@ -275,6 +276,17 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
       if (kind === 'head') updateDef('head_texture_url', publicUrl);
       if (kind === 'body') updateDef('body_texture_url', publicUrl);
       if (kind === 'face') updateDef('face_texture_url', publicUrl);
+
+      // Fire-and-forget KTX2 sibling.
+      const rowId = currentDef?.id;
+      void convertTextureToKtx2(publicUrl, 'standard').then((ktx2Url) => {
+        if (!ktx2Url) return;
+        const ktx2Field = `${kind}_texture_url_ktx2` as keyof ShnakeDefinition;
+        updateDef(ktx2Field, ktx2Url);
+        if (rowId) {
+          void (supabase.from('shnake_definitions' as any).update({ [ktx2Field]: ktx2Url }).eq('id', rowId) as any);
+        }
+      });
 
       toast({ title: 'Texture uploaded', description: `Shnake ${kind} texture saved` });
     } catch (err) {
