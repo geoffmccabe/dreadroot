@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
+import { fogState } from '@/lib/fogConfig';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
@@ -2491,8 +2492,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       const playerChunk = playerChunkRef.current;
       if (!playerChunk) return;
 
-      // Use ref to get current LOAD_RADIUS (avoids stale closure)
-      const radius = loadRadiusRef.current;
+      // Cap by the FOG's effective render radius — loading chunks the player
+      // can't see is wasted CPU + memory (they'd just sit invisible).
+      const radius = Math.min(loadRadiusRef.current, fogState.distChunks + 1);
 
       // Collect ALL chunks that should be loaded but aren't
       const toLoad: Array<{ x: number; z: number }> = [];

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { useFrustumCullGroup } from '@/lib/useFrustumCullGroup';
 import type { ShnakeInstance } from '../types';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
@@ -121,6 +122,23 @@ const TierRenderer: React.FC<TierRendererProps> = ({
   const headMeshRef = useRef<THREE.InstancedMesh>(null);
   const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
   const faceMeshRef = useRef<THREE.InstancedMesh>(null);
+
+  // Frustum-cull this tier's meshes — frustumCulled is forced off on each.
+  useFrustumCullGroup(
+    `shnake-t${tier}`,
+    [headMeshRef, bodyMeshRef, faceMeshRef],
+    () => {
+      const shnakes = shnakesRef.current;
+      if (!shnakes || shnakes.length === 0) return null;
+      const out: { x: number; y: number; z: number }[] = [];
+      for (const sn of shnakes) {
+        if (!sn.isActive || sn.tier !== tier) continue;
+        for (const seg of sn.segments) out.push(seg);
+      }
+      return out.length === 0 ? null : out;
+    },
+    { radiusPad: 3 },
+  );
 
   const headUvAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
   const bodyUvAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);

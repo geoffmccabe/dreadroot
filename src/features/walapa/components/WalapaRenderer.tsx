@@ -1,6 +1,7 @@
 import { useRef, useMemo, forwardRef, useImperativeHandle, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { useFrustumCullGroup } from '@/lib/useFrustumCullGroup';
 import { generateWalapaBodyBlocks, getTierDimensions, type WalapaInstance, type WalapaPart } from '../types';
 import {
   MAX_WALAPAS_TOTAL,
@@ -70,6 +71,14 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
     const bodyMeshRef = useRef<THREE.InstancedMesh>(null);
     const bellyMeshRef = useRef<THREE.InstancedMesh>(null);
     const eyesMeshRef = useRef<THREE.InstancedMesh>(null);
+
+    // Frustum-cull the walapa group — was always-rendered (frustumCulled=false).
+    useFrustumCullGroup(
+      'walapa',
+      [bodyMeshRef, bellyMeshRef, eyesMeshRef],
+      () => walapas.length === 0 ? null : walapas.filter(w => w.isActive).map(w => w.position),
+      { radiusPad: 4 },
+    );
 
     const bodyUvAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
     const bellyUvAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);

@@ -1,6 +1,7 @@
 import { useRef, useImperativeHandle, forwardRef, useMemo, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
+import { useFrustumCullGroup } from '@/lib/useFrustumCullGroup';
 import { SHOMBIE_BODY_PARTS, PARTS_PER_SHOMBIE, type ShombieInstance, type PartTwitch, type HeadMovementType, type ShombieBodyFire } from '../types';
 import {
   MAX_TOTAL_SHOMBIES,
@@ -181,6 +182,14 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
     const bodyFiresRef = useRef<BodyFire[]>([]);
     const partPositionsRef = useRef<Map<string, Map<string, THREE.Vector3>>>(new Map());
     const universalHeadFlamesRef = useRef<Map<string, string>>(new Map());
+
+    // Frustum-cull the whole shombie group — was always-rendered before.
+    useFrustumCullGroup(
+      'shombie',
+      [meshRef],
+      () => shombies.length === 0 ? null : shombies.filter(s => s.isActive).map(s => s.position),
+      { radiusPad: 3 },
+    );
     // Track body fire attachIds for position updates: Map<attachId, { flameId, shombieId, partName, startTime, duration }>
     const universalBodyFlamesRef = useRef<Map<string, { flameId: string; shombieId: string; partName: string; startTime: number; duration: number }>>(new Map());
     const { scene, camera } = useThree();

@@ -1,5 +1,6 @@
 import React, { useRef, useImperativeHandle, forwardRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
+import { useFrustumCullGroup } from '@/lib/useFrustumCullGroup';
 import { SHWARM_BLOCK_SIZE, DEFAULT_SHWARM_COLOR, MAX_SHWARM_BLOCKS } from '../constants';
 import type { ShwarmInstance } from '../hooks/useShwarmSystem';
 import { frameLoop } from '@/lib/frameLoop';
@@ -91,6 +92,22 @@ export const ShwarmRenderer = forwardRef<ShwarmRendererHandle, ShwarmRendererPro
     const hueShiftAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
     const effectsAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
     const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
+
+    // Frustum-cull the shwarm group — was always-rendered (frustumCulled=false).
+    useFrustumCullGroup(
+      'shwarm',
+      [meshRef, particleMeshRef],
+      () => {
+        if (shwarms.length === 0) return null;
+        const out: { x: number; y: number; z: number }[] = [];
+        for (const s of shwarms) {
+          if (!s.isActive) continue;
+          for (const b of s.blocks) if (b.isAlive) out.push(b.position);
+        }
+        return out.length === 0 ? null : out;
+      },
+      { radiusPad: 3 },
+    );
 
     // Track active flames by block ID -> flame ID
     const activeFlamesRef = useRef<Map<string, string>>(new Map());
