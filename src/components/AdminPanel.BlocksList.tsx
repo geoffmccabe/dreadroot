@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
+import { KtxBackfillButton } from './KtxBackfillButton';
 import { ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AdminBlock, BlocksListProps } from './adminPanel.types';
@@ -371,9 +372,10 @@ export function BlocksList({ userRoles }: BlocksListProps) {
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-sm font-semibold">Blocks Registry</h3>
         <div className="flex gap-2">
+          {isSuperAdmin && <KtxBackfillButton />}
           {isSuperAdmin && (
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={() => setShowNewBlockDialog(true)}
               className="gap-2"
             >
