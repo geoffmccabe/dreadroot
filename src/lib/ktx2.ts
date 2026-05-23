@@ -78,10 +78,10 @@ export async function convertTextureToKtx2(
     });
 
     const hash = await sha1Hex(`${sourceUrl}:${tier}`);
-    const path = `ktx2/${tier}/${hash}.ktx2`;
+    const path = `${tier}/${hash}.ktx2`;
 
     const { error: upErr } = await supabase.storage
-      .from('block-textures')
+      .from('ktx2-textures')
       .upload(path, new Blob([ktx2], { type: 'image/ktx2' }), {
         upsert: true,
         cacheControl: '31536000',
@@ -93,7 +93,7 @@ export async function convertTextureToKtx2(
     }
 
     const { data: pub } = supabase.storage
-      .from('block-textures')
+      .from('ktx2-textures')
       .getPublicUrl(path);
 
     const ratio = ((ktx2.length / sourceBytes.length) * 100).toFixed(0);
