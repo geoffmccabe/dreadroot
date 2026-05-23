@@ -3,77 +3,69 @@
 -- =====================================================================
 -- Adds `<existing>_url_ktx2` siblings for every texture URL the atlas
 -- consumes, plus a per-row `texture_tier` ('standard' or 'premium').
--- Existing columns are NOT touched — the legacy 2D atlas keeps working
--- unchanged. The new array-atlas system reads the _ktx2 columns when
--- enabled via the window.__USE_ARRAY_ATLAS flag.
+-- Existing columns are NOT touched.
 --
--- Idempotent: safe to run more than once (every ADD is IF NOT EXISTS,
--- CHECK constraints are dropped + re-added).
+-- Defensive: each table is wrapped in a guard so missing tables are
+-- skipped instead of erroring. Idempotent — safe to re-run.
 -- =====================================================================
 
--- ------ blocks (block-type definitions) ------
-ALTER TABLE public.blocks
-  ADD COLUMN IF NOT EXISTS texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT 'standard';
-ALTER TABLE public.blocks DROP CONSTRAINT IF EXISTS blocks_texture_tier_check;
-ALTER TABLE public.blocks
-  ADD CONSTRAINT blocks_texture_tier_check CHECK (texture_tier IN ('standard','premium'));
+DO $ktx2$
+DECLARE
+  v_tbl text;
+  v_tables text[] := ARRAY[
+    'blocks',
+    'seed_definitions',
+    'shombie_definitions',
+    'shwarm_definitions',
+    'shnake_definitions',
+    'walapa_definitions',
+    'shtickman_definitions'
+  ];
+  v_cols jsonb := '{
+    "blocks":                ["texture_url"],
+    "seed_definitions":      ["trunk_texture_url","branch_texture_url","fruit_texture_url","fungal_stem_texture_url","fungal_cap_top_texture_url","fungal_cap_underside_texture_url"],
+    "shombie_definitions":   ["texture_url"],
+    "shwarm_definitions":    ["texture_url"],
+    "shnake_definitions":    ["head_texture_url","body_texture_url","face_texture_url"],
+    "walapa_definitions":    ["head_texture_url","body_texture_url","face_texture_url"],
+    "shtickman_definitions": ["head_texture_url","body_texture_url","face_texture_url"]
+  }'::jsonb;
+  v_col text;
+  v_constraint_name text;
+BEGIN
+  FOREACH v_tbl IN ARRAY v_tables LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = v_tbl
+    ) THEN
+      RAISE NOTICE 'skipping %, table does not exist', v_tbl;
+      CONTINUE;
+    END IF;
 
--- ------ seed_definitions (tree + fungal: 6 texture columns each) ------
-ALTER TABLE public.seed_definitions
-  ADD COLUMN IF NOT EXISTS trunk_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS branch_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS fruit_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS fungal_stem_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS fungal_cap_top_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS fungal_cap_underside_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT 'standard';
-ALTER TABLE public.seed_definitions DROP CONSTRAINT IF EXISTS seed_definitions_texture_tier_check;
-ALTER TABLE public.seed_definitions
-  ADD CONSTRAINT seed_definitions_texture_tier_check CHECK (texture_tier IN ('standard','premium'));
+    -- Per-table _ktx2 columns.
+    FOR v_col IN SELECT jsonb_array_elements_text(v_cols->v_tbl) LOOP
+      EXECUTE format(
+        'ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS %I text',
+        v_tbl, v_col || '_ktx2'
+      );
+    END LOOP;
 
--- ------ shombie_definitions ------
-ALTER TABLE public.shombie_definitions
-  ADD COLUMN IF NOT EXISTS texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT 'standard';
-ALTER TABLE public.shombie_definitions DROP CONSTRAINT IF EXISTS shombie_definitions_texture_tier_check;
-ALTER TABLE public.shombie_definitions
-  ADD CONSTRAINT shombie_definitions_texture_tier_check CHECK (texture_tier IN ('standard','premium'));
+    -- texture_tier column + CHECK constraint.
+    EXECUTE format(
+      'ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT ''standard''',
+      v_tbl
+    );
+    v_constraint_name := v_tbl || '_texture_tier_check';
+    EXECUTE format(
+      'ALTER TABLE public.%I DROP CONSTRAINT IF EXISTS %I',
+      v_tbl, v_constraint_name
+    );
+    EXECUTE format(
+      'ALTER TABLE public.%I ADD CONSTRAINT %I CHECK (texture_tier IN (''standard'',''premium''))',
+      v_tbl, v_constraint_name
+    );
 
--- ------ shwarm_definitions ------
-ALTER TABLE public.shwarm_definitions
-  ADD COLUMN IF NOT EXISTS texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT 'standard';
-ALTER TABLE public.shwarm_definitions DROP CONSTRAINT IF EXISTS shwarm_definitions_texture_tier_check;
-ALTER TABLE public.shwarm_definitions
-  ADD CONSTRAINT shwarm_definitions_texture_tier_check CHECK (texture_tier IN ('standard','premium'));
-
--- ------ shnake_definitions (3 parts) ------
-ALTER TABLE public.shnake_definitions
-  ADD COLUMN IF NOT EXISTS head_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS body_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS face_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT 'standard';
-ALTER TABLE public.shnake_definitions DROP CONSTRAINT IF EXISTS shnake_definitions_texture_tier_check;
-ALTER TABLE public.shnake_definitions
-  ADD CONSTRAINT shnake_definitions_texture_tier_check CHECK (texture_tier IN ('standard','premium'));
-
--- ------ walapa_definitions (3 parts) ------
-ALTER TABLE public.walapa_definitions
-  ADD COLUMN IF NOT EXISTS head_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS body_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS face_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT 'standard';
-ALTER TABLE public.walapa_definitions DROP CONSTRAINT IF EXISTS walapa_definitions_texture_tier_check;
-ALTER TABLE public.walapa_definitions
-  ADD CONSTRAINT walapa_definitions_texture_tier_check CHECK (texture_tier IN ('standard','premium'));
-
--- ------ shtickman_definitions (3 parts) — included for future-proofing ------
-ALTER TABLE public.shtickman_definitions
-  ADD COLUMN IF NOT EXISTS head_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS body_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS face_texture_url_ktx2 text,
-  ADD COLUMN IF NOT EXISTS texture_tier text NOT NULL DEFAULT 'standard';
-ALTER TABLE public.shtickman_definitions DROP CONSTRAINT IF EXISTS shtickman_definitions_texture_tier_check;
-ALTER TABLE public.shtickman_definitions
-  ADD CONSTRAINT shtickman_definitions_texture_tier_check CHECK (texture_tier IN ('standard','premium'));
+    RAISE NOTICE 'updated %', v_tbl;
+  END LOOP;
+END
+$ktx2$;
