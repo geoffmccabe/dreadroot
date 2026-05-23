@@ -2227,6 +2227,10 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       if (hadPrevChunk) {
         const moveDistance = Math.max(Math.abs(newChunkX - oldChunkX), Math.abs(newChunkZ - oldChunkZ));
 
+        // Cap the load radius at the fog's effective render distance —
+        // loading chunks the fog hides is wasted CPU + memory.
+        const effectiveLoadRadius = Math.min(LOAD_RADIUS, fogState.distChunks + 1);
+
         // Determine which chunks to load
         let chunksToLoad: Array<{ x: number; z: number }>;
 
@@ -2235,14 +2239,14 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
           chunksToLoad = getStripeChunks(
             oldChunkX, oldChunkZ,
             newChunkX, newChunkZ,
-            LOAD_RADIUS
+            effectiveLoadRadius
           );
         } else {
           // Multi-chunk movement: find ALL missing chunks in new radius
           // This fixes the bug where teleporting/fast travel left chunks unloaded
           chunksToLoad = [];
-          for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
-            for (let dz = -LOAD_RADIUS; dz <= LOAD_RADIUS; dz++) {
+          for (let dx = -effectiveLoadRadius; dx <= effectiveLoadRadius; dx++) {
+            for (let dz = -effectiveLoadRadius; dz <= effectiveLoadRadius; dz++) {
               const cx = newChunkX + dx;
               const cz = newChunkZ + dz;
               const key = `chunk_${cx}_${cz}`;
@@ -2293,7 +2297,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       } else {
         // No previous chunk - do full initial load (this one can block as it's startup)
-        await loadChunksInRadius(newChunkX, newChunkZ, LOAD_RADIUS);
+        const effectiveLoadRadius = Math.min(LOAD_RADIUS, fogState.distChunks + 1);
+        await loadChunksInRadius(newChunkX, newChunkZ, effectiveLoadRadius);
         // After initial load, clean up any stale chunks
         unloadDistantChunks(newChunkX, newChunkZ);
         evictLRUChunks();
