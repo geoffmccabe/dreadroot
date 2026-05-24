@@ -577,6 +577,24 @@ All colors MUST be HSL.
     color: hsl(0, 0%, 95%);
   }
 
+  /* Sliders: the global --primary is dark waterfall-blue which
+     disappears against the translucent dark-blue panel background.
+     Force a much lighter cyan-blue for both track-fill and thumb
+     so sliders are obviously visible. */
+  .admin-panel-dialog [role="slider"] {
+    border-color: hsl(200, 90%, 78%) !important;
+    background-color: hsl(0, 0%, 98%) !important;
+  }
+  .admin-panel-dialog [data-orientation="horizontal"] > span[data-orientation="horizontal"],
+  .admin-panel-dialog [data-orientation="horizontal"] > span > span[data-orientation="horizontal"] {
+    /* Track fill (Radix renders the Range span inside the Track span) */
+    background-color: hsl(200, 85%, 65%) !important;
+  }
+  /* Track background — overrides bg-secondary inside slider */
+  .admin-panel-dialog .bg-secondary[data-orientation="horizontal"] {
+    background-color: hsla(211, 30%, 85%, 0.35) !important;
+  }
+
   /* Headings inside admin panel: near-white */
   .admin-panel-dialog h1,
   .admin-panel-dialog h2,

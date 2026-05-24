@@ -112,7 +112,7 @@ export function WeatherControls({ settings, onSettingsChange }: WeatherControlsP
           <div className="flex items-center justify-between">
             <Label className="text-sm">Day/Night Range</Label>
             <span className="text-sm font-mono opacity-75">
-              {settings.lightingRange[0]}% (Day) - {settings.lightingRange[1]}% (Night)
+              {settings.lightingRange[0]}% (Night) - {settings.lightingRange[1]}% (Day)
             </span>
           </div>
           <Slider
@@ -125,8 +125,8 @@ export function WeatherControls({ settings, onSettingsChange }: WeatherControlsP
             className="w-full"
           />
           <div className="flex justify-between text-xs text-muted-foreground mt-2">
-            <span>0% = Pure Day (Bright Blue, No Stars)</span>
-            <span>100% = Pure Night (Black, Full Stars)</span>
+            <span>0% = Pure Night (Black, Full Stars)</span>
+            <span>100% = Pure Day (Bright Blue, No Stars)</span>
           </div>
         </div>
 
@@ -150,7 +150,7 @@ export function WeatherControls({ settings, onSettingsChange }: WeatherControlsP
             <strong>Current behavior:</strong> Day/night will cycle between {settings.lightingRange[0]}% and {settings.lightingRange[1]}% over {settings.cycleDuration} minutes.
           </p>
           <p>
-            Sky transitions from bright blue with no stars (low %) to pure black with bright stars (high %).
+            Sky transitions from pure black with bright stars (low %) to bright blue with no stars (high %).
           </p>
         </div>
       </div>
