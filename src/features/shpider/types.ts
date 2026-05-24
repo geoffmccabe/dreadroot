@@ -103,4 +103,12 @@ export interface ShpiderInstance {
   // Head moves independently of body (slight bob + look-at-player).
   headYawOffset: number;
   headPitchOffset: number;
+
+  // Head horizontal slide oscillator — phase offset so neighbours
+  // don't all bob in sync.
+  headSlidePhase: number;
+
+  // Mandible click state. Per-shpider random schedule.
+  nextMandibleClickAt: number; // ms timestamp
+  mandibleClickStartedAt: number; // ms timestamp (0 if not clicking)
 }

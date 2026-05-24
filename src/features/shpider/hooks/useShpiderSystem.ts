@@ -52,6 +52,7 @@ export function useShpiderSystem({
     const scale = 1 + (Math.random() * 2 - 1) * 0.15;
     const legPhaseOffsets = Array.from({ length: LEGS_PER_SHPIDER }, () => Math.random() * Math.PI * 2);
 
+    const now = Date.now();
     const instance: ShpiderInstance = {
       id,
       definition,
@@ -60,7 +61,7 @@ export function useShpiderSystem({
       currentHealth: definition.health,
       maxHealth: definition.health,
       isActive: true,
-      spawnedAt: Date.now(),
+      spawnedAt: now,
       velocity: new THREE.Vector3(0, 0, 0),
       spawnChunkX: Math.floor(worldX / CHUNK_SIZE),
       spawnChunkZ: Math.floor(worldZ / CHUNK_SIZE),
@@ -68,9 +69,12 @@ export function useShpiderSystem({
       legPhaseOffsets,
       headYawOffset: 0,
       headPitchOffset: 0,
+      headSlidePhase: Math.random() * Math.PI * 2,
+      nextMandibleClickAt: now + 500 + Math.random() * 1500,
+      mandibleClickStartedAt: 0,
       hop: {
         phase: 'idle',
-        nextHopAt: Date.now() + 1000 + Math.random() * 500,
+        nextHopAt: now + definition.hop_interval_min_ms + Math.random() * (definition.hop_interval_max_ms - definition.hop_interval_min_ms),
         hopStartAt: 0,
         hopDurationMs: definition.hop_duration_ms,
         startX: worldX, startY: 0, startZ: worldZ,
