@@ -217,6 +217,7 @@ export function useShpiderSystem({
       } else {
         fragmentsRef.current = combined;
       }
+      console.log(`[Shpider] DEATH t${s.definition.tier} → spawned ${newFrags.length} fragments (active total ${fragmentsRef.current.length})`);
       removeShpider(s.id);
       return true;
     }

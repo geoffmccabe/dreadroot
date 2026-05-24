@@ -532,6 +532,14 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
       fragments.length = 0;
       for (const f of updated) fragments.push(f);
 
+      // One-time debug log when fragments first appear / change count.
+      if ((window as any).__shpiderLastFragCount !== updated.length) {
+        (window as any).__shpiderLastFragCount = updated.length;
+        console.log(`[Shpider] fragments active: ${updated.length}`);
+      }
+
+      let drawnFrags = 0;
+      let skippedFrags = 0;
       for (const f of updated) {
         const tier = Math.max(1, Math.min(NUM_TIERS, f.shpiderTier));
         let mesh: THREE.InstancedMesh | null = null;
@@ -548,13 +556,20 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
           count = legCounts.current[tier];
           cap = MAX_LEG_PER_TIER;
         }
-        if (!mesh || count >= cap) continue;
+        if (!mesh || count >= cap) { skippedFrags++; continue; }
 
         _mat.compose(f.position, f.rotation, f.scale);
         mesh.setMatrixAt(count, _mat);
         if (f.type === 'body')      bodyCounts.current[tier]++;
         else if (f.type === 'head') headCounts.current[tier]++;
         else                        legCounts.current[tier]++;
+        drawnFrags++;
+      }
+
+      // Log once when drawing state changes appreciably.
+      if (drawnFrags > 0 && (window as any).__shpiderLastDrawn !== drawnFrags) {
+        (window as any).__shpiderLastDrawn = drawnFrags;
+        console.log(`[Shpider] frags drawn: ${drawnFrags}, skipped: ${skippedFrags}`);
       }
     }
 
