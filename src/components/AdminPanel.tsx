@@ -16,6 +16,7 @@ import { ShombieDesignPanel } from '@/features/shombie';
 import { ShwarmDesignPanel } from '@/features/shwarm';
 import { WalapaDesignPanel } from '@/features/walapa';
 import { ShtickmanDesignPanel } from '@/features/shtickman';
+import { ShpiderDesignPanel } from '@/features/shpider';
 import { SeedDesignPanel } from '@/features/trees';
 import { AllItemsPanel } from './AdminPanel.AllItemsPanel';
 import { DropTablesPanel } from './AdminPanel.DropTablesPanel';
@@ -247,6 +248,7 @@ export function AdminPanel({
                     <ShnakeDesignPanel />
                     <ShombieDesignPanel />
                     <ShtickmanDesignPanel />
+                    <ShpiderDesignPanel />
                   </div>
                 </ScrollArea>
               </TabsContent>
