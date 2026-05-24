@@ -918,10 +918,10 @@ export function useFortressFrameLoop({
 
               if (onPointsEarned) onPointsEarned(finalDamage);
 
-              // Hit feedback sound — reuse the existing coin-hit / wooden
-              // thud pool so shpider hits have audio parity with shombie.
+              // Hit feedback sound — wooden thud (generic flesh-impact),
+              // NOT the coin sound. Same sound used elsewhere for body hits.
               try {
-                const audioEl = (audioRefs.current?.coinHit ?? audioRefs.current?.shwarmHit ?? audioRefs.current?.woodenThud) as HTMLAudioElement | undefined;
+                const audioEl = (audioRefs.current?.woodenThud ?? audioRefs.current?.shwarmHit) as HTMLAudioElement | undefined;
                 if (audioEl) {
                   audioEl.currentTime = 0;
                   void audioEl.play().catch(() => {});

@@ -30,22 +30,28 @@ const CRAWL_MAX_MS = 2400;
 const FALL_GRAVITY = 18.0; // blocks/s² while in mid-air (no support)
 const WORLD_FLOOR_Y = 0;   // hard floor of the playable world
 
-// Lightweight per-URL audio pool. We keep a small ring of HTMLAudio
-// elements per URL so several shpiders can hop within the same frame
-// without stomping on each other's playback.
+// Default fallback hop sound (used when the per-tier hop_sound_url
+// is null). File is copied to /public so it ships with the build.
+const DEFAULT_HOP_SOUND_URL = '/shpider_jump.mp3';
+// 50% of native volume per design — overlapping playback is by design.
+const HOP_VOLUME = 0.5;
+// Larger pool so dense crowds can fire simultaneously without
+// stealing each other's plays.
+const HOP_AUDIO_POOL_SIZE = 8;
 const HOP_AUDIO_POOL: Map<string, HTMLAudioElement[]> = new Map();
-const HOP_AUDIO_POOL_SIZE = 4;
+
 function playHopSound(url: string | null | undefined) {
-  if (!url || typeof window === 'undefined') return;
-  let pool = HOP_AUDIO_POOL.get(url);
+  if (typeof window === 'undefined') return;
+  const finalUrl = url && url.length > 0 ? url : DEFAULT_HOP_SOUND_URL;
+  let pool = HOP_AUDIO_POOL.get(finalUrl);
   if (!pool) {
     pool = Array.from({ length: HOP_AUDIO_POOL_SIZE }, () => {
-      const a = new Audio(url);
-      a.volume = 0.6;
+      const a = new Audio(finalUrl);
+      a.volume = HOP_VOLUME;
       a.preload = 'auto';
       return a;
     });
-    HOP_AUDIO_POOL.set(url, pool);
+    HOP_AUDIO_POOL.set(finalUrl, pool);
   }
   // Pick the first audio not currently playing.
   for (const a of pool) {
@@ -54,7 +60,8 @@ function playHopSound(url: string | null | undefined) {
       return;
     }
   }
-  // All busy: just replay the first one.
+  // All busy: replay the oldest one (rotates so we don't always
+  // stomp the same channel).
   try { pool[0].currentTime = 0; void pool[0].play().catch(() => {}); } catch {}
 }
 
