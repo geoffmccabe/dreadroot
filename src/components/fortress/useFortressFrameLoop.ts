@@ -918,6 +918,16 @@ export function useFortressFrameLoop({
 
               if (onPointsEarned) onPointsEarned(finalDamage);
 
+              // Hit feedback sound — reuse the existing coin-hit / wooden
+              // thud pool so shpider hits have audio parity with shombie.
+              try {
+                const audioEl = (audioRefs.current?.coinHit ?? audioRefs.current?.shwarmHit ?? audioRefs.current?.woodenThud) as HTMLAudioElement | undefined;
+                if (audioEl) {
+                  audioEl.currentTime = 0;
+                  void audioEl.play().catch(() => {});
+                }
+              } catch {}
+
               const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
               const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
               const fireConfig = {

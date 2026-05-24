@@ -82,10 +82,11 @@ export function useShpiderSystem({
     const id = `shpider_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const scale = 1 + (Math.random() * 2 - 1) * 0.15;
     // Per-leg random gait — wide ranges so two shpiders rarely twitch
-    // in the same way. Phase 0-2π, frequency 0.6×–2.4× base, lift 25–95%.
+    // in the same way. Phase 0-2π, frequency 0.6–2.4× base, lift 24–96%
+    // of halfBody (3× the earlier range per user playtest feedback).
     const legPhaseOffsets   = Array.from({ length: LEGS_PER_SHPIDER }, () => Math.random() * Math.PI * 2);
     const legFrequencies    = Array.from({ length: LEGS_PER_SHPIDER }, () => 0.6 + Math.random() * 1.8);
-    const legLiftAmplitudes = Array.from({ length: LEGS_PER_SHPIDER }, () => 0.25 + Math.random() * 0.70);
+    const legLiftAmplitudes = Array.from({ length: LEGS_PER_SHPIDER }, () => 0.24 + Math.random() * 0.72);
 
     const now = Date.now();
     const instance: ShpiderInstance = {
@@ -109,6 +110,7 @@ export function useShpiderSystem({
       headSlidePhase: Math.random() * Math.PI * 2,
       nextMandibleClickAt: now + 500 + Math.random() * 1500,
       mandibleClickStartedAt: 0,
+      lastAttackAt: 0,
       hop: {
         phase: 'idle',
         nextHopAt: now + definition.hop_interval_min_ms + Math.random() * (definition.hop_interval_max_ms - definition.hop_interval_min_ms),
@@ -177,14 +179,17 @@ export function useShpiderSystem({
     if (!s || !s.isActive) return false;
     s.currentHealth -= damage;
 
-    // Knockback: small velocity kick scaled by the shpider's
-    // knockback_received tuning. Shpiders take ~40% of a shombie's
-    // hit by default.
-    const kbStrength = (bulletSpeed * 0.015) * (s.definition.knockback_received ?? 1);
-    s.velocity.x += knockbackDir.x * kbStrength;
-    s.velocity.z += knockbackDir.z * kbStrength;
-    // Interrupt a hop mid-flight if heavily hit; the hop AI will
-    // recover next idle window.
+    // Tier-scaled knockback. T1 (knockback_received ≈ 2.5) travels
+    // ~10m before decaying; T10 (≈0.25) travels ~1m. Average is 25%
+    // of a shombie's punt, per design. velocity decays in hopAI step.
+    const kbScale = s.definition.knockback_received ?? 1;
+    // hopAI's halflife = 0.25s, so total distance ≈ v0 × 0.36s.
+    // 10m at kbScale=2.5 → v0=28 → coefficient ~11.
+    const v0 = 11 * kbScale * Math.max(1, bulletSpeed / 60);
+    s.velocity.x = knockbackDir.x * v0;
+    s.velocity.z = knockbackDir.z * v0;
+
+    // Interrupt a hop mid-flight if heavily hit.
     if (s.hop.phase === 'hopping' && damage > 30) {
       s.hop.phase = 'idle';
       s.hop.nextHopAt = Date.now() + 400;
@@ -237,25 +242,23 @@ export function useShpiderSystem({
 
   /**
    * Natural spawning loop. Every SPAWN_CHECK_INTERVAL_MS we look at
-   * the chunks around the player; each one rolls
-   *   chance = T1.spawn_chance_per_minute
+   * each chunk around the player and roll EACH eligible tier
+   * independently. A tier's per-check chance is
+   *   chance = def.spawn_chance_per_minute
    *          × distFalloff(chunkDist)            // halves per chunk
    *          × (CHECK_INTERVAL_MS / 60000)       // 2 s window
-   * to decide whether to drop one more shpider in it.
    *
-   * Same distance-falloff curve as Shombie so the two enemy systems
-   * feel consistent at the same chunk distance.
+   * Rarity comes from the per-tier `spawn_chance_per_minute` column:
+   * T1 spawns often, T10 spawns rarely. Same distance-falloff curve
+   * as Shombie.
    */
   useEffect(() => {
     if (!isEnabled || !spawningEnabled) return;
     if (!definitions || definitions.length === 0) return;
 
-    const tier1Def = definitions.find(d => d.tier === NATURAL_SPAWN_TIER);
-    if (!tier1Def) return;
-    if ((tier1Def.spawn_chance_per_minute ?? 0) <= 0) return;
-
-    const baseChancePerMinute = tier1Def.spawn_chance_per_minute;
-    console.log(`[Shpider] Natural spawning started — T1 ${baseChancePerMinute}/min, radius ${NATURAL_SPAWN_CHUNK_RADIUS} chunks`);
+    const eligibleDefs = definitions.filter(d => (d.spawn_chance_per_minute ?? 0) > 0);
+    if (eligibleDefs.length === 0) return;
+    console.log(`[Shpider] Natural spawning started — ${eligibleDefs.length} eligible tiers (T${eligibleDefs.map(d => d.tier).join(',T')}), radius ${NATURAL_SPAWN_CHUNK_RADIUS} chunks`);
 
     const spawnCheck = () => {
       if (shpidersRef.current.length >= MAX_TOTAL_SHPIDERS) return;
@@ -265,17 +268,20 @@ export function useShpiderSystem({
       for (let dx = -NATURAL_SPAWN_CHUNK_RADIUS; dx <= NATURAL_SPAWN_CHUNK_RADIUS; dx++) {
         for (let dz = -NATURAL_SPAWN_CHUNK_RADIUS; dz <= NATURAL_SPAWN_CHUNK_RADIUS; dz++) {
           const chunkDist = Math.max(Math.abs(dx), Math.abs(dz));
-          if (chunkDist === 0) continue; // never spawn in the player's chunk
+          if (chunkDist === 0) continue;
           const chunkX = player.x + dx;
           const chunkZ = player.z + dz;
           if (countInChunk(chunkX, chunkZ) >= MAX_SHPIDERS_PER_CHUNK) continue;
 
           const distMul = Math.pow(0.5, chunkDist - 1);
-          const chancePerCheck = baseChancePerMinute * distMul * (SPAWN_CHECK_INTERVAL_MS / 60000);
-          if (Math.random() < chancePerCheck) {
-            const worldX = chunkX * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
-            const worldZ = chunkZ * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
-            spawnShpiderAt(tier1Def, worldX, worldZ);
+          for (const def of eligibleDefs) {
+            const chance = (def.spawn_chance_per_minute ?? 0) * distMul * (SPAWN_CHECK_INTERVAL_MS / 60000);
+            if (Math.random() < chance) {
+              const worldX = chunkX * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
+              const worldZ = chunkZ * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
+              spawnShpiderAt(def, worldX, worldZ);
+              break; // one new spawn per chunk per check
+            }
           }
         }
       }

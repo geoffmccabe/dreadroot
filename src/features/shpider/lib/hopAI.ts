@@ -30,6 +30,34 @@ const CRAWL_MAX_MS = 2400;
 const FALL_GRAVITY = 18.0; // blocks/s² while in mid-air (no support)
 const WORLD_FLOOR_Y = 0;   // hard floor of the playable world
 
+// Lightweight per-URL audio pool. We keep a small ring of HTMLAudio
+// elements per URL so several shpiders can hop within the same frame
+// without stomping on each other's playback.
+const HOP_AUDIO_POOL: Map<string, HTMLAudioElement[]> = new Map();
+const HOP_AUDIO_POOL_SIZE = 4;
+function playHopSound(url: string | null | undefined) {
+  if (!url || typeof window === 'undefined') return;
+  let pool = HOP_AUDIO_POOL.get(url);
+  if (!pool) {
+    pool = Array.from({ length: HOP_AUDIO_POOL_SIZE }, () => {
+      const a = new Audio(url);
+      a.volume = 0.6;
+      a.preload = 'auto';
+      return a;
+    });
+    HOP_AUDIO_POOL.set(url, pool);
+  }
+  // Pick the first audio not currently playing.
+  for (const a of pool) {
+    if (a.paused || a.ended) {
+      try { a.currentTime = 0; void a.play().catch(() => {}); } catch {}
+      return;
+    }
+  }
+  // All busy: just replay the first one.
+  try { pool[0].currentTime = 0; void pool[0].play().catch(() => {}); } catch {}
+}
+
 interface StepDeps {
   playerX: number;
   playerY: number;
@@ -83,6 +111,18 @@ function getSurfaceTangents(normal: THREE.Vector3, outA: THREE.Vector3, outB: TH
 export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
   const { now, dt, playerX, playerY, playerZ } = deps;
   const def = s.definition;
+
+  // ── Knockback decay. Bullet hits set s.velocity; here we integrate
+  //    it onto the position and decay over time (halflife ~0.25s).
+  if (s.velocity.x !== 0 || s.velocity.z !== 0) {
+    s.position.x += s.velocity.x * dt;
+    s.position.z += s.velocity.z * dt;
+    const decay = Math.pow(0.5, dt * 4); // halflife = 0.25s
+    s.velocity.x *= decay;
+    s.velocity.z *= decay;
+    if (Math.abs(s.velocity.x) < 0.05) s.velocity.x = 0;
+    if (Math.abs(s.velocity.z) < 0.05) s.velocity.z = 0;
+  }
 
   // ── Gravity guard. After hops, shpiders may end up suspended in
   //    mid-air. While idle/crawling, run them down until they hit
@@ -260,6 +300,9 @@ function launchHop(s: ShpiderInstance, deps: StepDeps): void {
   s.hop.endNormalZ = endNZ;
 
   if (dx !== 0 || dz !== 0) s.rotation = Math.atan2(dx, dz);
+
+  // Play the per-tier hop sound (if uploaded).
+  playHopSound(def.hop_sound_url);
 }
 
 /** Returns hop progress 0..1 if hopping, or null. */

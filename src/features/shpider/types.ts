@@ -129,4 +129,7 @@ export interface ShpiderInstance {
   // Mandible click state. Per-shpider random schedule.
   nextMandibleClickAt: number; // ms timestamp
   mandibleClickStartedAt: number; // ms timestamp (0 if not clicking)
+
+  // Touch-attack throttle so a shpider can't melee every frame.
+  lastAttackAt: number;
 }
