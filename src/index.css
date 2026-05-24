@@ -548,14 +548,33 @@ All colors MUST be HSL.
     --input: 211 30% 20% / 0.5;
     --foreground: 0 0% 95%;
     --primary-foreground: var(--hud-text-bright);
-    --secondary: 211 30% 25% / 0.5;
-    --secondary-foreground: var(--hud-text);
-    --popover: 211 30% 20% / 0.7;
+    /* Bumped contrast so secondary/outline buttons stay visible on the
+       translucent blue background. */
+    --secondary: 211 35% 38% / 0.85;
+    --secondary-foreground: 0 0% 98%;
+    --popover: 211 30% 20% / 0.85;
     --popover-foreground: var(--hud-text);
     --ring: var(--hud-border);
-    --accent: var(--hud-bg);
-    --accent-foreground: var(--hud-text);
+    --accent: 211 35% 45% / 0.6;
+    --accent-foreground: 0 0% 98%;
     --shadow-sm: none;
+
+    /* Frosted-glass: blur whatever's behind the panel so its
+       semi-transparent fill stops competing with the game scene. */
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+  }
+
+  /* Outline buttons + inputs: visible border on the translucent bg. */
+  .admin-panel-dialog .border-input,
+  .admin-panel-dialog [class*="border-input"] {
+    border-color: hsla(211, 50%, 80%, 0.7) !important;
+  }
+
+  /* Ghost / outline / link buttons: keep text near-white instead of
+     dimming to the muted blue that fades into the background. */
+  .admin-panel-dialog button:not([class*="bg-primary"]):not([class*="bg-destructive"]):not([class*="bg-secondary"]) {
+    color: hsl(0, 0%, 95%);
   }
 
   /* Headings inside admin panel: near-white */

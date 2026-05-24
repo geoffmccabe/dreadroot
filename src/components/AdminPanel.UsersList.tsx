@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -190,7 +191,7 @@ export function UsersList({}: UsersListProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <Card className="p-4 space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <Input
           placeholder="Search by email, user ID, wallet, or role..."
@@ -387,7 +388,7 @@ export function UsersList({}: UsersListProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Card>
   );
 }
 
