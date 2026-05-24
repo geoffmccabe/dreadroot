@@ -823,6 +823,17 @@ export function useFortressFrameLoop({
                   bulletImpactsRef.current.spawnImpact(hitPos, fireConfig);
                 }
 
+                // Hit feedback sound — bullet impact #1 (shombies didn't
+                // have one before; standardising via the spatial audio
+                // module so distant hits sound distant).
+                {
+                  const sdx = shombie.position.x - bullet.position.x;
+                  const sdy = shombie.position.y - bullet.position.y;
+                  const sdz = shombie.position.z - bullet.position.z;
+                  const sdist = Math.hypot(sdx, sdy, sdz);
+                  void playSpatialSound('/bullet_impact_1.mp3', sdist, { baseVolume: 0.7 });
+                }
+
                 break;
               }
             }
@@ -918,16 +929,14 @@ export function useFortressFrameLoop({
 
               if (onPointsEarned) onPointsEarned(finalDamage);
 
-              // Hit feedback sound — wooden thud, played through the
-              // shared spatial audio module so distant hits sound distant.
-              // We approximate camera→shpider distance with bullet→shpider
-              // because the local bullet was just fired from the camera.
+              // Hit feedback sound — bullet impact #2 through the shared
+              // spatial-audio module so distant hits sound distant.
               {
                 const dx2 = sp.position.x - bullet.position.x;
                 const dy2 = sp.position.y - bullet.position.y;
                 const dz2 = sp.position.z - bullet.position.z;
                 const distToHit = Math.hypot(dx2, dy2, dz2);
-                void playSpatialSound('/wooden_thud_sound.mp3', distToHit, { baseVolume: 0.6 });
+                void playSpatialSound('/bullet_impact_2.mp3', distToHit, { baseVolume: 0.7 });
               }
 
               const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
