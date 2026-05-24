@@ -27,11 +27,10 @@ CREATE TABLE IF NOT EXISTS public.user_stats (
   current_killstreak       INTEGER NOT NULL DEFAULT 0,
   best_enemy_tier_killed   INTEGER NOT NULL DEFAULT 0,
 
-  -- World / building
+  -- World / building (blocks_destroyed + trees_chopped intentionally
+  -- omitted — destruction isn't a leaderboard-worthy achievement)
   blocks_placed            INTEGER NOT NULL DEFAULT 0,
-  blocks_destroyed         INTEGER NOT NULL DEFAULT 0,
   trees_planted            INTEGER NOT NULL DEFAULT 0,
-  trees_chopped            INTEGER NOT NULL DEFAULT 0,
   fruits_collected         INTEGER NOT NULL DEFAULT 0,
   fruits_forged            INTEGER NOT NULL DEFAULT 0,
   distance_traveled_blocks REAL    NOT NULL DEFAULT 0,
@@ -132,9 +131,7 @@ BEGIN
     total_kills              = total_kills              + COALESCE((p_delta->>'total_kills')::INTEGER, 0),
     total_deaths             = total_deaths             + COALESCE((p_delta->>'total_deaths')::INTEGER, 0),
     blocks_placed            = blocks_placed            + COALESCE((p_delta->>'blocks_placed')::INTEGER, 0),
-    blocks_destroyed         = blocks_destroyed         + COALESCE((p_delta->>'blocks_destroyed')::INTEGER, 0),
     trees_planted            = trees_planted            + COALESCE((p_delta->>'trees_planted')::INTEGER, 0),
-    trees_chopped            = trees_chopped            + COALESCE((p_delta->>'trees_chopped')::INTEGER, 0),
     fruits_collected         = fruits_collected         + COALESCE((p_delta->>'fruits_collected')::INTEGER, 0),
     fruits_forged            = fruits_forged            + COALESCE((p_delta->>'fruits_forged')::INTEGER, 0),
     distance_traveled_blocks = distance_traveled_blocks + COALESCE((p_delta->>'distance_traveled_blocks')::REAL, 0),

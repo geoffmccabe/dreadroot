@@ -20,9 +20,7 @@ interface UserStatsRow {
   current_killstreak: number;
   best_enemy_tier_killed: number;
   blocks_placed: number;
-  blocks_destroyed: number;
   trees_planted: number;
-  trees_chopped: number;
   fruits_collected: number;
   fruits_forged: number;
   distance_traveled_blocks: number;
@@ -250,9 +248,7 @@ export function UserStatsModal({ user, open, onOpenChange }: UserStatsModalProps
               <TabsContent value="world" className="space-y-3 mt-0">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <Stat label="Blocks placed" value={fmtNumber(stats?.blocks_placed)} />
-                  <Stat label="Blocks destroyed" value={fmtNumber(stats?.blocks_destroyed)} />
                   <Stat label="Trees planted" value={fmtNumber(stats?.trees_planted)} />
-                  <Stat label="Trees chopped" value={fmtNumber(stats?.trees_chopped)} />
                   <Stat label="Fruits collected" value={fmtNumber(stats?.fruits_collected)} />
                   <Stat label="Fruits forged" value={fmtNumber(stats?.fruits_forged)} />
                   <Stat label="Distance traveled" value={`${fmtNumber(stats?.distance_traveled_blocks)} blocks`} />
