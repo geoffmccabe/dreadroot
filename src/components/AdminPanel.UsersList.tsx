@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -224,6 +224,7 @@ export function UsersList({}: UsersListProps) {
       </div>
 
       <ScrollArea className="h-[500px] w-full">
+        <div className="min-w-[900px]">
         <Table>
           <TableHeader>
             <TableRow>
@@ -314,6 +315,8 @@ export function UsersList({}: UsersListProps) {
             })}
           </TableBody>
         </Table>
+        </div>
+        <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
       {/* Edit Coins Dialog */}

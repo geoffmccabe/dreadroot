@@ -547,7 +547,12 @@ All colors MUST be HSL.
     --border: var(--hud-border);
     --input: 211 30% 20% / 0.5;
     --foreground: 0 0% 95%;
-    --primary-foreground: var(--hud-text-bright);
+    /* Force `variant="default"` buttons (the global Upload pattern) to
+       render with a clearly-visible cyan-blue against the dark
+       translucent panel — the global --primary is a dark waterfall
+       blue that matches the panel bg. */
+    --primary: 200 85% 55%;
+    --primary-foreground: 0 0% 100%;
     /* Bumped contrast so secondary/outline buttons stay visible on the
        translucent blue background. */
     --secondary: 211 35% 38% / 0.85;
