@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 // 'market' is Block Store, 'p2p' is P2P Marketplace
-type PanelTab = 'user' | 'level' | 'wallet' | 'items' | 'kills' | 'blocks' | 'market' | 'p2p' | 'trees';
+type PanelTab = 'user' | 'level' | 'wallet' | 'items' | 'kills' | 'blocks' | 'market' | 'p2p' | 'trees' | 'leaders';
 
 interface UserPanelContextType {
   isOpen: boolean;

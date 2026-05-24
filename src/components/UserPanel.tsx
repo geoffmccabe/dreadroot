@@ -23,6 +23,7 @@ import { KillsTab } from '@/components/KillsTab';
 import { TreesTab } from '@/components/TreesTab';
 import { ItemsTab } from '@/components/ItemsTab';
 import { FruitsTab } from '@/components/FruitsTab';
+import { LeaderboardsPanel } from '@/components/LeaderboardsPanel';
 import { useFruitData } from '@/hooks/useFruitData';
 import { useTreeData } from '@/features/trees/hooks/useTreeData';
 import { useCurrentWorldId } from '@/hooks/useCurrentWorldId';
@@ -383,7 +384,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="relative">
-          <TabsList className={`grid w-full ${showTreesTab && showFruitsTab ? 'grid-cols-10' : showTreesTab || showFruitsTab ? 'grid-cols-9' : 'grid-cols-8'}`} style={{ background: 'hsla(var(--hud-bg-dim))', borderRadius: 'var(--hud-radius)' }}>
+          <TabsList className={`grid w-full ${showTreesTab && showFruitsTab ? 'grid-cols-11' : showTreesTab || showFruitsTab ? 'grid-cols-10' : 'grid-cols-9'}`} style={{ background: 'hsla(var(--hud-bg-dim))', borderRadius: 'var(--hud-radius)' }}>
             <TabsTrigger value="user">User</TabsTrigger>
             <TabsTrigger value="level">Level</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
@@ -392,6 +393,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             <TabsTrigger value="blocks">Blocks</TabsTrigger>
             <TabsTrigger value="market">Store</TabsTrigger>
             <TabsTrigger value="p2p">P2P</TabsTrigger>
+            <TabsTrigger value="leaders">Leaders</TabsTrigger>
             {showTreesTab && <TabsTrigger value="trees">Trees</TabsTrigger>}
             {showFruitsTab && <TabsTrigger value="fruits">Fruits</TabsTrigger>}
           </TabsList>
@@ -928,6 +930,18 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
               />
             </TabsContent>
           )}
+
+          <TabsContent
+            value="leaders"
+            className="overflow-y-auto"
+            style={{
+              height: `${panelSize.height - 104}px`,
+              marginTop: 0,
+              paddingTop: '1rem'
+            }}
+          >
+            <LeaderboardsPanel />
+          </TabsContent>
       </Tabs>
         
         {/* Resize Handle */}
