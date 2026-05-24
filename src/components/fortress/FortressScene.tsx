@@ -1428,8 +1428,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Shtickman Renderer - tall stick humanoids */}
       <ShtickmanRenderer ref={shtickmanRendererRef} shtickmenRef={shtickmenRef} cameraRef={cameraRef} universalFlameRef={universalFlameRef} />
 
-      {/* Shpider Renderer — Phase 3 static. */}
-      <ShpiderRenderer shpidersRef={shpidersRef} cameraRef={cameraRef} />
+      {/* Shpider Renderer — per-tier InstancedMesh routing. */}
+      <ShpiderRenderer shpidersRef={shpidersRef} cameraRef={cameraRef} definitions={shpiderDefinitions} />
 
       {/* Dropped Loot Items */}
       <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />

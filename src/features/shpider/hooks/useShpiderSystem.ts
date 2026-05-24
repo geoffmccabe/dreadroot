@@ -245,6 +245,62 @@ export function useShpiderSystem({
   }, [isAdmin, spawnShpiderGroup]);
 
   /**
+   * Stack collapse loop. Every 500 ms, scan for vertical columns of
+   * ≥ 4 shpiders. When found, remove all 4 and replace with a single
+   * shpider at the bottom position, tier = max(tiers) + 2 (capped to
+   * 10). Same-column = horizontal distance < body_size × 0.9.
+   */
+  useEffect(() => {
+    if (!isEnabled) return;
+    const collapseCheck = () => {
+      const list = shpidersRef.current;
+      if (list.length < 4) return;
+      // Find columns of 4+ active shpiders. Pick a "base" candidate
+      // and gather everyone in its XZ neighbourhood. Greedy — each
+      // shpider is consumed by at most one collapse per tick.
+      const consumed = new Set<string>();
+      for (const base of list) {
+        if (!base.isActive || consumed.has(base.id)) continue;
+        const r = base.definition.body_size * 0.9;
+        const r2 = r * r;
+        const column: ShpiderInstance[] = [base];
+        for (const o of list) {
+          if (o === base || !o.isActive || consumed.has(o.id)) continue;
+          const dx = o.position.x - base.position.x;
+          const dz = o.position.z - base.position.z;
+          if (dx * dx + dz * dz <= r2) column.push(o);
+        }
+        if (column.length < 4) continue;
+
+        // Sort by Y so bottom comes first; take exactly 4.
+        column.sort((a, b) => a.position.y - b.position.y);
+        const group = column.slice(0, 4);
+        const maxTier = group.reduce((m, x) => Math.max(m, x.definition.tier), 0);
+        const newTier = Math.min(10, maxTier + 2);
+        const bottom = group[0];
+        const newDef = getDefinitionByTier(definitions, newTier);
+
+        // Remove the 4 originals.
+        for (const g of group) {
+          g.isActive = false;
+          consumed.add(g.id);
+        }
+        // Spawn the replacement at the bottom's XZ if a definition exists.
+        // Without a valid definition, the column simply collapses into
+        // nothing (rare — only when no higher tier exists at all).
+        shpidersRef.current = shpidersRef.current.filter(s => !consumed.has(s.id));
+        if (newDef) {
+          spawnShpiderAt(newDef, bottom.position.x, bottom.position.z);
+          console.log(`[Shpider] Stack of 4 collapsed → T${newTier} at (${bottom.position.x.toFixed(1)}, ${bottom.position.z.toFixed(1)})`);
+        }
+      }
+      if (consumed.size > 0) setShpiders([...shpidersRef.current]);
+    };
+    const interval = setInterval(collapseCheck, 500);
+    return () => clearInterval(interval);
+  }, [isEnabled, definitions, spawnShpiderAt]);
+
+  /**
    * Natural spawning loop. Every SPAWN_CHECK_INTERVAL_MS we look at
    * each chunk around the player and roll EACH eligible tier
    * independently. A tier's per-check chance is

@@ -80,6 +80,32 @@ function isTooCrowded(
 }
 
 /**
+ * Inspect the vertical stack of shpiders sharing this column with
+ * `self`. Returns the count INCLUDING self and whether anyone is
+ * directly above. "Same column" = within bodySize × 1.0 in XZ.
+ */
+export function analyzeStack(
+  self: ShpiderInstance,
+  others?: readonly ShpiderInstance[],
+): { count: number; hasAbove: boolean } {
+  if (!others) return { count: 1, hasAbove: false };
+  const r = self.definition.body_size * 0.9;
+  const r2 = r * r;
+  let count = 1;
+  let hasAbove = false;
+  for (const o of others) {
+    if (o === self || !o.isActive) continue;
+    const dx = o.position.x - self.position.x;
+    const dz = o.position.z - self.position.z;
+    if (dx * dx + dz * dz > r2) continue;
+    // Within the column. Is it above me?
+    if (o.position.y > self.position.y + 0.2) hasAbove = true;
+    count++;
+  }
+  return { count, hasAbove };
+}
+
+/**
  * Build two orthogonal tangent vectors for the current surface normal.
  * tangentA points roughly forward, tangentB points roughly sideways.
  */
@@ -142,6 +168,22 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
   // ── IDLE: pick a target and decide whether to crawl or hop.
   if (s.hop.phase === 'idle') {
     if (now < s.hop.nextHopAt) return;
+
+    // Stacking: shpiders carrying another on top freeze. Shpiders
+    // at the top of a stack hop 20× less often (delay the schedule).
+    const stack = analyzeStack(s, deps.others);
+    if (stack.hasAbove) {
+      // Frozen — postpone the next attempt so we don't burn CPU.
+      s.hop.nextHopAt = now + 1500;
+      return;
+    }
+    if (stack.count > 1) {
+      // I'm on top of (or in the middle of) a column. Hop 20× less often.
+      if (Math.random() >= 1 / 20) {
+        s.hop.nextHopAt = now + 1500;
+        return;
+      }
+    }
 
     // 60% of the time, do a short stalking crawl first; 40% pounce
     // straight away. Randomness so groups don't move in lock-step.

@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { ShpiderInstance } from '../types';
+import type { ShpiderDefinition, ShpiderInstance } from '../types';
 import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../constants';
 import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
 import {
@@ -30,14 +30,20 @@ import {
   MANDIBLE_MAX_CLICK_INTERVAL_MS,
 } from '../lib/shpiderGeometry';
 
-const MAX_INSTANCES = 200;
+const NUM_TIERS = 10;
+const MAX_PER_TIER = 64;
+const MAX_LEG_PER_TIER = MAX_PER_TIER * LEGS_PER_SHPIDER * SEGMENTS_PER_LEG;
+
+// Total shpider cap across all tiers. Per-tier meshes each hold up to
+// MAX_PER_TIER (defined above the imports) so we never overflow a tier
+// even if 10 tiers are unevenly populated.
+const TOTAL_SHARED_INSTANCES = NUM_TIERS * MAX_PER_TIER;
 const RENDER_DISTANCE = 80;
 const RENDER_DISTANCE_SQ = RENDER_DISTANCE * RENDER_DISTANCE;
 
-const MAX_LEG_INSTANCES = MAX_INSTANCES * LEGS_PER_SHPIDER * SEGMENTS_PER_LEG;
-const MAX_MANDIBLE_INSTANCES = MAX_INSTANCES * 2;
+const MAX_MANDIBLE_INSTANCES = TOTAL_SHARED_INSTANCES * 2;
 // Eye: 3 instances per shpider — black outline, white body, black pupil.
-const MAX_EYE_INSTANCES = MAX_INSTANCES * 3;
+const MAX_EYE_INSTANCES = TOTAL_SHARED_INSTANCES * 3;
 
 // Football-shaped (horizontal ellipse) cyclops eye on the head's front
 // face. Dimensions are in head-radius units.
@@ -165,28 +171,44 @@ function getSegmentEndpoints(
 interface ShpiderRendererProps {
   shpidersRef: React.RefObject<ShpiderInstance[]>;
   cameraRef: React.RefObject<THREE.Camera | null>;
+  definitions: ShpiderDefinition[];
 }
 
-export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps) {
-  // First-tier definition supplies the placeholder textures for now.
-  // Note: per-tier visual differentiation lives behind a separate
-  // task (Phase 7 polish) — currently every shpider shares this set.
-  const sample = shpidersRef.current?.[0]?.definition;
+export function ShpiderRenderer({ shpidersRef, cameraRef, definitions }: ShpiderRendererProps) {
+  // ── Per-tier texture loading. One material per tier per part-type,
+  // so each tier renders with its own admin-uploaded textures. Tier
+  // rows missing a texture fall back to the bamboo placeholder.
   const fallback = '/Bamboo_Seamless_t1.webp';
-  const bodyTexUrl = sample?.body_texture_url ?? fallback;
-  const legTexUrl  = sample?.leg_texture_url  ?? fallback;
+  const defsByTier = useMemo(() => {
+    const arr: (ShpiderDefinition | null)[] = new Array(NUM_TIERS + 1).fill(null);
+    for (const d of definitions) {
+      if (d.tier >= 1 && d.tier <= NUM_TIERS) arr[d.tier] = d;
+    }
+    return arr;
+  }, [definitions]);
 
-  const bodyTex = useLoader(THREE.TextureLoader, bodyTexUrl);
-  const legTex  = useLoader(THREE.TextureLoader, legTexUrl);
+  const bodyUrls = useMemo(() => {
+    const arr: string[] = [];
+    for (let t = 1; t <= NUM_TIERS; t++) arr.push(defsByTier[t]?.body_texture_url || fallback);
+    return arr;
+  }, [defsByTier]);
+  const legUrls = useMemo(() => {
+    const arr: string[] = [];
+    for (let t = 1; t <= NUM_TIERS; t++) arr.push(defsByTier[t]?.leg_texture_url || fallback);
+    return arr;
+  }, [defsByTier]);
+
+  const bodyTexs = useLoader(THREE.TextureLoader, bodyUrls);
+  const legTexs  = useLoader(THREE.TextureLoader, legUrls);
 
   useEffect(() => {
-    [bodyTex, legTex].forEach(t => {
+    [...bodyTexs, ...legTexs].forEach(t => {
       t.colorSpace = THREE.SRGBColorSpace;
       t.minFilter = THREE.LinearMipMapLinearFilter;
       t.magFilter = THREE.LinearFilter;
       t.needsUpdate = true;
     });
-  }, [bodyTex, legTex]);
+  }, [bodyTexs, legTexs]);
 
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const headGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
@@ -195,9 +217,15 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
     []
   );
 
-  const bodyMat = useMemo(() => new THREE.MeshLambertMaterial({ map: bodyTex }), [bodyTex]);
-  const headMat = useMemo(() => new THREE.MeshLambertMaterial({ map: bodyTex }), [bodyTex]);
-  const legMat  = useMemo(() => new THREE.MeshLambertMaterial({ map: legTex }),  [legTex]);
+  // Per-tier materials. Body + head share the same body texture.
+  const bodyMats = useMemo(
+    () => bodyTexs.map(tex => new THREE.MeshLambertMaterial({ map: tex })),
+    [bodyTexs]
+  );
+  const legMats = useMemo(
+    () => legTexs.map(tex => new THREE.MeshLambertMaterial({ map: tex })),
+    [legTexs]
+  );
   // Eyelashes + mandibles share a dark non-textured chitin colour.
   const chitinMat = useMemo(() => new THREE.MeshStandardMaterial({
     color: new THREE.Color('#1a1a1f'),
@@ -205,9 +233,14 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
     metalness: 0.15,
   }), []);
 
-  const bodyMeshRef     = useRef<THREE.InstancedMesh>(null);
-  const headMeshRef     = useRef<THREE.InstancedMesh>(null);
-  const legMeshRef      = useRef<THREE.InstancedMesh>(null);
+  // 1-indexed arrays of per-tier mesh refs + per-tier counters.
+  const bodyMeshRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(NUM_TIERS + 1).fill(null));
+  const headMeshRefs = useRef<(THREE.InstancedMesh | null)[]>(new Array(NUM_TIERS + 1).fill(null));
+  const legMeshRefs  = useRef<(THREE.InstancedMesh | null)[]>(new Array(NUM_TIERS + 1).fill(null));
+  const bodyCounts = useRef<Int32Array>(new Int32Array(NUM_TIERS + 1));
+  const headCounts = useRef<Int32Array>(new Int32Array(NUM_TIERS + 1));
+  const legCounts  = useRef<Int32Array>(new Int32Array(NUM_TIERS + 1));
+
   const eyelashMeshRef  = useRef<THREE.InstancedMesh>(null);
   const mandibleMeshRef = useRef<THREE.InstancedMesh>(null);
   const eyeMeshRef      = useRef<THREE.InstancedMesh>(null);
@@ -229,12 +262,9 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
     const list = shpidersRef.current;
     const camera = cameraRef.current;
     if (!list || !camera) return;
-    const bodyMesh = bodyMeshRef.current;
-    const headMesh = headMeshRef.current;
-    const legMesh  = legMeshRef.current;
     const eyelashMesh  = eyelashMeshRef.current;
     const mandibleMesh = mandibleMeshRef.current;
-    if (!bodyMesh || !headMesh || !legMesh || !eyelashMesh || !mandibleMesh) return;
+    if (!eyelashMesh || !mandibleMesh) return;
 
     const now = Date.now();
     const t = clock.elapsedTime;
@@ -243,9 +273,10 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
     const playerY = camera.position.y;
     const playerZ = camera.position.z;
 
-    let bodyCount = 0;
-    let headCount = 0;
-    let legCount  = 0;
+    // Per-tier counters — reset every frame so we re-pack densely.
+    bodyCounts.current.fill(0);
+    headCounts.current.fill(0);
+    legCounts.current.fill(0);
     let eyelashCount  = 0;
     let mandibleCount = 0;
     let eyeCount = 0;
@@ -259,9 +290,14 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       const dx = s.position.x - playerX;
       const dz = s.position.z - playerZ;
       if (dx * dx + dz * dz > RENDER_DISTANCE_SQ) continue;
-      if (bodyCount >= MAX_INSTANCES) break;
 
       const def = s.definition;
+      const tier = Math.max(1, Math.min(NUM_TIERS, def.tier));
+      const bodyMesh = bodyMeshRefs.current[tier];
+      const headMesh = headMeshRefs.current[tier];
+      const legMesh  = legMeshRefs.current[tier];
+      if (!bodyMesh || !headMesh || !legMesh) continue;
+      if (bodyCounts.current[tier] >= MAX_PER_TIER) continue;
       const bodySize = def.body_size * s.scale;
       const headSize = def.head_size * s.scale;
       const halfBody = bodySize * 0.5;
@@ -284,7 +320,7 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       );
       _scale.set(bodySize, bodySize, bodySize);
       _mat.compose(_pos, _quat, _scale);
-      bodyMesh.setMatrixAt(bodyCount++, _mat);
+      bodyMesh.setMatrixAt(bodyCounts.current[tier]++, _mat);
 
       // === Head ===
       const slide = Math.sin(t * Math.PI * 2 * HEAD_SLIDE_HZ + s.headSlidePhase) * (headSize * 0.5);
@@ -300,12 +336,7 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       );
       _scale.set(headSize, headSize, headSize);
       _mat.compose(_pos, _quat, _scale);
-      headMesh.setMatrixAt(headCount++, _mat);
-
-      // Stash the head world position for eyelash + mandible offsets.
-      const headWorldX = _pos.x;
-      const headWorldY = _pos.y;
-      const headWorldZ = _pos.z;
+      headMesh.setMatrixAt(headCounts.current[tier]++, _mat);
 
       // === Eye (cyclops football, tracks the camera = local player) ===
       const eyeMesh = eyeMeshRef.current;
@@ -454,7 +485,7 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       const crawlT = getCrawlProgress(s, now);
       for (let leg = 0; leg < LEGS_PER_SHPIDER; leg++) {
         for (let seg = 0; seg < SEGMENTS_PER_LEG; seg++) {
-          if (legCount >= MAX_LEG_INSTANCES) break;
+          if (legCounts.current[tier] >= MAX_LEG_PER_TIER) break;
 
           getSegmentEndpoints(
             leg, seg, bodySize,
@@ -465,10 +496,6 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
             t, epScratch,
           );
 
-          // Local endpoints are in shpider-local space (Y up, Z forward,
-          // but oriented relative to the body, not the world). Apply the
-          // combined surface+yaw quat to bring them to world space, then
-          // translate by the shpider's body center.
           _segStart.copy(epScratch.start).applyQuaternion(_quat);
           _segStart.x += s.position.x;
           _segStart.y += s.position.y + halfBody;
@@ -488,25 +515,40 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
           _worldRot.setFromUnitVectors(_yAxis, _legDir);
           _scale.set(1, segLength, 1);
           _mat.compose(_segMid, _worldRot, _scale);
-          legMesh.setMatrixAt(legCount++, _mat);
+          legMesh.setMatrixAt(legCounts.current[tier]++, _mat);
         }
       }
     }
 
-    bodyMesh.count = bodyCount;
-    headMesh.count = headCount;
-    legMesh.count = legCount;
+    // Per-tier flush.
+    for (let tier = 1; tier <= NUM_TIERS; tier++) {
+      const bm = bodyMeshRefs.current[tier];
+      const hm = headMeshRefs.current[tier];
+      const lm = legMeshRefs.current[tier];
+      const bc = bodyCounts.current[tier];
+      const hc = headCounts.current[tier];
+      const lc = legCounts.current[tier];
+      if (bm) {
+        bm.count = bc;
+        bm.instanceMatrix.needsUpdate = true;
+        bm.visible = bc > 0;
+      }
+      if (hm) {
+        hm.count = hc;
+        hm.instanceMatrix.needsUpdate = true;
+        hm.visible = hc > 0;
+      }
+      if (lm) {
+        lm.count = lc;
+        lm.instanceMatrix.needsUpdate = true;
+        lm.visible = lc > 0;
+      }
+    }
+
     eyelashMesh.count = eyelashCount;
     mandibleMesh.count = mandibleCount;
-    bodyMesh.instanceMatrix.needsUpdate = true;
-    headMesh.instanceMatrix.needsUpdate = true;
-    legMesh.instanceMatrix.needsUpdate = true;
     eyelashMesh.instanceMatrix.needsUpdate = true;
     mandibleMesh.instanceMatrix.needsUpdate = true;
-
-    bodyMesh.visible = bodyCount > 0;
-    headMesh.visible = headCount > 0;
-    legMesh.visible = legCount > 0;
     eyelashMesh.visible = eyelashCount > 0;
     mandibleMesh.visible = mandibleCount > 0;
 
@@ -521,24 +563,31 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
 
   return (
     <>
-      <instancedMesh
-        ref={bodyMeshRef}
-        args={[bodyGeo, bodyMat, MAX_INSTANCES]}
-        frustumCulled={false}
-      />
-      <instancedMesh
-        ref={headMeshRef}
-        args={[headGeo, headMat, MAX_INSTANCES]}
-        frustumCulled={false}
-      />
-      <instancedMesh
-        ref={legMeshRef}
-        args={[legGeo, legMat, MAX_LEG_INSTANCES]}
-        frustumCulled={false}
-      />
+      {Array.from({ length: NUM_TIERS }).map((_, idx) => {
+        const tier = idx + 1;
+        return (
+          <React.Fragment key={tier}>
+            <instancedMesh
+              ref={(el) => { bodyMeshRefs.current[tier] = el; }}
+              args={[bodyGeo, bodyMats[idx], MAX_PER_TIER]}
+              frustumCulled={false}
+            />
+            <instancedMesh
+              ref={(el) => { headMeshRefs.current[tier] = el; }}
+              args={[headGeo, bodyMats[idx], MAX_PER_TIER]}
+              frustumCulled={false}
+            />
+            <instancedMesh
+              ref={(el) => { legMeshRefs.current[tier] = el; }}
+              args={[legGeo, legMats[idx], MAX_LEG_PER_TIER]}
+              frustumCulled={false}
+            />
+          </React.Fragment>
+        );
+      })}
       <instancedMesh
         ref={eyelashMeshRef}
-        args={[EYELASH_GEOMETRY, chitinMat, MAX_INSTANCES]}
+        args={[EYELASH_GEOMETRY, chitinMat, TOTAL_SHARED_INSTANCES]}
         frustumCulled={false}
       />
       <instancedMesh
