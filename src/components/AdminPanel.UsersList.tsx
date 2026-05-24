@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffect, useState } from 'react';
 import type { UserData, UsersListProps } from './adminPanel.types';
+import { UserStatsModal } from './UserStatsModal';
 
 export function UsersList({}: UsersListProps) {
   const [users, setUsers] = useState<UserData[]>([]);
@@ -20,6 +21,8 @@ export function UsersList({}: UsersListProps) {
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [editCoinsOpen, setEditCoinsOpen] = useState(false);
   const [manageRolesOpen, setManageRolesOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [statsUser, setStatsUser] = useState<UserData | null>(null);
   const [coinsInput, setCoinsInput] = useState('');
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const { toast } = useToast();
@@ -292,8 +295,15 @@ export function UsersList({}: UsersListProps) {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => { setStatsUser(user); setStatsOpen(true); }}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => handleEditCoins(user)}
                         disabled={!user.has_profile}
@@ -301,8 +311,8 @@ export function UsersList({}: UsersListProps) {
                       >
                         Edit Coins
                       </Button>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => handleManageRoles(user)}
                       >
@@ -391,6 +401,8 @@ export function UsersList({}: UsersListProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UserStatsModal user={statsUser} open={statsOpen} onOpenChange={setStatsOpen} />
     </Card>
   );
 }
