@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { PlayerState } from '@/hooks/useMultiplayer';
 import { Text, useFBX } from '@react-three/drei';
+import { SkeletonUtils } from 'three-stdlib';
 import { frameLoop } from '@/lib/frameLoop';
 
 interface MultiplayerPlayersProps {
@@ -102,8 +103,15 @@ function OtherPlayer({
 }) {
   const meshRef = useRef<THREE.Group>(null);
   
-  // Clone FBX once on mount (not on every render)
-  const avatarClone = useMemo(() => fbx.clone(), []);
+  // SkeletonUtils.clone — NOT plain fbx.clone(). A SkinnedMesh's
+  // skeleton has internal references between bones and bind matrices
+  // that the default Object3D.clone() doesn't deep-copy, so the
+  // visible mesh stays bound to the ORIGINAL skeleton. The AnimationMixer
+  // then animates the original (invisible) bones and the rendered
+  // clones never move — they end up rendered as collapsed/invisible
+  // meshes. SkeletonUtils.clone() properly clones skeleton + bind
+  // matrix so each clone animates independently.
+  const avatarClone = useMemo(() => SkeletonUtils.clone(fbx), [fbx]);
 
   // Setup mixer and register with controller
   useEffect(() => {
