@@ -4,9 +4,12 @@
 // `ktx2/<tier>/<hash>.ktx2` and the public URL is returned.
 
 import { encodeToKTX2 } from 'ktx2-encoder';
-import wasmUrl from 'ktx2-encoder/dist/basis/basis_encoder.wasm?url';
-import jsUrl from 'ktx2-encoder/dist/basis/basis_encoder.js?url';
 import { supabase } from '@/integrations/supabase/client';
+
+// Served from /public — the ktx2-encoder package's `exports` field
+// doesn't expose dist/basis/*, so we copy them in instead of importing.
+const wasmUrl = '/basis_encoder.wasm';
+const jsUrl = '/basis_encoder.js';
 
 export type Ktx2Tier = 'standard' | 'premium';
 
