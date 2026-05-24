@@ -452,7 +452,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // window.__spawnShpiders(tier, count) in the console.
   const { data: shpiderDefinitionsData } = useShpiderDefinitions();
   const shpiderDefinitions = shpiderDefinitionsData ?? [];
-  const { shpidersRef, spawnShpiderGroup } = useShpiderSystem({
+  const { shpidersRef, spawnShpiderGroup, damageShpider } = useShpiderSystem({
     definitions: shpiderDefinitions,
     cameraRef,
     isEnabled: enemiesEnabled,
@@ -1120,6 +1120,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     shtickmenRef,
     damageShtickman,
     updateShtickmanMovement,
+    shpidersRef,
+    damageShpider,
     isAIControlled,
     useNebulaForBulletImpacts: USE_NEBULA_FOR_BULLET_IMPACTS,
     debugBullets: DEBUG_BULLETS,

@@ -19,3 +19,13 @@ export const HOP_GRAVITY = 18.0; // blocks/sec^2, used when free-falling
 export const SPAWN_CHECK_INTERVAL_MS = 2000;
 export const MAX_SHPIDERS_PER_CHUNK = 4;
 export const CHUNK_SIZE = 16;
+
+// Hitbox cylinder used by the bullet ray-cylinder hit-test. Multiplied
+// by body_size × scale at hit time so big tiers get proportionally
+// bigger hitboxes.
+export const SHPIDER_HITBOX_RADIUS_FACTOR = 0.85; // × bodySize × scale
+export const SHPIDER_HITBOX_HEIGHT_FACTOR = 1.5;  // × bodySize × scale (covers body + head)
+
+// Anti-overlap radius used when choosing crawl + hop targets. Min
+// distance from any other living shpider so they don't pile up.
+export const SHPIDER_MIN_TARGET_SPACING = 1.2;

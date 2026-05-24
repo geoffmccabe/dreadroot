@@ -111,8 +111,12 @@ export interface ShpiderInstance {
   /** "Up" for the shpider — points away from whatever face it's on. */
   surfaceNormal: THREE.Vector3;
 
-  // Per-leg jitter for the idle / mid-hop animation.
-  legPhaseOffsets: number[]; // length = LEGS_PER_SHPIDER
+  // Per-leg random gait parameters — generated once at spawn so each
+  // shpider has a visually distinct walking pattern that persists for
+  // its lifetime.
+  legPhaseOffsets: number[];   // length = LEGS_PER_SHPIDER
+  legFrequencies: number[];    // step cycles/sec multiplier per leg
+  legLiftAmplitudes: number[]; // max foot lift per leg (× halfBody)
 
   // Head moves independently of body (slight bob + look-at-player).
   headYawOffset: number;

@@ -75,6 +75,9 @@ export function useFortressFrameLoop({
   damageShtickman,
   updateShtickmanMovement,
 
+  shpidersRef,
+  damageShpider,
+
   isAIControlled,
   useNebulaForBulletImpacts,
   debugBullets,
@@ -126,6 +129,9 @@ export function useFortressFrameLoop({
   shtickmenRef: MutableRefObject<any[]>;
   damageShtickman: (id: string, damage: number, knockbackDir?: THREE.Vector3) => boolean;
   updateShtickmanMovement: (delta: number, playerPosition: THREE.Vector3) => void;
+
+  shpidersRef: MutableRefObject<any[]>;
+  damageShpider: (id: string, damage: number, knockbackDir: THREE.Vector3, bulletSpeed: number) => boolean;
 
   isAIControlled: boolean;
   useNebulaForBulletImpacts: boolean;
@@ -819,6 +825,113 @@ export function useFortressFrameLoop({
 
                 break;
               }
+            }
+          }
+        }
+
+        // === SHPIDER COLLISION DETECTION ===
+        // Cylinder hitbox: width × bodySize, height = (body + head) × scale.
+        if (!hit && shpidersRef.current && shpidersRef.current.length > 0) {
+          const tierDef = getDefinitionRef.current(bullet.tier);
+          const bx = bullet.position.x;
+          const by = bullet.position.y;
+          const bz = bullet.position.z;
+          const prevX = (bullet as any).prevX ?? bx;
+          const prevY = (bullet as any).prevY ?? by;
+          const prevZ = (bullet as any).prevZ ?? bz;
+          const rayDx = bx - prevX;
+          const rayDy = by - prevY;
+          const rayDz = bz - prevZ;
+          const rayLen = Math.sqrt(rayDx * rayDx + rayDy * rayDy + rayDz * rayDz);
+
+          for (const sp of shpidersRef.current) {
+            if (!sp.isActive) continue;
+            const scale = sp.scale ?? 1;
+            const bodySize = sp.definition.body_size * scale;
+            const headSize = sp.definition.head_size * scale;
+            const hitRadius = bodySize * 0.85;
+            const cylBottom = sp.position.y;
+            const cylTop = sp.position.y + bodySize + headSize;
+            const cylX = sp.position.x;
+            const cylZ = sp.position.z;
+
+            const minBy = Math.min(prevY, by);
+            const maxBy = Math.max(prevY, by);
+            if (maxBy < cylBottom - 0.5 || minBy > cylTop + 0.5) continue;
+            const xzdx = bx - cylX;
+            const xzdz = bz - cylZ;
+            const bail = hitRadius + rayLen + 0.5;
+            if (xzdx * xzdx + xzdz * xzdz > bail * bail) continue;
+
+            let hitT = -1;
+            let hitY = 0;
+            if (rayLen < 0.001) {
+              const dx = bx - cylX;
+              const dz = bz - cylZ;
+              if (dx * dx + dz * dz < hitRadius * hitRadius && by >= cylBottom && by <= cylTop) {
+                hitT = 0; hitY = by;
+              }
+            } else {
+              const ox = prevX - cylX;
+              const oz = prevZ - cylZ;
+              const a = rayDx * rayDx + rayDz * rayDz;
+              const b = 2 * (ox * rayDx + oz * rayDz);
+              const c = ox * ox + oz * oz - hitRadius * hitRadius;
+              const disc = b * b - 4 * a * c;
+              if (disc >= 0 && a > 0.0001) {
+                const sd = Math.sqrt(disc);
+                for (const t of [(-b - sd) / (2 * a), (-b + sd) / (2 * a)]) {
+                  if (t >= 0 && t <= 1) {
+                    const iy = prevY + t * rayDy;
+                    if (iy >= cylBottom && iy <= cylTop) { hitT = t; hitY = iy; break; }
+                  }
+                }
+              }
+              if (hitT < 0 && rayDy !== 0) {
+                for (const [ey, capY] of [[(cylBottom - prevY) / rayDy, cylBottom], [(cylTop - prevY) / rayDy, cylTop]] as const) {
+                  if (ey >= 0 && ey <= 1) {
+                    const capX = prevX + ey * rayDx - cylX;
+                    const capZ = prevZ + ey * rayDz - cylZ;
+                    if (capX * capX + capZ * capZ < hitRadius * hitRadius) {
+                      if (hitT < 0 || ey < hitT) { hitT = ey; hitY = capY; }
+                    }
+                  }
+                }
+              }
+            }
+
+            if (hitT >= 0) {
+              hit = true;
+              needsBulletRender = true;
+              const hitX = prevX + hitT * rayDx;
+              const hitZ = prevZ + hitT * rayDz;
+
+              const BASE_BULLET_DAMAGE = 25;
+              const velocityRatio = bullet.speed / tierDef.velocity;
+              const isHeadshot = (hitY - sp.position.y) > bodySize; // upper region = head zone
+              const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
+              const finalDamage = isHeadshot ? scaledDamage * 2 : scaledDamage;
+
+              _scratchBulletDir.copy(bullet.direction).normalize();
+              _scratchBulletDir.y = 0;
+              damageShpider(sp.id, finalDamage, _scratchBulletDir, bullet.speed);
+
+              if (onPointsEarned) onPointsEarned(finalDamage);
+
+              const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
+              const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+              const fireConfig = {
+                colors: tierDef.colors,
+                size: tierDef.burn_width * pentaMul,
+                height: tierDef.burn_height * pentaMul,
+                duration: tierDef.burn_time * pentaMul,
+              };
+              if (useNebulaForBulletImpacts && nebulaImpactsRef?.current) {
+                nebulaImpactsRef.current.spawnImpact(hitPos, fireConfig);
+              } else if (bulletImpactsRef?.current) {
+                bulletImpactsRef.current.spawnImpact(hitPos, fireConfig);
+              }
+              break;
             }
           }
         }

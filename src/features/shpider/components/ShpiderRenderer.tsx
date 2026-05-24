@@ -20,7 +20,7 @@ import { useFrame, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
 import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../constants';
-import { stepShpiderHopAI, getHopProgress } from '../lib/hopAI';
+import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
 import {
   EYELASH_GEOMETRY,
   MANDIBLE_GEOMETRY,
@@ -66,56 +66,79 @@ function clickTriangle(t01: number): number {
 }
 
 /**
- * Local-space endpoints for a leg segment, with animation modifiers
- * applied based on hop progress and the per-leg idle phase.
+ * Local-space endpoints for a leg segment. Returns ONE leg segment in
+ * the body's local frame (Y up, Z forward, X right).
+ *
+ * Resting pose: shoulder on body surface (y=0), foot exactly on the
+ * supporting surface (y = -halfBody). Vertical extent is constrained
+ * to halfBody so legs can't punch through the wall the shpider is on.
+ *
+ * Animations layered on top:
+ *  - Idle bob: small vertical bob on each leg's own phase.
+ *  - Hop:      tuck inward at apex, splay outward on landing.
+ *  - Crawl:    walking gait — each leg lifts vertically (away from
+ *              surface) on its own random freq/amp/phase so individual
+ *              legs step at different rates. Foot pivots upward from
+ *              its rest position toward the shoulder anchor; ankle
+ *              and elbow follow proportionally.
  */
 function getSegmentEndpoints(
   legIdx: number,
   segmentIdx: number,
   bodySize: number,
-  hopT: number | null, // 0..1 if hopping, else null
+  hopT: number | null,
+  crawlT: number | null,
   legPhase: number,
+  legFreq: number,
+  legLiftAmp: number,
   time: number,
   out: { start: THREE.Vector3; end: THREE.Vector3 },
 ): void {
   const a = (legIdx / LEGS_PER_SHPIDER) * Math.PI * 2 + 0.1;
   const cosA = Math.cos(a);
   const sinA = Math.sin(a);
-  const r = bodySize * 0.5;
+  const half = bodySize * 0.5; // body radius
 
-  // Idle bob: each leg's foot dips slightly on its own phase.
-  const idleBob = Math.sin(time * 1.5 + legPhase) * 0.03;
-
-  // Hop modifier: tuck in at the peak of the arc, splay out as we land.
-  let tuck = 0;
-  let splay = 0;
+  // Hop modifier (unchanged).
+  let tuck = 0, splay = 0;
   if (hopT != null) {
-    // tuck peaks at midair (~hopT 0.4), inverted by landing.
-    tuck = Math.sin(Math.PI * hopT) * 0.45;
-    // splay kicks in near landing.
+    tuck  = Math.sin(Math.PI * hopT) * 0.45;
     splay = hopT > 0.75 ? (hopT - 0.75) * 4 * 0.25 : 0;
   }
-
-  // Outward multiplier (1 = base, < 1 = tucked, > 1 = splayed).
   const outMul = 1 - tuck + splay;
-  // Down multiplier: less downward reach when tucked, more when splayed.
   const downMul = 1 - tuck * 0.6 + splay * 0.3;
 
-  const shoulderX = cosA * r;
-  const shoulderZ = sinA * r;
-  const shoulderY = 0;
+  // Walking gait — half-rectified sine so each leg has a clear "lift"
+  // phase and a "plant" phase. Frequency + amplitude are per-leg.
+  let stepLift = 0;
+  if (crawlT != null) {
+    const phase = Math.sin(time * 2.4 * legFreq + legPhase);
+    stepLift = Math.max(0, phase) * legLiftAmp * half;
+  }
+  // Idle bob (subtle even when not crawling).
+  const idleBob = Math.sin(time * 1.5 + legPhase) * 0.02 * half;
 
-  const elbowX = cosA * r * 2.0 * outMul;
-  const elbowZ = sinA * r * 2.0 * outMul;
-  const elbowY = -bodySize * 0.25 * downMul + idleBob * 0.3;
+  // Resting points — feet sit exactly on the surface plane (y=-half).
+  // Vertical lift adds along +Y (away from surface) so feet step up
+  // without ever going past the body's own height.
+  const lift = stepLift + idleBob;
 
-  const ankleX = cosA * r * 2.5 * outMul;
-  const ankleZ = sinA * r * 2.5 * outMul;
-  const ankleY = -bodySize * 0.75 * downMul + idleBob * 0.7;
+  const shoulderX = cosA * half;
+  const shoulderZ = sinA * half;
+  const shoulderY = 0; // anchor at body surface
 
-  const footX = cosA * r * 2.5 * outMul;
-  const footZ = sinA * r * 2.5 * outMul;
-  const footY = -bodySize * 1.10 * downMul + idleBob;
+  const elbowX = cosA * half * 1.6 * outMul;
+  const elbowZ = sinA * half * 1.6 * outMul;
+  const elbowY = -half * 0.30 * downMul + lift * 0.25;
+
+  const ankleX = cosA * half * 2.0 * outMul;
+  const ankleZ = sinA * half * 2.0 * outMul;
+  const ankleY = -half * 0.75 * downMul + lift * 0.65;
+
+  const footX = cosA * half * 2.1 * outMul;
+  const footZ = sinA * half * 2.1 * outMul;
+  // Foot sits on the surface plane at rest (y = -half exactly).
+  const footY = -half * downMul + lift;
 
   if (segmentIdx === 0) {
     out.start.set(shoulderX, shoulderY, shoulderZ);
@@ -208,7 +231,7 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       if (!s.isActive) continue;
 
       // === AI tick. Mutates position/rotation/surfaceNormal. ===
-      stepShpiderHopAI(s, { now, dt, playerX, playerY, playerZ });
+      stepShpiderHopAI(s, { now, dt, playerX, playerY, playerZ, others: list });
 
       const dx = s.position.x - playerX;
       const dz = s.position.z - playerZ;
@@ -322,11 +345,19 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
 
       // === Legs ===
       const hopT = getHopProgress(s, now);
+      const crawlT = getCrawlProgress(s, now);
       for (let leg = 0; leg < LEGS_PER_SHPIDER; leg++) {
         for (let seg = 0; seg < SEGMENTS_PER_LEG; seg++) {
           if (legCount >= MAX_LEG_INSTANCES) break;
 
-          getSegmentEndpoints(leg, seg, bodySize, hopT, s.legPhaseOffsets[leg], t, epScratch);
+          getSegmentEndpoints(
+            leg, seg, bodySize,
+            hopT, crawlT,
+            s.legPhaseOffsets[leg],
+            s.legFrequencies[leg],
+            s.legLiftAmplitudes[leg],
+            t, epScratch,
+          );
 
           // Local endpoints are in shpider-local space (Y up, Z forward,
           // but oriented relative to the body, not the world). Apply the

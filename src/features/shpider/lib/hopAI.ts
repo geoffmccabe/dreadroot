@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
 import { findGroundY, pickTreeAwareTarget, findLandingSurface } from './surfaceDetect';
+import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
 
 const _normalScratch = new THREE.Vector3();
 const _posScratch = new THREE.Vector3();
@@ -27,13 +28,32 @@ const CRAWL_SPEED = 1.5; // blocks/sec along surface tangent
 const CRAWL_MIN_MS = 800;
 const CRAWL_MAX_MS = 2400;
 const FALL_GRAVITY = 18.0; // blocks/s² while in mid-air (no support)
+const WORLD_FLOOR_Y = 0;   // hard floor of the playable world
 
 interface StepDeps {
   playerX: number;
   playerY: number;
   playerZ: number;
   now: number;
-  dt: number; // seconds since last frame (for crawl + fall integrations)
+  dt: number; // seconds since last frame
+  /** Active shpider list (for anti-overlap target rejection). */
+  others?: readonly ShpiderInstance[];
+}
+
+/** True if the candidate (x,z) is too close to another active shpider. */
+function isTooCrowded(
+  x: number, z: number, self: ShpiderInstance,
+  others?: readonly ShpiderInstance[],
+): boolean {
+  if (!others) return false;
+  const r2 = SHPIDER_MIN_TARGET_SPACING * SHPIDER_MIN_TARGET_SPACING;
+  for (const o of others) {
+    if (o === self || !o.isActive) continue;
+    const dx = o.position.x - x;
+    const dz = o.position.z - z;
+    if (dx * dx + dz * dz < r2) return true;
+  }
+  return false;
 }
 
 /**
@@ -64,22 +84,24 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
   const { now, dt, playerX, playerY, playerZ } = deps;
   const def = s.definition;
 
-  // ── Free-fall guard. If we ended up above the ground with no
-  //    support voxel beneath, integrate gravity until we hit something.
-  if (s.hop.phase === 'idle' && s.surfaceNormal.y > 0.9) {
-    const groundY = findGroundY(s.position.x, s.position.y, s.position.z, 32);
-    if (groundY === -Infinity) {
-      // No support found in 32 voxels — let it sit. (Edge: bottomless world.)
-    } else if (s.position.y - groundY > 0.05) {
-      // Falling.
+  // ── Gravity guard. After hops, shpiders may end up suspended in
+  //    mid-air. While idle/crawling, run them down until they hit
+  //    either a block top OR the world floor (y = 0).
+  if ((s.hop.phase === 'idle' || s.hop.phase === 'crawling')
+      && s.surfaceNormal.y > 0.9) {
+    const probedGround = findGroundY(s.position.x, s.position.y + 0.5, s.position.z, 64);
+    const supportY = probedGround === -Infinity ? WORLD_FLOOR_Y : probedGround;
+    if (s.position.y - supportY > 0.05) {
       s.velocity.y -= FALL_GRAVITY * dt;
       s.position.y += s.velocity.y * dt;
-      if (s.position.y <= groundY) {
-        s.position.y = groundY;
+      if (s.position.y <= supportY) {
+        s.position.y = supportY;
         s.velocity.y = 0;
       }
       return;
     }
+    // On a support — clear any residual fall velocity.
+    if (s.velocity.y !== 0) s.velocity.y = 0;
   }
 
   // ── IDLE: pick a target and decide whether to crawl or hop.
@@ -113,8 +135,16 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
 
       const duration = CRAWL_MIN_MS + Math.random() * (CRAWL_MAX_MS - CRAWL_MIN_MS);
       const distance = (CRAWL_SPEED * duration) / 1000;
-      const endX = s.position.x + (_tangentA.x * dirA + _tangentB.x * dirB) * distance;
-      const endZ = s.position.z + (_tangentA.z * dirA + _tangentB.z * dirB) * distance;
+      let endX = s.position.x + (_tangentA.x * dirA + _tangentB.x * dirB) * distance;
+      let endZ = s.position.z + (_tangentA.z * dirA + _tangentB.z * dirB) * distance;
+
+      // Anti-overlap: if the crawl destination would land on another
+      // shpider, shorten it until it doesn't. Up to 4 retries.
+      let retries = 4;
+      while (retries-- > 0 && isTooCrowded(endX, endZ, s, deps.others)) {
+        endX = (endX + s.position.x) * 0.5;
+        endZ = (endZ + s.position.z) * 0.5;
+      }
 
       s.hop.phase = 'crawling';
       s.hop.crawlStartAt = now;
@@ -174,28 +204,39 @@ function launchHop(s: ShpiderInstance, deps: StepDeps): void {
   const { now, playerX, playerY, playerZ } = deps;
   const def = s.definition;
 
-  const accepted = pickTreeAwareTarget(
-    s.position.x, s.position.y, s.position.z,
-    playerX, playerY, playerZ,
-    s.surfaceNormal,
-    def.hop_distance_min, def.hop_distance_max,
-    _posScratch, _normalScratch,
-  );
+  // Up to 4 picks — reject any landing that overlaps another shpider.
+  let endX = s.position.x;
+  let endY = s.position.y;
+  let endZ = s.position.z;
+  let endNX = 0;
+  let endNY = 1;
+  let endNZ = 0;
+  let accepted = false;
+  for (let tries = 0; tries < 4; tries++) {
+    const ok = pickTreeAwareTarget(
+      s.position.x, s.position.y, s.position.z,
+      playerX, playerY, playerZ,
+      s.surfaceNormal,
+      def.hop_distance_min, def.hop_distance_max,
+      _posScratch, _normalScratch,
+    );
+    if (isTooCrowded(_posScratch.x, _posScratch.z, s, deps.others)) continue;
+    endX = _posScratch.x;
+    endY = _posScratch.y;
+    endZ = _posScratch.z;
+    endNX = _normalScratch.x;
+    endNY = _normalScratch.y;
+    endNZ = _normalScratch.z;
+    accepted = ok;
+    break;
+  }
 
-  // If target is rejected (inside block / no surface), the fallback in
-  // pickTreeAwareTarget gives us a flat-ground hop on the current surface.
-  let endX = _posScratch.x;
-  let endY = _posScratch.y;
-  let endZ = _posScratch.z;
-  let endNX = _normalScratch.x;
-  let endNY = _normalScratch.y;
-  let endNZ = _normalScratch.z;
-
+  // Fallback chain: if no tree-aware surface was returned, snap the
+  // Y-coord to either a block top OR the world floor (y=0) so we
+  // never end up hopping into mid-air.
   if (!accepted) {
-    // Re-find the surface below the fallback target so we don't fly
-    // off the ground into the void.
-    const groundY = findGroundY(endX, endY + 4, endZ, 32);
-    if (groundY > -1000) endY = groundY;
+    const groundY = findGroundY(endX, endY + 4, endZ, 64);
+    endY = groundY === -Infinity ? 0 : groundY;
     endNX = 0; endNY = 1; endNZ = 0;
   }
 

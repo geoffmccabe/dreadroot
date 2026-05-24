@@ -81,7 +81,11 @@ export function useShpiderSystem({
     }
     const id = `shpider_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const scale = 1 + (Math.random() * 2 - 1) * 0.15;
-    const legPhaseOffsets = Array.from({ length: LEGS_PER_SHPIDER }, () => Math.random() * Math.PI * 2);
+    // Per-leg random gait — wide ranges so two shpiders rarely twitch
+    // in the same way. Phase 0-2π, frequency 0.6×–2.4× base, lift 25–95%.
+    const legPhaseOffsets   = Array.from({ length: LEGS_PER_SHPIDER }, () => Math.random() * Math.PI * 2);
+    const legFrequencies    = Array.from({ length: LEGS_PER_SHPIDER }, () => 0.6 + Math.random() * 1.8);
+    const legLiftAmplitudes = Array.from({ length: LEGS_PER_SHPIDER }, () => 0.25 + Math.random() * 0.70);
 
     const now = Date.now();
     const instance: ShpiderInstance = {
@@ -98,6 +102,8 @@ export function useShpiderSystem({
       spawnChunkZ: Math.floor(worldZ / CHUNK_SIZE),
       scale,
       legPhaseOffsets,
+      legFrequencies,
+      legLiftAmplitudes,
       headYawOffset: 0,
       headPitchOffset: 0,
       headSlidePhase: Math.random() * Math.PI * 2,
@@ -149,11 +155,48 @@ export function useShpiderSystem({
     console.log(`[Shpider] Spawned ${count} tier-${tier} shpiders`);
   }, [definitions, cameraRef, spawnShpiderAt]);
 
-  /** Remove a shpider by id (used by combat later). */
+  /** Remove a shpider by id (used by combat). */
   const removeShpider = useCallback((id: string) => {
     shpidersRef.current = shpidersRef.current.filter(s => s.id !== id);
     setShpiders(shpidersRef.current);
   }, []);
+
+  /**
+   * Apply damage + knockback. Returns true if the shpider died.
+   * `knockbackDir` should be the bullet's horizontal direction; we
+   * scale by knockback_received (already < 1 for shpiders by default)
+   * so they get budged but not punted across the map.
+   */
+  const damageShpider = useCallback((
+    id: string,
+    damage: number,
+    knockbackDir: THREE.Vector3,
+    bulletSpeed: number,
+  ): boolean => {
+    const s = shpidersRef.current.find(x => x.id === id);
+    if (!s || !s.isActive) return false;
+    s.currentHealth -= damage;
+
+    // Knockback: small velocity kick scaled by the shpider's
+    // knockback_received tuning. Shpiders take ~40% of a shombie's
+    // hit by default.
+    const kbStrength = (bulletSpeed * 0.015) * (s.definition.knockback_received ?? 1);
+    s.velocity.x += knockbackDir.x * kbStrength;
+    s.velocity.z += knockbackDir.z * kbStrength;
+    // Interrupt a hop mid-flight if heavily hit; the hop AI will
+    // recover next idle window.
+    if (s.hop.phase === 'hopping' && damage > 30) {
+      s.hop.phase = 'idle';
+      s.hop.nextHopAt = Date.now() + 400;
+    }
+
+    if (s.currentHealth <= 0) {
+      s.isActive = false;
+      removeShpider(s.id);
+      return true;
+    }
+    return false;
+  }, [removeShpider]);
 
   /** Admin keybind: Ctrl+P spawns a group of T1 shpiders. */
   useEffect(() => {
@@ -253,6 +296,7 @@ export function useShpiderSystem({
     spawnShpiderAt,
     spawnShpiderGroup,
     removeShpider,
+    damageShpider,
     spawningEnabled,
     setSpawningEnabled,
   };
