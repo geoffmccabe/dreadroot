@@ -1,11 +1,12 @@
 /**
  * Universal Spawn Command System
  * Handles !X## keyboard sequences for all enemy types:
- * - !1## = Shwarm (tier, no count)
- * - !2## = Shnake (tier, no count)
- * - !3## = Shombie (tier, count)
- * - !4# = Walapa (tier, no count)
- * - !5# = Shtickman (tier, no count)
+ * - !1#   = Shwarm    (tier, no count)
+ * - !2#   = Shnake    (tier, no count)
+ * - !3##  = Shombie   (tier, count)
+ * - !4#   = Walapa    (tier, no count)
+ * - !5#   = Shtickman (tier, no count)
+ * - !6##  = Shpider   (tier, count)
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -26,6 +27,7 @@ export interface SpawnCommandCallbacks {
   onSpawnShombie?: (tier: number, count: number) => void;
   onSpawnWalapa?: (tier: number) => void;
   onSpawnShtickman?: (tier: number) => void;
+  onSpawnShpider?: (tier: number, count: number) => void;
 }
 
 interface UseSpawnCommandsOptions {
@@ -43,9 +45,9 @@ export function useSpawnCommands({
   callbacks,
 }: UseSpawnCommandsOptions) {
   const sequenceRef = useRef<{
-    step: number; // 0=idle, 1=got !, 2=got type, 3=got tier (shombie only, waiting for count)
+    step: number; // 0=idle, 1=got !, 2=got type, 3=got tier (shombie/shpider only, waiting for count)
     startTime: number;
-    type: number | null; // 1=shwarm, 2=shnake, 3=shombie, 4=walapa, 5=shtickman
+    type: number | null; // 1=shwarm, 2=shnake, 3=shombie, 4=walapa, 5=shtickman, 6=shpider
     tier: number | null;
   }>({ step: 0, startTime: 0, type: null, tier: null });
 
@@ -87,9 +89,12 @@ export function useSpawnCommands({
         return;
       }
 
-      // Step 1: Wait for enemy type (1, 2, 3, 4, or 5)
+      // Step 1: Wait for enemy type (1, 2, 3, 4, 5, or 6)
       if (seq.step === 1) {
-        if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4' || e.key === '5') {
+        if (
+          e.key === '1' || e.key === '2' || e.key === '3' ||
+          e.key === '4' || e.key === '5' || e.key === '6'
+        ) {
           if (!isAdmin) {
             console.log('[SpawnCommands] Spawn denied - admin only');
             resetSequence();
@@ -98,7 +103,7 @@ export function useSpawnCommands({
           seq.type = parseInt(e.key, 10);
           seq.step = 2;
           seq.startTime = now;
-          const typeNames: Record<number, string> = { 1: 'shwarm', 2: 'shnake', 3: 'shombie', 4: 'walapa', 5: 'shtickman' };
+          const typeNames: Record<number, string> = { 1: 'shwarm', 2: 'shnake', 3: 'shombie', 4: 'walapa', 5: 'shtickman', 6: 'shpider' };
           console.log(`[SpawnCommands] Type: ${typeNames[seq.type]} - press 1-9 (0=10) for tier`);
           return;
         }
@@ -143,20 +148,23 @@ export function useSpawnCommands({
             return;
           }
 
-          // For shombie, wait for count
-          if (seq.type === 3) {
+          // For shombie + shpider, wait for count
+          if (seq.type === 3 || seq.type === 6) {
             seq.tier = tier;
             seq.step = 3;
             seq.startTime = now;
-            console.log(`[SpawnCommands] Shombie tier ${actualTier} - press 1-9 (0=10) for count, or wait for 1`);
-            
+            const typeName = seq.type === 3 ? 'shombie' : 'shpider';
+            console.log(`[SpawnCommands] ${typeName} tier ${actualTier} - press 1-9 (0=10) for count, or wait for 1`);
+
             // Auto-spawn 1 after delay if no count entered
             const tierCapture = tier;
+            const typeCapture = seq.type;
             setTimeout(() => {
               if (sequenceRef.current.step === 3 && sequenceRef.current.tier === tierCapture) {
                 const t = tierCapture === 0 ? 10 : tierCapture;
-                console.log(`[SpawnCommands] Auto-spawning 1 shombie tier ${t}`);
-                callbacks.onSpawnShombie?.(t, 1);
+                console.log(`[SpawnCommands] Auto-spawning 1 ${typeName} tier ${t}`);
+                if (typeCapture === 3) callbacks.onSpawnShombie?.(t, 1);
+                else                   callbacks.onSpawnShpider?.(t, 1);
                 resetSequence();
               }
             }, 800);
@@ -169,22 +177,25 @@ export function useSpawnCommands({
         return;
       }
 
-      // Step 3: Wait for count (shombie only)
+      // Step 3: Wait for count (shombie + shpider)
       if (seq.step === 3) {
+        const typeName = seq.type === 3 ? 'shombie' : 'shpider';
         if (/^[0-9]$/.test(e.key)) {
           const count = parseInt(e.key, 10);
           const actualCount = count === 0 ? 10 : count;
           const actualTier = seq.tier === 0 ? 10 : seq.tier!;
-          
-          console.log(`[SpawnCommands] Spawning ${actualCount} shombie(s) tier ${actualTier}`);
-          callbacks.onSpawnShombie?.(actualTier, actualCount);
+
+          console.log(`[SpawnCommands] Spawning ${actualCount} ${typeName}(s) tier ${actualTier}`);
+          if (seq.type === 3) callbacks.onSpawnShombie?.(actualTier, actualCount);
+          else                callbacks.onSpawnShpider?.(actualTier, actualCount);
           resetSequence();
           return;
         }
         // Any other key spawns 1
         const actualTier = seq.tier === 0 ? 10 : seq.tier!;
-        console.log(`[SpawnCommands] Spawning 1 shombie tier ${actualTier}`);
-        callbacks.onSpawnShombie?.(actualTier, 1);
+        console.log(`[SpawnCommands] Spawning 1 ${typeName} tier ${actualTier}`);
+        if (seq.type === 3) callbacks.onSpawnShombie?.(actualTier, 1);
+        else                callbacks.onSpawnShpider?.(actualTier, 1);
         resetSequence();
         return;
       }

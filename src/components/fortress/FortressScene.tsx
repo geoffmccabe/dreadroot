@@ -452,7 +452,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // window.__spawnShpiders(tier, count) in the console.
   const { data: shpiderDefinitionsData } = useShpiderDefinitions();
   const shpiderDefinitions = shpiderDefinitionsData ?? [];
-  const { shpidersRef } = useShpiderSystem({
+  const { shpidersRef, spawnShpiderGroup } = useShpiderSystem({
     definitions: shpiderDefinitions,
     cameraRef,
     isEnabled: enemiesEnabled,
@@ -660,7 +660,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       console.log(`[SpawnCommands] Spawning shtickman tier ${tier}`);
       spawnShtickmanByTier(tier);
     },
-  }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup, spawnWalapa, spawnShtickmanByTier]);
+    onSpawnShpider: (tier: number, count: number) => {
+      console.log(`[SpawnCommands] Spawning ${count} shpider(s) tier ${tier}`);
+      spawnShpiderGroup(tier, count);
+    },
+  }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup, spawnWalapa, spawnShtickmanByTier, spawnShpiderGroup]);
   
   useSpawnCommands({
     isEnabled: true,
