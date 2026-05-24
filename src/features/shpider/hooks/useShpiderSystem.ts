@@ -1,15 +1,26 @@
-// Shpider system — Phase 3 (static): manages active shpider instances,
-// admin/debug spawn, and a per-frame tick that's currently a no-op (the
-// hop AI will land in Phase 4).
+// Shpider system — active instance list, admin/debug spawn commands,
+// and the natural-spawn loop. The per-frame hop AI lives in the
+// renderer (one pass over the active list does both AI tick + matrix
+// building).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { ShpiderDefinition, ShpiderInstance } from '../types';
-import { LEGS_PER_SHPIDER, CHUNK_SIZE } from '../constants';
+import {
+  LEGS_PER_SHPIDER,
+  CHUNK_SIZE,
+  MAX_SHPIDERS_PER_CHUNK,
+  SPAWN_CHECK_INTERVAL_MS,
+} from '../constants';
 
 const MAX_TOTAL_SHPIDERS = 200;
 const GROUP_SPREAD_RADIUS = 6;
 const DEFAULT_GROUP_SIZE = 5;
+
+// Only T1 spawns naturally — higher tiers come from drop tables /
+// events. Matches the Shombie pattern.
+const NATURAL_SPAWN_TIER = 1;
+const NATURAL_SPAWN_CHUNK_RADIUS = 5;
 
 interface UseShpiderSystemOptions {
   definitions: ShpiderDefinition[];
@@ -30,6 +41,7 @@ export function useShpiderSystem({
 }: UseShpiderSystemOptions) {
   const [shpiders, setShpiders] = useState<ShpiderInstance[]>([]);
   const shpidersRef = useRef<ShpiderInstance[]>([]);
+  const [spawningEnabled, setSpawningEnabled] = useState(true);
 
   // Keep ref in sync with state for cheap reads from frame loops.
   useEffect(() => {
@@ -37,6 +49,25 @@ export function useShpiderSystem({
   }, [shpiders]);
 
   const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
+
+  /** Count active shpiders in a chunk (used by the spawn cap). */
+  const countInChunk = useCallback((chunkX: number, chunkZ: number): number => {
+    let n = 0;
+    for (const s of shpidersRef.current) {
+      if (s.isActive && s.spawnChunkX === chunkX && s.spawnChunkZ === chunkZ) n++;
+    }
+    return n;
+  }, []);
+
+  /** Current chunk the player is standing in. */
+  const getPlayerChunk = useCallback(() => {
+    const cam = cameraRef.current;
+    if (!cam) return null;
+    return {
+      x: Math.floor(cam.position.x / CHUNK_SIZE),
+      z: Math.floor(cam.position.z / CHUNK_SIZE),
+    };
+  }, [cameraRef]);
 
   /** Spawn one shpider at an exact world position. */
   const spawnShpiderAt = useCallback((
@@ -142,14 +173,79 @@ export function useShpiderSystem({
    * Window-global hooks for the browser console — same convenience the
    * other enemy systems offer.
    *   window.__spawnShpiders(tier, count) — admin only
+   *   window.__toggleShpiderSpawning() — admin only
    */
   useEffect(() => {
     if (!isAdmin) return;
     (window as any).__spawnShpiders = (tier = 1, count = DEFAULT_GROUP_SIZE) => {
       spawnShpiderGroup(tier, count);
     };
-    return () => { delete (window as any).__spawnShpiders; };
+    (window as any).__toggleShpiderSpawning = () => {
+      setSpawningEnabled(v => {
+        console.log(`[Shpider] Natural spawning: ${!v ? 'ON' : 'OFF'}`);
+        return !v;
+      });
+    };
+    return () => {
+      delete (window as any).__spawnShpiders;
+      delete (window as any).__toggleShpiderSpawning;
+    };
   }, [isAdmin, spawnShpiderGroup]);
+
+  /**
+   * Natural spawning loop. Every SPAWN_CHECK_INTERVAL_MS we look at
+   * the chunks around the player; each one rolls
+   *   chance = T1.spawn_chance_per_minute
+   *          × distFalloff(chunkDist)            // halves per chunk
+   *          × (CHECK_INTERVAL_MS / 60000)       // 2 s window
+   * to decide whether to drop one more shpider in it.
+   *
+   * Same distance-falloff curve as Shombie so the two enemy systems
+   * feel consistent at the same chunk distance.
+   */
+  useEffect(() => {
+    if (!isEnabled || !spawningEnabled) return;
+    if (!definitions || definitions.length === 0) return;
+
+    const tier1Def = definitions.find(d => d.tier === NATURAL_SPAWN_TIER);
+    if (!tier1Def) return;
+    if ((tier1Def.spawn_chance_per_minute ?? 0) <= 0) return;
+
+    const baseChancePerMinute = tier1Def.spawn_chance_per_minute;
+    console.log(`[Shpider] Natural spawning started — T1 ${baseChancePerMinute}/min, radius ${NATURAL_SPAWN_CHUNK_RADIUS} chunks`);
+
+    const spawnCheck = () => {
+      if (shpidersRef.current.length >= MAX_TOTAL_SHPIDERS) return;
+      const player = getPlayerChunk();
+      if (!player) return;
+
+      for (let dx = -NATURAL_SPAWN_CHUNK_RADIUS; dx <= NATURAL_SPAWN_CHUNK_RADIUS; dx++) {
+        for (let dz = -NATURAL_SPAWN_CHUNK_RADIUS; dz <= NATURAL_SPAWN_CHUNK_RADIUS; dz++) {
+          const chunkDist = Math.max(Math.abs(dx), Math.abs(dz));
+          if (chunkDist === 0) continue; // never spawn in the player's chunk
+          const chunkX = player.x + dx;
+          const chunkZ = player.z + dz;
+          if (countInChunk(chunkX, chunkZ) >= MAX_SHPIDERS_PER_CHUNK) continue;
+
+          const distMul = Math.pow(0.5, chunkDist - 1);
+          const chancePerCheck = baseChancePerMinute * distMul * (SPAWN_CHECK_INTERVAL_MS / 60000);
+          if (Math.random() < chancePerCheck) {
+            const worldX = chunkX * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
+            const worldZ = chunkZ * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
+            spawnShpiderAt(tier1Def, worldX, worldZ);
+          }
+        }
+      }
+    };
+
+    // Initial check after a short delay so the world has settled.
+    const initial = setTimeout(spawnCheck, 2000);
+    const interval = setInterval(spawnCheck, SPAWN_CHECK_INTERVAL_MS);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
+  }, [isEnabled, spawningEnabled, definitions, getPlayerChunk, countInChunk, spawnShpiderAt]);
 
   return {
     shpiders,
@@ -157,5 +253,7 @@ export function useShpiderSystem({
     spawnShpiderAt,
     spawnShpiderGroup,
     removeShpider,
+    spawningEnabled,
+    setSpawningEnabled,
   };
 }
