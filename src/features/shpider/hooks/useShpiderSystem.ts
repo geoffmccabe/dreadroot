@@ -111,6 +111,11 @@ export function useShpiderSystem({
       nextMandibleClickAt: now + 500 + Math.random() * 1500,
       mandibleClickStartedAt: 0,
       lastAttackAt: 0,
+      eyeTargetX: 0,
+      eyeTargetY: 0,
+      eyePupilX: 0,
+      eyePupilY: 0,
+      eyeLastRandomLookAt: now,
       hop: {
         phase: 'idle',
         nextHopAt: now + definition.hop_interval_min_ms + Math.random() * (definition.hop_interval_max_ms - definition.hop_interval_min_ms),
@@ -189,8 +194,10 @@ export function useShpiderSystem({
     s.velocity.x = knockbackDir.x * v0;
     s.velocity.z = knockbackDir.z * v0;
 
-    // Interrupt a hop mid-flight if heavily hit.
-    if (s.hop.phase === 'hopping' && damage > 30) {
+    // ANY damage interrupts the current hop/crawl so velocity-based
+    // knockback can actually move the shpider. Without this, hop and
+    // crawl lerp their position each frame and overwrite the kick.
+    if (s.hop.phase === 'hopping' || s.hop.phase === 'crawling') {
       s.hop.phase = 'idle';
       s.hop.nextHopAt = Date.now() + 400;
     }

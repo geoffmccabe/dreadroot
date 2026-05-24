@@ -132,4 +132,13 @@ export interface ShpiderInstance {
 
   // Touch-attack throttle so a shpider can't melee every frame.
   lastAttackAt: number;
+
+  // Eye-tracking state: single cyclops eye on the head's front face.
+  // The pupil smoothly follows the nearest player; falls back to a
+  // random look-around cycle. Same idea as Shtickman.
+  eyeTargetX: number;          // -1..+1 (left ↔ right inside white)
+  eyeTargetY: number;          // -1..+1 (down ↔ up)
+  eyePupilX: number;           // smoothed toward target
+  eyePupilY: number;
+  eyeLastRandomLookAt: number;
 }

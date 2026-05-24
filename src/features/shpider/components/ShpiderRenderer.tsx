@@ -36,6 +36,19 @@ const RENDER_DISTANCE_SQ = RENDER_DISTANCE * RENDER_DISTANCE;
 
 const MAX_LEG_INSTANCES = MAX_INSTANCES * LEGS_PER_SHPIDER * SEGMENTS_PER_LEG;
 const MAX_MANDIBLE_INSTANCES = MAX_INSTANCES * 2;
+// Eye: 3 instances per shpider — black outline, white body, black pupil.
+const MAX_EYE_INSTANCES = MAX_INSTANCES * 3;
+
+// Football-shaped (horizontal ellipse) cyclops eye on the head's front
+// face. Dimensions are in head-radius units.
+const EYE_WIDTH         = 0.55;   // wider than tall = football
+const EYE_HEIGHT        = 0.30;
+const EYE_OUTLINE       = 0.06;   // outline thickness (each side)
+const EYE_PUPIL_RADIUS  = 0.08;
+const EYE_LOCAL_Y       = -0.10;  // below head center (lashes sit above this)
+const EYE_TRACK_RANGE   = 40;
+const EYE_PUPIL_LERP    = 4.0;    // per second
+const EYE_RANDOM_LOOK_INTERVAL_MS = 2200;
 
 // Head slide: ~1 Hz oscillator. Amplitude = headSize / 2, so peak to
 // peak = full head width — matches the user's spec.
@@ -200,6 +213,18 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
   const legMeshRef      = useRef<THREE.InstancedMesh>(null);
   const eyelashMeshRef  = useRef<THREE.InstancedMesh>(null);
   const mandibleMeshRef = useRef<THREE.InstancedMesh>(null);
+  const eyeMeshRef      = useRef<THREE.InstancedMesh>(null);
+
+  // Single quad — scaled non-uniformly per instance for the football.
+  const eyeGeo = useMemo(() => new THREE.CircleGeometry(0.5, 24), []);
+  // VertexColors-style material — each instance picks its own color
+  // via setColorAt (outline = black, body = white, pupil = black).
+  const eyeMat = useMemo(() => new THREE.MeshBasicMaterial({
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  }), []);
+  const _eyeColorBlack = useMemo(() => new THREE.Color(0x000000), []);
+  const _eyeColorWhite = useMemo(() => new THREE.Color(0xffffff), []);
 
   const epScratch = useMemo(() => ({ start: new THREE.Vector3(), end: new THREE.Vector3() }), []);
 
@@ -226,6 +251,7 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
     let legCount  = 0;
     let eyelashCount  = 0;
     let mandibleCount = 0;
+    let eyeCount = 0;
 
     for (const s of list) {
       if (!s.isActive) continue;
@@ -284,6 +310,89 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       const headWorldY = _pos.y;
       const headWorldZ = _pos.z;
 
+      // === Eye (cyclops football, tracks the camera = local player) ===
+      const eyeMesh = eyeMeshRef.current;
+      if (eyeMesh) {
+        // Eye anchor in shpider-local space (head front face, slightly
+        // below the eyelash row).
+        const eyeLocalY = headLocalY + EYE_LOCAL_Y * headSize;
+        const eyeLocalZ = headForward + headSize * 0.5 + 0.002;
+        _localPoint.set(0, eyeLocalY, eyeLocalZ).applyQuaternion(_quat);
+        const eyeCx = s.position.x + _localPoint.x;
+        const eyeCy = s.position.y + _localPoint.y;
+        const eyeCz = s.position.z + _localPoint.z;
+
+        // Track the camera (local player).
+        const dxp = playerX - eyeCx;
+        const dyp = playerY - eyeCy;
+        const dzp = playerZ - eyeCz;
+        const distSq = dxp * dxp + dyp * dyp + dzp * dzp;
+        const trackingRangeSq = EYE_TRACK_RANGE * EYE_TRACK_RANGE;
+        if (distSq < trackingRangeSq && distSq > 0.01) {
+          // Project into head-local frame to get yaw/pitch toward player.
+          // headQuat inverse rotates world → local.
+          const dist = Math.sqrt(distSq);
+          // Yaw angle relative to head's forward axis.
+          const headFwdX = Math.sin(s.rotation);
+          const headFwdZ = Math.cos(s.rotation);
+          const headRightX =  Math.cos(s.rotation);
+          const headRightZ = -Math.sin(s.rotation);
+          const localFwd  = (dxp * headFwdX  + dzp * headFwdZ)  / dist;
+          const localRight = (dxp * headRightX + dzp * headRightZ) / dist;
+          const localUp = dyp / dist;
+          const yaw   = Math.atan2(localRight, Math.max(0.01, localFwd));
+          const pitch = Math.atan2(localUp, Math.max(0.01, localFwd));
+          const limit = Math.PI / 2.2;
+          s.eyeTargetX = Math.max(-1, Math.min(1, yaw / limit));
+          s.eyeTargetY = Math.max(-1, Math.min(1, pitch / limit));
+        } else {
+          if (now - s.eyeLastRandomLookAt > EYE_RANDOM_LOOK_INTERVAL_MS) {
+            s.eyeTargetX = (Math.random() * 2 - 1) * 0.6;
+            s.eyeTargetY = (Math.random() * 2 - 1) * 0.3;
+            s.eyeLastRandomLookAt = now;
+          }
+        }
+        const lf = Math.min(1, EYE_PUPIL_LERP * dt);
+        s.eyePupilX += (s.eyeTargetX - s.eyePupilX) * lf;
+        s.eyePupilY += (s.eyeTargetY - s.eyePupilY) * lf;
+
+        const eyeW = EYE_WIDTH  * headSize;
+        const eyeH = EYE_HEIGHT * headSize;
+        const outW = EYE_OUTLINE * headSize;
+        const pupilR = EYE_PUPIL_RADIUS * headSize;
+        const rangeX = (eyeW - pupilR * 2) * 0.5;
+        const rangeY = (eyeH - pupilR * 2) * 0.5;
+
+        // All three sub-instances share the body's _quat orientation.
+        // Outline (slightly behind, slightly larger).
+        _localPoint.set(0, eyeLocalY, eyeLocalZ - 0.001).applyQuaternion(_quat);
+        _pos.set(s.position.x + _localPoint.x, s.position.y + _localPoint.y, s.position.z + _localPoint.z);
+        _scale.set(eyeW + outW * 2, eyeH + outW * 2, 1);
+        _mat.compose(_pos, _quat, _scale);
+        eyeMesh.setMatrixAt(eyeCount, _mat);
+        eyeMesh.setColorAt(eyeCount, _eyeColorBlack);
+        eyeCount++;
+
+        // White body.
+        _localPoint.set(0, eyeLocalY, eyeLocalZ).applyQuaternion(_quat);
+        _pos.set(s.position.x + _localPoint.x, s.position.y + _localPoint.y, s.position.z + _localPoint.z);
+        _scale.set(eyeW, eyeH, 1);
+        _mat.compose(_pos, _quat, _scale);
+        eyeMesh.setMatrixAt(eyeCount, _mat);
+        eyeMesh.setColorAt(eyeCount, _eyeColorWhite);
+        eyeCount++;
+
+        // Pupil (small black circle, slightly in front, offset by track).
+        const pupilLX = s.eyePupilX * rangeX;
+        const pupilLY = s.eyePupilY * rangeY;
+        _localPoint.set(pupilLX, eyeLocalY + pupilLY, eyeLocalZ + 0.001).applyQuaternion(_quat);
+        _pos.set(s.position.x + _localPoint.x, s.position.y + _localPoint.y, s.position.z + _localPoint.z);
+        _scale.set(pupilR * 2, pupilR * 2, 1);
+        _mat.compose(_pos, _quat, _scale);
+        eyeMesh.setMatrixAt(eyeCount, _mat);
+        eyeMesh.setColorAt(eyeCount, _eyeColorBlack);
+        eyeCount++;
+      }
       // === Eyelashes ===
       // Anchor a hair forward of the head's front face.
       const eyelashOffset = headSize * 0.5 + 0.005;
@@ -403,6 +512,14 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
     legMesh.visible = legCount > 0;
     eyelashMesh.visible = eyelashCount > 0;
     mandibleMesh.visible = mandibleCount > 0;
+
+    const eyeMesh = eyeMeshRef.current;
+    if (eyeMesh) {
+      eyeMesh.count = eyeCount;
+      eyeMesh.instanceMatrix.needsUpdate = true;
+      if (eyeMesh.instanceColor) eyeMesh.instanceColor.needsUpdate = true;
+      eyeMesh.visible = eyeCount > 0;
+    }
   });
 
   return (
@@ -430,6 +547,11 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       <instancedMesh
         ref={mandibleMeshRef}
         args={[MANDIBLE_GEOMETRY, chitinMat, MAX_MANDIBLE_INSTANCES]}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={eyeMeshRef}
+        args={[eyeGeo, eyeMat, MAX_EYE_INSTANCES]}
         frustumCulled={false}
       />
     </>
