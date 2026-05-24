@@ -68,9 +68,6 @@ const _segStart = new THREE.Vector3();
 const _segEnd = new THREE.Vector3();
 const _segMid = new THREE.Vector3();
 const _worldRot = new THREE.Quaternion();
-const _forwardWorld = new THREE.Vector3();
-const _upWorld = new THREE.Vector3();
-const _rightWorld = new THREE.Vector3();
 const _localPoint = new THREE.Vector3();
 
 /** Triangle wave 0→1→0 over duration. */
@@ -172,24 +169,24 @@ interface ShpiderRendererProps {
 
 export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps) {
   // First-tier definition supplies the placeholder textures for now.
+  // Note: per-tier visual differentiation lives behind a separate
+  // task (Phase 7 polish) — currently every shpider shares this set.
   const sample = shpidersRef.current?.[0]?.definition;
   const fallback = '/Bamboo_Seamless_t1.webp';
   const bodyTexUrl = sample?.body_texture_url ?? fallback;
   const legTexUrl  = sample?.leg_texture_url  ?? fallback;
-  const faceTexUrl = sample?.face_texture_url ?? bodyTexUrl;
 
   const bodyTex = useLoader(THREE.TextureLoader, bodyTexUrl);
   const legTex  = useLoader(THREE.TextureLoader, legTexUrl);
-  const faceTex = useLoader(THREE.TextureLoader, faceTexUrl);
 
   useEffect(() => {
-    [bodyTex, legTex, faceTex].forEach(t => {
+    [bodyTex, legTex].forEach(t => {
       t.colorSpace = THREE.SRGBColorSpace;
       t.minFilter = THREE.LinearMipMapLinearFilter;
       t.magFilter = THREE.LinearFilter;
       t.needsUpdate = true;
     });
-  }, [bodyTex, legTex, faceTex]);
+  }, [bodyTex, legTex]);
 
   const bodyGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const headGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);

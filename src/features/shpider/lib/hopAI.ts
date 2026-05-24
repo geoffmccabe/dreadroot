@@ -15,8 +15,9 @@
 
 import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
-import { findGroundY, pickTreeAwareTarget, findLandingSurface } from './surfaceDetect';
+import { findGroundY, pickTreeAwareTarget } from './surfaceDetect';
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
+import { playSpatialSound } from '@/lib/spatialAudio';
 
 const _normalScratch = new THREE.Vector3();
 const _posScratch = new THREE.Vector3();
@@ -30,39 +31,26 @@ const CRAWL_MAX_MS = 2400;
 const FALL_GRAVITY = 18.0; // blocks/s² while in mid-air (no support)
 const WORLD_FLOOR_Y = 0;   // hard floor of the playable world
 
-// Default fallback hop sound (used when the per-tier hop_sound_url
-// is null). File is copied to /public so it ships with the build.
+// Default hop sound (used when the per-tier hop_sound_url is null).
+// File is copied to /public so it ships with the build.
 const DEFAULT_HOP_SOUND_URL = '/shpider_jump.mp3';
-// 50% of native volume per design — overlapping playback is by design.
-const HOP_VOLUME = 0.5;
-// Larger pool so dense crowds can fire simultaneously without
-// stealing each other's plays.
-const HOP_AUDIO_POOL_SIZE = 8;
-const HOP_AUDIO_POOL: Map<string, HTMLAudioElement[]> = new Map();
+// 50% of native volume per design.
+const HOP_BASE_VOLUME = 0.5;
 
-function playHopSound(url: string | null | undefined) {
+/**
+ * Play the per-shpider hop sound through the shared spatial-audio
+ * module so distant shpiders are quiet and overlapping plays use
+ * Web Audio buffer sources (no HTMLAudio leak risk, automatic mix).
+ */
+function playHopSound(
+  url: string | null | undefined,
+  spX: number, spY: number, spZ: number,
+  listenerX: number, listenerY: number, listenerZ: number,
+) {
   if (typeof window === 'undefined') return;
   const finalUrl = url && url.length > 0 ? url : DEFAULT_HOP_SOUND_URL;
-  let pool = HOP_AUDIO_POOL.get(finalUrl);
-  if (!pool) {
-    pool = Array.from({ length: HOP_AUDIO_POOL_SIZE }, () => {
-      const a = new Audio(finalUrl);
-      a.volume = HOP_VOLUME;
-      a.preload = 'auto';
-      return a;
-    });
-    HOP_AUDIO_POOL.set(finalUrl, pool);
-  }
-  // Pick the first audio not currently playing.
-  for (const a of pool) {
-    if (a.paused || a.ended) {
-      try { a.currentTime = 0; void a.play().catch(() => {}); } catch {}
-      return;
-    }
-  }
-  // All busy: replay the oldest one (rotates so we don't always
-  // stomp the same channel).
-  try { pool[0].currentTime = 0; void pool[0].play().catch(() => {}); } catch {}
+  const dist = Math.hypot(spX - listenerX, spY - listenerY, spZ - listenerZ);
+  void playSpatialSound(finalUrl, dist, { baseVolume: HOP_BASE_VOLUME });
 }
 
 interface StepDeps {
@@ -308,8 +296,13 @@ function launchHop(s: ShpiderInstance, deps: StepDeps): void {
 
   if (dx !== 0 || dz !== 0) s.rotation = Math.atan2(dx, dz);
 
-  // Play the per-tier hop sound (if uploaded).
-  playHopSound(def.hop_sound_url);
+  // Play the per-tier hop sound through spatial audio so distant
+  // shpiders sound distant. Volume falloff handled by the shared module.
+  playHopSound(
+    def.hop_sound_url,
+    s.position.x, s.position.y, s.position.z,
+    playerX, playerY, playerZ,
+  );
 }
 
 /** Returns hop progress 0..1 if hopping, or null. */

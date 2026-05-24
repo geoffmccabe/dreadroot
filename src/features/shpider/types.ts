@@ -118,10 +118,6 @@ export interface ShpiderInstance {
   legFrequencies: number[];    // step cycles/sec multiplier per leg
   legLiftAmplitudes: number[]; // max foot lift per leg (× halfBody)
 
-  // Head moves independently of body (slight bob + look-at-player).
-  headYawOffset: number;
-  headPitchOffset: number;
-
   // Head horizontal slide oscillator — phase offset so neighbours
   // don't all bob in sync.
   headSlidePhase: number;

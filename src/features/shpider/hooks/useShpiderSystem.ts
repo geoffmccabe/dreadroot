@@ -17,9 +17,8 @@ const MAX_TOTAL_SHPIDERS = 200;
 const GROUP_SPREAD_RADIUS = 6;
 const DEFAULT_GROUP_SIZE = 5;
 
-// Only T1 spawns naturally — higher tiers come from drop tables /
-// events. Matches the Shombie pattern.
-const NATURAL_SPAWN_TIER = 1;
+// Every eligible tier rolls independently in the natural-spawn loop;
+// rarity comes from each tier's own spawn_chance_per_minute column.
 const NATURAL_SPAWN_CHUNK_RADIUS = 5;
 
 interface UseShpiderSystemOptions {
@@ -105,8 +104,6 @@ export function useShpiderSystem({
       legPhaseOffsets,
       legFrequencies,
       legLiftAmplitudes,
-      headYawOffset: 0,
-      headPitchOffset: 0,
       headSlidePhase: Math.random() * Math.PI * 2,
       nextMandibleClickAt: now + 500 + Math.random() * 1500,
       mandibleClickStartedAt: 0,

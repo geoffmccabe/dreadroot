@@ -918,15 +918,17 @@ export function useFortressFrameLoop({
 
               if (onPointsEarned) onPointsEarned(finalDamage);
 
-              // Hit feedback sound — wooden thud (generic flesh-impact),
-              // NOT the coin sound. Same sound used elsewhere for body hits.
-              try {
-                const audioEl = (audioRefs.current?.woodenThud ?? audioRefs.current?.shwarmHit) as HTMLAudioElement | undefined;
-                if (audioEl) {
-                  audioEl.currentTime = 0;
-                  void audioEl.play().catch(() => {});
-                }
-              } catch {}
+              // Hit feedback sound — wooden thud, played through the
+              // shared spatial audio module so distant hits sound distant.
+              // We approximate camera→shpider distance with bullet→shpider
+              // because the local bullet was just fired from the camera.
+              {
+                const dx2 = sp.position.x - bullet.position.x;
+                const dy2 = sp.position.y - bullet.position.y;
+                const dz2 = sp.position.z - bullet.position.z;
+                const distToHit = Math.hypot(dx2, dy2, dz2);
+                void playSpatialSound('/wooden_thud_sound.mp3', distToHit, { baseVolume: 0.6 });
+              }
 
               const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
               const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
