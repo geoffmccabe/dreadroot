@@ -430,15 +430,44 @@ All colors MUST be HSL.
     --border: var(--hud-border);
     --input: var(--hud-bg-dim);
     --foreground: var(--hud-text);
-    --primary-foreground: var(--hud-text-bright);
-    --secondary: var(--hud-bg);
-    --secondary-foreground: var(--hud-text);
+    /* Override global dark --primary so default/secondary buttons are
+       visible against the translucent blue HUD background — same fix
+       we applied to admin-panel-dialog. */
+    --primary: 200 85% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 211 35% 38% / 0.85;
+    --secondary-foreground: 0 0% 98%;
     --popover: var(--hud-bg);
     --popover-foreground: var(--hud-text);
     --ring: var(--hud-border);
-    --accent: var(--hud-bg);
-    --accent-foreground: var(--hud-text);
+    --accent: 211 35% 45% / 0.6;
+    --accent-foreground: 0 0% 98%;
     --shadow-sm: none;
+  }
+
+  /* Outline buttons + inputs inside user panel: visible borders. */
+  .user-panel-dialog .border-input,
+  .user-panel-dialog [class*="border-input"] {
+    border-color: hsla(211, 50%, 80%, 0.7) !important;
+  }
+  /* Ghost / outline / link buttons keep near-white text instead of
+     dimming into the panel background. */
+  .user-panel-dialog button:not([class*="bg-primary"]):not([class*="bg-destructive"]):not([class*="bg-secondary"]) {
+    color: hsl(0, 0%, 95%);
+  }
+
+  /* Sliders inside user panel: same lift as admin panel so the
+     thumb/track aren't lost against the dark blue. */
+  .user-panel-dialog [role="slider"] {
+    border-color: hsl(200, 90%, 78%) !important;
+    background-color: hsl(0, 0%, 98%) !important;
+  }
+  .user-panel-dialog [data-orientation="horizontal"] > span[data-orientation="horizontal"],
+  .user-panel-dialog [data-orientation="horizontal"] > span > span[data-orientation="horizontal"] {
+    background-color: hsl(200, 85%, 65%) !important;
+  }
+  .user-panel-dialog .bg-secondary[data-orientation="horizontal"] {
+    background-color: hsla(211, 30%, 85%, 0.35) !important;
   }
 
   /* Active tab inside user panel: subtle highlight, not bright white */
