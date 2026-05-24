@@ -1,71 +1,79 @@
 // Static merged geometries for the eyelash assembly and the bent
-// mandible. Both are built once at module load and shared across all
-// shpider instances via InstancedMesh; per-shpider positioning happens
-// in the renderer's matrix updates.
+// mandible.
+//
+// Authoring frame matches the shpider's local body frame:
+//   +Z = outward from face (forward of the head)
+//   +Y = up (toward the sky / toward surfaceNormal)
+//   +X = right
+//
+// Both geometries are built once at module load.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-const EYELASH_COUNT = 12;
+// ──────────────────────────────────────────────────────────────────────
+//  Eyelashes
+// ──────────────────────────────────────────────────────────────────────
+//
+// 12 lashes, each:
+//   - Base point on the face plane (Z=0), distributed along a wide
+//     upper-eyelid arc across the front of the head.
+//   - Extends forward (+Z) and curves upward (+Y) — like a real
+//     eyelash sweeping out and up.
+//   - Cone tip at the end, oriented along the curve's end tangent
+//     so it reads as a continuation of the tube, not perpendicular.
+//
+// The arc shape: an inverted-smile / brow shape — middle base is the
+// highest, edge bases are slightly lower.
+//
+const EYELASH_COUNT       = 12;
+const EYELASH_ARC_SPREAD  = Math.PI * 0.75;   // ~135° fan across face
+const EYELASH_ARC_RADIUS  = 0.40;             // half-width of face arc
+const EYELASH_ARC_BASE_Y  = 0.05;             // upper-face Y baseline (above face center)
+const EYELASH_TUBE_R      = 0.022;            // lash thickness
+const EYELASH_TIP_R       = 0.025;            // cone tip base radius (matches tube)
+const EYELASH_TIP_LEN     = 0.13;             // cone tip length
+const EYELASH_CURVE_LEN   = 0.42;             // approximate length of the curved part
 
-/**
- * One eyelash = curved tube (segment of a torus) + sharp cone tip at
- * the outer end. The whole assembly hangs as 12 lashes in a wide arc
- * along the front face of the shpider's head, lashes radiating
- * downward + outward to fan around the texture's central eye.
- *
- * Units are in *head-radius* space (head is 1 unit cube → radius 0.5),
- * so the geometry scales naturally with head size when applied via
- * instance matrix.
- */
 function buildEyelashAssembly(): THREE.BufferGeometry {
-  const lashRadius     = 0.45;  // curve radius (how curled the lash is)
-  const lashTubeR      = 0.025; // thickness of the lash tube
-  const lashArc        = Math.PI * 0.55; // how much of the torus we use
-  const tipLength      = 0.18;
-  const tipRadius      = 0.03;
-  const arcSpread      = Math.PI * 0.95; // how wide the 12-lash fan reaches
-  const arcStart       = -arcSpread / 2;
-
   const parts: THREE.BufferGeometry[] = [];
 
   for (let i = 0; i < EYELASH_COUNT; i++) {
-    const lashAngle = arcStart + (i / (EYELASH_COUNT - 1)) * arcSpread;
+    // theta sweeps from -spread/2 (far left) to +spread/2 (far right)
+    const t = (i + 0.5) / EYELASH_COUNT;
+    const theta = -EYELASH_ARC_SPREAD / 2 + t * EYELASH_ARC_SPREAD;
+    const baseX = Math.sin(theta) * EYELASH_ARC_RADIUS;
+    // Inverted-smile arc — middle higher, edges lower.
+    const baseY = EYELASH_ARC_BASE_Y + Math.cos(theta) * 0.10;
 
-    // 1) Curved tube (partial torus).
-    // TorusGeometry sits in the XY plane with its hole on +Z. We rotate
-    // it so its open arc reaches outward from the head's front face.
-    const tube = new THREE.TorusGeometry(lashRadius, lashTubeR, 6, 12, lashArc);
-    // Rotate so the lash's "base" sits near the head and the tip points
-    // away from the eye, along the +Y direction relative to the lash.
-    tube.rotateZ(-Math.PI / 2);   // align the arc plane to vertical
-    tube.rotateY(lashAngle);      // fan around the eye
+    // Cubic bezier from face outward + upward.
+    // Start: on face plane (Z=0).
+    // Two control points push the curve outward first, then up.
+    // End: above and slightly outward — gives the classic eyelash sweep.
+    const start = new THREE.Vector3(baseX, baseY,                       0);
+    const ctrl1 = new THREE.Vector3(baseX, baseY + 0.03,                EYELASH_CURVE_LEN * 0.45);
+    const ctrl2 = new THREE.Vector3(baseX, baseY + EYELASH_CURVE_LEN * 0.55, EYELASH_CURVE_LEN * 0.85);
+    const end   = new THREE.Vector3(baseX, baseY + EYELASH_CURVE_LEN,   EYELASH_CURVE_LEN * 0.60);
 
-    // 2) Cone tip at the outer end of the tube arc.
-    const tip = new THREE.ConeGeometry(tipRadius, tipLength, 8);
-    // Position at the world-end of the arc — torus center is origin,
-    // arc length = lashArc, end = (cos(arc), sin(arc)) in the rotated
-    // plane. After the rotateZ + rotateY above, compute end:
-    const endLocalX = Math.cos(lashArc) * lashRadius;
-    const endLocalY = Math.sin(lashArc) * lashRadius;
-    // Apply same rotateZ + rotateY transforms to the local end point.
-    // rotateZ(-π/2): (x, y, z) → (y, -x, z)
-    let ex = endLocalY;
-    let ey = -endLocalX;
-    let ez = 0;
-    // rotateY(lashAngle): (x, y, z) → (x cos + z sin, y, -x sin + z cos)
-    const ca = Math.cos(lashAngle);
-    const sa = Math.sin(lashAngle);
-    const ex2 =  ex * ca + ez * sa;
-    const ez2 = -ex * sa + ez * ca;
-    ex = ex2;
-    ez = ez2;
-    tip.translate(ex, ey - tipLength * 0.5, ez);
-    // Orient the cone so its tip points away from the head.
-    tip.rotateZ(-lashAngle);
+    const curve = new THREE.CubicBezierCurve3(start, ctrl1, ctrl2, end);
 
+    // Tube along the curve.
+    const tube = new THREE.TubeGeometry(curve, 10, EYELASH_TUBE_R, 5, false);
     parts.push(tube);
-    parts.push(tip);
+
+    // Cone tip at the end of the curve, oriented along the end tangent
+    // so it visually continues the tube.
+    const tangent = curve.getTangent(1).normalize();
+    const cone = new THREE.ConeGeometry(EYELASH_TIP_R, EYELASH_TIP_LEN, 8);
+    // ConeGeometry's base is at -Y/2 and tip at +Y/2. Translate so the
+    // base sits at the origin, tip along +Y.
+    cone.translate(0, EYELASH_TIP_LEN / 2, 0);
+    // Rotate +Y → tangent direction.
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+    cone.applyQuaternion(q);
+    // Move the cone's base to the curve's end point.
+    cone.translate(end.x, end.y, end.z);
+    parts.push(cone);
   }
 
   const merged = mergeGeometries(parts, false);
@@ -77,33 +85,40 @@ function buildEyelashAssembly(): THREE.BufferGeometry {
   return merged;
 }
 
-/**
- * One mandible = bent cone. Two cone segments stitched together: a
- * wider "base" cone + a narrower "tip" cone, the second tipped inward
- * at an angle. Approximates the curved-mandible look without needing
- * custom vertex math.
- *
- * Built with the base at origin, opening along +Y, tip curving inward
- * toward +X (so the LEFT mandible uses this geo as-is and the RIGHT
- * mandible just mirrors the X scale).
- */
+// ──────────────────────────────────────────────────────────────────────
+//  Mandible
+// ──────────────────────────────────────────────────────────────────────
+//
+// A bent cone pointing forward (+Z) in local space. Wider segment near
+// the face, thinner curved segment at the tip. Built as ONE mandible —
+// the renderer instances it twice per shpider, mirroring one via -X
+// scale and splaying around local +Y so they fan / click together.
+//
+const MAND_BASE_LEN  = 0.28;
+const MAND_BASE_R    = 0.07;
+const MAND_TIP_LEN   = 0.22;
+const MAND_TIP_R     = 0.025;
+const MAND_BEND_RAD  = Math.PI * 0.18; // ~32° inward bend at the joint
+
 function buildMandible(): THREE.BufferGeometry {
-  const baseLength = 0.28;
-  const baseRadius = 0.06;
-  const tipLength  = 0.22;
-  const tipRadius  = 0.025;
-  const tipBendAngle = Math.PI * 0.25; // 45° inward at the joint
+  // Base segment: a cone whose wide end sits at the face (origin) and
+  // whose narrow tip points forward (+Z).
+  const base = new THREE.ConeGeometry(MAND_BASE_R, MAND_BASE_LEN, 10);
+  // ConeGeometry: tip at +Y/2, base at -Y/2. rotateX(+π/2) maps +Y→+Z,
+  // so after this the tip is at +Z/2 and the base circle at -Z/2.
+  base.rotateX(Math.PI / 2);
+  // Slide forward so the base circle is at z=0 and tip at z=BASE_LEN.
+  base.translate(0, 0, MAND_BASE_LEN / 2);
 
-  const base = new THREE.ConeGeometry(baseRadius, baseLength, 8);
-  // ConeGeometry has its tip at +Y/2 and base at -Y/2. Move so the
-  // base sits at origin pointing down (apex pointing away from head).
-  base.translate(0, -baseLength / 2, 0);
-
-  const tip = new THREE.ConeGeometry(tipRadius, tipLength, 8);
-  // Tip starts where the base ends; rotate it inward by tipBendAngle.
-  tip.translate(0, -tipLength / 2, 0);
-  tip.rotateZ(-tipBendAngle);            // bend toward +X
-  tip.translate(0, -baseLength, 0);      // shift down to the base's end
+  // Tip segment: a thinner cone that starts at the base segment's tip
+  // and bends inward (rotation around Y so the tip drifts toward +X).
+  const tip = new THREE.ConeGeometry(MAND_TIP_R, MAND_TIP_LEN, 8);
+  tip.rotateX(Math.PI / 2);
+  tip.translate(0, 0, MAND_TIP_LEN / 2);
+  // Bend before relocating — pivots around the tip cone's own base.
+  tip.rotateY(MAND_BEND_RAD);
+  // Slot the bent tip onto the end of the base segment.
+  tip.translate(0, 0, MAND_BASE_LEN);
 
   const merged = mergeGeometries([base, tip], false);
   base.dispose();
@@ -115,10 +130,11 @@ function buildMandible(): THREE.BufferGeometry {
   return merged;
 }
 
-export const EYELASH_GEOMETRY = buildEyelashAssembly();
+export const EYELASH_GEOMETRY  = buildEyelashAssembly();
 export const MANDIBLE_GEOMETRY = buildMandible();
 
-export const MANDIBLE_OPEN_ANGLE = Math.PI * 0.15;  // ~27° splay at rest
-export const MANDIBLE_CLICK_DURATION_MS = 160;
-export const MANDIBLE_MIN_CLICK_INTERVAL_MS = 600;
-export const MANDIBLE_MAX_CLICK_INTERVAL_MS = 1800;
+// Per-shpider mandible animation settings.
+export const MANDIBLE_OPEN_ANGLE             = Math.PI * 0.18; // ~32° splay at rest
+export const MANDIBLE_CLICK_DURATION_MS      = 160;
+export const MANDIBLE_MIN_CLICK_INTERVAL_MS  = 600;
+export const MANDIBLE_MAX_CLICK_INTERVAL_MS  = 1800;

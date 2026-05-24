@@ -45,6 +45,8 @@ const HEAD_SLIDE_HZ = 1.1;
 const _mat = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
+const _surfaceQuat = new THREE.Quaternion();
+const _yawQuat = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 const _yAxis = new THREE.Vector3(0, 1, 0);
 const _zAxis = new THREE.Vector3(0, 0, 1);
@@ -53,7 +55,10 @@ const _segStart = new THREE.Vector3();
 const _segEnd = new THREE.Vector3();
 const _segMid = new THREE.Vector3();
 const _worldRot = new THREE.Quaternion();
-const _localBase = new THREE.Vector3();
+const _forwardWorld = new THREE.Vector3();
+const _upWorld = new THREE.Vector3();
+const _rightWorld = new THREE.Vector3();
+const _localPoint = new THREE.Vector3();
 
 /** Triangle wave 0→1→0 over duration. */
 function clickTriangle(t01: number): number {
@@ -175,7 +180,7 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
 
   const epScratch = useMemo(() => ({ start: new THREE.Vector3(), end: new THREE.Vector3() }), []);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const list = shpidersRef.current;
     const camera = cameraRef.current;
     if (!list || !camera) return;
@@ -188,7 +193,9 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
 
     const now = Date.now();
     const t = clock.elapsedTime;
+    const dt = Math.min(delta, 0.1);
     const playerX = camera.position.x;
+    const playerY = camera.position.y;
     const playerZ = camera.position.z;
 
     let bodyCount = 0;
@@ -200,11 +207,9 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
     for (const s of list) {
       if (!s.isActive) continue;
 
-      // === AI tick. Mutates s.position / s.rotation. ===
-      stepShpiderHopAI(s, { now, playerX, playerZ });
+      // === AI tick. Mutates position/rotation/surfaceNormal. ===
+      stepShpiderHopAI(s, { now, dt, playerX, playerY, playerZ });
 
-      // Distance culling AFTER tick so non-rendered shpiders still
-      // advance their hop schedule.
       const dx = s.position.x - playerX;
       const dz = s.position.z - playerZ;
       if (dx * dx + dz * dz > RENDER_DISTANCE_SQ) continue;
@@ -213,54 +218,63 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
       const def = s.definition;
       const bodySize = def.body_size * s.scale;
       const headSize = def.head_size * s.scale;
-      const bodyY = bodySize * 0.5;
+      const halfBody = bodySize * 0.5;
 
-      // Forward unit vector in world space.
-      const fx = Math.sin(s.rotation);
-      const fz = Math.cos(s.rotation);
-      const cosR = Math.cos(s.rotation);
-      const sinR = Math.sin(s.rotation);
+      // === Build the shpider's world transform once per shpider. ===
+      // surfaceNormal becomes the body's local +Y; `rotation` is yaw
+      // around that local +Y. Combined quaternion = align × yaw.
+      _surfaceQuat.setFromUnitVectors(_yAxis, s.surfaceNormal);
+      _yawQuat.setFromAxisAngle(_yAxis, s.rotation);
+      _quat.copy(_surfaceQuat).multiply(_yawQuat);
 
       // === Body ===
-      _pos.set(s.position.x, s.position.y + bodyY, s.position.z);
-      _quat.setFromAxisAngle(_yAxis, s.rotation);
+      // Body center sits half-body-distance ABOVE the surface (along
+      // local +Y in world space = surfaceNormal direction).
+      _localPoint.set(0, halfBody, 0).applyQuaternion(_quat);
+      _pos.set(
+        s.position.x + _localPoint.x,
+        s.position.y + _localPoint.y,
+        s.position.z + _localPoint.z,
+      );
       _scale.set(bodySize, bodySize, bodySize);
       _mat.compose(_pos, _quat, _scale);
       bodyMesh.setMatrixAt(bodyCount++, _mat);
 
       // === Head ===
-      // Horizontal slide: ±headSize/2 along shpider forward.
       const slide = Math.sin(t * Math.PI * 2 * HEAD_SLIDE_HZ + s.headSlidePhase) * (headSize * 0.5);
       const headForwardBase = bodySize * 0.45;
       const headForward = headForwardBase + slide;
-      const headY = bodySize + headSize * 0.5;
+      const headLocalY = bodySize + headSize * 0.5;
 
-      const headX = s.position.x + fx * headForward;
-      const headZ = s.position.z + fz * headForward;
-      const headWorldY = s.position.y + headY;
-
-      _pos.set(headX, headWorldY, headZ);
+      _localPoint.set(0, headLocalY, headForward).applyQuaternion(_quat);
+      _pos.set(
+        s.position.x + _localPoint.x,
+        s.position.y + _localPoint.y,
+        s.position.z + _localPoint.z,
+      );
       _scale.set(headSize, headSize, headSize);
       _mat.compose(_pos, _quat, _scale);
       headMesh.setMatrixAt(headCount++, _mat);
 
-      // === Eyelashes (one assembly per shpider, anchored to head front) ===
-      // Sit a hair in front of head's front face so they appear to
-      // emerge from the texture.
-      const eyelashAnchorOffset = headSize * 0.5 + 0.005;
+      // Stash the head world position for eyelash + mandible offsets.
+      const headWorldX = _pos.x;
+      const headWorldY = _pos.y;
+      const headWorldZ = _pos.z;
+
+      // === Eyelashes ===
+      // Anchor a hair forward of the head's front face.
+      const eyelashOffset = headSize * 0.5 + 0.005;
+      _localPoint.set(0, headLocalY, headForward + eyelashOffset).applyQuaternion(_quat);
       _pos.set(
-        headX + fx * eyelashAnchorOffset,
-        headWorldY,
-        headZ + fz * eyelashAnchorOffset,
+        s.position.x + _localPoint.x,
+        s.position.y + _localPoint.y,
+        s.position.z + _localPoint.z,
       );
-      // Scale with head; eyelash geometry is authored in head-radius
-      // units, so multiply by headSize.
       _scale.set(headSize, headSize, headSize);
       _mat.compose(_pos, _quat, _scale);
       eyelashMesh.setMatrixAt(eyelashCount++, _mat);
 
       // === Mandibles ===
-      // Schedule the next click if it's overdue.
       if (s.mandibleClickStartedAt === 0 && now >= s.nextMandibleClickAt) {
         s.mandibleClickStartedAt = now;
       }
@@ -275,33 +289,34 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
           clickPhase = clickTriangle(elapsed / MANDIBLE_CLICK_DURATION_MS);
         }
       }
-      // Open angle drops to 0 at click peak.
       const splay = MANDIBLE_OPEN_ANGLE * (1 - clickPhase);
 
-      // Mandibles hang from the bottom-front of the head, splaying L/R
-      // by `splay` radians around the shpider's Z (forward) axis.
-      const mandibleAnchorY = headWorldY - headSize * 0.4;
-      const mandibleAnchorForward = headForward + headSize * 0.55;
+      // Mandibles attach to the front-center of the face and point
+      // outward (+Z forward in local frame). They fan left/right by
+      // rotating around the local +Y (up) axis; click animation
+      // collapses that splay to 0 so the two cones meet.
+      const mandibleLocalY = headLocalY - headSize * 0.25;
+      const mandibleLocalZ = headForward + headSize * 0.5;
+      _localPoint.set(0, mandibleLocalY, mandibleLocalZ).applyQuaternion(_quat);
+      _pos.set(
+        s.position.x + _localPoint.x,
+        s.position.y + _localPoint.y,
+        s.position.z + _localPoint.z,
+      );
 
       for (let side = 0; side < 2; side++) {
         if (mandibleCount >= MAX_MANDIBLE_INSTANCES) break;
         const sideSign = side === 0 ? -1 : 1;
 
-        // Anchor in world space — same for both mandibles, they
-        // splay around it via rotation.
-        const mx = s.position.x + fx * mandibleAnchorForward;
-        const mz = s.position.z + fz * mandibleAnchorForward;
-        _pos.set(mx, mandibleAnchorY, mz);
+        // Splay around local +Y axis so mandibles fan to either side.
+        _worldRot.copy(_quat);
+        const yawQ = new THREE.Quaternion().setFromAxisAngle(_yAxis, sideSign * splay);
+        _worldRot.multiply(yawQ);
 
-        // Rotation: face the shpider's forward, then splay sideways.
-        // Build quaternion as Yaw(rotation) × Roll(±splay).
-        _quat.setFromAxisAngle(_yAxis, s.rotation);
-        const rollQ = new THREE.Quaternion().setFromAxisAngle(_zAxis, sideSign * splay);
-        _quat.multiply(rollQ);
-
-        // Mirror the right mandible by flipping X scale.
+        // Mirror the right mandible's geometry (which is authored
+        // bending toward +X) by flipping its X scale.
         _scale.set(sideSign === -1 ? headSize : -headSize, headSize, headSize);
-        _mat.compose(_pos, _quat, _scale);
+        _mat.compose(_pos, _worldRot, _scale);
         mandibleMesh.setMatrixAt(mandibleCount++, _mat);
       }
 
@@ -313,24 +328,18 @@ export function ShpiderRenderer({ shpidersRef, cameraRef }: ShpiderRendererProps
 
           getSegmentEndpoints(leg, seg, bodySize, hopT, s.legPhaseOffsets[leg], t, epScratch);
 
-          // Local → world: rotate XZ by shpider rotation, translate to
-          // body world position.
-          _segStart.set(
-            epScratch.start.x * cosR + epScratch.start.z * sinR,
-            epScratch.start.y,
-            -epScratch.start.x * sinR + epScratch.start.z * cosR,
-          );
+          // Local endpoints are in shpider-local space (Y up, Z forward,
+          // but oriented relative to the body, not the world). Apply the
+          // combined surface+yaw quat to bring them to world space, then
+          // translate by the shpider's body center.
+          _segStart.copy(epScratch.start).applyQuaternion(_quat);
           _segStart.x += s.position.x;
-          _segStart.y += s.position.y + bodyY;
+          _segStart.y += s.position.y + halfBody;
           _segStart.z += s.position.z;
 
-          _segEnd.set(
-            epScratch.end.x * cosR + epScratch.end.z * sinR,
-            epScratch.end.y,
-            -epScratch.end.x * sinR + epScratch.end.z * cosR,
-          );
+          _segEnd.copy(epScratch.end).applyQuaternion(_quat);
           _segEnd.x += s.position.x;
-          _segEnd.y += s.position.y + bodyY;
+          _segEnd.y += s.position.y + halfBody;
           _segEnd.z += s.position.z;
 
           _segMid.addVectors(_segStart, _segEnd).multiplyScalar(0.5);

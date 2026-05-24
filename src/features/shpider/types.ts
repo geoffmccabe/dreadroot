@@ -58,14 +58,21 @@ export interface ShpiderDefinition {
   updated_at: string;
 }
 
-/** Runtime hop state — used by Phase 4 hop AI. */
-export type HopPhase = 'idle' | 'hopping';
+/** Runtime hop state. Predator pattern: idle → stalk (crawl) → pounce (hop). */
+export type HopPhase = 'idle' | 'crawling' | 'hopping';
 
 export interface HopState {
   phase: HopPhase;
-  // While 'idle': time at which to start the next hop.
+  // While 'idle': time to start the next stalk/hop window.
   nextHopAt: number;
-  // While 'hopping': interpolation anchors.
+  // While 'crawling': linear progress 0..1 over the crawl duration.
+  crawlStartAt: number;
+  crawlDurationMs: number;
+  crawlStartX: number;
+  crawlStartZ: number;
+  crawlEndX: number;
+  crawlEndZ: number;
+  // While 'hopping': parabolic-arc anchors.
   hopStartAt: number;
   hopDurationMs: number;
   startX: number;
@@ -74,8 +81,12 @@ export interface HopState {
   endX: number;
   endY: number;
   endZ: number;
-  // Peak Y above the linear path midpoint.
   arcHeight: number;
+  // Surface normal at the *landing* target so the renderer can pivot
+  // the body to lie flat on the new face on touchdown.
+  endNormalX: number;
+  endNormalY: number;
+  endNormalZ: number;
 }
 
 /**
@@ -96,6 +107,9 @@ export interface ShpiderInstance {
   scale: number;
 
   hop: HopState;
+
+  /** "Up" for the shpider — points away from whatever face it's on. */
+  surfaceNormal: THREE.Vector3;
 
   // Per-leg jitter for the idle / mid-hop animation.
   legPhaseOffsets: number[]; // length = LEGS_PER_SHPIDER

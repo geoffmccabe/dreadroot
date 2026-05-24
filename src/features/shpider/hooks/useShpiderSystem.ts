@@ -75,12 +75,17 @@ export function useShpiderSystem({
       hop: {
         phase: 'idle',
         nextHopAt: now + definition.hop_interval_min_ms + Math.random() * (definition.hop_interval_max_ms - definition.hop_interval_min_ms),
+        crawlStartAt: 0, crawlDurationMs: 0,
+        crawlStartX: worldX, crawlStartZ: worldZ,
+        crawlEndX:   worldX, crawlEndZ:   worldZ,
         hopStartAt: 0,
         hopDurationMs: definition.hop_duration_ms,
         startX: worldX, startY: 0, startZ: worldZ,
         endX: worldX,   endY: 0, endZ: worldZ,
         arcHeight: 0,
+        endNormalX: 0, endNormalY: 1, endNormalZ: 0,
       },
+      surfaceNormal: new THREE.Vector3(0, 1, 0),
     };
 
     shpidersRef.current = [...shpidersRef.current, instance];
