@@ -94,9 +94,26 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
         .getPublicUrl(path);
 
       updateDef(field, publicUrl);
-      toast.success(`${part} texture uploaded`);
 
+      // Persist the URL to the DB immediately so the upload sticks even
+      // if the user navigates away without clicking Save.
       const rowId = currentDef.id;
+      if (!rowId.startsWith('temp_')) {
+        const { error: dbErr } = await (supabase
+          .from('shpider_definitions' as any)
+          .update({ [field]: publicUrl })
+          .eq('id', rowId) as any);
+        if (dbErr) {
+          console.warn('[ShpiderDesign] DB persist failed:', dbErr);
+          toast.error(`Uploaded but DB save failed: ${dbErr.message ?? dbErr}`);
+        } else {
+          toast.success(`${part} texture uploaded`);
+        }
+      } else {
+        toast.success(`${part} texture uploaded (save tier to persist)`);
+      }
+
+      // KTX2 conversion fires in the background and also auto-persists.
       void convertTextureToKtx2(publicUrl, 'standard').then((ktx2Url) => {
         if (!ktx2Url) return;
         const ktx2Field = `${field}_ktx2` as keyof ShpiderDefinition;
@@ -239,7 +256,7 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
                         <div className="flex gap-1 mt-2">
                           <Button
                             size="sm"
-                            variant="outline"
+                            variant="secondary"
                             className="flex-1 text-xs gap-1"
                             onClick={() => ref.current?.click()}
                             disabled={isUploading === field}
@@ -252,7 +269,7 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
                               size="sm"
                               variant="ghost"
                               onClick={() => updateDef(field, null)}
-                              className="text-destructive"
+                              className="text-destructive hover:text-destructive"
                             >
                               <X className="h-3 w-3" />
                             </Button>

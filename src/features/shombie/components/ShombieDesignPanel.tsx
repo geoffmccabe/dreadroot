@@ -394,7 +394,8 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
   };
 
   return (
-    <div className={`grid grid-cols-12 gap-4 ${className}`}>
+    <Card className={`p-4 ${className || ''}`}>
+      <div className="grid grid-cols-12 gap-4">
       {/* Part 1: Tier Selector */}
       <div className="col-span-3">
         <div className="border rounded-lg p-3 bg-muted/30">
@@ -622,6 +623,7 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
         </Card>
         )}
       </div>
-    </div>
+      </div>
+    </Card>
   );
 }
