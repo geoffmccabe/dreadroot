@@ -66,6 +66,7 @@ import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandl
 import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '@/features/shombie';
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
+import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
 import { getHeightBlocks } from '@/features/shtickman/types';
 
 // Tree system imports
@@ -445,6 +446,17 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     userRoles,
     onShombieKilled,
     playerLevel,
+  });
+
+  // Shpider system — Phase 3 static. Spawn via Ctrl+P (admin) or
+  // window.__spawnShpiders(tier, count) in the console.
+  const { data: shpiderDefinitionsData } = useShpiderDefinitions();
+  const shpiderDefinitions = shpiderDefinitionsData ?? [];
+  const { shpidersRef } = useShpiderSystem({
+    definitions: shpiderDefinitions,
+    cameraRef,
+    isEnabled: enemiesEnabled,
+    userRoles,
   });
 
   // Walapa system - floating whale creatures that travel between tall trees
@@ -1409,6 +1421,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Shtickman Renderer - tall stick humanoids */}
       <ShtickmanRenderer ref={shtickmanRendererRef} shtickmenRef={shtickmenRef} cameraRef={cameraRef} universalFlameRef={universalFlameRef} />
+
+      {/* Shpider Renderer — Phase 3 static. */}
+      <ShpiderRenderer shpidersRef={shpidersRef} cameraRef={cameraRef} />
 
       {/* Dropped Loot Items */}
       <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />
