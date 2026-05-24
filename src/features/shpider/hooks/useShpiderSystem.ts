@@ -12,6 +12,11 @@ import {
   MAX_SHPIDERS_PER_CHUNK,
   SPAWN_CHECK_INTERVAL_MS,
 } from '../constants';
+import {
+  createDeathFragments,
+  type DeathFragment,
+  DEATH_FRAGMENT_MAX,
+} from '../lib/deathFragments';
 
 const MAX_TOTAL_SHPIDERS = 200;
 const GROUP_SPREAD_RADIUS = 6;
@@ -41,6 +46,9 @@ export function useShpiderSystem({
   const [shpiders, setShpiders] = useState<ShpiderInstance[]>([]);
   const shpidersRef = useRef<ShpiderInstance[]>([]);
   const [spawningEnabled, setSpawningEnabled] = useState(true);
+  // Death-explosion fragments. Ref-only (rendered every frame from a
+  // useFrame loop in the renderer; doesn't need React re-renders).
+  const fragmentsRef = useRef<DeathFragment[]>([]);
 
   // Keep ref in sync with state for cheap reads from frame loops.
   useEffect(() => {
@@ -201,6 +209,14 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
+      // Spawn death fragments (capped — drop oldest if at capacity).
+      const newFrags = createDeathFragments(s, Date.now());
+      const combined = fragmentsRef.current.concat(newFrags);
+      if (combined.length > DEATH_FRAGMENT_MAX) {
+        fragmentsRef.current = combined.slice(combined.length - DEATH_FRAGMENT_MAX);
+      } else {
+        fragmentsRef.current = combined;
+      }
       removeShpider(s.id);
       return true;
     }
@@ -359,6 +375,7 @@ export function useShpiderSystem({
   return {
     shpiders,
     shpidersRef,
+    fragmentsRef,
     spawnShpiderAt,
     spawnShpiderGroup,
     removeShpider,

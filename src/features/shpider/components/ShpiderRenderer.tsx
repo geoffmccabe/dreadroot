@@ -29,6 +29,7 @@ import {
   MANDIBLE_MIN_CLICK_INTERVAL_MS,
   MANDIBLE_MAX_CLICK_INTERVAL_MS,
 } from '../lib/shpiderGeometry';
+import { stepDeathFragments, type DeathFragment } from '../lib/deathFragments';
 
 const NUM_TIERS = 10;
 const MAX_PER_TIER = 64;
@@ -170,11 +171,12 @@ function getSegmentEndpoints(
 
 interface ShpiderRendererProps {
   shpidersRef: React.RefObject<ShpiderInstance[]>;
+  fragmentsRef: React.RefObject<DeathFragment[]>;
   cameraRef: React.RefObject<THREE.Camera | null>;
   definitions: ShpiderDefinition[];
 }
 
-export function ShpiderRenderer({ shpidersRef, cameraRef, definitions }: ShpiderRendererProps) {
+export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definitions }: ShpiderRendererProps) {
   // ── Per-tier texture loading. One material per tier per part-type,
   // so each tier renders with its own admin-uploaded textures. Tier
   // rows missing a texture fall back to the bamboo placeholder.
@@ -517,6 +519,42 @@ export function ShpiderRenderer({ shpidersRef, cameraRef, definitions }: Shpider
           _mat.compose(_segMid, _worldRot, _scale);
           legMesh.setMatrixAt(legCounts.current[tier]++, _mat);
         }
+      }
+    }
+
+    // === Death-explosion fragments ===
+    // Physics step, then write each surviving fragment's matrix onto
+    // the per-tier mesh that matches its source shpider.
+    const fragments = fragmentsRef.current;
+    if (fragments && fragments.length > 0) {
+      const updated = stepDeathFragments(fragments, dt, now);
+      // Re-bind in place so the ref array is always the live list.
+      fragments.length = 0;
+      for (const f of updated) fragments.push(f);
+
+      for (const f of updated) {
+        const tier = Math.max(1, Math.min(NUM_TIERS, f.shpiderTier));
+        let mesh: THREE.InstancedMesh | null = null;
+        let count = 0;
+        let cap = MAX_PER_TIER;
+        if (f.type === 'body') {
+          mesh = bodyMeshRefs.current[tier];
+          count = bodyCounts.current[tier];
+        } else if (f.type === 'head') {
+          mesh = headMeshRefs.current[tier];
+          count = headCounts.current[tier];
+        } else {
+          mesh = legMeshRefs.current[tier];
+          count = legCounts.current[tier];
+          cap = MAX_LEG_PER_TIER;
+        }
+        if (!mesh || count >= cap) continue;
+
+        _mat.compose(f.position, f.rotation, f.scale);
+        mesh.setMatrixAt(count, _mat);
+        if (f.type === 'body')      bodyCounts.current[tier]++;
+        else if (f.type === 'head') headCounts.current[tier]++;
+        else                        legCounts.current[tier]++;
       }
     }
 

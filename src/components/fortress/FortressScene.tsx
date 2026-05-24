@@ -452,7 +452,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // window.__spawnShpiders(tier, count) in the console.
   const { data: shpiderDefinitionsData } = useShpiderDefinitions();
   const shpiderDefinitions = shpiderDefinitionsData ?? [];
-  const { shpidersRef, spawnShpiderGroup, damageShpider } = useShpiderSystem({
+  const { shpidersRef, fragmentsRef: shpiderFragmentsRef, spawnShpiderGroup, damageShpider } = useShpiderSystem({
     definitions: shpiderDefinitions,
     cameraRef,
     isEnabled: enemiesEnabled,
@@ -1428,8 +1428,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Shtickman Renderer - tall stick humanoids */}
       <ShtickmanRenderer ref={shtickmanRendererRef} shtickmenRef={shtickmenRef} cameraRef={cameraRef} universalFlameRef={universalFlameRef} />
 
-      {/* Shpider Renderer — per-tier InstancedMesh routing. */}
-      <ShpiderRenderer shpidersRef={shpidersRef} cameraRef={cameraRef} definitions={shpiderDefinitions} />
+      {/* Shpider Renderer — per-tier InstancedMesh routing + death fragments. */}
+      <ShpiderRenderer
+        shpidersRef={shpidersRef}
+        fragmentsRef={shpiderFragmentsRef}
+        cameraRef={cameraRef}
+        definitions={shpiderDefinitions}
+      />
 
       {/* Dropped Loot Items */}
       <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />
