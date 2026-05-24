@@ -276,32 +276,32 @@ export function useSeedPlanting({
         placeBlock(block.x, block.y, block.z, encodedType, undefined, textureUrl || undefined);
       }
 
-      // NOTE: Tree growth is now handled server-side by the process_tree_growth() function
-      // The server will pick up this tree and grow it based on elapsed time
+      // Atomic insert: planted_trees + tree_blueprints in one transaction
+      // via plant_seed_with_blueprint RPC. Either both rows exist or
+      // neither does — no orphaned trees with no blueprint.
+      const { data: rpcResult, error: rpcError } = await (supabase.rpc('plant_seed_with_blueprint' as any, {
+        p_world_id: worldId,
+        p_user_id: userId,
+        p_seed_definition_id: seedDef.id,
+        p_base_x: baseX,
+        p_base_y: baseY,
+        p_base_z: baseZ,
+        p_growth_seed: growthSeed,
+        p_target_block_count: blueprint.blocks.length,
+        p_first_block_count: firstBlocks.length,
+        p_blueprint_data: {
+          blocks: blueprint.blocks,
+          maxHeight: blueprint.maxHeight,
+          maxWidth: blueprint.maxWidth,
+          tier: seedDef.tier,
+          seedDefId: seedDef.id,
+          treeType: treeType,
+        },
+      }) as any);
 
-      // Create the planted tree record
-      // Server-side trigger will enforce chunk planting limits
-      const { data: newTree, error: insertError } = await supabase
-        .from('planted_trees')
-        .insert({
-          world_id: worldId,
-          seed_definition_id: seedDef.id,
-          planted_by: userId,
-          base_x: baseX,
-          base_y: baseY,
-          base_z: baseZ,
-          growth_seed: growthSeed,
-          target_block_count: blueprint.blocks.length,
-          current_block_count: firstBlocks.length,
-          is_fully_grown: false,
-        })
-        .select()
-        .single();
-
-      if (insertError) {
-        console.error('[SeedPlanting] Insert error:', insertError);
-        // Check for chunk limit error
-        if (insertError.message?.includes('planting limit')) {
+      if (rpcError) {
+        console.error('[SeedPlanting] plant_seed_with_blueprint failed:', rpcError);
+        if (rpcError.message?.includes('planting limit')) {
           toast({
             title: "Chunk limit reached",
             description: "Too many trees of this tier in this area",
@@ -312,41 +312,17 @@ export function useSeedPlanting({
         return { success: false, error: 'Failed to plant seed' };
       }
 
-      // Save blueprint to tree_blueprints table (required for server-side growth)
-      // Must succeed for growth to work - await it
-      const { error: blueprintError } = await (supabase
-        .from('tree_blueprints' as any)
-        .insert({
-          planted_tree_id: newTree.id,
-          world_id: worldId,
-          blueprint_data: {
-            blocks: blueprint.blocks,
-            maxHeight: blueprint.maxHeight,
-            maxWidth: blueprint.maxWidth,
-            tier: seedDef.tier,
-            seedDefId: seedDef.id,
-            treeType: treeType,
-          },
-          block_count: blueprint.blocks.length,
-        } as any) as any);
-
-      const bpSaved = !blueprintError;
-      if (blueprintError) {
-        console.error('[SeedPlanting] Blueprint save FAILED:', blueprintError.message || blueprintError.code || JSON.stringify(blueprintError));
-      } else {
-        console.log('[SeedPlanting] Blueprint saved successfully');
-      }
+      const newTreeId = (rpcResult as any)?.tree_id as string;
 
       recordPlantingEvent({
         timestamp: Date.now(),
         position: { x: baseX, y: baseY, z: baseZ },
         tier: seedDef.tier,
         treeType: treeType,
-        blueprintSaved: bpSaved,
+        blueprintSaved: true,
         blueprintBlockCount: blueprint.blocks.length,
         seedDefId: seedDef.id,
-        treeId: newTree.id,
-        error: blueprintError ? (blueprintError.message || blueprintError.code || 'Blueprint save failed') : undefined,
+        treeId: newTreeId,
       });
 
       toast({
@@ -354,7 +330,7 @@ export function useSeedPlanting({
         description: `Growing ${blueprint.blocks.length} blocks`,
       });
 
-      return { success: true, treeId: newTree.id };
+      return { success: true, treeId: newTreeId };
     } catch (err) {
       console.error('[SeedPlanting] Error:', err);
       return { success: false, error: 'Unexpected error while planting' };
