@@ -219,20 +219,40 @@ export function FortressHUD(props: FortressHUDProps) {
     return null;
   }, []);
 
+  // Quantity lookup by item UUID — built from the inventory list so
+  // the hotbar (and the grid) can show a stack badge that updates
+  // immediately when an item is consumed.
+  const quantityByItemId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const inv of (inventory || [])) {
+      if (inv.item_id && inv.quantity > 0) {
+        map.set(inv.item_id, (map.get(inv.item_id) ?? 0) + inv.quantity);
+      }
+    }
+    return map;
+  }, [inventory]);
+
   // Build hotbar slots 1-6
   const hotbarSlots = useMemo(() => {
-    const slots: Array<{ slot: number; itemId: string | null; sprite: string | null; name: string | null; tier: number | null }> = [];
+    const slots: Array<{ slot: number; itemId: string | null; sprite: string | null; name: string | null; tier: number | null; quantity: number }> = [];
     for (let i = 1; i <= 6; i++) {
       const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find((e: any) => e.slot === i);
       if (eq) {
         const def = itemDefs.get(eq.itemId);
-        slots.push({ slot: i, itemId: eq.itemId, sprite: getSpriteUrl(def), name: def?.name || null, tier: def?.tier ?? null });
+        slots.push({
+          slot: i,
+          itemId: eq.itemId,
+          sprite: getSpriteUrl(def),
+          name: def?.name || null,
+          tier: def?.tier ?? null,
+          quantity: quantityByItemId.get(eq.itemId) ?? 0,
+        });
       } else {
-        slots.push({ slot: i, itemId: null, sprite: null, name: null, tier: null });
+        slots.push({ slot: i, itemId: null, sprite: null, name: null, tier: null, quantity: 0 });
       }
     }
     return slots;
-  }, [equippedItems, itemDefs, getSpriteUrl]);
+  }, [equippedItems, itemDefs, getSpriteUrl, quantityByItemId]);
 
   // Set of item IDs currently equipped in hotbar
   const equippedItemIdSet = useMemo(
@@ -709,6 +729,22 @@ export function FortressHUD(props: FortressHUDProps) {
                                 style={{ width: '42px', height: '42px', objectFit: 'contain', pointerEvents: 'none' }}
                               />
                             )}
+                            {item.quantity > 1 && (
+                              <span style={{
+                                position: 'absolute',
+                                bottom: '2px',
+                                right: '4px',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                color: 'white',
+                                fontFamily: 'var(--hud-font)',
+                                lineHeight: 1,
+                                textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
+                                pointerEvents: 'none',
+                              }}>
+                                {item.quantity}x
+                              </span>
+                            )}
                           </>
                         )}
                       </div>
@@ -802,6 +838,24 @@ export function FortressHUD(props: FortressHUDProps) {
                         style={{ width: '42px', height: '42px', objectFit: 'contain', pointerEvents: 'none' }}
                       />
                     ) : null}
+                    {/* Stack-count badge (bottom-right) — only shown when
+                        more than one of this item is held. Format: "2x". */}
+                    {slot.quantity > 1 && (
+                      <span style={{
+                        position: 'absolute',
+                        bottom: '2px',
+                        right: '4px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        color: 'white',
+                        fontFamily: 'var(--hud-font)',
+                        lineHeight: 1,
+                        textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
+                        pointerEvents: 'none',
+                      }}>
+                        {slot.quantity}x
+                      </span>
+                    )}
                   </div>
                   {/* Slot number — below square, 20% smaller */}
                   <span style={{
