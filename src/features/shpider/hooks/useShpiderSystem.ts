@@ -399,6 +399,26 @@ export function useShpiderSystem({
         return damageShpider(s.id, info.damage, dir, info.bulletSpeed || 0);
       },
       getHitSoundUrl: () => '/bullet_impact_2.mp3',
+      // Multiple flame anchors so fire wraps the whole spider —
+      // body cube, head cube, and 4 leg-spread points. Sizes scale
+      // with bodySize × scale.
+      getFlameAttachPoints: (s) => {
+        const bodySize = s.definition.body_size * s.scale;
+        const headSize = s.definition.head_size * s.scale;
+        const half = bodySize * 0.5;
+        return [
+          // Body cube — large center flame.
+          { yOffset: half,              size: bodySize * 0.7, height: bodySize, particles: 16 },
+          // Head — smaller flame on top.
+          { yOffset: bodySize + headSize * 0.5,
+            size: headSize * 0.8, height: headSize, particles: 10 },
+          // Four leg-tip flames around the body (front/back/left/right).
+          { xOffset:  half * 1.6, yOffset: 0,              size: half, height: half * 1.2, particles: 6 },
+          { xOffset: -half * 1.6, yOffset: 0,              size: half, height: half * 1.2, particles: 6 },
+          { zOffset:  half * 1.6, yOffset: 0,              size: half, height: half * 1.2, particles: 6 },
+          { zOffset: -half * 1.6, yOffset: 0,              size: half, height: half * 1.2, particles: 6 },
+        ];
+      },
     });
   }, [damageShpider]);
 

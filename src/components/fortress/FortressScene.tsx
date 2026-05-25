@@ -67,6 +67,7 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBO
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getHeightBlocks } from '@/features/shtickman/types';
 
 // Tree system imports
@@ -1212,6 +1213,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     const dps = 10 * tier;
     const tickDamage = Math.round(dps * tickDelta);
     if (tickDamage <= 0) return;
+    // Tier-scaled burn duration. T1 = 5s, T10 = 14s. Higher tier
+    // weapons make the residual flame stick around longer for more
+    // total DOT damage.
+    const burnSecondsForTier = 5 + (tier - 1);
 
     // Flame direction from camera
     const origin = camera.position;
@@ -1234,7 +1239,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         if (!block.isAlive) continue;
         if (isInCone(block.position)) {
           damageBlock(shwarm.id, block.id, tickDamage);
-          burnSystem.applyBurn('shwarm', shwarm.id, block.id, tier, colors, colorMode, tickDamage, 0, block.position);
+          burnSystem.applyBurn('shwarm', shwarm.id, block.id, tier, colors, colorMode, tickDamage, 0, block.position, burnSecondsForTier);
         }
       }
     }
@@ -1246,7 +1251,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       const headPos = _flameTmpPos.current.set(head.x + 0.5, head.y + 0.5, head.z + 0.5);
       if (isInCone(headPos)) {
         damageShnakeHead(shnake.id, tickDamage);
-        burnSystem.applyBurn('shnake', shnake.id, undefined, tier, colors, colorMode, tickDamage, shnake.definition?.armor ?? 0, headPos);
+        burnSystem.applyBurn('shnake', shnake.id, undefined, tier, colors, colorMode, tickDamage, shnake.definition?.armor ?? 0, headPos, burnSecondsForTier);
       }
     }
 
@@ -1257,7 +1262,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       if (isInCone(shombieCenter)) {
         console.log(`[FlameGlove] Hit shombie ${shombie.id} for ${tickDamage} dmg`);
         damageShombie(shombie.id, tickDamage, undefined as any, false, undefined as any);
-        burnSystem.applyBurn('shombie', shombie.id, undefined, tier, colors, colorMode, tickDamage, 0, shombieCenter);
+        burnSystem.applyBurn('shombie', shombie.id, undefined, tier, colors, colorMode, tickDamage, 0, shombieCenter, burnSecondsForTier);
       }
     }
 
@@ -1266,7 +1271,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       if (!walapa.isActive) continue;
       if (isInCone(walapa.position)) {
         damageWalapa(walapa.id, tickDamage);
-        burnSystem.applyBurn('walapa', walapa.id, undefined, tier, colors, colorMode, tickDamage, 0, walapa.position);
+        burnSystem.applyBurn('walapa', walapa.id, undefined, tier, colors, colorMode, tickDamage, 0, walapa.position, burnSecondsForTier);
       }
     }
 
@@ -1285,7 +1290,38 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       if (hit) {
         const hitPos = _flameTmpPos.current;
         damageShtickman(shtickman.id, tickDamage, undefined as any);
-        burnSystem.applyBurn('shtickman', shtickman.id, undefined, tier, colors, colorMode, tickDamage, 0, hitPos);
+        burnSystem.applyBurn('shtickman', shtickman.id, undefined, tier, colors, colorMode, tickDamage, 0, hitPos, burnSecondsForTier);
+      }
+    }
+
+    // Universal registry pass — any enemy with a CombatAdapter that
+    // ISN'T in the legacy per-type cases above (currently: shpider,
+    // and any future enemy not yet listed) gets flame damage via the
+    // adapter. The hitbox center is checked against the cone.
+    const handledTypes = new Set(['shwarm', 'shnake', 'shombie', 'walapa', 'shtickman']);
+    for (const adapter of enemyCombatRegistry.getAdapters()) {
+      if (handledTypes.has(adapter.type)) continue;
+      for (const enemy of adapter.getActiveEnemies()) {
+        const hb = adapter.getHitbox(enemy);
+        if (!hb) continue;
+        _flameTmpPos.current.set(hb.centerX, (hb.bottomY + hb.topY) * 0.5, hb.centerZ);
+        if (!isInCone(_flameTmpPos.current)) continue;
+        adapter.applyDamage(enemy, {
+          damage: tickDamage,
+          bulletSpeed: 0,
+          knockbackDirX: 0, knockbackDirY: 0, knockbackDirZ: 0,
+          hitX: _flameTmpPos.current.x, hitY: _flameTmpPos.current.y, hitZ: _flameTmpPos.current.z,
+          isHeadshot: false,
+          source: 'flame',
+        });
+        burnSystem.applyBurn(
+          adapter.type,
+          adapter.getId(enemy),
+          undefined,
+          tier, colors, colorMode, tickDamage, 0,
+          _flameTmpPos.current,
+          burnSecondsForTier,
+        );
       }
     }
   });

@@ -29,11 +29,19 @@ import type { FlameColorMode, UniversalFlameRendererHandle } from './UniversalFl
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
-// Shrink factors per DOT second (0-4)
-const SHRINK = [1.0, 0.67, 0.44, 0.30, 0.20];
-// Damage multipliers per DOT second: 1, 1/2, 1/4, 1/8, 1/16
-const DMG_MULT = [1, 0.5, 0.25, 0.125, 0.0625];
-const DOT_SECONDS = 5;
+// Reusable scratch vector for the registry-fallback entity lookup.
+const _registryFallbackPos = new THREE.Vector3();
+
+// Burn duration is per-entry now (passed in by the caller, derived
+// from weapon tier). Defaults preserve old behaviour for callers that
+// don't pass a value.
+const DEFAULT_DOT_SECONDS = 5;
+// Shrink curve: full → 0.15 over the full burn. Independent of total
+// duration so longer burns shrink more gradually per second.
+const shrinkAt = (currentSec: number, total: number) =>
+  Math.max(0.15, 1 - 0.8 * (currentSec / Math.max(1, total - 1)));
+// Damage multipliers: halves each second regardless of total duration.
+const dmgMultAt = (currentSec: number) => Math.pow(0.5, currentSec);
 const ACTIVE_TO_DOT_DELAY = 0.15; // seconds after last hit before DOT begins
 const MAX_BURNS = 15; // cap burn entries to keep flame slot usage under control
 
@@ -41,6 +49,10 @@ const MAX_BURNS = 15; // cap burn entries to keep flame slot usage under control
 // Each flame point has a Y offset from entity position, size, height, and particle count
 interface FlamePoint {
   yOffset: number;
+  /** Optional XZ offsets — required when wrapping multi-part shapes
+   *  (e.g. spider legs around a central body). Default 0. */
+  xOffset?: number;
+  zOffset?: number;
   size: number;
   height: number;
   particles: number;
@@ -57,7 +69,7 @@ interface FlamePoint {
 // Walapa is 3-5m tall, wide — two large flames engulfing the body
 // Shtickman is 22-40m — 4 tall flames overlapping up the lower body
 // Player is ~1.8m — large flame centered on body
-const FLAME_LAYOUTS: Record<EntityType, FlamePoint[]> = {
+const FLAME_LAYOUTS: Record<string, FlamePoint[]> = {
   shwarm: [
     { yOffset: -0.3, size: 0.8, height: 0.9, particles: 18 },
   ],
@@ -83,7 +95,11 @@ const FLAME_LAYOUTS: Record<EntityType, FlamePoint[]> = {
   ],
 };
 
-type EntityType = 'shwarm' | 'shnake' | 'shombie' | 'walapa' | 'shtickman' | 'player';
+// Legacy named types still get hardcoded layouts in FLAME_LAYOUTS;
+// any string is allowed so adapter-registered enemies (e.g. shpider)
+// can route their entity type through the same API and pull their
+// layout from the EnemyCombatRegistry instead.
+type EntityType = string;
 
 interface BurnEntry {
   key: string;
@@ -102,6 +118,8 @@ interface BurnEntry {
   flameIds: (string | null)[];  // one per flame point in layout
   attachIds: string[];           // one per flame point
   hitOffset: THREE.Vector3 | null; // offset from entity base to hit point (for positioned burns)
+  /** Total burn duration in seconds (tier-derived). DOT phase ends here. */
+  dotSeconds: number;
 }
 
 interface UseBurnSystemOptions {
@@ -168,14 +186,42 @@ export function useBurnSystem({
         colorMode: entry.colorMode,
       });
     } else {
-      // Multi-point layout
-      const layout = FLAME_LAYOUTS[entry.entityType];
+      // Multi-point layout — pull from legacy table OR from the
+      // registered adapter's getFlameAttachPoints. Honors xOffset/zOffset
+      // so multi-part shapes (spider legs around a body) get full
+      // surround coverage.
+      let layout: FlamePoint[] | undefined = FLAME_LAYOUTS[entry.entityType];
+      if (!layout) {
+        const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
+        if (adapter?.getFlameAttachPoints) {
+          const list = adapter.getActiveEnemies();
+          const enemy = list.find(e => adapter.getId(e) === entry.entityId);
+          if (enemy) {
+            const pts = adapter.getFlameAttachPoints(enemy);
+            if (pts && pts.length > 0) {
+              layout = pts.map(p => ({
+                yOffset: p.yOffset,
+                xOffset: p.xOffset ?? 0,
+                zOffset: p.zOffset ?? 0,
+                size: p.size,
+                height: p.height,
+                particles: p.particles,
+              }));
+            }
+          }
+        }
+      }
+      if (!layout) layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
       for (let i = 0; i < layout.length; i++) {
         if (entry.flameIds[i]) {
           renderer.removeFlame(entry.flameIds[i]!);
         }
         const pt = layout[i];
-        _offsetPos.set(basePos.x, basePos.y + pt.yOffset, basePos.z);
+        _offsetPos.set(
+          basePos.x + (pt.xOffset ?? 0),
+          basePos.y + pt.yOffset,
+          basePos.z + (pt.zOffset ?? 0),
+        );
         entry.flameIds[i] = renderer.spawnFlame({
           type: 'point',
           position: _offsetPos,
@@ -239,8 +285,18 @@ export function useBurnSystem({
       case 'player': {
         return cameraRef.current?.position ?? null;
       }
-      default:
-        return null;
+      default: {
+        // Fall through to the EnemyCombatRegistry — any registered
+        // adapter exposes the enemy's hitbox we can use for flame anchor.
+        const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
+        if (!adapter) return null;
+        const list = adapter.getActiveEnemies();
+        const enemy = list.find(e => adapter.getId(e) === entry.entityId);
+        if (!enemy) return null;
+        const hb = adapter.getHitbox(enemy);
+        if (!hb) return null;
+        return _registryFallbackPos.set(hb.centerX, hb.bottomY, hb.centerZ);
+      }
     }
   }, [shwarmsRef, shnakesRef, shombiesRef, walapasRef, shtickmenRef, cameraRef]);
 
@@ -256,7 +312,9 @@ export function useBurnSystem({
     baseDamage: number,
     armor: number,
     hitPosition?: THREE.Vector3,
+    burnSeconds?: number,
   ) => {
+    const dotSeconds = Math.max(1, Math.floor(burnSeconds ?? DEFAULT_DOT_SECONDS));
     const key = entityType === 'shwarm' && blockId
       ? `shwarm:${entityId}:${blockId}`
       : `${entityType}:${entityId}`;
@@ -272,6 +330,8 @@ export function useBurnSystem({
       existing.tier = tier;
       existing.colors = colors;
       existing.colorMode = colorMode;
+      // Refreshing a burn with a longer-tier weapon extends the timer.
+      existing.dotSeconds = Math.max(existing.dotSeconds, dotSeconds);
 
       // Update hit offset if new hit position provided
       if (hitPosition) {
@@ -336,11 +396,38 @@ export function useBurnSystem({
     }
 
     // When we have a hit offset, use a single flame at the hit point
-    // Otherwise use the full multi-point layout
+    // Otherwise use the full multi-point layout. For entity types not
+    // in the legacy FLAME_LAYOUTS table, fall back to the registered
+    // EnemyCombatAdapter's getFlameAttachPoints — or a single-flame
+    // default centered on the hitbox.
     const useHitPoint = hitOff !== null;
-    const layout = useHitPoint
-      ? [FLAME_LAYOUTS[entityType][0]] // single flame, sized from first layout entry
-      : FLAME_LAYOUTS[entityType];
+    let layout: FlamePoint[] | undefined = FLAME_LAYOUTS[entityType as keyof typeof FLAME_LAYOUTS];
+    if (!layout) {
+      const adapter = enemyCombatRegistry.getAdapter(entityType);
+      if (adapter?.getFlameAttachPoints) {
+        const list = adapter.getActiveEnemies();
+        const enemy = list.find(e => adapter.getId(e) === entityId);
+        if (enemy) {
+          const pts = adapter.getFlameAttachPoints(enemy);
+          if (pts && pts.length > 0) {
+            layout = pts.map(p => ({
+              yOffset: p.yOffset,
+              size: p.size,
+              height: p.height,
+              particles: p.particles,
+              // xOffset/zOffset honored via custom field below
+              xOffset: p.xOffset ?? 0,
+              zOffset: p.zOffset ?? 0,
+            }) as FlamePoint);
+          }
+        }
+      }
+      if (!layout) {
+        // Last-resort single-flame default at center.
+        layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
+      }
+    }
+    if (useHitPoint) layout = [layout[0]];
     const attachIds = layout.map((_, i) => `burn_${key}_${i}`);
 
     const entry: BurnEntry = {
@@ -360,6 +447,7 @@ export function useBurnSystem({
       flameIds: new Array(layout.length).fill(null),
       attachIds,
       hitOffset: hitOff,
+      dotSeconds,
     };
 
     spawnBurnFlames(entry, 1.0, useHitPoint
@@ -463,7 +551,7 @@ export function useBurnSystem({
       const elapsed = now - entry.burnStartTime;
       const currentSecond = Math.floor(elapsed);
 
-      if (currentSecond >= DOT_SECONDS) {
+      if (currentSecond >= entry.dotSeconds) {
         _toRemove.push(key);
         continue;
       }
@@ -472,13 +560,13 @@ export function useBurnSystem({
       if (currentSecond > entry.lastDamageSecond) {
         entry.lastDamageSecond = currentSecond;
 
-        const shrink = SHRINK[currentSecond] ?? 0.2;
+        const shrink = shrinkAt(currentSecond, entry.dotSeconds);
         const spawnPos = entry.hitOffset
           ? _offsetPos.copy(pos).add(entry.hitOffset)
           : pos;
         spawnBurnFlames(entry, shrink, spawnPos);
 
-        const rawDmg = Math.floor(entry.baseDamage * DMG_MULT[currentSecond]);
+        const rawDmg = Math.floor(entry.baseDamage * dmgMultAt(currentSecond));
         if (rawDmg > 0) {
           applyBurnDamage(entry, rawDmg);
         }

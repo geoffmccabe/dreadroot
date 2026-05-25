@@ -49,6 +49,23 @@ export interface DamageInfo {
   source: DamageSource;
 }
 
+/**
+ * One flame anchor on an enemy's body. The burn system spawns a
+ * particle plume at (entity.position + offset) and uses size/height
+ * to scale the particle radius/length. Allows multi-body monsters
+ * (shpider, shtickman, etc.) to have multiple flame points so the
+ * fire visually engulfs them instead of being a single point.
+ */
+export interface FlameAttachPoint {
+  /** World-space delta from the entity's reported position. */
+  xOffset?: number;
+  yOffset: number;
+  zOffset?: number;
+  size: number;
+  height: number;
+  particles: number;
+}
+
 export interface EnemyCombatAdapter<TEnemy = unknown> {
   /** Unique stable id, e.g. 'shombie' / 'shpider' / 'walapa'. */
   type: string;
@@ -69,6 +86,16 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
   /** Optional: which audio URL plays for impact feedback. Falls back
    *  to a generic flesh thud if omitted. */
   getHitSoundUrl?: (enemy: TEnemy) => string | null;
+
+  /**
+   * Optional: where flames anchor on this enemy when it's on fire.
+   * Enemies made of multiple parts (a body+head spider, a stack of
+   * blocks, etc.) return one entry per visible chunk so the flame
+   * VFX wraps the whole shape rather than appearing at a single
+   * point. Returns null/empty → the burn system falls back to a
+   * single flame at the hitbox center.
+   */
+  getFlameAttachPoints?: (enemy: TEnemy) => FlameAttachPoint[] | null;
 }
 
 // ------------------------------------------------------------------
