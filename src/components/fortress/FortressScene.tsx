@@ -68,6 +68,7 @@ import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RA
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
 import { useGrenadeSystem, GrenadeRenderer } from '@/features/grenades';
+import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getHeightBlocks } from '@/features/shtickman/types';
 
@@ -183,6 +184,9 @@ export function FortressScene({
   consumeGrenade,
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
+  vaultInRange,
+  onVaultProximityChange,
+  onOpenVault,
   shnakeDefinitions,
   plantedTrees = [],
   treeFruits = [],
@@ -1385,6 +1389,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onThrowGrenade={handleThrowGrenade}
         onAdminGrantGrenade={onAdminGrantGrenade}
         onAdminGrantHealthPotion={onAdminGrantHealthPotion}
+        onOpenVault={vaultInRange ? onOpenVault : undefined}
         onSpawnShnake={handleSpawnShnake}
         onJetBoostStateChange={onJetBoostStateChange}
         onJetBoostFired={(pos, colors) => {
@@ -1481,6 +1486,16 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Grenade Renderer — instanced spheres for live grenades. */}
       <GrenadeRenderer grenadesRef={grenadesRef} />
+
+      {/* Vault proximity — emits when player walks into the back-wall
+          trigger zone so the HUD prompt + V keybind activate. */}
+      {onVaultProximityChange && (
+        <VaultProximityWatcher
+          cameraRef={cameraRef}
+          enabled={true}
+          onChange={onVaultProximityChange}
+        />
+      )}
 
       {/* Dropped Loot Items */}
       <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />

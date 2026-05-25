@@ -53,6 +53,7 @@ import { playSpatialSound, playSound } from '@/lib/spatialAudio';
 import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef, LightningSettings, CycleState, ViewSettings, DEFAULT_VIEW_SETTINGS } from './FortressTypes';
 import { LightningPanel } from './LightningPanel';
 import { PentabulletCrosshair } from './PentabulletCrosshair';
+import { VaultPanel } from '@/features/vault';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
 
@@ -228,6 +229,18 @@ export function Fortress() {
   const [treeChopModalOpen, setTreeChopModalOpen] = useState(false);
   const [pendingChopPosition, setPendingChopPosition] = useState<{ x: number; y: number; z: number } | null>(null);
   const [chopProgress, setChopProgress] = useState(0);
+
+  // Vault state — proximity flag flips when player walks into the
+  // back-wall trigger zone, prompt + V keybind become active. Open
+  // flag controls the modal.
+  const [vaultInRange, setVaultInRange] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
+  const handleOpenVault = useCallback(() => setVaultOpen(true), []);
+  const handleCloseVault = useCallback(() => setVaultOpen(false), []);
+  // Auto-close vault if the player walks out of range while it's open.
+  useEffect(() => {
+    if (!vaultInRange && vaultOpen) setVaultOpen(false);
+  }, [vaultInRange, vaultOpen]);
   
   // Waterfall disabled for performance testing (Phase 1)
   const waterfallEnabled = false;
@@ -1851,6 +1864,9 @@ export function Fortress() {
           consumeGrenade={consumeGrenade}
           onAdminGrantGrenade={grantAdminGrenade}
           onAdminGrantHealthPotion={grantAdminHealthPotion}
+          vaultInRange={vaultInRange}
+          onVaultProximityChange={setVaultInRange}
+          onOpenVault={handleOpenVault}
           onJetBoostStateChange={setJetBoostState}
           selectedItemDef={selectedItemDef}
           addItem={addItem}
@@ -1962,6 +1978,45 @@ export function Fortress() {
         onSettingsChange={handleLightningSettingsChange}
         cycleState={cycleStateRef.current}
       />
+
+      {/* Vault — modal that opens when V is pressed near the fortress
+          back wall. Per-account global stash. */}
+      <VaultPanel
+        isOpen={vaultOpen}
+        onClose={handleCloseVault}
+        userId={user?.id ?? null}
+        inventory={inventory}
+        equippedItems={equippedItems}
+        addItem={addItem}
+        removeInventoryRow={removeInventoryRow}
+        updateEquippedSlot={updateEquippedSlot}
+      />
+
+      {/* Proximity prompt — only visible when in range AND vault not
+          already open. Center-bottom of the screen, HUD-style. */}
+      {vaultInRange && !vaultOpen && (
+        <div style={{
+          position: 'fixed',
+          bottom: 120,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '10px 18px',
+          borderRadius: 'var(--hud-radius)',
+          background: 'hsla(211, 30%, 20%, 0.7)',
+          border: '1px solid hsla(211, 34%, 73%, 0.6)',
+          backdropFilter: 'blur(8px) saturate(140%)',
+          WebkitBackdropFilter: 'blur(8px) saturate(140%)',
+          color: 'hsl(0, 0%, 95%)',
+          fontSize: 14,
+          fontFamily: 'var(--hud-font)',
+          letterSpacing: 0.3,
+          zIndex: 100,
+          pointerEvents: 'none',
+          textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+        }}>
+          Press <b style={{ color: 'hsl(45, 80%, 70%)' }}>V</b> to open your <b>VAULT</b>
+        </div>
+      )}
       </FortressProviders>
     </div>
   );

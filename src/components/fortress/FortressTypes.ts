@@ -222,6 +222,10 @@ export interface SceneProps {
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: grant 1 health potion (same equip rule). */
   onAdminGrantHealthPotion?: () => Promise<boolean>;
+  /** Vault: parent state, scene reports proximity, V opens. */
+  vaultInRange?: boolean;
+  onVaultProximityChange?: (inRange: boolean) => void;
+  onOpenVault?: () => void;
   // Jet Boost system
   onJetBoostStateChange?: (state: JetBoostState) => void;
   // Selected hotbar item (for flame glove detection)
@@ -300,6 +304,9 @@ export interface FirstPersonControlsProps {
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: Cmd+H grants a health potion. */
   onAdminGrantHealthPotion?: () => Promise<boolean>;
+  /** V key handler — Fortress.tsx only wires this when player is in
+   *  the vault's back-wall trigger zone. */
+  onOpenVault?: () => void;
   // Admin spawn shortcut (!2# for shnakes)
   onSpawnShnake?: (tier: number) => void;
   // Jet Boost system

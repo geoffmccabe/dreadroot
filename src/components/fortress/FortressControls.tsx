@@ -98,6 +98,9 @@ export function FirstPersonControls({
   // Admin/superadmin item grants — Cmd+G grenade, Cmd+H health potion.
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
+  // Vault — V key opens it, only fires when caller passes a handler
+  // (Fortress.tsx gates this by proximity to the back wall).
+  onOpenVault,
   // Admin spawn shortcut
   onSpawnShnake,
   // Jet Boost system
@@ -667,8 +670,17 @@ export function FirstPersonControls({
           onHarvestFruitRef.current();
         }
         break;
+      case 'KeyV':
+        // Open vault if the player is near the fortress back-wall.
+        // No modifier — Cmd/Ctrl+V is left alone (browser paste).
+        if (event.metaKey || event.ctrlKey || event.altKey) break;
+        if (onOpenVault) {
+          event.preventDefault();
+          onOpenVault();
+        }
+        break;
     }
-  }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange, onAdminGrantGrenade, onAdminGrantHealthPotion]);
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange, onAdminGrantGrenade, onAdminGrantHealthPotion, onOpenVault]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     // Process key releases unconditionally — gating these on panelOpen
