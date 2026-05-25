@@ -179,9 +179,27 @@ interface ShpiderRendererProps {
   fragmentsRef: React.RefObject<DeathFragment[]>;
   cameraRef: React.RefObject<THREE.Camera | null>;
   definitions: ShpiderDefinition[];
+  /**
+   * Fired when a shpider touches the local player (player center
+   * within ATTACK_RANGE). Damage and knockback scale with shpider
+   * tier. direction is unit-length from shpider toward player.
+   */
+  onPlayerHit?: (
+    damage: number,
+    knockback: number,
+    direction: THREE.Vector3,
+  ) => void;
 }
 
-export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definitions }: ShpiderRendererProps) {
+// Touch-attack tuning. Player center is approximately the camera, so
+// "within 1m" means the shpider body is essentially touching the
+// player. Cooldown prevents per-frame melee spam.
+const SHPIDER_ATTACK_RANGE = 1.0;
+const SHPIDER_ATTACK_COOLDOWN_MS = 800;
+// Reusable direction scratch for the onPlayerHit callback.
+const _hitDirScratch = new THREE.Vector3();
+
+export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definitions, onPlayerHit }: ShpiderRendererProps) {
   // ── Per-tier texture loading. One material per tier per part-type,
   // so each tier renders with its own admin-uploaded textures. Tier
   // rows missing a texture fall back to the bamboo placeholder.
@@ -293,6 +311,32 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
 
       // === AI tick. Mutates position/rotation/surfaceNormal. ===
       stepShpiderHopAI(s, { now, dt, playerX, playerY, playerZ, others: list });
+
+      // === Touch attack. If the shpider's center is within
+      //     SHPIDER_ATTACK_RANGE of the player (3D distance) and the
+      //     attack cooldown has elapsed, fire the onPlayerHit callback
+      //     with tier-scaled damage and knockback. Damage comes from
+      //     the definition row (admin-tunable per tier). Knockback
+      //     also scales — T1 small bump, T10 strong push — using
+      //     definition.damage_per_hit as the scaling factor (no extra
+      //     stat needed; can be split out later if tuning demands).
+      if (onPlayerHit) {
+        const attackDX = playerX - s.position.x;
+        const attackDY = playerY - s.position.y;
+        const attackDZ = playerZ - s.position.z;
+        const attackDistSq = attackDX*attackDX + attackDY*attackDY + attackDZ*attackDZ;
+        const range = SHPIDER_ATTACK_RANGE;
+        if (attackDistSq < range * range && now - s.lastAttackAt >= SHPIDER_ATTACK_COOLDOWN_MS) {
+          s.lastAttackAt = now;
+          const attackDist = Math.sqrt(attackDistSq) || 1;
+          _hitDirScratch.set(attackDX / attackDist, 0, attackDZ / attackDist);
+          const damage = s.definition.damage_per_hit;
+          // Knockback in m/s. Min 4 m/s so T1 still bumps; cap nothing
+          // since high tiers should yeet the player.
+          const knockback = Math.max(4, damage);
+          onPlayerHit(damage, knockback, _hitDirScratch);
+        }
+      }
 
       const dx = s.position.x - playerX;
       const dz = s.position.z - playerZ;

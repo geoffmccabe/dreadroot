@@ -342,6 +342,23 @@ export function FortressScene({
     }, 0);
   }, [applyDamageWithKnockback, takeDamage]);
   
+// Shpider touch-attack handler. Mirrors handleShwarmPlayerHit:
+// universal damage system if available, else legacy takeDamage,
+// always plays the player-hit sound.
+const handleShpiderPlayerHit = useCallback((damage: number, knockback: number, direction: THREE.Vector3) => {
+  setTimeout(() => {
+    if (applyDamageWithKnockback) {
+      applyDamageWithKnockback(damage, direction.clone(), knockback, { type: 'enemy', entityName: 'Shpider' });
+    } else if (takeDamage) {
+      takeDamage(damage, direction.clone(), knockback);
+    }
+    if (audioRefs.current.playerHit) {
+      audioRefs.current.playerHit.currentTime = 0;
+      audioRefs.current.playerHit.play().catch(() => {});
+    }
+  }, 0);
+}, [applyDamageWithKnockback, takeDamage]);
+
 // Universal Enemy AI system control flag
 // Phase G: AI system enabled - controls all enemy behaviors via EnemyManager.
 // Legacy movement hooks are disabled when this is true.
@@ -1434,6 +1451,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         fragmentsRef={shpiderFragmentsRef}
         cameraRef={cameraRef}
         definitions={shpiderDefinitions}
+        onPlayerHit={handleShpiderPlayerHit}
       />
 
       {/* Dropped Loot Items */}

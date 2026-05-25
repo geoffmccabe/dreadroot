@@ -74,12 +74,33 @@ export function useSeedPlanting({
     tier: number,
     forceTreeType?: 'original' | 'fungal' | 'wide'
   ): Promise<PlantSeedResult> => {
-    if (!worldId || !userId || !TREE_CONFIG.ENABLED) {
-      return { success: false, error: 'Not ready to plant' };
+    // Surface every early-return path as a visible toast — previously
+    // many of these returned `{success:false}` silently, which let
+    // user reports like "I heard the seed plant but nothing grew"
+    // happen with no clue what blocked it.
+    if (!TREE_CONFIG.ENABLED) {
+      toast({ title: 'Trees disabled', description: 'TREE_CONFIG.ENABLED is false in code', variant: 'destructive' });
+      return { success: false, error: 'Tree feature disabled' };
     }
-
+    if (!worldId) {
+      toast({ title: 'Cannot plant seed', description: 'World not loaded yet — wait a few seconds and try again', variant: 'destructive' });
+      console.warn('[SeedPlanting] worldId missing');
+      return { success: false, error: 'World not loaded' };
+    }
+    if (!userId) {
+      toast({ title: 'Cannot plant seed', description: 'You are not signed in', variant: 'destructive' });
+      console.warn('[SeedPlanting] userId missing');
+      return { success: false, error: 'Not signed in' };
+    }
     if (!placeBlock) {
+      toast({ title: 'Cannot plant seed', description: 'Block placement system not ready', variant: 'destructive' });
+      console.warn('[SeedPlanting] placeBlock callback missing');
       return { success: false, error: 'Block placement not available' };
+    }
+    if (!seedDefinitions || seedDefinitions.length === 0) {
+      toast({ title: 'Cannot plant seed', description: 'Seed definitions still loading — try again in a moment', variant: 'destructive' });
+      console.warn('[SeedPlanting] seedDefinitions empty');
+      return { success: false, error: 'Seed definitions not loaded' };
     }
 
     // Find seed definition matching tier AND tree type
@@ -177,11 +198,15 @@ export function useSeedPlanting({
     }
 
     if (!seedDef) {
+      toast({ title: 'Cannot plant seed', description: `No seed definition for tier ${tier}${forceTreeType ? ' / ' + forceTreeType : ''}`, variant: 'destructive' });
+      console.warn(`[SeedPlanting] no seedDef for tier=${tier} forceTreeType=${forceTreeType}`);
       return { success: false, error: `Seed tier ${tier} not found` };
     }
 
     // Only require name for regular trees, not forced fungal trees
     if (!forceTreeType && (!seedDef.name || seedDef.name.trim() === '')) {
+      toast({ title: 'Seed not configured', description: `Tier ${tier} seed needs a name in the admin panel`, variant: 'destructive' });
+      console.warn(`[SeedPlanting] tier ${tier} seedDef has empty name; aborting`);
       return { success: false, error: `Seed tier ${tier} is not configured yet` };
     }
 
@@ -214,6 +239,7 @@ export function useSeedPlanting({
         .maybeSingle();
 
       if (existing) {
+        toast({ title: 'Already a tree here', description: 'Try a different spot', variant: 'destructive' });
         return { success: false, error: 'A tree is already planted here' };
       }
 
@@ -309,6 +335,12 @@ export function useSeedPlanting({
           });
           return { success: false, error: 'Chunk planting limit exceeded' };
         }
+        // Surface the real DB error so we stop guessing on user reports.
+        toast({
+          title: 'Seed save failed',
+          description: rpcError.message || 'Database returned an error',
+          variant: 'destructive'
+        });
         return { success: false, error: 'Failed to plant seed' };
       }
 
@@ -333,6 +365,11 @@ export function useSeedPlanting({
       return { success: true, treeId: newTreeId };
     } catch (err) {
       console.error('[SeedPlanting] Error:', err);
+      toast({
+        title: 'Unexpected error',
+        description: err instanceof Error ? err.message : 'See browser console for details',
+        variant: 'destructive'
+      });
       return { success: false, error: 'Unexpected error while planting' };
     } finally {
       setIsPlanting(false);

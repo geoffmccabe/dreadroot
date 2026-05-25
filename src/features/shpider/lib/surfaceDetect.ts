@@ -149,16 +149,32 @@ export function pickTreeAwareTarget(
     }
   }
 
-  // Final fallback: stay on current surface, hop in current up's tangent plane.
-  _v.set(surfaceNormal.x, surfaceNormal.y, surfaceNormal.z);
-  // Pick any vector orthogonal to surfaceNormal.
-  const tanX = Math.abs(_v.y) < 0.9 ? 0 : 1;
-  const tanZ = Math.abs(_v.y) < 0.9 ? 1 : 0;
-  outNormal.copy(_v);
-  outPos.set(
-    shpiderX + (tanX ? 1 : 0) * dist,
-    shpiderY,
-    shpiderZ + (tanZ ? 1 : 0) * dist,
-  );
+  // Final fallback: hop horizontally toward the player and snap Y to
+  // ground level. (Previous version picked an arbitrary +X/+Z tangent
+  // direction regardless of player position — on open ground where
+  // findLandingSurface returns false for every sample because the
+  // terrain isn't in the voxel collision grid, every shpider would
+  // hop east toward the same horizon point. THIS is the "all shpiders
+  // heading to the horizon" bug from 2026-May-24.)
+  const horizDX = playerX - shpiderX;
+  const horizDZ = playerZ - shpiderZ;
+  const horizLen = Math.hypot(horizDX, horizDZ);
+  let fbDX: number;
+  let fbDZ: number;
+  if (horizLen > 0.1) {
+    fbDX = (horizDX / horizLen) * dist;
+    fbDZ = (horizDZ / horizLen) * dist;
+  } else {
+    // Player is on top of the shpider — pick a random horizontal direction.
+    const ang = Math.random() * Math.PI * 2;
+    fbDX = Math.cos(ang) * dist;
+    fbDZ = Math.sin(ang) * dist;
+  }
+  const fbX = shpiderX + fbDX;
+  const fbZ = shpiderZ + fbDZ;
+  // Snap Y to top of any voxel stack at (fbX, fbZ), else world floor (y=0).
+  const groundY = findGroundY(fbX, shpiderY + 4, fbZ, 64);
+  outPos.set(fbX, groundY === -Infinity ? 0 : groundY, fbZ);
+  outNormal.set(0, 1, 0);
   return false;
 }
