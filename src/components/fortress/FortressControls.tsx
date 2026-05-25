@@ -671,12 +671,11 @@ export function FirstPersonControls({
   }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange, onAdminGrantGrenade, onAdminGrantHealthPotion]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
-    if (panelOpen || 
-        document.activeElement?.tagName === 'INPUT' || 
-        document.activeElement?.tagName === 'TEXTAREA') {
-      return;
-    }
-    
+    // Process key releases unconditionally — gating these on panelOpen
+    // / focused inputs would leave movement booleans (ctrl, shift, w/a/
+    // s/d, …) stuck on TRUE if a panel opens while a key is held. The
+    // worst symptom: pressing Ctrl, opening a panel, releasing Ctrl,
+    // closing the panel — the player would then be stuck crouched.
     switch (event.code) {
       case 'KeyW':
       case 'ArrowUp':
@@ -1512,6 +1511,19 @@ export function FirstPersonControls({
     // Cancel pentabullet if pointer lock is lost
     if (!isLocked.current && pentabulletPhaseRef.current !== 'idle') {
       cancelPentabulletCharge();
+    }
+    // Clear all movement keys when pointer lock is lost — held keys
+    // can otherwise stick (the browser stops delivering keyup once the
+    // canvas loses focus). Worst case before this: a player holding
+    // Ctrl when a panel auto-opened (or any focus shift) would stay
+    // crouched after returning, then a second Ctrl press could send
+    // weird state to other handlers.
+    if (!isLocked.current) {
+      const k = keys.current;
+      k.w = k.s = k.a = k.d = false;
+      k.shift = k.space = k.ctrl = k.q = k.z = k.e = false;
+      k.previouslyCtrl = false;
+      k.rightMouse = false;
     }
   }, [gl, cancelPentabulletCharge]);
   
