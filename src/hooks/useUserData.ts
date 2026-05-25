@@ -913,9 +913,40 @@ export const useUserData = () => {
     return { newLevel: leveledUp };
   }, [user?.id, profile]);
 
-  // Add an item to inventory (server-verified)
+  // Keys that DON'T stack — each one occupies its own inventory row /
+  // grid tile so the 18-slot grid naturally caps how many a player can
+  // carry. Grenades cover all tiers (grenade, grenade_t2..grenade_t10).
+  const isNonStackableKey = (key: string | null | undefined): boolean => {
+    if (!key) return false;
+    return key === 'health_potion' || key === 'grenade' || key.startsWith('grenade_t');
+  };
+
+  // Add an item to inventory (server-verified). Looks up the item's
+  // canonical key to decide whether to stack onto an existing row or
+  // create one new row per unit (non-stackable items).
   const addItem = async (itemId: string, quantity: number = 1): Promise<boolean> => {
     if (!user?.id) return false;
+
+    const { data: itemDef } = await supabase
+      .from('items')
+      .select('key')
+      .eq('id', itemId)
+      .maybeSingle();
+    const nonStackable = isNonStackableKey(itemDef?.key);
+
+    if (nonStackable) {
+      // One row per unit — the row IS the slot.
+      const rows = Array.from({ length: Math.max(1, quantity) }, () => ({
+        user_id: user.id, item_type: 'item', item_id: itemId, quantity: 1,
+      }));
+      const { data: inserted, error } = await supabase
+        .from('user_inventory')
+        .insert(rows)
+        .select();
+      if (error || !inserted) return false;
+      setInventory(prev => [...prev, ...inserted]);
+      return true;
+    }
 
     const { data: existing } = await supabase
       .from('user_inventory')
@@ -941,6 +972,25 @@ export const useUserData = () => {
         .single();
       if (error || !newItem) return false;
       setInventory(prev => [...prev, newItem]);
+    }
+    return true;
+  };
+
+  // Delete one specific inventory row. Used to consume non-stackable
+  // items (each row holds quantity=1, so consuming = deleting). Returns
+  // true on success.
+  const removeInventoryRow = async (rowId: string): Promise<boolean> => {
+    if (!user?.id) return false;
+    setInventory(prev => prev.filter(i => i.id !== rowId));
+    const { error } = await supabase
+      .from('user_inventory')
+      .delete()
+      .eq('id', rowId);
+    if (error) {
+      // Refetch on failure — easier than reconstructing the deleted row.
+      const { data } = await supabase.from('user_inventory').select('*').eq('user_id', user.id);
+      if (data) setInventory(data);
+      return false;
     }
     return true;
   };
@@ -1060,6 +1110,7 @@ export const useUserData = () => {
     addPoints,
     addItem,
     removeItems,
+    removeInventoryRow,
     updateBlockchainAddress,
     updateEquippedSlot,
     updateDisplayName,

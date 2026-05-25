@@ -196,18 +196,33 @@ export function FortressHUD(props: FortressHUDProps) {
     return Array.from(ids);
   }, [equippedItems, inventory]);
 
-  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; item_number: number | null; texture_url: string | null; tier: number | null }>>(new Map());
+  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null }>>(new Map());
 
   const loadItemDefs = useCallback(async () => {
     if (allItemIds.length === 0) { setItemDefs(new Map()); return; }
     const { data } = await supabase
       .from('items')
-      .select('id, name, item_number, texture_url, tier')
+      .select('id, key, name, item_number, texture_url, tier')
       .in('id', allItemIds);
-    const map = new Map<string, { name: string; item_number: number | null; texture_url: string | null; tier: number | null }>();
+    const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null }>();
     for (const d of data || []) map.set(d.id, d);
     setItemDefs(map);
   }, [allItemIds]);
+
+  // Item keys that don't stack — each row gets its own grid tile so
+  // the 18-slot cap naturally limits how many a player can carry.
+  // Mirrors useUserData.isNonStackableKey.
+  const isNonStackableKey = useCallback((key: string | null | undefined): boolean => {
+    if (!key) return false;
+    return key === 'health_potion' || key === 'grenade' || key.startsWith('grenade_t');
+  }, []);
+  const nonStackableItemIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const [id, def] of itemDefs) {
+      if (isNonStackableKey(def.key)) s.add(id);
+    }
+    return s;
+  }, [itemDefs, isNonStackableKey]);
 
   useEffect(() => { loadItemDefs(); }, [loadItemDefs]);
 
@@ -260,57 +275,72 @@ export function FortressHUD(props: FortressHUDProps) {
     [equippedItems]
   );
 
-  // Fixed 18-slot inventory grid — each slot holds an itemId or null
-  // Items stay in their positions; equipping removes from slot but doesn't shift others
+  // Fixed 18-slot inventory grid. Each slot holds a "grid key" — for
+  // stackable items the key is the itemId (one tile per itemId, stacks
+  // count via quantity badge), for non-stackable items the key is the
+  // inventory row.id (each grenade / potion gets its own tile).
   const [invSlots, setInvSlots] = useState<Array<string | null>>(new Array(18).fill(null));
 
-  // All inventory items with defs (regardless of equipped status, for lookups)
+  // All renderable inventory entries, keyed by grid key (itemId for
+  // stacks, rowId for non-stackable rows). One entry per future tile.
   const inventoryItemsMap = useMemo(() => {
-    const map = new Map<string, { itemId: string; sprite: string | null; name: string | null; tier: number | null; quantity: number }>();
+    const map = new Map<string, { gridKey: string; itemId: string; sprite: string | null; name: string | null; tier: number | null; quantity: number; isNonStackRow: boolean }>();
     for (const inv of (inventory || [])) {
-      if (inv.item_type === 'item' && inv.item_id && inv.quantity > 0) {
-        const def = itemDefs.get(inv.item_id);
-        map.set(inv.item_id, {
-          itemId: inv.item_id,
-          sprite: getSpriteUrl(def),
-          name: def?.name || null,
-          tier: def?.tier ?? null,
-          quantity: inv.quantity,
-        });
-      }
+      if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
+      const def = itemDefs.get(inv.item_id);
+      const nonStack = nonStackableItemIds.has(inv.item_id);
+      const gridKey = nonStack ? inv.id : inv.item_id;
+      // For stackable items multiple rows would collapse; sum their qty.
+      const prev = map.get(gridKey);
+      const qty = nonStack ? 1 : (prev ? prev.quantity + inv.quantity : inv.quantity);
+      map.set(gridKey, {
+        gridKey,
+        itemId: inv.item_id,
+        sprite: getSpriteUrl(def),
+        name: def?.name || null,
+        tier: def?.tier ?? null,
+        quantity: qty,
+        isNonStackRow: nonStack,
+      });
     }
     return map;
-  }, [inventory, itemDefs, getSpriteUrl]);
+  }, [inventory, itemDefs, getSpriteUrl, nonStackableItemIds]);
 
-  // Sync: place new inventory items into first empty slot, remove deleted items
+  // Sync: place new entries into the first empty slot, remove ones
+  // that no longer exist (consumed, dropped, etc.).
   useEffect(() => {
     setInvSlots(prev => {
       const next = [...prev];
-      const allInvIds = new Set(inventoryItemsMap.keys());
-      // Remove items that no longer exist in inventory
+      const allKeys = new Set(inventoryItemsMap.keys());
       for (let i = 0; i < 18; i++) {
-        if (next[i] && !allInvIds.has(next[i]!)) next[i] = null;
+        if (next[i] && !allKeys.has(next[i]!)) next[i] = null;
       }
-      // Items currently placed in the grid
-      const placedIds = new Set(next.filter(Boolean) as string[]);
-      // Items currently equipped in hotbar don't need a grid slot
-      // but keep them placed if they're already in a slot (they just won't render)
-      // Find new items not yet placed anywhere
-      for (const id of allInvIds) {
-        if (!placedIds.has(id) && !equippedItemIdSet.has(id)) {
-          const emptyIdx = next.indexOf(null);
-          if (emptyIdx !== -1) next[emptyIdx] = id;
-        }
+      const placed = new Set(next.filter(Boolean) as string[]);
+      for (const key of allKeys) {
+        if (placed.has(key)) continue;
+        const entry = inventoryItemsMap.get(key);
+        // Stackable items "owned" by an equipped hotbar slot don't
+        // need a grid tile (they only render in the hotbar). Non-
+        // stackable rows always get a tile even if a hotbar slot
+        // references the same itemId — the hotbar is a shortcut, not
+        // a physical container.
+        if (entry && !entry.isNonStackRow && equippedItemIdSet.has(entry.itemId)) continue;
+        const emptyIdx = next.indexOf(null);
+        if (emptyIdx !== -1) next[emptyIdx] = key;
       }
       return next;
     });
   }, [inventoryItemsMap, equippedItemIdSet]);
 
-  // Build renderable grid: only show items that are NOT currently equipped
+  // Render entries in their slot positions, hiding stackable items
+  // whose only home is the hotbar.
   const inventoryGridItems = useMemo(() => {
-    return invSlots.map(id => {
-      if (!id || equippedItemIdSet.has(id)) return null;
-      return inventoryItemsMap.get(id) || null;
+    return invSlots.map(key => {
+      if (!key) return null;
+      const entry = inventoryItemsMap.get(key);
+      if (!entry) return null;
+      if (!entry.isNonStackRow && equippedItemIdSet.has(entry.itemId)) return null;
+      return entry;
     });
   }, [invSlots, inventoryItemsMap, equippedItemIdSet]);
 

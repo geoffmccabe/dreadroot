@@ -233,7 +233,7 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -370,26 +370,26 @@ export function Fortress() {
   }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
 
   // Pull one grenade out of inventory and return its tier. Picks the
-  // HIGHEST tier the user owns so forging is rewarded. Used by the
-  // throw flow in FortressScene.handleThrowGrenade.
+  // HIGHEST tier the user owns so forging is rewarded. Grenades are
+  // non-stackable — each row holds exactly one — so consume = delete
+  // the specific row, not decrement.
   const consumeGrenade = useCallback((): number | null => {
     const defs = grenadeDefsRef.current;
     let bestTier = 0;
-    let bestItemId: string | null = null;
+    let bestRowId: string | null = null;
     for (const inv of inventory) {
       if (inv.quantity <= 0 || !inv.item_id) continue;
       const tier = defs.get(inv.item_id);
       if (tier == null) continue;
       if (tier > bestTier) {
         bestTier = tier;
-        bestItemId = inv.item_id;
+        bestRowId = inv.id;
       }
     }
-    if (bestTier === 0 || !bestItemId) return null;
-    // useBlock matches on item_type OR item_id; UUID hits item_id.
-    void useBlock(bestItemId);
+    if (bestTier === 0 || !bestRowId) return null;
+    void removeInventoryRow(bestRowId);
     return bestTier;
-  }, [inventory, useBlock]);
+  }, [inventory, removeInventoryRow]);
 
   // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
@@ -429,21 +429,24 @@ export function Fortress() {
     if (itemDef.key === 'health_potion') {
       // Don't waste a potion at full HP.
       if (healthRef.current.currentHealth >= healthRef.current.maxHealth) return;
+      // Find one potion row to consume — non-stackable, each row has
+      // quantity=1.
+      const row = inventory.find(i => i.item_id === eq.itemId && i.quantity > 0);
+      if (!row) return;
       heal(healthRef.current.maxHealth);
       try {
         const audio = new Audio('/swallow_potion.mp3');
         audio.volume = 0.8;
         void audio.play();
       } catch { /* sound failure shouldn't break consume */ }
-      // Decrement the inventory row. useBlock matches on key OR id.
-      await useBlock(itemDef.key);
-      // If this was the last potion, unequip the slot so the UI updates.
-      const remaining = inventory.find(i => i.item_type === itemDef.key || i.item_id === eq.itemId);
-      if (!remaining || remaining.quantity <= 1) {
+      await removeInventoryRow(row.id);
+      // If this was the last potion, unequip slot 6.
+      const stillHave = inventory.some(i => i.id !== row.id && i.item_id === eq.itemId && i.quantity > 0);
+      if (!stillHave) {
         await updateEquippedSlot(slot, null);
       }
     }
-  }, [equippedItems, heal, healthRef, useBlock, inventory, updateEquippedSlot]);
+  }, [equippedItems, heal, healthRef, inventory, removeInventoryRow, updateEquippedSlot]);
 
   // Compute bullet tier from player level (automatic for all players)
   // Level 1-3 → Tier 1, Level 4-6 → Tier 2, etc.
