@@ -10,6 +10,9 @@ import { playSpatialSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { entityCollisionGrid, worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
+import { enemyCombatRegistry, type RaycastResult } from '@/features/enemies/combat/EnemyCombatRegistry';
+
+const _raycastResult: RaycastResult = { adapter: null, enemy: null, t: 0, hitX: 0, hitY: 0, hitZ: 0 };
 import { startPerfStallObservers, stopPerfStallObservers } from '@/lib/perfStallObservers';
 
 import {
@@ -629,6 +632,84 @@ export function useFortressFrameLoop({
           }
         }
         
+        // === UNIVERSAL ENEMY COMBAT REGISTRY ===
+        // Any enemy type registered with enemyCombatRegistry gets hit
+        // tested in a single pass. Per-type inline blocks below are
+        // kept as a fallback for enemies not yet ported into the
+        // registry (currently: shtickman).
+        if (!hit) {
+          const tierDef = getDefinitionRef.current(bullet.tier);
+          const bx = bullet.position.x;
+          const by = bullet.position.y;
+          const bz = bullet.position.z;
+          const prevBX = (bullet as any).prevX ?? bx;
+          const prevBY = (bullet as any).prevY ?? by;
+          const prevBZ = (bullet as any).prevZ ?? bz;
+
+          if (enemyCombatRegistry.raycastBullet(prevBX, prevBY, prevBZ, bx, by, bz, _raycastResult)) {
+            const adapter = _raycastResult.adapter!;
+            const enemy = _raycastResult.enemy!;
+            const hitX = _raycastResult.hitX;
+            const hitY = _raycastResult.hitY;
+            const hitZ = _raycastResult.hitZ;
+
+            // Compute headshot using the enemy's actual hitbox bounds.
+            const hb = adapter.getHitbox(enemy);
+            const isHeadshot = hb ? (hitY - hb.bottomY) > (hb.topY - hb.bottomY) * 0.75 : false;
+
+            // Damage = base × velocity ratio. Same formula the inline
+            // shombie/shpider blocks used.
+            const BASE_BULLET_DAMAGE = 25;
+            const velocityRatio = bullet.speed / tierDef.velocity;
+            const scaled = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
+            const finalDamage = isHeadshot ? scaled * 2 : scaled;
+
+            // Knockback dir — horizontal component of bullet direction.
+            _scratchBulletDir.copy(bullet.direction).normalize();
+            const kbX = _scratchBulletDir.x;
+            const kbZ = _scratchBulletDir.z;
+
+            adapter.applyDamage(enemy, {
+              damage: finalDamage,
+              bulletSpeed: bullet.speed,
+              knockbackDirX: kbX,
+              knockbackDirY: 0,
+              knockbackDirZ: kbZ,
+              hitX, hitY, hitZ,
+              isHeadshot,
+              source: 'bullet',
+            });
+
+            if (onPointsEarned) onPointsEarned(finalDamage);
+
+            // Impact fire — same config the legacy blocks built.
+            const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
+            const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+            const fireConfig = {
+              colors: tierDef.colors,
+              size: tierDef.burn_width * pentaMul,
+              height: tierDef.burn_height * pentaMul,
+              duration: tierDef.burn_time * pentaMul,
+            };
+            if (useNebulaForBulletImpacts && nebulaImpactsRef?.current) {
+              nebulaImpactsRef.current.spawnImpact(hitPos, fireConfig);
+            } else if (bulletImpactsRef?.current) {
+              bulletImpactsRef.current.spawnImpact(hitPos, fireConfig);
+            }
+
+            // Per-adapter hit sound (falls back to generic thud).
+            const hitSound = adapter.getHitSoundUrl?.(enemy) ?? '/wooden_thud_sound.mp3';
+            const sdx = hitX - prevBX;
+            const sdy = hitY - prevBY;
+            const sdz = hitZ - prevBZ;
+            const sdist = Math.hypot(sdx, sdy, sdz);
+            void playSpatialSound(hitSound, sdist, { baseVolume: 0.7 });
+
+            hit = true;
+            needsBulletRender = true;
+          }
+        }
+
         // Check SHOMBIE collisions (if not already hit something)
         // Use ray-cylinder intersection from previous to current position
         if (!hit) {

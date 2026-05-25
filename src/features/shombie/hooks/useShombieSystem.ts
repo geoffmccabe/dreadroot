@@ -13,6 +13,8 @@ import {
   KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '../constants';
 
 // Head movement type randomizer - 1/3 each
 function randomHeadMovementType(): HeadMovementType {
@@ -409,6 +411,33 @@ export function useShombieSystem({
       clearInterval(interval);
     };
   }, [isEnabled, spawningEnabled, definitions, getPlayerChunk, countInChunk, spawnShombie]);
+
+  // Register Shombie with the EnemyCombatRegistry so the universal
+  // bullet + flame pipelines work without per-type code.
+  useEffect(() => {
+    return enemyCombatRegistry.register({
+      type: 'shombie',
+      getActiveEnemies: () => shombiesRef.current,
+      getId: (s) => s.id,
+      getHitbox: (s) => {
+        if (!s.isActive) return null;
+        const scale = s.scale ?? 1;
+        return {
+          centerX: s.position.x,
+          centerZ: s.position.z,
+          bottomY: s.position.y,
+          topY: s.position.y + SHOMBIE_HITBOX_HEIGHT * scale,
+          radius: SHOMBIE_HITBOX_RADIUS * scale,
+        };
+      },
+      applyDamage: (s, info) => {
+        const dir = new THREE.Vector3(info.knockbackDirX, 0, info.knockbackDirZ);
+        const killed = damageShombie(s.id, info.damage, dir, info.isHeadshot, dir);
+        return killed;
+      },
+      getHitSoundUrl: () => '/bullet_impact_1.mp3',
+    });
+  }, [damageShombie]);
 
   return {
     shombies,

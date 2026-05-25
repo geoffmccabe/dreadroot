@@ -1,6 +1,9 @@
 /**
  * useBurnSystem - Universal burn-over-time system for all entity types.
  *
+ * Imports the enemy combat registry so any registered adapter can
+ * receive flame damage without per-type code here.
+ *
  * When an entity is hit by the flamethrower, it catches fire visually
  * (same colors as flamethrower tier). After the flamethrower stops hitting,
  * a 5-second DOT applies with shrinking flames and halving damage each second.
@@ -24,6 +27,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { FlameColorMode, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 // Shrink factors per DOT second (0-4)
 const SHRINK = [1.0, 0.67, 0.44, 0.30, 0.20];
@@ -393,6 +397,27 @@ export function useBurnSystem({
       case 'player':
         takeDamage?.(actualDmg);
         break;
+      default: {
+        // Universal dispatch via the enemy combat registry — works for
+        // any monster that's registered an adapter (shpider, and any
+        // future enemy not in the legacy switch above).
+        const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
+        if (adapter) {
+          const list = adapter.getActiveEnemies();
+          const enemy = list.find(e => adapter.getId(e) === entry.entityId);
+          if (enemy) {
+            adapter.applyDamage(enemy, {
+              damage: actualDmg,
+              bulletSpeed: 0,
+              knockbackDirX: 0, knockbackDirY: 0, knockbackDirZ: 0,
+              hitX: 0, hitY: 0, hitZ: 0,
+              isHeadshot: false,
+              source: 'flame',
+            });
+          }
+        }
+        break;
+      }
     }
   }, [damageBlock, damageShnakeHead, damageShombie, damageWalapa, damageShtickman, takeDamage]);
 

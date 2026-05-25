@@ -17,6 +17,7 @@ import {
   type DeathFragment,
   DEATH_FRAGMENT_MAX,
 } from '../lib/deathFragments';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 const MAX_TOTAL_SHPIDERS = 200;
 const GROUP_SPREAD_RADIUS = 6;
@@ -372,6 +373,34 @@ export function useShpiderSystem({
       clearInterval(interval);
     };
   }, [isEnabled, spawningEnabled, definitions, getPlayerChunk, countInChunk, spawnShpiderAt]);
+
+  // Register with the universal EnemyCombatRegistry so every weapon
+  // (bullets, flamethrower, future explosions) can damage shpiders
+  // without per-type code in the weapon.
+  useEffect(() => {
+    return enemyCombatRegistry.register({
+      type: 'shpider',
+      getActiveEnemies: () => shpidersRef.current,
+      getId: (s) => s.id,
+      getHitbox: (s) => {
+        if (!s.isActive) return null;
+        const bodySize = s.definition.body_size * s.scale;
+        const headSize = s.definition.head_size * s.scale;
+        return {
+          centerX: s.position.x,
+          centerZ: s.position.z,
+          bottomY: s.position.y,
+          topY: s.position.y + bodySize + headSize,
+          radius: bodySize * 0.85,
+        };
+      },
+      applyDamage: (s, info) => {
+        const dir = new THREE.Vector3(info.knockbackDirX, 0, info.knockbackDirZ);
+        return damageShpider(s.id, info.damage, dir, info.bulletSpeed || 0);
+      },
+      getHitSoundUrl: () => '/bullet_impact_2.mp3',
+    });
+  }, [damageShpider]);
 
   return {
     shpiders,
