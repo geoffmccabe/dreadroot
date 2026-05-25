@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import type { ShwarmDefinition, ShwarmBlock, ActiveShwarm } from '../types';
 import { SHWARM_SPAWN_BOUNDS, MAX_SHWARM_BLOCKS } from '../constants';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 /**
  * Runtime state for an active shwarm
@@ -296,6 +297,43 @@ export function useShwarmSystem({
 
     return () => clearInterval(interval);
   }, []);
+
+  // EnemyCombatRegistry adapter. Each block is a separate "enemy" so
+  // the registry can hit individual blocks with one cylinder pass.
+  // Compound id format: "<shwarmId>::<blockId>".
+  useEffect(() => {
+    type ShwarmTarget = { shwarmId: string; block: ShwarmBlock; visualScale: number };
+    return enemyCombatRegistry.register<ShwarmTarget>({
+      type: 'shwarm',
+      getActiveEnemies: () => {
+        const out: ShwarmTarget[] = [];
+        for (const s of shwarmsRef.current) {
+          for (const block of s.blocks) {
+            if (block.isAlive) out.push({ shwarmId: s.id, block, visualScale: block.scale ?? 1 });
+          }
+        }
+        return out;
+      },
+      getId: (t) => `${t.shwarmId}::${t.block.id}`,
+      getHitbox: (t) => {
+        if (!t.block.isAlive) return null;
+        // Half-meter cubes — radius ≈ 0.35, height = 0.7 × visualScale.
+        const half = 0.35 * t.visualScale;
+        return {
+          centerX: t.block.position.x,
+          centerZ: t.block.position.z,
+          bottomY: t.block.position.y - half,
+          topY: t.block.position.y + half,
+          radius: half,
+        };
+      },
+      applyDamage: (t, info) => {
+        const r = damageBlock(t.shwarmId, t.block.id, info.damage);
+        return r.wasKilled;
+      },
+      getHitSoundUrl: () => '/bullet_impact_1.mp3',
+    });
+  }, [damageBlock]);
 
   return {
     shwarms,

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { PlantedTree } from '@/features/trees/types';
 import { decodeBlockType, getBaseTreeBlockType, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { entityCollisionGrid } from '@/lib/spatialHashGrid';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import type { ShnakeDefinition, ShnakeInstance, ShnakeSegment } from '../types';
 
 // Debug flag - disable in production for FPS
@@ -530,6 +531,31 @@ export function useShnakeSystem({
     const treeChunks = getTreeChunkKeys(tree);
     return treeChunks.has(playerCk);
   }, []);
+
+  // EnemyCombatRegistry adapter — head-only hitbox at segments[0].
+  useEffect(() => {
+    return enemyCombatRegistry.register({
+      type: 'shnake',
+      getActiveEnemies: () => shnakesRef.current,
+      getId: (s) => s.id,
+      getHitbox: (s) => {
+        if (!s.isActive || s.segments.length === 0) return null;
+        const head = s.segments[0];
+        return {
+          centerX: head.x + 0.5,
+          centerZ: head.z + 0.5,
+          bottomY: head.y,
+          topY: head.y + 1,
+          radius: 0.5,
+        };
+      },
+      applyDamage: (s, info) => {
+        const result = damageHead(s.id, info.damage);
+        return result.killedEntire;
+      },
+      getHitSoundUrl: () => '/bullet_impact_1.mp3',
+    });
+  }, [damageHead]);
 
   return {
     shnakes,

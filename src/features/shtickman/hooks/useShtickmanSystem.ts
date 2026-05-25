@@ -18,6 +18,8 @@ import {
   DEFAULT_PROXIMITY_SOUND_URL,
 } from '../constants';
 import { playSpatialSound } from '@/lib/spatialAudio';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { SHTICKMAN_HITBOX_RADIUS } from '../constants';
 import { pathfindingService } from '@/lib/pathfinding';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import type { PlantedTree } from '@/features/trees/types';
@@ -583,6 +585,33 @@ export function useShtickmanSystem({
 
     return () => clearInterval(interval);
   }, [isEnabled, definitions, ensureAtLeastOne]);
+
+  // EnemyCombatRegistry adapter — every weapon (bullet, flame, future)
+  // can target shtickmen without per-type code in the weapon.
+  useEffect(() => {
+    return enemyCombatRegistry.register({
+      type: 'shtickman',
+      getActiveEnemies: () => shtickmenRef.current,
+      getId: (s) => s.id,
+      getHitbox: (s) => {
+        if (!s.isActive) return null;
+        const scale = s.scale ?? 1;
+        const height = (s.heightBlocks ?? 22) * scale;
+        return {
+          centerX: s.position.x,
+          centerZ: s.position.z,
+          bottomY: s.position.y,
+          topY: s.position.y + height,
+          radius: SHTICKMAN_HITBOX_RADIUS * scale,
+        };
+      },
+      applyDamage: (s, info) => {
+        const dir = new THREE.Vector3(info.knockbackDirX, 0, info.knockbackDirZ);
+        return damageShtickman(s.id, info.damage, dir);
+      },
+      getHitSoundUrl: () => '/bullet_impact_1.mp3',
+    });
+  }, [damageShtickman]);
 
   return {
     shtickmen,

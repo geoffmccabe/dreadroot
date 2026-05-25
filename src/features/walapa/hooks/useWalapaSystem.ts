@@ -15,6 +15,8 @@ import {
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '../constants';
 
 // Spawn check interval in ms
 const SPAWN_CHECK_INTERVAL_MS = 10000;
@@ -627,6 +629,30 @@ export function useWalapaSystem({
       clearInterval(interval);
     };
   }, [isEnabled, cameraRef]);
+
+  // EnemyCombatRegistry adapter — universal bullet + flame dispatch.
+  useEffect(() => {
+    return enemyCombatRegistry.register({
+      type: 'walapa',
+      getActiveEnemies: () => walapasRef.current,
+      getId: (w) => w.id,
+      getHitbox: (w) => {
+        if (!w.isActive) return null;
+        const scale = w.scale ?? 1;
+        return {
+          centerX: w.position.x,
+          centerZ: w.position.z,
+          bottomY: w.position.y,
+          topY: w.position.y + WALAPA_HITBOX_HEIGHT * scale,
+          radius: WALAPA_HITBOX_RADIUS * scale,
+        };
+      },
+      applyDamage: (w, info) => {
+        return damageWalapa(w.id, info.damage);
+      },
+      getHitSoundUrl: () => '/bullet_impact_1.mp3',
+    });
+  }, [damageWalapa]);
 
   return {
     walapas,
