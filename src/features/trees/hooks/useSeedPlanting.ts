@@ -74,34 +74,11 @@ export function useSeedPlanting({
     tier: number,
     forceTreeType?: 'original' | 'fungal' | 'wide'
   ): Promise<PlantSeedResult> => {
-    // Surface every early-return path as a visible toast — previously
-    // many of these returned `{success:false}` silently, which let
-    // user reports like "I heard the seed plant but nothing grew"
-    // happen with no clue what blocked it.
-    if (!TREE_CONFIG.ENABLED) {
-      toast({ title: 'Trees disabled', description: 'TREE_CONFIG.ENABLED is false in code', variant: 'destructive' });
-      return { success: false, error: 'Tree feature disabled' };
-    }
-    if (!worldId) {
-      toast({ title: 'Cannot plant seed', description: 'World not loaded yet — wait a few seconds and try again', variant: 'destructive' });
-      console.warn('[SeedPlanting] worldId missing');
-      return { success: false, error: 'World not loaded' };
-    }
-    if (!userId) {
-      toast({ title: 'Cannot plant seed', description: 'You are not signed in', variant: 'destructive' });
-      console.warn('[SeedPlanting] userId missing');
-      return { success: false, error: 'Not signed in' };
-    }
-    if (!placeBlock) {
-      toast({ title: 'Cannot plant seed', description: 'Block placement system not ready', variant: 'destructive' });
-      console.warn('[SeedPlanting] placeBlock callback missing');
-      return { success: false, error: 'Block placement not available' };
-    }
-    if (!seedDefinitions || seedDefinitions.length === 0) {
-      toast({ title: 'Cannot plant seed', description: 'Seed definitions still loading — try again in a moment', variant: 'destructive' });
-      console.warn('[SeedPlanting] seedDefinitions empty');
-      return { success: false, error: 'Seed definitions not loaded' };
-    }
+    // Hard prerequisites — bail quietly, but log enough to diagnose.
+    if (!TREE_CONFIG.ENABLED) return { success: false, error: 'Tree feature disabled' };
+    if (!worldId)   { console.warn('[SeedPlanting] worldId missing'); return { success: false, error: 'World not loaded' }; }
+    if (!userId)    { console.warn('[SeedPlanting] userId missing'); return { success: false, error: 'Not signed in' }; }
+    if (!placeBlock){ console.warn('[SeedPlanting] placeBlock missing'); return { success: false, error: 'Block placement not available' }; }
 
     // Find seed definition matching tier AND tree type
     let seedDef = forceTreeType
@@ -197,17 +174,56 @@ export function useSeedPlanting({
       } as SeedDefinition;
     }
 
+    // No seed def for this tier? Build a default. Same pattern as the
+    // forced fungal/wide branches above — never silently bail on the
+    // user just because a DB row is missing or the row's name is
+    // empty (admin hasn't filled in T3 yet, etc.).
     if (!seedDef) {
-      toast({ title: 'Cannot plant seed', description: `No seed definition for tier ${tier}${forceTreeType ? ' / ' + forceTreeType : ''}`, variant: 'destructive' });
-      console.warn(`[SeedPlanting] no seedDef for tier=${tier} forceTreeType=${forceTreeType}`);
-      return { success: false, error: `Seed tier ${tier} not found` };
+      seedDef = {
+        id: `original-default-${tier}`,
+        tier,
+        name: `Tree T${tier}`,
+        tree_type: 'original',
+        trunk_texture_url: null,
+        branch_texture_url: null,
+        fruit_texture_url: null,
+        fungal_stem_texture_url: null,
+        fungal_cap_top_texture_url: null,
+        fungal_cap_underside_texture_url: null,
+        width_factor: 0.5,
+        branching_factor: 0.5,
+        fruiting_factor: 0.5,
+        growth_factor: 0.5,
+        cost: tier * 50,
+        rarity: 'common',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        low_branch_height: 2,
+        spike_chance: 0,
+        spike_length: 3,
+        nob_chance: 0,
+        nob_size: 1,
+        cross_chance: 0,
+        cross_length: 3,
+        shroom_chance: 0,
+        shroom_length: 5,
+        shroom_cap_diameter: 3,
+        symmetry: 'none',
+        shrine_chance: 0,
+        root_style: 'none',
+        fungal_min_height: null,
+        fungal_max_height: null,
+        fungal_min_cap_width: null,
+        fungal_max_cap_width: null,
+        fungal_stem_random: null,
+        fungal_lean_angle: null,
+        fungal_s_curve: null,
+      } as SeedDefinition;
     }
-
-    // Only require name for regular trees, not forced fungal trees
-    if (!forceTreeType && (!seedDef.name || seedDef.name.trim() === '')) {
-      toast({ title: 'Seed not configured', description: `Tier ${tier} seed needs a name in the admin panel`, variant: 'destructive' });
-      console.warn(`[SeedPlanting] tier ${tier} seedDef has empty name; aborting`);
-      return { success: false, error: `Seed tier ${tier} is not configured yet` };
+    // Backfill an empty name so the unconfigured-tier check doesn't
+    // bail. Same as the default above — the user just wants a tree.
+    if (!seedDef.name || seedDef.name.trim() === '') {
+      seedDef = { ...seedDef, name: `Tree T${tier}` };
     }
 
     setIsPlanting(true);
@@ -239,7 +255,6 @@ export function useSeedPlanting({
         .maybeSingle();
 
       if (existing) {
-        toast({ title: 'Already a tree here', description: 'Try a different spot', variant: 'destructive' });
         return { success: false, error: 'A tree is already planted here' };
       }
 
@@ -328,6 +343,8 @@ export function useSeedPlanting({
       if (rpcError) {
         console.error('[SeedPlanting] plant_seed_with_blueprint failed:', rpcError);
         if (rpcError.message?.includes('planting limit')) {
+          // Keep this one toast: it's a gameplay rule the user needs
+          // to know about (chunk-tier cap), not a system error.
           toast({
             title: "Chunk limit reached",
             description: "Too many trees of this tier in this area",
@@ -335,12 +352,6 @@ export function useSeedPlanting({
           });
           return { success: false, error: 'Chunk planting limit exceeded' };
         }
-        // Surface the real DB error so we stop guessing on user reports.
-        toast({
-          title: 'Seed save failed',
-          description: rpcError.message || 'Database returned an error',
-          variant: 'destructive'
-        });
         return { success: false, error: 'Failed to plant seed' };
       }
 
@@ -365,11 +376,6 @@ export function useSeedPlanting({
       return { success: true, treeId: newTreeId };
     } catch (err) {
       console.error('[SeedPlanting] Error:', err);
-      toast({
-        title: 'Unexpected error',
-        description: err instanceof Error ? err.message : 'See browser console for details',
-        variant: 'destructive'
-      });
       return { success: false, error: 'Unexpected error while planting' };
     } finally {
       setIsPlanting(false);
