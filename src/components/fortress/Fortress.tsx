@@ -232,14 +232,20 @@ export function Fortress() {
 
   // Vault state — proximity flag flips when player walks into the
   // back-wall trigger zone, prompt + V keybind become active. Open
-  // flag controls the modal.
+  // flag controls the modal. forceCloseToken bumps when we want the
+  // VaultPanel to run its cursor-stack-return logic and then close.
   const [vaultInRange, setVaultInRange] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultForceCloseToken, setVaultForceCloseToken] = useState(0);
   const handleOpenVault = useCallback(() => setVaultOpen(true), []);
   const handleCloseVault = useCallback(() => setVaultOpen(false), []);
   // Auto-close vault if the player walks out of range while it's open.
+  // Bump the token so the panel can return any held cursor stack to
+  // its origin before unmounting — otherwise the items would vanish.
   useEffect(() => {
-    if (!vaultInRange && vaultOpen) setVaultOpen(false);
+    if (!vaultInRange && vaultOpen) {
+      setVaultForceCloseToken(t => t + 1);
+    }
   }, [vaultInRange, vaultOpen]);
   
   // Waterfall disabled for performance testing (Phase 1)
@@ -1980,10 +1986,13 @@ export function Fortress() {
       />
 
       {/* Vault — modal that opens when V is pressed near the fortress
-          back wall. Per-account global stash. */}
+          back wall. Per-account global stash. forceCloseToken makes
+          the panel run its cursor-return + close sequence when the
+          player walks out of range mid-session. */}
       <VaultPanel
         isOpen={vaultOpen}
         onClose={handleCloseVault}
+        forceCloseToken={vaultForceCloseToken}
         userId={user?.id ?? null}
         inventory={inventory}
         equippedItems={equippedItems}

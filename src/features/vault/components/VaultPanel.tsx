@@ -52,6 +52,10 @@ interface ItemDef {
 interface VaultPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Bump this counter to force a graceful close (e.g. player walked
+   *  out of range). Triggers the cursor-stack return-to-origin path
+   *  before the dialog unmounts so items don't vanish. */
+  forceCloseToken?: number;
   userId: string | null;
   inventory: UserInventoryItem[];
   equippedItems: Array<{ slot: number; itemId: string }>;
@@ -64,6 +68,7 @@ interface VaultPanelProps {
 export function VaultPanel({
   isOpen,
   onClose,
+  forceCloseToken,
   userId,
   inventory,
   equippedItems,
@@ -73,6 +78,10 @@ export function VaultPanel({
 }: VaultPanelProps) {
   const { pages, config, setSlot, removeFromSlot, replacePageLayout } = useVaultData(userId);
   const [activePage, setActivePage] = useState(0);
+  // Clamp activePage if page_count shrinks (e.g. a future re-config).
+  useEffect(() => {
+    if (activePage >= config.page_count) setActivePage(0);
+  }, [config.page_count, activePage]);
   const [cursor, setCursor] = useState<CursorStack | null>(null);
   const [cursorXY, setCursorXY] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -132,8 +141,31 @@ export function VaultPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, onClose, returnCursorToOrigin]);
 
+  // Parent-driven close (e.g. player walked out of vault range while
+  // holding a stack on the cursor). Return the stack first so items
+  // don't get dropped on the floor.
+  const lastForceCloseRef = useRef(forceCloseToken);
+  useEffect(() => {
+    if (forceCloseToken === undefined) return;
+    if (forceCloseToken === lastForceCloseRef.current) return;
+    lastForceCloseRef.current = forceCloseToken;
+    if (!isOpen) return;
+    void (async () => {
+      await returnCursorToOrigin();
+      onClose();
+    })();
+  }, [forceCloseToken, isOpen, returnCursorToOrigin, onClose]);
+
   // ── Inventory groups (stackable items collapse, non-stack rows
   //    stay separate). Mirrors FortressHUD logic so the UX matches.
+  //    Stackable items that are equipped to the hotbar are filtered
+  //    out — the hotbar slot owns them, just like in the main HUD.
+  //    Non-stackable rows always render (the hotbar is a shortcut,
+  //    not a physical container).
+  const equippedItemIdSet = useMemo(
+    () => new Set(equippedItems.map(e => e.itemId)),
+    [equippedItems]
+  );
   const inventoryEntries = useMemo(() => {
     type Entry = {
       key: string;          // rowId for non-stack, itemId for stack
@@ -148,6 +180,9 @@ export function VaultPanel({
       if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
       const def = invDefs.get(inv.item_id);
       const nonStack = isNonStackableKey(def?.key);
+      // Skip stackable items the hotbar is showing — they'd otherwise
+      // appear in both panels.
+      if (!nonStack && equippedItemIdSet.has(inv.item_id)) continue;
       const k = nonStack ? inv.id : inv.item_id;
       const existing = byKey.get(k);
       if (existing) {
@@ -165,7 +200,7 @@ export function VaultPanel({
       }
     }
     return Array.from(byKey.values());
-  }, [inventory, invDefs]);
+  }, [inventory, invDefs, equippedItemIdSet]);
 
   // ── Vault slot click handler (Minecraft model) ─────────────────
   const handleVaultClick = useCallback(async (
@@ -311,6 +346,32 @@ export function VaultPanel({
       await addItem(cursor.itemId, qty);
       if (qty >= cursor.quantity) setCursor(null);
       else setCursor({ ...cursor, quantity: cursor.quantity - qty });
+      return;
+    }
+
+    if (cursor && entry && entry.itemId !== cursor.itemId) {
+      // Swap: take inventory entry onto cursor, drop the held stack
+      // into inventory. Only left-click swaps in Minecraft; right-click
+      // on a different-item slot does nothing.
+      if (right) return;
+      const pickedDef = {
+        itemId: entry.itemId,
+        itemKey: entry.def?.key ?? '',
+        name: entry.def?.name ?? '',
+        tier: entry.def?.tier ?? null,
+        itemNumber: entry.def?.item_number ?? null,
+        textureUrl: entry.def?.texture_url ?? null,
+        quantity: entry.quantity,
+      };
+      // Remove the rows that backed the inventory entry.
+      for (const rid of entry.rowIds) await removeInventoryRow(rid);
+      // Drop the cursor stack into the inventory.
+      await addItem(cursor.itemId, cursor.quantity);
+      // Cursor now holds what was in the slot.
+      setCursor({
+        ...pickedDef,
+        origin: { kind: 'inventory', rowId: entry.rowIds[0] },
+      });
     }
   }, [cursor, pages, activePage, config, addItem, removeInventoryRow, setSlot]);
 
