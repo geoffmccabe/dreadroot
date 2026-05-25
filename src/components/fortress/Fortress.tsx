@@ -337,44 +337,82 @@ export function Fortress() {
     fetchDef();
   }, [selectedSlot, equippedItems]);
 
+  // Resolve grenade item UUIDs → tier. Forged grenades live in
+  // user_inventory as { item_type: 'item', item_id: <items.id> }, so we
+  // need the items table to know which UUIDs are grenades. Refetches
+  // when the inventory id-set changes (covers forging a fresh tier).
+  const grenadeDefsRef = useRef<Map<string, number>>(new Map());
+  const healthPotionIdRef = useRef<string | null>(null);
+  const grenadeT1IdRef = useRef<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('items')
+        .select('id, key, tier')
+        .or('key.eq.grenade,key.like.grenade\\_t%,key.eq.health_potion');
+      if (cancelled || !data) return;
+      const map = new Map<string, number>();
+      for (const row of data) {
+        if (row.key === 'health_potion') {
+          healthPotionIdRef.current = row.id;
+          continue;
+        }
+        const tier = row.tier ?? 1;
+        map.set(row.id, tier);
+        if (row.key === 'grenade') grenadeT1IdRef.current = row.id;
+      }
+      grenadeDefsRef.current = map;
+    })();
+    return () => { cancelled = true; };
+    // Re-run when inventory composition changes so newly-forged tiers
+    // (which create a fresh items row) show up. Cheap query, rarely hit.
+  }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
+
   // Pull one grenade out of inventory and return its tier. Picks the
-  // HIGHEST tier the user owns so a player who's been forging gets to
-  // throw the meanest grenade they have. Used by the throw flow in
-  // FortressScene.handleThrowGrenade.
+  // HIGHEST tier the user owns so forging is rewarded. Used by the
+  // throw flow in FortressScene.handleThrowGrenade.
   const consumeGrenade = useCallback((): number | null => {
-    // Find every inventory row whose item key starts with "grenade".
-    // The base key is "grenade" (T1) and forged tiers append "_t2",
-    // "_t3", etc. (see handleForge in ItemsTab.tsx).
+    const defs = grenadeDefsRef.current;
     let bestTier = 0;
-    let bestRowId: string | null = null;
     let bestItemId: string | null = null;
-    let bestItemKey: string | null = null;
     for (const inv of inventory) {
-      if (inv.quantity <= 0) continue;
-      const key = inv.item_type;
-      const idKey = inv.item_id;
-      const isGrenade =
-        key === 'grenade' ||
-        (key && key.startsWith('grenade_t')) ||
-        (idKey && (idKey === 'grenade' || idKey.startsWith?.('grenade_t')));
-      if (!isGrenade) continue;
-      // Tier comes from "grenade_tN"; "grenade" (no suffix) is T1.
-      const probe = (key && key !== 'item') ? key : (idKey || '');
-      const m = /_t(\d+)$/.exec(probe || '');
-      const tier = m ? parseInt(m[1], 10) : 1;
+      if (inv.quantity <= 0 || !inv.item_id) continue;
+      const tier = defs.get(inv.item_id);
+      if (tier == null) continue;
       if (tier > bestTier) {
         bestTier = tier;
-        bestRowId = inv.id;
         bestItemId = inv.item_id;
-        bestItemKey = key;
       }
     }
-    if (bestTier === 0 || !bestRowId) return null;
-    // Decrement via useBlock — accepts the key OR id, matches either.
-    // Fire and forget (DB sync happens asynchronously inside useBlock).
-    void useBlock(bestItemKey || bestItemId || '');
+    if (bestTier === 0 || !bestItemId) return null;
+    // useBlock matches on item_type OR item_id; UUID hits item_id.
+    void useBlock(bestItemId);
     return bestTier;
   }, [inventory, useBlock]);
+
+  // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
+  // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
+  // Cmd+H (health potion).
+  const grantAdminItem = useCallback(async (itemId: string | null): Promise<boolean> => {
+    const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
+    if (!isAdmin || !itemId) return false;
+    const ok = await addItem(itemId, 1);
+    if (!ok) return false;
+    const slot6 = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === 6);
+    if (!slot6) {
+      await updateEquippedSlot(6, itemId);
+    }
+    return true;
+  }, [userRoles, addItem, equippedItems, updateEquippedSlot]);
+
+  const grantAdminGrenade = useCallback(async (): Promise<boolean> => {
+    return grantAdminItem(grenadeT1IdRef.current);
+  }, [grantAdminItem]);
+
+  const grantAdminHealthPotion = useCallback(async (): Promise<boolean> => {
+    return grantAdminItem(healthPotionIdRef.current);
+  }, [grantAdminItem]);
 
   // Hotbar quick-use: digit keys 1-6 activate the equipped slot's item.
   // Currently handles health_potion (full heal + swallow sound + consume);
@@ -1808,6 +1846,8 @@ export function Fortress() {
           onPentabulletChargeChange={setPentabulletCharge}
           onUseHotbarSlot={handleUseHotbarSlot}
           consumeGrenade={consumeGrenade}
+          onAdminGrantGrenade={grantAdminGrenade}
+          onAdminGrantHealthPotion={grantAdminHealthPotion}
           onJetBoostStateChange={setJetBoostState}
           selectedItemDef={selectedItemDef}
           addItem={addItem}

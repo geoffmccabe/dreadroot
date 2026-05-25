@@ -217,6 +217,11 @@ export interface SceneProps {
    *  tier. Returns null if no grenade is held. Inventory is owned by
    *  Fortress.tsx so the throw mechanism delegates here. */
   consumeGrenade?: () => number | null;
+  /** Admin/superadmin only: grant 1 grenade and auto-equip to hotbar
+   *  slot 6 if free. Wired to Cmd+G in FortressControls. */
+  onAdminGrantGrenade?: () => Promise<boolean>;
+  /** Admin/superadmin only: grant 1 health potion (same equip rule). */
+  onAdminGrantHealthPotion?: () => Promise<boolean>;
   // Jet Boost system
   onJetBoostStateChange?: (state: JetBoostState) => void;
   // Selected hotbar item (for flame glove detection)
@@ -291,6 +296,10 @@ export interface FirstPersonControlsProps {
   /** Throw a grenade now. Returns true if one was actually thrown
    *  (false if inventory empty / live cap hit). */
   onThrowGrenade?: () => boolean;
+  /** Admin/superadmin only: Cmd+G grants a grenade. */
+  onAdminGrantGrenade?: () => Promise<boolean>;
+  /** Admin/superadmin only: Cmd+H grants a health potion. */
+  onAdminGrantHealthPotion?: () => Promise<boolean>;
   // Admin spawn shortcut (!2# for shnakes)
   onSpawnShnake?: (tier: number) => void;
   // Jet Boost system

@@ -35,12 +35,15 @@ GRENADE_GEO.scale(1, 1.15, 1);
 export function GrenadeRenderer({ grenadesRef }: GrenadeRendererProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
+  // Base color must be white so per-instance tier color shows through
+  // multiplicatively. Emissive stays subtle so the body still reads as
+  // a metal object and not a glowing orb.
   const material = useMemo(() => new THREE.MeshStandardMaterial({
-    color: '#888',
+    color: '#ffffff',
     metalness: 0.6,
     roughness: 0.4,
-    emissive: '#222',
-    emissiveIntensity: 0.4,
+    emissive: '#000000',
+    emissiveIntensity: 0,
   }), []);
 
   useFrame(() => {

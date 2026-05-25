@@ -95,6 +95,9 @@ export function FirstPersonControls({
   // Grenade throw — called on click while grenade-ready. Returns true
   // if a grenade was actually thrown (false if inventory empty etc.).
   onThrowGrenade,
+  // Admin/superadmin item grants — Cmd+G grenade, Cmd+H health potion.
+  onAdminGrantGrenade,
+  onAdminGrantHealthPotion,
   // Admin spawn shortcut
   onSpawnShnake,
   // Jet Boost system
@@ -622,8 +625,18 @@ export function FirstPersonControls({
         keys.current.z = true;
         break;
       case 'KeyG':
-        // Glide mode (mid-air, falling) takes precedence so jumping
-        // off a cliff still works. On the ground, G readies a grenade.
+        // Cmd+G / Ctrl+G (admin): grant 1 grenade and auto-equip to
+        // slot 6 if free. Browser's "find next" is preventDefault'd.
+        if ((event.metaKey || event.ctrlKey) && onAdminGrantGrenade
+            && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
+          event.preventDefault();
+          void onAdminGrantGrenade();
+          break;
+        }
+        // Plain G with no modifier: glide (mid-air, falling) or ready
+        // a grenade (on ground). Modifier present without admin perm
+        // falls through to a no-op rather than triggering the throw.
+        if (event.metaKey || event.ctrlKey || event.altKey) break;
         if (!onGround.current && velocity.current.y < 0) {
           glideActiveRef.current = true;
         } else if (onThrowGrenade) {
@@ -637,6 +650,14 @@ export function FirstPersonControls({
           }
         }
         break;
+      case 'KeyH':
+        // Cmd+H / Ctrl+H (admin): grant 1 health potion.
+        if ((event.metaKey || event.ctrlKey) && onAdminGrantHealthPotion
+            && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
+          event.preventDefault();
+          void onAdminGrantHealthPotion();
+        }
+        break;
       case 'KeyE':
         keys.current.e = true;
         break;
@@ -647,7 +668,7 @@ export function FirstPersonControls({
         }
         break;
     }
-  }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange]);
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange, onAdminGrantGrenade, onAdminGrantHealthPotion]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     if (panelOpen || 
@@ -910,11 +931,12 @@ export function FirstPersonControls({
         );
         onWideTreePlace(position);
       }
-    } else if (grenadeReadyRef.current && onThrowGrenade && showCrosshairs) {
-      // Grenade-ready mode takes priority over normal weapon fire.
-      // Throw, clear the ready flag whether it succeeded or not (a
-      // failed throw — e.g. inventory empty — disarms cleanly so the
-      // user knows they need to press G again).
+    } else if (grenadeReadyRef.current && onThrowGrenade) {
+      // Grenade-ready mode takes priority over normal weapon fire and
+      // works without a weapon equipped (COD-style). Throw, clear the
+      // ready flag whether it succeeded or not — a failed throw (e.g.
+      // empty inventory) disarms cleanly so the user knows to press G
+      // again.
       onThrowGrenade();
       grenadeReadyRef.current = false;
     } else if (showCrosshairs && onShoot) {

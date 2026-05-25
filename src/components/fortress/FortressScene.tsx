@@ -181,6 +181,8 @@ export function FortressScene({
   onPentabulletChargeChange,
   onUseHotbarSlot,
   consumeGrenade,
+  onAdminGrantGrenade,
+  onAdminGrantHealthPotion,
   shnakeDefinitions,
   plantedTrees = [],
   treeFruits = [],
@@ -1381,6 +1383,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onPentabulletChargeChange={onPentabulletChargeChange}
         onUseHotbarSlot={onUseHotbarSlot}
         onThrowGrenade={handleThrowGrenade}
+        onAdminGrantGrenade={onAdminGrantGrenade}
+        onAdminGrantHealthPotion={onAdminGrantHealthPotion}
         onSpawnShnake={handleSpawnShnake}
         onJetBoostStateChange={onJetBoostStateChange}
         onJetBoostFired={(pos, colors) => {
