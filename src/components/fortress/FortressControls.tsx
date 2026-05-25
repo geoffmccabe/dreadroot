@@ -30,6 +30,7 @@ import { blockDB } from '@/hooks/useIndexedDB';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { type WaterType } from '@/lib/pondGenerator';
 import { isPointInNoFireZone } from '@/features/enemies/ai/fortressSafeZone';
+import { playPinPullSound } from '@/features/grenades/lib/explosionSound';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -91,6 +92,9 @@ export function FirstPersonControls({
   onPentabulletChargeChange,
   // Hotbar quick-use (digit 1-6 activates the equipped slot's item)
   onUseHotbarSlot,
+  // Grenade throw — called on click while grenade-ready. Returns true
+  // if a grenade was actually thrown (false if inventory empty etc.).
+  onThrowGrenade,
   // Admin spawn shortcut
   onSpawnShnake,
   // Jet Boost system
@@ -127,6 +131,11 @@ export function FirstPersonControls({
   });
   // Glide mode: activated by pressing G while falling, auto-deactivates on landing
   const glideActiveRef = useRef(false);
+
+  // Grenade ready mode: pressing G on the ground sets this true; the
+  // next left-click throws and resets it. COD-style "pull pin, then
+  // throw on click". G in mid-air keeps its glide meaning.
+  const grenadeReadyRef = useRef(false);
 
   // Jet Boost system: 1 boost per 3 levels, recharges every 60 seconds
   const jetBoostMaxRef = useRef(0);
@@ -613,9 +622,19 @@ export function FirstPersonControls({
         keys.current.z = true;
         break;
       case 'KeyG':
-        // Glide mode: only activates if currently falling (not on ground)
+        // Glide mode (mid-air, falling) takes precedence so jumping
+        // off a cliff still works. On the ground, G readies a grenade.
         if (!onGround.current && velocity.current.y < 0) {
           glideActiveRef.current = true;
+        } else if (onThrowGrenade) {
+          // Toggle ready. We don't pull anything from inventory until
+          // the throw actually fires.
+          grenadeReadyRef.current = !grenadeReadyRef.current;
+          if (grenadeReadyRef.current) {
+            // Pin-pull click — gives the player audible feedback that
+            // they're now armed and the next click will throw.
+            playPinPullSound();
+          }
         }
         break;
       case 'KeyE':
@@ -891,6 +910,13 @@ export function FirstPersonControls({
         );
         onWideTreePlace(position);
       }
+    } else if (grenadeReadyRef.current && onThrowGrenade && showCrosshairs) {
+      // Grenade-ready mode takes priority over normal weapon fire.
+      // Throw, clear the ready flag whether it succeeded or not (a
+      // failed throw — e.g. inventory empty — disarms cleanly so the
+      // user knows they need to press G again).
+      onThrowGrenade();
+      grenadeReadyRef.current = false;
     } else if (showCrosshairs && onShoot) {
       // Flame Glove uses continuous hold, not click-to-fire
       if (isFlameGloveSelected) return;

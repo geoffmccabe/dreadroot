@@ -210,6 +210,13 @@ export interface SceneProps {
   /** Activate a hotbar slot by index (1-6). Used for keyboard digits
    *  consuming health potions, etc. */
   onUseHotbarSlot?: (slot: number) => void;
+  /** Throw a grenade now. Returns true if one was actually thrown
+   *  (false if inventory empty / live cap hit). */
+  onThrowGrenade?: () => boolean;
+  /** Take one grenade out of the user's inventory and return its
+   *  tier. Returns null if no grenade is held. Inventory is owned by
+   *  Fortress.tsx so the throw mechanism delegates here. */
+  consumeGrenade?: () => number | null;
   // Jet Boost system
   onJetBoostStateChange?: (state: JetBoostState) => void;
   // Selected hotbar item (for flame glove detection)
@@ -281,6 +288,9 @@ export interface FirstPersonControlsProps {
   /** Activate a hotbar slot by index (1-6). Used for keyboard digits
    *  consuming health potions, etc. */
   onUseHotbarSlot?: (slot: number) => void;
+  /** Throw a grenade now. Returns true if one was actually thrown
+   *  (false if inventory empty / live cap hit). */
+  onThrowGrenade?: () => boolean;
   // Admin spawn shortcut (!2# for shnakes)
   onSpawnShnake?: (tier: number) => void;
   // Jet Boost system

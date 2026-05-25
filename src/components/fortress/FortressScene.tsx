@@ -67,6 +67,7 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBO
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
+import { useGrenadeSystem, GrenadeRenderer } from '@/features/grenades';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getHeightBlocks } from '@/features/shtickman/types';
 
@@ -179,6 +180,7 @@ export function FortressScene({
   playerLevel = 1,
   onPentabulletChargeChange,
   onUseHotbarSlot,
+  consumeGrenade,
   shnakeDefinitions,
   plantedTrees = [],
   treeFruits = [],
@@ -853,6 +855,22 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const universalFlameRef = useRef<UniversalFlameRendererHandle>(null);
   const { flameDemoRef, fruitVisibility } = useAdminPanel();
 
+  // Grenade system. Owns live grenades + their physics; explosion VFX
+  // routes through universalFlameRef. The throw flow goes:
+  //   FortressControls (G + click) → onThrowGrenade()
+  //     → consumeGrenade() (Fortress.tsx, inventory)
+  //     → grenadeSystem.throwGrenade(tier) (this hook)
+  const { grenadesRef, throwGrenade } = useGrenadeSystem({
+    universalFlameRef,
+    cameraRef,
+  });
+  const handleThrowGrenade = useCallback((): boolean => {
+    if (!consumeGrenade) return false;
+    const tier = consumeGrenade();
+    if (tier == null) return false;
+    return throwGrenade(tier);
+  }, [consumeGrenade, throwGrenade]);
+
   // (Flame Glove setup is below, after getDefinition is available)
 
   // Track meshes by a unique ID (mesh reference) to allow multiple meshes per blockType
@@ -1362,6 +1380,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         playerLevel={playerLevel}
         onPentabulletChargeChange={onPentabulletChargeChange}
         onUseHotbarSlot={onUseHotbarSlot}
+        onThrowGrenade={handleThrowGrenade}
         onSpawnShnake={handleSpawnShnake}
         onJetBoostStateChange={onJetBoostStateChange}
         onJetBoostFired={(pos, colors) => {
@@ -1455,6 +1474,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         definitions={shpiderDefinitions}
         onPlayerHit={handleShpiderPlayerHit}
       />
+
+      {/* Grenade Renderer — instanced spheres for live grenades. */}
+      <GrenadeRenderer grenadesRef={grenadesRef} />
 
       {/* Dropped Loot Items */}
       <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />

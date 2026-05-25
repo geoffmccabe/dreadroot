@@ -337,6 +337,45 @@ export function Fortress() {
     fetchDef();
   }, [selectedSlot, equippedItems]);
 
+  // Pull one grenade out of inventory and return its tier. Picks the
+  // HIGHEST tier the user owns so a player who's been forging gets to
+  // throw the meanest grenade they have. Used by the throw flow in
+  // FortressScene.handleThrowGrenade.
+  const consumeGrenade = useCallback((): number | null => {
+    // Find every inventory row whose item key starts with "grenade".
+    // The base key is "grenade" (T1) and forged tiers append "_t2",
+    // "_t3", etc. (see handleForge in ItemsTab.tsx).
+    let bestTier = 0;
+    let bestRowId: string | null = null;
+    let bestItemId: string | null = null;
+    let bestItemKey: string | null = null;
+    for (const inv of inventory) {
+      if (inv.quantity <= 0) continue;
+      const key = inv.item_type;
+      const idKey = inv.item_id;
+      const isGrenade =
+        key === 'grenade' ||
+        (key && key.startsWith('grenade_t')) ||
+        (idKey && (idKey === 'grenade' || idKey.startsWith?.('grenade_t')));
+      if (!isGrenade) continue;
+      // Tier comes from "grenade_tN"; "grenade" (no suffix) is T1.
+      const probe = (key && key !== 'item') ? key : (idKey || '');
+      const m = /_t(\d+)$/.exec(probe || '');
+      const tier = m ? parseInt(m[1], 10) : 1;
+      if (tier > bestTier) {
+        bestTier = tier;
+        bestRowId = inv.id;
+        bestItemId = inv.item_id;
+        bestItemKey = key;
+      }
+    }
+    if (bestTier === 0 || !bestRowId) return null;
+    // Decrement via useBlock — accepts the key OR id, matches either.
+    // Fire and forget (DB sync happens asynchronously inside useBlock).
+    void useBlock(bestItemKey || bestItemId || '');
+    return bestTier;
+  }, [inventory, useBlock]);
+
   // Hotbar quick-use: digit keys 1-6 activate the equipped slot's item.
   // Currently handles health_potion (full heal + swallow sound + consume);
   // other consumable item keys can be added below by name.
@@ -1768,6 +1807,7 @@ export function Fortress() {
           playerLevel={profile?.current_level ?? 1}
           onPentabulletChargeChange={setPentabulletCharge}
           onUseHotbarSlot={handleUseHotbarSlot}
+          consumeGrenade={consumeGrenade}
           onJetBoostStateChange={setJetBoostState}
           selectedItemDef={selectedItemDef}
           addItem={addItem}
