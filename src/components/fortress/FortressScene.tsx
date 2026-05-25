@@ -1184,20 +1184,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     colorMode: (flameGloveTier === 8 ? 'rainbow' : 'static') as import('./UniversalFlameRenderer').FlameColorMode,
   };
 
-  // Universal burn-over-time system for flamethrower DOT
+  // Universal burn-over-time system for flamethrower DOT. The burn
+  // system now talks to every monster via the EnemyCombatRegistry, so
+  // adding a new monster doesn't require touching this hook — only
+  // its adapter needs to be registered.
   const burnSystem = useBurnSystem({
     universalFlameRef,
-    shwarmsRef,
-    shnakesRef,
-    shombiesRef,
-    walapasRef,
-    shtickmenRef,
     cameraRef,
-    damageBlock,
-    damageShnakeHead,
-    damageShombie,
-    damageWalapa,
-    damageShtickman,
     takeDamage,
   });
 
@@ -1233,91 +1226,58 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       return angle <= halfAngle;
     };
 
-    // Damage shwarm blocks in cone
-    for (const shwarm of shwarmsRef.current) {
-      for (const block of shwarm.blocks) {
-        if (!block.isAlive) continue;
-        if (isInCone(block.position)) {
-          damageBlock(shwarm.id, block.id, tickDamage);
-          burnSystem.applyBurn('shwarm', shwarm.id, block.id, tier, colors, colorMode, tickDamage, 0, block.position, burnSecondsForTier);
-        }
-      }
-    }
-
-    // Damage shnake heads in cone (segments store grid coords, not Vector3)
-    for (const shnake of shnakesRef.current) {
-      if (!shnake.isActive || shnake.segments.length === 0) continue;
-      const head = shnake.segments[0];
-      const headPos = _flameTmpPos.current.set(head.x + 0.5, head.y + 0.5, head.z + 0.5);
-      if (isInCone(headPos)) {
-        damageShnakeHead(shnake.id, tickDamage);
-        burnSystem.applyBurn('shnake', shnake.id, undefined, tier, colors, colorMode, tickDamage, shnake.definition?.armor ?? 0, headPos, burnSecondsForTier);
-      }
-    }
-
-    // Damage shombies in cone (check at center mass, not feet — shombies are 2.2m tall)
-    for (const shombie of shombiesRef.current) {
-      if (!shombie.isActive) continue;
-      const shombieCenter = _flameTmpPos.current.set(shombie.position.x, shombie.position.y + 1.1, shombie.position.z);
-      if (isInCone(shombieCenter)) {
-        console.log(`[FlameGlove] Hit shombie ${shombie.id} for ${tickDamage} dmg`);
-        damageShombie(shombie.id, tickDamage, undefined as any, false, undefined as any);
-        burnSystem.applyBurn('shombie', shombie.id, undefined, tier, colors, colorMode, tickDamage, 0, shombieCenter, burnSecondsForTier);
-      }
-    }
-
-    // Damage walapas in cone
-    for (const walapa of walapasRef.current) {
-      if (!walapa.isActive) continue;
-      if (isInCone(walapa.position)) {
-        damageWalapa(walapa.id, tickDamage);
-        burnSystem.applyBurn('walapa', walapa.id, undefined, tier, colors, colorMode, tickDamage, 0, walapa.position, burnSecondsForTier);
-      }
-    }
-
-    // Damage shtickmen in cone — check multiple points along body height (they're 22-40m tall)
-    for (const shtickman of shtickmenRef.current) {
-      if (!shtickman.isActive) continue;
-      const sx = shtickman.position.x;
-      const sy = shtickman.position.y;
-      const sz = shtickman.position.z;
-      // Check feet, knees, waist, chest, head — any hit counts
-      let hit = false;
-      for (const yOff of [1, 4, 8, 14, 20]) {
-        _flameTmpPos.current.set(sx, sy + yOff, sz);
-        if (isInCone(_flameTmpPos.current)) { hit = true; break; }
-      }
-      if (hit) {
-        const hitPos = _flameTmpPos.current;
-        damageShtickman(shtickman.id, tickDamage, undefined as any);
-        burnSystem.applyBurn('shtickman', shtickman.id, undefined, tier, colors, colorMode, tickDamage, 0, hitPos, burnSecondsForTier);
-      }
-    }
-
-    // Universal registry pass — any enemy with a CombatAdapter that
-    // ISN'T in the legacy per-type cases above (currently: shpider,
-    // and any future enemy not yet listed) gets flame damage via the
-    // adapter. The hitbox center is checked against the cone.
-    const handledTypes = new Set(['shwarm', 'shnake', 'shombie', 'walapa', 'shtickman']);
+    // Universal cone pass — iterate every adapter in the
+    // EnemyCombatRegistry. For tall enemies (shtickman is 22–40m) a
+    // single hitbox-center test misses the feet/head; sample five
+    // points evenly between bottomY and topY so any visible part in
+    // the cone triggers a hit. Shwarm exposes one entry per block, so
+    // each block's small hitbox gets tested independently.
     for (const adapter of enemyCombatRegistry.getAdapters()) {
-      if (handledTypes.has(adapter.type)) continue;
       for (const enemy of adapter.getActiveEnemies()) {
         const hb = adapter.getHitbox(enemy);
         if (!hb) continue;
-        _flameTmpPos.current.set(hb.centerX, (hb.bottomY + hb.topY) * 0.5, hb.centerZ);
-        if (!isInCone(_flameTmpPos.current)) continue;
+        const heightSpan = hb.topY - hb.bottomY;
+        const sampleCount = heightSpan > 4 ? 5 : 1;
+        let hitX = 0, hitY = 0, hitZ = 0;
+        let coneHit = false;
+        for (let s = 0; s < sampleCount; s++) {
+          const t = sampleCount === 1 ? 0.5 : s / (sampleCount - 1);
+          const py = hb.bottomY + heightSpan * t;
+          _flameTmpPos.current.set(hb.centerX, py, hb.centerZ);
+          if (isInCone(_flameTmpPos.current)) {
+            hitX = hb.centerX; hitY = py; hitZ = hb.centerZ;
+            coneHit = true;
+            break;
+          }
+        }
+        if (!coneHit) continue;
+
         adapter.applyDamage(enemy, {
           damage: tickDamage,
           bulletSpeed: 0,
           knockbackDirX: 0, knockbackDirY: 0, knockbackDirZ: 0,
-          hitX: _flameTmpPos.current.x, hitY: _flameTmpPos.current.y, hitZ: _flameTmpPos.current.z,
+          hitX, hitY, hitZ,
           isHeadshot: false,
           source: 'flame',
         });
+        // Compound id for shwarm becomes "<shwarmId>::<blockId>". The
+        // burn system expects shwarm as (entityId, blockId), so split.
+        let burnEntityId: string;
+        let burnBlockId: string | undefined;
+        const compoundId = adapter.getId(enemy);
+        if (adapter.type === 'shwarm') {
+          const idx = compoundId.indexOf('::');
+          burnEntityId = idx >= 0 ? compoundId.slice(0, idx) : compoundId;
+          burnBlockId = idx >= 0 ? compoundId.slice(idx + 2) : undefined;
+        } else {
+          burnEntityId = compoundId;
+          burnBlockId = undefined;
+        }
+        _flameTmpPos.current.set(hitX, hitY, hitZ);
         burnSystem.applyBurn(
           adapter.type,
-          adapter.getId(enemy),
-          undefined,
+          burnEntityId,
+          burnBlockId,
           tier, colors, colorMode, tickDamage, 0,
           _flameTmpPos.current,
           burnSecondsForTier,

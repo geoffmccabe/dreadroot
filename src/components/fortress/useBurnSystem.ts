@@ -26,7 +26,6 @@ import { useRef, useCallback, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { FlameColorMode, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
-import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 // Reusable scratch vector for the registry-fallback entity lookup.
@@ -120,44 +119,26 @@ interface BurnEntry {
   hitOffset: THREE.Vector3 | null; // offset from entity base to hit point (for positioned burns)
   /** Total burn duration in seconds (tier-derived). DOT phase ends here. */
   dotSeconds: number;
+  /** Flame layout snapshot taken at burn-creation time (one entry per
+   *  flame point). Cached on the burn so the frame loop never has to
+   *  re-query FLAME_LAYOUTS or the registry per-tick. */
+  layout: FlamePoint[];
 }
 
 interface UseBurnSystemOptions {
   universalFlameRef: React.RefObject<UniversalFlameRendererHandle>;
-  shwarmsRef: React.RefObject<ShwarmInstance[]>;
-  shnakesRef: React.RefObject<any[]>;
-  shombiesRef: React.RefObject<any[]>;
-  walapasRef: React.RefObject<any[]>;
-  shtickmenRef: React.RefObject<any[]>;
   cameraRef: React.RefObject<THREE.Camera>;
-  damageBlock: (shwarmId: string, blockId: string, damage: number) => any;
-  damageShnakeHead: (shnakeId: string, damage: number) => any;
-  damageShombie: (shombieId: string, damage: number, dir: THREE.Vector3, isHeadshot: boolean, bulletDir: THREE.Vector3) => any;
-  damageWalapa: (walapaId: string, damage: number) => any;
-  damageShtickman: (shtickmanId: string, damage: number, dir: THREE.Vector3) => any;
   takeDamage?: (damage: number, direction?: THREE.Vector3, knockback?: number) => void;
 }
 
 // Pre-allocated temp vectors
-const _burnDir = new THREE.Vector3(0, 0, 1);
 const _offsetPos = new THREE.Vector3();
-const _shnakeHeadPos = new THREE.Vector3();
 // Pre-allocated array for removal keys (avoids per-frame allocation)
 const _toRemove: string[] = [];
 
 export function useBurnSystem({
   universalFlameRef,
-  shwarmsRef,
-  shnakesRef,
-  shombiesRef,
-  walapasRef,
-  shtickmenRef,
   cameraRef,
-  damageBlock,
-  damageShnakeHead,
-  damageShombie,
-  damageWalapa,
-  damageShtickman,
   takeDamage,
 }: UseBurnSystemOptions) {
   const burnsRef = useRef<Map<string, BurnEntry>>(new Map());
@@ -173,7 +154,7 @@ export function useBurnSystem({
       if (entry.flameIds[0]) {
         renderer.removeFlame(entry.flameIds[0]!);
       }
-      const pt = FLAME_LAYOUTS[entry.entityType][0];
+      const pt = entry.layout[0];
       entry.flameIds[0] = renderer.spawnFlame({
         type: 'point',
         position: basePos,
@@ -186,32 +167,10 @@ export function useBurnSystem({
         colorMode: entry.colorMode,
       });
     } else {
-      // Multi-point layout — pull from legacy table OR from the
-      // registered adapter's getFlameAttachPoints. Honors xOffset/zOffset
-      // so multi-part shapes (spider legs around a body) get full
-      // surround coverage.
-      let layout: FlamePoint[] | undefined = FLAME_LAYOUTS[entry.entityType];
-      if (!layout) {
-        const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
-        if (adapter?.getFlameAttachPoints) {
-          const list = adapter.getActiveEnemies();
-          const enemy = list.find(e => adapter.getId(e) === entry.entityId);
-          if (enemy) {
-            const pts = adapter.getFlameAttachPoints(enemy);
-            if (pts && pts.length > 0) {
-              layout = pts.map(p => ({
-                yOffset: p.yOffset,
-                xOffset: p.xOffset ?? 0,
-                zOffset: p.zOffset ?? 0,
-                size: p.size,
-                height: p.height,
-                particles: p.particles,
-              }));
-            }
-          }
-        }
-      }
-      if (!layout) layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
+      // Multi-point layout — use the snapshot cached on the entry at
+      // burn-creation time. Honors xOffset/zOffset so multi-part
+      // shapes (spider legs around a body) get full surround coverage.
+      const layout = entry.layout;
       for (let i = 0; i < layout.length; i++) {
         if (entry.flameIds[i]) {
           renderer.removeFlame(entry.flameIds[i]!);
@@ -251,54 +210,26 @@ export function useBurnSystem({
     burnsRef.current.delete(key);
   }, [universalFlameRef]);
 
-  // Look up entity position; returns null if entity is dead/gone
+  // Look up entity position; returns null if entity is dead/gone.
+  // Player is the only special case — every other entity comes from
+  // the EnemyCombatRegistry, including the compound-id shwarm blocks.
   const getEntityPosition = useCallback((entry: BurnEntry): THREE.Vector3 | null => {
-    switch (entry.entityType) {
-      case 'shwarm': {
-        const shwarm = shwarmsRef.current?.find(s => s.id === entry.entityId);
-        if (!shwarm) return null;
-        const block = shwarm.blocks.find(b => b.id === entry.blockId && b.isAlive);
-        return block?.position ?? null;
-      }
-      case 'shnake': {
-        const shnake = shnakesRef.current?.find(s => s.id === entry.entityId);
-        if (!shnake || !shnake.isActive || shnake.segments.length === 0) return null;
-        // Segments store grid coords (integers), convert to world center
-        const seg = shnake.segments[0];
-        return _shnakeHeadPos.set(seg.x + 0.5, seg.y + 0.5, seg.z + 0.5);
-      }
-      case 'shombie': {
-        const shombie = shombiesRef.current?.find(s => s.id === entry.entityId);
-        if (!shombie || !shombie.isActive) return null;
-        return shombie.position;
-      }
-      case 'walapa': {
-        const walapa = walapasRef.current?.find(w => w.id === entry.entityId);
-        if (!walapa || !walapa.isActive) return null;
-        return walapa.position;
-      }
-      case 'shtickman': {
-        const shtickman = shtickmenRef.current?.find(s => s.id === entry.entityId);
-        if (!shtickman || !shtickman.isActive) return null;
-        return shtickman.position;
-      }
-      case 'player': {
-        return cameraRef.current?.position ?? null;
-      }
-      default: {
-        // Fall through to the EnemyCombatRegistry — any registered
-        // adapter exposes the enemy's hitbox we can use for flame anchor.
-        const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
-        if (!adapter) return null;
-        const list = adapter.getActiveEnemies();
-        const enemy = list.find(e => adapter.getId(e) === entry.entityId);
-        if (!enemy) return null;
-        const hb = adapter.getHitbox(enemy);
-        if (!hb) return null;
-        return _registryFallbackPos.set(hb.centerX, hb.bottomY, hb.centerZ);
-      }
+    if (entry.entityType === 'player') {
+      return cameraRef.current?.position ?? null;
     }
-  }, [shwarmsRef, shnakesRef, shombiesRef, walapasRef, shtickmenRef, cameraRef]);
+    const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
+    if (!adapter) return null;
+    // Compound id for shwarm: "<shwarmId>::<blockId>". Match on getId().
+    const lookupId = entry.entityType === 'shwarm' && entry.blockId
+      ? `${entry.entityId}::${entry.blockId}`
+      : entry.entityId;
+    const list = adapter.getActiveEnemies();
+    const enemy = list.find(e => adapter.getId(e) === lookupId);
+    if (!enemy) return null;
+    const hb = adapter.getHitbox(enemy);
+    if (!hb) return null;
+    return _registryFallbackPos.set(hb.centerX, hb.bottomY, hb.centerZ);
+  }, [cameraRef]);
 
   // Public: apply or refresh a burn on an entity
   // hitPosition: world-space point where flame actually hit (for positioned burns on large entities)
@@ -448,6 +379,7 @@ export function useBurnSystem({
       attachIds,
       hitOffset: hitOff,
       dotSeconds,
+      layout,
     };
 
     spawnBurnFlames(entry, 1.0, useHitPoint
@@ -456,58 +388,35 @@ export function useBurnSystem({
     burnsRef.current.set(key, entry);
   }, [spawnBurnFlames, removeBurn, getEntityPosition]);
 
-  // Apply burn damage to the appropriate entity
-  // NOTE: No knockback direction passed — burn damage should not push enemies around
+  // Apply burn damage. Player is the only non-enemy special case;
+  // every monster routes through its EnemyCombatAdapter.
+  // NOTE: No knockback direction passed — burn damage should not push enemies around.
   const applyBurnDamage = useCallback((entry: BurnEntry, damage: number) => {
     const actualDmg = Math.max(0, damage - entry.armor);
     if (actualDmg <= 0) return;
 
-    switch (entry.entityType) {
-      case 'shwarm':
-        if (entry.blockId) {
-          damageBlock(entry.entityId, entry.blockId, actualDmg);
-        }
-        break;
-      case 'shnake':
-        damageShnakeHead(entry.entityId, actualDmg);
-        break;
-      case 'shombie':
-        // Pass undefined for knockbackDir so burn doesn't launch enemies
-        damageShombie(entry.entityId, actualDmg, undefined as any, false, undefined as any);
-        break;
-      case 'walapa':
-        damageWalapa(entry.entityId, actualDmg);
-        break;
-      case 'shtickman':
-        // Pass undefined for knockbackDir so burn doesn't launch enemies
-        damageShtickman(entry.entityId, actualDmg, undefined as any);
-        break;
-      case 'player':
-        takeDamage?.(actualDmg);
-        break;
-      default: {
-        // Universal dispatch via the enemy combat registry — works for
-        // any monster that's registered an adapter (shpider, and any
-        // future enemy not in the legacy switch above).
-        const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
-        if (adapter) {
-          const list = adapter.getActiveEnemies();
-          const enemy = list.find(e => adapter.getId(e) === entry.entityId);
-          if (enemy) {
-            adapter.applyDamage(enemy, {
-              damage: actualDmg,
-              bulletSpeed: 0,
-              knockbackDirX: 0, knockbackDirY: 0, knockbackDirZ: 0,
-              hitX: 0, hitY: 0, hitZ: 0,
-              isHeadshot: false,
-              source: 'flame',
-            });
-          }
-        }
-        break;
-      }
+    if (entry.entityType === 'player') {
+      takeDamage?.(actualDmg);
+      return;
     }
-  }, [damageBlock, damageShnakeHead, damageShombie, damageWalapa, damageShtickman, takeDamage]);
+
+    const adapter = enemyCombatRegistry.getAdapter(entry.entityType);
+    if (!adapter) return;
+    const lookupId = entry.entityType === 'shwarm' && entry.blockId
+      ? `${entry.entityId}::${entry.blockId}`
+      : entry.entityId;
+    const list = adapter.getActiveEnemies();
+    const enemy = list.find(e => adapter.getId(e) === lookupId);
+    if (!enemy) return;
+    adapter.applyDamage(enemy, {
+      damage: actualDmg,
+      bulletSpeed: 0,
+      knockbackDirX: 0, knockbackDirY: 0, knockbackDirZ: 0,
+      hitX: 0, hitY: 0, hitZ: 0,
+      isHeadshot: false,
+      source: 'flame',
+    });
+  }, [takeDamage]);
 
   // Main frame loop
   useFrame(() => {
@@ -525,14 +434,21 @@ export function useBurnSystem({
         continue;
       }
 
-      // 2. Update flame positions — use hit offset if available, else multi-point layout
+      // 2. Update flame positions — use hit offset if available, else
+      //    the layout cached on the entry at creation time. Honors
+      //    xOffset/zOffset for multi-shape monsters (e.g. spider legs).
       if (entry.hitOffset) {
         _offsetPos.copy(pos).add(entry.hitOffset);
         renderer.updateAttachedPosition(entry.attachIds[0], _offsetPos);
       } else {
-        const layout = FLAME_LAYOUTS[entry.entityType];
+        const layout = entry.layout;
         for (let i = 0; i < layout.length; i++) {
-          _offsetPos.set(pos.x, pos.y + layout[i].yOffset, pos.z);
+          const pt = layout[i];
+          _offsetPos.set(
+            pos.x + (pt.xOffset ?? 0),
+            pos.y + pt.yOffset,
+            pos.z + (pt.zOffset ?? 0),
+          );
           renderer.updateAttachedPosition(entry.attachIds[i], _offsetPos);
         }
       }
