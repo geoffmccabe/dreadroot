@@ -410,8 +410,20 @@ export function Fortress() {
   // Local growth manager - stub for backwards compatibility
   const { stopGrowing, growingTreesRef } = useLocalGrowth();
 
-  // Automatic server-side tree growth polling
-  const hasGrowingTrees = plantedTrees.some(t => !t.is_fully_grown);
+  // Automatic server-side tree growth polling.
+  //
+  // CRITICAL: useTreeData splits the user's OWN in-progress trees into
+  // `myIncompleteTrees` (a separate array) so that `plantedTrees`
+  // returns only fully-grown trees + other users' trees. That makes
+  // `plantedTrees.some(t => !t.is_fully_grown)` always false for the
+  // local player's just-planted seed. If we only watched plantedTrees,
+  // the poller never fired and the user's tree never grew. This was
+  // the "I planted a T23 seed and it never grows" bug from 2026-May-24.
+  // Include myIncompleteTrees so the poller actually runs while the
+  // user's own seed is growing.
+  const hasGrowingTrees =
+    plantedTrees.some(t => !t.is_fully_grown) ||
+    myIncompleteTrees.length > 0;
   useTreeGrowthPoller({
     hasGrowingTrees,
     enabled: TREE_CONFIG.ENABLED && !!user?.id,

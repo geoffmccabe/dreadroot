@@ -174,54 +174,23 @@ export function useSeedPlanting({
       } as SeedDefinition;
     }
 
-    // No seed def for this tier? Build a default. Same pattern as the
-    // forced fungal/wide branches above — never silently bail on the
-    // user just because a DB row is missing or the row's name is
-    // empty (admin hasn't filled in T3 yet, etc.).
+    // No seed def for this tier — bail. (Earlier code here tried to
+    // fabricate a default with a synthetic id like 'original-default-23'
+    // but that breaks the RPC: plant_seed_with_blueprint's
+    // p_seed_definition_id is typed `uuid` AND planted_trees has a
+    // FK on seed_definitions(id). A synthetic id fails type cast at
+    // the PostgREST layer before the function even runs — leaving
+    // the optimistic seed block visible on screen but no DB row,
+    // so no growth and no label. That matches the user's report
+    // exactly. The right fix is to require the admin to configure
+    // the tier in the seed-definitions table; the seed cycler already
+    // filters to in_bracket_menu=true so users normally can't pick
+    // an unconfigured tier.)
     if (!seedDef) {
-      seedDef = {
-        id: `original-default-${tier}`,
-        tier,
-        name: `Tree T${tier}`,
-        tree_type: 'original',
-        trunk_texture_url: null,
-        branch_texture_url: null,
-        fruit_texture_url: null,
-        fungal_stem_texture_url: null,
-        fungal_cap_top_texture_url: null,
-        fungal_cap_underside_texture_url: null,
-        width_factor: 0.5,
-        branching_factor: 0.5,
-        fruiting_factor: 0.5,
-        growth_factor: 0.5,
-        cost: tier * 50,
-        rarity: 'common',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        low_branch_height: 2,
-        spike_chance: 0,
-        spike_length: 3,
-        nob_chance: 0,
-        nob_size: 1,
-        cross_chance: 0,
-        cross_length: 3,
-        shroom_chance: 0,
-        shroom_length: 5,
-        shroom_cap_diameter: 3,
-        symmetry: 'none',
-        shrine_chance: 0,
-        root_style: 'none',
-        fungal_min_height: null,
-        fungal_max_height: null,
-        fungal_min_cap_width: null,
-        fungal_max_cap_width: null,
-        fungal_stem_random: null,
-        fungal_lean_angle: null,
-        fungal_s_curve: null,
-      } as SeedDefinition;
+      console.warn(`[SeedPlanting] No seed definition for tier=${tier}${forceTreeType ? ' / ' + forceTreeType : ''} — aborting plant`);
+      return { success: false, error: `Seed tier ${tier} not configured` };
     }
-    // Backfill an empty name so the unconfigured-tier check doesn't
-    // bail. Same as the default above — the user just wants a tree.
+    // Empty name is fine — backfill so downstream code doesn't choke.
     if (!seedDef.name || seedDef.name.trim() === '') {
       seedDef = { ...seedDef, name: `Tree T${tier}` };
     }
@@ -341,7 +310,19 @@ export function useSeedPlanting({
       }) as any);
 
       if (rpcError) {
-        console.error('[SeedPlanting] plant_seed_with_blueprint failed:', rpcError);
+        // Loud console log so user-reported "I planted but nothing
+        // happened" can be diagnosed from the browser console without
+        // round-tripping more traces.
+        console.error('[SeedPlanting] plant_seed_with_blueprint FAILED:', {
+          code: rpcError.code,
+          message: rpcError.message,
+          details: (rpcError as any).details,
+          hint: (rpcError as any).hint,
+          seed_definition_id: seedDef.id,
+          tier: seedDef.tier,
+          tree_type: treeType,
+          base: { x: baseX, y: baseY, z: baseZ },
+        });
         if (rpcError.message?.includes('planting limit')) {
           // Keep this one toast: it's a gameplay rule the user needs
           // to know about (chunk-tier cap), not a system error.
