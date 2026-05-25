@@ -11,28 +11,42 @@
 //       frontZ - courtyardDepth - frontT + 1]
 // We trigger anywhere within 2m of the inside face (z = frontZ -
 // courtyardDepth - frontT + 1) and across the full wall width / height.
+//
+// IMPORTANT: do NOT destructure FORTRESS_DIMENSIONS at module top-
+// level. The first vault build did, and it threw a temporal-dead-zone
+// "Cannot access FORTRESS_DIMENSIONS before initialization" at app
+// start due to circular module-load ordering with the rest of the
+// fortress code. Reading the value inside a function avoids that
+// entire class of bug.
 
 import { FORTRESS_DIMENSIONS } from '@/components/fortress/FortressCollision';
 
-const { cliffW, cliffH, frontT, courtyardDepth, frontZ } = FORTRESS_DIMENSIONS;
-
-const BACK_WALL_INSIDE_Z = frontZ - courtyardDepth - frontT + 1;
 const TRIGGER_DEPTH = 2; // 2m in front of the inside wall face
 
-export const VAULT_TRIGGER_AABB = {
-  minX: -cliffW / 2,
-  maxX:  cliffW / 2,
-  minY: 0,
-  maxY: cliffH,
-  // Inside the courtyard (player approaching) up to / past the wall.
-  minZ: BACK_WALL_INSIDE_Z,
-  maxZ: BACK_WALL_INSIDE_Z + TRIGGER_DEPTH,
-};
+export interface VaultTriggerAABB {
+  minX: number; maxX: number;
+  minY: number; maxY: number;
+  minZ: number; maxZ: number;
+}
+
+export function getVaultTriggerAABB(): VaultTriggerAABB {
+  const { cliffW, cliffH, frontT, courtyardDepth, frontZ } = FORTRESS_DIMENSIONS;
+  const backWallInsideZ = frontZ - courtyardDepth - frontT + 1;
+  return {
+    minX: -cliffW / 2,
+    maxX:  cliffW / 2,
+    minY: 0,
+    maxY: cliffH,
+    minZ: backWallInsideZ,
+    maxZ: backWallInsideZ + TRIGGER_DEPTH,
+  };
+}
 
 export function isInVaultTriggerZone(x: number, y: number, z: number): boolean {
+  const a = getVaultTriggerAABB();
   return (
-    x >= VAULT_TRIGGER_AABB.minX && x <= VAULT_TRIGGER_AABB.maxX &&
-    y >= VAULT_TRIGGER_AABB.minY && y <= VAULT_TRIGGER_AABB.maxY &&
-    z >= VAULT_TRIGGER_AABB.minZ && z <= VAULT_TRIGGER_AABB.maxZ
+    x >= a.minX && x <= a.maxX &&
+    y >= a.minY && y <= a.maxY &&
+    z >= a.minZ && z <= a.maxZ
   );
 }
