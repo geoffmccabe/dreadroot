@@ -87,6 +87,14 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
    *  to a generic flesh thud if omitted. */
   getHitSoundUrl?: (enemy: TEnemy) => string | null;
 
+  /** Optional: how tall the "head" zone is, as a fraction of total
+   *  hitbox height (0–1). A hit in the upper N% of the hitbox counts
+   *  as a headshot (2× damage). Defaults to 0.25 (top quarter) which
+   *  matches the legacy shombie rule. Enemies whose head is a larger
+   *  share of their body (e.g. shpider's head≈body cube) should
+   *  return a larger value so headshots stay achievable. */
+  getHeadshotZoneFraction?: (enemy: TEnemy) => number;
+
   /**
    * Optional: where flames anchor on this enemy when it's on fire.
    * Enemies made of multiple parts (a body+head spider, a stack of
@@ -225,6 +233,8 @@ function raycastCylinder(
   }
 
   // Side intersection: |prevXZ + t·rayXZ - centerXZ|² = radius².
+  // Unrolled (no array literals) — this is on the per-bullet × per-enemy
+  // inner loop and gets called every frame for every active hit query.
   const ox = prevX - hb.centerX;
   const oz = prevZ - hb.centerZ;
   const a = rayDx * rayDx + rayDz * rayDz;
@@ -233,29 +243,45 @@ function raycastCylinder(
   const disc = b * b - 4 * a * c;
   if (disc >= 0 && a > 0.0001) {
     const sqrtD = Math.sqrt(disc);
-    for (const t of [(-b - sqrtD) / (2 * a), (-b + sqrtD) / (2 * a)]) {
-      if (t >= 0 && t <= 1) {
-        const iy = prevY + t * rayDy;
-        if (iy >= hb.bottomY && iy <= hb.topY) {
-          if (t < _cylHit.t) { _cylHit.t = t; _cylHit.y = iy; }
-          break;
+    const inv2a = 1 / (2 * a);
+    const tNear = (-b - sqrtD) * inv2a;
+    if (tNear >= 0 && tNear <= 1) {
+      const iy = prevY + tNear * rayDy;
+      if (iy >= hb.bottomY && iy <= hb.topY) {
+        if (tNear < _cylHit.t) { _cylHit.t = tNear; _cylHit.y = iy; }
+      } else {
+        // tNear's height was out of band — fall back to the far hit.
+        const tFar = (-b + sqrtD) * inv2a;
+        if (tFar >= 0 && tFar <= 1) {
+          const iy2 = prevY + tFar * rayDy;
+          if (iy2 >= hb.bottomY && iy2 <= hb.topY && tFar < _cylHit.t) {
+            _cylHit.t = tFar; _cylHit.y = iy2;
+          }
         }
       }
     }
   }
-  // Cap intersections (top/bottom face).
+  // Cap intersections (bottom + top face). Unrolled.
   if (rayDy !== 0) {
-    for (const [tCand, capY] of [
-      [(hb.bottomY - prevY) / rayDy, hb.bottomY],
-      [(hb.topY - prevY)    / rayDy, hb.topY],
-    ] as const) {
-      if (tCand >= 0 && tCand <= 1) {
-        const capX = prevX + tCand * rayDx - hb.centerX;
-        const capZ = prevZ + tCand * rayDz - hb.centerZ;
-        if (capX * capX + capZ * capZ < r2 && tCand < _cylHit.t) {
-          _cylHit.t = tCand;
-          _cylHit.y = capY;
-        }
+    const invRayDy = 1 / rayDy;
+    // Bottom cap.
+    const tBot = (hb.bottomY - prevY) * invRayDy;
+    if (tBot >= 0 && tBot <= 1 && tBot < _cylHit.t) {
+      const capX = prevX + tBot * rayDx - hb.centerX;
+      const capZ = prevZ + tBot * rayDz - hb.centerZ;
+      if (capX * capX + capZ * capZ < r2) {
+        _cylHit.t = tBot;
+        _cylHit.y = hb.bottomY;
+      }
+    }
+    // Top cap.
+    const tTop = (hb.topY - prevY) * invRayDy;
+    if (tTop >= 0 && tTop <= 1 && tTop < _cylHit.t) {
+      const capX = prevX + tTop * rayDx - hb.centerX;
+      const capZ = prevZ + tTop * rayDz - hb.centerZ;
+      if (capX * capX + capZ * capZ < r2) {
+        _cylHit.t = tTop;
+        _cylHit.y = hb.topY;
       }
     }
   }

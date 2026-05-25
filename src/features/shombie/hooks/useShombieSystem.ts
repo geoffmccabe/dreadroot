@@ -415,6 +415,8 @@ export function useShombieSystem({
   // Register Shombie with the EnemyCombatRegistry so the universal
   // bullet + flame pipelines work without per-type code.
   useEffect(() => {
+    // Reused per hit — avoids allocating a Vector3 every bullet impact.
+    const dirScratch = new THREE.Vector3();
     return enemyCombatRegistry.register({
       type: 'shombie',
       getActiveEnemies: () => shombiesRef.current,
@@ -431,9 +433,8 @@ export function useShombieSystem({
         };
       },
       applyDamage: (s, info) => {
-        const dir = new THREE.Vector3(info.knockbackDirX, 0, info.knockbackDirZ);
-        const killed = damageShombie(s.id, info.damage, dir, info.isHeadshot, dir);
-        return killed;
+        dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
+        return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
     });

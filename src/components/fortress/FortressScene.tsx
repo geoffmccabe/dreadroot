@@ -1228,16 +1228,20 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
     // Universal cone pass — iterate every adapter in the
     // EnemyCombatRegistry. For tall enemies (shtickman is 22–40m) a
-    // single hitbox-center test misses the feet/head; sample five
-    // points evenly between bottomY and topY so any visible part in
-    // the cone triggers a hit. Shwarm exposes one entry per block, so
-    // each block's small hitbox gets tested independently.
+    // single hitbox-center test misses the feet/head; sample at a
+    // fixed ~3m step so the cone's narrowest reach (~6m at max
+    // distance) can't slip between samples. Shwarm exposes one
+    // entry per block, so each block's tiny hitbox gets tested
+    // independently with a single-sample pass.
+    const CONE_SAMPLE_STEP = 3.0;
     for (const adapter of enemyCombatRegistry.getAdapters()) {
       for (const enemy of adapter.getActiveEnemies()) {
         const hb = adapter.getHitbox(enemy);
         if (!hb) continue;
         const heightSpan = hb.topY - hb.bottomY;
-        const sampleCount = heightSpan > 4 ? 5 : 1;
+        const sampleCount = heightSpan > CONE_SAMPLE_STEP
+          ? Math.max(2, Math.ceil(heightSpan / CONE_SAMPLE_STEP) + 1)
+          : 1;
         let hitX = 0, hitY = 0, hitZ = 0;
         let coneHit = false;
         for (let s = 0; s < sampleCount; s++) {

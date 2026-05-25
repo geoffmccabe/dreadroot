@@ -301,15 +301,20 @@ export function useShwarmSystem({
   // EnemyCombatRegistry adapter. Each block is a separate "enemy" so
   // the registry can hit individual blocks with one cylinder pass.
   // Compound id format: "<shwarmId>::<blockId>".
+  //
+  // Hitbox is CONSTANT regardless of the block's visual scale — see
+  // ShwarmBlock.scale ("Visual scale based on health (0.2 to 1.0),
+  // hitbox stays constant"). Matches legacy SHWARM_HALF_SIZE = 0.35.
   useEffect(() => {
-    type ShwarmTarget = { shwarmId: string; block: ShwarmBlock; visualScale: number };
+    type ShwarmTarget = { shwarmId: string; block: ShwarmBlock };
+    const SHWARM_HALF = 0.35;
     return enemyCombatRegistry.register<ShwarmTarget>({
       type: 'shwarm',
       getActiveEnemies: () => {
         const out: ShwarmTarget[] = [];
         for (const s of shwarmsRef.current) {
           for (const block of s.blocks) {
-            if (block.isAlive) out.push({ shwarmId: s.id, block, visualScale: block.scale ?? 1 });
+            if (block.isAlive) out.push({ shwarmId: s.id, block });
           }
         }
         return out;
@@ -317,14 +322,12 @@ export function useShwarmSystem({
       getId: (t) => `${t.shwarmId}::${t.block.id}`,
       getHitbox: (t) => {
         if (!t.block.isAlive) return null;
-        // Half-meter cubes — radius ≈ 0.35, height = 0.7 × visualScale.
-        const half = 0.35 * t.visualScale;
         return {
           centerX: t.block.position.x,
           centerZ: t.block.position.z,
-          bottomY: t.block.position.y - half,
-          topY: t.block.position.y + half,
-          radius: half,
+          bottomY: t.block.position.y - SHWARM_HALF,
+          topY: t.block.position.y + SHWARM_HALF,
+          radius: SHWARM_HALF,
         };
       },
       applyDamage: (t, info) => {

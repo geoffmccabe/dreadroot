@@ -378,6 +378,8 @@ export function useShpiderSystem({
   // (bullets, flamethrower, future explosions) can damage shpiders
   // without per-type code in the weapon.
   useEffect(() => {
+    // Reused per hit — avoids allocating a Vector3 every bullet impact.
+    const dirScratch = new THREE.Vector3();
     return enemyCombatRegistry.register({
       type: 'shpider',
       getActiveEnemies: () => shpidersRef.current,
@@ -395,10 +397,19 @@ export function useShpiderSystem({
         };
       },
       applyDamage: (s, info) => {
-        const dir = new THREE.Vector3(info.knockbackDirX, 0, info.knockbackDirZ);
-        return damageShpider(s.id, info.damage, dir, info.bulletSpeed || 0);
+        dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
+        return damageShpider(s.id, info.damage, dirScratch, info.bulletSpeed || 0);
       },
       getHitSoundUrl: () => '/bullet_impact_2.mp3',
+      // Head zone = full headSize / (bodySize+headSize). Matches the
+      // legacy rule "hitY > bodySize counts as head" — anything above
+      // the body cube is the spider's head cube.
+      getHeadshotZoneFraction: (s) => {
+        const bodySize = s.definition.body_size * s.scale;
+        const headSize = s.definition.head_size * s.scale;
+        const total = bodySize + headSize;
+        return total > 0 ? headSize / total : 0.25;
+      },
       // Multiple flame anchors so fire wraps the whole spider —
       // body cube, head cube, and 4 leg-spread points. Sizes scale
       // with bodySize × scale.

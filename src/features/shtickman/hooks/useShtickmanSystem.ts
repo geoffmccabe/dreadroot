@@ -589,6 +589,8 @@ export function useShtickmanSystem({
   // EnemyCombatRegistry adapter — every weapon (bullet, flame, future)
   // can target shtickmen without per-type code in the weapon.
   useEffect(() => {
+    // Reused per hit — avoids allocating a Vector3 every bullet impact.
+    const dirScratch = new THREE.Vector3();
     return enemyCombatRegistry.register({
       type: 'shtickman',
       getActiveEnemies: () => shtickmenRef.current,
@@ -606,10 +608,13 @@ export function useShtickmanSystem({
         };
       },
       applyDamage: (s, info) => {
-        const dir = new THREE.Vector3(info.knockbackDirX, 0, info.knockbackDirZ);
-        return damageShtickman(s.id, info.damage, dir);
+        dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
+        return damageShtickman(s.id, info.damage, dirScratch);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
+      // Shtickman head is small relative to its 22-40m body — match
+      // the legacy 15% upper-zone rule.
+      getHeadshotZoneFraction: () => 0.15,
     });
   }, [damageShtickman]);
 
