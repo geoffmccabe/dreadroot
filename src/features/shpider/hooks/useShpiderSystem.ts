@@ -19,7 +19,13 @@ import {
 } from '../lib/deathFragments';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
-const MAX_TOTAL_SHPIDERS = 200;
+// Capped at 50 because per-frame AI cost is O(N²) in the active spider
+// count (stepShpiderHopAI iterates the full `others` list for spacing
+// and stack checks). Profile trace 2026-May-24 (Trace-20260524T175147)
+// showed the consolidated useFrame body burning 222s of 374s profile
+// time (59%) when this cap was 200, with spider count >100. 50²/200²
+// = 6.25% of the old work; ~16× less per-frame.
+const MAX_TOTAL_SHPIDERS = 50;
 const GROUP_SPREAD_RADIUS = 6;
 const DEFAULT_GROUP_SIZE = 5;
 

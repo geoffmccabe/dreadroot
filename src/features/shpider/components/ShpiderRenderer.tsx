@@ -75,6 +75,11 @@ const _segStart = new THREE.Vector3();
 const _segEnd = new THREE.Vector3();
 const _segMid = new THREE.Vector3();
 const _worldRot = new THREE.Quaternion();
+// Scratch for the mandible splay rotation; one per process, NOT one
+// per shpider per frame (the original code did `new Quaternion()`
+// inside the mandible loop = 2 allocs per shpider per frame, =
+// ~12k allocs/sec with 100 spiders. Pure GC churn).
+const _mandibleYawQ = new THREE.Quaternion();
 const _localPoint = new THREE.Vector3();
 
 /** Triangle wave 0→1→0 over duration. */
@@ -472,8 +477,8 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
 
         // Splay around local +Y axis so mandibles fan to either side.
         _worldRot.copy(_quat);
-        const yawQ = new THREE.Quaternion().setFromAxisAngle(_yAxis, sideSign * splay);
-        _worldRot.multiply(yawQ);
+        _mandibleYawQ.setFromAxisAngle(_yAxis, sideSign * splay);
+        _worldRot.multiply(_mandibleYawQ);
 
         // Mirror the right mandible's geometry (which is authored
         // bending toward +X) by flipping its X scale.

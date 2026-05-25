@@ -127,12 +127,21 @@ export function Fortress() {
       return result;
     }
     return {
-      lightingRange: [0, 100] as [number, number],
+      lightingRange: [50, 100] as [number, number],
       cycleDuration: 2,
       cloudLayer1: defaultCloud1,
       cloudLayer2: defaultCloud2,
     };
   });
+
+  // Belt-and-suspenders persistence: write weatherSettings to
+  // localStorage on every change. The setter at handleWeatherSettingsChange
+  // also writes, but doing it in an effect guarantees the value on disk
+  // stays in sync with whatever React last committed, even across
+  // Strict-Mode double-invokes or programmatic state pushes.
+  useEffect(() => {
+    localStorage.setItem('weatherSettings', JSON.stringify(weatherSettings));
+  }, [weatherSettings]);
   
   // Lightning Panel state
   const [lightningPanelOpen, setLightningPanelOpen] = useState(false);
