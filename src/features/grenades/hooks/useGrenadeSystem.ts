@@ -33,7 +33,8 @@ import {
 } from '../constants';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
-import { playExplosionSound, playThrowSound } from '../lib/explosionSound';
+import { playThrowSound } from '../lib/explosionSound';
+import { playSpatialSound } from '@/lib/spatialAudio';
 import type { UniversalFlameRendererHandle } from '@/components/fortress/UniversalFlameRenderer';
 
 interface UseGrenadeSystemOptions {
@@ -302,10 +303,14 @@ export function useGrenadeSystem({
       // Renderer manages auto-cleanup via duration, no follow-up needed.
     }
 
-    // ── Sound: distance from camera for the listener falloff ───────
+    // ── Sound: recorded boom played through the shared spatial-audio
+    //    module so it shares the project's inverse-distance falloff
+    //    with every other world SFX. Higher tier → slightly louder
+    //    base volume so a T10 thumps harder than a T1.
     const cam = cameraRef.current;
     const distFromCam = cam ? center.distanceTo(cam.position) : 0;
-    playExplosionSound(distFromCam, g.tier);
+    const tierVol = 0.6 + Math.min(0.35, (g.tier - 1) * 0.04);
+    void playSpatialSound('/grenade_explosion.mp3', distFromCam, { baseVolume: tierVol });
 
     return { position: center, tier: g.tier, killed };
   }, [universalFlameRef, cameraRef]);
