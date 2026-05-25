@@ -18,6 +18,7 @@ import type { ShpiderInstance } from '../types';
 import { findGroundY, pickTreeAwareTarget } from './surfaceDetect';
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
 import { playSpatialSound } from '@/lib/spatialAudio';
+import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 
 const _normalScratch = new THREE.Vector3();
 const _posScratch = new THREE.Vector3();
@@ -222,6 +223,14 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
         endX = (endX + s.position.x) * 0.5;
         endZ = (endZ + s.position.z) * 0.5;
       }
+      // Fortress Safe Zone: collapse any crawl endpoint that lands
+      // inside the FSZ back to the shpider's current position. If
+      // the shpider is already outside the FSZ and the crawl would
+      // breach it, this effectively cancels the crawl this tick.
+      if (isPointInFSZ(endX, 0, endZ)) {
+        endX = s.position.x;
+        endZ = s.position.z;
+      }
 
       s.hop.phase = 'crawling';
       s.hop.crawlStartAt = now;
@@ -298,6 +307,9 @@ function launchHop(s: ShpiderInstance, deps: StepDeps): void {
       _posScratch, _normalScratch,
     );
     if (isTooCrowded(_posScratch.x, _posScratch.z, s, deps.others)) continue;
+    // Reject hop landings inside the FSZ so shpiders bounce off
+    // the fortress's invisible wall like every other enemy type.
+    if (isPointInFSZ(_posScratch.x, 0, _posScratch.z)) continue;
     endX = _posScratch.x;
     endY = _posScratch.y;
     endZ = _posScratch.z;
@@ -315,6 +327,18 @@ function launchHop(s: ShpiderInstance, deps: StepDeps): void {
     const groundY = findGroundY(endX, endY + 4, endZ, 64);
     endY = groundY === -Infinity ? 0 : groundY;
     endNX = 0; endNY = 1; endNZ = 0;
+  }
+  // Final safety net: if every retry landed inside the FSZ and we
+  // fell through here, cancel the hop entirely by anchoring it to
+  // the shpider's current position. Better than punching into the
+  // safe zone.
+  if (isPointInFSZ(endX, 0, endZ)) {
+    endX = s.position.x;
+    endY = s.position.y;
+    endZ = s.position.z;
+    endNX = s.surfaceNormal.x;
+    endNY = s.surfaceNormal.y;
+    endNZ = s.surfaceNormal.z;
   }
 
   const dx = endX - s.position.x;

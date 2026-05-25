@@ -337,6 +337,37 @@ export function Fortress() {
     fetchDef();
   }, [selectedSlot, equippedItems]);
 
+  // Hotbar quick-use: digit keys 1-6 activate the equipped slot's item.
+  // Currently handles health_potion (full heal + swallow sound + consume);
+  // other consumable item keys can be added below by name.
+  const handleUseHotbarSlot = useCallback(async (slot: number) => {
+    const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === slot);
+    if (!eq?.itemId) return;
+    const { data: itemDef } = await supabase
+      .from('items')
+      .select('key, item_category')
+      .eq('id', eq.itemId)
+      .maybeSingle();
+    if (!itemDef) return;
+    if (itemDef.key === 'health_potion') {
+      // Don't waste a potion at full HP.
+      if (healthRef.current.currentHealth >= healthRef.current.maxHealth) return;
+      heal(healthRef.current.maxHealth);
+      try {
+        const audio = new Audio('/swallow_potion.mp3');
+        audio.volume = 0.8;
+        void audio.play();
+      } catch { /* sound failure shouldn't break consume */ }
+      // Decrement the inventory row. useBlock matches on key OR id.
+      await useBlock(itemDef.key);
+      // If this was the last potion, unequip the slot so the UI updates.
+      const remaining = inventory.find(i => i.item_type === itemDef.key || i.item_id === eq.itemId);
+      if (!remaining || remaining.quantity <= 1) {
+        await updateEquippedSlot(slot, null);
+      }
+    }
+  }, [equippedItems, heal, healthRef, useBlock, inventory, updateEquippedSlot]);
+
   // Compute bullet tier from player level (automatic for all players)
   // Level 1-3 → Tier 1, Level 4-6 → Tier 2, etc.
   const baseBulletTier = useMemo(() => 
@@ -352,14 +383,15 @@ export function Fortress() {
   const bulletColor = getDefinition(selectedBulletTier).colors[0] || '#FFFF00';
   
   // Player health system
-  const { 
-    currentHealth, 
-    maxHealth, 
-    isDead, 
+  const {
+    currentHealth,
+    maxHealth,
+    isDead,
     takeDamage,
     applyDamageWithKnockback,
     respawn,
-    healthRef 
+    heal,
+    healthRef
   } = usePlayerHealth();
   
   // Shwarm definitions
@@ -1735,6 +1767,7 @@ export function Fortress() {
           onBulletTierChange={setAdminTierOverride}
           playerLevel={profile?.current_level ?? 1}
           onPentabulletChargeChange={setPentabulletCharge}
+          onUseHotbarSlot={handleUseHotbarSlot}
           onJetBoostStateChange={setJetBoostState}
           selectedItemDef={selectedItemDef}
           addItem={addItem}

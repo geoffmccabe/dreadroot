@@ -89,6 +89,8 @@ export function FirstPersonControls({
   // Pentabullet props
   playerLevel = 1,
   onPentabulletChargeChange,
+  // Hotbar quick-use (digit 1-6 activates the equipped slot's item)
+  onUseHotbarSlot,
   // Admin spawn shortcut
   onSpawnShnake,
   // Jet Boost system
@@ -485,6 +487,16 @@ export function FirstPersonControls({
             clearTimeout(rModeTimeoutRef.current);
             rModeTimeoutRef.current = null;
           }
+          break;
+        }
+        // Default: digits 1-6 activate the corresponding hotbar slot
+        // (consume the equipped item — used for health potions etc.).
+        // Skipped while in any placement / spawn mode so number keys
+        // still mean what they used to in those flows.
+        if (onUseHotbarSlot && event.code >= 'Digit1' && event.code <= 'Digit6') {
+          const slot = parseInt(event.code.replace('Digit', ''));
+          event.preventDefault();
+          onUseHotbarSlot(slot);
         }
         break;
       case 'KeyB':

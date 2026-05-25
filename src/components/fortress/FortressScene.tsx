@@ -178,6 +178,7 @@ export function FortressScene({
   onBulletTierChange,
   playerLevel = 1,
   onPentabulletChargeChange,
+  onUseHotbarSlot,
   shnakeDefinitions,
   plantedTrees = [],
   treeFruits = [],
@@ -1360,6 +1361,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onBulletTierChange={onBulletTierChange}
         playerLevel={playerLevel}
         onPentabulletChargeChange={onPentabulletChargeChange}
+        onUseHotbarSlot={onUseHotbarSlot}
         onSpawnShnake={handleSpawnShnake}
         onJetBoostStateChange={onJetBoostStateChange}
         onJetBoostFired={(pos, colors) => {

@@ -207,6 +207,9 @@ export interface SceneProps {
   // Pentabullet system
   playerLevel?: number;
   onPentabulletChargeChange?: (charge: number) => void;
+  /** Activate a hotbar slot by index (1-6). Used for keyboard digits
+   *  consuming health potions, etc. */
+  onUseHotbarSlot?: (slot: number) => void;
   // Jet Boost system
   onJetBoostStateChange?: (state: JetBoostState) => void;
   // Selected hotbar item (for flame glove detection)
@@ -275,6 +278,9 @@ export interface FirstPersonControlsProps {
   // Pentabullet system
   playerLevel?: number;
   onPentabulletChargeChange?: (charge: number) => void;
+  /** Activate a hotbar slot by index (1-6). Used for keyboard digits
+   *  consuming health potions, etc. */
+  onUseHotbarSlot?: (slot: number) => void;
   // Admin spawn shortcut (!2# for shnakes)
   onSpawnShnake?: (tier: number) => void;
   // Jet Boost system

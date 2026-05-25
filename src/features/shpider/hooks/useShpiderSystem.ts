@@ -18,6 +18,7 @@ import {
   DEATH_FRAGMENT_MAX,
 } from '../lib/deathFragments';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 
 // Capped at 50 because per-frame AI cost is O(N²) in the active spider
 // count (stepShpiderHopAI iterates the full `others` list for spacing
@@ -191,6 +192,7 @@ export function useShpiderSystem({
     damage: number,
     knockbackDir: THREE.Vector3,
     bulletSpeed: number,
+    isHeadshot: boolean = false,
   ): boolean => {
     const s = shpidersRef.current.find(x => x.id === id);
     if (!s || !s.isActive) return false;
@@ -216,15 +218,20 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
-      // Spawn death fragments (capped — drop oldest if at capacity).
-      const newFrags = createDeathFragments(s, Date.now());
-      const combined = fragmentsRef.current.concat(newFrags);
-      if (combined.length > DEATH_FRAGMENT_MAX) {
-        fragmentsRef.current = combined.slice(combined.length - DEATH_FRAGMENT_MAX);
-      } else {
-        fragmentsRef.current = combined;
+      // Death explosion is ONLY for headshot kills — a body/leg kill
+      // is supposed to just make the shpider vanish quietly. Per
+      // 2026-May-24 user feedback: "Make the shpiders only explode if
+      // they are killed by a headshot. If they are killed with a
+      // body/leg shot then they just disappear."
+      if (isHeadshot) {
+        const newFrags = createDeathFragments(s, Date.now());
+        const combined = fragmentsRef.current.concat(newFrags);
+        if (combined.length > DEATH_FRAGMENT_MAX) {
+          fragmentsRef.current = combined.slice(combined.length - DEATH_FRAGMENT_MAX);
+        } else {
+          fragmentsRef.current = combined;
+        }
       }
-      console.log(`[Shpider] DEATH t${s.definition.tier} → spawned ${newFrags.length} fragments (active total ${fragmentsRef.current.length})`);
       removeShpider(s.id);
       return true;
     }
@@ -363,6 +370,10 @@ export function useShpiderSystem({
             if (Math.random() < chance) {
               const worldX = chunkX * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
               const worldZ = chunkZ * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
+              // Block spawns inside the Fortress Safe Zone — every
+              // other enemy adapter respects it, shpiders shouldn't
+              // be the exception. (User report 2026-May-24.)
+              if (isPointInFSZ(worldX, 0, worldZ)) continue;
               spawnShpiderAt(def, worldX, worldZ);
               break; // one new spawn per chunk per check
             }
@@ -404,7 +415,7 @@ export function useShpiderSystem({
       },
       applyDamage: (s, info) => {
         dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
-        return damageShpider(s.id, info.damage, dirScratch, info.bulletSpeed || 0);
+        return damageShpider(s.id, info.damage, dirScratch, info.bulletSpeed || 0, info.isHeadshot);
       },
       getHitSoundUrl: () => '/bullet_impact_2.mp3',
       // Head zone = full headSize / (bodySize+headSize). Matches the

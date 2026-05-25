@@ -58,6 +58,17 @@ export const FruitRenderer = React.memo(function FruitRenderer({
   const findClosestFruitRef = useRef(findClosestFruit);
   findClosestFruitRef.current = findClosestFruit;
 
+  // React state for whether to MOUNT the harvest prompt. drei's <Html>
+  // portals its content into the document body — toggling parent
+  // group.visible doesn't reliably remove the DOM node, so the
+  // "Press F to Harvest" text could linger at the just-harvested
+  // fruit's position. Tracking this in state lets us unmount the
+  // <Html> entirely when no fruit is in range. Edge-triggered: we
+  // only setState when the visibility changes, so the frame loop
+  // doesn't spam React re-renders.
+  const [promptVisible, setPromptVisible] = useState(false);
+  const promptVisibleRef = useRef(false);
+
   // Track atlas readiness
   const [atlasReady, setAtlasReady] = useState(false);
 
@@ -197,24 +208,23 @@ export const FruitRenderer = React.memo(function FruitRenderer({
     mesh.instanceMatrix.needsUpdate = true;
     if (uvAttr) uvAttr.needsUpdate = true;
 
-    // Update "Press F to Harvest" prompt position
-    const promptGroup = promptGroupRef.current;
-    if (promptGroup && findClosestFruitRef.current) {
-      const closest = findClosestFruitRef.current();
-      // Skip phantom/ghost fruit at origin (0,0,0) - known issue
-      const isPhantom = closest && closest.position_x === 0 && closest.position_y === 0 && closest.position_z === 0;
-      if (closest && !isPhantom) {
-        promptGroup.visible = true;
-        promptGroup.position.set(
-          closest.position_x + 0.5,
-          closest.position_y + 1.4, // Above the fruit sphere
-          closest.position_z + 0.5
-        );
-        // Billboard: face camera
-        promptGroup.quaternion.copy(cam.quaternion);
-      } else {
-        promptGroup.visible = false;
-      }
+    // Update "Press F to Harvest" prompt position. Only mount the
+    // <Html> when there's actually a closest fruit, so the portaled
+    // DOM unmounts cleanly after a harvest.
+    const closest = findClosestFruitRef.current ? findClosestFruitRef.current() : null;
+    const isPhantom = closest && closest.position_x === 0 && closest.position_y === 0 && closest.position_z === 0;
+    const shouldShowPrompt = !!(closest && !isPhantom);
+    if (shouldShowPrompt !== promptVisibleRef.current) {
+      promptVisibleRef.current = shouldShowPrompt;
+      setPromptVisible(shouldShowPrompt);
+    }
+    if (shouldShowPrompt && promptGroupRef.current && closest) {
+      promptGroupRef.current.position.set(
+        closest.position_x + 0.5,
+        closest.position_y + 1.4,
+        closest.position_z + 0.5,
+      );
+      promptGroupRef.current.quaternion.copy(cam.quaternion);
     }
 
     // Manage flames for visible fruits
@@ -296,8 +306,11 @@ export const FruitRenderer = React.memo(function FruitRenderer({
         args={[SPHERE_GEO, material, maxCount]}
         frustumCulled={false}
       />
-      {/* "Press F to Harvest" prompt — HTML overlay, always visible on top */}
-      <group ref={promptGroupRef} visible={false}>
+      {/* "Press F to Harvest" prompt — HTML overlay. Mounted only when
+          there's a fruit in range so the portaled DOM unmounts after
+          harvest (drei's <Html> doesn't respect parent visible={false}). */}
+      {promptVisible && (
+      <group ref={promptGroupRef}>
         <Html center distanceFactor={8} style={{ pointerEvents: 'none' }}>
           <div style={{
             color: 'white',
@@ -311,6 +324,7 @@ export const FruitRenderer = React.memo(function FruitRenderer({
           </div>
         </Html>
       </group>
+      )}
     </>
   );
 });
