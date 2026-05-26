@@ -36,8 +36,9 @@ export function useWalapaDefinitions() {
         .order('tier', { ascending: true });
 
       if (error) {
-        // Table might not exist - return defaults
-        console.warn('[WalapaDefinitions] Fetch error (table may not exist):', error.message);
+        // Table might not exist - silently fall back to defaults.
+        // (Previously logged a warn here, but in Supabase projects
+        // that don't have walapa_definitions it spammed every load.)
         // Create default definitions for all 10 tiers
         const defaults: WalapaDefinition[] = [];
         for (let tier = 1; tier <= 10; tier++) {

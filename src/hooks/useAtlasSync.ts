@@ -100,6 +100,10 @@ export function useAtlasSync(options?: {
     staleTime: 5 * 60 * 1000,
   });
 
+  // walapa_definitions and block_types are optional — they may not
+  // exist in every Supabase project. Return [] silently if missing
+  // instead of spamming the console with 404s. Atlas sync degrades
+  // gracefully (skips that category) when the array is empty.
   const { data: walapaDefinitions, isLoading: loadingWalapas } = useQuery({
     queryKey: ['atlas-walapa-definitions'],
     queryFn: async () => {
@@ -107,24 +111,26 @@ export function useAtlasSync(options?: {
         .from('walapa_definitions' as any)
         .select('tier, body_texture_url, belly_texture_url, eyes_texture_url')
         .order('tier');
-      if (error) throw error;
-      return data;
+      if (error) return [];
+      return data ?? [];
     },
     enabled,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   const { data: blockTypes, isLoading: loadingBlocks } = useQuery({
     queryKey: ['atlas-block-types'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('block_types')
+        .from('block_types' as any)
         .select('name, texture_url');
-      if (error) throw error;
-      return data;
+      if (error) return [];
+      return data ?? [];
     },
     enabled,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   const isLoading = loadingSeeds || loadingShwarms || loadingShombies || loadingShnakes || loadingWalapas || loadingBlocks;
@@ -361,15 +367,18 @@ export async function syncAtlasOnInit(): Promise<void> {
     supabase.from('shombie_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url').order('tier'),
     supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
-    supabase.from('block_types').select('name, texture_url'),
+    supabase.from('block_types' as any).select('name, texture_url'),
   ]);
 
   const seedDefinitions = seedsResult.data;
   const shwarmDefinitions = shwarmsResult.data;
   const shombieDefinitions = shombiesResult.data;
   const shnakeDefinitions = shnakesResult.data;
-  const walapaDefinitions = walapasResult.data;
-  const blockTypes = blocksResult.data;
+  // walapa_definitions and block_types are optional — quietly fall
+  // back to empty arrays when the table is missing in this Supabase
+  // project. Atlas sync handles the empty case.
+  const walapaDefinitions = walapasResult.error ? [] : walapasResult.data;
+  const blockTypes = blocksResult.error ? [] : blocksResult.data;
 
   // Build batch of all texture specs for parallel loading
   const specs: Array<{
