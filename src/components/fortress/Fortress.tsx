@@ -230,6 +230,12 @@ export function Fortress() {
   const [pendingChopPosition, setPendingChopPosition] = useState<{ x: number; y: number; z: number } | null>(null);
   const [chopProgress, setChopProgress] = useState(0);
 
+  // Grenade-ready flag — true between G-press (pin pulled) and the
+  // click that throws or another G-press that cancels. HUD reads
+  // this to flash the slot-6 ring green and render the green throw
+  // crosshair with "G" in the middle.
+  const [grenadeReady, setGrenadeReady] = useState(false);
+
   // Vault state — proximity flag flips when player walks into the
   // back-wall trigger zone, prompt + V keybind become active. Open
   // flag controls the modal. forceCloseToken bumps when we want the
@@ -1874,6 +1880,7 @@ export function Fortress() {
           onPentabulletChargeChange={setPentabulletCharge}
           onUseHotbarSlot={handleUseHotbarSlot}
           consumeGrenade={consumeGrenade}
+          onGrenadeReadyChange={setGrenadeReady}
           onAdminGrantGrenade={grantAdminGrenade}
           onAdminGrantHealthPotion={grantAdminHealthPotion}
           vaultInRange={vaultInRange}
@@ -1951,6 +1958,7 @@ export function Fortress() {
         selectedSlot={selectedSlot}
         onSelectSlot={setSelectedSlot}
         onDeleteBlock={handleInspectorDeleteBlock}
+        grenadeReady={grenadeReady}
       />
 
       <FortressOverlays
@@ -1968,6 +1976,7 @@ export function Fortress() {
         treePlacementMode={treePlacementMode}
         crosshairsEnabled={crosshairsEnabled}
         bulletColor={bulletColor}
+        grenadeReady={grenadeReady}
         isDead={isDead}
         respawnTimer={respawnTimer}
         respawn={respawn}

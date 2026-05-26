@@ -213,6 +213,10 @@ export interface SceneProps {
   /** Throw a grenade now. Returns true if one was actually thrown
    *  (false if inventory empty / live cap hit). */
   onThrowGrenade?: () => boolean;
+  /** Fires whenever the grenade-ready flag flips (G pressed on the
+   *  ground, or click consumed it). HUD reacts to light slot 6 and
+   *  render the green throw crosshair. */
+  onGrenadeReadyChange?: (ready: boolean) => void;
   /** Take one grenade out of the user's inventory and return its
    *  tier. Returns null if no grenade is held. Inventory is owned by
    *  Fortress.tsx so the throw mechanism delegates here. */
@@ -300,6 +304,8 @@ export interface FirstPersonControlsProps {
   /** Throw a grenade now. Returns true if one was actually thrown
    *  (false if inventory empty / live cap hit). */
   onThrowGrenade?: () => boolean;
+  /** Grenade-ready flag flipped (pin pulled / thrown). */
+  onGrenadeReadyChange?: (ready: boolean) => void;
   /** Admin/superadmin only: Cmd+G grants a grenade. */
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: Cmd+H grants a health potion. */

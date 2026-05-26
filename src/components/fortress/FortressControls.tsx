@@ -95,6 +95,10 @@ export function FirstPersonControls({
   // Grenade throw — called on click while grenade-ready. Returns true
   // if a grenade was actually thrown (false if inventory empty etc.).
   onThrowGrenade,
+  // Fires whenever the grenade-ready flag flips. HUD uses this to
+  // light up the slot 6 ring green + flashing, and to render the
+  // green throw-direction crosshair with a "G" in the center.
+  onGrenadeReadyChange,
   // Admin/superadmin item grants — Cmd+G grenade, Cmd+H health potion.
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
@@ -258,10 +262,11 @@ export function FirstPersonControls({
       getSoundUrl('pistol_cock', '/pistol_cocking_sound.mp3'),
       getSoundUrl('pistol_holster', '/holster_pistol_sound.mp3'),
       getSoundUrl('jet_boots', '/jet_boots_1.mp3'),
-      // Preload the grenade explosion sample. Without preload, the
-      // first throw fetches+decodes the MP3 on demand and the boom
-      // lags noticeably behind the visual flash.
+      // Preload grenade explosion + pin-pull. Without preload the
+      // first throw fetches/decodes the MP3 on demand and the SFX
+      // lag noticeably behind the action.
       '/grenade_explosion.mp3',
+      '/grenade-pin-pull.mp3',
     ]);
   }, []);
 
@@ -656,9 +661,9 @@ export function FirstPersonControls({
           // Toggle ready. We don't pull anything from inventory until
           // the throw actually fires.
           grenadeReadyRef.current = !grenadeReadyRef.current;
+          onGrenadeReadyChange?.(grenadeReadyRef.current);
           if (grenadeReadyRef.current) {
-            // Pin-pull click — gives the player audible feedback that
-            // they're now armed and the next click will throw.
+            // Pin-pull SFX so the player hears they're armed.
             playPinPullSound();
           }
         }
@@ -962,6 +967,7 @@ export function FirstPersonControls({
       // again.
       onThrowGrenade();
       grenadeReadyRef.current = false;
+      onGrenadeReadyChange?.(false);
     } else if (showCrosshairs && onShoot) {
       // Flame Glove uses continuous hold, not click-to-fire
       if (isFlameGloveSelected) return;

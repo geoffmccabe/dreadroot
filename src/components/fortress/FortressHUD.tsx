@@ -113,6 +113,7 @@ export function FortressHUD(props: FortressHUDProps) {
     selectedSlot: selectedSlotProp = 1,
     onSelectSlot,
     onDeleteBlock,
+    grenadeReady = false,
   } = props;
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
@@ -821,6 +822,13 @@ export function FortressHUD(props: FortressHUDProps) {
           >
             {hotbarSlots.map((slot) => {
               const isSelected = selectedSlot === slot.slot;
+              // Light up the slot that holds the pin-pulled grenade.
+              // Only slots whose item is non-stackable AND whose itemId
+              // matches a held grenade get the flashing green ring.
+              // (Currently the grenade-ready state is global, not
+              // per-slot, so we just light the non-stack slots — in
+              // practice only slot 6 ever holds a grenade.)
+              const isGrenadeReady = grenadeReady && slot.isNonStack;
               return (
                 <div
                   key={slot.slot}
@@ -839,13 +847,16 @@ export function FortressHUD(props: FortressHUDProps) {
                     onDragEnter={allowDrop}
                     onDragOver={allowDrop}
                     onDrop={(e) => onDropHotbar(e, slot.slot)}
+                    className={isGrenadeReady ? 'grenade-ready-pulse' : undefined}
                     style={{
                       width: '56px',
                       height: '56px',
                       borderRadius: 'var(--hud-radius)',
-                      border: isSelected
-                        ? '2px solid white'
-                        : '1px solid hsla(var(--hud-border))',
+                      border: isGrenadeReady
+                        ? '2px solid #00ff66'
+                        : isSelected
+                          ? '2px solid white'
+                          : '1px solid hsla(var(--hud-border))',
                       background: isSelected
                         ? 'hsla(var(--hud-bg))'
                         : 'hsla(var(--hud-bg-dim))',
@@ -863,15 +874,17 @@ export function FortressHUD(props: FortressHUDProps) {
                       <span style={{
                         position: 'absolute',
                         top: '2px',
-                        left: '2px',
-                        fontSize: '11px',
+                        left: '4px',
+                        // Match the bottom-right qty badge style: white
+                        // text + heavy black text-shadow, no background
+                        // pill, same hud-font. Slightly smaller than
+                        // qty (9px vs 11px) per user request.
+                        fontSize: '9px',
                         fontWeight: 700,
                         color: 'white',
                         fontFamily: 'var(--hud-font)',
                         lineHeight: 1,
-                        padding: '2px 4px',
-                        borderRadius: '3px',
-                        background: 'rgba(0,0,0,0.65)',
+                        textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
                         pointerEvents: 'none',
                         zIndex: 2,
                       }}>

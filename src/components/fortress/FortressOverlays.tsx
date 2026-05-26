@@ -12,6 +12,7 @@ import { inspectorModeEnabled } from '@/components/FPSCounter';
 
 import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { InspectorCrosshair } from './InspectorCrosshair';
+import { GrenadeReadyCrosshair } from './GrenadeReadyCrosshair';
 
 // Intentionally loose typing: this file is an extraction of UI overlays
 // from a large component, and we want minimal friction during refactor.
@@ -65,6 +66,7 @@ export function FortressOverlays(props: FortressOverlaysProps) {
     handleTreeChopConfirm,
     viewSettings,
     handleViewSettingsChange,
+    grenadeReady,
   } = props;
 
   const baseMode = blockPlacementMode
@@ -102,6 +104,9 @@ export function FortressOverlays(props: FortressOverlaysProps) {
 
       {/* Inspector Mode Crosshair (rainbow "I") */}
       <InspectorCrosshair visible={isInspectorMode} />
+
+      {/* Grenade-ready throw crosshair (green ring + "G") */}
+      <GrenadeReadyCrosshair visible={!!grenadeReady && !isInspectorMode} />
 
       {/* Death Overlay */}
       <DeathOverlay

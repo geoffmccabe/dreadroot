@@ -1,9 +1,8 @@
-// Procedural pin-pull + throw whoosh sounds.
-//
-// The grenade-explosion sound itself is now the recorded file at
-// /grenade_explosion.mp3 played through the project's spatial-audio
-// module (see useGrenadeSystem). The procedural booms that used to
-// live here have been removed.
+// Pin-pull SFX uses a recorded MP3 (/grenade-pin-pull.mp3, preloaded
+// by FortressControls). The throw whoosh is still procedural since
+// it's a 180ms noise burst with no obvious "right" sample.
+
+import { playSound } from '@/lib/spatialAudio';
 
 let sharedCtx: AudioContext | null = null;
 function getCtx(): AudioContext | null {
@@ -14,22 +13,9 @@ function getCtx(): AudioContext | null {
   return sharedCtx;
 }
 
-/** Metallic ping for pin-pull on G press. */
+/** Pin-pull SFX on G press. Flat-volume UI feedback (not spatial). */
 export function playPinPullSound() {
-  const ctx = getCtx();
-  if (!ctx) return;
-  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-  const now = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(1800, now);
-  osc.frequency.exponentialRampToValueAtTime(900, now + 0.08);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.18, now);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(now);
-  osc.stop(now + 0.12);
+  void playSound('/grenade-pin-pull.mp3', 0.7);
 }
 
 /** Brief whoosh for the throw release. */
