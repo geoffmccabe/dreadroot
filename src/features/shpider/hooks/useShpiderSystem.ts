@@ -193,6 +193,7 @@ export function useShpiderSystem({
     knockbackDir: THREE.Vector3,
     bulletSpeed: number,
     isHeadshot: boolean = false,
+    opts?: { forceFragment?: boolean; fragmentImpulse?: THREE.Vector3; explicitV0?: number },
   ): boolean => {
     const s = shpidersRef.current.find(x => x.id === id);
     if (!s || !s.isActive) return false;
@@ -201,10 +202,16 @@ export function useShpiderSystem({
     // Tier-scaled knockback. T1 (knockback_received ≈ 2.5) travels
     // ~10m before decaying; T10 (≈0.25) travels ~1m. Average is 25%
     // of a shombie's punt, per design. velocity decays in hopAI step.
+    //
+    // Bullets: v0 derived from bulletSpeed/60 (calibrated for ~150 m/s
+    // projectiles). Explosions pass bulletSpeed = knockback param
+    // which is much smaller (16 m/s), so they'd hit the Math.max(1)
+    // clamp and never scale. For those callers `explicitV0` bypasses
+    // the formula with a pre-computed velocity.
     const kbScale = s.definition.knockback_received ?? 1;
-    // hopAI's halflife = 0.25s, so total distance ≈ v0 × 0.36s.
-    // 10m at kbScale=2.5 → v0=28 → coefficient ~11.
-    const v0 = 11 * kbScale * Math.max(1, bulletSpeed / 60);
+    const v0 = opts?.explicitV0 != null
+      ? opts.explicitV0 * kbScale
+      : 11 * kbScale * Math.max(1, bulletSpeed / 60);
     s.velocity.x = knockbackDir.x * v0;
     s.velocity.z = knockbackDir.z * v0;
 
@@ -218,13 +225,13 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
-      // Death explosion is ONLY for headshot kills — a body/leg kill
-      // is supposed to just make the shpider vanish quietly. Per
-      // 2026-May-24 user feedback: "Make the shpiders only explode if
-      // they are killed by a headshot. If they are killed with a
-      // body/leg shot then they just disappear."
-      if (isHeadshot) {
-        const newFrags = createDeathFragments(s, Date.now());
+      // Body/leg shots normally just disappear (per 2026-May-24
+      // feedback). Headshots fragment. Explosion kills ALWAYS
+      // fragment AND inherit the blast's radial impulse on each
+      // piece — feels meatier and matches user expectation that "a
+      // grenade should always blow them apart" (2026-May-26).
+      if (isHeadshot || opts?.forceFragment) {
+        const newFrags = createDeathFragments(s, Date.now(), opts?.fragmentImpulse);
         const combined = fragmentsRef.current.concat(newFrags);
         if (combined.length > DEATH_FRAGMENT_MAX) {
           fragmentsRef.current = combined.slice(combined.length - DEATH_FRAGMENT_MAX);
@@ -415,6 +422,27 @@ export function useShpiderSystem({
       },
       applyDamage: (s, info) => {
         dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
+        // Explosion source: force fragmentation on kill and pass an
+        // outward impulse so each fragment inherits the blast's
+        // momentum (radial + a touch of upward kick). bulletSpeed in
+        // the explosion DamageInfo is the falloff-scaled knockback
+        // strength (set by the grenade explode loop).
+        if (info.source === 'explosion') {
+          const speed = info.bulletSpeed || 0;
+          const impulse = new THREE.Vector3(
+            info.knockbackDirX * speed,
+            speed * 0.35, // upward kick — fragments arc out, not just slide
+            info.knockbackDirZ * speed,
+          );
+          // Explicit knockback velocity for live shpiders too — the
+          // bullet-speed formula doesn't scale below 60 m/s so the
+          // doubled grenade constants would otherwise have no effect.
+          return damageShpider(s.id, info.damage, dirScratch, info.bulletSpeed || 0, info.isHeadshot, {
+            forceFragment: true,
+            fragmentImpulse: impulse,
+            explicitV0: speed,
+          });
+        }
         return damageShpider(s.id, info.damage, dirScratch, info.bulletSpeed || 0, info.isHeadshot);
       },
       getHitSoundUrl: () => '/bullet_impact_2.mp3',

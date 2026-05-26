@@ -63,8 +63,18 @@ const _scratchDir = new THREE.Vector3();
  * positioned at its visual rest location in world space, then given a
  * random outward velocity scaled so it travels ~5–30 m before
  * gravity and bounces bring it to rest.
+ *
+ * `impulse` (optional) is a world-space velocity vector added to every
+ * fragment's initial velocity. Used by explosion deaths so the blast's
+ * radial knockback gets carried into each piece via correct momentum
+ * (every fragment flies away from the blast center, then the random
+ * scatter happens on top of that base direction).
  */
-export function createDeathFragments(s: ShpiderInstance, now: number): DeathFragment[] {
+export function createDeathFragments(
+  s: ShpiderInstance,
+  now: number,
+  impulse?: THREE.Vector3,
+): DeathFragment[] {
   const out: DeathFragment[] = [];
   const def = s.definition;
   const bodySize = def.body_size * s.scale;
@@ -184,6 +194,17 @@ export function createDeathFragments(s: ShpiderInstance, now: number): DeathFrag
         bounces: 0,
         isResting: false,
       });
+    }
+  }
+
+  // Stack the blast impulse on every fragment's initial velocity so
+  // they all fly away from the explosion center (correct momentum) on
+  // top of the random scatter.
+  if (impulse) {
+    for (const f of out) {
+      f.velocity.x += impulse.x;
+      f.velocity.y += impulse.y;
+      f.velocity.z += impulse.z;
     }
   }
 

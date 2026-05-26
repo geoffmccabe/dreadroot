@@ -42,9 +42,10 @@ export const GRENADE_BASE_RADIUS = 4;
 /** Each tier extends the explosion radius by this much (m). */
 export const GRENADE_RADIUS_PER_TIER = 0.5;
 
-/** Knockback strength applied to nearby enemies (m/s) at T1. */
-export const GRENADE_BASE_KNOCKBACK = 8;
-export const GRENADE_KNOCKBACK_PER_TIER = 2;
+/** Knockback strength applied to nearby enemies (m/s) at T1.
+ *  Doubled per 2026-May-26 user feedback ("let's double the knockback"). */
+export const GRENADE_BASE_KNOCKBACK = 16;
+export const GRENADE_KNOCKBACK_PER_TIER = 4;
 
 /** Total damage = BASE_DAMAGE + (tier - 1) × DAMAGE_PER_TIER. */
 export function grenadeDamage(tier: number): number {

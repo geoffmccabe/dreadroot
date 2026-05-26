@@ -189,6 +189,42 @@ export function useGrenadeSystem({
         }
       }
 
+      // Entity collision: bounce off enemy cylinders (shpiders,
+      // shombies, walapas, etc.). World blocks already handled above;
+      // this pass uses the EnemyCombatRegistry hitboxes as colliders
+      // so a grenade can't pass through an enemy on its way to the
+      // ground. Sphere-vs-cylinder horizontal test, reflect XZ
+      // velocity outward, dampen the bounce.
+      for (const adapter of enemyCombatRegistry.getAdapters()) {
+        for (const enemy of adapter.getActiveEnemies()) {
+          const hb = adapter.getHitbox(enemy);
+          if (!hb) continue;
+          // Vertical overlap check first.
+          if (py + r < hb.bottomY || py - r > hb.topY) continue;
+          // Horizontal distance vs. sum of radii.
+          const dx = px - hb.centerX;
+          const dz = pz - hb.centerZ;
+          const distSq = dx * dx + dz * dz;
+          const reach = hb.radius + r;
+          if (distSq > reach * reach) continue;
+          // Push grenade out along the outward normal, reflect XZ
+          // velocity, dampen so the bounce isn't huge.
+          const dist = Math.sqrt(distSq) || 0.001;
+          const nx = dx / dist;
+          const nz = dz / dist;
+          px = hb.centerX + nx * (reach + 0.001);
+          pz = hb.centerZ + nz * (reach + 0.001);
+          // Reflect: v -= 2 * (v · n) * n
+          const vDotN = g.velocity.x * nx + g.velocity.z * nz;
+          if (vDotN < 0) {
+            g.velocity.x -= 2 * vDotN * nx;
+            g.velocity.z -= 2 * vDotN * nz;
+            g.velocity.x *= GRENADE_BOUNCE_DAMP;
+            g.velocity.z *= GRENADE_BOUNCE_DAMP;
+          }
+        }
+      }
+
       g.position.set(px, py, pz);
 
       // Switch to "rolling" once we've come to rest vertically and
