@@ -258,6 +258,10 @@ export function FirstPersonControls({
       getSoundUrl('pistol_cock', '/pistol_cocking_sound.mp3'),
       getSoundUrl('pistol_holster', '/holster_pistol_sound.mp3'),
       getSoundUrl('jet_boots', '/jet_boots_1.mp3'),
+      // Preload the grenade explosion sample. Without preload, the
+      // first throw fetches+decodes the MP3 on demand and the boom
+      // lags noticeably behind the visual flash.
+      '/grenade_explosion.mp3',
     ]);
   }, []);
 
@@ -630,6 +634,12 @@ export function FirstPersonControls({
       case 'KeyG':
         // Cmd+G / Ctrl+G (admin): grant 1 grenade and auto-equip to
         // slot 6 if free. Browser's "find next" is preventDefault'd.
+        //
+        // event.repeat guard: holding the keys fires keydown ~30x/sec
+        // at OS auto-repeat rate. Without this, a half-second hold
+        // grants 15 grenades. Same for plain G (would re-toggle the
+        // grenade-ready state, blocking throw).
+        if (event.repeat) break;
         if ((event.metaKey || event.ctrlKey) && onAdminGrantGrenade
             && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           event.preventDefault();
@@ -655,6 +665,8 @@ export function FirstPersonControls({
         break;
       case 'KeyH':
         // Cmd+H / Ctrl+H (admin): grant 1 health potion.
+        // event.repeat guard: same rationale as KeyG above.
+        if (event.repeat) break;
         if ((event.metaKey || event.ctrlKey) && onAdminGrantHealthPotion
             && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           event.preventDefault();

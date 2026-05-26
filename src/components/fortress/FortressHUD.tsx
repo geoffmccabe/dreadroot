@@ -249,25 +249,31 @@ export function FortressHUD(props: FortressHUDProps) {
 
   // Build hotbar slots 1-6
   const hotbarSlots = useMemo(() => {
-    const slots: Array<{ slot: number; itemId: string | null; sprite: string | null; name: string | null; tier: number | null; quantity: number }> = [];
+    const slots: Array<{ slot: number; itemId: string | null; sprite: string | null; name: string | null; tier: number | null; quantity: number; isNonStack: boolean }> = [];
     for (let i = 1; i <= 6; i++) {
       const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find((e: any) => e.slot === i);
       if (eq) {
         const def = itemDefs.get(eq.itemId);
+        const isNonStack = nonStackableItemIds.has(eq.itemId);
         slots.push({
           slot: i,
           itemId: eq.itemId,
           sprite: getSpriteUrl(def),
           name: def?.name || null,
           tier: def?.tier ?? null,
-          quantity: quantityByItemId.get(eq.itemId) ?? 0,
+          // For non-stackable items the count badge would imply "stack",
+          // which contradicts the rule (each grenade / potion is its own
+          // row). Show 0 here so the badge is suppressed in the render
+          // path; the inventory grid shows each one as its own tile.
+          quantity: isNonStack ? 0 : (quantityByItemId.get(eq.itemId) ?? 0),
+          isNonStack,
         });
       } else {
-        slots.push({ slot: i, itemId: null, sprite: null, name: null, tier: null, quantity: 0 });
+        slots.push({ slot: i, itemId: null, sprite: null, name: null, tier: null, quantity: 0, isNonStack: false });
       }
     }
     return slots;
-  }, [equippedItems, itemDefs, getSpriteUrl, quantityByItemId]);
+  }, [equippedItems, itemDefs, getSpriteUrl, quantityByItemId, nonStackableItemIds]);
 
   // Set of item IDs currently equipped in hotbar
   const equippedItemIdSet = useMemo(
@@ -380,10 +386,19 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
     if (src.type === 'hotbar') {
-      // Hotbar → Inventory: unequip and place in target slot
+      // Hotbar → Inventory: unequip and place in target slot.
+      //
+      // For NON-STACKABLE items (grenades, potions), the inventory grid
+      // already renders one tile per row keyed by rowId — the hotbar
+      // slot was just a shortcut. Setting invSlots[targetIdx] to the
+      // itemId would create a phantom key that doesn't match anything
+      // in inventoryItemsMap, so the dragged item appears to "vanish".
+      // For non-stack items we just unequip; the existing inventory
+      // tiles stay where they are.
       const hotbarItemId = hotbarSlots.find(s => s.slot === src.slot)?.itemId;
+      const hotbarIsNonStack = hotbarItemId ? nonStackableItemIds.has(hotbarItemId) : false;
       if (updateEquippedSlot) updateEquippedSlot(src.slot, null);
-      if (hotbarItemId) {
+      if (hotbarItemId && !hotbarIsNonStack) {
         setInvSlots(prev => {
           const next = [...prev];
           // Place in the target slot (swap if occupied)
@@ -408,7 +423,7 @@ export function FortressHUD(props: FortressHUDProps) {
         return next;
       });
     }
-  }, [updateEquippedSlot, hotbarSlots]);
+  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds]);
 
   const allowDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -848,16 +863,19 @@ export function FortressHUD(props: FortressHUDProps) {
                       <span style={{
                         position: 'absolute',
                         top: '2px',
-                        left: '4px',
-                        fontSize: '10px',
+                        left: '2px',
+                        fontSize: '11px',
                         fontWeight: 700,
                         color: 'white',
                         fontFamily: 'var(--hud-font)',
                         lineHeight: 1,
-                        textShadow: '0 0 3px rgba(0,0,0,0.8)',
+                        padding: '2px 4px',
+                        borderRadius: '3px',
+                        background: 'rgba(0,0,0,0.65)',
                         pointerEvents: 'none',
+                        zIndex: 2,
                       }}>
-                        {slot.tier}
+                        T{slot.tier}
                       </span>
                     )}
                     {slot.sprite ? (
