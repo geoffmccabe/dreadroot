@@ -1828,6 +1828,52 @@ export function Fortress() {
               }
             }
           }}
+          onShpiderKilled={async (tier) => {
+            // Same pattern as the other enemy kill writers — bumps
+            // user_combat_stats so the Kills panel shows shpiders
+            // alongside everything else. Without this they were
+            // killable but invisible in the stats screen.
+            if (!user?.id) return;
+            playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
+            const { data: existing } = await supabase
+              .from('user_combat_stats')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('enemy_type', `shpider_t${tier}`)
+              .maybeSingle();
+            if (existing) {
+              await supabase
+                .from('user_combat_stats')
+                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+            } else {
+              await supabase
+                .from('user_combat_stats')
+                .insert({ user_id: user.id, enemy_type: `shpider_t${tier}`, kills: 1 });
+            }
+          }}
+          onWalapaKilled={async (tier) => {
+            // Walapa kill tracking — Fortress wasn't passing a
+            // handler before so kills never reached the DB.
+            if (!user?.id) return;
+            playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
+            const { data: existing } = await supabase
+              .from('user_combat_stats')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('enemy_type', `walapa_t${tier}`)
+              .maybeSingle();
+            if (existing) {
+              await supabase
+                .from('user_combat_stats')
+                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+            } else {
+              await supabase
+                .from('user_combat_stats')
+                .insert({ user_id: user.id, enemy_type: `walapa_t${tier}`, kills: 1 });
+            }
+          }}
           onShtickmanKilled={async (tier) => {
             console.log(`[Fortress] Shtickman killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {

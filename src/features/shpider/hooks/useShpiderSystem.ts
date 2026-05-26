@@ -39,6 +39,8 @@ interface UseShpiderSystemOptions {
   cameraRef: React.RefObject<THREE.Camera | null>;
   isEnabled: boolean;
   userRoles: string[];
+  /** Fired whenever a shpider dies. Used to increment kill stats. */
+  onShpiderKilled?: (tier: number) => void;
 }
 
 function getDefinitionByTier(defs: ShpiderDefinition[], tier: number): ShpiderDefinition | null {
@@ -50,6 +52,7 @@ export function useShpiderSystem({
   cameraRef,
   isEnabled,
   userRoles,
+  onShpiderKilled,
 }: UseShpiderSystemOptions) {
   const [shpiders, setShpiders] = useState<ShpiderInstance[]>([]);
   const shpidersRef = useRef<ShpiderInstance[]>([]);
@@ -225,6 +228,7 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
+      onShpiderKilled?.(s.definition.tier);
       // Body/leg shots normally just disappear (per 2026-May-24
       // feedback). Headshots fragment. Explosion kills ALWAYS
       // fragment AND inherit the blast's radial impulse on each
@@ -243,7 +247,7 @@ export function useShpiderSystem({
       return true;
     }
     return false;
-  }, [removeShpider]);
+  }, [removeShpider, onShpiderKilled]);
 
   /** Admin keybind: Ctrl+P spawns a group of T1 shpiders. */
   useEffect(() => {

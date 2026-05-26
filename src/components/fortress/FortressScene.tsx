@@ -183,6 +183,7 @@ export function FortressScene({
   onUseHotbarSlot,
   consumeGrenade,
   onGrenadeReadyChange,
+  onShpiderKilled,
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
   vaultInRange,
@@ -485,6 +486,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     cameraRef,
     isEnabled: enemiesEnabled,
     userRoles,
+    onShpiderKilled,
   });
 
   // Walapa system - floating whale creatures that travel between tall trees

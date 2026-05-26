@@ -15,7 +15,7 @@ export interface EnemyDefinition {
   name: string;
   texture_url: string | null;
   rarity?: string;
-  enemyType: 'shwarm' | 'shnake' | 'shombie' | 'shtickman'; // Distinguish between enemy types
+  enemyType: 'shwarm' | 'shnake' | 'shombie' | 'shtickman' | 'shpider' | 'walapa';
 }
 
 // Rarity order for sorting (lowest to highest)
@@ -63,6 +63,10 @@ function getShtickmanRarityFromTier(tier: number): string {
   return 'legendary';
 }
 
+// Shpider + walapa share the standard 1-10 tier rarity buckets.
+const getShpiderRarityFromTier = getShtickmanRarityFromTier;
+const getWalapaRarityFromTier = getShtickmanRarityFromTier;
+
 export function useUserCombatStats() {
   const { user } = useAuth();
   const [stats, setStats] = useState<CombatStat[]>([]);
@@ -80,7 +84,15 @@ export function useUserCombatStats() {
     const loadData = async () => {
       setIsLoading(true);
       
-      const [statsResult, shwarmDefsResult, shnakeDefsResult, shombieDefsResult, shtickmanDefsResult] = await Promise.all([
+      const [
+        statsResult,
+        shwarmDefsResult,
+        shnakeDefsResult,
+        shombieDefsResult,
+        shtickmanDefsResult,
+        shpiderDefsResult,
+        walapaDefsResult,
+      ] = await Promise.all([
         supabase
           .from('user_combat_stats')
           .select('*')
@@ -100,7 +112,17 @@ export function useUserCombatStats() {
         supabase
           .from('shtickman_definitions')
           .select('id, tier, name, body_texture_url')
-          .order('tier', { ascending: true })
+          .order('tier', { ascending: true }),
+        supabase
+          .from('shpider_definitions' as any)
+          .select('id, tier, name, body_texture_url')
+          .order('tier', { ascending: true }),
+        // walapa_definitions is optional — some Supabase projects
+        // don't have the table. Falls back to an empty list.
+        supabase
+          .from('walapa_definitions' as any)
+          .select('id, tier, name, body_texture_url')
+          .order('tier', { ascending: true }),
       ]);
 
       if (!statsResult.error) {
@@ -159,6 +181,33 @@ export function useUserCombatStats() {
           enemyType: 'shtickman' as const,
         }));
         allDefs.push(...shtickmanDefs);
+      }
+
+      // Shpider — body texture for thumbnail.
+      if (!shpiderDefsResult.error && shpiderDefsResult.data) {
+        const shpiderDefs = (shpiderDefsResult.data as any[]).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.body_texture_url,
+          rarity: getShpiderRarityFromTier(d.tier),
+          enemyType: 'shpider' as const,
+        }));
+        allDefs.push(...shpiderDefs);
+      }
+
+      // Walapa — body texture for thumbnail. Tolerates the table not
+      // existing (walapa_definitions is optional per useAtlasSync).
+      if (!walapaDefsResult.error && walapaDefsResult.data) {
+        const walapaDefs = (walapaDefsResult.data as any[]).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.body_texture_url,
+          rarity: getWalapaRarityFromTier(d.tier),
+          enemyType: 'walapa' as const,
+        }));
+        allDefs.push(...walapaDefs);
       }
 
       setDefinitions(allDefs);

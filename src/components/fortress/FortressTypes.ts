@@ -184,6 +184,9 @@ export interface SceneProps {
   // Walapa system
   walapaDefinitions?: WalapaDefinition[];
   onWalapaKilled?: (tier: number) => void;
+  /** Fired when a shpider dies. Used by Fortress.tsx to bump
+   *  user_combat_stats so the Kills panel shows them. */
+  onShpiderKilled?: (tier: number) => void;
   // Shtickman system
   shtickmanDefinitions?: ShtickmanDefinition[];
   onShtickmanKilled?: (tier: number) => void;
