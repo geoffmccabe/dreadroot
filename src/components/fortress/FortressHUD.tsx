@@ -351,14 +351,24 @@ export function FortressHUD(props: FortressHUDProps) {
     });
   }, [invSlots, inventoryItemsMap, equippedItemIdSet]);
 
-  // Drag source ref — stored in ref to avoid stale closures, survives re-renders
-  const dragRef = useRef<{ type: 'hotbar'; slot: number } | { type: 'inventory'; itemId: string } | null>(null);
+  // Drag source ref — stored in ref to avoid stale closures, survives re-renders.
+  //
+  // For inventory drags the source carries BOTH the grid key (rowId
+  // for non-stackable items, itemId for stackable) and the itemId.
+  // The earlier version only tracked itemId, which broke inventory→
+  // inventory swaps for non-stack items: invSlots holds rowIds, so
+  // prev.indexOf(itemId) returned -1 and the swap silently failed.
+  // Also caused "dragging the 2nd grenade swaps the 1st grenade"
+  // because indexOf returns the first match.
+  type DragSource =
+    | { type: 'hotbar'; slot: number }
+    | { type: 'inventory'; gridKey: string; itemId: string };
+  const dragRef = useRef<DragSource | null>(null);
 
-  const onDragStart = useCallback((e: React.DragEvent, source: { type: 'hotbar'; slot: number } | { type: 'inventory'; itemId: string }) => {
+  const onDragStart = useCallback((e: React.DragEvent, source: DragSource) => {
     dragRef.current = source;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', JSON.stringify(source));
-    // Make the drag image just the target element
     if (e.currentTarget instanceof HTMLElement) {
       e.dataTransfer.setDragImage(e.currentTarget, 28, 28);
     }
@@ -371,12 +381,19 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src || !updateEquippedSlot) return;
     if (src.type === 'inventory') {
+      // Inventory → Hotbar: equip the dragged item in target slot.
+      // If targetSlot already had a different item equipped, that
+      // item becomes unequipped (returns to its invSlots tile).
       updateEquippedSlot(targetSlot, src.itemId);
     } else if (src.type === 'hotbar' && src.slot !== targetSlot) {
-      const srcData = hotbarSlots.find(s => s.slot === src.slot);
-      const tgtData = hotbarSlots.find(s => s.slot === targetSlot);
-      updateEquippedSlot(targetSlot, srcData?.itemId || null);
-      updateEquippedSlot(src.slot, tgtData?.itemId || null);
+      // Hotbar → Hotbar swap. Snapshot both itemIds BEFORE issuing
+      // any updateEquippedSlot call — the local state setter mutates
+      // the same array, so the second call would see the first call's
+      // intermediate state and corrupt the swap.
+      const srcId = hotbarSlots.find(s => s.slot === src.slot)?.itemId || null;
+      const tgtId = hotbarSlots.find(s => s.slot === targetSlot)?.itemId || null;
+      updateEquippedSlot(targetSlot, srcId);
+      updateEquippedSlot(src.slot, tgtId);
     }
   }, [updateEquippedSlot, hotbarSlots]);
 
@@ -387,25 +404,20 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
     if (src.type === 'hotbar') {
-      // Hotbar → Inventory: unequip and place in target slot.
-      //
-      // For NON-STACKABLE items (grenades, potions), the inventory grid
-      // already renders one tile per row keyed by rowId — the hotbar
-      // slot was just a shortcut. Setting invSlots[targetIdx] to the
-      // itemId would create a phantom key that doesn't match anything
-      // in inventoryItemsMap, so the dragged item appears to "vanish".
-      // For non-stack items we just unequip; the existing inventory
-      // tiles stay where they are.
+      // Hotbar → Inventory: unequip and (for stackable items) place
+      // in target slot. Non-stackable items already have a tile per
+      // row in the grid, so placing the itemId at invSlots[targetIdx]
+      // would create a phantom key that doesn't match anything in
+      // inventoryItemsMap — the tile appears to vanish. For those
+      // we just unequip.
       const hotbarItemId = hotbarSlots.find(s => s.slot === src.slot)?.itemId;
       const hotbarIsNonStack = hotbarItemId ? nonStackableItemIds.has(hotbarItemId) : false;
       if (updateEquippedSlot) updateEquippedSlot(src.slot, null);
       if (hotbarItemId && !hotbarIsNonStack) {
         setInvSlots(prev => {
           const next = [...prev];
-          // Place in the target slot (swap if occupied)
           const existing = next[targetIdx];
           next[targetIdx] = hotbarItemId;
-          // If target had an unequipped item, find it a home
           if (existing && existing !== hotbarItemId) {
             const srcSlotIdx = next.indexOf(null);
             if (srcSlotIdx !== -1) next[srcSlotIdx] = existing;
@@ -413,11 +425,18 @@ export function FortressHUD(props: FortressHUDProps) {
           return next;
         });
       }
-    } else if (src.type === 'inventory') {
-      // Inventory → Inventory: swap the two slots
-      const srcItemId = src.itemId;
+      return;
+    }
+
+    if (src.type === 'inventory') {
+      // Inventory → Inventory swap. Use gridKey (rowId for non-stack
+      // items, itemId for stackable) — invSlots is keyed by gridKey,
+      // not itemId. Bug history: prior code used itemId and silently
+      // failed for non-stack items and mis-swapped when the same
+      // itemId appeared in multiple slots.
+      const srcKey = src.gridKey;
       setInvSlots(prev => {
-        const sourceIdx = prev.indexOf(srcItemId);
+        const sourceIdx = prev.indexOf(srcKey);
         if (sourceIdx === -1 || sourceIdx === targetIdx) return prev;
         const next = [...prev];
         [next[sourceIdx], next[targetIdx]] = [next[targetIdx], next[sourceIdx]];
@@ -734,7 +753,7 @@ export function FortressHUD(props: FortressHUDProps) {
                       <div
                         key={`inv-${idx}`}
                         draggable={!!item}
-                        onDragStart={item ? (e) => onDragStart(e, { type: 'inventory', itemId: item.itemId }) : undefined}
+                        onDragStart={item ? (e) => onDragStart(e, { type: 'inventory', gridKey: item.gridKey, itemId: item.itemId }) : undefined}
                         style={{
                           width: '56px',
                           height: '56px',
