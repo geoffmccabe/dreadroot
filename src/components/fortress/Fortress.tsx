@@ -433,9 +433,41 @@ export function Fortress() {
     return grantAdminItem(healthPotionIdRef.current);
   }, [grantAdminItem]);
 
+  // Compute bullet tier from player level (automatic for all players)
+  // Level 1-3 → Tier 1, Level 4-6 → Tier 2, etc.
+  const baseBulletTier = useMemo(() => 
+    getDefaultBulletTier(profile?.current_level ?? 1), 
+    [profile?.current_level]
+  );
+  
+  // Effective tier: admin override OR level-based automatic tier
+  const selectedBulletTier = adminTierOverride ?? baseBulletTier;
+  
+  // Get bullet color for crosshair
+  const { getDefinition } = useBulletDefinitions();
+  const bulletColor = getDefinition(selectedBulletTier).colors[0] || '#FFFF00';
+  
+  // Player health system
+  const {
+    currentHealth,
+    maxHealth,
+    isDead,
+    takeDamage,
+    applyDamageWithKnockback,
+    respawn,
+    heal,
+    healthRef
+  } = usePlayerHealth();
+
   // Hotbar quick-use: digit keys 1-6 activate the equipped slot's item.
   // Currently handles health_potion (full heal + swallow sound + consume);
   // other consumable item keys can be added below by name.
+  // IMPORTANT: must be declared AFTER usePlayerHealth() because the
+  // useCallback dep array references `heal` and `healthRef`. Declaring
+  // it earlier puts them in the temporal dead zone — minified prod
+  // builds crash with "Cannot access 'heal' before initialization" on
+  // every render, which is what caused the blank-blue-screen incident
+  // on 2026-May-26.
   const handleUseHotbarSlot = useCallback(async (slot: number) => {
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === slot);
     if (!eq?.itemId) return;
@@ -467,32 +499,6 @@ export function Fortress() {
     }
   }, [equippedItems, heal, healthRef, inventory, removeInventoryRow, updateEquippedSlot]);
 
-  // Compute bullet tier from player level (automatic for all players)
-  // Level 1-3 → Tier 1, Level 4-6 → Tier 2, etc.
-  const baseBulletTier = useMemo(() => 
-    getDefaultBulletTier(profile?.current_level ?? 1), 
-    [profile?.current_level]
-  );
-  
-  // Effective tier: admin override OR level-based automatic tier
-  const selectedBulletTier = adminTierOverride ?? baseBulletTier;
-  
-  // Get bullet color for crosshair
-  const { getDefinition } = useBulletDefinitions();
-  const bulletColor = getDefinition(selectedBulletTier).colors[0] || '#FFFF00';
-  
-  // Player health system
-  const {
-    currentHealth,
-    maxHealth,
-    isDead,
-    takeDamage,
-    applyDamageWithKnockback,
-    respawn,
-    heal,
-    healthRef
-  } = usePlayerHealth();
-  
   // Shwarm definitions
   const { data: shwarmDefinitions } = useShwarmDefinitions();
 
