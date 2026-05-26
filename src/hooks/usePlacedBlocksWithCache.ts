@@ -325,11 +325,17 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
             return; // Ignore changes to chunks we haven't loaded
           }
           
-          // Skip refetch for chunks with active tree growth (longer grace period)
-          // Tree growth continuously places blocks, so we need to suppress realtime refetch
-          if (activeGrowthChunks.current.has(chunkKey)) {
-            return;
-          }
+          // NOTE: removed the activeGrowthChunks 15-second suppression here.
+          // It was designed for the OLD client-side tree growth model where
+          // the client placed each growth block locally and would have
+          // re-fetched its own writes. With the current server-side model
+          // (process_tree_growth inserts placed_blocks → trigger bumps
+          // chunk_versions → client refetches), the suppression actively
+          // hides new growth from the player: every server-driven growth
+          // tick for a chunk we'd just planted in was silently dropped for
+          // 15s, so blocks never appeared in real-time. The 2s
+          // local-modification grace below still covers the seed-block
+          // optimistic placement; nothing else needs suppressing.
           
           // Skip refetch for chunks we recently modified locally
           // We already have optimistic data, no need to refetch our own changes
