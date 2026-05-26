@@ -54,6 +54,7 @@ import { FlyingCoin, GameSettings, WeatherSettings, SelectedItemDef, LightningSe
 import { LightningPanel } from './LightningPanel';
 import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { VaultPanel } from '@/features/vault';
+import { playPinPullSound } from '@/features/grenades/lib/explosionSound';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
 
@@ -230,11 +231,12 @@ export function Fortress() {
   const [pendingChopPosition, setPendingChopPosition] = useState<{ x: number; y: number; z: number } | null>(null);
   const [chopProgress, setChopProgress] = useState(0);
 
-  // Grenade-ready flag — true between G-press (pin pulled) and the
-  // click that throws or another G-press that cancels. HUD reads
-  // this to flash the slot-6 ring green and render the green throw
-  // crosshair with "G" in the middle.
-  const [grenadeReady, setGrenadeReady] = useState(false);
+  // Grenade-ready slot — the specific hotbar slot (1-6) that has a
+  // pin-pulled grenade waiting for a throw click. null means not armed.
+  // HUD reads this to flash ONLY this slot (not every non-stack slot).
+  // The boolean flag is derived for convenience.
+  const [grenadeReadySlot, setGrenadeReadySlot] = useState<number | null>(null);
+  const grenadeReady = grenadeReadySlot !== null;
 
   // Vault state — proximity flag flips when player walks into the
   // back-wall trigger zone, prompt + V keybind become active. Open
@@ -415,6 +417,69 @@ export function Fortress() {
     void removeInventoryRow(bestRowId);
     return bestTier;
   }, [inventory, removeInventoryRow]);
+
+  // G key handler — only arms if a grenade is actually available.
+  // Decision tree:
+  //   1. Already armed → second G cancels (disarm).
+  //   2. Grenade in equipped hotbar slot → arm that slot.
+  //   3. Grenade in inventory + free hotbar slot → auto-equip into
+  //      first free slot, arm it.
+  //   4. Grenade in inventory but hotbar full → no-op (G doesn't work).
+  //   5. No grenade anywhere → no-op.
+  const handleGrenadeTogglePress = useCallback(() => {
+    if (grenadeReadySlot !== null) {
+      // Cancel arm.
+      setGrenadeReadySlot(null);
+      return;
+    }
+    const defs = grenadeDefsRef.current;
+    // Step 2: any equipped slot already holding a grenade?
+    const equippedSlotWithGrenade = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(eq => defs.has(eq.itemId));
+    if (equippedSlotWithGrenade) {
+      setGrenadeReadySlot(equippedSlotWithGrenade.slot);
+      playPinPullSound();
+      return;
+    }
+    // Step 3: inventory has a grenade and a hotbar slot is free?
+    const grenadeInv = inventory.find(inv =>
+      inv.quantity > 0 && inv.item_id && defs.has(inv.item_id)
+    );
+    if (!grenadeInv || !grenadeInv.item_id) return; // no grenade anywhere
+    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    let firstEmpty: number | null = null;
+    for (let i = 1; i <= 6; i++) {
+      if (!usedSlots.has(i)) { firstEmpty = i; break; }
+    }
+    if (firstEmpty === null) return; // hotbar full — G doesn't work
+    void updateEquippedSlot(firstEmpty, grenadeInv.item_id);
+    setGrenadeReadySlot(firstEmpty);
+    playPinPullSound();
+  }, [grenadeReadySlot, equippedItems, inventory, updateEquippedSlot]);
+
+  // Throw flow needs to clear the armed slot when the click consumes
+  // the grenade. We can't modify onThrowGrenade itself (it lives in
+  // FortressScene), so we listen for inventory shrink after a throw
+  // via a useEffect. Simpler approach: wrap consumeGrenade so it
+  // also clears state. But consumeGrenade is passed to Scene…
+  //
+  // Cleanest: re-use a useEffect that watches inventory + armed slot:
+  // if armed AND the armed slot's item is no longer present, disarm.
+  useEffect(() => {
+    if (grenadeReadySlot === null) return;
+    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(e => e.slot === grenadeReadySlot);
+    if (!eq) { setGrenadeReadySlot(null); return; }
+    const defs = grenadeDefsRef.current;
+    // Slot's item still a grenade? If user dragged a non-grenade in
+    // here, drop the armed state.
+    if (!defs.has(eq.itemId)) { setGrenadeReadySlot(null); return; }
+    // Still hold at least one grenade row in inventory?
+    const stillHaveAnyGrenade = inventory.some(inv =>
+      inv.quantity > 0 && inv.item_id && defs.has(inv.item_id)
+    );
+    if (!stillHaveAnyGrenade) setGrenadeReadySlot(null);
+  }, [grenadeReadySlot, equippedItems, inventory]);
 
   // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
@@ -1926,7 +1991,8 @@ export function Fortress() {
           onPentabulletChargeChange={setPentabulletCharge}
           onUseHotbarSlot={handleUseHotbarSlot}
           consumeGrenade={consumeGrenade}
-          onGrenadeReadyChange={setGrenadeReady}
+          onGrenadeTogglePress={handleGrenadeTogglePress}
+          grenadeReady={grenadeReady}
           onAdminGrantGrenade={grantAdminGrenade}
           onAdminGrantHealthPotion={grantAdminHealthPotion}
           vaultInRange={vaultInRange}
@@ -2004,7 +2070,7 @@ export function Fortress() {
         selectedSlot={selectedSlot}
         onSelectSlot={setSelectedSlot}
         onDeleteBlock={handleInspectorDeleteBlock}
-        grenadeReady={grenadeReady}
+        grenadeReadySlot={grenadeReadySlot}
       />
 
       <FortressOverlays

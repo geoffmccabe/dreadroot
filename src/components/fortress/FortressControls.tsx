@@ -95,10 +95,15 @@ export function FirstPersonControls({
   // Grenade throw — called on click while grenade-ready. Returns true
   // if a grenade was actually thrown (false if inventory empty etc.).
   onThrowGrenade,
-  // Fires whenever the grenade-ready flag flips. HUD uses this to
-  // light up the slot 6 ring green + flashing, and to render the
-  // green throw-direction crosshair with a "G" in the center.
-  onGrenadeReadyChange,
+  // G key handler — parent decides whether to arm (and which slot)
+  // based on inventory + equipped state. Returns whether arming
+  // happened (controls don't care, the parent will reflect state
+  // via grenadeReady prop).
+  onGrenadeTogglePress,
+  // True while a grenade is pin-pulled and waiting for a throw click.
+  // Owned by parent. The click handler reads this to know whether
+  // to throw instead of fire the equipped weapon.
+  grenadeReady: grenadeReadyProp = false,
   // Admin/superadmin item grants — Cmd+G grenade, Cmd+H health potion.
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
@@ -142,10 +147,12 @@ export function FirstPersonControls({
   // Glide mode: activated by pressing G while falling, auto-deactivates on landing
   const glideActiveRef = useRef(false);
 
-  // Grenade ready mode: pressing G on the ground sets this true; the
-  // next left-click throws and resets it. COD-style "pull pin, then
-  // throw on click". G in mid-air keeps its glide meaning.
+  // Grenade ready state mirror — synced from parent prop so the
+  // click handler can read it without async state. Parent (Fortress)
+  // owns the actual flag because it depends on inventory + equipped
+  // slot lookups.
   const grenadeReadyRef = useRef(false);
+  useEffect(() => { grenadeReadyRef.current = grenadeReadyProp; }, [grenadeReadyProp]);
 
   // Jet Boost system: 1 boost per 3 levels, recharges every 60 seconds
   const jetBoostMaxRef = useRef(0);
@@ -637,13 +644,9 @@ export function FirstPersonControls({
         keys.current.z = true;
         break;
       case 'KeyG':
-        // Cmd+G / Ctrl+G (admin): grant 1 grenade and auto-equip to
-        // slot 6 if free. Browser's "find next" is preventDefault'd.
-        //
-        // event.repeat guard: holding the keys fires keydown ~30x/sec
-        // at OS auto-repeat rate. Without this, a half-second hold
-        // grants 15 grenades. Same for plain G (would re-toggle the
-        // grenade-ready state, blocking throw).
+        // Cmd+G / Ctrl+G (admin): grant 1 grenade. event.repeat guard
+        // prevents OS auto-repeat (30Hz) from minting 15 grenades on
+        // a held key.
         if (event.repeat) break;
         if ((event.metaKey || event.ctrlKey) && onAdminGrantGrenade
             && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
@@ -651,21 +654,15 @@ export function FirstPersonControls({
           void onAdminGrantGrenade();
           break;
         }
-        // Plain G with no modifier: glide (mid-air, falling) or ready
-        // a grenade (on ground). Modifier present without admin perm
-        // falls through to a no-op rather than triggering the throw.
+        // Plain G: glide if mid-air falling, else delegate to parent
+        // for the "find/auto-equip/arm grenade" logic (parent owns
+        // inventory + equipped state, so it decides whether G is
+        // valid AND which slot to arm).
         if (event.metaKey || event.ctrlKey || event.altKey) break;
         if (!onGround.current && velocity.current.y < 0) {
           glideActiveRef.current = true;
-        } else if (onThrowGrenade) {
-          // Toggle ready. We don't pull anything from inventory until
-          // the throw actually fires.
-          grenadeReadyRef.current = !grenadeReadyRef.current;
-          onGrenadeReadyChange?.(grenadeReadyRef.current);
-          if (grenadeReadyRef.current) {
-            // Pin-pull SFX so the player hears they're armed.
-            playPinPullSound();
-          }
+        } else if (onGrenadeTogglePress) {
+          onGrenadeTogglePress();
         }
         break;
       case 'KeyH':

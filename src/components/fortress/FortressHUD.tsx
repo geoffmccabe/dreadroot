@@ -113,7 +113,7 @@ export function FortressHUD(props: FortressHUDProps) {
     selectedSlot: selectedSlotProp = 1,
     onSelectSlot,
     onDeleteBlock,
-    grenadeReady = false,
+    grenadeReadySlot = null,
   } = props;
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
@@ -841,13 +841,11 @@ export function FortressHUD(props: FortressHUDProps) {
           >
             {hotbarSlots.map((slot) => {
               const isSelected = selectedSlot === slot.slot;
-              // Light up the slot that holds the pin-pulled grenade.
-              // Only slots whose item is non-stackable AND whose itemId
-              // matches a held grenade get the flashing green ring.
-              // (Currently the grenade-ready state is global, not
-              // per-slot, so we just light the non-stack slots — in
-              // practice only slot 6 ever holds a grenade.)
-              const isGrenadeReady = grenadeReady && slot.isNonStack;
+              // Flash ONLY the specific slot that's grenade-armed —
+              // the parent (Fortress) decided which slot when G was
+              // pressed. Earlier this lit every non-stackable slot,
+              // which incorrectly flashed health-potion slots too.
+              const isGrenadeReady = grenadeReadySlot === slot.slot;
               return (
                 <div
                   key={slot.slot}

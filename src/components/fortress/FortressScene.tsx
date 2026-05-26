@@ -182,7 +182,8 @@ export function FortressScene({
   onPentabulletChargeChange,
   onUseHotbarSlot,
   consumeGrenade,
-  onGrenadeReadyChange,
+  onGrenadeTogglePress,
+  grenadeReady,
   onShpiderKilled,
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
@@ -1390,7 +1391,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onPentabulletChargeChange={onPentabulletChargeChange}
         onUseHotbarSlot={onUseHotbarSlot}
         onThrowGrenade={handleThrowGrenade}
-        onGrenadeReadyChange={onGrenadeReadyChange}
+        onGrenadeTogglePress={onGrenadeTogglePress}
+        grenadeReady={grenadeReady}
         onAdminGrantGrenade={onAdminGrantGrenade}
         onAdminGrantHealthPotion={onAdminGrantHealthPotion}
         onOpenVault={vaultInRange ? onOpenVault : undefined}
