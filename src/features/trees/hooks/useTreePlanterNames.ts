@@ -44,9 +44,13 @@ export function useTreePlanterNames(plantedTrees: PlantedTree[]) {
     const fetchUserProfiles = async () => {
       setIsLoading(true);
       try {
+        // Prefer display_name → blockchain_address → truncated UUID.
+        // Earlier this only fetched blockchain_address, so any planter
+        // who hadn't linked a wallet showed up as a truncated UUID
+        // on their tree labels even when they had a display name set.
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('user_id, blockchain_address')
+          .select('user_id, display_name, blockchain_address')
           .in('user_id', uniqueUserIds);
 
         if (error) {
@@ -74,11 +78,10 @@ export function useTreePlanterNames(plantedTrees: PlantedTree[]) {
         for (const profile of data || []) {
           if (profile.user_id) {
             foundUserIds.add(profile.user_id);
-            // Use blockchain address if available, otherwise truncated user_id
-            const displayName = profile.blockchain_address 
-              ? truncateId(profile.blockchain_address)
-              : truncateId(profile.user_id);
-            newMap.set(profile.user_id, displayName);
+            const name = (profile.display_name?.trim())
+              || (profile.blockchain_address && truncateId(profile.blockchain_address))
+              || truncateId(profile.user_id);
+            newMap.set(profile.user_id, name);
           }
         }
         
