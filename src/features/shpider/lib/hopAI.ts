@@ -153,7 +153,12 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
       && s.surfaceNormal.y > 0.9) {
     const probedGround = findGroundY(s.position.x, s.position.y + 0.5, s.position.z, 64);
     const supportY = probedGround === -Infinity ? WORLD_FLOOR_Y : probedGround;
-    if (s.position.y - supportY > 0.05) {
+    // Airborne if already above support OR carrying a positive upward
+    // impulse (grenade blast kick). Without the second clause an
+    // upward kick on a grounded shpider would be wiped in the same
+    // frame by the "clear residual" line below.
+    const airborne = (s.position.y - supportY > 0.05) || s.velocity.y > 0;
+    if (airborne) {
       s.velocity.y -= FALL_GRAVITY * dt;
       s.position.y += s.velocity.y * dt;
       if (s.position.y <= supportY) {
@@ -162,8 +167,10 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
       }
       return;
     }
-    // On a support — clear any residual fall velocity.
-    if (s.velocity.y !== 0) s.velocity.y = 0;
+    // Resting on support — clear any tiny residual downward velocity
+    // so the gravity term doesn't accumulate. Positive Y has been
+    // routed to the airborne branch above, so this only zeroes ≤0.
+    if (s.velocity.y < 0) s.velocity.y = 0;
   }
 
   // ── IDLE: pick a target and decide whether to crawl or hop.

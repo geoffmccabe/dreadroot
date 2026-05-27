@@ -294,7 +294,11 @@ export function useShombieSystem({
     damage: number,
     knockbackDir?: THREE.Vector3,
     isHeadshot: boolean = false,
-    bulletDirection?: THREE.Vector3
+    bulletDirection?: THREE.Vector3,
+    /** Strength of the knockback impulse. Bullets default to ~1 m/s;
+     *  grenade blasts pass a much larger value (post-falloff). The
+     *  knockbackDir Y component lets blasts launch shombies upward. */
+    kbStrength: number = 1.0,
   ): boolean => {
     const shombie = shombiesRef.current.find(s => s.id === shombieId);
     if (!shombie || !shombie.isActive) return false;
@@ -314,10 +318,15 @@ export function useShombieSystem({
       // Clear velocity when knocked down
       shombie.velocity.set(0, 0, 0);
     } else if (knockbackDir) {
-      // Body shot: 1 block knockback + 1 second stun
-      shombie.velocity.x = knockbackDir.x * 1.0;
-      shombie.velocity.z = knockbackDir.z * 1.0;
-      shombie.stunUntil = Date.now() + 1000; // 1 second stun
+      // Apply the impulse on all three axes. Grenade source passes a
+      // unit-length knockbackDir with a 0–45° upward tilt baked in;
+      // bullets pass horizontal-only at kbStrength=1.
+      shombie.velocity.x = knockbackDir.x * kbStrength;
+      shombie.velocity.z = knockbackDir.z * kbStrength;
+      if (knockbackDir.y > 0) {
+        shombie.velocity.y = knockbackDir.y * kbStrength;
+      }
+      shombie.stunUntil = Date.now() + 1000;
     }
 
     if (shombie.currentHealth <= 0) {
@@ -433,8 +442,14 @@ export function useShombieSystem({
         };
       },
       applyDamage: (s, info) => {
-        dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
-        return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch);
+        dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
+        // Grenade blast: pass the falloff-scaled impulse magnitude so
+        // explosions actually punt shombies. Bullets keep the gentle
+        // 1 m/s tap that the body-shot stun rule expects.
+        const kbStrength = info.source === 'explosion'
+          ? (info.bulletSpeed || 1.0)
+          : 1.0;
+        return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
     });

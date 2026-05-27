@@ -211,7 +211,11 @@ export function useShtickmanSystem({
   const damageShtickman = useCallback((
     shtickmanId: string,
     damage: number,
-    knockbackDir?: THREE.Vector3
+    knockbackDir?: THREE.Vector3,
+    /** Override the per-tier knockback_received multiplier. Grenades
+     *  pass their blast magnitude directly so explosions actually
+     *  punt; bullets leave this undefined and use the per-tier value. */
+    kbOverride?: number,
   ): boolean => {
     const shtickman = shtickmenRef.current.find(s => s.id === shtickmanId);
     if (!shtickman || !shtickman.isActive) return false;
@@ -220,10 +224,16 @@ export function useShtickmanSystem({
     shtickman.lastDamagedAt = Date.now();
 
     if (knockbackDir) {
-      const knockbackForce = shtickman.definition.knockback_received;
+      const knockbackForce = kbOverride ?? shtickman.definition.knockback_received;
       shtickman.velocity.x += knockbackDir.x * knockbackForce;
       shtickman.velocity.z += knockbackDir.z * knockbackForce;
-      shtickman.velocity.y += 2; // Small upward bounce
+      // Y comes from the knockback direction (blast 0–45° tilt). Falls
+      // back to the legacy small bounce if Y is zero (bullet hits).
+      if (knockbackDir.y > 0) {
+        shtickman.velocity.y += knockbackDir.y * knockbackForce;
+      } else {
+        shtickman.velocity.y += 2;
+      }
     }
 
     if (shtickman.currentHealth <= 0) {
@@ -609,8 +619,14 @@ export function useShtickmanSystem({
         };
       },
       applyDamage: (s, info) => {
-        dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
-        return damageShtickman(s.id, info.damage, dirScratch);
+        dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
+        // Explosion: use the falloff-scaled blast magnitude so grenade
+        // hits punt shtickmen visibly (the per-tier knockback_received
+        // value is calibrated for bullet hits).
+        const kbOverride = info.source === 'explosion'
+          ? (info.bulletSpeed || undefined)
+          : undefined;
+        return damageShtickman(s.id, info.damage, dirScratch, kbOverride);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
       // Shtickman head is small relative to its 22-40m body — match
