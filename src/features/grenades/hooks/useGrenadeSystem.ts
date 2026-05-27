@@ -37,11 +37,32 @@ import { playThrowSound } from '../lib/explosionSound';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import type { UniversalFlameRendererHandle } from '@/components/fortress/UniversalFlameRenderer';
 
+// Loose type so we don't depend on the full burn-system module from
+// inside the grenade feature.
+type ApplyBurnFn = (
+  entityType: string,
+  entityId: string,
+  blockId: string | undefined,
+  tier: number,
+  colors: [string, string, string],
+  colorMode: 'static' | 'gradient' | 'tier' | 'random',
+  baseDamage: number,
+  armor: number,
+  hitPosition?: THREE.Vector3,
+  burnSeconds?: number,
+) => void;
+
 interface UseGrenadeSystemOptions {
   /** Plays the explosion VFX (flame plumes). May be null until mounted. */
   universalFlameRef: React.RefObject<UniversalFlameRendererHandle>;
   /** Camera, used to derive throw direction and listener position. */
   cameraRef: React.RefObject<THREE.Camera>;
+  /** Optional bridge to the burn system. When set, every enemy in the
+   *  blast radius also gets a burn DOT, anchored at the surface point
+   *  of the enemy that faces the explosion. The ref is populated by
+   *  FortressScene after useBurnSystem runs — hook-order matters
+   *  because the grenade system mounts earlier in the scene. */
+  applyBurnRef?: React.RefObject<ApplyBurnFn | null>;
 }
 
 /** Result of a single explosion — handed to the caller for UI / stats. */
@@ -56,6 +77,7 @@ const _scratchToEnemy = new THREE.Vector3();
 export function useGrenadeSystem({
   universalFlameRef,
   cameraRef,
+  applyBurnRef,
 }: UseGrenadeSystemOptions) {
   // Ref-based list so the per-frame tick has zero React overhead.
   const grenadesRef = useRef<GrenadeInstance[]>([]);
@@ -265,6 +287,9 @@ export function useGrenadeSystem({
     const radius = grenadeRadius(g.tier);
     const baseDmg = grenadeDamage(g.tier);
     const baseKb = grenadeKnockback(g.tier);
+    // Tier color triplet — used for both the burn flame and the
+    // explosion VFX so they visually match.
+    const colors = grenadeColors(g.tier);
 
     // ── Damage every registered enemy inside the radius ────────────
     let killed = 0;
@@ -307,12 +332,58 @@ export function useGrenadeSystem({
           source: 'explosion',
         });
         if (died) killed++;
+
+        // Ignite survivors. The burn anchor is the surface point on
+        // the enemy facing the blast — i.e. the side of their body
+        // that "saw" the explosion. Closest-point on a cylinder
+        // hitbox: project (cyl_center → blast_center) into the
+        // horizontal plane, walk out by hitbox.radius. Y clamps to
+        // the cylinder's vertical extent so the flame sits on whichever
+        // body part is at blast level (legs vs head).
+        if (!died && applyBurnRef?.current) {
+          const radial = Math.hypot(_scratchToEnemy.x, _scratchToEnemy.z) || 0.001;
+          const nx = -_scratchToEnemy.x / radial; // outward from blast → into enemy surface
+          const nz = -_scratchToEnemy.z / radial;
+          const burnX = hb.centerX + nx * hb.radius;
+          const burnZ = hb.centerZ + nz * hb.radius;
+          const burnY = Math.max(hb.bottomY, Math.min(hb.topY, center.y));
+          const burnPos = new THREE.Vector3(burnX, burnY, burnZ);
+          // Compound shwarm id "shwarmId::blockId" splits like the
+          // existing flamethrower path. Everything else: blockId none.
+          const compoundId = adapter.getId(enemy);
+          let burnEntityId = compoundId;
+          let burnBlockId: string | undefined;
+          if (adapter.type === 'shwarm') {
+            const idx = compoundId.indexOf('::');
+            if (idx >= 0) {
+              burnEntityId = compoundId.slice(0, idx);
+              burnBlockId = compoundId.slice(idx + 2);
+            }
+          }
+          // DOT damage: ~25% of the impact damage per second, tier-
+          // scaled duration (3s + 0.5s/tier). A T1 grenade burns the
+          // target for 3.5s @ ~20 dps; T10 for 8s @ ~180 dps.
+          const burnDps = Math.max(1, Math.round(damage * 0.25));
+          const burnSeconds = 3 + g.tier * 0.5;
+          applyBurnRef.current(
+            adapter.type,
+            burnEntityId,
+            burnBlockId,
+            g.tier,
+            colors,
+            'static',
+            burnDps,
+            0,
+            burnPos,
+            burnSeconds,
+          );
+        }
       }
     }
 
     // ── VFX: a big central flame + a ring of smaller plumes ────────
+    // (colors already computed above for the burn anchor)
     const renderer = universalFlameRef.current;
-    const colors = grenadeColors(g.tier);
     if (renderer) {
       const centralFlame = renderer.spawnFlame({
         type: 'point',
@@ -356,7 +427,7 @@ export function useGrenadeSystem({
     void playSpatialSound('/grenade_explosion.mp3', distFromCam, { baseVolume: tierVol });
 
     return { position: center, tier: g.tier, killed };
-  }, [universalFlameRef, cameraRef]);
+  }, [universalFlameRef, cameraRef, applyBurnRef]);
 
   // Register the physics tick so the consumer doesn't have to plumb
   // it through the main frame loop. Explosion results are dropped on

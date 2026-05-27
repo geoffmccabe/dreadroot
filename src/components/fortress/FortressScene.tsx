@@ -873,9 +873,15 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   //   FortressControls (G + click) → onThrowGrenade()
   //     → consumeGrenade() (Fortress.tsx, inventory)
   //     → grenadeSystem.throwGrenade(tier) (this hook)
+  //
+  // applyBurnRef is populated by a useEffect below once burnSystem is
+  // created — hook order makes the burn system mount AFTER the
+  // grenade system, so we pass a ref and back-fill it.
+  const applyBurnRef = useRef<((...args: any[]) => void) | null>(null);
   const { grenadesRef, throwGrenade } = useGrenadeSystem({
     universalFlameRef,
     cameraRef,
+    applyBurnRef: applyBurnRef as React.RefObject<any>,
   });
   const handleThrowGrenade = useCallback((): boolean => {
     if (!consumeGrenade) return false;
@@ -1242,6 +1248,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     cameraRef,
     takeDamage,
   });
+  // Back-fill the grenade system's burn ref. Hook order requires
+  // useGrenadeSystem to be defined before useBurnSystem, so the
+  // grenade hook accepts a ref it can read at explosion time.
+  applyBurnRef.current = burnSystem.applyBurn;
 
   useFrame((_, delta) => {
     if (!flamethrower.isActiveRef.current) return;
