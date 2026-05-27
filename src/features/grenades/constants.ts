@@ -44,9 +44,11 @@ export const GRENADE_BASE_RADIUS = 8;
 export const GRENADE_RADIUS_PER_TIER = 1.0;
 
 /** Knockback strength applied to nearby enemies (m/s) at T1.
- *  Doubled per 2026-May-26 user feedback ("let's double the knockback"). */
-export const GRENADE_BASE_KNOCKBACK = 16;
-export const GRENADE_KNOCKBACK_PER_TIER = 4;
+ *  Bumped 10× per 2026-May-27 — at the previous 16 m/s tier-1
+ *  enemies barely flinched. Per-enemy random 0–45° upward kick
+ *  is applied in useGrenadeSystem at hit time. */
+export const GRENADE_BASE_KNOCKBACK = 160;
+export const GRENADE_KNOCKBACK_PER_TIER = 40;
 
 /** Total damage = BASE_DAMAGE + (tier - 1) × DAMAGE_PER_TIER. */
 export function grenadeDamage(tier: number): number {

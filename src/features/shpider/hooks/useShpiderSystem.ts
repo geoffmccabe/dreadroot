@@ -217,6 +217,13 @@ export function useShpiderSystem({
       : 11 * kbScale * Math.max(1, bulletSpeed / 60);
     s.velocity.x = knockbackDir.x * v0;
     s.velocity.z = knockbackDir.z * v0;
+    // Vertical kick from the knockback direction's Y component (used
+    // by the grenade explosion 0–45° upward angle). Bullets pass Y=0,
+    // so this is a no-op for them. Without this the shpider stays
+    // glued to the ground regardless of the impulse.
+    if (knockbackDir.y !== 0) {
+      s.velocity.y = knockbackDir.y * v0;
+    }
 
     // ANY damage interrupts the current hop/crawl so velocity-based
     // knockback can actually move the shpider. Without this, hop and
@@ -425,7 +432,7 @@ export function useShpiderSystem({
         };
       },
       applyDamage: (s, info) => {
-        dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
+        dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
         // Explosion source: force fragmentation on kill and pass an
         // outward impulse so each fragment inherits the blast's
         // momentum (radial + a touch of upward kick). bulletSpeed in

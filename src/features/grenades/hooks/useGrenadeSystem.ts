@@ -326,15 +326,24 @@ export function useGrenadeSystem({
         const t = dist / radius;
         const falloff = 2.0 * Math.pow(0.05, t);
         const damage = Math.max(1, Math.round(baseDmg * falloff));
-        // Knockback direction = away from center on XZ.
+        // Knockback direction = away from center on XZ, rotated UP by
+        // a random 0–45° angle per enemy so they fly outward AND a bit
+        // skyward instead of just sliding along the ground. Resulting
+        // vector stays unit length (cos²(θ)·(x²+z²) + sin²(θ) = 1).
         const dHoriz = Math.max(0.01, Math.hypot(_scratchToEnemy.x, _scratchToEnemy.z));
-        const kbX = _scratchToEnemy.x / dHoriz;
-        const kbZ = _scratchToEnemy.z / dHoriz;
+        const horizX = _scratchToEnemy.x / dHoriz;
+        const horizZ = _scratchToEnemy.z / dHoriz;
+        const upAngle = Math.random() * (Math.PI / 4); // 0 – 45°
+        const cosA = Math.cos(upAngle);
+        const sinA = Math.sin(upAngle);
+        const kbX = horizX * cosA;
+        const kbY = sinA;
+        const kbZ = horizZ * cosA;
         const died = adapter.applyDamage(enemy, {
           damage,
           bulletSpeed: baseKb * falloff,
           knockbackDirX: kbX,
-          knockbackDirY: 0,
+          knockbackDirY: kbY,
           knockbackDirZ: kbZ,
           hitX: ex,
           hitY: ey,
