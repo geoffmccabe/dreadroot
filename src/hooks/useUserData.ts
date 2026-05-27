@@ -944,7 +944,8 @@ export const useUserData = () => {
     if (!key) return false;
     return key === 'health_potion'
       || key === 'grenade' || key.startsWith('grenade_t')
-      || key === 'diamond';
+      || key === 'diamond'
+      || key.startsWith('shpider_egg_t');
   };
 
   // Add an item to inventory (server-verified). Looks up the item's

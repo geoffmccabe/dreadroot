@@ -219,7 +219,8 @@ export function FortressHUD(props: FortressHUDProps) {
     if (!key) return false;
     return key === 'health_potion'
       || key === 'grenade' || key.startsWith('grenade_t')
-      || key === 'diamond';
+      || key === 'diamond'
+      || key.startsWith('shpider_egg_t');
   }, []);
   const nonStackableItemIds = useMemo(() => {
     const s = new Set<string>();
@@ -295,7 +296,7 @@ export function FortressHUD(props: FortressHUDProps) {
   // All renderable inventory entries, keyed by grid key (itemId for
   // stacks, rowId for non-stackable rows). One entry per future tile.
   const inventoryItemsMap = useMemo(() => {
-    const map = new Map<string, { gridKey: string; itemId: string; sprite: string | null; name: string | null; tier: number | null; quantity: number; isNonStackRow: boolean }>();
+    const map = new Map<string, { gridKey: string; itemId: string; sprite: string | null; name: string | null; tier: number | null; quantity: number; isNonStackRow: boolean; cooldownUntil: number | null }>();
     for (const inv of (inventory || [])) {
       if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
       const def = itemDefs.get(inv.item_id);
@@ -304,6 +305,11 @@ export function FortressHUD(props: FortressHUDProps) {
       // For stackable items multiple rows would collapse; sum their qty.
       const prev = map.get(gridKey);
       const qty = nonStack ? 1 : (prev ? prev.quantity + inv.quantity : inv.quantity);
+      // Cooldown ms (epoch). Non-null when item is on heal/refresh
+      // cooldown — e.g. a recovered shpider egg. UI greys + counts down.
+      const cd = (inv as any).cooldown_until
+        ? new Date((inv as any).cooldown_until).getTime()
+        : null;
       map.set(gridKey, {
         gridKey,
         itemId: inv.item_id,
@@ -312,6 +318,7 @@ export function FortressHUD(props: FortressHUDProps) {
         tier: def?.tier ?? null,
         quantity: qty,
         isNonStackRow: nonStack,
+        cooldownUntil: cd,
       });
     }
     return map;
@@ -813,6 +820,30 @@ export function FortressHUD(props: FortressHUDProps) {
                               }}>
                                 {item.quantity}x
                               </span>
+                            )}
+                            {(item as any).cooldownUntil && (item as any).cooldownUntil > Date.now() && (
+                              <>
+                                <div style={{
+                                  position: 'absolute', inset: 0,
+                                  background: 'rgba(0,0,0,0.6)',
+                                  borderRadius: 'inherit',
+                                  pointerEvents: 'none',
+                                }} />
+                                <span style={{
+                                  position: 'absolute', inset: 0,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: '#fff', fontWeight: 700, fontSize: 11,
+                                  fontFamily: 'var(--hud-font)',
+                                  textShadow: '0 0 3px rgba(0,0,0,0.9)',
+                                  pointerEvents: 'none',
+                                }}>
+                                  {(() => {
+                                    const ms = (item as any).cooldownUntil - Date.now();
+                                    const mins = Math.ceil(ms / 60000);
+                                    return mins >= 60 ? `${Math.ceil(mins/60)}h` : `${mins}m`;
+                                  })()}
+                                </span>
+                              </>
                             )}
                           </>
                         )}

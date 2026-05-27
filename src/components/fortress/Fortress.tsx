@@ -1966,6 +1966,21 @@ export function Fortress() {
                 .from('user_combat_stats')
                 .insert({ user_id: user.id, enemy_type: `shpider_t${tier}`, kills: 1 });
             }
+            // 1% chance to drop a shpider egg of the killed shpider's
+            // tier. Goes straight to inventory. Pet-shpider deaths
+            // skip this — they drop a world_eggs row instead via the
+            // shpider system, since the egg has a known owner.
+            if (Math.random() < 0.01) {
+              const { data: eggItem } = await supabase
+                .from('items')
+                .select('id')
+                .eq('key', `shpider_egg_t${tier}`)
+                .maybeSingle();
+              if (eggItem) {
+                await addItem(eggItem.id, 1);
+                toast({ title: `🥚 Shpider Egg T${tier} dropped!`, duration: 4000 });
+              }
+            }
           }}
           onWalapaKilled={async (tier) => {
             // Walapa kill tracking — Fortress wasn't passing a
