@@ -125,6 +125,168 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
   );
 }
 
+// ─── Egg Forge Panel ─────────────────────────────────────────────
+// Eggs are non-stackable (one row per egg) and each row carries its
+// own cooldown_until. Forge = combine 2 rows of tier N into 1 row of
+// tier N+1, where the result inherits the LONGER of the two source
+// cooldowns. Caps at tier 9 → 10. Eggs that are cooldown-locked can
+// still participate in forging.
+
+function EggForgePanel({
+  inventory,
+  itemDefs,
+  onForged,
+}: {
+  inventory: any[];
+  itemDefs: Map<string, ItemDef>;
+  onForged: (fromTier: number, toTier: number) => void;
+}) {
+  const [forgingTier, setForgingTier] = useState<number | null>(null);
+
+  // Group egg rows by tier. Each tier carries an array of raw rows.
+  const eggsByTier = new Map<number, any[]>();
+  for (const inv of inventory) {
+    if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
+    const def = itemDefs.get(inv.item_id);
+    if (!def) continue;
+    // Detect egg rows by the item key prefix in the items table. We
+    // already have tier from def; the discriminator is the name. Eggs
+    // always have name "Shpider Egg" per the seed insert.
+    if (def.name !== 'Shpider Egg') continue;
+    const tier = def.tier;
+    if (!eggsByTier.has(tier)) eggsByTier.set(tier, []);
+    eggsByTier.get(tier)!.push(inv);
+  }
+
+  // Tiers with at least 2 rows and tier < 10 (tier 10 can't go higher).
+  const forgeableTiers = Array.from(eggsByTier.entries())
+    .filter(([tier, rows]) => tier < 10 && rows.length >= 2)
+    .sort((a, b) => a[0] - b[0]);
+
+  if (forgeableTiers.length === 0) {
+    return (
+      <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>
+        Collect 2 Shpider Eggs of the same tier to forge them into the next tier.
+      </p>
+    );
+  }
+
+  const handleForgeEggs = async (tier: number, rows: any[]) => {
+    if (forgingTier !== null) return;
+    setForgingTier(tier);
+    try {
+      // Pick the 2 rows with the LOWEST cooldown_until so the result
+      // unlocks sooner. The result still inherits MAX of the two.
+      const sorted = [...rows].sort((a, b) => {
+        const ca = a.cooldown_until ? new Date(a.cooldown_until).getTime() : 0;
+        const cb = b.cooldown_until ? new Date(b.cooldown_until).getTime() : 0;
+        return ca - cb;
+      });
+      const pick = sorted.slice(0, 2);
+      const userId = pick[0].user_id;
+      const tA = pick[0].cooldown_until ? new Date(pick[0].cooldown_until).getTime() : 0;
+      const tB = pick[1].cooldown_until ? new Date(pick[1].cooldown_until).getTime() : 0;
+      const resultCooldown = Math.max(tA, tB);
+      const resultIso = resultCooldown > Date.now()
+        ? new Date(resultCooldown).toISOString()
+        : null;
+
+      // Look up the target tier's item id.
+      const nextKey = `shpider_egg_t${tier + 1}`;
+      const { data: nextItem, error: lookupErr } = await supabase
+        .from('items')
+        .select('id, texture_url')
+        .eq('key', nextKey)
+        .maybeSingle();
+      if (lookupErr || !nextItem) {
+        toast.error(`Missing items row for ${nextKey}`);
+        return;
+      }
+
+      // Delete the 2 source rows first.
+      const { error: delErr } = await supabase
+        .from('user_inventory')
+        .delete()
+        .in('id', [pick[0].id, pick[1].id]);
+      if (delErr) {
+        toast.error(`Forge failed: ${delErr.message}`);
+        return;
+      }
+
+      // Insert the result row.
+      const { error: insErr } = await supabase
+        .from('user_inventory')
+        .insert({
+          user_id: userId,
+          item_type: 'item',
+          item_id: nextItem.id,
+          quantity: 1,
+          cooldown_until: resultIso,
+        } as any);
+      if (insErr) {
+        toast.error(`Forge insert failed: ${insErr.message}`);
+        return;
+      }
+      onForged(tier, tier + 1);
+    } finally {
+      setForgingTier(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {forgeableTiers.map(([tier, rows]) => {
+        const def = itemDefs.get(rows[0].item_id) || null;
+        const sprite = def ? getSpriteUrl(def) : null;
+        const busy = forgingTier !== null;
+        const groups = Math.floor(rows.length / 2);
+        return (
+          <Card key={tier} className="p-3">
+            <div style={{ textAlign: 'center', fontSize: '11px', fontWeight: 600, marginBottom: '6px', color: 'hsl(var(--hud-text))' }}>
+              Shpider Egg — T{tier} → T{tier + 1}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {[0, 1].map(i => (
+                  <div key={i} style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: 'hsla(var(--hud-bg))' }}>
+                    {sprite ? (
+                      <img src={sprite} alt="" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              <span style={{ fontSize: '14px', color: 'hsl(var(--hud-text-dim))' }}>→</span>
+              <button
+                onClick={() => handleForgeEggs(tier, rows)}
+                disabled={busy}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
+                  padding: '6px',
+                  border: '2px solid hsla(var(--hud-border))',
+                  borderRadius: 'var(--hud-radius)',
+                  background: 'hsla(var(--hud-bg))',
+                  cursor: busy ? 'default' : 'pointer',
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', background: 'hsla(var(--hud-bg))' }}>
+                  {sprite ? (
+                    <img src={sprite} alt="" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
+                  ) : null}
+                </div>
+                <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>T{tier + 1}</span>
+              </button>
+              <span style={{ fontSize: '10px', color: 'hsl(var(--hud-text-dim))' }}>
+                {groups} forge{groups === 1 ? '' : 's'} available
+              </span>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Forge Panel ─────────────────────────────────────────────────
 
 function ForgePanel({
@@ -358,7 +520,7 @@ export function ItemsTab({ height = 500 }: { height?: number }) {
   const { inventory, addItem, removeItems } = useUserData();
   const [itemDefs, setItemDefs] = useState<Map<string, ItemDef>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
-  const [forgeModal, setForgeModal] = useState<{ name: string; fromTier: number; toTier: number } | null>(null);
+  const [forgeModal, setForgeModal] = useState<{ name: string; fromTier: number; toTier: number; sourceCount?: number } | null>(null);
 
   // Load item definitions for all inventory items
   const loadDefs = useCallback(async () => {
@@ -535,7 +697,14 @@ export function ItemsTab({ height = 500 }: { height?: number }) {
 
         <TabsContent value="forge" className="mt-0">
           <ScrollArea style={{ height: `${height - 56}px` }}>
-          <div className="pr-4">
+          <div className="pr-4 space-y-4">
+          <EggForgePanel
+            inventory={inventory}
+            itemDefs={itemDefs}
+            onForged={(fromTier, toTier) => {
+              setForgeModal({ name: 'Shpider Egg', fromTier, toTier, sourceCount: 2 });
+            }}
+          />
           <ForgePanel
             items={displayItems}
             onForge={handleForge}
@@ -555,7 +724,7 @@ export function ItemsTab({ height = 500 }: { height?: number }) {
             <DialogTitle>Forge Successful</DialogTitle>
           </DialogHeader>
           <p className="text-sm">
-            You forged four Tier {forgeModal?.fromTier} {forgeModal?.name} into 1 of Tier {forgeModal?.toTier}!
+            You forged {forgeModal?.sourceCount ?? 4} Tier {forgeModal?.fromTier} {forgeModal?.name} into 1 of Tier {forgeModal?.toTier}!
           </p>
           <Button className="w-full mt-2" onClick={() => setForgeModal(null)}>
             OK
