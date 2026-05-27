@@ -552,8 +552,16 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // Sort by lastAccessedAt ascending (oldest first)
     evictionCandidates.sort((a, b) => a.lastAccessedAt - b.lastAccessedAt);
 
-    // Evict up to EVICTION_BATCH_SIZE chunks
-    const toEvict = evictionCandidates.slice(0, EVICTION_BATCH_SIZE);
+    // Evict enough to get back under cap. EVICTION_BATCH_SIZE used to be
+    // a hard 10/call ceiling which fell behind during fast traversal
+    // (loaded climbed to 329 vs cap 275 in the D-Flow trace). Now we
+    // evict the excess + a small extra so we don't have to immediately
+    // re-trigger. Collider work is batched (single invalidation per
+    // chunk's worth of voxels) so the bigger batch is cheaper than the
+    // old per-voxel grid invalidation churn.
+    const overBy = chunkCount - MAX_LOADED_CHUNKS;
+    const evictTarget = Math.min(evictionCandidates.length, overBy + EVICTION_BATCH_SIZE);
+    const toEvict = evictionCandidates.slice(0, evictTarget);
 
     if (toEvict.length > 0) {
       for (const { key } of toEvict) {
@@ -569,16 +577,19 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         removeChunkHeightMap(key);
 
         if (chunkData && chunkData.blocks.length > 0) {
-          // Synchronous removal: budgeted removal "can't keep pace" with
-          // loading, leaving orphaned colliders that balloon the grid + heap.
-          // Removing the surface set (exactly what got colliders) is bounded
-          // and fast (O(1-4 cells) each); the full-list fallback is a safe
-          // no-op for blocks that never had a collider.
+          // Batch-remove the chunk's voxels in ONE pass — single
+          // generation bump + cache invalidation at the end.
+          // Per-block remove was the chunk-boundary stutter culprit
+          // (each removeVoxel called generation++/invalidateCache,
+          // so a 300-block chunk caused 300 cache thrashes).
           const evictBlocks = chunkData.visibleBlocks?.length
             ? chunkData.visibleBlocks
             : chunkData.blocks;
-          for (let i = 0; i < evictBlocks.length; i++) {
-            removeBlockCollider(evictBlocks[i]);
+          worldCollisionGrid.removeVoxelsBatch(evictBlocks);
+          if (Math.random() < 0.05) {
+            // Sample timing 5% of the time so the diagnostic still
+            // shows collider work without paying perf.now() per evict.
+            diagnostics.recordColliderOp('remove', 0);
           }
         }
       }

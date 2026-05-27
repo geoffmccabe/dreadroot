@@ -424,6 +424,36 @@ class SpatialHashGrid {
     }
   }
 
+  /**
+   * Batch-remove many voxels with a SINGLE generation bump + cache
+   * invalidation at the end. Used during chunk eviction where 300+
+   * blocks get removed in one tick — per-block generation bumps were
+   * causing the spatial-grid query cache to thrash and tanking FPS
+   * during chunk-boundary crossings.
+   */
+  removeVoxelsBatch(positions: ReadonlyArray<{ position_x: number; position_y: number; position_z: number }>): void {
+    let actuallyRemoved = 0;
+    for (let i = 0; i < positions.length; i++) {
+      const p = positions[i];
+      const fx = Math.floor(p.position_x);
+      const fy = Math.floor(p.position_y);
+      const fz = Math.floor(p.position_z);
+      const ck = xzColKey(fx, fz);
+      const s = this.voxelCols.get(ck);
+      if (s && s.has(fy)) {
+        s.delete(fy);
+        if (s.size === 0) this.voxelCols.delete(ck);
+        this.voxelBoxes.delete(voxKey(fx, fy, fz));
+        this._voxelCount--;
+        actuallyRemoved++;
+      }
+    }
+    if (actuallyRemoved > 0) {
+      this.generation++;
+      this.invalidateCache();
+    }
+  }
+
   hasVoxel(x: number, y: number, z: number): boolean {
     return this.voxelCols.get(xzColKey(x, z))?.has(Math.floor(y)) ?? false;
   }
