@@ -114,6 +114,8 @@ export function FortressHUD(props: FortressHUDProps) {
     onSelectSlot,
     onDeleteBlock,
     grenadeReadySlot = null,
+    potionDrinkingSlot = null,
+    onUseHotbarSlot,
   } = props;
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
@@ -841,11 +843,15 @@ export function FortressHUD(props: FortressHUDProps) {
           >
             {hotbarSlots.map((slot) => {
               const isSelected = selectedSlot === slot.slot;
-              // Flash ONLY the specific slot that's grenade-armed —
-              // the parent (Fortress) decided which slot when G was
-              // pressed. Earlier this lit every non-stackable slot,
-              // which incorrectly flashed health-potion slots too.
               const isGrenadeReady = grenadeReadySlot === slot.slot;
+              const isDrinking = potionDrinkingSlot === slot.slot;
+              // Single-click: select the slot AND fire the activator
+              // (drinks a potion, etc.) so the user doesn't need to
+              // hit the digit key separately.
+              const handleSlotClick = () => {
+                setSelectedSlot(slot.slot);
+                if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(slot.slot);
+              };
               return (
                 <div
                   key={slot.slot}
@@ -855,7 +861,7 @@ export function FortressHUD(props: FortressHUDProps) {
                     alignItems: 'center',
                     gap: '3px',
                   }}
-                  onClick={() => setSelectedSlot(slot.slot)}
+                  onClick={handleSlotClick}
                 >
                   {/* Slot square */}
                   <div
@@ -864,16 +870,22 @@ export function FortressHUD(props: FortressHUDProps) {
                     onDragEnter={allowDrop}
                     onDragOver={allowDrop}
                     onDrop={(e) => onDropHotbar(e, slot.slot)}
-                    className={isGrenadeReady ? 'grenade-ready-pulse' : undefined}
+                    className={
+                      isGrenadeReady ? 'grenade-ready-pulse'
+                      : isDrinking ? 'potion-drink-pulse'
+                      : undefined
+                    }
                     style={{
                       width: '56px',
                       height: '56px',
                       borderRadius: 'var(--hud-radius)',
                       border: isGrenadeReady
                         ? '2px solid #00ff66'
-                        : isSelected
-                          ? '2px solid white'
-                          : '1px solid hsla(var(--hud-border))',
+                        : isDrinking
+                          ? '2px solid #ff3a6a'
+                          : isSelected
+                            ? '2px solid white'
+                            : '1px solid hsla(var(--hud-border))',
                       background: isSelected
                         ? 'hsla(var(--hud-bg))'
                         : 'hsla(var(--hud-bg-dim))',

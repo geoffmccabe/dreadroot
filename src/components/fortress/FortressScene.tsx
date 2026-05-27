@@ -184,6 +184,7 @@ export function FortressScene({
   consumeGrenade,
   onGrenadeTogglePress,
   grenadeReady,
+  onHealthPotionUse,
   onShpiderKilled,
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
@@ -1393,6 +1394,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onThrowGrenade={handleThrowGrenade}
         onGrenadeTogglePress={onGrenadeTogglePress}
         grenadeReady={grenadeReady}
+        onHealthPotionUse={onHealthPotionUse}
         onAdminGrantGrenade={onAdminGrantGrenade}
         onAdminGrantHealthPotion={onAdminGrantHealthPotion}
         onOpenVault={vaultInRange ? onOpenVault : undefined}

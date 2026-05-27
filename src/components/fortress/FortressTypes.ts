@@ -224,6 +224,11 @@ export interface SceneProps {
   /** Which hotbar slot is currently grenade-armed (1-6 or null).
    *  HUD flashes only this specific slot. */
   grenadeReadySlot?: number | null;
+  /** H key handler — drink a potion (auto-equip if needed). */
+  onHealthPotionUse?: () => void;
+  /** Slot index (1-6) currently flashing red while a potion drink
+   *  animation plays. Null when nothing is drinking. */
+  potionDrinkingSlot?: number | null;
   /** Take one grenade out of the user's inventory and return its
    *  tier. Returns null if no grenade is held. Inventory is owned by
    *  Fortress.tsx so the throw mechanism delegates here. */
@@ -315,6 +320,8 @@ export interface FirstPersonControlsProps {
   onGrenadeTogglePress?: () => void;
   /** True while grenade is armed. */
   grenadeReady?: boolean;
+  /** H-press handler. */
+  onHealthPotionUse?: () => void;
   /** Admin/superadmin only: Cmd+G grants a grenade. */
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: Cmd+H grants a health potion. */

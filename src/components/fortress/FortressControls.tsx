@@ -104,6 +104,8 @@ export function FirstPersonControls({
   // Owned by parent. The click handler reads this to know whether
   // to throw instead of fire the equipped weapon.
   grenadeReady: grenadeReadyProp = false,
+  // H key handler — parent drinks a potion (auto-equips if needed).
+  onHealthPotionUse,
   // Admin/superadmin item grants — Cmd+G grenade, Cmd+H health potion.
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
@@ -666,14 +668,18 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyH':
-        // Cmd+H / Ctrl+H (admin): grant 1 health potion.
-        // event.repeat guard: same rationale as KeyG above.
+        // Cmd+H / Ctrl+H (admin): grant 1 health potion. Plain H:
+        // drink a potion (parent handles auto-equip + slot selection,
+        // same flow as G for grenades).
         if (event.repeat) break;
         if ((event.metaKey || event.ctrlKey) && onAdminGrantHealthPotion
             && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
           event.preventDefault();
           void onAdminGrantHealthPotion();
+          break;
         }
+        if (event.metaKey || event.ctrlKey || event.altKey) break;
+        if (onHealthPotionUse) onHealthPotionUse();
         break;
       case 'KeyE':
         keys.current.e = true;

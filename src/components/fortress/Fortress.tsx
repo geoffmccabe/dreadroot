@@ -539,6 +539,32 @@ export function Fortress() {
   // builds crash with "Cannot access 'heal' before initialization" on
   // every render, which is what caused the blank-blue-screen incident
   // on 2026-May-26.
+  // Pink-red flash on the slot during the drink animation. Set when
+  // a potion is consumed (slot N), cleared by the timeout below.
+  const [potionDrinkingSlot, setPotionDrinkingSlot] = useState<number | null>(null);
+
+  // Internal helper used by both the slot-# handler and the H key —
+  // drinks the potion in the given slot, plays SFX, runs the flash.
+  // Returns true if the drink happened. Caller is responsible for
+  // ensuring the slot actually holds a health potion before calling.
+  const consumePotionInSlot = useCallback(async (slot: number, itemId: string): Promise<boolean> => {
+    if (healthRef.current.currentHealth >= healthRef.current.maxHealth) return false;
+    const row = inventory.find(i => i.item_id === itemId && i.quantity > 0);
+    if (!row) return false;
+    heal(healthRef.current.maxHealth);
+    try {
+      const audio = new Audio('/swallow_potion.mp3');
+      audio.volume = 0.8;
+      void audio.play();
+    } catch { /* sound failure shouldn't block consume */ }
+    setPotionDrinkingSlot(slot);
+    setTimeout(() => setPotionDrinkingSlot(s => (s === slot ? null : s)), 600);
+    await removeInventoryRow(row.id);
+    const stillHave = inventory.some(i => i.id !== row.id && i.item_id === itemId && i.quantity > 0);
+    if (!stillHave) await updateEquippedSlot(slot, null);
+    return true;
+  }, [heal, healthRef, inventory, removeInventoryRow, updateEquippedSlot]);
+
   const handleUseHotbarSlot = useCallback(async (slot: number) => {
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === slot);
     if (!eq?.itemId) return;
@@ -549,26 +575,39 @@ export function Fortress() {
       .maybeSingle();
     if (!itemDef) return;
     if (itemDef.key === 'health_potion') {
-      // Don't waste a potion at full HP.
-      if (healthRef.current.currentHealth >= healthRef.current.maxHealth) return;
-      // Find one potion row to consume — non-stackable, each row has
-      // quantity=1.
-      const row = inventory.find(i => i.item_id === eq.itemId && i.quantity > 0);
-      if (!row) return;
-      heal(healthRef.current.maxHealth);
-      try {
-        const audio = new Audio('/swallow_potion.mp3');
-        audio.volume = 0.8;
-        void audio.play();
-      } catch { /* sound failure shouldn't break consume */ }
-      await removeInventoryRow(row.id);
-      // If this was the last potion, unequip slot 6.
-      const stillHave = inventory.some(i => i.id !== row.id && i.item_id === eq.itemId && i.quantity > 0);
-      if (!stillHave) {
-        await updateEquippedSlot(slot, null);
-      }
+      await consumePotionInSlot(slot, eq.itemId);
     }
-  }, [equippedItems, heal, healthRef, inventory, removeInventoryRow, updateEquippedSlot]);
+  }, [equippedItems, consumePotionInSlot]);
+
+  // H key handler — drinks a potion if one is reachable. Same auto-
+  // equip rule as G for grenades:
+  //   1. Health potion already in a hotbar slot → drink that slot.
+  //   2. Potion in inventory + a free hotbar slot → equip to first
+  //      free slot then drink.
+  //   3. No potion or hotbar full → no-op.
+  const handleHealthPotionUse = useCallback(async () => {
+    const potionId = healthPotionIdRef.current;
+    if (!potionId) return; // potion def hasn't loaded yet
+    if (healthRef.current.currentHealth >= healthRef.current.maxHealth) return; // full HP — don't waste
+    // Step 1: any hotbar slot holding a potion?
+    const equippedSlot = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(eq => eq.itemId === potionId);
+    if (equippedSlot) {
+      await consumePotionInSlot(equippedSlot.slot, potionId);
+      return;
+    }
+    // Step 2: potion in inventory + free hotbar slot?
+    const inv = inventory.find(i => i.item_id === potionId && i.quantity > 0);
+    if (!inv) return;
+    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    let firstEmpty: number | null = null;
+    for (let i = 1; i <= 6; i++) {
+      if (!usedSlots.has(i)) { firstEmpty = i; break; }
+    }
+    if (firstEmpty === null) return; // hotbar full
+    await updateEquippedSlot(firstEmpty, potionId);
+    await consumePotionInSlot(firstEmpty, potionId);
+  }, [equippedItems, inventory, healthRef, consumePotionInSlot, updateEquippedSlot]);
 
   // Shwarm definitions
   const { data: shwarmDefinitions } = useShwarmDefinitions();
@@ -1993,6 +2032,7 @@ export function Fortress() {
           consumeGrenade={consumeGrenade}
           onGrenadeTogglePress={handleGrenadeTogglePress}
           grenadeReady={grenadeReady}
+          onHealthPotionUse={handleHealthPotionUse}
           onAdminGrantGrenade={grantAdminGrenade}
           onAdminGrantHealthPotion={grantAdminHealthPotion}
           vaultInRange={vaultInRange}
@@ -2071,6 +2111,7 @@ export function Fortress() {
         onSelectSlot={setSelectedSlot}
         onDeleteBlock={handleInspectorDeleteBlock}
         grenadeReadySlot={grenadeReadySlot}
+        potionDrinkingSlot={potionDrinkingSlot}
       />
 
       <FortressOverlays
