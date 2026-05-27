@@ -131,19 +131,20 @@ export function useFruitSpawning({
       const seedDef = tree.seed_definition!;
       const spawnChance = FRUIT_CONFIG.SPAWN_CHANCE_PER_BRANCH * seedDef.fruiting_factor;
 
-      // Per-tree cap. Owner-nearby check uses Chebyshev distance in
-      // chunks from camera to tree base. Eligible trees are always
-      // owned by the current user (filter upstream), so any "nearby"
-      // tree means the owner is farming it.
+      // Server-side cron (process_fruit_spawning) handles the base
+      // 2× cap for ALL trees in the world, regardless of who's
+      // online. The client spawner now does ONLY the owner-proximity
+      // top-up: when the player is within 5 chunks of one of their
+      // own trees, walk that tree with the higher 3× cap so the
+      // remaining headroom (up to +1× tier) gets spawned. If the
+      // owner isn't nearby, skip — the server already covered base.
       const treeChunkX = Math.floor(tree.base_x / CHUNK_SIZE);
       const treeChunkZ = Math.floor(tree.base_z / CHUNK_SIZE);
       const ownerNearby = camChunkX !== null && camChunkZ !== null
         && Math.max(Math.abs(camChunkX - treeChunkX), Math.abs(camChunkZ - treeChunkZ))
            <= FRUIT_CONFIG.OWNER_PROXIMITY_CHUNKS;
-      const capMultiplier = ownerNearby
-        ? FRUIT_CONFIG.MAX_FRUITS_PER_TIER_OWNER_NEARBY
-        : FRUIT_CONFIG.MAX_FRUITS_PER_TIER_BASE;
-      const maxFruits = capMultiplier * seedDef.tier;
+      if (!ownerNearby) continue;
+      const maxFruits = FRUIT_CONFIG.MAX_FRUITS_PER_TIER_OWNER_NEARBY * seedDef.tier;
       let currentCount = existingFruitsByTree.get(tree.id) ?? 0;
       if (currentCount >= maxFruits) continue;
 
