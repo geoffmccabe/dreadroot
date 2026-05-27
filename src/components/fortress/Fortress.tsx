@@ -415,6 +415,12 @@ export function Fortress() {
     }
     if (bestTier === 0 || !bestRowId) return null;
     void removeInventoryRow(bestRowId);
+    // The throw was committed — drop out of G-mode immediately so the
+    // green crosshair / flashing slot disappear. Press G again to re-
+    // arm another grenade. Previously the ready state lingered until
+    // a useEffect noticed the slot's item was gone (1-frame delay
+    // PLUS the user had to wait for the inventory state propagation).
+    setGrenadeReadySlot(null);
     return bestTier;
   }, [inventory, removeInventoryRow]);
 

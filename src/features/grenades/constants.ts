@@ -36,11 +36,12 @@ export const GRENADE_BASE_DAMAGE = 40;
 /** Each tier adds this much damage on top of base. */
 export const GRENADE_DAMAGE_PER_TIER = 35;
 
-/** Explosion radius (m) at T1. */
-export const GRENADE_BASE_RADIUS = 4;
+/** Explosion radius (m) at T1. Doubled per 2026-May-27 feedback —
+ *  was 4, now 8 so the AoE actually catches enemies in motion. */
+export const GRENADE_BASE_RADIUS = 8;
 
 /** Each tier extends the explosion radius by this much (m). */
-export const GRENADE_RADIUS_PER_TIER = 0.5;
+export const GRENADE_RADIUS_PER_TIER = 1.0;
 
 /** Knockback strength applied to nearby enemies (m/s) at T1.
  *  Doubled per 2026-May-26 user feedback ("let's double the knockback"). */

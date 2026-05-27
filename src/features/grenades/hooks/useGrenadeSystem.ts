@@ -280,8 +280,15 @@ export function useGrenadeSystem({
         const dist = _scratchToEnemy.length();
         if (dist > radius) continue;
 
-        // Linear falloff: full damage at center, 0 at the edge.
-        const falloff = 1 - dist / radius;
+        // Exponential falloff curve, calibrated to 2026-May-27 feedback:
+        //   center (t=0): 200% of baseDmg
+        //   edge   (t=1):  10% of baseDmg
+        //   beyond:        0 (the `dist > radius` continue above handles it)
+        // Solved 2 · b^t with b = 0.05 → 0.05^1 = 0.05, × 2 = 0.10.
+        // Sharper than linear: still-lethal close hits, glancing hits
+        // chip but don't waste the grenade.
+        const t = dist / radius;
+        const falloff = 2.0 * Math.pow(0.05, t);
         const damage = Math.max(1, Math.round(baseDmg * falloff));
         // Knockback direction = away from center on XZ.
         const dHoriz = Math.max(0.01, Math.hypot(_scratchToEnemy.x, _scratchToEnemy.z));
