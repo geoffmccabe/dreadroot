@@ -6,3 +6,6 @@ export {
   EGG_REST_HATCH_SEC,
   MAX_LIVE_EGGS,
 } from './constants';
+export { useWorldEggs, EGG_PICKUP_REACH } from './hooks/useWorldEggs';
+export type { WorldEgg } from './hooks/useWorldEggs';
+export { WorldEggRenderer } from './components/WorldEggRenderer';

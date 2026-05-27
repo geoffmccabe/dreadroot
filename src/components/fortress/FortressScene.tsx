@@ -67,7 +67,7 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBO
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
-import { useShpiderEggSystem, ShpiderEggRenderer } from '@/features/shpider-eggs';
+import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer } from '@/features/shpider-eggs';
 import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
 import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
@@ -238,6 +238,13 @@ export function FortressScene({
     plantedTrees,
     treeFruits,
     worldId: currentWorldId,
+    userId: currentUserId ?? null,
+    cameraRef,
+  });
+
+  // World eggs (dropped on pet death). Owner-scoped fetch + realtime;
+  // F-key prompt + pickup. See useWorldEggs for the row-shape contract.
+  const { eggs: worldEggs, findClosestEgg, pickupClosestEgg } = useWorldEggs({
     userId: currentUserId ?? null,
     cameraRef,
   });
@@ -1456,7 +1463,15 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         isFlameGloveSelected={isFlameGloveSelected}
         onFlameStart={handleFlameStart}
         onFlameStop={handleFlameStop}
-        onHarvestFruit={harvestNearest}
+        onHarvestFruit={async () => {
+          // Eggs take priority over fruit on the F key — easy to walk
+          // past a freshly-dropped egg if a tree's right there.
+          if (findClosestEgg()) {
+            await pickupClosestEgg();
+            return;
+          }
+          harvestNearest();
+        }}
         checkIsInWater={worldPonds.checkIsInWater}
         getWaterType={worldPonds.getWaterType}
         loadedChunksRef={chunksRef}
@@ -1544,6 +1559,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Shpider Egg Renderer — instanced spheres for in-flight eggs. */}
       <ShpiderEggRenderer eggsRef={eggsRef} />
+
+      {/* Dropped pet-shpider eggs in the world (owner-scoped). */}
+      <WorldEggRenderer eggs={worldEggs} />
 
       {/* Grenade explosion FX — shockwave ring + bright flash. Sits
           on top of the existing flame plumes for the "concussion"
