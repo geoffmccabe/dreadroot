@@ -504,7 +504,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // rest. Phase 5 will turn the hatched mob into a pet (owner field +
   // friendly-target logic). For Phase 3 we just spawn a normal mob so
   // the throw/bounce/hatch path is testable end-to-end.
-  const { eggsRef, throwEgg, tick: tickEggs } = useShpiderEggSystem({
+  const { eggsRef, throwEgg } = useShpiderEggSystem({
     cameraRef,
     onHatch: ({ tier, position }) => {
       const def = shpiderDefinitions.find(d => d.tier === tier)

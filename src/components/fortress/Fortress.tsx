@@ -547,25 +547,24 @@ export function Fortress() {
     }
     const defs = eggDefsRef.current;
     const now = Date.now();
-    const hasUsableInRow = (itemId: string, rowCooldown: any): boolean => {
-      if (!defs.has(itemId)) return false;
-      if (rowCooldown && new Date(rowCooldown).getTime() > now) return false;
+    const rowIsUsable = (inv: any): boolean => {
+      if (inv.quantity <= 0 || !inv.item_id) return false;
+      if (!defs.has(inv.item_id)) return false;
+      const cd = inv.cooldown_until;
+      if (cd && new Date(cd).getTime() > now) return false;
       return true;
     };
-    // Step 1: equipped slot already holding a usable egg?
+    // Step 1: equipped slot already holding a usable egg? A single
+    // item_id can map to multiple inventory rows (non-stackable, one
+    // row per egg) — equip arms if ANY matching row is usable.
     const equippedSlotWithEgg = (equippedItems as Array<{ slot: number; itemId: string }>)
-      .find(eq => {
-        const inv = inventory.find(i => i.item_id === eq.itemId);
-        return inv ? hasUsableInRow(eq.itemId, (inv as any).cooldown_until) : false;
-      });
+      .find(eq => defs.has(eq.itemId) && inventory.some(i => i.item_id === eq.itemId && rowIsUsable(i)));
     if (equippedSlotWithEgg) {
       setEggReadySlot(equippedSlotWithEgg.slot);
       return;
     }
     // Step 2: inventory has a usable egg + a free hotbar slot.
-    const eggInv = inventory.find(inv =>
-      inv.quantity > 0 && inv.item_id && hasUsableInRow(inv.item_id, (inv as any).cooldown_until)
-    );
+    const eggInv = inventory.find(inv => rowIsUsable(inv));
     if (!eggInv || !eggInv.item_id) return;
     const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
     let firstEmpty: number | null = null;
