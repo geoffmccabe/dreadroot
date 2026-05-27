@@ -230,6 +230,23 @@ export const DynamicSky = forwardRef<SkyHandle, DynamicSkyProps>(({ weatherSetti
         const skyMesh = skyRefs.current.skyMeshRef.current;
         const starMesh = skyRefs.current.starMeshRef.current;
 
+        // Sky-follow: park both spheres on the camera's XZ each
+        // frame so the player is always at the dome center. The
+        // sphere has radius 640, but the world is unbounded — if
+        // the dome stayed at world origin the player would walk
+        // outside it past chunk ~40 (~640 blocks). User report:
+        // "if you go outside of it then it's like the world breaks"
+        // — exactly this. Y offset of -50 stays so the dome still
+        // extends below the horizon.
+        if (skyMesh) {
+          skyMesh.position.x = camera.position.x;
+          skyMesh.position.z = camera.position.z;
+        }
+        if (starMesh) {
+          starMesh.position.x = camera.position.x;
+          starMesh.position.z = camera.position.z;
+        }
+
         if (skyMesh) {
           const mat = skyMesh.material as THREE.MeshBasicMaterial;
           const t = lightingPercentage / 100;
