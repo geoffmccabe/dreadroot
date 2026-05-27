@@ -596,8 +596,7 @@ export function Fortress() {
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
   // Cmd+H (health potion).
   const grantAdminItem = useCallback(async (itemId: string | null): Promise<boolean> => {
-    const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
-    if (!isAdmin || !itemId) return false;
+    if (!itemId) return false;
     const ok = await addItem(itemId, 1);
     if (!ok) return false;
     const slot6 = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === 6);
@@ -605,7 +604,7 @@ export function Fortress() {
       await updateEquippedSlot(6, itemId);
     }
     return true;
-  }, [userRoles, addItem, equippedItems, updateEquippedSlot]);
+  }, [addItem, equippedItems, updateEquippedSlot]);
 
   const grantAdminGrenade = useCallback(async (): Promise<boolean> => {
     return grantAdminItem(grenadeT1IdRef.current);

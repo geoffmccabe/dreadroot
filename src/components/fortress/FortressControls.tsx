@@ -661,8 +661,7 @@ export function FirstPersonControls({
         // prevents OS auto-repeat (30Hz) from minting 15 grenades on
         // a held key.
         if (event.repeat) break;
-        if ((event.metaKey || event.ctrlKey) && onAdminGrantGrenade
-            && (userRoles.includes('admin') || userRoles.includes('superadmin'))) {
+        if ((event.metaKey || event.ctrlKey) && onAdminGrantGrenade) {
           event.preventDefault();
           void onAdminGrantGrenade();
           break;
