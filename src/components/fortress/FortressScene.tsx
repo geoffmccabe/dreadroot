@@ -1557,11 +1557,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Grenade Renderer — instanced spheres for live grenades. */}
       <GrenadeRenderer grenadesRef={grenadesRef} />
 
-      {/* Shpider Egg Renderer — instanced spheres for in-flight eggs. */}
-      <ShpiderEggRenderer eggsRef={eggsRef} />
+      {/* Shpider Egg Renderer — per-tier shpider body texture. */}
+      <ShpiderEggRenderer eggsRef={eggsRef} definitions={shpiderDefinitions} />
 
       {/* Dropped pet-shpider eggs in the world (owner-scoped). */}
-      <WorldEggRenderer eggs={worldEggs} />
+      <WorldEggRenderer eggs={worldEggs} definitions={shpiderDefinitions} />
 
       {/* Grenade explosion FX — shockwave ring + bright flash. Sits
           on top of the existing flame plumes for the "concussion"
