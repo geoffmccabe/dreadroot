@@ -238,6 +238,10 @@ export function Fortress() {
   const [grenadeReadySlot, setGrenadeReadySlot] = useState<number | null>(null);
   const grenadeReady = grenadeReadySlot !== null;
 
+  // Shpider Egg ready slot — same shape as grenadeReadySlot. Armed via
+  // Y, thrown on click. Eggs hatch on rest into a pet shpider.
+  const [eggReadySlot, setEggReadySlot] = useState<number | null>(null);
+
   // Vault state — proximity flag flips when player walks into the
   // back-wall trigger zone, prompt + V keybind become active. Open
   // flag controls the modal. forceCloseToken bumps when we want the
@@ -486,6 +490,108 @@ export function Fortress() {
     );
     if (!stillHaveAnyGrenade) setGrenadeReadySlot(null);
   }, [grenadeReadySlot, equippedItems, inventory]);
+
+  // Resolve shpider egg item UUIDs → tier. Same pattern as grenades —
+  // forging a new tier creates a fresh items row, so we refetch when
+  // the inventory id-set changes.
+  const eggDefsRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('items')
+        .select('id, key, tier')
+        .like('key', 'shpider\\_egg\\_t%');
+      if (cancelled || !data) return;
+      const map = new Map<string, number>();
+      for (const row of data) {
+        map.set(row.id, row.tier ?? 1);
+      }
+      eggDefsRef.current = map;
+    })();
+    return () => { cancelled = true; };
+  }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
+
+  // Pull one shpider egg out of inventory. Picks HIGHEST tier the user
+  // owns. Skips rows whose cooldown_until is still in the future. Eggs
+  // are non-stackable — consume = delete the specific row. Caller gets
+  // both the tier (for spawn) and the row id (so the pet remembers
+  // which row to refund into when it dies).
+  const consumeEgg = useCallback((): { tier: number; eggInventoryRowId: string } | null => {
+    const defs = eggDefsRef.current;
+    const now = Date.now();
+    let bestTier = 0;
+    let bestRowId: string | null = null;
+    for (const inv of inventory) {
+      if (inv.quantity <= 0 || !inv.item_id) continue;
+      const tier = defs.get(inv.item_id);
+      if (tier == null) continue;
+      const cdRaw = (inv as any).cooldown_until;
+      if (cdRaw && new Date(cdRaw).getTime() > now) continue;
+      if (tier > bestTier) {
+        bestTier = tier;
+        bestRowId = inv.id;
+      }
+    }
+    if (bestTier === 0 || !bestRowId) return null;
+    void removeInventoryRow(bestRowId);
+    setEggReadySlot(null);
+    return { tier: bestTier, eggInventoryRowId: bestRowId };
+  }, [inventory, removeInventoryRow]);
+
+  // Y key handler — only arms if a non-cooldown egg is available.
+  const handleEggTogglePress = useCallback(() => {
+    if (eggReadySlot !== null) {
+      setEggReadySlot(null);
+      return;
+    }
+    const defs = eggDefsRef.current;
+    const now = Date.now();
+    const hasUsableInRow = (itemId: string, rowCooldown: any): boolean => {
+      if (!defs.has(itemId)) return false;
+      if (rowCooldown && new Date(rowCooldown).getTime() > now) return false;
+      return true;
+    };
+    // Step 1: equipped slot already holding a usable egg?
+    const equippedSlotWithEgg = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(eq => {
+        const inv = inventory.find(i => i.item_id === eq.itemId);
+        return inv ? hasUsableInRow(eq.itemId, (inv as any).cooldown_until) : false;
+      });
+    if (equippedSlotWithEgg) {
+      setEggReadySlot(equippedSlotWithEgg.slot);
+      return;
+    }
+    // Step 2: inventory has a usable egg + a free hotbar slot.
+    const eggInv = inventory.find(inv =>
+      inv.quantity > 0 && inv.item_id && hasUsableInRow(inv.item_id, (inv as any).cooldown_until)
+    );
+    if (!eggInv || !eggInv.item_id) return;
+    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    let firstEmpty: number | null = null;
+    for (let i = 1; i <= 6; i++) {
+      if (!usedSlots.has(i)) { firstEmpty = i; break; }
+    }
+    if (firstEmpty === null) return;
+    void updateEquippedSlot(firstEmpty, eggInv.item_id);
+    setEggReadySlot(firstEmpty);
+  }, [eggReadySlot, equippedItems, inventory, updateEquippedSlot]);
+
+  // Auto-disarm if armed egg slot becomes empty / non-egg / cooldown-locked.
+  useEffect(() => {
+    if (eggReadySlot === null) return;
+    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(e => e.slot === eggReadySlot);
+    if (!eq) { setEggReadySlot(null); return; }
+    const defs = eggDefsRef.current;
+    if (!defs.has(eq.itemId)) { setEggReadySlot(null); return; }
+    const now = Date.now();
+    const stillUsable = inventory.some(inv =>
+      inv.quantity > 0 && inv.item_id && defs.has(inv.item_id)
+      && (!((inv as any).cooldown_until) || new Date((inv as any).cooldown_until).getTime() <= now)
+    );
+    if (!stillUsable) setEggReadySlot(null);
+  }, [eggReadySlot, equippedItems, inventory]);
 
   // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
@@ -2058,6 +2164,9 @@ export function Fortress() {
           consumeGrenade={consumeGrenade}
           onGrenadeTogglePress={handleGrenadeTogglePress}
           grenadeReady={grenadeReady}
+          consumeEgg={consumeEgg}
+          onEggTogglePress={handleEggTogglePress}
+          eggReady={eggReadySlot !== null}
           onHealthPotionUse={handleHealthPotionUse}
           onGrowthProximityChange={setGrowingTreeInView}
           onAdminGrantGrenade={grantAdminGrenade}
@@ -2138,6 +2247,7 @@ export function Fortress() {
         onSelectSlot={setSelectedSlot}
         onDeleteBlock={handleInspectorDeleteBlock}
         grenadeReadySlot={grenadeReadySlot}
+        eggReadySlot={eggReadySlot}
         potionDrinkingSlot={potionDrinkingSlot}
       />
 
@@ -2157,6 +2267,7 @@ export function Fortress() {
         crosshairsEnabled={crosshairsEnabled}
         bulletColor={bulletColor}
         grenadeReady={grenadeReady}
+        eggReady={eggReadySlot !== null}
         isDead={isDead}
         respawnTimer={respawnTimer}
         respawn={respawn}

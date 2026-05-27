@@ -104,6 +104,10 @@ export function FirstPersonControls({
   // Owned by parent. The click handler reads this to know whether
   // to throw instead of fire the equipped weapon.
   grenadeReady: grenadeReadyProp = false,
+  // Shpider Egg throw (Y key + click) — same shape as grenade.
+  onThrowEgg,
+  onEggTogglePress,
+  eggReady: eggReadyProp = false,
   // H key handler — parent drinks a potion (auto-equips if needed).
   onHealthPotionUse,
   // Admin/superadmin item grants — Cmd+G grenade, Cmd+H health potion.
@@ -155,6 +159,8 @@ export function FirstPersonControls({
   // slot lookups.
   const grenadeReadyRef = useRef(false);
   useEffect(() => { grenadeReadyRef.current = grenadeReadyProp; }, [grenadeReadyProp]);
+  const eggReadyRef = useRef(false);
+  useEffect(() => { eggReadyRef.current = eggReadyProp; }, [eggReadyProp]);
 
   // Jet Boost system: 1 boost per 3 levels, recharges every 60 seconds
   const jetBoostMaxRef = useRef(0);
@@ -402,7 +408,12 @@ export function FirstPersonControls({
             { baseVolume: 0.8 }
           );
           // TODO: Broadcast yodel position to other players via multiplayer system
+          break;
         }
+        // Plain Y: arm a shpider egg (parent handles find/auto-equip).
+        if (event.repeat) break;
+        if (event.metaKey || event.ctrlKey || event.altKey) break;
+        if (onEggTogglePress) onEggTogglePress();
         break;
       case 'KeyW':
       case 'ArrowUp':
@@ -971,6 +982,11 @@ export function FirstPersonControls({
       onThrowGrenade();
       grenadeReadyRef.current = false;
       onGrenadeReadyChange?.(false);
+    } else if (eggReadyRef.current && onThrowEgg) {
+      // Egg-ready mode same priority as grenade. Clear ref so the
+      // crosshair clears even if the throw failed.
+      onThrowEgg();
+      eggReadyRef.current = false;
     } else if (showCrosshairs && onShoot) {
       // Flame Glove uses continuous hold, not click-to-fire
       if (isFlameGloveSelected) return;

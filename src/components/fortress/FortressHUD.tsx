@@ -114,6 +114,7 @@ export function FortressHUD(props: FortressHUDProps) {
     onSelectSlot,
     onDeleteBlock,
     grenadeReadySlot = null,
+    eggReadySlot = null,
     potionDrinkingSlot = null,
     onUseHotbarSlot,
   } = props;
@@ -877,6 +878,7 @@ export function FortressHUD(props: FortressHUDProps) {
             {hotbarSlots.map((slot) => {
               const isSelected = selectedSlot === slot.slot;
               const isGrenadeReady = grenadeReadySlot === slot.slot;
+              const isEggReady = eggReadySlot === slot.slot;
               const isDrinking = potionDrinkingSlot === slot.slot;
               // Single-click: select the slot AND fire the activator
               // (drinks a potion, etc.) so the user doesn't need to
@@ -905,6 +907,7 @@ export function FortressHUD(props: FortressHUDProps) {
                     onDrop={(e) => onDropHotbar(e, slot.slot)}
                     className={
                       isGrenadeReady ? 'grenade-ready-pulse'
+                      : isEggReady ? 'egg-ready-pulse'
                       : isDrinking ? 'potion-drink-pulse'
                       : undefined
                     }
@@ -914,11 +917,13 @@ export function FortressHUD(props: FortressHUDProps) {
                       borderRadius: 'var(--hud-radius)',
                       border: isGrenadeReady
                         ? '2px solid #00ff66'
-                        : isDrinking
-                          ? '2px solid #ff3a6a'
-                          : isSelected
-                            ? '2px solid white'
-                            : '1px solid hsla(var(--hud-border))',
+                        : isEggReady
+                          ? '2px solid #000000'
+                          : isDrinking
+                            ? '2px solid #ff3a6a'
+                            : isSelected
+                              ? '2px solid white'
+                              : '1px solid hsla(var(--hud-border))',
                       background: isSelected
                         ? 'hsla(var(--hud-bg))'
                         : 'hsla(var(--hud-bg-dim))',

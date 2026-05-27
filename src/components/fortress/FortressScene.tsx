@@ -67,6 +67,7 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBO
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
+import { useShpiderEggSystem, ShpiderEggRenderer } from '@/features/shpider-eggs';
 import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
 import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
@@ -187,6 +188,9 @@ export function FortressScene({
   consumeGrenade,
   onGrenadeTogglePress,
   grenadeReady,
+  consumeEgg,
+  onEggTogglePress,
+  eggReady,
   onHealthPotionUse,
   onGrowthProximityChange,
   onShpiderKilled,
@@ -488,13 +492,33 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // window.__spawnShpiders(tier, count) in the console.
   const { data: shpiderDefinitionsData } = useShpiderDefinitions();
   const shpiderDefinitions = shpiderDefinitionsData ?? [];
-  const { shpidersRef, fragmentsRef: shpiderFragmentsRef, spawnShpiderGroup, damageShpider } = useShpiderSystem({
+  const { shpidersRef, fragmentsRef: shpiderFragmentsRef, spawnShpiderGroup, spawnShpiderAt, damageShpider } = useShpiderSystem({
     definitions: shpiderDefinitions,
     cameraRef,
     isEnabled: enemiesEnabled,
     userRoles,
     onShpiderKilled,
   });
+
+  // Shpider Egg system — eggs hatch into a tier-matched shpider on
+  // rest. Phase 5 will turn the hatched mob into a pet (owner field +
+  // friendly-target logic). For Phase 3 we just spawn a normal mob so
+  // the throw/bounce/hatch path is testable end-to-end.
+  const { eggsRef, throwEgg, tick: tickEggs } = useShpiderEggSystem({
+    cameraRef,
+    onHatch: ({ tier, position }) => {
+      const def = shpiderDefinitions.find(d => d.tier === tier)
+        ?? shpiderDefinitions[0];
+      if (!def) return;
+      spawnShpiderAt(def, position.x, position.z);
+    },
+  });
+  const handleThrowEgg = useCallback((): boolean => {
+    if (!consumeEgg) return false;
+    const consumed = consumeEgg();
+    if (!consumed) return false;
+    return throwEgg(consumed.tier, consumed.eggInventoryRowId);
+  }, [consumeEgg, throwEgg]);
 
   // Walapa system - floating whale creatures that travel between tall trees
   // Memoized: only recomputes when plantedTrees changes (not on every call)
@@ -1411,6 +1435,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onThrowGrenade={handleThrowGrenade}
         onGrenadeTogglePress={onGrenadeTogglePress}
         grenadeReady={grenadeReady}
+        onThrowEgg={handleThrowEgg}
+        onEggTogglePress={onEggTogglePress}
+        eggReady={eggReady}
         onHealthPotionUse={onHealthPotionUse}
         onAdminGrantGrenade={onAdminGrantGrenade}
         onAdminGrantHealthPotion={onAdminGrantHealthPotion}
@@ -1511,6 +1538,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Grenade Renderer — instanced spheres for live grenades. */}
       <GrenadeRenderer grenadesRef={grenadesRef} />
+
+      {/* Shpider Egg Renderer — instanced spheres for in-flight eggs. */}
+      <ShpiderEggRenderer eggsRef={eggsRef} />
 
       {/* Grenade explosion FX — shockwave ring + bright flash. Sits
           on top of the existing flame plumes for the "concussion"

@@ -238,6 +238,16 @@ export interface SceneProps {
    *  tier. Returns null if no grenade is held. Inventory is owned by
    *  Fortress.tsx so the throw mechanism delegates here. */
   consumeGrenade?: () => number | null;
+  /** Throw a shpider egg now. Returns true if one was thrown. */
+  onThrowEgg?: () => boolean;
+  /** Y-key handler — parent decides whether to arm. */
+  onEggTogglePress?: () => void;
+  /** True while an egg is armed for throw. */
+  eggReady?: boolean;
+  /** Consume one shpider egg from inventory. Returns the row id + tier
+   *  so the spawned pet can refund the same row (with cooldown) on
+   *  death. Skips cooldown-locked rows. */
+  consumeEgg?: () => { tier: number; eggInventoryRowId: string } | null;
   /** Admin/superadmin only: grant 1 grenade and auto-equip to hotbar
    *  slot 6 if free. Wired to Cmd+G in FortressControls. */
   onAdminGrantGrenade?: () => Promise<boolean>;
@@ -325,6 +335,12 @@ export interface FirstPersonControlsProps {
   onGrenadeTogglePress?: () => void;
   /** True while grenade is armed. */
   grenadeReady?: boolean;
+  /** Throw a shpider egg now. */
+  onThrowEgg?: () => boolean;
+  /** Parent Y-press handler. */
+  onEggTogglePress?: () => void;
+  /** True while an egg is armed. */
+  eggReady?: boolean;
   /** H-press handler. */
   onHealthPotionUse?: () => void;
   /** Admin/superadmin only: Cmd+G grants a grenade. */
