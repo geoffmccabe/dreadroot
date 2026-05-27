@@ -9,6 +9,12 @@ import { TREE_CONFIG, FRUIT_CONFIG, getFruitTier } from '../constants';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 
+// Module-level streak tracker for the owner double-fruit chain. Keyed
+// by spot string "x,y,z". Ephemeral by design — chain resets on page
+// reload. Persisting it across sessions would let players exploit
+// chain resumption from save states.
+const doubleStreakByPos: Map<string, number> = new Map();
+
 interface UseFruitPickupOptions {
   treeFruits: TreeFruit[];
   plantedTrees: PlantedTree[];
@@ -128,6 +134,10 @@ export function useFruitPickup({
     // Immediately remove fruit from local state so it disappears from the tree
     onFruitRemovedRef.current?.(fruitId);
 
+    // Diamonds skip the fruit-panel optimistic update + the standard
+    // tier toast — they get their own toast in the async block.
+    const harvestIsDiamond = fruitCode === 'diamond';
+
     // Optimistic: immediately add to fruit panel before DB round-trip
     const optimisticFruit = {
       id: crypto.randomUUID(),
@@ -136,14 +146,15 @@ export function useFruitPickup({
       tier: rolledTier,
       created_at: new Date().toISOString(),
     };
-    window.dispatchEvent(new CustomEvent('fruitHarvested', { detail: optimisticFruit }));
-
-    // Toast
-    toast({
-      title: `Tier ${rolledTier} ${tierDef.name} Harvested!`,
-      description: isOwnTree ? 'Own-tree bonus applied' : undefined,
-      duration: 3000,
-    });
+    if (!harvestIsDiamond) {
+      window.dispatchEvent(new CustomEvent('fruitHarvested', { detail: optimisticFruit }));
+      // Toast
+      toast({
+        title: `Tier ${rolledTier} ${tierDef.name} Harvested!`,
+        description: isOwnTree ? 'Own-tree bonus applied' : undefined,
+        duration: 3000,
+      });
+    }
 
     // Async DB operations
     (async () => {
@@ -158,24 +169,83 @@ export function useFruitPickup({
           console.error('[FruitHarvest] Delete error:', delError);
         }
 
-        // Insert into user_fruits
-        const { data: inserted, error: insError } = await supabase
-          .from('user_fruits' as any)
-          .insert({
-            user_id: userId,
-            fruit_code: fruitCode,
-            tier: rolledTier,
-          } as any)
-          .select()
-          .single();
+        // Diamond pickup: grant non-stackable 'diamond' item, skip the
+        // user_fruits insert entirely. Diamonds aren't fruits — they
+        // live in the inventory grid (one per row) until vault.
+        const isDiamond = fruitCode === 'diamond';
+        if (isDiamond) {
+          const { data: diamondItem } = await supabase
+            .from('items')
+            .select('id')
+            .eq('key', 'diamond')
+            .maybeSingle();
+          if (diamondItem && addItemRef.current) {
+            await addItemRef.current(diamondItem.id, 1);
+            toast({ title: '💎 Diamond collected', duration: 3000 });
+          } else {
+            console.warn('[FruitHarvest] Diamond item not found in items table');
+          }
+        } else {
+          // Insert into user_fruits
+          const { data: inserted, error: insError } = await supabase
+            .from('user_fruits' as any)
+            .insert({
+              user_id: userId,
+              fruit_code: fruitCode,
+              tier: rolledTier,
+            } as any)
+            .select()
+            .single();
 
-        if (insError) {
-          console.error('[FruitHarvest] Insert error:', insError);
-        } else if (inserted) {
-          // Replace optimistic fruit with real DB fruit (has real ID)
-          window.dispatchEvent(new CustomEvent('fruitHarvestConfirmed', {
-            detail: { optimisticId: optimisticFruit.id, real: inserted },
-          }));
+          if (insError) {
+            console.error('[FruitHarvest] Insert error:', insError);
+          } else if (inserted) {
+            // Replace optimistic fruit with real DB fruit (has real ID)
+            window.dispatchEvent(new CustomEvent('fruitHarvestConfirmed', {
+              detail: { optimisticId: optimisticFruit.id, real: inserted },
+            }));
+          }
+        }
+
+        // Owner double-fruit / diamond streak. 33% chance an extra
+        // fruit appears at the same spot for the tree's owner. Each
+        // consecutive successful double on the same spot increments
+        // the streak; the 6th becomes a diamond (a special tree_fruits
+        // row with fruit_code='diamond' that the renderer + pickup
+        // both treat specially). Streak resets on a failed roll.
+        if (isOwnTree) {
+          const spotKey = `${fruit.position_x},${fruit.position_y},${fruit.position_z}`;
+          const rolled = Math.random() < FRUIT_CONFIG.OWNER_DOUBLE_FRUIT_CHANCE;
+          if (rolled) {
+            const prevStreak = doubleStreakByPos.get(spotKey) ?? 0;
+            const nextStreak = prevStreak + 1;
+            const isDiamond = nextStreak >= FRUIT_CONFIG.DIAMOND_STREAK_LENGTH;
+            const newRow: any = {
+              world_id: tree?.world_id,
+              tree_id: treeId,
+              position_x: fruit.position_x,
+              position_y: fruit.position_y,
+              position_z: fruit.position_z,
+              tier: isDiamond ? 1 : rolledTier,
+              is_falling: false,
+              is_collectible: true,
+              velocity_y: 0,
+              fruit_code: isDiamond ? 'diamond' : (fruitCode || `fruit_t${rolledTier}`),
+            };
+            const { error: bonusErr } = await supabase
+              .from('tree_fruits')
+              .insert(newRow);
+            if (bonusErr) {
+              console.error('[FruitHarvest] Bonus insert error:', bonusErr);
+            } else if (isDiamond) {
+              doubleStreakByPos.delete(spotKey);
+              toast({ title: '💎 Diamond!', description: 'A diamond appeared on the tree.', duration: 5000 });
+            } else {
+              doubleStreakByPos.set(spotKey, nextStreak);
+            }
+          } else {
+            doubleStreakByPos.delete(spotKey);
+          }
         }
 
         // 1% chance: egg fruit

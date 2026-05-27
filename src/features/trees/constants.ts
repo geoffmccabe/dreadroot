@@ -32,7 +32,11 @@ export const TREE_CONFIG: {
   
   // Base timing (in milliseconds)
   BASE_GROWTH_INTERVAL: 10000, // 10 seconds per block normally
-  BASE_FRUIT_SPAWN_INTERVAL: 3600000, // 1 hour normally
+  // Was 3600000 (1 hour) which spawned in one giant burst per hour.
+  // Now polls every minute so fruit appears gradually. The per-branch
+  // chance is scaled down 60× to compensate, then ×0.2 to reduce
+  // overall spawn frequency to 20% of the original hourly rate.
+  BASE_FRUIT_SPAWN_INTERVAL: 60_000,
   
   // Tree generation parameters
   BLOCKS_PER_TIER_HEIGHT: 3, // Tier 1 = 3 blocks, Tier 30 = 90 blocks
@@ -89,8 +93,23 @@ export const FRUIT_CONFIG = {
   EGG_CHANCE: 0.01,                   // 1% chance of egg fruit on harvest
   MAX_FORGE_BONUS: 30,                // Maximum tier increase from a single forge
 
-  // Spawning
-  SPAWN_CHANCE_PER_BRANCH: 0.1,       // Multiplied by fruiting_factor per spawn tick
+  // Spawning. Tuned 2026-May-27 for per-minute polling:
+  //   was 0.10 per hour  →  per minute would be 0.10/60 ≈ 0.001667
+  //   ×0.20 user reduction = 0.000333
+  // So an average tree with ~200 branches yields one fruit roughly
+  // every 15 minutes at idle. Owner farming (tree within 5 chunks of
+  // camera) doubles the per-tree cap, not the spawn chance.
+  SPAWN_CHANCE_PER_BRANCH: 0.000333,
+  // Per-tree fruit cap. New fruit refuses to spawn when this many are
+  // already on the tree. Multiplied by tree tier; bonus applied when
+  // the owner is within OWNER_PROXIMITY_CHUNKS of the tree base.
+  MAX_FRUITS_PER_TIER_BASE: 2,
+  MAX_FRUITS_PER_TIER_OWNER_NEARBY: 3,
+  OWNER_PROXIMITY_CHUNKS: 5,
+  // Owner harvest bonus: chance an extra fruit (or, every 6th, a
+  // diamond) appears at the same spot immediately after harvest.
+  OWNER_DOUBLE_FRUIT_CHANCE: 0.33,
+  DIAMOND_STREAK_LENGTH: 6,
 } as const;
 
 // Fruit tier definition — extensible for future fruit codes (#FR1, #FR2, etc.)

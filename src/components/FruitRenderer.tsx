@@ -147,6 +147,9 @@ export const FruitRenderer = React.memo(function FruitRenderer({
     let visibleCount = 0;
 
     for (const fruit of treeFruits) {
+      // Diamonds are rendered separately by DiamondRenderer (different
+      // mesh + materials). Filter them out of the fruit instanced mesh.
+      if (fruit.fruit_code === 'diamond') continue;
       // Skip fruits whose host chunk is not RENDERED yet — just loaded into
       // memory isn't enough; otherwise the fruit pops in mid-air before the
       // tree appears around it.

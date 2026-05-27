@@ -217,7 +217,9 @@ export function FortressHUD(props: FortressHUDProps) {
   // Mirrors useUserData.isNonStackableKey.
   const isNonStackableKey = useCallback((key: string | null | undefined): boolean => {
     if (!key) return false;
-    return key === 'health_potion' || key === 'grenade' || key.startsWith('grenade_t');
+    return key === 'health_potion'
+      || key === 'grenade' || key.startsWith('grenade_t')
+      || key === 'diamond';
   }, []);
   const nonStackableItemIds = useMemo(() => {
     const s = new Set<string>();

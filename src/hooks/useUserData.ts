@@ -918,7 +918,9 @@ export const useUserData = () => {
   // carry. Grenades cover all tiers (grenade, grenade_t2..grenade_t10).
   const isNonStackableKey = (key: string | null | undefined): boolean => {
     if (!key) return false;
-    return key === 'health_potion' || key === 'grenade' || key.startsWith('grenade_t');
+    return key === 'health_potion'
+      || key === 'grenade' || key.startsWith('grenade_t')
+      || key === 'diamond';
   };
 
   // Add an item to inventory (server-verified). Looks up the item's

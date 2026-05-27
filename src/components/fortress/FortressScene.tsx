@@ -77,6 +77,8 @@ import { TreeInfoLabels } from '@/features/trees/components/TreeInfoLabels';
 import { WideTreeLights } from '@/features/trees/components/WideTreeLights';
 import { GlowLightPool } from '@/components/GlowLightPool';
 import { FruitRenderer } from '@/components/FruitRenderer';
+import { DiamondRenderer } from '@/components/DiamondRenderer';
+import { renderedChunkKeys } from '@/lib/renderedChunks';
 import { useTreePlanterNames } from '@/features/trees/hooks/useTreePlanterNames';
 import { useFruitSpawning } from '@/features/trees/hooks/useFruitSpawning';
 import { useFruitPickup } from '@/features/trees/hooks/useFruitPickup';
@@ -232,6 +234,7 @@ export function FortressScene({
     treeFruits,
     worldId: currentWorldId,
     userId: currentUserId ?? null,
+    cameraRef,
   });
 
   // Fruit harvesting - F-key system with tier rolling
@@ -1548,6 +1551,15 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         adminSeeAll={isAdmin && fruitVisibility}
         findClosestFruit={findClosestFruit}
         loadedChunksRef={chunksRef}
+      />
+
+      {/* Diamond Renderer - draws 'diamond' fruit_code rows as
+          spinning blue gems instead of regular fruits. */}
+      <DiamondRenderer
+        treeFruits={treeFruits}
+        cameraRef={cameraRef}
+        renderedChunkKeys={renderedChunkKeys}
+        adminSeeAll={isAdmin && fruitVisibility}
       />
 
       {/* Wide Tree Glow Lights */}

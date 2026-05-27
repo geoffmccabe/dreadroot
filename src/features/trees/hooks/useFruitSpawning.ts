@@ -2,6 +2,7 @@
 // Runs on an interval, checks branch blocks in blueprints, and inserts fruits into tree_fruits
 
 import { useEffect, useRef, useCallback } from 'react';
+import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 import { PlantedTree, TreeFruit, BlueprintBlock } from '../types';
 import { TREE_CONFIG, FRUIT_CONFIG, getFruitSpawnInterval } from '../constants';
@@ -11,7 +12,12 @@ interface UseFruitSpawningOptions {
   treeFruits: TreeFruit[];
   worldId: string | null;
   userId: string | null;
+  /** Camera, used to detect owner-proximity bonus (3× cap when owner
+   *  is within OWNER_PROXIMITY_CHUNKS of the tree base). */
+  cameraRef?: React.RefObject<THREE.Camera | null>;
 }
+
+const CHUNK_SIZE = 16;
 
 // Branch-like block types that can have fruit hanging below them
 const FRUIT_BEARING_TYPES = new Set([
@@ -23,6 +29,7 @@ export function useFruitSpawning({
   treeFruits,
   worldId,
   userId,
+  cameraRef,
 }: UseFruitSpawningOptions) {
   // Keep refs to avoid stale closures in the interval
   const treeFruitsRef = useRef(treeFruits);
@@ -98,6 +105,19 @@ export function useFruitSpawning({
       fruit_code: string;
     }> = [];
 
+    // Camera chunk for owner-proximity bonus. Computed once per tick;
+    // cheap enough that we don't bother caching across ticks (player
+    // moves frequently).
+    const cam = cameraRef?.current;
+    const camChunkX = cam ? Math.floor(cam.position.x / CHUNK_SIZE) : null;
+    const camChunkZ = cam ? Math.floor(cam.position.z / CHUNK_SIZE) : null;
+
+    // Per-tree existing-fruit counts so we can enforce the cap.
+    const existingFruitsByTree = new Map<string, number>();
+    for (const f of fruits) {
+      existingFruitsByTree.set(f.tree_id, (existingFruitsByTree.get(f.tree_id) ?? 0) + 1);
+    }
+
     let missingBlueprints = 0;
     let noBranches = 0;
     for (const tree of eligibleTrees) {
@@ -111,8 +131,25 @@ export function useFruitSpawning({
       const seedDef = tree.seed_definition!;
       const spawnChance = FRUIT_CONFIG.SPAWN_CHANCE_PER_BRANCH * seedDef.fruiting_factor;
 
+      // Per-tree cap. Owner-nearby check uses Chebyshev distance in
+      // chunks from camera to tree base. Eligible trees are always
+      // owned by the current user (filter upstream), so any "nearby"
+      // tree means the owner is farming it.
+      const treeChunkX = Math.floor(tree.base_x / CHUNK_SIZE);
+      const treeChunkZ = Math.floor(tree.base_z / CHUNK_SIZE);
+      const ownerNearby = camChunkX !== null && camChunkZ !== null
+        && Math.max(Math.abs(camChunkX - treeChunkX), Math.abs(camChunkZ - treeChunkZ))
+           <= FRUIT_CONFIG.OWNER_PROXIMITY_CHUNKS;
+      const capMultiplier = ownerNearby
+        ? FRUIT_CONFIG.MAX_FRUITS_PER_TIER_OWNER_NEARBY
+        : FRUIT_CONFIG.MAX_FRUITS_PER_TIER_BASE;
+      const maxFruits = capMultiplier * seedDef.tier;
+      let currentCount = existingFruitsByTree.get(tree.id) ?? 0;
+      if (currentCount >= maxFruits) continue;
+
       // Find all branch-like blocks
       for (const block of blueprint) {
+        if (currentCount >= maxFruits) break;
         if (!FRUIT_BEARING_TYPES.has(block.type)) continue;
 
         // Fruit spawns 1 block below the branch
@@ -150,6 +187,7 @@ export function useFruitSpawning({
           velocity_y: 0,
           fruit_code: `fruit_t${fruitTier}`,
         });
+        currentCount++;
       }
     }
 
