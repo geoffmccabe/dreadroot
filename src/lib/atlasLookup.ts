@@ -116,8 +116,23 @@ export function getTreeUVs(tier: number, type: 'trunk' | 'branch' | 'fruit'): At
     return slotIndexToUVs(slot.slotIndex);
   }
 
-  // Fallback: use deterministic slot calculation if metadata lookup fails
-  // This handles race conditions where blocks render before sync completes
+  // Fruit-specific fallback: tiers without a unique fruit texture borrow
+  // T1's. Per 2026-May-27 design rule "every non-fungal tree shows fruit;
+  // tier stays correct, only the picture is shared." Tried before going to
+  // the deterministic-slot fallback, which often points at an empty slot.
+  if (type === 'fruit' && tier !== 1) {
+    const t1Slot = atlasManager.getSlotForTexture(getTreeTextureId(1, 'fruit'));
+    if (t1Slot) {
+      if (!_treeUvDiagLogged.has(textureId)) {
+        _treeUvDiagLogged.add(textureId);
+        console.info(`[AtlasUV] FRUIT FALLBACK: ${textureId} → T1 fruit slot ${t1Slot.slotIndex}`);
+      }
+      return slotIndexToUVs(t1Slot.slotIndex);
+    }
+  }
+
+  // Last-resort: deterministic slot calculation. Handles race conditions
+  // where blocks render before atlas sync completes.
   const calculatedSlot = calculateTreeSlotIndex(tier, type);
   if (!_treeUvDiagLogged.has(textureId)) {
     _treeUvDiagLogged.add(textureId);

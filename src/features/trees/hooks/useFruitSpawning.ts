@@ -95,6 +95,7 @@ export function useFruitSpawning({
       is_falling: boolean;
       is_collectible: boolean;
       velocity_y: number;
+      fruit_code: string;
     }> = [];
 
     let missingBlueprints = 0;
@@ -132,16 +133,22 @@ export function useFruitSpawning({
         // Mark occupied to avoid duplicates in same tick
         occupiedPositions.add(key);
 
+        // fruit_code: 'fruit_t<tier>'. Required by schema (NOT NULL);
+        // tier carries the actual gameplay identity, fruit_code is the
+        // canonical string the items/textures pipeline keys on.
+        // Texture fallback to T1 happens client-side at render, not here.
+        const fruitTier = seedDef.tier;
         inserts.push({
           world_id: worldId,
           tree_id: tree.id,
           position_x: fx,
           position_y: fy,
           position_z: fz,
-          tier: 1,
+          tier: fruitTier,
           is_falling: false,
           is_collectible: true,
           velocity_y: 0,
+          fruit_code: `fruit_t${fruitTier}`,
         });
       }
     }
