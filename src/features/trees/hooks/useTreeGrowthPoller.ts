@@ -23,9 +23,13 @@ interface UseTreeGrowthPollerOptions {
    *  Owner decides "near" — typically true when at least one
    *  growing tree is within the player's view-distance. */
   fastMode?: boolean;
+  /** Fired after each poll that inserted >0 blocks. Caller can use
+   *  this to force a client-side refetch of nearby chunks — guarantees
+   *  growth is visible even if the realtime channel drops events. */
+  onBlocksInserted?: (count: number) => void;
 }
 
-export function useTreeGrowthPoller({ hasGrowingTrees, enabled, fastMode = false }: UseTreeGrowthPollerOptions) {
+export function useTreeGrowthPoller({ hasGrowingTrees, enabled, fastMode = false, onBlocksInserted }: UseTreeGrowthPollerOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPollingRef = useRef(false);
   const consecutiveErrorsRef = useRef(0);
@@ -65,6 +69,7 @@ export function useTreeGrowthPoller({ hasGrowingTrees, enabled, fastMode = false
         console.log(
           `[TreeGrowthPoller] Grew ${data.total_blocks_inserted} blocks across ${data.trees_processed} trees`
         );
+        onBlocksInserted?.(data.total_blocks_inserted);
       } else if (data) {
         console.log(`[TreeGrowthPoller] Poll OK - ${data.trees_processed} trees checked, 0 blocks inserted`);
       }
@@ -75,7 +80,7 @@ export function useTreeGrowthPoller({ hasGrowingTrees, enabled, fastMode = false
     } finally {
       isPollingRef.current = false;
     }
-  }, []);
+  }, [onBlocksInserted]);
 
   useEffect(() => {
     if (!enabled || !hasGrowingTrees) {

@@ -789,6 +789,19 @@ export function Fortress() {
     hasGrowingTrees,
     enabled: TREE_CONFIG.ENABLED && !!user?.id,
     fastMode: growingTreeInView,
+    // Realtime can drop chunk_versions events (channel hiccup, etc.) so
+    // when the server confirms growth happened, force-refetch every
+    // currently-loaded chunk. Cheap (only fires when blocks actually
+    // grew) and guarantees the player sees their tree advance.
+    onBlocksInserted: useCallback(() => {
+      const chunks = loadedChunksRef?.current;
+      if (!chunks || !refetchSingleChunk) return;
+      for (const key of chunks.keys()) {
+        const m = key.match(/^chunk_(-?\d+)_(-?\d+)$/);
+        if (!m) continue;
+        void refetchSingleChunk(parseInt(m[1], 10), parseInt(m[2], 10));
+      }
+    }, [loadedChunksRef, refetchSingleChunk]),
   });
 
   const { plantSeed } = useSeedPlanting({
