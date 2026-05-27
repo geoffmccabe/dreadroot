@@ -116,16 +116,17 @@ export function getTreeUVs(tier: number, type: 'trunk' | 'branch' | 'fruit'): At
     return slotIndexToUVs(slot.slotIndex);
   }
 
-  // Fruit-specific fallback: tiers without a unique fruit texture borrow
-  // T1's. Per 2026-May-27 design rule "every non-fungal tree shows fruit;
-  // tier stays correct, only the picture is shared." Tried before going to
-  // the deterministic-slot fallback, which often points at an empty slot.
-  if (type === 'fruit' && tier !== 1) {
-    const t1Slot = atlasManager.getSlotForTexture(getTreeTextureId(1, 'fruit'));
+  // Per-type T1 fallback: tiers without a unique texture borrow T1's.
+  // Previously only fruit had this; now trunk + branch do too, so a
+  // seed/trunk block always renders something visible instead of a
+  // blank slot when an admin hasn't uploaded a texture for that tier
+  // (or the atlas hasn't synced that slot yet).
+  if (tier !== 1) {
+    const t1Slot = atlasManager.getSlotForTexture(getTreeTextureId(1, type));
     if (t1Slot) {
       if (!_treeUvDiagLogged.has(textureId)) {
         _treeUvDiagLogged.add(textureId);
-        console.info(`[AtlasUV] FRUIT FALLBACK: ${textureId} → T1 fruit slot ${t1Slot.slotIndex}`);
+        console.info(`[AtlasUV] T1 FALLBACK: ${textureId} → T1 ${type} slot ${t1Slot.slotIndex}`);
       }
       return slotIndexToUVs(t1Slot.slotIndex);
     }
@@ -169,7 +170,21 @@ export function getFungalTreeUVs(tier: number, type: 'stem' | 'cap_top' | 'cap_u
     return slotIndexToUVs(slot.slotIndex);
   }
 
-  // Fallback: use deterministic slot calculation
+  // T1 fallback for fungal tiers without a unique texture — same idea
+  // as the standard-tree fallback above, so an unconfigured/unsynced
+  // fungal block still shows something instead of a blank slot.
+  if (tier !== 1) {
+    const t1Slot = atlasManager.getSlotForTexture(getFungalTreeTextureId(1, type));
+    if (t1Slot) {
+      if (!_treeUvDiagLogged.has(textureId)) {
+        _treeUvDiagLogged.add(textureId);
+        console.info(`[AtlasUV] FUNGAL T1 FALLBACK: ${textureId} → T1 ${type} slot ${t1Slot.slotIndex}`);
+      }
+      return slotIndexToUVs(t1Slot.slotIndex);
+    }
+  }
+
+  // Last resort: deterministic slot — points at whatever's there.
   const calculatedSlot = calculateFungalTreeSlotIndex(tier, type);
   if (!_treeUvDiagLogged.has(textureId)) {
     _treeUvDiagLogged.add(textureId);
