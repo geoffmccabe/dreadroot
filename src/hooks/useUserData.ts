@@ -205,6 +205,30 @@ export const useUserData = () => {
       setInventory(inventoryData || []);
       setUserRoles(roles);
 
+      // One-time avatar backfill from OAuth metadata. If the profile
+      // has no avatar yet AND the auth user came in with a picture
+      // (Google `picture`, generic OAuth `avatar_url`), copy it once.
+      // Never overwrite an existing avatar — user uploads + earlier
+      // auth providers always win.
+      if (existingProfile && !existingProfile.avatar_url && user) {
+        const meta: any = user.user_metadata || {};
+        const oauthPicture: string | undefined =
+          meta.picture || meta.avatar_url || meta.photoURL;
+        if (oauthPicture && typeof oauthPicture === 'string') {
+          // Optimistic local update, then persist. If the update
+          // fails we don't roll back — they can re-upload from the
+          // panel — but this isn't a hot path so failures are rare.
+          setProfile(prev => prev ? { ...prev, avatar_url: oauthPicture } : null);
+          supabase
+            .from('user_profiles')
+            .update({ avatar_url: oauthPicture })
+            .eq('user_id', user.id)
+            .then(({ error }) => {
+              if (error) console.error('[avatar backfill]', error);
+            });
+        }
+      }
+
       // Consolidate duplicate inventory rows (same user + item_type + item_id)
       const inv = inventoryData || [];
       const seen = new Map<string, typeof inv[0]>();
