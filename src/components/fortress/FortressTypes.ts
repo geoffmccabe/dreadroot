@@ -187,6 +187,17 @@ export interface SceneProps {
   /** Fired when a shpider dies. Used by Fortress.tsx to bump
    *  user_combat_stats so the Kills panel shows them. */
   onShpiderKilled?: (tier: number) => void;
+  /** Fired when a PET shpider dies (hatched from a thrown egg).
+   *  Parent inserts a world_eggs row so the owner can pick it back up
+   *  with a 1-hour cooldown. */
+  onPetShpiderDied?: (info: {
+    tier: number;
+    petOwnerUserId: string;
+    eggInventoryRowId: string | null;
+    x: number;
+    y: number;
+    z: number;
+  }) => void;
   // Shtickman system
   shtickmanDefinitions?: ShtickmanDefinition[];
   onShtickmanKilled?: (tier: number) => void;

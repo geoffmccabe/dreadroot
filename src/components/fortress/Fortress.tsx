@@ -2087,6 +2087,31 @@ export function Fortress() {
               }
             }
           }}
+          onPetShpiderDied={async ({ tier, petOwnerUserId, x, y, z }) => {
+            // Pet shpider died — drop a world_eggs row at its position
+            // so the owner can pick it back up (with a 1-hour cooldown
+            // applied at pickup time). RLS should restrict pickup to
+            // the owner — that's enforced by the world_eggs row's
+            // owner_user_id column + table RLS policy.
+            const { error } = await supabase
+              .from('world_eggs' as any)
+              .insert({
+                tier,
+                owner_user_id: petOwnerUserId,
+                position_x: x,
+                position_y: y,
+                position_z: z,
+              } as any);
+            if (error) {
+              // Table may not be installed yet on this DB. Log but
+              // don't crash — the pet just dies without a refund.
+              console.warn('[ShpiderEgg] world_eggs insert failed:', error.message);
+              return;
+            }
+            if (user?.id === petOwnerUserId) {
+              toast({ title: `🥚 Your pet shpider died — egg dropped`, duration: 3500 });
+            }
+          }}
           onWalapaKilled={async (tier) => {
             // Walapa kill tracking — Fortress wasn't passing a
             // handler before so kills never reached the DB.

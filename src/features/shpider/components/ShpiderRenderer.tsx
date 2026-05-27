@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import type { ShpiderDefinition, ShpiderInstance } from '../types';
 import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../constants';
 import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import {
   EYELASH_GEOMETRY,
   MANDIBLE_GEOMETRY,
@@ -189,6 +190,10 @@ interface ShpiderRendererProps {
     knockback: number,
     direction: THREE.Vector3,
   ) => void;
+  /** Local auth user id. Pet shpiders skip touch damage on their
+   *  owner and pets owned by this user are also targeted-as-friendly
+   *  by other pets. */
+  localUserId?: string | null;
 }
 
 // Touch-attack tuning. Player center is approximately the camera, so
@@ -203,7 +208,7 @@ const SHPIDER_ATTACK_COOLDOWN_MS = 800;
 // Reusable direction scratch for the onPlayerHit callback.
 const _hitDirScratch = new THREE.Vector3();
 
-export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definitions, onPlayerHit }: ShpiderRendererProps) {
+export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definitions, onPlayerHit, localUserId }: ShpiderRendererProps) {
   // ── Per-tier texture loading. One material per tier per part-type,
   // so each tier renders with its own admin-uploaded textures. Tier
   // rows missing a texture fall back to the bamboo placeholder.
@@ -313,8 +318,41 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
     for (const s of list) {
       if (!s.isActive) continue;
 
+      // === Target selection. Wild shpiders chase the local player.
+      //     Pets chase the nearest huntable enemy (any monster except
+      //     other pets, shnakes, and shtickmen). If no enemy is in
+      //     range, the pet falls back to the player position — the
+      //     local player IS the owner (multiplayer pet visibility for
+      //     non-owner clients is a later phase), so this makes the
+      //     pet "follow me" when there's nothing to fight.
+      let tgtX = playerX, tgtY = playerY, tgtZ = playerZ;
+      const isPet = !!s.petOwnerUserId;
+      if (isPet) {
+        let bestDistSq = Infinity;
+        for (const adapter of enemyCombatRegistry.getAdapters()) {
+          const aType = adapter.type;
+          if (aType === 'shnake' || aType === 'shtickman') continue;
+          const enemies = adapter.getActiveEnemies();
+          for (const enemy of enemies) {
+            // Don't target self / other pets — friendly fire is bad.
+            if (aType === 'shpider' && (enemy as any).petOwnerUserId) continue;
+            const hb = adapter.getHitbox(enemy);
+            if (!hb) continue;
+            const ddx = hb.centerX - s.position.x;
+            const ddz = hb.centerZ - s.position.z;
+            const dsq = ddx*ddx + ddz*ddz;
+            if (dsq < bestDistSq) {
+              bestDistSq = dsq;
+              tgtX = hb.centerX;
+              tgtY = (hb.bottomY + hb.topY) * 0.5;
+              tgtZ = hb.centerZ;
+            }
+          }
+        }
+      }
+
       // === AI tick. Mutates position/rotation/surfaceNormal. ===
-      stepShpiderHopAI(s, { now, dt, playerX, playerY, playerZ, others: list });
+      stepShpiderHopAI(s, { now, dt, playerX: tgtX, playerY: tgtY, playerZ: tgtZ, others: list });
 
       // === Touch attack. If the shpider's center is within
       //     SHPIDER_ATTACK_RANGE of the player (3D distance) and the
@@ -324,7 +362,9 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
       //     also scales — T1 small bump, T10 strong push — using
       //     definition.damage_per_hit as the scaling factor (no extra
       //     stat needed; can be split out later if tuning demands).
-      if (onPlayerHit) {
+      //     PETS skip touch damage on their owner (the local player).
+      const skipPlayerTouch = isPet && s.petOwnerUserId === localUserId;
+      if (onPlayerHit && !skipPlayerTouch) {
         const attackDX = playerX - s.position.x;
         const attackDY = playerY - s.position.y;
         const attackDZ = playerZ - s.position.z;

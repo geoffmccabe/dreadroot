@@ -39,8 +39,19 @@ interface UseShpiderSystemOptions {
   cameraRef: React.RefObject<THREE.Camera | null>;
   isEnabled: boolean;
   userRoles: string[];
-  /** Fired whenever a shpider dies. Used to increment kill stats. */
+  /** Fired when a WILD shpider dies. Pet deaths route to onPetDied
+   *  instead — they don't count as a "kill" for the player. */
   onShpiderKilled?: (tier: number) => void;
+  /** Fired when a PET shpider dies. Caller inserts a world_eggs row
+   *  so the dropped egg can be picked back up. */
+  onPetDied?: (info: {
+    tier: number;
+    petOwnerUserId: string;
+    eggInventoryRowId: string | null;
+    x: number;
+    y: number;
+    z: number;
+  }) => void;
 }
 
 function getDefinitionByTier(defs: ShpiderDefinition[], tier: number): ShpiderDefinition | null {
@@ -53,6 +64,7 @@ export function useShpiderSystem({
   isEnabled,
   userRoles,
   onShpiderKilled,
+  onPetDied,
 }: UseShpiderSystemOptions) {
   const [shpiders, setShpiders] = useState<ShpiderInstance[]>([]);
   const shpidersRef = useRef<ShpiderInstance[]>([]);
@@ -87,11 +99,15 @@ export function useShpiderSystem({
     };
   }, [cameraRef]);
 
-  /** Spawn one shpider at an exact world position. */
+  /** Spawn one shpider at an exact world position.
+   *  Pass `petOwnerUserId` to spawn it as a pet — pets target hostile
+   *  enemies instead of the player and skip damage on their owner. */
   const spawnShpiderAt = useCallback((
     definition: ShpiderDefinition,
     worldX: number,
     worldZ: number,
+    petOwnerUserId?: string | null,
+    eggInventoryRowId?: string | null,
   ): ShpiderInstance | null => {
     if (shpidersRef.current.length >= MAX_TOTAL_SHPIDERS) {
       console.warn('[Shpider] Max total reached');
@@ -146,6 +162,8 @@ export function useShpiderSystem({
         endNormalX: 0, endNormalY: 1, endNormalZ: 0,
       },
       surfaceNormal: new THREE.Vector3(0, 1, 0),
+      petOwnerUserId: petOwnerUserId ?? null,
+      eggInventoryRowId: eggInventoryRowId ?? null,
     };
 
     shpidersRef.current = [...shpidersRef.current, instance];
@@ -235,7 +253,20 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
-      onShpiderKilled?.(s.definition.tier);
+      // Pet deaths don't grant kill credit (or roll the 1% wild-drop) —
+      // they leave a world egg instead, owned by the original thrower.
+      if (s.petOwnerUserId) {
+        onPetDied?.({
+          tier: s.definition.tier,
+          petOwnerUserId: s.petOwnerUserId,
+          eggInventoryRowId: s.eggInventoryRowId ?? null,
+          x: s.position.x,
+          y: s.position.y,
+          z: s.position.z,
+        });
+      } else {
+        onShpiderKilled?.(s.definition.tier);
+      }
       // Body/leg shots normally just disappear (per 2026-May-24
       // feedback). Headshots fragment. Explosion kills ALWAYS
       // fragment AND inherit the blast's radial impulse on each
@@ -254,7 +285,7 @@ export function useShpiderSystem({
       return true;
     }
     return false;
-  }, [removeShpider, onShpiderKilled]);
+  }, [removeShpider, onShpiderKilled, onPetDied]);
 
   /** Admin keybind: Ctrl+P spawns a group of T1 shpiders. */
   useEffect(() => {

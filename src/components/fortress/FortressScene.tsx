@@ -194,6 +194,7 @@ export function FortressScene({
   onHealthPotionUse,
   onGrowthProximityChange,
   onShpiderKilled,
+  onPetShpiderDied,
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
   vaultInRange,
@@ -498,19 +499,20 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     isEnabled: enemiesEnabled,
     userRoles,
     onShpiderKilled,
+    onPetDied: onPetShpiderDied,
   });
 
-  // Shpider Egg system — eggs hatch into a tier-matched shpider on
-  // rest. Phase 5 will turn the hatched mob into a pet (owner field +
-  // friendly-target logic). For Phase 3 we just spawn a normal mob so
-  // the throw/bounce/hatch path is testable end-to-end.
+  // Shpider Egg system — eggs hatch into a tier-matched PET shpider on
+  // rest. The pet is owned by the local thrower; pet AI targets nearby
+  // hostile enemies instead of the owner, and pet death leaves a
+  // world egg the owner can pick back up.
   const { eggsRef, throwEgg } = useShpiderEggSystem({
     cameraRef,
-    onHatch: ({ tier, position }) => {
+    onHatch: ({ tier, position, eggInventoryRowId }) => {
       const def = shpiderDefinitions.find(d => d.tier === tier)
         ?? shpiderDefinitions[0];
       if (!def) return;
-      spawnShpiderAt(def, position.x, position.z);
+      spawnShpiderAt(def, position.x, position.z, currentUserId ?? null, eggInventoryRowId);
     },
   });
   const handleThrowEgg = useCallback((): boolean => {
@@ -1534,6 +1536,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         cameraRef={cameraRef}
         definitions={shpiderDefinitions}
         onPlayerHit={handleShpiderPlayerHit}
+        localUserId={currentUserId}
       />
 
       {/* Grenade Renderer — instanced spheres for live grenades. */}
