@@ -70,6 +70,11 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
   /** Unique stable id, e.g. 'shombie' / 'shpider' / 'walapa'. */
   type: string;
 
+  /** Whether pet shpiders may target this enemy class. Default true.
+   *  Set false for friendly / non-aggro creatures (shnakes, shtickmen)
+   *  so pets ignore them when picking a target. */
+  petAttackable?: boolean;
+
   /** Latest snapshot of active enemies. Called once per hit query. */
   getActiveEnemies: () => readonly TEnemy[];
 

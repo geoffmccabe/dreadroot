@@ -536,6 +536,7 @@ export function useShnakeSystem({
   useEffect(() => {
     return enemyCombatRegistry.register({
       type: 'shnake',
+      petAttackable: false,
       getActiveEnemies: () => shnakesRef.current,
       getId: (s) => s.id,
       getHitbox: (s) => {

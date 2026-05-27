@@ -593,6 +593,7 @@ export function useShtickmanSystem({
     const dirScratch = new THREE.Vector3();
     return enemyCombatRegistry.register({
       type: 'shtickman',
+      petAttackable: false,
       getActiveEnemies: () => shtickmenRef.current,
       getId: (s) => s.id,
       getHitbox: (s) => {

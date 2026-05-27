@@ -330,8 +330,10 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
       if (isPet) {
         let bestDistSq = Infinity;
         for (const adapter of enemyCombatRegistry.getAdapters()) {
+          // Friendly / non-aggro enemy classes opt out via the
+          // petAttackable=false flag (shnakes, shtickmen).
+          if (adapter.petAttackable === false) continue;
           const aType = adapter.type;
-          if (aType === 'shnake' || aType === 'shtickman') continue;
           const enemies = adapter.getActiveEnemies();
           for (const enemy of enemies) {
             // Don't target self / other pets — friendly fire is bad.
