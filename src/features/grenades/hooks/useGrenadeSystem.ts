@@ -66,6 +66,13 @@ interface UseGrenadeSystemOptions {
   /** Optional ref to the ExplosionFX renderer (shockwave + flash).
    *  When set, explode() also fires the concussion layer. */
   explosionFxRef?: React.RefObject<{ spawn: (p: THREE.Vector3, r: number, c: string) => void } | null>;
+  /** Optional bridge to the player damage pipeline. If the player is
+   *  caught in the blast radius they take damage through the same
+   *  exponential falloff curve as enemies. */
+  applyPlayerDamageRef?: React.RefObject<((dmg: number, kbDir: THREE.Vector3, kbForce: number) => void) | null>;
+  /** Optional bridge to the camera-shake controller. Called per
+   *  nearby explosion with a normalized magnitude 0..1. */
+  triggerShakeRef?: React.RefObject<((magnitude: number, durationSec: number) => void) | null>;
 }
 
 /** Result of a single explosion — handed to the caller for UI / stats. */

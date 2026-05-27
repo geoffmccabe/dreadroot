@@ -58,16 +58,34 @@ export const KillsTab: React.FC<KillsTabProps> = ({ height }) => {
             style={getRarityBorderStyle(monster.rarity || 'common')}
           >
             {/* Square Monster Image - top 2/3 */}
-            <div 
-              className="w-full aspect-square rounded mb-1 flex items-center justify-center overflow-hidden"
+            <div
+              className="w-full aspect-square rounded mb-1 flex items-center justify-center overflow-hidden relative"
               style={{
-                background: monster.texture_url 
+                background: monster.texture_url
                   ? `url(${monster.texture_url}) center/cover`
                   : 'linear-gradient(135deg, hsl(var(--muted)), hsl(var(--muted-foreground)/0.2))'
               }}
             >
               {!monster.texture_url && (
                 <Skull className="w-6 h-6 text-muted-foreground/50" />
+              )}
+              {/* Tier badge — top-left corner. White text with heavy
+                  shadow so it's legible on any texture; matches the
+                  hotbar tier badge style. */}
+              {monster.tier != null && (
+                <span style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: 4,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: 'white',
+                  lineHeight: 1,
+                  textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
+                  pointerEvents: 'none',
+                }}>
+                  T{monster.tier}
+                </span>
               )}
             </div>
             

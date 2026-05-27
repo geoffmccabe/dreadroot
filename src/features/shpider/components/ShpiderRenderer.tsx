@@ -194,7 +194,11 @@ interface ShpiderRendererProps {
 // Touch-attack tuning. Player center is approximately the camera, so
 // "within 1m" means the shpider body is essentially touching the
 // player. Cooldown prevents per-frame melee spam.
-const SHPIDER_ATTACK_RANGE = 1.0;
+// Base reach beyond the shpider's body radius. Actual attack
+// range = body_size × scale × 0.5 + this base. Earlier this was a
+// flat 1.0m which the shpider body itself easily occupies — the
+// center never got that close so touch-attacks rarely fired.
+const SHPIDER_ATTACK_REACH = 1.2;
 const SHPIDER_ATTACK_COOLDOWN_MS = 800;
 // Reusable direction scratch for the onPlayerHit callback.
 const _hitDirScratch = new THREE.Vector3();
@@ -325,7 +329,12 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
         const attackDY = playerY - s.position.y;
         const attackDZ = playerZ - s.position.z;
         const attackDistSq = attackDX*attackDX + attackDY*attackDY + attackDZ*attackDZ;
-        const range = SHPIDER_ATTACK_RANGE;
+        // Scale the touch range with the shpider's body so big spiders
+        // hit at a bigger radius than tiny ones. body_size × scale ×
+        // 0.5 is the shpider's body radius; SHPIDER_ATTACK_REACH adds
+        // a little reach for the legs/mandibles.
+        const bodyRadius = (s.definition.body_size ?? 1) * s.scale * 0.5;
+        const range = bodyRadius + SHPIDER_ATTACK_REACH;
         if (attackDistSq < range * range && now - s.lastAttackAt >= SHPIDER_ATTACK_COOLDOWN_MS) {
           s.lastAttackAt = now;
           const attackDist = Math.sqrt(attackDistSq) || 1;
