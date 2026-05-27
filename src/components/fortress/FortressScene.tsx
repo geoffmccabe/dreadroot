@@ -67,7 +67,7 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBO
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
-import { useGrenadeSystem, GrenadeRenderer } from '@/features/grenades';
+import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
 import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getHeightBlocks } from '@/features/shtickman/types';
@@ -878,10 +878,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // created — hook order makes the burn system mount AFTER the
   // grenade system, so we pass a ref and back-fill it.
   const applyBurnRef = useRef<((...args: any[]) => void) | null>(null);
+  const explosionFxRef = useRef<ExplosionFXHandle | null>(null);
   const { grenadesRef, throwGrenade } = useGrenadeSystem({
     universalFlameRef,
     cameraRef,
     applyBurnRef: applyBurnRef as React.RefObject<any>,
+    explosionFxRef,
   });
   const handleThrowGrenade = useCallback((): boolean => {
     if (!consumeGrenade) return false;
@@ -1506,6 +1508,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Grenade Renderer — instanced spheres for live grenades. */}
       <GrenadeRenderer grenadesRef={grenadesRef} />
+
+      {/* Grenade explosion FX — shockwave ring + bright flash. Sits
+          on top of the existing flame plumes for the "concussion"
+          read. Ref filled imperatively; auto-cleans per effect. */}
+      <ExplosionFX ref={explosionFxRef} />
 
       {/* Vault proximity — emits when player walks into the back-wall
           trigger zone so the HUD prompt + V keybind activate. */}

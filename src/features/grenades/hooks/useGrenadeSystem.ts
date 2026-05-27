@@ -63,6 +63,9 @@ interface UseGrenadeSystemOptions {
    *  FortressScene after useBurnSystem runs — hook-order matters
    *  because the grenade system mounts earlier in the scene. */
   applyBurnRef?: React.RefObject<ApplyBurnFn | null>;
+  /** Optional ref to the ExplosionFX renderer (shockwave + flash).
+   *  When set, explode() also fires the concussion layer. */
+  explosionFxRef?: React.RefObject<{ spawn: (p: THREE.Vector3, r: number, c: string) => void } | null>;
 }
 
 /** Result of a single explosion — handed to the caller for UI / stats. */
@@ -78,6 +81,7 @@ export function useGrenadeSystem({
   universalFlameRef,
   cameraRef,
   applyBurnRef,
+  explosionFxRef,
 }: UseGrenadeSystemOptions) {
   // Ref-based list so the per-frame tick has zero React overhead.
   const grenadesRef = useRef<GrenadeInstance[]>([]);
@@ -381,18 +385,31 @@ export function useGrenadeSystem({
       }
     }
 
+    // ── Concussion: shockwave ring + bright flash ─────────────────
+    // The brightest of the three tier colors (last entry) reads best
+    // on top of bright daylight. Falls through gracefully if the FX
+    // renderer hasn't mounted yet.
+    if (explosionFxRef?.current) {
+      explosionFxRef.current.spawn(center, radius, colors[2]);
+    }
+
     // ── VFX: a big central flame + a ring of smaller plumes ────────
     // (colors already computed above for the burn anchor)
+    //
+    // Numbers bumped 2026-May-27: central plume +50% size,
+    // +particles, longer life so the fire blast carries through
+    // after the shockwave dissipates. The shockwave is the punchy
+    // initial moment; the plumes are the lingering fireball.
     const renderer = universalFlameRef.current;
     if (renderer) {
       const centralFlame = renderer.spawnFlame({
         type: 'point',
         position: center,
         colors,
-        size: radius * 0.6,
-        height: radius * 0.9,
-        duration: 0.6,
-        particleCount: 80,
+        size: radius * 0.9,
+        height: radius * 1.3,
+        duration: 0.9,
+        particleCount: 160,
         colorMode: 'static',
       });
       // Ring of side plumes for visual coverage.
@@ -407,9 +424,9 @@ export function useGrenadeSystem({
           type: 'plume',
           position: ringPos,
           colors,
-          size: radius * 0.25,
-          height: radius * 0.5,
-          duration: 0.5,
+          size: radius * 0.35,
+          height: radius * 0.7,
+          duration: 0.7,
           colorMode: 'static',
         });
         ringIds.push(id);
@@ -427,7 +444,7 @@ export function useGrenadeSystem({
     void playSpatialSound('/grenade_explosion.mp3', distFromCam, { baseVolume: tierVol });
 
     return { position: center, tier: g.tier, killed };
-  }, [universalFlameRef, cameraRef, applyBurnRef]);
+  }, [universalFlameRef, cameraRef, applyBurnRef, explosionFxRef]);
 
   // Register the physics tick so the consumer doesn't have to plumb
   // it through the main frame loop. Explosion results are dropped on
