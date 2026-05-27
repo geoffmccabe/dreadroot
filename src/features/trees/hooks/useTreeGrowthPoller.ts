@@ -10,17 +10,22 @@ import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { recordPollResult, setPollerStatus } from '../lib/treeDiagnosticsStore';
 
-const POLL_INTERVAL_MS = 10_000; // Poll every 10 seconds
-const ERROR_BACKOFF_MS = 30_000; // Back off to 30s on errors
+const POLL_INTERVAL_MS_DEFAULT = 10_000;        // 10s when no growing tree is near
+const POLL_INTERVAL_MS_NEAR_TREE = 1_000;       // 1s when a growing tree is in view
+const ERROR_BACKOFF_MS = 30_000;                // Back off to 30s on errors
 
 interface UseTreeGrowthPollerOptions {
   /** Whether there are any trees still growing */
   hasGrowingTrees: boolean;
   /** Whether the user is authenticated */
   enabled: boolean;
+  /** When true, poll every 1s for buttery-smooth visible growth.
+   *  Owner decides "near" — typically true when at least one
+   *  growing tree is within the player's view-distance. */
+  fastMode?: boolean;
 }
 
-export function useTreeGrowthPoller({ hasGrowingTrees, enabled }: UseTreeGrowthPollerOptions) {
+export function useTreeGrowthPoller({ hasGrowingTrees, enabled, fastMode = false }: UseTreeGrowthPollerOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPollingRef = useRef(false);
   const consecutiveErrorsRef = useRef(0);
@@ -83,10 +88,15 @@ export function useTreeGrowthPoller({ hasGrowingTrees, enabled }: UseTreeGrowthP
       return;
     }
 
-    // Start polling
-    const interval = consecutiveErrorsRef.current > 3 ? ERROR_BACKOFF_MS : POLL_INTERVAL_MS;
+    // Start polling. Fast mode (player near growing tree) → 1s,
+    // otherwise default 10s. Errors back off to 30s regardless.
+    const interval = consecutiveErrorsRef.current > 3
+      ? ERROR_BACKOFF_MS
+      : fastMode
+        ? POLL_INTERVAL_MS_NEAR_TREE
+        : POLL_INTERVAL_MS_DEFAULT;
     setPollerStatus(true, interval);
-    console.log(`[TreeGrowthPoller] Starting - polling every ${interval / 1000}s`);
+    console.log(`[TreeGrowthPoller] Starting - polling every ${interval / 1000}s${fastMode ? ' (fast)' : ''}`);
     timerRef.current = setInterval(pollGrowth, interval);
 
     // Run once immediately
@@ -98,5 +108,5 @@ export function useTreeGrowthPoller({ hasGrowingTrees, enabled }: UseTreeGrowthP
         timerRef.current = null;
       }
     };
-  }, [enabled, hasGrowingTrees, pollGrowth]);
+  }, [enabled, hasGrowingTrees, fastMode, pollGrowth]);
 }

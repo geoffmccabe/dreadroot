@@ -671,9 +671,14 @@ export function Fortress() {
   const hasGrowingTrees =
     plantedTrees.some(t => !t.is_fully_grown) ||
     myIncompleteTrees.length > 0;
+  // fastMode: poll every 1s when a growing tree is within view of
+  // the camera. Drops back to 10s when player walks away. Source of
+  // truth is the GrowthProximityWatcher mounted in FortressScene.
+  const [growingTreeInView, setGrowingTreeInView] = useState(false);
   useTreeGrowthPoller({
     hasGrowingTrees,
     enabled: TREE_CONFIG.ENABLED && !!user?.id,
+    fastMode: growingTreeInView,
   });
 
   const { plantSeed } = useSeedPlanting({
@@ -2033,6 +2038,7 @@ export function Fortress() {
           onGrenadeTogglePress={handleGrenadeTogglePress}
           grenadeReady={grenadeReady}
           onHealthPotionUse={handleHealthPotionUse}
+          onGrowthProximityChange={setGrowingTreeInView}
           onAdminGrantGrenade={grantAdminGrenade}
           onAdminGrantHealthPotion={grantAdminHealthPotion}
           vaultInRange={vaultInRange}

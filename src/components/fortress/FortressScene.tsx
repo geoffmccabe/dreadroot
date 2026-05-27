@@ -81,6 +81,7 @@ import { useTreePlanterNames } from '@/features/trees/hooks/useTreePlanterNames'
 import { useFruitSpawning } from '@/features/trees/hooks/useFruitSpawning';
 import { useFruitPickup } from '@/features/trees/hooks/useFruitPickup';
 import { PulsingSeedBlocks } from '@/features/trees/components/PulsingSeedBlocks';
+import { GrowthProximityWatcher } from '@/features/trees/components/GrowthProximityWatcher';
 
 // Universal Enemy AI system (Phase 3)
 import { useEnemyAI } from '@/features/enemies/ai';
@@ -185,6 +186,7 @@ export function FortressScene({
   onGrenadeTogglePress,
   grenadeReady,
   onHealthPotionUse,
+  onGrowthProximityChange,
   onShpiderKilled,
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
@@ -1502,6 +1504,18 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           cameraRef={cameraRef}
           enabled={true}
           onChange={onVaultProximityChange}
+        />
+      )}
+
+      {/* Tree-growth proximity — emits true when a growing tree is in
+          view range. Parent bumps the growth poller to 1s cadence so
+          blocks visibly tick into place instead of jumping in 10s
+          batches. */}
+      {onGrowthProximityChange && (
+        <GrowthProximityWatcher
+          cameraRef={cameraRef}
+          growingTrees={plantedTrees.filter(t => !t.is_fully_grown)}
+          onChange={onGrowthProximityChange}
         />
       )}
 

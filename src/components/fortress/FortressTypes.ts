@@ -229,6 +229,11 @@ export interface SceneProps {
   /** Slot index (1-6) currently flashing red while a potion drink
    *  animation plays. Null when nothing is drinking. */
   potionDrinkingSlot?: number | null;
+  /** Fires when the set of growing trees within view distance flips
+   *  from "none nearby" to "at least one nearby" or back. Parent
+   *  uses this to switch the tree-growth poller between 1s (near)
+   *  and 10s (far) cadence. */
+  onGrowthProximityChange?: (nearby: boolean) => void;
   /** Take one grenade out of the user's inventory and return its
    *  tier. Returns null if no grenade is held. Inventory is owned by
    *  Fortress.tsx so the throw mechanism delegates here. */
