@@ -351,6 +351,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   // No mutex needed: JS is single-threaded, per-chunk cap check in the
   // processing loop sees accurate state between async yield points.
 
+  // Inflight refetch tracker. Stops concurrent refetches of the same
+  // chunk from racing (the older response can otherwise overwrite the
+  // newer one with stale data, making blocks flicker in/out as growth
+  // happens). Set entries are removed in the refetch's finally block.
+  const inflightRefetches = useRef<Set<string>>(new Set());
+
   // Ref for post-load eviction (avoids circular useCallback dependency)
   const evictAfterLoadRef = useRef<(() => void) | null>(null);
 
@@ -1988,13 +1994,26 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (!worldId) return;
 
     const chunkKey = `chunk_${chunkX}_${chunkZ}`;
-    
+
+    // Race protection: if a refetch for this chunk is already in flight,
+    // skip the new request. The in-flight one will resolve with the
+    // current server state shortly. Without this guard two concurrent
+    // requests can finish out of order and the older one stamps stale
+    // blocks back onto the chunk, causing visible blocks to flicker
+    // away as the tree grows.
+    if (inflightRefetches.current.has(chunkKey)) {
+      return;
+    }
+    inflightRefetches.current.add(chunkKey);
+
     // Only refetch if chunk is currently loaded
     const existingChunkData = loadedChunksRef.current.get(chunkKey);
     if (!existingChunkData) {
+      inflightRefetches.current.delete(chunkKey);
       return;
     }
 
+    try {
     // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
     let serverBlocks: PlacedBlock[] | null = null;
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
@@ -2111,8 +2130,28 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       });
     }
 
+    // Option A: also recompute visibleBlocks for the 8 surrounding
+    // chunks. Their boundary view changed (this chunk now has different
+    // blocks), so any rendered boundary they showed may be stale.
+    // Recompute happens against each neighbor's existing block list —
+    // no network refetch, just a local pass through the surface culler.
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if (dx === 0 && dz === 0) continue;
+        const nKey = `chunk_${chunkX + dx}_${chunkZ + dz}`;
+        const nData = loadedChunksRef.current.get(nKey);
+        if (!nData) continue;
+        nData.visibleBlocks = computeSurfaceVisibleBlocks(
+          chunkX + dx, chunkZ + dz, nData.blocks,
+        );
+      }
+    }
+
     // Phase 3.0: Use batched emit instead of synchronous callback (only if blocks changed)
     scheduleEmit();
+    } finally {
+      inflightRefetches.current.delete(chunkKey);
+    }
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**
