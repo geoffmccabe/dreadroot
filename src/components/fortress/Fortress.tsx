@@ -265,7 +265,7 @@ export function Fortress() {
   
   // Hooks
   const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
-  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef } = useBlocks();
+  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel, isMarketplaceOpen, openMarketplace, closeMarketplace } = useUserPanel();
@@ -814,7 +814,8 @@ export function Fortress() {
   // Tree chopping - allows owner to destroy tree and get seed back
   // IMPORTANT: Combine plantedTrees + myIncompleteTrees + actively growing trees
   // This ensures user can chop trees at any stage (just planted, growing, or fully grown)
-  const { refetchSingleChunk, removeBlocksByPositions } = useBlocks();
+  // (refetchSingleChunk + removeBlocksByPositions are destructured up top with the
+  // rest of useBlocks() so the tree-growth poller callback can reach them.)
   
   // Build allTrees by merging DB trees with actively growing local trees
   // NOTE: Using a function instead of useMemo so we get fresh data from growingTreesRef on each render
