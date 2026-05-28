@@ -1056,6 +1056,38 @@ export const useUserData = () => {
     return true;
   };
 
+  // Orphan-equipped cleanup. After consumeGrenade/consumeEgg/etc.
+  // delete the last inventory row of an item, the equipped slot is
+  // left pointing at a row that no longer exists. The slot then
+  // "looks armed" (G arms it because the slot has the grenade itemId)
+  // but throws silently fail because consumeGrenade can't find a row.
+  // This effect scans equipped slots and unequips any whose item_id
+  // has no live inventory backing. Single round-trip per orphan.
+  useEffect(() => {
+    if (!user?.id || equippedItems.length === 0) return;
+    const liveItemIds = new Set<string>();
+    for (const inv of inventory) {
+      if (inv.item_type === 'item' && inv.item_id && inv.quantity > 0) {
+        liveItemIds.add(inv.item_id);
+      }
+    }
+    const orphans = equippedItems.filter(eq => eq.itemId && !liveItemIds.has(eq.itemId));
+    if (orphans.length === 0) return;
+    (async () => {
+      const slotTypes = orphans.map(o => `hotbar_${o.slot}`);
+      const { error } = await supabase
+        .from('user_equipped_items')
+        .delete()
+        .eq('user_id', user.id)
+        .in('slot_type', slotTypes);
+      if (error) {
+        console.warn('[OrphanEquip] cleanup failed:', error.message);
+        return;
+      }
+      setEquippedItems(prev => prev.filter(eq => !orphans.some(o => o.slot === eq.slot)));
+    })();
+  }, [user?.id, inventory, equippedItems]);
+
   const updateEquippedSlot = useCallback(async (slot: number, itemId: string | null) => {
     if (!user?.id) return;
     const slotType = `hotbar_${slot}`;
