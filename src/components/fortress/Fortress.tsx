@@ -381,7 +381,7 @@ export function Fortress() {
       const { data } = await supabase
         .from('items')
         .select('id, key, tier')
-        .or('key.eq.grenade,key.like.grenade\\_t%,key.eq.health_potion');
+        .or('key.eq.grenade,key.like.grenade_t%,key.eq.health_potion');
       if (cancelled || !data) return;
       const map = new Map<string, number>();
       for (const row of data) {
@@ -506,7 +506,7 @@ export function Fortress() {
       const { data } = await supabase
         .from('items')
         .select('id, key, tier')
-        .like('key', 'shpider\\_egg\\_t%');
+        .like('key', 'shpider_egg_t%');
       if (cancelled || !data) return;
       const map = new Map<string, number>();
       for (const row of data) {

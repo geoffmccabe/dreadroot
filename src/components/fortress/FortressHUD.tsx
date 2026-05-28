@@ -416,27 +416,51 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
     if (src.type === 'hotbar') {
-      // Hotbar → Inventory: unequip and (for stackable items) place
-      // in target slot. Non-stackable items already have a tile per
-      // row in the grid, so placing the itemId at invSlots[targetIdx]
-      // would create a phantom key that doesn't match anything in
-      // inventoryItemsMap — the tile appears to vanish. For those
-      // we just unequip.
+      // Hotbar → Inventory: unequip, then place the resulting tile at
+      // the target inventory slot. For non-stack rows the tile's
+      // gridKey is the row id (not the item id); the auto-layout
+      // effect has already assigned each row a position, so the drop
+      // here just MOVES the existing tile to the requested slot.
       const hotbarItemId = hotbarSlots.find(s => s.slot === src.slot)?.itemId;
       const hotbarIsNonStack = hotbarItemId ? nonStackableItemIds.has(hotbarItemId) : false;
       if (updateEquippedSlot) updateEquippedSlot(src.slot, null);
-      if (hotbarItemId && !hotbarIsNonStack) {
+      if (!hotbarItemId) return;
+
+      if (hotbarIsNonStack) {
+        // Find the row(s) for this item id; pick one that isn't already
+        // sitting at the target slot. Then swap into target.
         setInvSlots(prev => {
           const next = [...prev];
-          const existing = next[targetIdx];
-          next[targetIdx] = hotbarItemId;
-          if (existing && existing !== hotbarItemId) {
-            const srcSlotIdx = next.indexOf(null);
-            if (srcSlotIdx !== -1) next[srcSlotIdx] = existing;
+          let sourceIdx = -1;
+          for (let i = 0; i < next.length; i++) {
+            const key = next[i];
+            if (!key) continue;
+            const entry = inventoryItemsMap.get(key);
+            if (entry && entry.isNonStackRow && entry.itemId === hotbarItemId) {
+              sourceIdx = i;
+              break;
+            }
           }
+          if (sourceIdx === -1 || sourceIdx === targetIdx) return next;
+          const existing = next[targetIdx];
+          next[targetIdx] = next[sourceIdx];
+          next[sourceIdx] = existing ?? null;
           return next;
         });
+        return;
       }
+
+      // Stackable: place itemId at target, bumping any prior occupant.
+      setInvSlots(prev => {
+        const next = [...prev];
+        const existing = next[targetIdx];
+        next[targetIdx] = hotbarItemId;
+        if (existing && existing !== hotbarItemId) {
+          const srcSlotIdx = next.indexOf(null);
+          if (srcSlotIdx !== -1) next[srcSlotIdx] = existing;
+        }
+        return next;
+      });
       return;
     }
 
@@ -455,7 +479,7 @@ export function FortressHUD(props: FortressHUDProps) {
         return next;
       });
     }
-  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds]);
+  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds, inventoryItemsMap]);
 
   const allowDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
