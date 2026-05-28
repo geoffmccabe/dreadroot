@@ -27,6 +27,12 @@ interface Props {
    *  date by the scene's per-frame loop. The panel reads it each
    *  render frame to draw the flashing green "you are here" dot. */
   playerPositionRef: React.RefObject<THREE.Vector3 | null>;
+  /** Other players' positions (admin-only overlay). Empty array when
+   *  multiplayer is offline. */
+  otherPlayersRef?: React.RefObject<Array<{ userId: string; x: number; y: number; z: number }> | null>;
+  /** Live enemy snapshots (admin-only overlay). One entry per active
+   *  enemy. type is the adapter type ('shombie' / 'shpider' / etc). */
+  enemiesRef?: React.RefObject<Array<{ type: string; tier: number; x: number; y: number; z: number }> | null>;
 }
 
 type Tool = 'pan' | 'paint' | 'erase';
@@ -35,6 +41,25 @@ const WATER_PAD_CHUNKS = 10;
 const CHUNK_SIZE = 16;
 const PULSE_HZ = 2; // pulses per second for owned trees + player marker
 
+// Admin-only enemy overlay. Color per adapter type — must match the
+// adapter.type strings registered in EnemyCombatRegistry.
+const ENEMY_COLOR: Record<string, string> = {
+  shombie: '#e04040',
+  shpider: '#a040d0',
+  shnake:  '#e0c040',
+  shwarm:  '#40c0e0',
+  walapa:  '#e07040',
+  shtickman: '#d0d0d0',
+};
+const ENEMY_LABEL: Record<string, string> = {
+  shombie: 'Shombie',
+  shpider: 'Shpider',
+  shnake:  'Shnake',
+  shwarm:  'Shwarm',
+  walapa:  'Walapa',
+  shtickman: 'Shtickman',
+};
+
 export function GodMapPanel({
   open,
   onClose,
@@ -42,6 +67,8 @@ export function GodMapPanel({
   currentUserId,
   userRoles,
   playerPositionRef,
+  otherPlayersRef,
+  enemiesRef,
 }: Props) {
   const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
   const isSuperadmin = userRoles.includes('superadmin');
@@ -56,6 +83,11 @@ export function GodMapPanel({
   // Pan offset in MAP CELLS (chunks at chunk zoom, voxels at voxel zoom).
   const [panX, setPanX] = useState(0);
   const [panZ, setPanZ] = useState(0);
+  // Set by the auto-center effect below the first time we render at a
+  // given zoom level. Without this, switching to voxel zoom leaves the
+  // pan at (0,0) which is the corner of the data — the player ends up
+  // off-screen and the map appears "empty."
+  const lastAutoCenterKey = useRef<string>('');
 
   // Hover state for the tooltip.
   const [hover, setHover] = useState<{
@@ -116,6 +148,37 @@ export function GodMapPanel({
       fits,
     };
   }, [ext, zoomLevel, containerSize]);
+
+  // Auto-center the view when the panel opens or zoom changes. Targets
+  // the player's current position if available; otherwise the data
+  // centroid. Keyed by (open, zoomLevel, ext) so it only fires when
+  // those change — not on every render.
+  useEffect(() => {
+    if (!open || !ext || !layout || !containerSize.w) return;
+    const key = `${open}|${zoomLevel}|${ext.minChunkX},${ext.maxChunkX},${ext.minChunkZ},${ext.maxChunkZ}`;
+    if (lastAutoCenterKey.current === key) return;
+    lastAutoCenterKey.current = key;
+    const isVoxel = zoomLevel === 'voxel';
+    const pos = playerPositionRef.current;
+    let targetCellX: number, targetCellZ: number;
+    if (pos) {
+      const pcx = Math.floor(pos.x / CHUNK_SIZE);
+      const pcz = Math.floor(pos.z / CHUNK_SIZE);
+      if (isVoxel) {
+        targetCellX = (pcx - ext.minChunkX) * CHUNK_SIZE + Math.floor(pos.x - pcx * CHUNK_SIZE);
+        targetCellZ = (pcz - ext.minChunkZ) * CHUNK_SIZE + Math.floor(pos.z - pcz * CHUNK_SIZE);
+      } else {
+        targetCellX = pcx - ext.minChunkX;
+        targetCellZ = pcz - ext.minChunkZ;
+      }
+    } else {
+      targetCellX = Math.floor(layout.widthCells / 2);
+      targetCellZ = Math.floor(layout.heightCells / 2);
+    }
+    const scale = layout.scale;
+    setPanX(Math.round(containerSize.w / 2 / scale - targetCellX));
+    setPanZ(Math.round(containerSize.h / 2 / scale - targetCellZ));
+  }, [open, zoomLevel, ext, layout, containerSize.w, containerSize.h, playerPositionRef]);
 
   // Render. Re-runs on every state change to data, zoom, pan, or hover.
   useEffect(() => {
@@ -264,7 +327,53 @@ export function GodMapPanel({
       ctx.fillRect(px - dotSize / 2, py - dotSize / 2, dotSize, dotSize);
       ctx.globalAlpha = 1;
     }
-  }, [ext, layout, density, noPlant, trees, panX, panZ, zoomLevel, bounds, currentUserId, isAdmin, playerPositionRef]);
+
+    // 6. Other players (admin-only): solid black flashing dots.
+    if (isAdmin && otherPlayersRef?.current) {
+      ctx.fillStyle = '#000000';
+      ctx.globalAlpha = 0.4 + 0.6 * pulse;
+      for (const p of otherPlayersRef.current) {
+        const pcx = Math.floor(p.x / CHUNK_SIZE);
+        const pcz = Math.floor(p.z / CHUNK_SIZE);
+        let px: number, py: number;
+        if (isVoxel) {
+          const lx = Math.floor(p.x) - pcx * CHUNK_SIZE;
+          const lz = Math.floor(p.z) - pcz * CHUNK_SIZE;
+          px = ((pcx - ext.minChunkX) * CHUNK_SIZE + lx + panX) * scale;
+          py = ((pcz - ext.minChunkZ) * CHUNK_SIZE + lz + panZ) * scale;
+        } else {
+          const s = chunkToScreen(pcx, pcz);
+          px = s.x; py = s.y;
+        }
+        const dotSize = Math.max(3, scale * 2);
+        ctx.fillRect(px - dotSize / 2, py - dotSize / 2, dotSize, dotSize);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // 7. Enemies (admin-only): small flashing dots colored by type.
+    if (isAdmin && enemiesRef?.current) {
+      ctx.globalAlpha = 0.5 + 0.5 * pulse;
+      const dotSize = Math.max(2, scale);
+      for (const e of enemiesRef.current) {
+        const ecx = Math.floor(e.x / CHUNK_SIZE);
+        const ecz = Math.floor(e.z / CHUNK_SIZE);
+        let px: number, py: number;
+        if (isVoxel) {
+          const lx = Math.floor(e.x) - ecx * CHUNK_SIZE;
+          const lz = Math.floor(e.z) - ecz * CHUNK_SIZE;
+          px = ((ecx - ext.minChunkX) * CHUNK_SIZE + lx + panX) * scale;
+          py = ((ecz - ext.minChunkZ) * CHUNK_SIZE + lz + panZ) * scale;
+        } else {
+          const s = chunkToScreen(ecx, ecz);
+          px = s.x; py = s.y;
+        }
+        ctx.fillStyle = ENEMY_COLOR[e.type] || '#ff00aa';
+        ctx.fillRect(px - dotSize / 2, py - dotSize / 2, dotSize, dotSize);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }, [ext, layout, density, noPlant, trees, panX, panZ, zoomLevel, bounds, currentUserId, isAdmin, playerPositionRef, otherPlayersRef, enemiesRef]);
 
   // Animation loop for pulse — re-runs the render effect on every frame
   // while the panel is open by tracking a tick state.
@@ -574,7 +683,58 @@ export function GodMapPanel({
             </>
           )}
         </div>
+
+        {/* Enemy legend — bottom right, admins only. Shows distinct
+            tier+type combinations currently alive. */}
+        {isAdmin && enemiesRef?.current && enemiesRef.current.length > 0 && (
+          <EnemyLegend enemiesRef={enemiesRef} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function EnemyLegend({
+  enemiesRef,
+}: {
+  enemiesRef: React.RefObject<Array<{ type: string; tier: number; x: number; y: number; z: number }> | null>;
+}) {
+  // Group by (type, tier). Sort by type then tier ascending. Cap at 12
+  // entries so the legend stays compact in the corner.
+  const list = enemiesRef.current ?? [];
+  const seen = new Map<string, { type: string; tier: number }>();
+  for (const e of list) {
+    const k = `${e.type}_${e.tier}`;
+    if (!seen.has(k)) seen.set(k, { type: e.type, tier: e.tier });
+  }
+  const entries = Array.from(seen.values())
+    .sort((a, b) => a.type.localeCompare(b.type) || a.tier - b.tier)
+    .slice(0, 12);
+  if (entries.length === 0) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute', right: '12px', bottom: '12px',
+        background: 'hsla(var(--hud-bg))',
+        border: '1px solid hsla(var(--hud-border))',
+        borderRadius: 'var(--hud-radius)',
+        padding: '6px 8px',
+        fontSize: '10px',
+        color: 'hsl(var(--hud-text))',
+        minWidth: '92px',
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: '4px', color: 'hsl(var(--hud-text-dim))' }}>Enemies</div>
+      {entries.map(e => {
+        const name = (ENEMY_LABEL[e.type] || e.type);
+        const label = `T${e.tier} ${name}`.slice(0, 10);
+        return (
+          <div key={`${e.type}_${e.tier}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', lineHeight: 1.2 }}>
+            <span style={{ display: 'inline-block', width: '8px', height: '8px', background: ENEMY_COLOR[e.type] || '#ff00aa' }} />
+            <span>{label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
