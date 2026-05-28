@@ -44,6 +44,7 @@ import { usePathfindingConfigs } from '@/hooks/usePathfindingConfigs';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 
 import { FortressScene } from './FortressScene';
+import { GodMapPanel } from '@/features/god-map';
 import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
 import { FortressOverlays } from './FortressOverlays';
@@ -237,6 +238,14 @@ export function Fortress() {
   // The boolean flag is derived for convenience.
   const [grenadeReadySlot, setGrenadeReadySlot] = useState<number | null>(null);
   const grenadeReady = grenadeReadySlot !== null;
+
+  // God Map (Cmd+M). Open to everyone for viewing; only superadmins
+  // can paint/erase no-plant zones; only admins/superadmins see other
+  // players' seed details on hover. Player position ref is populated
+  // by FortressScene's per-frame loop so the map can draw the "you
+  // are here" dot without a render-thrash subscription.
+  const [godMapOpen, setGodMapOpen] = useState(false);
+  const playerPositionRef = useRef<THREE.Vector3 | null>(null);
 
   // Shpider Egg ready slot — same shape as grenadeReadySlot. Armed via
   // Y, thrown on click. Eggs hatch on rest into a pet shpider.
@@ -1911,6 +1920,8 @@ export function Fortress() {
           onModeChange={handleModeChange}
           onOpenPanel={handleOpenPanel}
           onOpenMarketplace={openMarketplace}
+          onOpenGodMap={() => setGodMapOpen(true)}
+          playerPositionRef={playerPositionRef}
           onToggleInventory={() => {
             setInventoryOpen(prev => {
               const next = !prev;
@@ -2337,6 +2348,15 @@ export function Fortress() {
         grenadeReadySlot={grenadeReadySlot}
         eggReadySlot={eggReadySlot}
         potionDrinkingSlot={potionDrinkingSlot}
+      />
+
+      <GodMapPanel
+        open={godMapOpen}
+        onClose={() => setGodMapOpen(false)}
+        worldId={currentWorldId}
+        currentUserId={user?.id ?? null}
+        userRoles={userRoles}
+        playerPositionRef={playerPositionRef}
       />
 
       <FortressOverlays

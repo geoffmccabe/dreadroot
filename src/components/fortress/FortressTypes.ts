@@ -264,6 +264,12 @@ export interface SceneProps {
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: grant 1 health potion (same equip rule). */
   onAdminGrantHealthPotion?: () => Promise<boolean>;
+  /** Cmd+M opens this panel. Open to all roles; superadmin paint/erase
+   *  + admin tooltip detail is gated inside the panel itself. */
+  onOpenGodMap?: () => void;
+  /** Mutable ref the scene populates each frame with the player's
+   *  current world position. Read by the God Map panel. */
+  playerPositionRef?: React.RefObject<THREE.Vector3 | null>;
   /** Vault: parent state, scene reports proximity, V opens. */
   vaultInRange?: boolean;
   onVaultProximityChange?: (inRange: boolean) => void;
@@ -358,6 +364,8 @@ export interface FirstPersonControlsProps {
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: Cmd+H grants a health potion. */
   onAdminGrantHealthPotion?: () => Promise<boolean>;
+  /** Cmd+M opens the God Map. */
+  onOpenGodMap?: () => void;
   /** V key handler — Fortress.tsx only wires this when player is in
    *  the vault's back-wall trigger zone. */
   onOpenVault?: () => void;

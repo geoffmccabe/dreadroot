@@ -333,6 +333,15 @@ export function useSeedPlanting({
           });
           return { success: false, error: 'Chunk planting limit exceeded' };
         }
+        // God Map painted no-plant chunk. Non-admins can't plant here.
+        if (rpcError.message?.includes('no_plant_chunk')) {
+          toast({
+            title: "Cannot plant on a path",
+            description: "This chunk is reserved as a walking path. Try a different spot.",
+            variant: "destructive",
+          });
+          return { success: false, error: 'no_plant_chunk' };
+        }
         return { success: false, error: 'Failed to plant seed' };
       }
 

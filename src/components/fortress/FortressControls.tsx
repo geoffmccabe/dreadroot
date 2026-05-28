@@ -53,6 +53,7 @@ export function FirstPersonControls({
   onWideTreePlace,
   onOpenPanel,
   onOpenMarketplace,
+  onOpenGodMap,
   onToggleInventory,
   onModeChange,
   getBlockQuantity,
@@ -569,7 +570,13 @@ export function FirstPersonControls({
         break;
       case 'KeyM':
         event.preventDefault();
-        onOpenMarketplace?.();
+        // Cmd/Ctrl+M opens the God Map (admin map view). Plain M still
+        // opens the marketplace.
+        if (event.metaKey || event.ctrlKey) {
+          onOpenGodMap?.();
+        } else {
+          onOpenMarketplace?.();
+        }
         break;
       case 'BracketLeft':
         if (blockPlacementMode) {
@@ -710,7 +717,7 @@ export function FirstPersonControls({
         }
         break;
     }
-  }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange, onAdminGrantGrenade, onAdminGrantHealthPotion, onOpenVault]);
+  }, [crosshairsEnabled, onModeChange, onOpenPanel, onOpenMarketplace, onOpenGodMap, onToggleInventory, getBlockQuantity, selectedBlockType, panelOpen, blockPlacementMode, showCrosshairs, audioRefs, playAudio, onBlockRain, onCycleBlock, userRoles, onGodModeChange, onAdminGrantGrenade, onAdminGrantHealthPotion, onOpenVault]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     // Process key releases unconditionally — gating these on panelOpen

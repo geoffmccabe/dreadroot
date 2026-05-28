@@ -133,6 +133,8 @@ export function FortressScene({
   onModeChange,
   onOpenPanel,
   onOpenMarketplace,
+  onOpenGodMap,
+  playerPositionRef,
   onToggleInventory,
   crosshairsEnabled,
   getBlockQuantity,
@@ -1291,6 +1293,17 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // grenade hook accepts a ref it can read at explosion time.
   applyBurnRef.current = burnSystem.applyBurn;
 
+  // Keep the God Map's player-position ref fresh. Camera is the
+  // canonical local player position — cheap copy per frame.
+  useFrame(() => {
+    if (playerPositionRef) {
+      if (!playerPositionRef.current) {
+        (playerPositionRef as React.MutableRefObject<THREE.Vector3 | null>).current = new THREE.Vector3();
+      }
+      playerPositionRef.current!.copy(camera.position);
+    }
+  });
+
   useFrame((_, delta) => {
     if (!flamethrower.isActiveRef.current) return;
 
@@ -1404,6 +1417,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onWideTreePlace={onWideTreePlace}
         onOpenPanel={onOpenPanel}
         onOpenMarketplace={onOpenMarketplace}
+        onOpenGodMap={onOpenGodMap}
         onToggleInventory={onToggleInventory}
         onModeChange={onModeChange}
         getBlockQuantity={getBlockQuantity}
