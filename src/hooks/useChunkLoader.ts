@@ -37,6 +37,13 @@ const PREFETCH_ENABLED = false;
 
 // Phase 3A: Eviction configuration
 const EVICTION_BATCH_SIZE = 10;
+// Hard ceiling on chunks evicted per call. The D-Flow trace 2026-May-27
+// showed a single eviction frame removing 33 chunks (89,310 collision
+// voxels) in one synchronous burst — that frame ran ~100ms. Capping at
+// 4/call spreads the same work across ~8 frames; chunk count drifts a
+// few above MAX_LOADED_CHUNKS for a few hundred ms but never spikes
+// the main thread.
+const MAX_EVICT_PER_TICK = 4;
 
 // Retry configuration for failed chunk loads
 const MAX_RETRY_ATTEMPTS = 3;
@@ -560,7 +567,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // chunk's worth of voxels) so the bigger batch is cheaper than the
     // old per-voxel grid invalidation churn.
     const overBy = chunkCount - MAX_LOADED_CHUNKS;
-    const evictTarget = Math.min(evictionCandidates.length, overBy + EVICTION_BATCH_SIZE);
+    const evictTarget = Math.min(
+      evictionCandidates.length,
+      overBy + EVICTION_BATCH_SIZE,
+      MAX_EVICT_PER_TICK,
+    );
     const toEvict = evictionCandidates.slice(0, evictTarget);
 
     if (toEvict.length > 0) {
