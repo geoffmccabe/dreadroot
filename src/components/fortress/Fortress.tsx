@@ -391,7 +391,12 @@ export function Fortress() {
         }
         const tier = row.tier ?? 1;
         map.set(row.id, tier);
-        if (row.key === 'grenade') grenadeT1IdRef.current = row.id;
+        // Accept either legacy 'grenade' key OR the tiered 'grenade_t1'
+        // pattern. The Ctrl+G admin grant needs the tier-1 item id so
+        // it can drop one in the user's inventory.
+        if (tier === 1 && (row.key === 'grenade' || row.key === 'grenade_t1')) {
+          grenadeT1IdRef.current = row.id;
+        }
       }
       grenadeDefsRef.current = map;
     })();
@@ -678,6 +683,34 @@ export function Fortress() {
   const handleUseHotbarSlot = useCallback(async (slot: number) => {
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === slot);
     if (!eq?.itemId) return;
+
+    // Grenade in this slot → toggle grenade-ready for THIS specific
+    // slot (digit press = same intent as G). Disarm if already armed
+    // on this slot. Synchronous via grenadeDefsRef so the digit fires
+    // before any DB roundtrip.
+    if (grenadeDefsRef.current.has(eq.itemId)) {
+      if (grenadeReadySlot === slot) {
+        setGrenadeReadySlot(null);
+      } else {
+        setEggReadySlot(null); // mutually exclusive with egg-ready
+        setGrenadeReadySlot(slot);
+        playPinPullSound();
+      }
+      return;
+    }
+
+    // Shpider egg in this slot → same toggle pattern (Y-key equivalent).
+    if (eggDefsRef.current.has(eq.itemId)) {
+      if (eggReadySlot === slot) {
+        setEggReadySlot(null);
+      } else {
+        setGrenadeReadySlot(null);
+        setEggReadySlot(slot);
+      }
+      return;
+    }
+
+    // Anything else: fall back to the per-item-type quick-use behavior.
     const { data: itemDef } = await supabase
       .from('items')
       .select('key, item_category')
@@ -687,7 +720,7 @@ export function Fortress() {
     if (itemDef.key === 'health_potion') {
       await consumePotionInSlot(slot, eq.itemId);
     }
-  }, [equippedItems, consumePotionInSlot]);
+  }, [equippedItems, consumePotionInSlot, grenadeReadySlot, eggReadySlot]);
 
   // H key handler — drinks a potion if one is reachable. Same auto-
   // equip rule as G for grenades:
