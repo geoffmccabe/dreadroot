@@ -2061,7 +2061,7 @@ export function Fortress() {
               }
             }
           }}
-          onShpiderKilled={async (tier) => {
+          onShpiderKilled={async ({ tier, x, y, z }) => {
             // Same pattern as the other enemy kill writers — bumps
             // user_combat_stats so the Kills panel shows shpiders
             // alongside everything else. Without this they were
@@ -2085,18 +2085,36 @@ export function Fortress() {
                 .insert({ user_id: user.id, enemy_type: `shpider_t${tier}`, kills: 1 });
             }
             // 1% chance to drop a shpider egg of the killed shpider's
-            // tier. Goes straight to inventory. Pet-shpider deaths
-            // skip this — they drop a world_eggs row instead via the
-            // shpider system, since the egg has a known owner.
+            // tier. Previously this added straight to inventory which
+            // gave a misleading "dropped!" toast but no visible egg in
+            // the world. Now we insert a world_eggs row at the kill
+            // position so the killer sees a glowing egg on the ground
+            // and picks it up with F — same UX as pet-death drops.
             if (Math.random() < 0.01) {
-              const { data: eggItem } = await supabase
-                .from('items')
-                .select('id')
-                .eq('key', `shpider_egg_t${tier}`)
-                .maybeSingle();
-              if (eggItem) {
-                await addItem(eggItem.id, 1);
-                toast({ title: `🥚 Shpider Egg T${tier} dropped!`, duration: 4000 });
+              const { error } = await supabase
+                .from('world_eggs' as any)
+                .insert({
+                  tier,
+                  owner_user_id: user.id,
+                  position_x: x,
+                  position_y: y,
+                  position_z: z,
+                } as any);
+              if (error) {
+                // world_eggs migration not applied — fall back to direct
+                // inventory grant so the drop isn't lost.
+                console.warn('[ShpiderEgg] world drop insert failed:', error.message);
+                const { data: eggItem } = await supabase
+                  .from('items')
+                  .select('id')
+                  .eq('key', `shpider_egg_t${tier}`)
+                  .maybeSingle();
+                if (eggItem) {
+                  await addItem(eggItem.id, 1);
+                  toast({ title: `🥚 Shpider Egg T${tier} dropped!`, duration: 4000 });
+                }
+              } else {
+                toast({ title: `🥚 Shpider Egg T${tier} dropped — find it on the ground!`, duration: 4000 });
               }
             }
           }}

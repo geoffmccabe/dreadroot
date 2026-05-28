@@ -40,8 +40,10 @@ interface UseShpiderSystemOptions {
   isEnabled: boolean;
   userRoles: string[];
   /** Fired when a WILD shpider dies. Pet deaths route to onPetDied
-   *  instead — they don't count as a "kill" for the player. */
-  onShpiderKilled?: (tier: number) => void;
+   *  instead — they don't count as a "kill" for the player. Position
+   *  is included so a wild 1% egg drop can be rendered in-world (vs
+   *  silently entering inventory). */
+  onShpiderKilled?: (info: { tier: number; x: number; y: number; z: number }) => void;
   /** Fired when a PET shpider dies. Caller inserts a world_eggs row
    *  so the dropped egg can be picked back up. */
   onPetDied?: (info: {
@@ -265,7 +267,12 @@ export function useShpiderSystem({
           z: s.position.z,
         });
       } else {
-        onShpiderKilled?.(s.definition.tier);
+        onShpiderKilled?.({
+          tier: s.definition.tier,
+          x: s.position.x,
+          y: s.position.y,
+          z: s.position.z,
+        });
       }
       // Body/leg shots normally just disappear (per 2026-May-24
       // feedback). Headshots fragment. Explosion kills ALWAYS
