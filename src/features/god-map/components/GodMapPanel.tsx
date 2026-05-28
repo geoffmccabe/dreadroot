@@ -73,10 +73,15 @@ export function GodMapPanel({
     paintedThisDrag: Set<string>;
   }>({ active: false, mode: 'pan', lastMouse: null, paintedThisDrag: new Set() });
 
-  // Canvas + container refs
+  // Canvas + container refs. Container size is STATE (not just a ref)
+  // so the layout useMemo recomputes when the panel mounts and the
+  // ResizeObserver fires — without that, the canvas stayed 0×0 and
+  // nothing rendered.
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const sizeRef = useRef(containerSize);
+  useEffect(() => { sizeRef.current = containerSize; }, [containerSize]);
 
   // Build extended bounds (data bounds + 10-chunk water border).
   const ext = useMemo(() => {
@@ -98,7 +103,7 @@ export function GodMapPanel({
     const heightCells = zoomLevel === 'chunk' ? heightChunks : heightChunks * CHUNK_SIZE;
     // Canvas is sized to the container; pick a scale that lets the
     // whole content fit at chunk zoom and pan-around at voxel zoom.
-    const { w, h } = sizeRef.current;
+    const { w, h } = containerSize;
     if (!w || !h) return { widthCells, heightCells, scale: 1, fits: true };
     const fitScale = Math.max(1, Math.min(Math.floor(w / widthCells), Math.floor(h / heightCells)));
     const fits = (widthCells * fitScale <= w) && (heightCells * fitScale <= h);
@@ -110,7 +115,7 @@ export function GodMapPanel({
       scale: zoomLevel === 'chunk' ? fitScale : 1,
       fits,
     };
-  }, [ext, zoomLevel]);
+  }, [ext, zoomLevel, containerSize]);
 
   // Render. Re-runs on every state change to data, zoom, pan, or hover.
   useEffect(() => {
@@ -145,23 +150,52 @@ export function GodMapPanel({
       return { x: screenX, y: screenY, size };
     };
 
-    // 2. Per-chunk fill.
-    // Empty chunks WITHIN the data bounds get a dark grey.
-    // Density-shaded chunks get progressively brighter grey.
+    // 2. Per-chunk fill. All in-map chunks get the ground green; chunks
+    // with blocks get a slightly darker tone so dense areas read at a
+    // glance. (Per 2026-May-28 brand: ground is hsl(69 33% 64%); a
+    // ~12% lightness drop reads as "denser" without losing the green.)
+    const GROUND_GREEN = 'hsl(69, 33%, 64%)';
     for (let cx = bounds!.minChunkX; cx <= bounds!.maxChunkX; cx++) {
       for (let cz = bounds!.minChunkZ; cz <= bounds!.maxChunkZ; cz++) {
         const { x, y, size } = chunkToScreen(cx, cz);
         if (x + size < 0 || y + size < 0 || x > w || y > h) continue;
         const dens = density.get(`${cx},${cz}`) ?? 0;
         if (dens === 0) {
-          ctx.fillStyle = '#1a1a1d';
+          ctx.fillStyle = GROUND_GREEN;
         } else {
-          // Log-shaded: 1→darker, 1000+→brighter
-          const t = Math.min(1, Math.log10(dens + 1) / 4);
-          const g = 30 + Math.floor(t * 110); // 30..140
-          ctx.fillStyle = `rgb(${g}, ${g}, ${g})`;
+          const t = Math.min(1, Math.log10(dens + 1) / 4); // 0..1
+          const lightness = 64 - Math.floor(t * 18);       // 64..46
+          ctx.fillStyle = `hsl(69, 33%, ${lightness}%)`;
         }
         ctx.fillRect(x, y, size, size);
+      }
+    }
+
+    // 2b. Voxel zoom: draw 1-voxel-wide chunk boundary lines so the
+    // grid is legible. Color is the lighter brand green so the lines
+    // sit above the ground without screaming.
+    if (isVoxel) {
+      ctx.fillStyle = 'hsl(69, 24%, 75%)';
+      for (let cx = bounds!.minChunkX; cx <= bounds!.maxChunkX + 1; cx++) {
+        const cellX = (cx - ext.minChunkX) * CHUNK_SIZE;
+        const sx = (cellX + panX) * scale;
+        if (sx < -scale || sx > w) continue;
+        // Vertical line at this chunk-boundary x.
+        const topCell = (bounds!.minChunkZ - ext.minChunkZ) * CHUNK_SIZE;
+        const botCell = (bounds!.maxChunkZ + 1 - ext.minChunkZ) * CHUNK_SIZE;
+        const y0 = (topCell + panZ) * scale;
+        const y1 = (botCell + panZ) * scale;
+        ctx.fillRect(sx, y0, scale, y1 - y0);
+      }
+      for (let cz = bounds!.minChunkZ; cz <= bounds!.maxChunkZ + 1; cz++) {
+        const cellZ = (cz - ext.minChunkZ) * CHUNK_SIZE;
+        const sy = (cellZ + panZ) * scale;
+        if (sy < -scale || sy > h) continue;
+        const leftCell = (bounds!.minChunkX - ext.minChunkX) * CHUNK_SIZE;
+        const rightCell = (bounds!.maxChunkX + 1 - ext.minChunkX) * CHUNK_SIZE;
+        const x0 = (leftCell + panX) * scale;
+        const x1 = (rightCell + panX) * scale;
+        ctx.fillRect(x0, sy, x1 - x0, scale);
       }
     }
 
@@ -253,8 +287,7 @@ export function GodMapPanel({
     if (!c) return;
     const update = () => {
       const r = c.getBoundingClientRect();
-      sizeRef.current = { w: Math.floor(r.width), h: Math.floor(r.height) };
-      setTick(t => t + 1);
+      setContainerSize({ w: Math.floor(r.width), h: Math.floor(r.height) });
     };
     update();
     const ro = new ResizeObserver(update);
@@ -407,7 +440,9 @@ export function GodMapPanel({
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 9000,
-        background: 'rgba(0,0,0,0.55)',
+        background: 'rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
@@ -468,9 +503,9 @@ export function GodMapPanel({
               position: 'fixed',
               left: Math.min(hover.screenX + 12, window.innerWidth - 240),
               top: Math.min(hover.screenY + 12, window.innerHeight - 110),
-              background: 'rgba(15,15,18,0.95)',
+              background: 'hsla(var(--hud-bg))',
               border: '1px solid hsla(var(--hud-border))',
-              borderRadius: '4px',
+              borderRadius: 'var(--hud-radius)',
               padding: '8px 10px',
               fontSize: '12px',
               minWidth: '200px',
@@ -499,9 +534,9 @@ export function GodMapPanel({
             position: 'absolute', right: '12px', top: '50%',
             transform: 'translateY(-50%)',
             display: 'flex', flexDirection: 'column', gap: '6px',
-            background: 'rgba(15,15,18,0.85)',
+            background: 'hsla(var(--hud-bg))',
             border: '1px solid hsla(var(--hud-border))',
-            borderRadius: '4px',
+            borderRadius: 'var(--hud-radius)',
             padding: '8px',
           }}
         >
@@ -545,12 +580,16 @@ export function GodMapPanel({
 }
 
 function toolButtonStyle(active: boolean): React.CSSProperties {
+  // Brand-correct: active uses the existing HUD highlight border,
+  // inactive uses the HUD dim background. No off-brand greens/yellows.
   return {
     cursor: 'pointer',
-    background: active ? 'hsla(120, 40%, 30%, 0.8)' : 'rgba(40,40,45,0.8)',
-    border: '1px solid hsla(var(--hud-border))',
+    background: active ? 'hsla(var(--hud-bg))' : 'hsla(var(--hud-bg-dim))',
+    border: active
+      ? '2px solid hsla(var(--hud-highlight))'
+      : '1px solid hsla(var(--hud-border))',
     color: 'hsl(var(--hud-text))',
-    borderRadius: '4px',
+    borderRadius: 'var(--hud-radius)',
     padding: '6px 10px',
     fontSize: '14px',
     minWidth: '36px',
