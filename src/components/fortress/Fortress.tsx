@@ -613,9 +613,14 @@ export function Fortress() {
     if (!itemId) return false;
     const ok = await addItem(itemId, 1);
     if (!ok) return false;
-    const slot6 = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === 6);
-    if (!slot6) {
-      await updateEquippedSlot(6, itemId);
+    // Equip into the RIGHTMOST empty hotbar slot (prefer 6, then 5,
+    // ..., then 1). If all six are taken, leave it in inventory only.
+    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    for (let s = 6; s >= 1; s--) {
+      if (!usedSlots.has(s)) {
+        await updateEquippedSlot(s, itemId);
+        break;
+      }
     }
     return true;
   }, [addItem, equippedItems, updateEquippedSlot]);
