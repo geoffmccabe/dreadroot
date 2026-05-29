@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { QuarksLoader, BatchedParticleRenderer, ParticleSystem, ParticleEmitter } from 'three.quarks';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 import { getSoundUrl } from '@/hooks/useGameSounds';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
 // Flame Glove constants
 const MAX_USE_DURATION = 10; // seconds
@@ -424,8 +425,11 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     if (!canFireRef.current || !loadedRef.current) return;
     if (isActiveRef.current) return;
 
-    // Block firing inside Fortress Safe Zone
-    if (isPointInFSZ(camera.position.x, camera.position.y, camera.position.z)) return;
+    // Block firing inside Fortress Safe Zone. Uses canonical snapshot
+    // (post-L2 this is reconciled server position), same gating pattern
+    // as useFortressShooting.
+    const snap = getLocalPlayerSnapshot();
+    if (isPointInFSZ(snap.x, snap.y, snap.z)) return;
 
     isActiveRef.current = true;
     fadingOutRef.current = false; // cancel any pending fade-out
