@@ -11,6 +11,7 @@ import { getSoundUrl } from '@/hooks/useGameSounds';
 import { entityCollisionGrid, worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 import { enemyCombatRegistry, type RaycastResult } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { resolveBulletHit, BASE_BULLET_DAMAGE } from '@/features/combat';
 
 const _raycastResult: RaycastResult = { adapter: null, enemy: null, t: 0, hitX: 0, hitY: 0, hitZ: 0 };
 import { startPerfStallObservers, stopPerfStallObservers } from '@/lib/perfStallObservers';
@@ -653,34 +654,33 @@ export function useFortressFrameLoop({
             const hitY = _raycastResult.hitY;
             const hitZ = _raycastResult.hitZ;
 
-            // Compute headshot using the enemy's actual hitbox bounds.
-            // Adapter can override the "head zone fraction" — default
-            // top 25% matches legacy shombie. Shpider needs ~50% so
-            // its head (which is half the body) still counts.
+            // Damage + headshot + knockback resolved by the pure
+            // combat-math module so the same formula runs client-side
+            // (here) and on the future L2 DO. Adapter can override
+            // head zone fraction (default 25% matches shombie legacy).
             const hb = adapter.getHitbox(enemy);
             const headFrac = adapter.getHeadshotZoneFraction?.(enemy) ?? 0.25;
-            const isHeadshot = hb
-              ? (hitY - hb.bottomY) > (hb.topY - hb.bottomY) * (1 - headFrac)
-              : false;
-
-            // Damage = base × velocity ratio. Same formula the inline
-            // shombie/shpider blocks used.
-            const BASE_BULLET_DAMAGE = 25;
-            const velocityRatio = bullet.speed / tierDef.velocity;
-            const scaled = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
-            const finalDamage = isHeadshot ? scaled * 2 : scaled;
-
-            // Knockback dir — horizontal component of bullet direction.
-            _scratchBulletDir.copy(bullet.direction).normalize();
-            const kbX = _scratchBulletDir.x;
-            const kbZ = _scratchBulletDir.z;
+            const hitResolved = resolveBulletHit({
+              hitX, hitY, hitZ,
+              hitboxBottomY: hb?.bottomY ?? 0,
+              hitboxTopY: hb?.topY ?? 0,
+              headFrac,
+              bulletDirX: bullet.direction.x,
+              bulletDirY: bullet.direction.y,
+              bulletDirZ: bullet.direction.z,
+              bulletSpeed: bullet.speed,
+              tierMaxSpeed: tierDef.velocity,
+              baseDamage: BASE_BULLET_DAMAGE,
+            });
+            const finalDamage = hitResolved.damage;
+            const isHeadshot = hitResolved.isHeadshot;
 
             adapter.applyDamage(enemy, {
               damage: finalDamage,
               bulletSpeed: bullet.speed,
-              knockbackDirX: kbX,
-              knockbackDirY: 0,
-              knockbackDirZ: kbZ,
+              knockbackDirX: hitResolved.knockbackDirX,
+              knockbackDirY: hitResolved.knockbackDirY,
+              knockbackDirZ: hitResolved.knockbackDirZ,
               hitX, hitY, hitZ,
               isHeadshot,
               source: 'bullet',

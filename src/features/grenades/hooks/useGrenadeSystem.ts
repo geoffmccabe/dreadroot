@@ -33,6 +33,7 @@ import {
 } from '../constants';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { resolveBlastHit } from '@/features/combat';
 import { playThrowSound } from '../lib/explosionSound';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import type { UniversalFlameRendererHandle } from '@/components/fortress/UniversalFlameRenderer';
@@ -312,39 +313,25 @@ export function useGrenadeSystem({
         const ex = hb.centerX;
         const ey = (hb.bottomY + hb.topY) * 0.5;
         const ez = hb.centerZ;
+        // Pure resolver — falloff + damage + 0–45° upward-tilted
+        // knockback all in one place, shared with the future L2 DO.
+        const blast = resolveBlastHit({
+          blastX: center.x, blastY: center.y, blastZ: center.z,
+          hitX: ex, hitY: ey, hitZ: ez,
+          radius,
+          baseDamage: baseDmg,
+          baseKnockback: baseKb,
+        });
+        if (!blast.inRange) continue;
+        // Reused downstream by the burn-anchor logic so it can
+        // compute the surface point on the enemy facing the blast.
         _scratchToEnemy.set(ex - center.x, ey - center.y, ez - center.z);
-        const dist = _scratchToEnemy.length();
-        if (dist > radius) continue;
-
-        // Exponential falloff curve, calibrated to 2026-May-27 feedback:
-        //   center (t=0): 200% of baseDmg
-        //   edge   (t=1):  10% of baseDmg
-        //   beyond:        0 (the `dist > radius` continue above handles it)
-        // Solved 2 · b^t with b = 0.05 → 0.05^1 = 0.05, × 2 = 0.10.
-        // Sharper than linear: still-lethal close hits, glancing hits
-        // chip but don't waste the grenade.
-        const t = dist / radius;
-        const falloff = 2.0 * Math.pow(0.05, t);
-        const damage = Math.max(1, Math.round(baseDmg * falloff));
-        // Knockback direction = away from center on XZ, rotated UP by
-        // a random 0–45° angle per enemy so they fly outward AND a bit
-        // skyward instead of just sliding along the ground. Resulting
-        // vector stays unit length (cos²(θ)·(x²+z²) + sin²(θ) = 1).
-        const dHoriz = Math.max(0.01, Math.hypot(_scratchToEnemy.x, _scratchToEnemy.z));
-        const horizX = _scratchToEnemy.x / dHoriz;
-        const horizZ = _scratchToEnemy.z / dHoriz;
-        const upAngle = Math.random() * (Math.PI / 4); // 0 – 45°
-        const cosA = Math.cos(upAngle);
-        const sinA = Math.sin(upAngle);
-        const kbX = horizX * cosA;
-        const kbY = sinA;
-        const kbZ = horizZ * cosA;
         const died = adapter.applyDamage(enemy, {
-          damage,
-          bulletSpeed: baseKb * falloff,
-          knockbackDirX: kbX,
-          knockbackDirY: kbY,
-          knockbackDirZ: kbZ,
+          damage: blast.damage,
+          bulletSpeed: blast.bulletSpeed,
+          knockbackDirX: blast.knockbackDirX,
+          knockbackDirY: blast.knockbackDirY,
+          knockbackDirZ: blast.knockbackDirZ,
           hitX: ex,
           hitY: ey,
           hitZ: ez,

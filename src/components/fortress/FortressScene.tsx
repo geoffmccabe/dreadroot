@@ -71,6 +71,7 @@ import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer
 import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
 import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { isPointInFlameCone, FLAME_HALF_ANGLE, flameDpsForTier, flameBurnSecondsForTier } from '@/features/combat';
 import { getHeightBlocks } from '@/features/shtickman/types';
 
 // Tree system imports
@@ -1313,20 +1314,24 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     flameDamageTickRef.current = 0;
 
     const { tier, distance, colors, colorMode } = configRef_flame.current;
-    const dps = 10 * tier;
+    const dps = flameDpsForTier(tier);
     const tickDamage = Math.round(dps * tickDelta);
     if (tickDamage <= 0) return;
-    // Tier-scaled burn duration. T1 = 5s, T10 = 14s. Higher tier
-    // weapons make the residual flame stick around longer for more
-    // total DOT damage.
-    const burnSecondsForTier = 5 + (tier - 1);
+    const burnSecondsForTier = flameBurnSecondsForTier(tier);
 
     // Flame direction from camera
     const origin = camera.position;
     const dir = _flameDirVec.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    const halfAngle = Math.PI / 9; // ~20 degrees — matches visual flame spread
+    const halfAngle = FLAME_HALF_ANGLE;
 
-    // Helper: check if a position is within flame cone
+    // Helper: check if a position is within flame cone. Geometry lives
+    // in @/features/combat so the same test runs on the L2 DO.
+    const flameCone = {
+      originX: origin.x, originY: origin.y, originZ: origin.z,
+      dirX: dir.x, dirY: dir.y, dirZ: dir.z,
+      maxDistance: distance,
+      halfAngle,
+    };
     const isInCone = (pos: THREE.Vector3): boolean => {
       const toEnemy = _flameEnemyDir.current.copy(pos).sub(origin);
       const dist = toEnemy.length();
