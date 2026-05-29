@@ -51,11 +51,14 @@ export function resolveBulletHit(input: BulletHitInput): BulletHitResult {
   const scaled = Math.round(input.baseDamage * velocityRatio);
   const damage = isHeadshot ? scaled * 2 : scaled;
 
-  // Knockback = horizontal component of bullet direction, unit-length.
-  // Vertical kick is reserved for blasts.
-  const hMag = Math.hypot(input.bulletDirX, input.bulletDirZ);
-  const kbX = hMag > 0 ? input.bulletDirX / hMag : 0;
-  const kbZ = hMag > 0 ? input.bulletDirZ / hMag : 0;
+  // Knockback = the X/Z components of the FULL-3D unit-length bullet
+  // direction. Matches legacy behavior: a 45° upward shot imparts
+  // ~0.71 horizontal kb, not the 1.0 a horizontal-only normalize
+  // would give. Vertical kick is reserved for blasts, so Y stays 0.
+  const mag3 = Math.hypot(input.bulletDirX, input.bulletDirY, input.bulletDirZ);
+  const inv = mag3 > 0 ? 1 / mag3 : 0;
+  const kbX = input.bulletDirX * inv;
+  const kbZ = input.bulletDirZ * inv;
 
   return {
     damage,
