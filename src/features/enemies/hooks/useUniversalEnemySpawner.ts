@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
 // Spawn check interval - 1 second as requested
 const SPAWN_CHECK_INTERVAL_MS = 1000;
@@ -266,8 +267,9 @@ export function useUniversalEnemySpawner({
     const getChunk = getChunkCountRef.current;
     const spawn = onSpawnEnemyRef.current;
 
-    // Get player position
-    _playerPos.copy(camera.position);
+    // Get player position via canonical snapshot — post-L2 this is reconciled server state.
+    const snap = getLocalPlayerSnapshot();
+    _playerPos.set(snap.x, snap.y, snap.z);
     const playerChunkX = Math.floor(_playerPos.x / CHUNK_SIZE);
     const playerChunkZ = Math.floor(_playerPos.z / CHUNK_SIZE);
     const distanceFromOrigin = Math.sqrt(_playerPos.x * _playerPos.x + _playerPos.z * _playerPos.z);

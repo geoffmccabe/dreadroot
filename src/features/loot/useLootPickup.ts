@@ -8,6 +8,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import type { DroppedWorldItem } from '@/features/shwarm/types';
 import { useToast } from '@/hooks/use-toast';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
 const PICKUP_RANGE = 2.0; // blocks
 const EXCLUSIVITY_MS = 30_000;
@@ -42,9 +43,12 @@ export function useLootPickup({
     const items = droppedItemsRef.current;
     if (!camera || !items || items.length === 0 || !userId) return;
 
-    const px = camera.position.x;
-    const py = camera.position.y;
-    const pz = camera.position.z;
+    // Position via canonical snapshot — post-L2 this will be
+    // reconciled server state instead of the local camera.
+    const snap = getLocalPlayerSnapshot();
+    const px = snap.x;
+    const py = snap.y;
+    const pz = snap.z;
 
     let closestDist = Infinity;
     let closestItem: DroppedWorldItem | null = null;

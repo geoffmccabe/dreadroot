@@ -6,6 +6,7 @@ const _scratchTracerEnd = new THREE.Vector3();
 
 import { MAX_BULLETS, type BulletLocal } from './fortressScene.constants';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
 export function useFortressShooting({
   checkWispHit,
@@ -35,8 +36,15 @@ export function useFortressShooting({
     direction?: THREE.Vector3,
     isPentabullet?: boolean
   ) => {
-    // Capture origin and direction immediately
-    const capturedOrigin = origin ? origin.clone() : camera.position.clone();
+    // Capture origin and direction immediately. Default origin = local-player
+    // canonical snapshot (post-L2 this is reconciled server position, not camera).
+    let capturedOrigin: THREE.Vector3;
+    if (origin) {
+      capturedOrigin = origin.clone();
+    } else {
+      const snap = getLocalPlayerSnapshot();
+      capturedOrigin = new THREE.Vector3(snap.x, snap.y, snap.z);
+    }
 
     // Block firing inside Fortress Safe Zone
     if (isPointInFSZ(capturedOrigin.x, capturedOrigin.y, capturedOrigin.z)) return;
