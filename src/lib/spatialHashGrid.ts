@@ -13,15 +13,32 @@ const MAX_NEARBY_RESULTS = 128;
 // a Box3 only for voxels actually returned, cached with STABLE identity
 // (never mutated after creation, freed when the block unloads) so any
 // consumer holding a collider reference within a frame stays correct.
-// Same proven scheme as the codebase's numPosKey: coords in [-32768, 32767]
-// (= 2048 chunks of 16 in every direction — far beyond any real world here),
-// keys stay well under Number.MAX_SAFE_INTEGER.
-const xzColKey = (x: number, z: number): number =>
-  (Math.floor(x) + 32768) * 65536 + (Math.floor(z) + 32768);
-const voxKey = (x: number, y: number, z: number): number =>
-  (Math.floor(x) + 32768) * 4294967296 +
-  (Math.floor(y) + 32768) * 65536 +
-  (Math.floor(z) + 32768);
+// Same proven scheme as the codebase's numPosKey: coords in
+// [-COORD_OFFSET, COORD_OFFSET-1] per axis. Keys stay well under
+// Number.MAX_SAFE_INTEGER (current max key ≈ 2^48, safe limit ≈ 2^53).
+//
+// Exported as the canonical encoding so every consumer (chunk loader,
+// shnake AI, fade renderer, instanced atlas) uses the same formula.
+// Pre-refactor 2026-May-29 these constants were re-inlined in 5 separate
+// files; Track 7 of the L123 plan (coord-scale lift) only touches this
+// file now.
+//
+// Track 7 safety contract: lifting COORD_OFFSET past ~100,000 would push
+// the max key past Number.MAX_SAFE_INTEGER. At that point switch to
+// Morton encoding (NEVER BigInt or strings — see L123 plan perf trap #3).
+// Strides are DERIVED from COORD_OFFSET to enforce that they stay in
+// lockstep on any future change.
+export const COORD_OFFSET = 32768;
+const COORD_RANGE = COORD_OFFSET * 2;                       // 65536
+export const NUMPOSKEY_Y_STRIDE = COORD_RANGE;              // 65536
+export const NUMPOSKEY_X_STRIDE = COORD_RANGE * COORD_RANGE; // 4_294_967_296
+
+export const xzPosKey = (x: number, z: number): number =>
+  (Math.floor(x) + COORD_OFFSET) * NUMPOSKEY_Y_STRIDE + (Math.floor(z) + COORD_OFFSET);
+export const numPosKey = (x: number, y: number, z: number): number =>
+  (Math.floor(x) + COORD_OFFSET) * NUMPOSKEY_X_STRIDE +
+  (Math.floor(y) + COORD_OFFSET) * NUMPOSKEY_Y_STRIDE +
+  (Math.floor(z) + COORD_OFFSET);
 
 // NOTE: Cache variables are now PER-INSTANCE (see private fields in class)
 // This is critical when using multiple grids to prevent cross-grid cache pollution.
@@ -399,7 +416,7 @@ class SpatialHashGrid {
   //    Box3 + insert/remove). Cheap: a Set entry, no Box3, no hash cells. ──
   addVoxel(x: number, y: number, z: number): void {
     const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
-    const ck = xzColKey(fx, fz);
+    const ck = xzPosKey(fx, fz);
     let s = this.voxelCols.get(ck);
     if (!s) { s = new Set(); this.voxelCols.set(ck, s); }
     if (!s.has(fy)) {
@@ -412,12 +429,12 @@ class SpatialHashGrid {
 
   removeVoxel(x: number, y: number, z: number): void {
     const fx = Math.floor(x), fy = Math.floor(y), fz = Math.floor(z);
-    const ck = xzColKey(fx, fz);
+    const ck = xzPosKey(fx, fz);
     const s = this.voxelCols.get(ck);
     if (s && s.has(fy)) {
       s.delete(fy);
       if (s.size === 0) this.voxelCols.delete(ck);
-      this.voxelBoxes.delete(voxKey(fx, fy, fz)); // free the lazy box
+      this.voxelBoxes.delete(numPosKey(fx, fy, fz)); // free the lazy box
       this._voxelCount--;
       this.generation++;
       this.invalidateCache();
@@ -438,12 +455,12 @@ class SpatialHashGrid {
       const fx = Math.floor(p.position_x);
       const fy = Math.floor(p.position_y);
       const fz = Math.floor(p.position_z);
-      const ck = xzColKey(fx, fz);
+      const ck = xzPosKey(fx, fz);
       const s = this.voxelCols.get(ck);
       if (s && s.has(fy)) {
         s.delete(fy);
         if (s.size === 0) this.voxelCols.delete(ck);
-        this.voxelBoxes.delete(voxKey(fx, fy, fz));
+        this.voxelBoxes.delete(numPosKey(fx, fy, fz));
         this._voxelCount--;
         actuallyRemoved++;
       }
@@ -455,7 +472,7 @@ class SpatialHashGrid {
   }
 
   hasVoxel(x: number, y: number, z: number): boolean {
-    return this.voxelCols.get(xzColKey(x, z))?.has(Math.floor(y)) ?? false;
+    return this.voxelCols.get(xzPosKey(x, z))?.has(Math.floor(y)) ?? false;
   }
 
   // Append occupied voxels in the query region to nearbyResult. Materializes
@@ -472,11 +489,11 @@ class SpatialHashGrid {
     const bzMax = Math.floor(z + radius) + 1;
     for (let bx = bxMin; bx <= bxMax; bx++) {
       for (let bz = bzMin; bz <= bzMax; bz++) {
-        const col = this.voxelCols.get(xzColKey(bx, bz));
+        const col = this.voxelCols.get(xzPosKey(bx, bz));
         if (!col) continue;
         for (const by of col) {
           if (by + 1 < minY || by > maxY) continue; // vertical overlap
-          const vk = voxKey(bx, by, bz);
+          const vk = numPosKey(bx, by, bz);
           let box = this.voxelBoxes.get(vk);
           if (!box) {
             box = new THREE.Box3();

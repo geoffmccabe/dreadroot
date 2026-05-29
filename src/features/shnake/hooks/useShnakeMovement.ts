@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { PlantedTree } from '@/features/trees/types';
-import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, entityCollisionGrid, numPosKey } from '@/lib/spatialHashGrid';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import type { ShnakeInstance } from '../types';
 
@@ -10,12 +10,7 @@ const DEBUG_SHNAKE = false;
 
 const CHUNK_SIZE = 16;
 
-// Numeric position key — same as useShnakeSystem.ts. Eliminates per-call
-// string allocation in the per-frame shnake movement path (occupied-set
-// rebuild for each shnake's path-find lookahead).
-function key(x: number, y: number, z: number): number {
-  return (x + 32768) * 4294967296 + (y + 32768) * 65536 + (z + 32768);
-}
+const key = numPosKey;
 
 function chunkKey(x: number, z: number) {
   return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;

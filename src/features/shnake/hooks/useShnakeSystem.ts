@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { PlantedTree } from '@/features/trees/types';
 import { decodeBlockType, getBaseTreeBlockType, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
-import { entityCollisionGrid } from '@/lib/spatialHashGrid';
+import { entityCollisionGrid, numPosKey } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import type { ShnakeDefinition, ShnakeInstance, ShnakeSegment } from '../types';
 
@@ -14,15 +14,7 @@ const CHUNK_SIZE = 16;
 const SPAWN_COOLDOWN_MS = 30000; // 30 second cooldown after failed spawn
 const REBUILD_INTERVAL_MS = 5000; // Rebuild index every 5 seconds (was 1s)
 
-// Numeric position key — eliminates per-block template-literal string
-// allocation. Real-world trace 2026-May-19 (Trace-20260519T210931): the
-// rebuild() function below took 679ms × 7 fires (2.0s/22s = 9%) because
-// it iterates ~290k blocks and previously allocated 2-3 fresh strings
-// per block as Map/Set keys. Matches the +32768 offset used by
-// InstancedAtlasBlockGroup.numPosKey for consistency.
-function key(x: number, y: number, z: number): number {
-  return (x + 32768) * 4294967296 + (y + 32768) * 65536 + (z + 32768);
-}
+const key = numPosKey;
 
 function chunkKey(x: number, z: number) {
   return `${Math.floor(x / CHUNK_SIZE)},${Math.floor(z / CHUNK_SIZE)}`;
