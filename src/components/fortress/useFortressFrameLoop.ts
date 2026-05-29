@@ -325,7 +325,6 @@ export function useFortressFrameLoop({
           // Use ray-AABB intersection to prevent bullets tunneling through targets
           // Check the bullet's travel path this frame, not just its current position
           const SHWARM_HALF_SIZE = 0.35; // Slightly larger for forgiving hit detection
-          const BASE_BULLET_DAMAGE = 25;
           // Get the tier's original muzzle velocity for damage scaling
           const tierDef = getDefinitionRef.current(bullet.tier);
           const originalMuzzleVelocity = tierDef.velocity;
@@ -422,14 +421,26 @@ export function useFortressFrameLoop({
                 // Hit shwarm block!
                 hit = true;
                 needsBulletRender = true;
-                
-                // Calculate damage based on current velocity vs original muzzle velocity
-                // If bullet has slowed from ricochets, damage is proportionally reduced
-                const velocityRatio = bullet.speed / originalMuzzleVelocity;
-                const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
-                
+
+                // Damage from the canonical pure resolver — same formula as
+                // the universal registry path + the future L2 DO validator.
+                // Shwarm blocks are point-targets (no sub-zone headshots), so
+                // headFrac = 0; the block's 1m AABB is the hitbox bounds.
+                const hitResolved = resolveBulletHit({
+                  hitX: bx, hitY: by, hitZ: bz,
+                  hitboxBottomY: by - SHWARM_HALF_SIZE,
+                  hitboxTopY:    by + SHWARM_HALF_SIZE,
+                  headFrac: 0,
+                  bulletDirX: bullet.direction.x,
+                  bulletDirY: bullet.direction.y,
+                  bulletDirZ: bullet.direction.z,
+                  bulletSpeed: bullet.speed,
+                  tierMaxSpeed: originalMuzzleVelocity,
+                  baseDamage: BASE_BULLET_DAMAGE,
+                });
+
                 // Apply damage and get actual damage dealt (capped at remaining health)
-                const { actualDamage } = damageBlock(shwarm.id, block.id, scaledDamage);
+                const { actualDamage } = damageBlock(shwarm.id, block.id, hitResolved.damage);
                 
                 // Award points based on actual damage dealt
                 if (actualDamage > 0 && onPointsEarned) {
@@ -462,7 +473,6 @@ export function useFortressFrameLoop({
         // Head takes damage, body ricochets like building blocks
         if (!hit) {
           const SHNAKE_HALF_SIZE = 0.5;
-          const BASE_BULLET_DAMAGE = 25;
           const tierDef = getDefinitionRef.current(bullet.tier);
           const originalMuzzleVelocity = tierDef.velocity;
           
@@ -547,18 +557,33 @@ export function useFortressFrameLoop({
                     // HEAD: takes damage, bullet destroyed
                     hit = true;
                     needsBulletRender = true;
-                    
-                    const velocityRatio = bullet.speed / originalMuzzleVelocity;
-                    const scaledDamage = Math.round(BASE_BULLET_DAMAGE * velocityRatio);
-                    
+
+                    // Damage from the canonical pure resolver — same formula
+                    // as the universal registry path + the future L2 DO
+                    // validator. Shnake head is the entire top segment, so
+                    // headFrac = 0 (no sub-zone bonus).
+                    const hitResolved = resolveBulletHit({
+                      hitX, hitY, hitZ,
+                      hitboxBottomY: seg.y,
+                      hitboxTopY:    seg.y + 1,
+                      headFrac: 0,
+                      bulletDirX: bullet.direction.x,
+                      bulletDirY: bullet.direction.y,
+                      bulletDirZ: bullet.direction.z,
+                      bulletSpeed: bullet.speed,
+                      tierMaxSpeed: originalMuzzleVelocity,
+                      baseDamage: BASE_BULLET_DAMAGE,
+                    });
+                    const scaledDamage = hitResolved.damage;
+
                     const { killedHead, killedEntire, tier: shnakeTier } = damageShnakeHead(shnake.id, scaledDamage);
-                    
+
                     // Initialize revenge tracking - shnake will chase player until it deals this damage back
                     initializeShnakeRevenge(shnake.id, scaledDamage);
-                    
+
                     // Trigger damage flash (3 flashes over 1 second)
                     shnakeRendererRef.current?.triggerDamageFlash(shnake.id);
-                    
+
                     // Award points for damage
                     if (onPointsEarned) {
                       onPointsEarned(scaledDamage);
