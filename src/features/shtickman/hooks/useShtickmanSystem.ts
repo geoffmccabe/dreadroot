@@ -19,6 +19,7 @@ import {
 } from '../constants';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHTICKMAN_HITBOX_RADIUS } from '../constants';
 import { pathfindingService } from '@/lib/pathfinding';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -176,23 +177,16 @@ export function useShtickmanSystem({
       return null;
     }
 
-    const camera = cameraRef.current;
-    if (!camera) {
-      return null;
-    }
-
-    // Spawn in front of player
-    const forward = new THREE.Vector3(0, 0, -1);
-    forward.applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
-
+    // Spawn in front of player using snapshot yaw.
+    const p = getLocalPlayerSnapshot();
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
     const spawnDist = SPAWN_MIN_DISTANCE + Math.random() * (SPAWN_MAX_DISTANCE - SPAWN_MIN_DISTANCE);
-    const worldX = camera.position.x + forward.x * spawnDist + (Math.random() - 0.5) * 4;
-    const worldZ = camera.position.z + forward.z * spawnDist + (Math.random() - 0.5) * 4;
+    const worldX = p.x + fx * spawnDist + (Math.random() - 0.5) * 4;
+    const worldZ = p.z + fz * spawnDist + (Math.random() - 0.5) * 4;
 
     return spawnShtickmanAt(definition, worldX, worldZ);
-  }, [cameraRef, definitions, getDefinitionByTier, spawnShtickmanAt]);
+  }, [definitions, getDefinitionByTier, spawnShtickmanAt]);
 
   /**
    * Ensure at least one shtickman exists
@@ -241,14 +235,12 @@ export function useShtickmanSystem({
 
       // Play death sound if available
       if (shtickman.definition.death_sound_url) {
-        const camera = cameraRef.current;
-        if (camera) {
-          const dx = shtickman.position.x - camera.position.x;
-          const dy = shtickman.position.y - camera.position.y;
-          const dz = shtickman.position.z - camera.position.z;
-          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          playSpatialSound(shtickman.definition.death_sound_url, distance, { baseVolume: 0.7 });
-        }
+        const p = getLocalPlayerSnapshot();
+        const dx = shtickman.position.x - p.x;
+        const dy = shtickman.position.y - p.y;
+        const dz = shtickman.position.z - p.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        playSpatialSound(shtickman.definition.death_sound_url, distance, { baseVolume: 0.7 });
       }
 
       onShtickmanKilled?.(shtickman.definition.tier);
@@ -519,21 +511,17 @@ export function useShtickmanSystem({
     if (!isEnabled) return;
 
     const roarCheck = () => {
-      const camera = cameraRef.current;
-      if (!camera) return;
       if (shtickmenRef.current.length === 0) return;
+      const p = getLocalPlayerSnapshot();
 
       for (const shtickman of shtickmenRef.current) {
         if (!shtickman.isActive) continue;
         if (!shtickman.definition.roar_sound_url) continue;
-
-        // 10% chance per shtickman
         if (Math.random() < ROAR_CHANCE) {
-          const dx = shtickman.position.x - camera.position.x;
-          const dy = shtickman.position.y - camera.position.y;
-          const dz = shtickman.position.z - camera.position.z;
+          const dx = shtickman.position.x - p.x;
+          const dy = shtickman.position.y - p.y;
+          const dz = shtickman.position.z - p.z;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
           playSpatialSound(shtickman.definition.roar_sound_url, distance, { baseVolume: ROAR_VOLUME });
         }
       }
@@ -541,7 +529,7 @@ export function useShtickmanSystem({
 
     const interval = setInterval(roarCheck, ROAR_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isEnabled, cameraRef]);
+  }, [isEnabled]);
 
   /**
    * Proximity sounds - plays when shtickman gets within one chunk of player
@@ -550,18 +538,14 @@ export function useShtickmanSystem({
     if (!isEnabled) return;
 
     const proximityCheck = () => {
-      const camera = cameraRef.current;
-      if (!camera) return;
       if (shtickmenRef.current.length === 0) return;
-
+      const p = getLocalPlayerSnapshot();
       const now = Date.now();
 
       for (const shtickman of shtickmenRef.current) {
         if (!shtickman.isActive) continue;
-
-        // Calculate distance to player
-        const dx = shtickman.position.x - camera.position.x;
-        const dz = shtickman.position.z - camera.position.z;
+        const dx = shtickman.position.x - p.x;
+        const dz = shtickman.position.z - p.z;
         const distance = Math.sqrt(dx * dx + dz * dz);
 
         // Check if within proximity distance (one chunk)

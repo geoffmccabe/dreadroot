@@ -72,6 +72,11 @@ import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle 
 import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { isPointInFlameCone, FLAME_HALF_ANGLE, flameDpsForTier, flameBurnSecondsForTier } from '@/features/combat';
+import { updateLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+
+// Module-level scratch Euler used by the snapshot updater. YXZ order
+// matches the camera quaternion convention.
+const _snapEuler = new THREE.Euler();
 import { getHeightBlocks } from '@/features/shtickman/types';
 
 // Tree system imports
@@ -1294,8 +1299,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // grenade hook accepts a ref it can read at explosion time.
   applyBurnRef.current = burnSystem.applyBurn;
 
-  // Keep the God Map's player-position ref fresh. Camera is the
-  // canonical local player position — cheap copy per frame.
+  // Keep the God Map's player-position ref AND the global player
+  // snapshot fresh. The snapshot is what enemy AI hooks read each
+  // frame — the L2 DO migration will swap its source from camera to
+  // server-reconciled state without changing any AI code.
   useFrame(() => {
     if (playerPositionRef) {
       if (!playerPositionRef.current) {
@@ -1303,6 +1310,14 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       }
       playerPositionRef.current!.copy(camera.position);
     }
+    _snapEuler.setFromQuaternion(camera.quaternion, 'YXZ');
+    updateLocalPlayerSnapshot({
+      x: camera.position.x,
+      y: camera.position.y,
+      z: camera.position.z,
+      yaw: _snapEuler.y,
+      pitch: _snapEuler.x,
+    });
   });
 
   useFrame((_, delta) => {

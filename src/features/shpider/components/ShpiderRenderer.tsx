@@ -22,6 +22,7 @@ import type { ShpiderDefinition, ShpiderInstance } from '../types';
 import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../constants';
 import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import {
   EYELASH_GEOMETRY,
   MANDIBLE_GEOMETRY,
@@ -303,9 +304,14 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
     const now = Date.now();
     const t = clock.elapsedTime;
     const dt = Math.min(delta, 0.1);
-    const playerX = camera.position.x;
-    const playerY = camera.position.y;
-    const playerZ = camera.position.z;
+    // AI target: where to chase. Comes from the canonical player
+    // snapshot so the source can be swapped to the L2 DO later.
+    // Camera-position reads further down stay as-is — those are
+    // per-client LOD / culling decisions.
+    const _localPlayer = getLocalPlayerSnapshot();
+    const playerX = _localPlayer.x;
+    const playerY = _localPlayer.y;
+    const playerZ = _localPlayer.z;
 
     // Per-tier counters — reset every frame so we re-pack densely.
     bodyCounts.current.fill(0);

@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { frameLoop } from '@/lib/frameLoop';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import type { ShwarmInstance } from './useShwarmSystem';
 import type { ShwarmBlock } from '../types';
 import { PLAYER_HIT_RADIUS, PLAYER_HIT_DEBOUNCE_MS, MOVE_TOWARDS_PLAYER, SHWARM_BLOCK_SIZE, MIN_SHWARM_SPACING, MOVEMENT_PHASE_MS, GRAVITY_FALL, GROUND_LEVEL } from '../constants';
@@ -187,10 +188,9 @@ export function useShwarmMovement({
 
     const unregister = frameLoop.register('shwarmInterpolation', (delta) => {
       const shwarms = shwarmsRef.current;
-      const camera = cameraRef.current;
-      if (!shwarms || shwarms.length === 0 || !camera) return;
+      if (!shwarms || shwarms.length === 0) return;
 
-      const playerPos = camera.position;
+      const playerPos = getLocalPlayerSnapshot();
       const now = Date.now();
       const lerpFactor = Math.min(1, LERP_SPEED * delta);
 
@@ -272,10 +272,9 @@ export function useShwarmMovement({
 
     const intervalId = setInterval(() => {
       const shwarms = shwarmsRef.current;
-      const camera = cameraRef.current;
-      if (!shwarms || shwarms.length === 0 || !camera) return;
+      if (!shwarms || shwarms.length === 0) return;
 
-      const playerPos = camera.position;
+      const playerPos = getLocalPlayerSnapshot();
       const now = Date.now();
 
       // Collect all alive blocks for inter-shwarm collision checking

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { PlantedTree } from '@/features/trees/types';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import type { ShnakeInstance } from '../types';
 
 // Debug flag - disable in production for FPS
@@ -221,13 +222,9 @@ export function useShnakeMovement({
       lastTime = now;
       debugLogTimer += dt;
 
-      if (!cameraRef.current) {
-        raf = requestAnimationFrame(step);
-        return;
-      }
-
-      tmpPlayer.current.copy(cameraRef.current.position);
-      const playerChunk = chunkKey(tmpPlayer.current.x, tmpPlayer.current.z);
+      const p = getLocalPlayerSnapshot();
+      tmpPlayer.current.set(p.x, p.y, p.z);
+      const playerChunk = chunkKey(p.x, p.z);
 
       const trees = treesRef.current || [];
       if (!trees.length || shnakesRef.current.length === 0) {

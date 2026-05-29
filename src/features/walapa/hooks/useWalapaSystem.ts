@@ -14,6 +14,7 @@ import {
   WALAPA_SCALE_VARIATION,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '../constants';
@@ -329,21 +330,13 @@ export function useWalapaSystem({
       return null;
     }
 
-    const camera = cameraRef.current;
-    if (!camera) {
-      console.warn('[Walapa] Cannot spawn - no camera');
-      return null;
-    }
-
-    // 6 blocks in front of player (horizontal only)
-    const forward = new THREE.Vector3(0, 0, -1);
-    forward.applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
-
-    const spawnX = camera.position.x + forward.x * 6;
-    const spawnZ = camera.position.z + forward.z * 6;
-    let spawnY = camera.position.y + 6; // 6 blocks above
+    // 6 blocks in front of player (horizontal only) via snapshot yaw.
+    const p = getLocalPlayerSnapshot();
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    const spawnX = p.x + fx * 6;
+    const spawnZ = p.z + fz * 6;
+    let spawnY = p.y + 6; // 6 blocks above
 
     // Search upward if colliders are in the way (up to 500 blocks)
     const MAX_SEARCH_HEIGHT = 500;
@@ -509,18 +502,19 @@ export function useWalapaSystem({
           walapa.pathWaypoints = [];
 
           // Play arrival sound (ALWAYS when arriving at a tree)
-          const camera = cameraRef.current;
-          if (camera) {
-            const distance = walapa.position.distanceTo(camera.position);
-            if (distance < 150) {
-              playSpatialSound(WALAPA_SOUND_URL, distance, { baseVolume: WALAPA_SOUND_VOLUME });
-            }
+          const p = getLocalPlayerSnapshot();
+          const ddx = walapa.position.x - p.x;
+          const ddy = walapa.position.y - p.y;
+          const ddz = walapa.position.z - p.z;
+          const distance = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
+          if (distance < 150) {
+            playSpatialSound(WALAPA_SOUND_URL, distance, { baseVolume: WALAPA_SOUND_VOLUME });
           }
           break;
         }
       }
     }
-  }, [isEnabled, findRandomTree, getEligibleTrees, cameraRef]);
+  }, [isEnabled, findRandomTree, getEligibleTrees]);
 
   /**
    * Add a rider to a walapa
@@ -606,16 +600,14 @@ export function useWalapaSystem({
     if (!isEnabled) return;
 
     const soundCheck = () => {
-      const camera = cameraRef.current;
-      if (!camera) return;
-
+      const p = getLocalPlayerSnapshot();
       for (const walapa of walapasRef.current) {
         if (!walapa.isActive) continue;
-
-        // 1% chance per walapa
         if (Math.random() < WALAPA_RANDOM_SOUND_CHANCE) {
-          const distance = walapa.position.distanceTo(camera.position);
-          // Only play if within reasonable distance (150 blocks)
+          const ddx = walapa.position.x - p.x;
+          const ddy = walapa.position.y - p.y;
+          const ddz = walapa.position.z - p.z;
+          const distance = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
           if (distance < 150) {
             playSpatialSound(WALAPA_SOUND_URL, distance, { baseVolume: WALAPA_SOUND_VOLUME });
           }

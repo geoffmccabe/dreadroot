@@ -14,6 +14,7 @@ import {
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '../constants';
 
 // Head movement type randomizer - 1/3 each
@@ -88,22 +89,16 @@ export function useShombieSystem({
     // Play moans even when natural spawning is disabled (for manually spawned shombies)
 
     const moanCheck = () => {
-      const camera = cameraRef.current;
-      if (!camera) return;
       if (shombiesRef.current.length === 0) return;
+      const p = getLocalPlayerSnapshot();
 
       for (const shombie of shombiesRef.current) {
         if (!shombie.isActive) continue;
-        
-        // 10% chance per zombie
         if (Math.random() < MOAN_CHANCE) {
-          // Calculate distance to camera
-          const dx = shombie.position.x - camera.position.x;
-          const dy = shombie.position.y - camera.position.y;
-          const dz = shombie.position.z - camera.position.z;
+          const dx = shombie.position.x - p.x;
+          const dy = shombie.position.y - p.y;
+          const dz = shombie.position.z - p.z;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          
-          // Play spatial audio with distance-based volume
           playSpatialSound(MOAN_SOUND_URL, distance, { baseVolume: MOAN_VOLUME });
         }
       }
@@ -111,19 +106,18 @@ export function useShombieSystem({
 
     const interval = setInterval(moanCheck, MOAN_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isEnabled, cameraRef]);
+  }, [isEnabled]);
 
   /**
    * Get player's current chunk
    */
   const getPlayerChunk = useCallback((): { x: number; z: number } | null => {
-    const camera = cameraRef.current;
-    if (!camera) return null;
+    const p = getLocalPlayerSnapshot();
     return {
-      x: Math.floor(camera.position.x / CHUNK_SIZE),
-      z: Math.floor(camera.position.z / CHUNK_SIZE),
+      x: Math.floor(p.x / CHUNK_SIZE),
+      z: Math.floor(p.z / CHUNK_SIZE),
     };
-  }, [cameraRef]);
+  }, []);
 
   /**
    * Count shombies in a specific chunk
@@ -221,20 +215,14 @@ export function useShombieSystem({
       return;
     }
 
-    const camera = cameraRef.current;
-    if (!camera) {
-      console.warn('[Shombie] Cannot spawn group - no camera');
-      return;
-    }
-
-    // Spawn in front of player, spread in a semicircle
-    const forward = new THREE.Vector3(0, 0, -1);
-    forward.applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
-
-    const baseX = camera.position.x + forward.x * 8; // 8 blocks in front
-    const baseZ = camera.position.z + forward.z * 8;
+    // Spawn 8 blocks in front of the player, spread in a semicircle.
+    // Forward derived from snapshot yaw — at yaw=0 the player looks
+    // down -Z, so forward = (-sin yaw, 0, -cos yaw).
+    const p = getLocalPlayerSnapshot();
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    const baseX = p.x + fx * 8;
+    const baseZ = p.z + fz * 8;
 
     for (let i = 0; i < spawnCount; i++) {
       // Spread around the base position

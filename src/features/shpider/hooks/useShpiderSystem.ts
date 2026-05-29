@@ -19,6 +19,7 @@ import {
 } from '../lib/deathFragments';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
 // Capped at 50 because per-frame AI cost is O(N²) in the active spider
 // count (stepShpiderHopAI iterates the full `others` list for spacing
@@ -93,13 +94,12 @@ export function useShpiderSystem({
 
   /** Current chunk the player is standing in. */
   const getPlayerChunk = useCallback(() => {
-    const cam = cameraRef.current;
-    if (!cam) return null;
+    const p = getLocalPlayerSnapshot();
     return {
-      x: Math.floor(cam.position.x / CHUNK_SIZE),
-      z: Math.floor(cam.position.z / CHUNK_SIZE),
+      x: Math.floor(p.x / CHUNK_SIZE),
+      z: Math.floor(p.z / CHUNK_SIZE),
     };
-  }, [cameraRef]);
+  }, []);
 
   /** Spawn one shpider at an exact world position.
    *  Pass `petOwnerUserId` to spawn it as a pet — pets target hostile
@@ -180,15 +180,14 @@ export function useShpiderSystem({
       console.warn('[Shpider] No definition for tier', tier);
       return;
     }
-    const camera = cameraRef.current;
-    if (!camera) return;
-
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
-
-    const baseX = camera.position.x + forward.x * 8;
-    const baseZ = camera.position.z + forward.z * 8;
+    // Spawn 8m in front of where the player is facing. Forward derived
+    // from snapshot yaw — at yaw=0 the player looks down -Z, so
+    // forward = (-sin yaw, 0, -cos yaw).
+    const p = getLocalPlayerSnapshot();
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    const baseX = p.x + fx * 8;
+    const baseZ = p.z + fz * 8;
 
     for (let i = 0; i < count; i++) {
       const angle = (Math.random() - 0.5) * Math.PI;
@@ -196,7 +195,7 @@ export function useShpiderSystem({
       spawnShpiderAt(definition, baseX + Math.cos(angle) * radius, baseZ + Math.sin(angle) * radius);
     }
     console.log(`[Shpider] Spawned ${count} tier-${tier} shpiders`);
-  }, [definitions, cameraRef, spawnShpiderAt]);
+  }, [definitions, spawnShpiderAt]);
 
   /** Remove a shpider by id (used by combat). */
   const removeShpider = useCallback((id: string) => {
