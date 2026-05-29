@@ -324,43 +324,15 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
     for (const s of list) {
       if (!s.isActive) continue;
 
-      // === Target selection. Wild shpiders chase the local player.
-      //     Pets chase the nearest huntable enemy (any monster except
-      //     other pets, shnakes, and shtickmen). If no enemy is in
-      //     range, the pet falls back to the player position — the
-      //     local player IS the owner (multiplayer pet visibility for
-      //     non-owner clients is a later phase), so this makes the
-      //     pet "follow me" when there's nothing to fight.
-      let tgtX = playerX, tgtY = playerY, tgtZ = playerZ;
-      const isPet = !!s.petOwnerUserId;
-      if (isPet) {
-        let bestDistSq = Infinity;
-        for (const adapter of enemyCombatRegistry.getAdapters()) {
-          // Friendly / non-aggro enemy classes opt out via the
-          // petAttackable=false flag (shnakes, shtickmen).
-          if (adapter.petAttackable === false) continue;
-          const aType = adapter.type;
-          const enemies = adapter.getActiveEnemies();
-          for (const enemy of enemies) {
-            // Don't target self / other pets — friendly fire is bad.
-            if (aType === 'shpider' && (enemy as any).petOwnerUserId) continue;
-            const hb = adapter.getHitbox(enemy);
-            if (!hb) continue;
-            const ddx = hb.centerX - s.position.x;
-            const ddz = hb.centerZ - s.position.z;
-            const dsq = ddx*ddx + ddz*ddz;
-            if (dsq < bestDistSq) {
-              bestDistSq = dsq;
-              tgtX = hb.centerX;
-              tgtY = (hb.bottomY + hb.topY) * 0.5;
-              tgtZ = hb.centerZ;
-            }
-          }
-        }
-      }
+      // === Target selection — bound at spawn time (wild = chase
+      //     player; pet = nearest huntable enemy, fallback owner).
+      //     No per-frame branching on instance type.
+      const target = s.targetProvider
+        ? s.targetProvider(s)
+        : { x: playerX, y: playerY, z: playerZ };
 
       // === AI tick. Mutates position/rotation/surfaceNormal. ===
-      stepShpiderHopAI(s, { now, dt, playerX: tgtX, playerY: tgtY, playerZ: tgtZ, others: list });
+      stepShpiderHopAI(s, { now, dt, playerX: target.x, playerY: target.y, playerZ: target.z, others: list });
 
       // === Touch attack. If the shpider's center is within
       //     SHPIDER_ATTACK_RANGE of the player (3D distance) and the

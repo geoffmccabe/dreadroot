@@ -149,4 +149,10 @@ export interface ShpiderInstance {
   //                      kept for forensic/debug.
   petOwnerUserId?: string | null;
   eggInventoryRowId?: string | null;
+
+  /** Picks the world position the AI should aim its next hop at.
+   *  Wild shpiders use chaseLocalPlayer; pets use
+   *  petTargetNearestHostile. Stored once at spawn so the per-frame
+   *  loop can call it without branching on instance type. */
+  targetProvider?: (s: ShpiderInstance) => { x: number; y: number; z: number };
 }

@@ -73,6 +73,7 @@ import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { isPointInFlameCone, FLAME_HALF_ANGLE, flameDpsForTier, flameBurnSecondsForTier } from '@/features/combat';
 import { updateLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { usePlayerCombatAdapter } from '@/features/players/combat/PlayerCombatAdapter';
 
 // Module-level scratch Euler used by the snapshot updater. YXZ order
 // matches the camera quaternion convention.
@@ -503,6 +504,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     onShombieKilled,
     playerLevel,
   });
+
+  // PvP combat adapter stub — no-op until PLAYER_PVP_ADAPTER_ENABLED
+  // is flipped on, but the call site lives here for the L2 migration.
+  usePlayerCombatAdapter(currentUserId ?? null);
 
   // Shpider system — Phase 3 static. Spawn via Ctrl+P (admin) or
   // window.__spawnShpiders(tier, count) in the console.

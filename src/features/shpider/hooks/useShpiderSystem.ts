@@ -20,6 +20,7 @@ import {
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { chaseLocalPlayer, petTargetNearestHostile } from '../lib/targetSelection';
 
 // Capped at 50 because per-frame AI cost is O(N²) in the active spider
 // count (stepShpiderHopAI iterates the full `others` list for spacing
@@ -166,6 +167,10 @@ export function useShpiderSystem({
       surfaceNormal: new THREE.Vector3(0, 1, 0),
       petOwnerUserId: petOwnerUserId ?? null,
       eggInventoryRowId: eggInventoryRowId ?? null,
+      // Target provider bound once at spawn — pets hunt hostiles,
+      // wild shpiders chase the player. Renderer just calls this each
+      // frame; no per-frame branching on instance type.
+      targetProvider: petOwnerUserId ? petTargetNearestHostile : chaseLocalPlayer,
     };
 
     shpidersRef.current = [...shpidersRef.current, instance];
