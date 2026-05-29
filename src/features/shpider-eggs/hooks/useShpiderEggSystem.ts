@@ -9,6 +9,24 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { stepEggPhysics, type VoxelCollider, type EnemyColliderSource } from '@/features/combat';
+
+// Pure-physics function adapters around our client-side singletons.
+// On the L2 DO the same physics function will receive different
+// implementations of these interfaces backed by server state.
+const _voxelCollider: VoxelCollider = {
+  hasVoxel: (ix, iy, iz) => worldCollisionGrid.hasVoxel(ix, iy, iz),
+};
+const _enemyColliderSource: EnemyColliderSource = {
+  forEachHitbox(cb) {
+    for (const adapter of enemyCombatRegistry.getAdapters()) {
+      for (const enemy of adapter.getActiveEnemies()) {
+        const hb = adapter.getHitbox(enemy);
+        if (hb) cb(hb);
+      }
+    }
+  },
+};
 import { ShpiderEggInstance } from '../types';
 import {
   EGG_THROW_SPEED, EGG_THROW_UP, EGG_GRAVITY, EGG_BOUNCE_DAMP,
@@ -84,100 +102,33 @@ export function useShpiderEggSystem({
       const e = list[i];
       if (e.hatched) continue;
 
-      // Integrate
-      e.velocity.y -= EGG_GRAVITY * stepDt;
-      const nextX = e.position.x + e.velocity.x * stepDt;
-      const nextY = e.position.y + e.velocity.y * stepDt;
-      const nextZ = e.position.z + e.velocity.z * stepDt;
-      let px = nextX, py = nextY, pz = nextZ;
-      const r = EGG_VISUAL_RADIUS;
+      // Physics + rest accumulation extracted to @/features/combat so
+      // the same step runs on the L2 DO. restAccumSec is incremented
+      // inside the step; the hatch trigger stays in this caller.
+      stepEggPhysics(
+        e,
+        stepDt,
+        _voxelCollider,
+        _enemyColliderSource,
+        {
+          gravity: EGG_GRAVITY,
+          bounceDamp: EGG_BOUNCE_DAMP,
+          rollFrictionPerSec: EGG_ROLL_FRICTION_PER_SEC,
+          visualRadius: EGG_VISUAL_RADIUS,
+          restSpeed: EGG_REST_SPEED,
+        },
+      );
 
-      // Y collision (floor / ceiling)
-      const yCellNext = Math.floor(nextY - r);
-      if (e.velocity.y < 0 && worldCollisionGrid.hasVoxel(Math.floor(e.position.x), yCellNext, Math.floor(e.position.z))) {
-        py = yCellNext + 1 + r + 0.001;
-        e.velocity.y = -e.velocity.y * EGG_BOUNCE_DAMP;
-        e.velocity.x *= 0.8;
-        e.velocity.z *= 0.8;
-      } else if (e.velocity.y > 0 && worldCollisionGrid.hasVoxel(Math.floor(e.position.x), Math.floor(nextY + r), Math.floor(e.position.z))) {
-        py = Math.floor(nextY + r) - r - 0.001;
-        e.velocity.y = -e.velocity.y * EGG_BOUNCE_DAMP;
-      } else if (nextY - r < 0) {
-        py = r + 0.001;
-        e.velocity.y = -e.velocity.y * EGG_BOUNCE_DAMP;
-        e.velocity.x *= 0.8;
-        e.velocity.z *= 0.8;
-      }
-      // X / Z walls
-      if (e.velocity.x !== 0) {
-        const xCell = Math.floor(e.velocity.x > 0 ? nextX + r : nextX - r);
-        if (worldCollisionGrid.hasVoxel(xCell, Math.floor(py), Math.floor(e.position.z))) {
-          px = e.position.x;
-          e.velocity.x = -e.velocity.x * EGG_BOUNCE_DAMP;
-        }
-      }
-      if (e.velocity.z !== 0) {
-        const zCell = Math.floor(e.velocity.z > 0 ? nextZ + r : nextZ - r);
-        if (worldCollisionGrid.hasVoxel(Math.floor(px), Math.floor(py), zCell)) {
-          pz = e.position.z;
-          e.velocity.z = -e.velocity.z * EGG_BOUNCE_DAMP;
-        }
-      }
-
-      // Entity bounce (same shape as grenade) — bounce off enemy cylinders
-      for (const adapter of enemyCombatRegistry.getAdapters()) {
-        for (const enemy of adapter.getActiveEnemies()) {
-          const hb = adapter.getHitbox(enemy);
-          if (!hb) continue;
-          if (py + r < hb.bottomY || py - r > hb.topY) continue;
-          const dx = px - hb.centerX;
-          const dz = pz - hb.centerZ;
-          const distSq = dx * dx + dz * dz;
-          const reach = hb.radius + r;
-          if (distSq > reach * reach) continue;
-          const dist = Math.sqrt(distSq) || 0.001;
-          const nx = dx / dist, nz = dz / dist;
-          px = hb.centerX + nx * (reach + 0.001);
-          pz = hb.centerZ + nz * (reach + 0.001);
-          const vDotN = e.velocity.x * nx + e.velocity.z * nz;
-          if (vDotN < 0) {
-            e.velocity.x -= 2 * vDotN * nx;
-            e.velocity.z -= 2 * vDotN * nz;
-            e.velocity.x *= EGG_BOUNCE_DAMP;
-            e.velocity.z *= EGG_BOUNCE_DAMP;
-          }
-        }
-      }
-
-      e.position.set(px, py, pz);
-
-      // Friction while grounded so the egg comes to rest.
-      const grounded = Math.abs(e.velocity.y) < 1.5
-        && (py - r <= 0.05
-            || worldCollisionGrid.hasVoxel(Math.floor(px), Math.floor(py - r - 0.05), Math.floor(pz)));
-      if (grounded) {
-        const decay = Math.pow(EGG_ROLL_FRICTION_PER_SEC, stepDt);
-        e.velocity.x *= decay;
-        e.velocity.z *= decay;
-        if (e.velocity.y < 0) e.velocity.y = 0;
-      }
-
-      // Rest detection — hatch when speed stays under threshold long enough.
-      const speed = Math.hypot(e.velocity.x, e.velocity.y, e.velocity.z);
-      if (speed < EGG_REST_SPEED && grounded) {
-        e.restAccumSec += stepDt;
-        if (e.restAccumSec >= EGG_REST_HATCH_SEC) {
-          e.hatched = true;
-          onHatch?.({
-            tier: e.tier,
-            position: e.position.clone(),
-            eggInventoryRowId: e.eggInventoryRowId,
-          });
-          hatches.push({ tier: e.tier, position: e.position.clone() });
-          continue; // drop from list
-        }
-      } else {
-        e.restAccumSec = 0;
+      // Hatch when rest accumulator passes the threshold.
+      if (e.restAccumSec >= EGG_REST_HATCH_SEC) {
+        e.hatched = true;
+        onHatch?.({
+          tier: e.tier,
+          position: e.position.clone(),
+          eggInventoryRowId: e.eggInventoryRowId,
+        });
+        hatches.push({ tier: e.tier, position: e.position.clone() });
+        continue; // drop from list
       }
 
       list[writeIdx++] = e;

@@ -33,7 +33,24 @@ import {
 } from '../constants';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
-import { resolveBlastHit } from '@/features/combat';
+import { resolveBlastHit, stepGrenadePhysics, type VoxelCollider, type EnemyColliderSource } from '@/features/combat';
+
+// Pure-physics function adapters around our client-side singletons.
+// On the L2 DO the same physics function will receive different
+// implementations of these interfaces backed by server state.
+const _voxelCollider: VoxelCollider = {
+  hasVoxel: (ix, iy, iz) => worldCollisionGrid.hasVoxel(ix, iy, iz),
+};
+const _enemyColliderSource: EnemyColliderSource = {
+  forEachHitbox(cb) {
+    for (const adapter of enemyCombatRegistry.getAdapters()) {
+      for (const enemy of adapter.getActiveEnemies()) {
+        const hb = adapter.getHitbox(enemy);
+        if (hb) cb(hb);
+      }
+    }
+  },
+};
 import { playThrowSound } from '../lib/explosionSound';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import type { UniversalFlameRendererHandle } from '@/components/fortress/UniversalFlameRenderer';
@@ -170,117 +187,23 @@ export function useGrenadeSystem({
         continue;
       }
 
-      // Integrate.
-      g.velocity.y -= GRENADE_GRAVITY * stepDt;
-      const nextX = g.position.x + g.velocity.x * stepDt;
-      const nextY = g.position.y + g.velocity.y * stepDt;
-      const nextZ = g.position.z + g.velocity.z * stepDt;
-
-      // Simple voxel collision: probe each axis independently so we
-      // can bounce off walls and roll along floors without getting
-      // stuck in corners.
-      let px = nextX;
-      let py = nextY;
-      let pz = nextZ;
-
-      const r = GRENADE_VISUAL_RADIUS;
-
-      // Y first (most important — produces the bounce off floor).
-      const yCellNext = Math.floor(nextY - r);
-      if (g.velocity.y < 0 && worldCollisionGrid.hasVoxel(Math.floor(g.position.x), yCellNext, Math.floor(g.position.z))) {
-        // Snap to top of voxel, dampen Y velocity.
-        py = yCellNext + 1 + r + 0.001;
-        g.velocity.y = -g.velocity.y * GRENADE_BOUNCE_DAMP;
-        // Also dampen horizontal each bounce a bit.
-        g.velocity.x *= 0.8;
-        g.velocity.z *= 0.8;
-      } else if (g.velocity.y > 0 && worldCollisionGrid.hasVoxel(Math.floor(g.position.x), Math.floor(nextY + r), Math.floor(g.position.z))) {
-        // Hit a ceiling.
-        py = Math.floor(nextY + r) - r - 0.001;
-        g.velocity.y = -g.velocity.y * GRENADE_BOUNCE_DAMP;
-      } else if (nextY - r < 0) {
-        // World floor.
-        py = r + 0.001;
-        g.velocity.y = -g.velocity.y * GRENADE_BOUNCE_DAMP;
-        g.velocity.x *= 0.8;
-        g.velocity.z *= 0.8;
-      }
-
-      // X-axis wall.
-      if (g.velocity.x !== 0) {
-        const xCell = Math.floor(g.velocity.x > 0 ? nextX + r : nextX - r);
-        if (worldCollisionGrid.hasVoxel(xCell, Math.floor(py), Math.floor(g.position.z))) {
-          px = g.position.x;
-          g.velocity.x = -g.velocity.x * GRENADE_BOUNCE_DAMP;
-        }
-      }
-      // Z-axis wall.
-      if (g.velocity.z !== 0) {
-        const zCell = Math.floor(g.velocity.z > 0 ? nextZ + r : nextZ - r);
-        if (worldCollisionGrid.hasVoxel(Math.floor(px), Math.floor(py), zCell)) {
-          pz = g.position.z;
-          g.velocity.z = -g.velocity.z * GRENADE_BOUNCE_DAMP;
-        }
-      }
-
-      // Entity collision: bounce off enemy cylinders (shpiders,
-      // shombies, walapas, etc.). World blocks already handled above;
-      // this pass uses the EnemyCombatRegistry hitboxes as colliders
-      // so a grenade can't pass through an enemy on its way to the
-      // ground. Sphere-vs-cylinder horizontal test, reflect XZ
-      // velocity outward, dampen the bounce.
-      for (const adapter of enemyCombatRegistry.getAdapters()) {
-        for (const enemy of adapter.getActiveEnemies()) {
-          const hb = adapter.getHitbox(enemy);
-          if (!hb) continue;
-          // Vertical overlap check first.
-          if (py + r < hb.bottomY || py - r > hb.topY) continue;
-          // Horizontal distance vs. sum of radii.
-          const dx = px - hb.centerX;
-          const dz = pz - hb.centerZ;
-          const distSq = dx * dx + dz * dz;
-          const reach = hb.radius + r;
-          if (distSq > reach * reach) continue;
-          // Push grenade out along the outward normal, reflect XZ
-          // velocity, dampen so the bounce isn't huge.
-          const dist = Math.sqrt(distSq) || 0.001;
-          const nx = dx / dist;
-          const nz = dz / dist;
-          px = hb.centerX + nx * (reach + 0.001);
-          pz = hb.centerZ + nz * (reach + 0.001);
-          // Reflect: v -= 2 * (v · n) * n
-          const vDotN = g.velocity.x * nx + g.velocity.z * nz;
-          if (vDotN < 0) {
-            g.velocity.x -= 2 * vDotN * nx;
-            g.velocity.z -= 2 * vDotN * nz;
-            g.velocity.x *= GRENADE_BOUNCE_DAMP;
-            g.velocity.z *= GRENADE_BOUNCE_DAMP;
-          }
-        }
-      }
-
-      g.position.set(px, py, pz);
-
-      // Switch to "rolling" once we've come to rest vertically and
-      // horizontal velocity is small — applies ground friction so
-      // the grenade visibly comes to a stop instead of zooming.
-      const grounded = Math.abs(g.velocity.y) < 1.5
-        && (py - r <= 0.05
-            || worldCollisionGrid.hasVoxel(Math.floor(px), Math.floor(py - r - 0.05), Math.floor(pz)));
-      if (grounded) {
-        const speed = Math.hypot(g.velocity.x, g.velocity.z);
-        g.isRolling = speed < GRENADE_ROLL_THRESHOLD;
-        if (g.isRolling) {
-          // Friction: exponential decay at FRICTION_PER_SEC.
-          const decay = Math.pow(GRENADE_ROLL_FRICTION_PER_SEC, stepDt);
-          g.velocity.x *= decay;
-          g.velocity.z *= decay;
-          // Stop the bounce drift on Y while rolling.
-          if (g.velocity.y < 0) g.velocity.y = 0;
-        }
-      } else {
-        g.isRolling = false;
-      }
+      // Physics integration extracted to @/features/combat so the
+      // same step function will run on the L2 DO. The voxel + entity
+      // colliders are passed in as plain interfaces so we don't drag
+      // the client-specific singletons across the boundary.
+      stepGrenadePhysics(
+        g,
+        stepDt,
+        _voxelCollider,
+        _enemyColliderSource,
+        {
+          gravity: GRENADE_GRAVITY,
+          bounceDamp: GRENADE_BOUNCE_DAMP,
+          rollFrictionPerSec: GRENADE_ROLL_FRICTION_PER_SEC,
+          rollThreshold: GRENADE_ROLL_THRESHOLD,
+          visualRadius: GRENADE_VISUAL_RADIUS,
+        },
+      );
 
       // Keep the grenade.
       list[writeIdx++] = g;

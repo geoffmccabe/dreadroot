@@ -11,7 +11,7 @@ import { getSoundUrl } from '@/hooks/useGameSounds';
 import { entityCollisionGrid, worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 import { enemyCombatRegistry, type RaycastResult } from '@/features/enemies/combat/EnemyCombatRegistry';
-import { resolveBulletHit, BASE_BULLET_DAMAGE } from '@/features/combat';
+import { resolveBulletHit, BASE_BULLET_DAMAGE, stepBulletPhysics } from '@/features/combat';
 
 const _raycastResult: RaycastResult = { adapter: null, enemy: null, t: 0, hitX: 0, hitY: 0, hitZ: 0 };
 import { startPerfStallObservers, stopPerfStallObservers } from '@/lib/perfStallObservers';
@@ -258,13 +258,10 @@ export function useFortressFrameLoop({
       const prevY = bullet.position.y;
       const prevZ = bullet.position.z;
       
-      // Apply gravity to Y velocity
-      bullet.velocityY -= BULLET_GRAVITY * delta;
-      
-      // Update position using projectile physics
-      bullet.position.x += bullet.direction.x * bullet.speed * delta;
-      bullet.position.z += bullet.direction.z * bullet.speed * delta;
-      bullet.position.y += bullet.velocityY * delta;
+      // Physics integration extracted to @/features/combat so the
+      // same step function will run on the L2 DO. life is decremented
+      // here too; the caller still owns the dead-bullet filter below.
+      stepBulletPhysics(bullet, delta, { gravity: BULLET_GRAVITY });
       
       // Add tracer segment only if bullet moved at least 2 meters since last segment
       const lastTracerPos = (bullet as any).lastTracerPos;
@@ -293,8 +290,8 @@ export function useFortressFrameLoop({
         }
       }
       
-      bullet.life -= delta;
-      
+      // (life decremented inside stepBulletPhysics above)
+
       // Store previous pos in bullet for collision check later
       (bullet as any).prevX = prevX;
       (bullet as any).prevY = prevY;
