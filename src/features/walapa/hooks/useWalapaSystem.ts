@@ -358,11 +358,19 @@ export function useWalapaSystem({
   const damageWalapa = useCallback((
     walapaId: string,
     damage: number,
+    knockback?: { dirX: number; dirY: number; dirZ: number; strength: number },
   ): boolean => {
     const walapa = walapasRef.current.find(w => w.id === walapaId);
     if (!walapa || !walapa.isActive) return false;
 
     walapa.currentHealth -= damage;
+    // Knockback — additive impulse on velocity so it composes with
+    // the walapa's existing flight motion instead of overwriting it.
+    if (knockback) {
+      walapa.velocity.x += knockback.dirX * knockback.strength;
+      walapa.velocity.y += knockback.dirY * knockback.strength;
+      walapa.velocity.z += knockback.dirZ * knockback.strength;
+    }
 
     if (walapa.currentHealth <= 0) {
       walapa.isActive = false;
@@ -640,7 +648,19 @@ export function useWalapaSystem({
         };
       },
       applyDamage: (w, info) => {
-        return damageWalapa(w.id, info.damage);
+        // Explosions pass info.bulletSpeed as the falloff-scaled
+        // blast magnitude — same convention shombie/shtickman use.
+        // Bullets use the bullet speed as a small impulse so kills
+        // don't snap-stop the walapa.
+        const kbStrength = info.source === 'explosion'
+          ? (info.bulletSpeed || 1)
+          : Math.max(1, info.bulletSpeed * 0.05);
+        return damageWalapa(w.id, info.damage, {
+          dirX: info.knockbackDirX,
+          dirY: info.knockbackDirY,
+          dirZ: info.knockbackDirZ,
+          strength: kbStrength,
+        });
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
     });

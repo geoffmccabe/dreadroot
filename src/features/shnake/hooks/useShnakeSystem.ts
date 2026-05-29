@@ -551,6 +551,14 @@ export function useShnakeSystem({
         };
       },
       applyDamage: (s, info) => {
+        // Shnakes don't have horizontal velocity (segments are tile-
+        // discrete), but they DO have velocityY for falling physics.
+        // Apply the Y component of the impulse so grenade blasts and
+        // similar effects can flip a shnake upward. X/Z are intentional
+        // no-ops here — see the shnake movement model.
+        if (s.isActive && info.knockbackDirY > 0 && info.bulletSpeed > 0) {
+          s.velocityY = Math.max(s.velocityY, info.knockbackDirY * info.bulletSpeed);
+        }
         const result = damageHead(s.id, info.damage);
         return result.killedEntire;
       },

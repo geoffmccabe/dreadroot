@@ -323,6 +323,11 @@ export function useShwarmSystem({
         };
       },
       applyDamage: (t, info) => {
+        // Shwarm blocks are intentionally STATIC — they don't move
+        // under impulse. Knockback fields in DamageInfo are noted for
+        // adapter-contract completeness but have no physical effect
+        // on a shwarm block. Damage still applies normally.
+        void info.knockbackDirX; void info.knockbackDirY; void info.knockbackDirZ;
         const r = damageBlock(t.shwarmId, t.block.id, info.damage);
         return r.wasKilled;
       },
