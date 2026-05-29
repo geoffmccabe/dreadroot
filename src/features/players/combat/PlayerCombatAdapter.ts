@@ -53,9 +53,12 @@ export function usePlayerCombatAdapter(currentUserId: string | null): void {
       petAttackable: false,
 
       getActiveEnemies: () => {
-        // Single-shot array: just the local player. The L2 migration
-        // will swap this for a zone roster pulled from the server.
-        return [{ id: currentUserId, isLocal: true }];
+        // STUB returns no targets so flipping the flag prematurely
+        // can't damage the local player with their own weapons. The
+        // L2 migration replaces this with a zone roster of REMOTE
+        // players (self excluded — players never fire-on-self
+        // through this adapter).
+        return [];
       },
 
       getId: (p) => p.id,

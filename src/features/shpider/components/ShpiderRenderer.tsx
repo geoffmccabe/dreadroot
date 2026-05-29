@@ -21,7 +21,6 @@ import * as THREE from 'three';
 import type { ShpiderDefinition, ShpiderInstance } from '../types';
 import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../constants';
 import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
-import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import {
   EYELASH_GEOMETRY,
