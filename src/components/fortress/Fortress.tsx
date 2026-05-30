@@ -2140,6 +2140,14 @@ export function Fortress() {
             // position so the killer sees a glowing egg on the ground
             // and picks it up with F — same UX as pet-death drops.
             if (Math.random() < 0.01) {
+              // Resolve item_id for the egg (item_number-style lookup) so
+              // the new world_eggs.item_id column gets populated. Old rows
+              // without it still work via the RPC's tier-fallback.
+              const { data: eggItemRow } = await supabase
+                .from('items')
+                .select('id')
+                .eq('key', `shpider_egg_t${tier}`)
+                .maybeSingle();
               const { error } = await supabase
                 .from('world_eggs' as any)
                 .insert({
@@ -2148,6 +2156,7 @@ export function Fortress() {
                   position_x: x,
                   position_y: y,
                   position_z: z,
+                  item_id: eggItemRow?.id ?? null,
                 } as any);
               if (error) {
                 // world_eggs migration not applied — fall back to direct
@@ -2173,6 +2182,11 @@ export function Fortress() {
             // applied at pickup time). RLS should restrict pickup to
             // the owner — that's enforced by the world_eggs row's
             // owner_user_id column + table RLS policy.
+            const { data: petEggItemRow } = await supabase
+              .from('items')
+              .select('id')
+              .eq('key', `shpider_egg_t${tier}`)
+              .maybeSingle();
             const { error } = await supabase
               .from('world_eggs' as any)
               .insert({
@@ -2181,6 +2195,7 @@ export function Fortress() {
                 position_x: x,
                 position_y: y,
                 position_z: z,
+                item_id: petEggItemRow?.id ?? null,
               } as any);
             if (error) {
               // Table may not be installed yet on this DB. Log but

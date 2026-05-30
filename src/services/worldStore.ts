@@ -413,6 +413,61 @@ export async function grantPoints(
   };
 }
 
+// ── Cooldown drops (D-cooldown) ────────────────────────────────────
+
+export interface EggPickupResult {
+  rows: InventoryRow[];
+  deletedRowIds: string[];
+  deletedWorldEggId: string | null;
+  replayed: boolean;
+}
+
+interface RawEggPickupRpcResult {
+  rows: InventoryRow[];
+  deleted_row_ids?: string[];
+  deleted_world_egg_id?: string | null;
+  replayed: boolean;
+}
+
+/** Atomic world-egg pickup. Server deletes the world row, inserts a
+ *  fresh inventory row, and applies the item's configured pickup
+ *  cooldown — all in one transaction. */
+export async function pickupEgg(
+  worldEggId: string,
+  requestId?: string,
+): Promise<EggPickupResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('pickup_egg', {
+    p_world_egg_id: worldEggId,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as RawEggPickupRpcResult;
+  return {
+    rows: raw.rows ?? [],
+    deletedRowIds: raw.deleted_row_ids ?? [],
+    deletedWorldEggId: raw.deleted_world_egg_id ?? null,
+    replayed: raw.replayed ?? false,
+  };
+}
+
+/** Atomic forge: two source inventory rows of the same item_id become
+ *  one result row of the next tier in the same forge_family. */
+export async function forgeItems(
+  sourceRowIds: string[],
+  resultItemId: string,
+  requestId?: string,
+): Promise<ConsumeResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('forge_items', {
+    p_source_row_ids: sourceRowIds,
+    p_result_item_id: resultItemId,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptConsume(data as RawConsumeRpcResult);
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -438,4 +493,6 @@ export const worldStore = {
   buyBlock,
   grantCurrency,
   grantPoints,
+  pickupEgg,
+  forgeItems,
 };

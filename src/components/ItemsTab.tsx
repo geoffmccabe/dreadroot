@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { worldStore } from '@/services/worldStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -176,26 +177,20 @@ function EggForgePanel({
     setForgingTier(tier);
     try {
       // Pick the 2 rows with the LOWEST cooldown_until so the result
-      // unlocks sooner. The result still inherits MAX of the two.
+      // unlocks sooner. (Server still computes MAX of the two for the
+      // result, so this is purely about which two we offer up.)
       const sorted = [...rows].sort((a, b) => {
         const ca = a.cooldown_until ? new Date(a.cooldown_until).getTime() : 0;
         const cb = b.cooldown_until ? new Date(b.cooldown_until).getTime() : 0;
         return ca - cb;
       });
       const pick = sorted.slice(0, 2);
-      const userId = pick[0].user_id;
-      const tA = pick[0].cooldown_until ? new Date(pick[0].cooldown_until).getTime() : 0;
-      const tB = pick[1].cooldown_until ? new Date(pick[1].cooldown_until).getTime() : 0;
-      const resultCooldown = Math.max(tA, tB);
-      const resultIso = resultCooldown > Date.now()
-        ? new Date(resultCooldown).toISOString()
-        : null;
 
-      // Look up the target tier's item id.
+      // Resolve the result item id (next tier of the same forge_family).
       const nextKey = `shpider_egg_t${tier + 1}`;
       const { data: nextItem, error: lookupErr } = await supabase
         .from('items')
-        .select('id, texture_url')
+        .select('id')
         .eq('key', nextKey)
         .maybeSingle();
       if (lookupErr || !nextItem) {
@@ -203,31 +198,12 @@ function EggForgePanel({
         return;
       }
 
-      // Delete the 2 source rows first.
-      const { error: delErr } = await supabase
-        .from('user_inventory')
-        .delete()
-        .in('id', [pick[0].id, pick[1].id]);
-      if (delErr) {
-        toast.error(`Forge failed: ${delErr.message}`);
-        return;
+      try {
+        await worldStore.forgeItems([pick[0].id, pick[1].id], nextItem.id);
+        onForged(tier, tier + 1);
+      } catch (err: any) {
+        toast.error(`Forge failed: ${err?.message ?? String(err)}`);
       }
-
-      // Insert the result row.
-      const { error: insErr } = await supabase
-        .from('user_inventory')
-        .insert({
-          user_id: userId,
-          item_type: 'item',
-          item_id: nextItem.id,
-          quantity: 1,
-          cooldown_until: resultIso,
-        } as any);
-      if (insErr) {
-        toast.error(`Forge insert failed: ${insErr.message}`);
-        return;
-      }
-      onForged(tier, tier + 1);
     } finally {
       setForgingTier(null);
     }

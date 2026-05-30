@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
+import { worldStore } from '@/services/worldStore';
 
 export interface WorldEgg {
   id: string;
@@ -20,9 +21,6 @@ interface UseWorldEggsOptions {
   userId: string | null;
   cameraRef: React.RefObject<THREE.Camera | null>;
 }
-
-/** Pickup cooldown — spec value, applied at pickup time. */
-const EGG_PICKUP_COOLDOWN_MS = 60 * 60 * 1000;
 
 /** Max world-space distance for "nearby" prompt + F-pickup. */
 export const EGG_PICKUP_REACH = 2.2;
@@ -105,49 +103,20 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
     return best;
   }, [cameraRef]);
 
-  /** Delete the world row and insert a fresh inventory row with a
-   *  1-hour cooldown_until. Returns the picked-up egg or null. */
+  /** Atomic world-egg pickup via worldStore. Server deletes the world
+   *  row, inserts a fresh inventory row, and applies the item's
+   *  configured pickup cooldown in one transaction. */
   const pickupClosestEgg = useCallback(async (): Promise<WorldEgg | null> => {
     const target = findClosestEgg();
     if (!target || !userId) return null;
-    // Look up the item id for this tier.
-    const { data: itemRow, error: itemErr } = await supabase
-      .from('items')
-      .select('id')
-      .eq('key', `shpider_egg_t${target.tier}`)
-      .maybeSingle();
-    if (itemErr || !itemRow) {
-      console.warn('[WorldEggs] no items row for', `shpider_egg_t${target.tier}`);
+    try {
+      await worldStore.pickupEgg(target.id);
+      setEggs(prev => prev.filter(e => e.id !== target.id));
+      return target;
+    } catch (err) {
+      console.warn('[WorldEggs] pickup failed:', err);
       return null;
     }
-    const cooldownIso = new Date(Date.now() + EGG_PICKUP_COOLDOWN_MS).toISOString();
-    // Delete the world row first (owner-scoped via RLS).
-    const { error: delErr } = await supabase
-      .from('world_eggs' as any)
-      .delete()
-      .eq('id', target.id);
-    if (delErr) {
-      console.warn('[WorldEggs] delete failed:', delErr.message);
-      return null;
-    }
-    // Insert a fresh inventory row. Non-stackable so quantity=1 per
-    // row. cooldown_until stays set until the timer clears.
-    const { error: insErr } = await supabase
-      .from('user_inventory')
-      .insert({
-        user_id: userId,
-        item_type: 'item',
-        item_id: itemRow.id,
-        quantity: 1,
-        cooldown_until: cooldownIso,
-      } as any);
-    if (insErr) {
-      console.warn('[WorldEggs] inventory insert failed:', insErr.message);
-      return null;
-    }
-    // Optimistic local removal — realtime DELETE will confirm soon.
-    setEggs(prev => prev.filter(e => e.id !== target.id));
-    return target;
   }, [findClosestEgg, userId]);
 
   return { eggs, eggsRef, findClosestEgg, pickupClosestEgg };
