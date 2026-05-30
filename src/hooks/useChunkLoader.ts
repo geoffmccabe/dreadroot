@@ -15,6 +15,7 @@ import {
   computeSurfaceVisibleBlocks,
   sortBlocksDeterministic,
 } from '@/lib/chunkBinary';
+import { fetchChunksByRadius, fetchChunksBatched } from '@/lib/chunkFetch';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { updateChunkHeightMap, removeChunkHeightMap, clearAllHeightMaps } from '@/lib/chunkHeightMap';
 import * as THREE from 'three';
@@ -696,60 +697,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const minChunkZ = centerChunkZ - radius;
     const maxChunkZ = centerChunkZ + radius;
 
-    // Paginated bounding query for all chunks in radius — with retry
-    const PAGE_SIZE = 1000;
-    let blocks: PlacedBlock[] | null = null;
-    let hitSafetyLimit = false;
-
-    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-      const fetched: PlacedBlock[] = [];
-      hitSafetyLimit = false;
-      let offset = 0;
-      let hasMore = true;
-      let pageError = false;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('placed_blocks')
-          .select('*')
-          .eq('world_id', worldId)
-          .gte('chunk_x', minChunkX)
-          .lte('chunk_x', maxChunkX)
-          .gte('chunk_z', minChunkZ)
-          .lte('chunk_z', maxChunkZ)
-          .range(offset, offset + PAGE_SIZE - 1);
-
-        if (error) {
-          console.error(`[ChunkLoader] loadChunksInRadius page failed at offset ${offset} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, error.message);
-          pageError = true;
-          break;
-        }
-
-        if (data && data.length > 0) {
-          fetched.push(...data);
-          offset += data.length;
-          hasMore = data.length === PAGE_SIZE;
-        } else {
-          hasMore = false;
-        }
-
-        if (offset >= MAX_TOTAL_BLOCKS) {
-          console.warn(`[ChunkLoader] loadChunksInRadius hit ${MAX_TOTAL_BLOCKS} safety limit`);
-          hitSafetyLimit = true;
-          hasMore = false;
-        }
-      }
-
-      if (!pageError) {
-        blocks = fetched;
-        break;
-      }
-
-      // Retry entire fetch
-      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-        await new Promise(r => setTimeout(r, RETRY_BASE_DELAY_MS * (2 ** attempt)));
-      }
-    }
+    const { blocks } = await fetchChunksByRadius(
+      supabase,
+      worldId,
+      { minChunkX, maxChunkX, minChunkZ, maxChunkZ },
+      {
+        pageSize: 1000,
+        maxTotalBlocks: MAX_TOTAL_BLOCKS,
+        maxRetries: MAX_RETRY_ATTEMPTS,
+        retryBaseDelayMs: RETRY_BASE_DELAY_MS,
+      },
+    );
 
     if (!blocks) {
       console.error('All retry attempts failed for loadChunksInRadius');
@@ -1163,92 +1121,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // D-Flow: Start timing fetch phase
       const fetchT0 = performance.now();
 
-      let blocks: PlacedBlock[] = [];
       let fetchFailed = false;
-      const failedChunkCoords: Array<{ x: number; z: number }> = [];
 
-      // Batched RPC fetch: 1-3 calls instead of 100-200 individual queries
-      const RPC_BATCH_SIZE = 50;
-      let useRpcFallback = false;
-
-      for (let i = 0; i < chunksToFetchFromServer.length; i += RPC_BATCH_SIZE) {
-        const batch = chunksToFetchFromServer.slice(i, i + RPC_BATCH_SIZE);
-        const chunkParams = batch.map(({ x, z }) => ({ x, z }));
-
-        const { data, error } = await supabase.rpc('fetch_chunks_batch', {
-          p_world_id: worldId,
-          p_chunks: chunkParams,
-        });
-
-        if (error) {
-          // RPC not available (migration not applied yet) — fall back to per-chunk queries
-          if (error.code === '42883' || error.message?.includes('function') || error.code === 'PGRST202') {
-            console.warn('[ChunkLoader] Batched RPC not available, falling back to per-chunk fetch');
-            useRpcFallback = true;
-            break;
-          }
-          console.error('[ChunkLoader] Batched RPC error:', error.message);
-          // Mark all chunks in this batch as failed
-          for (const { x, z } of batch) {
-            failedChunkCoords.push({ x, z });
-          }
-          continue;
-        }
-
-        if (data && data.length > 0) {
-          // RPC returns rows without created_at/updated_at — add defaults for PlacedBlock compatibility
-          for (let j = 0; j < data.length; j++) {
-            const row = data[j];
-            row.created_at = row.created_at ?? '';
-            row.updated_at = row.updated_at ?? '';
-          }
-          blocks = blocks.concat(data as PlacedBlock[]);
-        }
-      }
-
-      // Fallback: per-chunk individual queries (if RPC not available)
-      if (useRpcFallback) {
-        blocks = [];
-        const PARALLEL_FETCH_LIMIT = 10;
-        for (let i = 0; i < chunksToFetchFromServer.length; i += PARALLEL_FETCH_LIMIT) {
-          const batch = chunksToFetchFromServer.slice(i, i + PARALLEL_FETCH_LIMIT);
-          const batchPromises = batch.map(async ({ x, z }) => {
-            const PAGE_SIZE = 1000;
-            let chunkBlocks: PlacedBlock[] = [];
-            let offset = 0;
-            let hasMore = true;
-            while (hasMore) {
-              const { data: pageData, error: pageErr } = await supabase
-                .from('placed_blocks')
-                .select('*')
-                .eq('world_id', worldId)
-                .eq('chunk_x', x)
-                .eq('chunk_z', z)
-                .range(offset, offset + PAGE_SIZE - 1);
-              if (pageErr) {
-                return { x, z, blocks: null as PlacedBlock[] | null, failed: true };
-              }
-              if (pageData && pageData.length > 0) {
-                chunkBlocks = chunkBlocks.concat(pageData);
-                offset += pageData.length;
-                hasMore = pageData.length === PAGE_SIZE;
-              } else {
-                hasMore = false;
-              }
-              if (offset >= 10000) { hasMore = false; }
-            }
-            return { x, z, blocks: chunkBlocks, failed: false };
-          });
-          const batchResults = await Promise.all(batchPromises);
-          for (const result of batchResults) {
-            if (result.failed || result.blocks === null) {
-              failedChunkCoords.push({ x: result.x, z: result.z });
-            } else {
-              blocks = blocks.concat(result.blocks);
-            }
-          }
-        }
-      }
+      const fetchResult = await fetchChunksBatched(
+        supabase,
+        worldId,
+        chunksToFetchFromServer,
+        { rpcBatchSize: 50, parallelLimit: 10, pageSize: 1000, maxBlocksPerChunk: 10000 },
+      );
+      let blocks: PlacedBlock[] = fetchResult.blocks;
+      const failedChunkCoords: Array<{ x: number; z: number }> = [...fetchResult.failedChunkCoords];
+      const useRpcFallback = fetchResult.usedFallback;
 
       // D-Flow: End fetch timing
       const fetchMs = performance.now() - fetchT0;
