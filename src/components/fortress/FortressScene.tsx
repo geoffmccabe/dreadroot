@@ -103,6 +103,7 @@ import { useSpawnCommands } from '@/features/enemies/hooks/useSpawnCommands';
 // Loot drop system
 import { useDropTableCache } from '@/features/loot/useDropTableCache';
 import { useLootPickup } from '@/features/loot/useLootPickup';
+import { useWorldDrops } from '@/features/loot/useWorldDrops';
 import { DroppedItemRenderer } from './DroppedItemRenderer';
 import type { DroppedWorldItem, ShwarmDefinition } from '@/features/shwarm/types';
 
@@ -284,25 +285,16 @@ export function FortressScene({
   const blocksRef = useRef(allLoadedBlocks);
   blocksRef.current = allLoadedBlocks;
   
-  // Loot drop system
+  // Loot drop system — persistent (L1, world_drops table).
   const { rollDrop, isLoaded: dropTablesLoaded } = useDropTableCache();
-  const [droppedItems, setDroppedItems] = useState<DroppedWorldItem[]>([]);
-  const droppedItemsRef = useRef<DroppedWorldItem[]>([]);
-  useEffect(() => { droppedItemsRef.current = droppedItems; }, [droppedItems]);
-
-  const handleItemPickedUp = useCallback((dropId: string) => {
-    setDroppedItems(prev => prev.filter(i => i.id !== dropId));
-  }, []);
-
-
-
-  const noopAddItem = useCallback(async (_id: string, _qty: number) => false, []);
+  const { drops: droppedItems, dropsRef: droppedItemsRef, spawnDrop, pickupDrop } = useWorldDrops({
+    userId: currentUserId ?? null,
+  });
   useLootPickup({
     droppedItemsRef,
     userId: currentUserId ?? null,
     cameraRef,
-    addItem: addItem ?? noopAddItem,
-    onItemPickedUp: handleItemPickedUp,
+    pickup: pickupDrop,
   });
 
   // Callback when entire shwarm group is killed - play yay sound, notify parent
@@ -332,20 +324,11 @@ export function FortressScene({
         console.warn(`[Loot] Drop rolled successfully but currentUserId is null — skipping`);
         return;
       }
-      const worldItem: DroppedWorldItem = {
-        id: `drop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        itemNumber: drop.itemNumber,
-        itemName: drop.itemName,
-        itemId: drop.itemId,
-        position: blockPosition.clone(),
-        droppedAt: Date.now(),
-        killerUserId: currentUserId,
-        pickedUp: false,
-      };
       console.log(`[Loot] Spawning world item: ${drop.itemName} at (${blockPosition.x.toFixed(1)}, ${blockPosition.y.toFixed(1)}, ${blockPosition.z.toFixed(1)})`);
-      setDroppedItems(prev => [...prev, worldItem]);
+      // Fire-and-forget spawn. Realtime INSERT will populate state.
+      void spawnDrop(drop.itemId, drop.itemNumber, drop.itemName, blockPosition);
     }
-  }, [rollDrop, currentUserId, dropTablesLoaded, shwarmDefinitions]);
+  }, [rollDrop, currentUserId, dropTablesLoaded, shwarmDefinitions, spawnDrop]);
   
   const { shwarms, shwarmsRef, damageBlock, spawnShwarmByTier, spawnShwarmAt } = useShwarmSystem({
     definitions: shwarmDefinitions,

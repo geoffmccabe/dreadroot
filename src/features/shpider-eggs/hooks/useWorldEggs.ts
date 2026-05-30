@@ -25,8 +25,9 @@ interface UseWorldEggsOptions {
 /** Max horizontal (XZ) distance for "nearby" prompt + F-pickup.
  *  Y is excluded so the player's standing-height-above-ground doesn't
  *  eat into the budget — the egg can be on the floor and the player
- *  can be standing right next to it and still pick up. */
-export const EGG_PICKUP_REACH = 2.5;
+ *  can be standing right next to it and still pick up. Generous
+ *  enough that "walking past" picks up. */
+export const EGG_PICKUP_REACH = 4.0;
 
 export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
   const [eggs, setEggs] = useState<WorldEgg[]>([]);

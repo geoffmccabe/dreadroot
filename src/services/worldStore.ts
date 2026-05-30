@@ -522,6 +522,69 @@ export async function ensureTokenBalance(
   return (data as TokenBalanceRow) ?? null;
 }
 
+// ── World drops (D-drops) ───────────────────────────────────────────
+
+export interface WorldDropRow {
+  id: string;
+  item_id: string;
+  killer_user_id: string;
+  position_x: number;
+  position_y: number;
+  position_z: number;
+  dropped_at: string;
+}
+
+export interface SpawnDropResult {
+  row: WorldDropRow | null;
+  replayed: boolean;
+}
+
+export interface PickupDropResult {
+  rows: InventoryRow[];
+  deletedWorldDropId: string | null;
+  replayed: boolean;
+}
+
+export async function spawnWorldDrop(
+  itemId: string,
+  position: { x: number; y: number; z: number },
+  requestId?: string,
+): Promise<SpawnDropResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('spawn_world_drop', {
+    p_item_id: itemId,
+    p_position_x: position.x,
+    p_position_y: position.y,
+    p_position_z: position.z,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as { row: WorldDropRow | null; replayed: boolean };
+  return { row: raw.row, replayed: raw.replayed ?? false };
+}
+
+export async function pickupWorldDrop(
+  dropId: string,
+  requestId?: string,
+): Promise<PickupDropResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('pickup_world_drop', {
+    p_drop_id: dropId,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as {
+    rows: InventoryRow[];
+    deleted_world_drop_id: string | null;
+    replayed: boolean;
+  };
+  return {
+    rows: raw.rows ?? [],
+    deletedWorldDropId: raw.deleted_world_drop_id,
+    replayed: raw.replayed ?? false,
+  };
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -551,4 +614,6 @@ export const worldStore = {
   forgeItems,
   adminGrantInventoryRow,
   ensureTokenBalance,
+  spawnWorldDrop,
+  pickupWorldDrop,
 };

@@ -1,7 +1,13 @@
 /**
  * useLootPickup - F-key proximity pickup for dropped world items.
  * Player must be within 2 blocks and press F to collect.
- * Items are exclusive to the killer for 30 seconds, then available to all.
+ *
+ * Server is authoritative — the `pickup` callback wraps a single
+ * atomic RPC (pickup_world_drop) that deletes the world row and
+ * grants the item to the caller. Anyone can pick up any drop in
+ * range, even during the 30s killer-only visibility window — the
+ * server doesn't enforce killer-exclusivity for pickup, only for
+ * visibility (rendered in DroppedItemRenderer.tsx).
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -11,29 +17,26 @@ import { useToast } from '@/hooks/use-toast';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
 const PICKUP_RANGE = 2.0; // blocks
-const EXCLUSIVITY_MS = 30_000;
 const PICKUP_DEBOUNCE_MS = 500;
 
 interface UseLootPickupOptions {
   droppedItemsRef: React.RefObject<DroppedWorldItem[]>;
   userId: string | null;
   cameraRef: React.RefObject<THREE.Camera>;
-  addItem: (itemId: string, quantity: number) => Promise<boolean>;
-  onItemPickedUp: (dropId: string) => void;
+  /** Server-side atomic pickup. Returns true on success. */
+  pickup: (dropId: string) => Promise<boolean>;
 }
 
 export function useLootPickup({
   droppedItemsRef,
   userId,
   cameraRef,
-  addItem,
-  onItemPickedUp,
+  pickup,
 }: UseLootPickupOptions) {
   const lastPickupRef = useRef(0);
   const { toast } = useToast();
 
   const collectNearbyItem = useCallback(async () => {
-    // Only allow pickup when pointer is locked (game is active)
     if (!document.pointerLockElement) return;
 
     const now = Date.now();
@@ -43,29 +46,18 @@ export function useLootPickup({
     const items = droppedItemsRef.current;
     if (!camera || !items || items.length === 0 || !userId) return;
 
-    // Position via canonical snapshot — post-L2 this will be
-    // reconciled server state instead of the local camera.
     const snap = getLocalPlayerSnapshot();
-    const px = snap.x;
-    const py = snap.y;
-    const pz = snap.z;
+    const px = snap.x, py = snap.y, pz = snap.z;
 
     let closestDist = Infinity;
     let closestItem: DroppedWorldItem | null = null;
 
     for (const item of items) {
       if (item.pickedUp) continue;
-
-      // Exclusivity check
-      if (now - item.droppedAt < EXCLUSIVITY_MS && item.killerUserId !== userId) {
-        continue;
-      }
-
       const dx = item.position.x - px;
       const dy = item.position.y - py;
       const dz = item.position.z - pz;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
       if (dist < PICKUP_RANGE && dist < closestDist) {
         closestDist = dist;
         closestItem = item;
@@ -75,18 +67,16 @@ export function useLootPickup({
     if (!closestItem) return;
 
     lastPickupRef.current = now;
-    closestItem.pickedUp = true; // Immediately mark to prevent double-pickup
+    closestItem.pickedUp = true; // optimistic local guard against double-fire
 
-    const success = await addItem(closestItem.itemId, 1);
+    const success = await pickup(closestItem.id);
     if (success) {
-      onItemPickedUp(closestItem.id);
-      toast({
-        title: `Picked up ${closestItem.itemName}!`,
-      });
+      toast({ title: `Picked up ${closestItem.itemName}!` });
+      // Realtime DELETE will remove the row from droppedItemsRef.
     } else {
-      closestItem.pickedUp = false; // Revert on failure
+      closestItem.pickedUp = false;
     }
-  }, [userId, cameraRef, droppedItemsRef, addItem, onItemPickedUp, toast]);
+  }, [userId, cameraRef, droppedItemsRef, pickup, toast]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
