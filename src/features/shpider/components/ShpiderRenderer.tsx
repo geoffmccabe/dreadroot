@@ -342,6 +342,7 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
       //     definition.damage_per_hit as the scaling factor (no extra
       //     stat needed; can be split out later if tuning demands).
       //     PETS skip touch damage on their owner (the local player).
+      const isPet = s.petOwnerUserId != null;
       const skipPlayerTouch = isPet && s.petOwnerUserId === localUserId;
       if (onPlayerHit && !skipPlayerTouch) {
         const attackDX = playerX - s.position.x;
