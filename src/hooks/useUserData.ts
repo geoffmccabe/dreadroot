@@ -712,7 +712,9 @@ export const useUserData = () => {
     await loadUserData();
   }, [loadUserData]);
 
-  // Collect wisp block (free addition to inventory)
+  // Collect wisp block via L1 Write API. The RPC validates the block
+  // key against the blocks table, handles existing-row lookup, and
+  // increments the count atomically.
   const collectWispBlock = async (blockKey: string) => {
     if (!user?.id) {
       toast({
@@ -724,83 +726,26 @@ export const useUserData = () => {
     }
 
     try {
-      // Verify block exists in blocks table
-      const { data: blockData, error: blockError } = await supabase
-        .from('blocks')
-        .select('id, name')
-        .eq('key', blockKey)
-        .maybeSingle();
-
-      if (blockError) throw blockError;
-      if (!blockData) {
-        toast({
-          title: "Block not found",
-          description: "This block type is not available",
-          variant: "destructive"
+      const result = await worldStore.grantInventoryBlock(blockKey, 1);
+      if (result.rows && result.rows.length > 0) {
+        setInventory(prev => {
+          const next = [...prev];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+          return next;
         });
-        return false;
       }
-
-      // Query database directly to avoid race conditions with local state
-      const { data: existingItems, error: queryError } = await supabase
-        .from('user_inventory')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('item_type', blockKey)
-        .is('item_id', null);
-
-      if (queryError) throw queryError;
-      
-      if (existingItems && existingItems.length > 0) {
-        // Update existing inventory item
-        const existingItem = existingItems[0];
-        const newQuantity = existingItem.quantity + 1;
-        const { error: updateError } = await supabase
-          .from('user_inventory')
-          .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
-          .eq('id', existingItem.id);
-
-        if (updateError) throw updateError;
-        
-        // Update local state
-        setInventory(prev => 
-          prev.map(i => 
-            i.id === existingItem.id 
-              ? { ...i, quantity: newQuantity, updated_at: new Date().toISOString() }
-              : i
-          )
-        );
-      } else {
-        // Create new inventory item for block (item_id is NULL for blocks)
-        const { data: newItem, error: insertError } = await supabase
-          .from('user_inventory')
-          .insert([{
-            user_id: user.id,
-            item_type: blockKey,
-            item_id: null,
-            quantity: 1
-          }])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-        
-        // Update local state
-        if (newItem) {
-          setInventory(prev => [...prev, newItem]);
-        }
-      }
-      
-      console.log(`✨ Wisp collected: +1 ${blockData.name} (${blockKey})`);
-      
+      console.log(`✨ Wisp collected: +1 ${blockKey}`);
       toast({
         title: "Wisp collected!",
         description: `You caught a ${blockKey} wisp! +1 block added to inventory`,
       });
-      
       return true;
-    } catch (error) {
-      console.error('Error collecting wisp:', error);
+    } catch (err) {
+      console.error('[collectWispBlock] grantInventoryBlock failed:', err);
       toast({
         title: "Collection failed",
         description: "Failed to add wisp block to inventory",
@@ -810,7 +755,10 @@ export const useUserData = () => {
     }
   };
 
-  // Return a seed to inventory (after chopping a tree)
+  // Return a seed to inventory (after chopping a tree) via L1 Write API.
+  // We still look up the tier client-side to construct the item_type
+  // (`seed_tier_${tier}`). The RPC validates the seedDefId against
+  // seed_definitions and handles the stack-or-insert.
   const returnSeed = async (seedDefId: string): Promise<boolean> => {
     if (!user?.id) {
       toast({
@@ -822,76 +770,33 @@ export const useUserData = () => {
     }
 
     try {
-      // Get the seed definition to find the item_type key
       const { data: seedDef, error: seedError } = await supabase
         .from('seed_definitions')
-        .select('id, name, tier')
+        .select('tier, name')
         .eq('id', seedDefId)
         .maybeSingle();
-
       if (seedError) throw seedError;
       if (!seedDef) {
         console.warn('Seed definition not found for id:', seedDefId);
         return false;
       }
 
-      // Use seed_definition_id as the item_id for seeds
-      const itemType = `seed_tier_${seedDef.tier}`;
-      const itemId = seedDefId;
-
-      // Query database directly to avoid race conditions
-      const { data: existingItems, error: queryError } = await supabase
-        .from('user_inventory')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('item_id', itemId);
-
-      if (queryError) throw queryError;
-
-      if (existingItems && existingItems.length > 0) {
-        // Update existing inventory item
-        const existingItem = existingItems[0];
-        const newQuantity = existingItem.quantity + 1;
-        const { error: updateError } = await supabase
-          .from('user_inventory')
-          .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
-          .eq('id', existingItem.id);
-
-        if (updateError) throw updateError;
-
-        // Update local state
-        setInventory(prev =>
-          prev.map(i =>
-            i.id === existingItem.id
-              ? { ...i, quantity: newQuantity, updated_at: new Date().toISOString() }
-              : i
-          )
-        );
-      } else {
-        // Create new inventory item for seed
-        const { data: newItem, error: insertError } = await supabase
-          .from('user_inventory')
-          .insert([{
-            user_id: user.id,
-            item_type: itemType,
-            item_id: itemId,
-            quantity: 1
-          }])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        // Update local state
-        if (newItem) {
-          setInventory(prev => [...prev, newItem]);
-        }
+      const result = await worldStore.grantInventorySeed(seedDefId, seedDef.tier, 1);
+      if (result.rows && result.rows.length > 0) {
+        setInventory(prev => {
+          const next = [...prev];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+          return next;
+        });
       }
-
       console.log(`🌱 Seed returned: +1 ${seedDef.name || `Tier ${seedDef.tier}`} seed`);
       return true;
-    } catch (error) {
-      console.error('Error returning seed to inventory:', error);
+    } catch (err) {
+      console.error('[returnSeed] grantInventorySeed failed:', err);
       toast({
         title: "Return failed",
         description: "Failed to return seed to inventory",

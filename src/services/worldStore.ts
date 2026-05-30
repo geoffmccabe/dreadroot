@@ -34,18 +34,25 @@ export interface WriteResult<T> {
   replayed: boolean;
 }
 
-// ── D1: grant_inventory_item ────────────────────────────────────────
+// ── Inventory grants (D1 + D3) ──────────────────────────────────────
+//
+// All three grant flows go through one RPC: grant_inventory_row.
+// The RPC validates by item_type:
+//   • 'item'           — looks up items.key, applies stackable rules
+//   • 'seed_tier_N'    — looks up seed_definitions
+//   • anything else    — treated as a block key, looked up in blocks
+// Stackability: items use the canonical non-stackable list; seeds and
+// blocks always stack.
 
-/** Grant items to the caller's inventory. Server validates auth,
- *  caps quantity, dedupes by request id. Returns the affected
- *  inventory rows (one for stackable, N for non-stackable). */
-export async function grantInventoryItem(
-  itemId: string,
-  quantity: number = 1,
+async function grantInventoryRow(
+  itemType: string,
+  itemId: string | null,
+  quantity: number,
   requestId?: string,
 ): Promise<WriteResult<InventoryRow>> {
   const reqId = requestId ?? crypto.randomUUID();
-  const { data, error } = await supabase.rpc('grant_inventory_item', {
+  const { data, error } = await supabase.rpc('grant_inventory_row', {
+    p_item_type: itemType,
     p_item_id: itemId,
     p_quantity: quantity,
     p_client_request_id: reqId,
@@ -54,16 +61,46 @@ export async function grantInventoryItem(
   return data as WriteResult<InventoryRow>;
 }
 
+/** Grant items from the `items` table (weapons, consumables, etc.). */
+export async function grantInventoryItem(
+  itemId: string,
+  quantity: number = 1,
+  requestId?: string,
+): Promise<WriteResult<InventoryRow>> {
+  return grantInventoryRow('item', itemId, quantity, requestId);
+}
+
+/** Grant a wisp block (uses item_type=blockKey, item_id=null). */
+export async function grantInventoryBlock(
+  blockKey: string,
+  quantity: number = 1,
+  requestId?: string,
+): Promise<WriteResult<InventoryRow>> {
+  return grantInventoryRow(blockKey, null, quantity, requestId);
+}
+
+/** Return a seed to inventory after chopping a tree. Stored as
+ *  item_type=`seed_tier_${tier}`, item_id=seedDefId. */
+export async function grantInventorySeed(
+  seedDefId: string,
+  tier: number,
+  quantity: number = 1,
+  requestId?: string,
+): Promise<WriteResult<InventoryRow>> {
+  return grantInventoryRow(`seed_tier_${tier}`, seedDefId, quantity, requestId);
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
-/** Namespace-style export. Callers can do either:
+/** Namespace-style export. Callers can use either form:
  *    import { worldStore } from '@/services/worldStore';
  *    worldStore.grantInventoryItem(...);
  *  OR:
  *    import { grantInventoryItem } from '@/services/worldStore';
  *    grantInventoryItem(...);
- *  Both forms are supported. New methods land here as they're added
- *  in subsequent Phase D sub-phases. */
+ *  Both supported. New methods land here as Phase D sub-phases ship. */
 export const worldStore = {
   grantInventoryItem,
+  grantInventoryBlock,
+  grantInventorySeed,
 };
