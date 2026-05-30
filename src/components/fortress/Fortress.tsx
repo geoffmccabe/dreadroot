@@ -11,6 +11,7 @@ import { AdminPanel } from '@/components/AdminPanel';
 import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
+import { worldStore } from '@/services/worldStore';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -1188,33 +1189,10 @@ export function Fortress() {
         // Return block to owner's inventory (if owner exists)
         if (ownerId) {
           try {
-            // Check if owner already has this block type in inventory
-            const { data: existingItems, error: queryError } = await supabase
-              .from('user_inventory')
-              .select('id, quantity')
-              .eq('user_id', ownerId)
-              .eq('item_type', blockType)
-              .is('item_id', null);
-
-            if (queryError) {
-              console.warn('[InspectorDelete] Inventory query error:', queryError);
-            } else if (existingItems && existingItems.length > 0) {
-              // Update existing inventory entry
-              await supabase
-                .from('user_inventory')
-                .update({ quantity: existingItems[0].quantity + 1 })
-                .eq('id', existingItems[0].id);
-            } else {
-              // Create new inventory entry
-              await supabase
-                .from('user_inventory')
-                .insert({
-                  user_id: ownerId,
-                  item_type: blockType,
-                  item_id: null,
-                  quantity: 1
-                });
-            }
+            // Server-side admin grant. RPC enforces 'admin' role and
+            // handles the stack-or-insert atomically on the owner's
+            // inventory.
+            await worldStore.adminGrantInventoryRow(ownerId, blockType, null, 1);
           } catch (invError) {
             console.warn('[InspectorDelete] Failed to return to inventory:', invError);
           }

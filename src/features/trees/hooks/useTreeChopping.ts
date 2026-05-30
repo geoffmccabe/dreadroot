@@ -4,6 +4,7 @@
 
 import { useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { worldStore } from '@/services/worldStore';
 import { PlantedTree, SeedDefinition, TreeBlueprint, TreeGrowthOptions } from '../types';
 import { deleteTree } from './useLocalGrowth';
 import { useToast } from '@/hooks/use-toast';
@@ -18,58 +19,21 @@ const CHOP_COOLDOWN_MS = 1000;
 const CHUNK_SIZE = 16;
 
 /**
- * Return a seed to a specific user's inventory (used when admin chops another user's tree)
+ * Return a seed to a specific user's inventory (used when admin chops another user's tree).
+ * Caller must hold the 'admin' app_role — enforced server-side by the RPC.
  */
 export async function returnSeedToUser(seedDefId: string, seedDef: SeedDefinition, targetUserId: string): Promise<boolean> {
   try {
-    const itemType = `seed_tier_${seedDef.tier}`;
-    const itemId = seedDefId;
-
-    // Check if user already has this seed type
-    const { data: existingItems, error: queryError } = await supabase
-      .from('user_inventory')
-      .select('id, quantity')
-      .eq('user_id', targetUserId)
-      .eq('item_type', itemType)
-      .eq('item_id', itemId);
-
-    if (queryError) {
-      console.error('[returnSeedToUser] Query error:', queryError);
-      return false;
-    }
-
-    if (existingItems && existingItems.length > 0) {
-      // Update existing inventory entry
-      const { error: updateError } = await supabase
-        .from('user_inventory')
-        .update({ quantity: existingItems[0].quantity + 1 })
-        .eq('id', existingItems[0].id);
-
-      if (updateError) {
-        console.error('[returnSeedToUser] Update error:', updateError);
-        return false;
-      }
-    } else {
-      // Create new inventory entry
-      const { error: insertError } = await supabase
-        .from('user_inventory')
-        .insert({
-          user_id: targetUserId,
-          item_type: itemType,
-          item_id: itemId,
-          quantity: 1
-        });
-
-      if (insertError) {
-        console.error('[returnSeedToUser] Insert error:', insertError);
-        return false;
-      }
-    }
-
+    await worldStore.adminGrantInventoryRow(
+      targetUserId,
+      `seed_tier_${seedDef.tier}`,
+      seedDefId,
+      1,
+    );
     console.log(`[returnSeedToUser] Seed returned to user ${targetUserId.slice(0, 8)}`);
     return true;
   } catch (err) {
-    console.error('[returnSeedToUser] Unexpected error:', err);
+    console.error('[returnSeedToUser] admin_grant_inventory_row failed:', err);
     return false;
   }
 }

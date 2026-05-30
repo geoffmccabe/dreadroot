@@ -468,6 +468,31 @@ export async function forgeItems(
   return adaptConsume(data as RawConsumeRpcResult);
 }
 
+// ── Admin grants (D-admin) ──────────────────────────────────────────
+
+/** Admin-only grant on behalf of another user. Caller must have the
+ *  'admin' app_role. Used by inspector-delete (return block to owner)
+ *  and admin tree-chop (return seed to tree owner) flows. */
+export async function adminGrantInventoryRow(
+  targetUserId: string,
+  itemType: string,
+  itemId: string | null,
+  quantity: number,
+  requestId?: string,
+): Promise<WriteResult<InventoryRow>> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('admin_grant_inventory_row', {
+    p_target_user_id: targetUserId,
+    p_item_type: itemType,
+    p_item_id: itemId,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as { rows: InventoryRow[]; replayed: boolean };
+  return { rows: raw.rows ?? [], replayed: raw.replayed ?? false };
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -495,4 +520,5 @@ export const worldStore = {
   grantPoints,
   pickupEgg,
   forgeItems,
+  adminGrantInventoryRow,
 };
