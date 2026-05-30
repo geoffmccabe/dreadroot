@@ -30,13 +30,16 @@ const FALLBACK_TEX = '/Bamboo_Seamless_t1.webp';
 // Outer shell.
 const SHELL_RADIUS = 0.22;
 
-// Mini-shpider dimensions (must fit inside SHELL_RADIUS).
-const BODY_RADIUS = 0.085;
-const HEAD_RADIUS = 0.045;
-const HEAD_OFFSET = 0.10;
+// Mini-shpider dimensions (must fit inside SHELL_RADIUS). Body and
+// head are CUBES (matches the big shpiders, which also use BoxGeometry).
+const BODY_SIZE = 0.16;
+const BODY_HALF = BODY_SIZE / 2;
+const HEAD_SIZE = 0.09;
+const HEAD_HALF = HEAD_SIZE / 2;
+const HEAD_OFFSET = BODY_HALF + HEAD_HALF; // head sits against body's front face
 const LEG_LENGTH = 0.085;
 const LEG_THICKNESS = 0.018;
-const LEG_ANCHOR_RADIUS = BODY_RADIUS - 0.005; // attach just inside body surface
+const LEG_ANCHOR_RADIUS = BODY_HALF;
 
 // Animation.
 const FLOAT_HEIGHT = 0.4;
@@ -78,12 +81,14 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
     () => new THREE.SphereGeometry(SHELL_RADIUS, 18, 14),
     [],
   );
+  // Body + head are cubes, matching the big shpiders (which also use
+  // BoxGeometry per ShpiderRenderer.tsx). Both share the body texture.
   const bodyGeometry = useMemo(
-    () => new THREE.SphereGeometry(BODY_RADIUS, 14, 10),
+    () => new THREE.BoxGeometry(BODY_SIZE, BODY_SIZE, BODY_SIZE),
     [],
   );
   const headGeometry = useMemo(
-    () => new THREE.SphereGeometry(HEAD_RADIUS, 10, 8),
+    () => new THREE.BoxGeometry(HEAD_SIZE, HEAD_SIZE, HEAD_SIZE),
     [],
   );
   // Leg geometry oriented along +Z so the leg cylinder rotates around
@@ -125,15 +130,6 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
       roughness: 0.7,
       emissive: '#330000',
       emissiveIntensity: 0.3,
-    }),
-    [],
-  );
-  const headMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({
-      color: '#3a1a1a',
-      roughness: 0.5,
-      emissive: '#220000',
-      emissiveIntensity: 0.4,
     }),
     [],
   );
@@ -183,7 +179,6 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
           legGeometry={legGeometry}
           shellMaterial={shellMaterials[Math.max(0, Math.min(NUM_TIERS - 1, egg.tier - 1))]}
           bodyMaterial={bodyMaterials[Math.max(0, Math.min(NUM_TIERS - 1, egg.tier - 1))]}
-          headMaterial={headMaterial}
           legMaterial={legMaterial}
         />
       ))}
@@ -213,14 +208,13 @@ interface InstanceProps {
   legGeometry: THREE.BufferGeometry;
   shellMaterial: THREE.Material;
   bodyMaterial: THREE.Material;
-  headMaterial: THREE.Material;
   legMaterial: THREE.Material;
 }
 
 function EggInstance({
   egg, index,
   shellGeometry, bodyGeometry, headGeometry, legGeometry,
-  shellMaterial, bodyMaterial, headMaterial, legMaterial,
+  shellMaterial, bodyMaterial, legMaterial,
 }: InstanceProps) {
   const groupRef = useRef<THREE.Group>(null);
   const bodyGroupRef = useRef<THREE.Group>(null);
@@ -281,8 +275,9 @@ function EggInstance({
         {/* Body */}
         <mesh geometry={bodyGeometry} material={bodyMaterial} />
 
-        {/* Head — small dark sphere offset forward (+Z is "front") */}
-        <mesh geometry={headGeometry} material={headMaterial} position={[0, 0, HEAD_OFFSET]} />
+        {/* Head — small cube using the same body texture, offset
+            forward (+Z is "front"). Same material as the big shpiders. */}
+        <mesh geometry={headGeometry} material={bodyMaterial} position={[0, 0, HEAD_OFFSET]} />
 
         {/* 6 legs around the body equator. Each leg is a Group rooted
             at the body's surface point, with the leg cylinder shifted
