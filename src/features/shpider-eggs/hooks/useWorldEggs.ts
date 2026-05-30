@@ -22,8 +22,11 @@ interface UseWorldEggsOptions {
   cameraRef: React.RefObject<THREE.Camera | null>;
 }
 
-/** Max world-space distance for "nearby" prompt + F-pickup. */
-export const EGG_PICKUP_REACH = 2.2;
+/** Max horizontal (XZ) distance for "nearby" prompt + F-pickup.
+ *  Y is excluded so the player's standing-height-above-ground doesn't
+ *  eat into the budget — the egg can be on the floor and the player
+ *  can be standing right next to it and still pick up. */
+export const EGG_PICKUP_REACH = 2.5;
 
 export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
   const [eggs, setEggs] = useState<WorldEgg[]>([]);
@@ -92,12 +95,12 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
   const findClosestEgg = useCallback((): WorldEgg | null => {
     const cam = cameraRef.current;
     if (!cam) return null;
-    const px = cam.position.x, py = cam.position.y, pz = cam.position.z;
+    const px = cam.position.x, pz = cam.position.z;
     let best: WorldEgg | null = null;
     let bestSq = EGG_PICKUP_REACH * EGG_PICKUP_REACH;
     for (const e of eggsRef.current) {
-      const dx = e.x - px, dy = e.y - py, dz = e.z - pz;
-      const dsq = dx*dx + dy*dy + dz*dz;
+      const dx = e.x - px, dz = e.z - pz;
+      const dsq = dx*dx + dz*dz;
       if (dsq < bestSq) { bestSq = dsq; best = e; }
     }
     return best;

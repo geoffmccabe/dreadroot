@@ -4,13 +4,16 @@
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
 import * as THREE from 'three';
 import type { WorldEgg } from '../hooks/useWorldEggs';
+import { EGG_PICKUP_REACH } from '../hooks/useWorldEggs';
 import type { ShpiderDefinition } from '@/features/shpider/types';
 
 interface Props {
   eggs: WorldEgg[];
   definitions: ShpiderDefinition[];
+  cameraRef?: React.RefObject<THREE.Camera | null>;
 }
 
 const NUM_TIERS = 10;
@@ -21,7 +24,10 @@ const FLOAT_AMPLITUDE = 0.08;
 const FLOAT_FREQ = 1.6;
 const MAX_PER_TIER = 16;
 
-export function WorldEggRenderer({ eggs, definitions }: Props) {
+export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
+  const promptRef = useRef<THREE.Group | null>(null);
+  const promptVisibleRef = useRef(false);
+  const REACH_SQ = EGG_PICKUP_REACH * EGG_PICKUP_REACH;
   const defsByTier = useMemo(() => {
     const arr: (ShpiderDefinition | null)[] = new Array(NUM_TIERS + 1).fill(null);
     for (const d of definitions) {
@@ -97,6 +103,32 @@ export function WorldEggRenderer({ eggs, definitions }: Props) {
       mesh.count = counts.current[t2];
       mesh.instanceMatrix.needsUpdate = true;
     }
+
+    // "Press F to pick up" prompt above the closest egg in horizontal
+    // pickup range. Uses XZ-only distance to match useWorldEggs.findClosestEgg.
+    const cam = cameraRef?.current;
+    const prompt = promptRef.current;
+    if (cam && prompt) {
+      const cx = cam.position.x, cz = cam.position.z;
+      let bestEgg: WorldEgg | null = null;
+      let bestSq = REACH_SQ;
+      for (const e of eggs) {
+        const dx = e.x - cx, dz = e.z - cz;
+        const dsq = dx * dx + dz * dz;
+        if (dsq < bestSq) { bestSq = dsq; bestEgg = e; }
+      }
+      if (bestEgg) {
+        const bob = Math.sin(t * FLOAT_FREQ) * FLOAT_AMPLITUDE;
+        prompt.position.set(bestEgg.x, bestEgg.y + FLOAT_HEIGHT + bob + 0.55, bestEgg.z);
+        if (!promptVisibleRef.current) {
+          prompt.visible = true;
+          promptVisibleRef.current = true;
+        }
+      } else if (promptVisibleRef.current) {
+        prompt.visible = false;
+        promptVisibleRef.current = false;
+      }
+    }
   });
 
   return (
@@ -112,6 +144,18 @@ export function WorldEggRenderer({ eggs, definitions }: Props) {
           />
         );
       })}
+      <group ref={promptRef} visible={false}>
+        <Text
+          fontSize={0.18}
+          color="white"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.018}
+          outlineColor="black"
+        >
+          Press F to pick up
+        </Text>
+      </group>
     </>
   );
 }

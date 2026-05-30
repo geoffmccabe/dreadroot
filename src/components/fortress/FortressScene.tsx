@@ -1600,7 +1600,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <ShpiderEggRenderer eggsRef={eggsRef} definitions={shpiderDefinitions} />
 
       {/* Dropped pet-shpider eggs in the world (owner-scoped). */}
-      <WorldEggRenderer eggs={worldEggs} definitions={shpiderDefinitions} />
+      <WorldEggRenderer eggs={worldEggs} definitions={shpiderDefinitions} cameraRef={cameraRef} />
 
       {/* Grenade explosion FX — shockwave ring + bright flash. Sits
           on top of the existing flame plumes for the "concussion"
