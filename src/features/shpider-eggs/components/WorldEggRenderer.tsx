@@ -1,18 +1,14 @@
-// World-egg renderer. Per-egg group (no longer instanced) because
-// each egg now contains a mini-shpider visual inside a translucent
-// shell — too much per-egg state for instancing to be worth it at
-// the typical 1–5 active eggs.
+// World-egg renderer.
 //
-// Structure per egg:
-//   • Translucent shell (50% opacity, per-tier shpider body texture)
-//   • Inner "mini-shpider" body (2/3 shell diameter, opaque, same texture)
-//   • 6 small leg cones around the body, wiggling in place (walking)
-//   • Debug label below the egg showing tier + horizontal distance
-//     to the local player camera (helps verify pickup-reach issues)
+// Per-egg group: translucent shell containing a mini-shpider that
+// walks in place. The shell + mini-shpider tumble together so the
+// shpider stays centered inside the egg as the egg slowly inverts.
 //
-// The whole group bobs + rotates upside-down slowly so the mini-shpider
-// rotates WITH the egg shell. Inner body has an extra rotation so it
-// visibly moves relative to the shell.
+// Mini-shpider parts:
+//   • Body (sphere, per-tier shpider body texture)
+//   • Head (smaller sphere, dark, offset forward from body)
+//   • 6 dark bent legs around the body equator, animated to wiggle
+//     (walking-in-place — no translation)
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
@@ -30,18 +26,26 @@ interface Props {
 
 const NUM_TIERS = 10;
 const FALLBACK_TEX = '/Bamboo_Seamless_t1.webp';
+
+// Outer shell.
 const SHELL_RADIUS = 0.22;
-const BODY_RADIUS = SHELL_RADIUS * (2 / 3);
+
+// Mini-shpider dimensions (must fit inside SHELL_RADIUS).
+const BODY_RADIUS = 0.085;
+const HEAD_RADIUS = 0.045;
+const HEAD_OFFSET = 0.10;
+const LEG_LENGTH = 0.085;
+const LEG_THICKNESS = 0.018;
+const LEG_ANCHOR_RADIUS = BODY_RADIUS - 0.005; // attach just inside body surface
+
+// Animation.
 const FLOAT_HEIGHT = 0.4;
 const FLOAT_AMPLITUDE = 0.08;
 const FLOAT_FREQ = 1.6;
-const SHELL_TUMBLE_HZ = 0.4;   // upside-down tumble
-const BODY_SPIN_HZ = 0.9;      // mini-shpider rotates differently
-const LEG_WIGGLE_HZ = 3.5;
+const SHELL_TUMBLE_HZ = 0.35;
+const BODY_SPIN_HZ = 0.6;
+const LEG_WIGGLE_HZ = 3.0;
 const NUM_LEGS = 6;
-const LEG_LENGTH = 0.10;
-const LEG_THICKNESS = 0.012;
-const LEG_RADIUS_OFFSET = BODY_RADIUS + 0.005; // leg root at body surface
 
 export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
   const defsByTier = useMemo(() => {
@@ -78,12 +82,19 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
     () => new THREE.SphereGeometry(BODY_RADIUS, 14, 10),
     [],
   );
+  const headGeometry = useMemo(
+    () => new THREE.SphereGeometry(HEAD_RADIUS, 10, 8),
+    [],
+  );
+  // Leg geometry oriented along +Z so the leg cylinder rotates around
+  // its anchor point at z=0 cleanly. Y is the cylinder's natural long
+  // axis; we rotate it to point along Z when placing.
   const legGeometry = useMemo(
-    () => new THREE.CylinderGeometry(LEG_THICKNESS, LEG_THICKNESS, LEG_LENGTH, 5),
+    () => new THREE.CylinderGeometry(LEG_THICKNESS * 0.6, LEG_THICKNESS, LEG_LENGTH, 6),
     [],
   );
 
-  // Two materials per tier: translucent shell, opaque body.
+  // Per-tier materials. Shell is translucent; body is opaque.
   const shellMaterials = useMemo(
     () => texs.map(tex => new THREE.MeshStandardMaterial({
       map: tex,
@@ -102,18 +113,32 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
     () => texs.map(tex => new THREE.MeshStandardMaterial({
       map: tex,
       roughness: 0.45,
-      metalness: 0.1,
+      metalness: 0.05,
       emissive: '#222222',
-      emissiveIntensity: 0.4,
+      emissiveIntensity: 0.5,
     })),
     [texs],
   );
   const legMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#1a0e0e', roughness: 0.6 }),
+    () => new THREE.MeshStandardMaterial({
+      color: '#1a0a0a',
+      roughness: 0.7,
+      emissive: '#330000',
+      emissiveIntensity: 0.3,
+    }),
+    [],
+  );
+  const headMaterial = useMemo(
+    () => new THREE.MeshStandardMaterial({
+      color: '#3a1a1a',
+      roughness: 0.5,
+      emissive: '#220000',
+      emissiveIntensity: 0.4,
+    }),
     [],
   );
 
-  // Promp ref ("Press F to pick up") — placed above closest in-range egg.
+  // "Press F to pick up" prompt — above the closest in-range egg.
   const promptRef = useRef<THREE.Group | null>(null);
   const promptVisibleRef = useRef(false);
   const REACH_SQ = EGG_PICKUP_REACH * EGG_PICKUP_REACH;
@@ -154,11 +179,12 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
           index={idx}
           shellGeometry={shellGeometry}
           bodyGeometry={bodyGeometry}
+          headGeometry={headGeometry}
           legGeometry={legGeometry}
           shellMaterial={shellMaterials[Math.max(0, Math.min(NUM_TIERS - 1, egg.tier - 1))]}
           bodyMaterial={bodyMaterials[Math.max(0, Math.min(NUM_TIERS - 1, egg.tier - 1))]}
+          headMaterial={headMaterial}
           legMaterial={legMaterial}
-          cameraRef={cameraRef}
         />
       ))}
 
@@ -183,126 +209,107 @@ interface InstanceProps {
   index: number;
   shellGeometry: THREE.BufferGeometry;
   bodyGeometry: THREE.BufferGeometry;
+  headGeometry: THREE.BufferGeometry;
   legGeometry: THREE.BufferGeometry;
   shellMaterial: THREE.Material;
   bodyMaterial: THREE.Material;
+  headMaterial: THREE.Material;
   legMaterial: THREE.Material;
-  cameraRef?: React.RefObject<THREE.Camera | null>;
 }
 
 function EggInstance({
   egg, index,
-  shellGeometry, bodyGeometry, legGeometry,
-  shellMaterial, bodyMaterial, legMaterial,
-  cameraRef,
+  shellGeometry, bodyGeometry, headGeometry, legGeometry,
+  shellMaterial, bodyMaterial, headMaterial, legMaterial,
 }: InstanceProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const bodyRef = useRef<THREE.Group>(null);
-  const legRefs = useRef<(THREE.Mesh | null)[]>(new Array(NUM_LEGS).fill(null));
-  const debugTextRef = useRef<any>(null);
-  const debugTextStrRef = useRef<string>('');
+  const bodyGroupRef = useRef<THREE.Group>(null);
+  const legRefs = useRef<(THREE.Group | null)[]>(new Array(NUM_LEGS).fill(null));
+
+  // Leg anchor positions around body equator.
+  const legAnchors = useMemo(() => {
+    const arr: { x: number; z: number; angle: number }[] = [];
+    for (let l = 0; l < NUM_LEGS; l++) {
+      const a = (l / NUM_LEGS) * Math.PI * 2;
+      arr.push({
+        x: Math.cos(a) * LEG_ANCHOR_RADIUS,
+        z: Math.sin(a) * LEG_ANCHOR_RADIUS,
+        angle: a,
+      });
+    }
+    return arr;
+  }, []);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     const phaseOffset = index * 1.7;
 
-    // Whole-group position: bob up/down, very slow tumble so the egg
-    // visibly inverts over time (~one half-tumble every ~1.25s).
+    // Whole-group: bob + slow tumble (egg inverting).
     const bob = Math.sin(t * FLOAT_FREQ + phaseOffset) * FLOAT_AMPLITUDE;
-    const tumbleZ = t * SHELL_TUMBLE_HZ * Math.PI * 2 + phaseOffset;
     if (groupRef.current) {
       groupRef.current.position.set(egg.x, egg.y + FLOAT_HEIGHT + bob, egg.z);
-      groupRef.current.rotation.set(tumbleZ, t * 1.2 + index, 0);
+      groupRef.current.rotation.set(
+        t * SHELL_TUMBLE_HZ * Math.PI * 2 + phaseOffset,
+        t * 1.0,
+        0,
+      );
     }
-
-    // Inner body rotates a bit faster — visible "shpider turning"
-    // inside the shell. The body group sits at origin so the rotation
-    // is around its own center (which IS the shell center too — they
-    // move together as required).
-    if (bodyRef.current) {
-      bodyRef.current.rotation.y = t * BODY_SPIN_HZ * Math.PI * 2 + phaseOffset;
+    // Mini-shpider body+legs+head rotate together inside the shell —
+    // a little slower than the shell tumble so the body appears to
+    // turn relative to the shell.
+    if (bodyGroupRef.current) {
+      bodyGroupRef.current.rotation.y = t * BODY_SPIN_HZ * Math.PI * 2 + phaseOffset;
     }
-
-    // Wiggle legs in place — walking-without-going-anywhere.
+    // Per-leg wiggle. Each leg group has its anchor at the body
+    // surface; we rotate the group itself to swing the leg.
     for (let l = 0; l < NUM_LEGS; l++) {
-      const leg = legRefs.current[l];
-      if (!leg) continue;
-      const legPhase = t * LEG_WIGGLE_HZ * Math.PI * 2 + l * 0.9;
-      // Rotation around the leg's own X (forward/back swing) — the
-      // resting orientation is "leg points outward from body center"
-      // (set in the JSX); this wiggle adds a small fore/aft swing on
-      // top.
-      leg.rotation.z = Math.sin(legPhase) * 0.45;
-    }
-
-    // Debug distance label — always visible above (below) the egg so
-    // we can verify pickup-reach. Tells us at a glance whether the
-    // player is in range.
-    if (debugTextRef.current && cameraRef?.current) {
-      const cam = cameraRef.current;
-      const dx = egg.x - cam.position.x;
-      const dz = egg.z - cam.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      const inRange = dist <= EGG_PICKUP_REACH;
-      const next = `T${egg.tier} • ${dist.toFixed(1)}m ${inRange ? '✓' : ''}`;
-      if (next !== debugTextStrRef.current) {
-        debugTextRef.current.text = next;
-        debugTextStrRef.current = next;
-      }
+      const g = legRefs.current[l];
+      if (!g) continue;
+      const legPhase = t * LEG_WIGGLE_HZ * Math.PI * 2 + l * 1.05;
+      // Swing the leg up/down around the body's tangent axis.
+      g.rotation.x = Math.sin(legPhase) * 0.6;
     }
   });
-
-  // Pre-compute leg anchor positions around the body equator.
-  const legAnchors = useMemo(() => {
-    const arr: { x: number; z: number; rotY: number }[] = [];
-    for (let l = 0; l < NUM_LEGS; l++) {
-      const a = (l / NUM_LEGS) * Math.PI * 2;
-      arr.push({
-        x: Math.cos(a) * LEG_RADIUS_OFFSET,
-        z: Math.sin(a) * LEG_RADIUS_OFFSET,
-        rotY: a,
-      });
-    }
-    return arr;
-  }, []);
 
   return (
     <group ref={groupRef}>
       {/* Translucent outer shell */}
       <mesh geometry={shellGeometry} material={shellMaterial} renderOrder={2} />
 
-      {/* Mini-shpider — body + legs grouped so they tumble with the shell */}
-      <group ref={bodyRef}>
+      {/* Mini-shpider — body + head + legs, all rotating together */}
+      <group ref={bodyGroupRef}>
+        {/* Body */}
         <mesh geometry={bodyGeometry} material={bodyMaterial} />
+
+        {/* Head — small dark sphere offset forward (+Z is "front") */}
+        <mesh geometry={headGeometry} material={headMaterial} position={[0, 0, HEAD_OFFSET]} />
+
+        {/* 6 legs around the body equator. Each leg is a Group rooted
+            at the body's surface point, with the leg cylinder shifted
+            so its base sits at the group origin and the leg extends
+            outward + slightly downward. */}
         {legAnchors.map((a, l) => (
-          <mesh
+          <group
             key={l}
-            ref={(m) => { legRefs.current[l] = m; }}
-            geometry={legGeometry}
-            material={legMaterial}
-            // Anchor at body surface, rotate the cylinder so its long
-            // axis points outward (Y is the cylinder's long axis).
+            ref={(g) => { legRefs.current[l] = g; }}
             position={[a.x, 0, a.z]}
-            rotation={[0, a.rotY, Math.PI / 2]}
-          />
+            // Orient so the leg's +Y axis points away from the body
+            // center (outward radially). Then rotate to angle outward
+            // and slightly down.
+            rotation={[0, -a.angle, -Math.PI / 2 + 0.3]}
+          >
+            {/* Cylinder geometry's local +Y is the cylinder long axis;
+                shift down by half its length so the group origin sits
+                at the leg's BASE (where it attaches to the body), not
+                its middle. */}
+            <mesh
+              geometry={legGeometry}
+              material={legMaterial}
+              position={[0, LEG_LENGTH / 2, 0]}
+            />
+          </group>
         ))}
       </group>
-
-      {/* Debug distance label (below the egg, world-space). The
-          parent group rotates/tumbles, so the label tumbles with it
-          — that's actually fine for confirming the egg is rendering. */}
-      <Text
-        ref={debugTextRef}
-        position={[0, -0.32, 0]}
-        fontSize={0.07}
-        color="yellow"
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.005}
-        outlineColor="black"
-      >
-        T?
-      </Text>
     </group>
   );
 }
