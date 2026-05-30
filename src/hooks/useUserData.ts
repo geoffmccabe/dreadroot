@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
 import { worldStore } from '@/services/worldStore';
-import { checkLevelUp, getLevelForPoints } from '@/lib/levelSystem';
+import { getLevelForPoints } from '@/lib/levelSystem';
 import { initLogStep } from '@/contexts/InitializationContext';
 
 export interface UserProfile {
@@ -59,13 +59,6 @@ export const useUserData = () => {
   // Refs for instant access to current state (avoids stale closures in rapid calls)
   const tokenBalanceRef = useRef(tokenBalance);
   const inventoryRef = useRef(inventory);
-  
-  // Track pending purchases per item type (for accurate database sync)
-  const pendingPurchasesRef = useRef<Map<string, number>>(new Map());
-  // Track pending coin deductions (for accurate database sync)
-  const pendingCoinDeductionRef = useRef<number>(0);
-  // Debounce timer for database sync
-  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Keep refs in sync with state
   useEffect(() => {
@@ -417,6 +410,10 @@ export const useUserData = () => {
     };
   }, [user?.id, currentTheme?.id]);
 
+  // Atomic block purchase. The RPC deducts coins AND grants the block
+  // in a single transaction — if anything fails, both roll back so the
+  // user never loses coins for nothing. UI is still optimistic for
+  // responsiveness; we revert on RPC failure.
   const buyBlock = async (itemType: string, cost: number): Promise<boolean> => {
     if (!user?.id || !currentTheme?.id) {
       toast({
@@ -427,7 +424,6 @@ export const useUserData = () => {
       return false;
     }
 
-    // Get FRESH balance from ref
     const currentBalance = tokenBalanceRef.current;
     if (!currentBalance || currentBalance.coins < cost) {
       toast({
@@ -438,115 +434,55 @@ export const useUserData = () => {
       return false;
     }
 
-    const newCoinAmount = currentBalance.coins - cost;
-    
-    // Track pending purchase for database sync
-    const currentPending = pendingPurchasesRef.current.get(itemType) || 0;
-    pendingPurchasesRef.current.set(itemType, currentPending + 1);
-    pendingCoinDeductionRef.current += cost;
-    
-    // OPTIMISTIC UPDATE - update UI immediately using refs for fresh state
-    setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+    const optimisticBalance = currentBalance.coins - cost;
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    setTokenBalance(prev => prev ? { ...prev, coins: optimisticBalance } : null);
     setInventory(prev => {
       const existingItem = prev.find(item => item.item_type === itemType || item.item_id === itemType);
       if (existingItem) {
-        return prev.map(item => 
-          item.id === existingItem.id 
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
+        return prev.map(item =>
+          item.id === existingItem.id ? { ...item, quantity: item.quantity + 1 } : item
         );
-      } else {
-        const tempId = `temp-${Date.now()}-${Math.random()}`;
-        return [...prev, {
-          id: tempId,
-          user_id: user.id,
-          item_type: itemType,
-          item_id: null,
-          quantity: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }];
       }
+      return [...prev, {
+        id: tempId, user_id: user.id, item_type: itemType, item_id: null, quantity: 1,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }];
     });
-    
-    toast({
-      title: "Purchase successful!",
-      description: `You bought 1 ${itemType} for ${cost} coins`,
-      duration: 2000,
-    });
+    toast({ title: "Purchase successful!", description: `You bought 1 ${itemType} for ${cost} coins`, duration: 2000 });
 
-    // Debounced database sync - collects rapid purchases into one update
-    if (syncTimerRef.current) {
-      clearTimeout(syncTimerRef.current);
+    try {
+      const result = await worldStore.buyBlock(itemType, cost, currentTheme.id);
+      // Reconcile with server result
+      setTokenBalance(prev => prev ? { ...prev, coins: result.newBalance } : null);
+      setInventory(prev => {
+        let next = prev.filter(i => i.id !== tempId);
+        for (const row of result.rows) {
+          const idx = next.findIndex(i => i.id === row.id);
+          if (idx >= 0) next[idx] = row as UserInventoryItem;
+          else next.push(row as UserInventoryItem);
+        }
+        return next;
+      });
+      return true;
+    } catch (err) {
+      console.error('[buyBlock] RPC failed:', err);
+      // Revert optimistic update
+      setTokenBalance(prev => prev ? { ...prev, coins: currentBalance.coins } : null);
+      setInventory(prev => prev.filter(i => i.id !== tempId).map(item => {
+        const existing = item.item_type === itemType || item.item_id === itemType;
+        if (existing && item.id !== tempId) {
+          return { ...item, quantity: Math.max(0, item.quantity - 1) };
+        }
+        return item;
+      }).filter(i => i.quantity > 0));
+      toast({
+        title: "Purchase failed",
+        description: "Could not complete the purchase. Please try again.",
+        variant: "destructive",
+      });
+      return false;
     }
-    
-    syncTimerRef.current = setTimeout(async () => {
-      try {
-        const userId = user.id;
-        const themeId = currentTheme.id;
-        
-        // Get current database values and apply ALL pending changes at once
-        const pendingCoins = pendingCoinDeductionRef.current;
-        const pendingItems = new Map(pendingPurchasesRef.current);
-        
-        // Clear pending counters BEFORE async operations
-        pendingCoinDeductionRef.current = 0;
-        pendingPurchasesRef.current.clear();
-        
-        // Fetch current database balance
-        const { data: dbBalance } = await supabase
-          .from('user_token_balances')
-          .select('coins')
-          .eq('user_id', userId)
-          .eq('token_theme_id', themeId)
-          .single();
-        
-        if (dbBalance) {
-          const newDbCoins = dbBalance.coins - pendingCoins;
-          await supabase
-            .from('user_token_balances')
-            .update({ coins: newDbCoins })
-            .eq('user_id', userId)
-            .eq('token_theme_id', themeId);
-        }
-
-        // Update inventory for each pending item type
-        for (const [pendingItemType, pendingCount] of pendingItems) {
-          const { data: existingInvItem } = await supabase
-            .from('user_inventory')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('item_type', pendingItemType)
-            .maybeSingle();
-
-          if (existingInvItem) {
-            await supabase
-              .from('user_inventory')
-              .update({ quantity: existingInvItem.quantity + pendingCount })
-              .eq('id', existingInvItem.id);
-          } else {
-            const { data: newItem } = await supabase
-              .from('user_inventory')
-              .insert([{ user_id: userId, item_type: pendingItemType, quantity: pendingCount }])
-              .select()
-              .single();
-            
-            // Replace temp item with real item
-            if (newItem) {
-              setInventory(prev => prev.map(item => 
-                item.id.startsWith('temp-') && item.item_type === pendingItemType
-                  ? { ...newItem } as UserInventoryItem
-                  : item
-              ));
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error syncing purchase:', error);
-      }
-    }, 300); // 300ms debounce - fast enough to feel instant, slow enough to batch
-    
-    return true;
   };
 
   // Consume one of `itemKey` (matches by item_type for blocks or
@@ -585,27 +521,13 @@ export const useUserData = () => {
 
   const addCoins = async (amount: number) => {
     if (!user?.id || !currentTheme?.id || !tokenBalance) return false;
-
     try {
-      const newCoinAmount = tokenBalance.coins + amount;
-      const { error } = await supabase
-        .from('user_token_balances')
-        .update({ coins: newCoinAmount })
-        .eq('user_id', user.id)
-        .eq('token_theme_id', currentTheme.id);
-
-      if (error) throw error;
-
-      setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
-      
+      const result = await worldStore.grantCurrency(currentTheme.id, amount);
+      setTokenBalance(prev => prev ? { ...prev, coins: result.newBalance } : null);
       return true;
     } catch (error) {
       console.error('Error adding coins:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add coins",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Failed to add coins", variant: "destructive" });
       return false;
     }
   };
@@ -795,41 +717,35 @@ export const useUserData = () => {
     }
   };
 
-  // Add points (from dealing damage to enemies)
+  // Add points (from dealing damage to enemies). Server is authoritative:
+  // RPC atomically increments total_points and recomputes level. Optimistic
+  // local update first; we reconcile from the RPC result.
   const addPoints = useCallback(async (amount: number): Promise<{ newLevel: number | null }> => {
     if (!user?.id || !profile) return { newLevel: null };
-    
-    const currentPoints = profile.total_points || 0;
-    const currentLevel = profile.current_level || 1;
-    const newPoints = currentPoints + amount;
-    const newLevel = getLevelForPoints(newPoints);
-    const leveledUp = checkLevelUp(currentPoints, newPoints);
-    
-    // Optimistic update
-    setProfile(prev => prev ? { 
-      ...prev, 
-      total_points: newPoints, 
-      current_level: newLevel 
+
+    const prevPoints = profile.total_points || 0;
+    const prevLevel = profile.current_level || 1;
+
+    setProfile(prev => prev ? {
+      ...prev,
+      total_points: prevPoints + amount,
+      current_level: getLevelForPoints(prevPoints + amount),
     } : null);
-    
-    // Sync to database in background
-    supabase
-      .from('user_profiles')
-      .update({ total_points: newPoints, current_level: newLevel })
-      .eq('user_id', user.id)
-      .then(({ error }) => {
-        if (error) {
-          console.error('Error syncing points:', error);
-          // Revert on error
-          setProfile(prev => prev ? {
-            ...prev,
-            total_points: currentPoints,
-            current_level: currentLevel
-          } : null);
-        }
-      });
-    
-    return { newLevel: leveledUp };
+
+    try {
+      const result = await worldStore.grantPoints(amount);
+      setProfile(prev => prev ? {
+        ...prev,
+        total_points: result.newTotalPoints,
+        current_level: result.newLevel,
+      } : null);
+      return { newLevel: result.leveledUp ? result.newLevel : null };
+    } catch (err) {
+      console.error('Error syncing points:', err);
+      // Revert
+      setProfile(prev => prev ? { ...prev, total_points: prevPoints, current_level: prevLevel } : null);
+      return { newLevel: null };
+    }
   }, [user?.id, profile]);
 
   // Add an item to inventory via the L1 Write API. The RPC handles

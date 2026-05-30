@@ -314,6 +314,105 @@ export async function clearEquippedSlots(
   return adaptEquipped(data as RawEquippedRpcResult);
 }
 
+// ── Currency (D7) ───────────────────────────────────────────────────
+
+export interface BuyBlockResult {
+  rows: InventoryRow[];
+  deletedRowIds: string[];
+  newBalance: number;
+  replayed: boolean;
+}
+
+export interface CurrencyResult {
+  newBalance: number;
+  replayed: boolean;
+}
+
+export interface PointsResult {
+  newTotalPoints: number;
+  newLevel: number;
+  leveledUp: boolean;
+  replayed: boolean;
+}
+
+interface RawBuyBlockRpcResult {
+  rows: InventoryRow[];
+  deleted_row_ids?: string[];
+  new_balance: number;
+  replayed: boolean;
+}
+
+interface RawCurrencyRpcResult {
+  new_balance: number;
+  replayed: boolean;
+}
+
+interface RawPointsRpcResult {
+  new_total_points: number;
+  new_level: number;
+  leveled_up: boolean;
+  replayed: boolean;
+}
+
+/** Atomic spend-coins + grant-block. Either both happen or neither does. */
+export async function buyBlock(
+  blockKey: string,
+  cost: number,
+  tokenThemeId: string,
+  requestId?: string,
+): Promise<BuyBlockResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('buy_block', {
+    p_block_key: blockKey,
+    p_cost: cost,
+    p_token_theme_id: tokenThemeId,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as RawBuyBlockRpcResult;
+  return {
+    rows: raw.rows ?? [],
+    deletedRowIds: raw.deleted_row_ids ?? [],
+    newBalance: raw.new_balance,
+    replayed: raw.replayed ?? false,
+  };
+}
+
+export async function grantCurrency(
+  tokenThemeId: string,
+  amount: number,
+  requestId?: string,
+): Promise<CurrencyResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('grant_currency', {
+    p_token_theme_id: tokenThemeId,
+    p_amount: amount,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as RawCurrencyRpcResult;
+  return { newBalance: raw.new_balance, replayed: raw.replayed ?? false };
+}
+
+export async function grantPoints(
+  amount: number,
+  requestId?: string,
+): Promise<PointsResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('grant_points', {
+    p_amount: amount,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as RawPointsRpcResult;
+  return {
+    newTotalPoints: raw.new_total_points,
+    newLevel: raw.new_level,
+    leveledUp: raw.leveled_up ?? false,
+    replayed: raw.replayed ?? false,
+  };
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -336,4 +435,7 @@ export const worldStore = {
   setEquippedSlot,
   clearEquippedSlot,
   clearEquippedSlots,
+  buyBlock,
+  grantCurrency,
+  grantPoints,
 };
