@@ -1008,26 +1008,12 @@ export function Fortress() {
       // My block — returned to my inventory
       toast({ title: "Block returned to inventory", duration: 2000 });
     } else if (block.user_id) {
-      // Someone else's block — return to their inventory
-      // Use direct insert/upsert to their inventory
+      // Someone else's block. removeBlock() above already enforced
+      // "owner or admin only," so this branch is only reachable when
+      // the caller is admin/superadmin mining another player's block.
+      // The admin grant RPC validates the role server-side.
       try {
-        const { data: existing } = await supabase
-          .from('user_inventory')
-          .select('id, quantity')
-          .eq('user_id', block.user_id)
-          .eq('item_type', 'fortress_block')
-          .maybeSingle();
-
-        if (existing) {
-          await supabase
-            .from('user_inventory')
-            .update({ quantity: existing.quantity + 1 })
-            .eq('id', existing.id);
-        } else {
-          await supabase
-            .from('user_inventory')
-            .insert({ user_id: block.user_id, item_type: 'fortress_block', quantity: 1 });
-        }
+        await worldStore.adminGrantInventoryRow(block.user_id, 'fortress_block', null, 1);
         toast({ title: "Block returned to owner", duration: 2000 });
       } catch (err) {
         console.error('[BlockMine] Failed to return block to owner:', err);
