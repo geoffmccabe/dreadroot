@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
-import { findGroundY, pickTreeAwareTarget } from './surfaceDetect';
+import { findGroundY, pickTreeAwareTarget, findAdjacentWall } from './surfaceDetect';
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
@@ -283,6 +283,15 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
     s.position.y = s.hop.endY;
     s.position.z = s.hop.endZ;
     s.surfaceNormal.set(s.hop.endNormalX, s.hop.endNormalY, s.hop.endNormalZ);
+
+    // Wall-attach: if we ended up next to a tree trunk (or any solid
+    // wall), override the surfaceNormal to face away from that wall
+    // so the shpider becomes a wall-crawler. From there, the existing
+    // crawl logic naturally moves up the trunk toward the player.
+    if (findAdjacentWall(s.position.x, s.position.y, s.position.z, _normalScratch)) {
+      s.surfaceNormal.copy(_normalScratch);
+    }
+
     s.hop.phase = 'idle';
     s.hop.nextHopAt = now + def.hop_interval_min_ms
                     + Math.random() * (def.hop_interval_max_ms - def.hop_interval_min_ms);
