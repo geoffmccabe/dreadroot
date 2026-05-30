@@ -34,6 +34,14 @@ export interface WriteResult<T> {
   replayed: boolean;
 }
 
+/** Consume / delete RPCs return both updated rows AND ids of rows
+ *  that were fully removed. Client merges accordingly. */
+export interface ConsumeResult {
+  rows: InventoryRow[];
+  deletedRowIds: string[];
+  replayed: boolean;
+}
+
 // ── Inventory grants (D1 + D3) ──────────────────────────────────────
 //
 // All three grant flows go through one RPC: grant_inventory_row.
@@ -90,6 +98,56 @@ export async function grantInventorySeed(
   return grantInventoryRow(`seed_tier_${tier}`, seedDefId, quantity, requestId);
 }
 
+// ── Inventory consumes (D4) ─────────────────────────────────────────
+
+interface RawConsumeRpcResult {
+  rows: InventoryRow[];
+  deleted_row_ids: string[];
+  replayed: boolean;
+}
+
+function adaptConsume(raw: RawConsumeRpcResult): ConsumeResult {
+  return {
+    rows: raw.rows ?? [],
+    deletedRowIds: raw.deleted_row_ids ?? [],
+    replayed: raw.replayed ?? false,
+  };
+}
+
+/** Decrement an inventory target by quantity. The target is either a
+ *  block key (matches item_type) or an item UUID (matches item_id) —
+ *  the RPC handles both by OR-matching. If quantity reaches 0 the
+ *  row is deleted; its id comes back in deletedRowIds. */
+export async function consumeInventoryTarget(
+  target: string,
+  quantity: number = 1,
+  requestId?: string,
+): Promise<ConsumeResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('consume_inventory_target', {
+    p_target: target,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptConsume(data as RawConsumeRpcResult);
+}
+
+/** Delete a specific inventory row by id (auth-checked). Used for
+ *  non-stackable items where each row represents one slot. */
+export async function deleteInventoryRow(
+  rowId: string,
+  requestId?: string,
+): Promise<ConsumeResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('delete_inventory_row', {
+    p_row_id: rowId,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptConsume(data as RawConsumeRpcResult);
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -103,4 +161,6 @@ export const worldStore = {
   grantInventoryItem,
   grantInventoryBlock,
   grantInventorySeed,
+  consumeInventoryTarget,
+  deleteInventoryRow,
 };

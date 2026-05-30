@@ -257,20 +257,23 @@ export const useUserData = () => {
       if (starterDefs && starterDefs.length > 0) {
         for (const sd of starterDefs) {
           const existing = inv.find(i => i.item_type === 'item' && i.item_id === sd.id);
-          if (!existing) {
-            // Insert new starter item
-            const { data: inserted } = await supabase
-              .from('user_inventory')
-              .insert({ user_id: user.id, item_type: 'item', item_id: sd.id, quantity: 4 })
-              .select();
-            if (inserted) setInventory(prev => [...prev, ...inserted]);
-          } else if (existing.quantity < 4) {
-            // Bump up to 4
-            await supabase
-              .from('user_inventory')
-              .update({ quantity: 4 })
-              .eq('id', existing.id);
-            setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: 4 } : i));
+          const needed = existing ? Math.max(0, 4 - existing.quantity) : 4;
+          if (needed === 0) continue;
+          try {
+            const result = await worldStore.grantInventoryItem(sd.id, needed);
+            if (result.rows && result.rows.length > 0) {
+              setInventory(prev => {
+                const next = [...prev];
+                for (const row of result.rows) {
+                  const idx = next.findIndex(i => i.id === row.id);
+                  if (idx >= 0) next[idx] = row as UserInventoryItem;
+                  else next.push(row as UserInventoryItem);
+                }
+                return next;
+              });
+            }
+          } catch (err) {
+            console.error('[starter items] grantInventoryItem failed:', err);
           }
         }
       }
@@ -539,31 +542,31 @@ export const useUserData = () => {
     return true;
   };
 
+  // Consume one of `itemKey` (matches by item_type for blocks or
+  // item_id for items via the RPC's OR-match). Server is authoritative:
+  // local state updates from the RPC response.
   const useBlock = async (itemKey: string) => {
-    // Use functional update to ensure we get latest state
-    let success = false;
-    let itemId: string | null = null;
-    let originalQuantity = 0;
-    
-    setInventory(prev => {
-      const item = prev.find(i => i.item_type === itemKey || i.item_id === itemKey);
-      if (!item || item.quantity <= 0) {
-        success = false;
-        return prev;
-      }
-      
-      success = true;
-      itemId = item.id;
-      originalQuantity = item.quantity;
-      
-      return prev.map(i => 
-        i.id === item.id 
-          ? { ...i, quantity: i.quantity - 1 }
-          : i
-      );
-    });
-    
-    if (!success) {
+    try {
+      const result = await worldStore.consumeInventoryTarget(itemKey, 1);
+      setInventory(prev => {
+        let next = prev;
+        if (result.deletedRowIds.length > 0) {
+          next = next.filter(i => !result.deletedRowIds.includes(i.id));
+        }
+        if (result.rows.length > 0) {
+          next = [...next];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+        }
+        return next;
+      });
+      return true;
+    } catch (err: any) {
+      // PGRST/SQL error means no matching row or insufficient quantity.
+      console.error('[useBlock] consumeInventoryTarget failed:', err);
       toast({
         title: "No blocks available",
         description: `You don't have any ${itemKey} blocks in your inventory`,
@@ -571,27 +574,6 @@ export const useUserData = () => {
       });
       return false;
     }
-
-    // Sync to database in background (non-blocking)
-    if (itemId) {
-      supabase
-        .from('user_inventory')
-        .update({ quantity: originalQuantity - 1 })
-        .eq('id', itemId)
-        .then(({ error }) => {
-          if (error) {
-            console.error('Error syncing inventory:', error);
-            // Revert optimistic update on error
-            setInventory(prev => prev.map(i => 
-              i.id === itemId 
-                ? { ...i, quantity: originalQuantity }
-                : i
-            ));
-          }
-        });
-    }
-    
-    return true;
   };
 
   const addCoins = async (amount: number) => {
@@ -876,52 +858,47 @@ export const useUserData = () => {
   // true on success.
   const removeInventoryRow = async (rowId: string): Promise<boolean> => {
     if (!user?.id) return false;
-    setInventory(prev => prev.filter(i => i.id !== rowId));
-    const { error } = await supabase
-      .from('user_inventory')
-      .delete()
-      .eq('id', rowId);
-    if (error) {
-      // Refetch on failure — easier than reconstructing the deleted row.
+    try {
+      const result = await worldStore.deleteInventoryRow(rowId);
+      if (result.deletedRowIds.length > 0) {
+        setInventory(prev => prev.filter(i => !result.deletedRowIds.includes(i.id)));
+      }
+      return true;
+    } catch (err) {
+      console.error('[removeInventoryRow] deleteInventoryRow failed:', err);
+      // Refetch on failure to recover from any local-state drift.
       const { data } = await supabase.from('user_inventory').select('*').eq('user_id', user.id);
       if (data) setInventory(data);
       return false;
     }
-    return true;
   };
 
-  // Remove items from inventory (server-verified)
+  // Remove items from inventory via the L1 Write API. The RPC handles
+  // ownership + quantity validation server-side.
   const removeItems = async (itemId: string, quantity: number): Promise<boolean> => {
     if (!user?.id) return false;
-
-    // Server-side verify ownership and quantity
-    const { data: existing } = await supabase
-      .from('user_inventory')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('item_type', 'item')
-      .eq('item_id', itemId)
-      .maybeSingle();
-
-    if (!existing || existing.quantity < quantity) return false;
-
-    if (existing.quantity === quantity) {
-      const { error } = await supabase
-        .from('user_inventory')
-        .delete()
-        .eq('id', existing.id);
-      if (error) return false;
-      setInventory(prev => prev.filter(i => i.id !== existing.id));
-    } else {
-      const newQty = existing.quantity - quantity;
-      const { error } = await supabase
-        .from('user_inventory')
-        .update({ quantity: newQty, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-      if (error) return false;
-      setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: newQty } : i));
+    try {
+      const result = await worldStore.consumeInventoryTarget(itemId, quantity);
+      setInventory(prev => {
+        let next = prev;
+        if (result.deletedRowIds.length > 0) {
+          next = next.filter(i => !result.deletedRowIds.includes(i.id));
+        }
+        if (result.rows.length > 0) {
+          next = [...next];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+        }
+        return next;
+      });
+      return true;
+    } catch (err) {
+      console.error('[removeItems] consumeInventoryTarget failed:', err);
+      return false;
     }
-    return true;
   };
 
   // Orphan-equipped cleanup. After consumeGrenade/consumeEgg/etc.
