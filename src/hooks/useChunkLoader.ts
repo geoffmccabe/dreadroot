@@ -6,9 +6,15 @@ import { fogState } from '@/lib/fogConfig';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
-import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
-import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
+import {
+  ChunkSignature,
+  EMPTY_CHUNK_SIG,
+  signaturesEqual,
+  computeChunkSignature,
+  computeSurfaceVisibleBlocks,
+  sortBlocksDeterministic,
+} from '@/lib/chunkBinary';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { updateChunkHeightMap, removeChunkHeightMap, clearAllHeightMaps } from '@/lib/chunkHeightMap';
 import * as THREE from 'three';
@@ -75,13 +81,6 @@ interface PrefetchHandle {
   id: number;
 }
 
-// B4: Numeric chunk signature for O(1) world signature updates
-interface ChunkSignature {
-  count: number;
-  xor: number;
-  sum: number;
-}
-
 interface ChunkData {
   blocks: PlacedBlock[];
   // Surface-only blocks for rendering (interior blocks culled via Uint8Array grid)
@@ -132,177 +131,6 @@ const removeBlockCollider = (block: PlacedBlock): void => {
   const t0 = shouldTime ? performance.now() : 0;
   worldCollisionGrid.removeVoxel(block.position_x, block.position_y, block.position_z);
   if (shouldTime) diagnostics.recordColliderOp('remove', performance.now() - t0);
-};
-
-// Reusable occupancy buffer for surface culling — avoids allocating a new
-// Uint8Array per chunk (up to 512KB each for tall trees, causing GC storms).
-// Pre-allocate for 300-block-tall chunks (300 * 256 = 76800 bytes) to avoid
-// first-use allocation stall. Buffer grows on demand for taller chunks.
-const INITIAL_OCC_BUF_SIZE = 300 * 256;
-let _occBuf: Uint8Array = new Uint8Array(INITIAL_OCC_BUF_SIZE);
-let _occBufSize = INITIAL_OCC_BUF_SIZE;
-
-/**
- * Surface-only culling: removes fully-surrounded interior blocks per chunk.
- * Uses a compact Uint8Array occupancy grid (16×16×H) for O(1) neighbor checks.
- * Chunk-edge blocks are always kept (cross-chunk culling is too expensive).
- * This is the "Minecraft approach" — render faces, not cubes.
- */
-function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: PlacedBlock[]): PlacedBlock[] {
-  if (blocks.length < 50) return blocks; // Not worth culling tiny sets
-
-  const originX = chunkX * CHUNK_SIZE;
-  const originZ = chunkZ * CHUNK_SIZE;
-
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i < blocks.length; i++) {
-    const y = blocks[i].position_y;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-
-  const ySpan = (maxY - minY + 1);
-  if (ySpan <= 0 || ySpan > 2048) return blocks; // Safety fallback
-
-  const stride = 256; // 16 * 16 per Y layer
-  const needed = ySpan * stride;
-  // Reuse buffer if large enough, otherwise grow
-  if (_occBufSize < needed) {
-    _occBuf = new Uint8Array(needed);
-    _occBufSize = needed;
-  }
-  const occ = _occBuf;
-  // Zero only the portion we'll use (faster than allocating new)
-  occ.fill(0, 0, needed);
-
-  // Fill occupancy grid
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    const lx = b.position_x - originX;
-    const lz = b.position_z - originZ;
-    const ly = b.position_y - minY;
-
-    if (lx < 0 || lx >= 16 || lz < 0 || lz >= 16) continue;
-    occ[(ly * stride) + (lz * 16) + lx] = 1;
-  }
-
-  // Filter: keep blocks with at least one exposed face
-  // Only cull tree blocks — user-placed blocks are always kept visible
-  const visible: PlacedBlock[] = [];
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-
-    // Never cull non-tree blocks (user-placed blocks should always render)
-    if (!isTreeBlockType(b.block_type)) {
-      visible.push(b);
-      continue;
-    }
-
-    const lx = b.position_x - originX;
-    const lz = b.position_z - originZ;
-    const ly = b.position_y - minY;
-
-    // Out-of-chunk blocks: always keep (shouldn't happen, but safe)
-    if (lx < 0 || lx >= 16 || lz < 0 || lz >= 16) {
-      visible.push(b);
-      continue;
-    }
-
-    const base = (ly * stride) + (lz * 16) + lx;
-
-    // Chunk edges = always exposed (cross-chunk neighbors unknown)
-    const exposed =
-      (lx === 0) || (lx === 15) || (lz === 0) || (lz === 15) ||
-      (ly === 0) || (ly === ySpan - 1) ||
-      (occ[base - 1] === 0) || (occ[base + 1] === 0) ||       // ±X
-      (occ[base - 16] === 0) || (occ[base + 16] === 0) ||     // ±Z
-      (occ[base - stride] === 0) || (occ[base + stride] === 0); // ±Y
-
-    if (exposed) visible.push(b);
-  }
-
-  // Safety net: if all blocks were somehow culled, return original to prevent invisible chunks
-  // This should never happen for tree structures (branches always have exposed faces)
-  if (visible.length === 0 && blocks.length > 0) {
-    console.warn(`[SurfaceCulling] All ${blocks.length} tree blocks culled for chunk (${chunkX},${chunkZ}) - returning original to prevent invisible chunk`);
-    return blocks;
-  }
-
-  // B10: Sort visible blocks deterministically to stabilize sampling-based signatures
-  // Without this, after culling removes different blocks, the sample indices shift and
-  // cheapGroupKey/InstancedAtlasBlockGroup signatures change, causing cache misses
-  sortBlocksDeterministic(visible);
-
-  return visible;
-}
-
-/**
- * B4: Fast integer mixing for numeric signatures (no strings, no allocations)
- */
-const mix32 = (n: number): number => {
-  n |= 0;
-  n = Math.imul(n ^ (n >>> 16), 0x7feb352d);
-  n = Math.imul(n ^ (n >>> 15), 0x846ca68b);
-  return (n ^ (n >>> 16)) >>> 0;
-};
-
-/**
- * B4: Compute numeric hash for a single block (no string creation)
- * Uses FNV-1a style mixing with position, block_type hash, and branch_depth
- */
-const blockSig32 = (b: PlacedBlock): number => {
-  let h = 2166136261 >>> 0; // FNV offset basis
-  h = Math.imul(h ^ mix32(b.position_x | 0), 16777619) >>> 0;
-  h = Math.imul(h ^ mix32(b.position_y | 0), 16777619) >>> 0;
-  h = Math.imul(h ^ mix32(b.position_z | 0), 16777619) >>> 0;
-  // Hash block_type string by summing char codes (fast, no allocation)
-  const bt = b.block_type || '';
-  let btHash = 0;
-  for (let i = 0; i < bt.length; i++) {
-    btHash = (btHash * 31 + bt.charCodeAt(i)) | 0;
-  }
-  h = Math.imul(h ^ mix32(btHash), 16777619) >>> 0;
-  h = Math.imul(h ^ mix32((b as any).branch_depth | 0), 16777619) >>> 0;
-  return h >>> 0;
-};
-
-/**
- * B4: Compute numeric chunk signature - O(n) but no string allocations
- * Returns {count, xor, sum} for incremental world signature updates
- */
-function computeChunkSignature(blocks: PlacedBlock[]): ChunkSignature {
-  let xor = 0 >>> 0;
-  let sum = 0 >>> 0;
-  for (let i = 0; i < blocks.length; i++) {
-    const v = blockSig32(blocks[i]);
-    xor = (xor ^ v) >>> 0;
-    sum = (sum + v) >>> 0;
-  }
-  return { count: blocks.length, xor, sum };
-}
-
-// B4: Empty signature constant
-const EMPTY_CHUNK_SIG: ChunkSignature = { count: 0, xor: 0, sum: 0 };
-
-/**
- * Sort blocks deterministically by position (y, x, z).
- * Prevents reorder churn when the same blocks arrive in different order
- * from server queries or cache reads. This stabilizes cheapGroupKey sampling
- * in PlacedBlocks.tsx, avoiding false cache misses and unnecessary re-grouping.
- * In-place sort, O(n log n) per chunk — negligible for typical chunk sizes.
- */
-const sortBlocksDeterministic = (blocks: PlacedBlock[]): void => {
-  blocks.sort((a, b) =>
-    (a.position_y - b.position_y) ||
-    (a.position_x - b.position_x) ||
-    (a.position_z - b.position_z)
-  );
-};
-
-// B4: Compare two chunk signatures for equality
-const signaturesEqual = (a: ChunkSignature, b: ChunkSignature): boolean => {
-  return a.count === b.count && a.xor === b.xor && a.sum === b.sum;
 };
 
 /**
