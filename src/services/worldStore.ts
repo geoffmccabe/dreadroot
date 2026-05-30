@@ -493,6 +493,35 @@ export async function adminGrantInventoryRow(
   return { rows: raw.rows ?? [], replayed: raw.replayed ?? false };
 }
 
+// ── Token balance bootstrap (D-final-cleanup) ──────────────────────
+
+export interface TokenBalanceRow {
+  id: string;
+  user_id: string;
+  token_theme_id: string;
+  coins: number;
+  blockchain_address: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Idempotent first-login balance creation. Returns the row whether
+ *  it was just inserted or already existed. */
+export async function ensureTokenBalance(
+  tokenThemeId: string,
+  startingCoins: number,
+  requestId?: string,
+): Promise<TokenBalanceRow | null> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('ensure_token_balance', {
+    p_token_theme_id: tokenThemeId,
+    p_starting_coins: startingCoins,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return (data as TokenBalanceRow) ?? null;
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -521,4 +550,5 @@ export const worldStore = {
   pickupEgg,
   forgeItems,
   adminGrantInventoryRow,
+  ensureTokenBalance,
 };

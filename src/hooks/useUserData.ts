@@ -151,17 +151,12 @@ export const useUserData = () => {
       }
 
       if (!tokenBalanceData) {
-        const { data: newBalance, error: createError } = await supabase
-          .from('user_token_balances')
-          .insert({
-            user_id: user.id,
-            token_theme_id: currentTheme.id,
-            coins: 100
-          })
-          .select()
-          .single();
-
-        if (!createError) setTokenBalance(newBalance);
+        try {
+          const newBalance = await worldStore.ensureTokenBalance(currentTheme.id, 100);
+          if (newBalance) setTokenBalance(newBalance);
+        } catch (err) {
+          console.error('[useUserData] ensureTokenBalance failed:', err);
+        }
       } else {
         setTokenBalance(tokenBalanceData);
       }
@@ -223,23 +218,10 @@ export const useUserData = () => {
         }
       }
 
-      // Consolidate duplicate inventory rows (same user + item_type + item_id)
+      // Duplicate-row consolidation now lives server-side (one-shot
+      // migration ran in D-final-cleanup, and the D-races advisory lock
+      // prevents new duplicates from forming). No client-side merge needed.
       const inv = inventoryData || [];
-      const seen = new Map<string, typeof inv[0]>();
-      for (const row of inv) {
-        if (row.item_type !== 'item' || !row.item_id) continue;
-        const key = `${row.item_type}:${row.item_id}`;
-        const prev = seen.get(key);
-        if (prev) {
-          // Merge: add quantity to first row, delete duplicate
-          const newQty = prev.quantity + row.quantity;
-          await supabase.from('user_inventory').update({ quantity: newQty }).eq('id', prev.id);
-          await supabase.from('user_inventory').delete().eq('id', row.id);
-          prev.quantity = newQty;
-        } else {
-          seen.set(key, row);
-        }
-      }
 
       // Ensure starter items (#15 Pistol, #193 Flame Glove) with quantity >= 4
       const { data: starterDefs } = await supabase
