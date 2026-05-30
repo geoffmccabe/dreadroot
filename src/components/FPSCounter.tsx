@@ -3,6 +3,7 @@ import { useRef, useState, useEffect, useImperativeHandle, forwardRef, useCallba
 import * as THREE from 'three';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { supabase } from '@/integrations/supabase/client';
+import { APP_VERSION } from '@/version';
 
 let globalFps = 0;
 let globalPlayerPos = { x: 0, y: 0, z: 0 };
@@ -328,7 +329,8 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
 
   if (isAdmin) {
     return (
-      <div className="fixed top-2 left-2 z-50 text-xs flex flex-col gap-1">
+      <div className="fixed top-2 left-2 z-50 text-xs flex flex-row items-start gap-2">
+        <div className="flex flex-col gap-1">
         <div
           id="fps-display"
           className="pointer-events-none"
@@ -665,24 +667,50 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
             </div>
           </div>
         )}
+        </div>
+        <VersionBadge />
       </div>
     );
   }
 
   return (
+    <div className="fixed top-2 left-2 z-50 text-xs flex flex-row items-start gap-2">
+      <div
+        id="fps-display"
+        className="pointer-events-none"
+        style={{
+          borderRadius: '6px',
+          border: '1px solid hsla(211, 34%, 73%, 0.8)',
+          background: 'hsla(211, 30%, 51%, 0.35)',
+          color: 'hsl(211, 32%, 90%)',
+          fontFamily: 'Inter, sans-serif',
+          padding: '4px 8px',
+        }}
+      >
+        FPS: --
+      </div>
+      <VersionBadge />
+    </div>
+  );
+}
+
+function VersionBadge() {
+  return (
     <div
-      id="fps-display"
-      className="fixed top-2 left-2 z-50 text-xs pointer-events-none"
+      className="pointer-events-none"
       style={{
         borderRadius: '6px',
-        border: '1px solid hsla(211, 34%, 73%, 0.8)',
-        background: 'hsla(211, 30%, 51%, 0.35)',
-        color: 'hsl(211, 32%, 90%)',
+        background: 'hsla(150, 60%, 35%, 0.55)',
+        color: 'hsl(150, 80%, 95%)',
         fontFamily: 'Inter, sans-serif',
         padding: '4px 8px',
+        fontSize: '11px',
+        fontWeight: 600,
+        letterSpacing: '0.03em',
       }}
+      title="Build version — bumped on every code push"
     >
-      FPS: --
+      v{APP_VERSION}
     </div>
   );
 }
