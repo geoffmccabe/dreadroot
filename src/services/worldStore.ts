@@ -243,6 +243,77 @@ export async function vaultEnsureConfig(): Promise<VaultConfig | null> {
   return (data as VaultConfig) ?? null;
 }
 
+// ── Equipped slots (D6) ─────────────────────────────────────────────
+
+export interface EquippedRow {
+  id: string;
+  user_id: string;
+  slot_type: string;
+  item_id: string;
+  equipped_at: string;
+}
+
+export interface EquippedWriteResult {
+  rows: EquippedRow[];
+  deletedRowIds: string[];
+  replayed: boolean;
+}
+
+interface RawEquippedRpcResult {
+  rows: EquippedRow[];
+  deleted_row_ids?: string[];
+  replayed: boolean;
+}
+
+function adaptEquipped(raw: RawEquippedRpcResult): EquippedWriteResult {
+  return {
+    rows: raw.rows ?? [],
+    deletedRowIds: raw.deleted_row_ids ?? [],
+    replayed: raw.replayed ?? false,
+  };
+}
+
+export async function setEquippedSlot(
+  slotType: string,
+  itemId: string,
+  requestId?: string,
+): Promise<EquippedWriteResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('set_equipped_slot', {
+    p_slot_type: slotType,
+    p_item_id: itemId,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptEquipped(data as RawEquippedRpcResult);
+}
+
+export async function clearEquippedSlot(
+  slotType: string,
+  requestId?: string,
+): Promise<EquippedWriteResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('clear_equipped_slot', {
+    p_slot_type: slotType,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptEquipped(data as RawEquippedRpcResult);
+}
+
+export async function clearEquippedSlots(
+  slotTypes: string[],
+  requestId?: string,
+): Promise<EquippedWriteResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('clear_equipped_slots', {
+    p_slot_types: slotTypes,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptEquipped(data as RawEquippedRpcResult);
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -262,4 +333,7 @@ export const worldStore = {
   vaultRemoveFromSlot,
   vaultReplacePage,
   vaultEnsureConfig,
+  setEquippedSlot,
+  clearEquippedSlot,
+  clearEquippedSlots,
 };

@@ -291,19 +291,26 @@ export const useUserData = () => {
           itemId: e.item_id,
         })));
       } else {
-        // First time: equip starter items — #15 Pistol in slot 1, #193 Flame Glove in slot 2
+        // First time: equip starter items — #15 Pistol in slot 1, #193 Flame Glove in slot 2.
+        // Two separate set_equipped_slot RPC calls (one per slot).
         if (starterDefs && starterDefs.length > 0) {
           const pistol = starterDefs.find(d => d.item_number === 15);
           const glove = starterDefs.find(d => d.item_number === 193);
-          const starterEquips: Array<{ user_id: string; item_id: string; slot_type: string }> = [];
-          if (pistol) starterEquips.push({ user_id: user.id, item_id: pistol.id, slot_type: 'hotbar_1' });
-          if (glove) starterEquips.push({ user_id: user.id, item_id: glove.id, slot_type: 'hotbar_2' });
+          const starterEquips: Array<{ slot_type: string; item_id: string }> = [];
+          if (pistol) starterEquips.push({ slot_type: 'hotbar_1', item_id: pistol.id });
+          if (glove) starterEquips.push({ slot_type: 'hotbar_2', item_id: glove.id });
           if (starterEquips.length > 0) {
-            await supabase.from('user_equipped_items').insert(starterEquips);
-            setEquippedItems(starterEquips.map(e => ({
-              slot: parseInt(e.slot_type.replace('hotbar_', '')),
-              itemId: e.item_id,
-            })));
+            try {
+              for (const eq of starterEquips) {
+                await worldStore.setEquippedSlot(eq.slot_type, eq.item_id);
+              }
+              setEquippedItems(starterEquips.map(e => ({
+                slot: parseInt(e.slot_type.replace('hotbar_', '')),
+                itemId: e.item_id,
+              })));
+            } catch (err) {
+              console.error('[starter equips] setEquippedSlot failed:', err);
+            }
           }
         }
       }
@@ -920,16 +927,12 @@ export const useUserData = () => {
     if (orphans.length === 0) return;
     (async () => {
       const slotTypes = orphans.map(o => `hotbar_${o.slot}`);
-      const { error } = await supabase
-        .from('user_equipped_items')
-        .delete()
-        .eq('user_id', user.id)
-        .in('slot_type', slotTypes);
-      if (error) {
-        console.warn('[OrphanEquip] cleanup failed:', error.message);
-        return;
+      try {
+        await worldStore.clearEquippedSlots(slotTypes);
+        setEquippedItems(prev => prev.filter(eq => !orphans.some(o => o.slot === eq.slot)));
+      } catch (err) {
+        console.warn('[OrphanEquip] cleanup failed:', err);
       }
-      setEquippedItems(prev => prev.filter(eq => !orphans.some(o => o.slot === eq.slot)));
     })();
   }, [user?.id, inventory, equippedItems]);
 
@@ -944,32 +947,14 @@ export const useUserData = () => {
       return filtered;
     });
 
-    if (itemId) {
-      // Upsert: try update first, insert if not found
-      const { data: existing } = await supabase
-        .from('user_equipped_items')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('slot_type', slotType)
-        .maybeSingle();
-
-      if (existing) {
-        await supabase
-          .from('user_equipped_items')
-          .update({ item_id: itemId })
-          .eq('id', existing.id);
+    try {
+      if (itemId) {
+        await worldStore.setEquippedSlot(slotType, itemId);
       } else {
-        await supabase
-          .from('user_equipped_items')
-          .insert({ user_id: user.id, item_id: itemId, slot_type: slotType });
+        await worldStore.clearEquippedSlot(slotType);
       }
-    } else {
-      // Remove from slot
-      await supabase
-        .from('user_equipped_items')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('slot_type', slotType);
+    } catch (err) {
+      console.error('[updateEquippedSlot] failed:', err);
     }
   }, [user?.id]);
 
