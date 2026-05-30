@@ -1,14 +1,9 @@
 // World-egg renderer.
 //
-// Per-egg group: translucent shell containing a mini-shpider that
-// walks in place. The shell + mini-shpider tumble together so the
-// shpider stays centered inside the egg as the egg slowly inverts.
-//
-// Mini-shpider parts:
-//   • Body (sphere, per-tier shpider body texture)
-//   • Head (smaller sphere, dark, offset forward from body)
-//   • 6 dark bent legs around the body equator, animated to wiggle
-//     (walking-in-place — no translation)
+// Per-egg group: translucent shell containing a miniature version of
+// the big shpider — body cube, head cube on top with sliding
+// animation, 8 legs × 3 segments each animated by the SAME
+// getSegmentEndpoints function the big shpider uses. Just smaller.
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
@@ -17,6 +12,8 @@ import * as THREE from 'three';
 import type { WorldEgg } from '../hooks/useWorldEggs';
 import { EGG_PICKUP_REACH } from '../hooks/useWorldEggs';
 import type { ShpiderDefinition } from '@/features/shpider/types';
+import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '@/features/shpider/constants';
+import { getSegmentEndpoints, HEAD_SLIDE_HZ } from '@/features/shpider/lib/legGeometry';
 
 interface Props {
   eggs: WorldEgg[];
@@ -30,25 +27,18 @@ const FALLBACK_TEX = '/Bamboo_Seamless_t1.webp';
 // Outer shell.
 const SHELL_RADIUS = 0.22;
 
-// Mini-shpider dimensions (must fit inside SHELL_RADIUS). Body and
-// head are CUBES (matches the big shpiders, which also use BoxGeometry).
-const BODY_SIZE = 0.16;
-const BODY_HALF = BODY_SIZE / 2;
-const HEAD_SIZE = 0.09;
-const HEAD_HALF = HEAD_SIZE / 2;
-const HEAD_OFFSET = BODY_HALF + HEAD_HALF; // head sits against body's front face
-const LEG_LENGTH = 0.085;
-const LEG_THICKNESS = 0.018;
-const LEG_ANCHOR_RADIUS = BODY_HALF;
+// Mini-shpider body — sized to fit (with head + legs) inside the
+// shell. Big shpiders use bodySize from their definition (e.g. ~1.0);
+// here we just use a fixed small bodySize.
+const MINI_BODY_SIZE = 0.13;
+const MINI_HEAD_SIZE = MINI_BODY_SIZE * 0.65;
+const MINI_LEG_THICKNESS_SCALE = 0.45; // scale the big shpider's leg thickness down
 
 // Animation.
 const FLOAT_HEIGHT = 0.4;
 const FLOAT_AMPLITUDE = 0.08;
 const FLOAT_FREQ = 1.6;
 const SHELL_TUMBLE_HZ = 0.35;
-const BODY_SPIN_HZ = 0.6;
-const LEG_WIGGLE_HZ = 3.0;
-const NUM_LEGS = 6;
 
 export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
   const defsByTier = useMemo(() => {
@@ -59,49 +49,54 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
     return arr;
   }, [definitions]);
 
-  const urls = useMemo(() => {
+  // Both shell + body + head use the BODY texture (matches the big
+  // shpider — body and head share the same body texture). Legs use
+  // the LEG texture per tier when available; fallback to body tex.
+  const bodyUrls = useMemo(() => {
     const arr: string[] = [];
     for (let t = 1; t <= NUM_TIERS; t++) {
       arr.push(defsByTier[t]?.body_texture_url || FALLBACK_TEX);
     }
     return arr;
   }, [defsByTier]);
+  const legUrls = useMemo(() => {
+    const arr: string[] = [];
+    for (let t = 1; t <= NUM_TIERS; t++) {
+      arr.push(defsByTier[t]?.leg_texture_url || defsByTier[t]?.body_texture_url || FALLBACK_TEX);
+    }
+    return arr;
+  }, [defsByTier]);
 
-  const texs = useLoader(THREE.TextureLoader, urls);
+  const bodyTexs = useLoader(THREE.TextureLoader, bodyUrls);
+  const legTexs = useLoader(THREE.TextureLoader, legUrls);
   useEffect(() => {
-    texs.forEach(t => {
+    [...bodyTexs, ...legTexs].forEach(t => {
       t.colorSpace = THREE.SRGBColorSpace;
       t.minFilter = THREE.LinearMipMapLinearFilter;
       t.magFilter = THREE.LinearFilter;
       t.needsUpdate = true;
     });
-  }, [texs]);
+  }, [bodyTexs, legTexs]);
 
+  // Geometries — unit cubes scaled per-instance to match the big shpider.
   const shellGeometry = useMemo(
     () => new THREE.SphereGeometry(SHELL_RADIUS, 18, 14),
     [],
   );
-  // Body + head are cubes, matching the big shpiders (which also use
-  // BoxGeometry per ShpiderRenderer.tsx). Both share the body texture.
-  const bodyGeometry = useMemo(
-    () => new THREE.BoxGeometry(BODY_SIZE, BODY_SIZE, BODY_SIZE),
-    [],
-  );
-  const headGeometry = useMemo(
-    () => new THREE.BoxGeometry(HEAD_SIZE, HEAD_SIZE, HEAD_SIZE),
-    [],
-  );
-  // Leg geometry oriented along +Z so the leg cylinder rotates around
-  // its anchor point at z=0 cleanly. Y is the cylinder's natural long
-  // axis; we rotate it to point along Z when placing.
+  const bodyGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
+  const headGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const legGeometry = useMemo(
-    () => new THREE.CylinderGeometry(LEG_THICKNESS * 0.6, LEG_THICKNESS, LEG_LENGTH, 6),
+    () => new THREE.BoxGeometry(
+      LEG_SEGMENT_THICKNESS * MINI_LEG_THICKNESS_SCALE,
+      1,
+      LEG_SEGMENT_THICKNESS * MINI_LEG_THICKNESS_SCALE,
+    ),
     [],
   );
 
-  // Per-tier materials. Shell is translucent; body is opaque.
+  // Per-tier materials.
   const shellMaterials = useMemo(
-    () => texs.map(tex => new THREE.MeshStandardMaterial({
+    () => bodyTexs.map(tex => new THREE.MeshStandardMaterial({
       map: tex,
       roughness: 0.4,
       metalness: 0.1,
@@ -112,26 +107,15 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
       depthWrite: false,
       side: THREE.DoubleSide,
     })),
-    [texs],
+    [bodyTexs],
   );
   const bodyMaterials = useMemo(
-    () => texs.map(tex => new THREE.MeshStandardMaterial({
-      map: tex,
-      roughness: 0.45,
-      metalness: 0.05,
-      emissive: '#222222',
-      emissiveIntensity: 0.5,
-    })),
-    [texs],
+    () => bodyTexs.map(tex => new THREE.MeshLambertMaterial({ map: tex })),
+    [bodyTexs],
   );
-  const legMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({
-      color: '#1a0a0a',
-      roughness: 0.7,
-      emissive: '#330000',
-      emissiveIntensity: 0.3,
-    }),
-    [],
+  const legMaterials = useMemo(
+    () => legTexs.map(tex => new THREE.MeshLambertMaterial({ map: tex })),
+    [legTexs],
   );
 
   // "Press F to pick up" prompt — above the closest in-range egg.
@@ -168,20 +152,23 @@ export function WorldEggRenderer({ eggs, definitions, cameraRef }: Props) {
 
   return (
     <>
-      {eggs.map((egg, idx) => (
-        <EggInstance
-          key={egg.id}
-          egg={egg}
-          index={idx}
-          shellGeometry={shellGeometry}
-          bodyGeometry={bodyGeometry}
-          headGeometry={headGeometry}
-          legGeometry={legGeometry}
-          shellMaterial={shellMaterials[Math.max(0, Math.min(NUM_TIERS - 1, egg.tier - 1))]}
-          bodyMaterial={bodyMaterials[Math.max(0, Math.min(NUM_TIERS - 1, egg.tier - 1))]}
-          legMaterial={legMaterial}
-        />
-      ))}
+      {eggs.map((egg, idx) => {
+        const tierIdx = Math.max(0, Math.min(NUM_TIERS - 1, egg.tier - 1));
+        return (
+          <EggInstance
+            key={egg.id}
+            egg={egg}
+            index={idx}
+            shellGeometry={shellGeometry}
+            bodyGeometry={bodyGeometry}
+            headGeometry={headGeometry}
+            legGeometry={legGeometry}
+            shellMaterial={shellMaterials[tierIdx]}
+            bodyMaterial={bodyMaterials[tierIdx]}
+            legMaterial={legMaterials[tierIdx]}
+          />
+        );
+      })}
 
       <group ref={promptRef} visible={false}>
         <Text
@@ -211,34 +198,58 @@ interface InstanceProps {
   legMaterial: THREE.Material;
 }
 
+// Scratch vectors per leg-segment placement, reused across all eggs
+// (one per frame so we don't allocate new Vector3s per leg per egg).
+const _segScratch = { start: new THREE.Vector3(), end: new THREE.Vector3() };
+const _segMid = new THREE.Vector3();
+const _segDir = new THREE.Vector3();
+const _segUp = new THREE.Vector3(0, 1, 0);
+
 function EggInstance({
   egg, index,
   shellGeometry, bodyGeometry, headGeometry, legGeometry,
   shellMaterial, bodyMaterial, legMaterial,
 }: InstanceProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const bodyGroupRef = useRef<THREE.Group>(null);
-  const legRefs = useRef<(THREE.Group | null)[]>(new Array(NUM_LEGS).fill(null));
+  const shpiderGroupRef = useRef<THREE.Group>(null);
+  const bodyMeshRef = useRef<THREE.Mesh>(null);
+  const headMeshRef = useRef<THREE.Mesh>(null);
+  const legMeshRefs = useRef<(THREE.Mesh | null)[]>(
+    new Array(LEGS_PER_SHPIDER * SEGMENTS_PER_LEG).fill(null),
+  );
 
-  // Leg anchor positions around body equator.
-  const legAnchors = useMemo(() => {
-    const arr: { x: number; z: number; angle: number }[] = [];
-    for (let l = 0; l < NUM_LEGS; l++) {
-      const a = (l / NUM_LEGS) * Math.PI * 2;
+  // Per-leg random offsets/freq/amplitude, persisted for the egg's
+  // lifetime so each leg has a consistent gait.
+  const legParams = useMemo(() => {
+    const arr: { phase: number; freq: number; lift: number }[] = [];
+    // Deterministic seed from egg.id so same egg always animates the same
+    let seed = 0;
+    for (let i = 0; i < egg.id.length; i++) seed = (seed * 31 + egg.id.charCodeAt(i)) | 0;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) | 0;
+      return ((seed >>> 0) / 0xffffffff);
+    };
+    for (let i = 0; i < LEGS_PER_SHPIDER; i++) {
       arr.push({
-        x: Math.cos(a) * LEG_ANCHOR_RADIUS,
-        z: Math.sin(a) * LEG_ANCHOR_RADIUS,
-        angle: a,
+        phase: rand() * Math.PI * 2,
+        freq: 0.8 + rand() * 0.5,
+        lift: 0.25 + rand() * 0.15,
       });
     }
     return arr;
-  }, []);
+  }, [egg.id]);
+  // Random head-slide phase per egg.
+  const headSlidePhase = useMemo(() => {
+    let seed = 0;
+    for (let i = 0; i < egg.id.length; i++) seed = (seed * 17 + egg.id.charCodeAt(i)) | 0;
+    return ((seed >>> 0) / 0xffffffff) * Math.PI * 2;
+  }, [egg.id]);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     const phaseOffset = index * 1.7;
 
-    // Whole-group: bob + slow tumble (egg inverting).
+    // Outer group: egg world position + bob + slow tumble.
     const bob = Math.sin(t * FLOAT_FREQ + phaseOffset) * FLOAT_AMPLITUDE;
     if (groupRef.current) {
       groupRef.current.position.set(egg.x, egg.y + FLOAT_HEIGHT + bob, egg.z);
@@ -248,20 +259,56 @@ function EggInstance({
         0,
       );
     }
-    // Mini-shpider body+legs+head rotate together inside the shell —
-    // a little slower than the shell tumble so the body appears to
-    // turn relative to the shell.
-    if (bodyGroupRef.current) {
-      bodyGroupRef.current.rotation.y = t * BODY_SPIN_HZ * Math.PI * 2 + phaseOffset;
+
+    // Body — sits at halfBody above origin (matches big shpider).
+    const halfBody = MINI_BODY_SIZE * 0.5;
+    if (bodyMeshRef.current) {
+      bodyMeshRef.current.position.set(0, halfBody, 0);
+      bodyMeshRef.current.scale.set(MINI_BODY_SIZE, MINI_BODY_SIZE, MINI_BODY_SIZE);
     }
-    // Per-leg wiggle. Each leg group has its anchor at the body
-    // surface; we rotate the group itself to swing the leg.
-    for (let l = 0; l < NUM_LEGS; l++) {
-      const g = legRefs.current[l];
-      if (!g) continue;
-      const legPhase = t * LEG_WIGGLE_HZ * Math.PI * 2 + l * 1.05;
-      // Swing the leg up/down around the body's tangent axis.
-      g.rotation.x = Math.sin(legPhase) * 0.6;
+
+    // Head — directly above body, sliding forward/back. Same formula
+    // as ShpiderRenderer.tsx (head Y = bodySize + headSize*0.5; head Z
+    // = bodySize*0.45 + sin(...) * (headSize*0.5)).
+    const slide = Math.sin(t * Math.PI * 2 * HEAD_SLIDE_HZ + headSlidePhase) * (MINI_HEAD_SIZE * 0.5);
+    const headForward = MINI_BODY_SIZE * 0.45 + slide;
+    const headY = MINI_BODY_SIZE + MINI_HEAD_SIZE * 0.5;
+    if (headMeshRef.current) {
+      headMeshRef.current.position.set(0, headY, headForward);
+      headMeshRef.current.scale.set(MINI_HEAD_SIZE, MINI_HEAD_SIZE, MINI_HEAD_SIZE);
+    }
+
+    // Legs — 8 legs × 3 segments, same getSegmentEndpoints math as
+    // the big shpider. crawlT=1 means "always walking."
+    let meshIdx = 0;
+    for (let leg = 0; leg < LEGS_PER_SHPIDER; leg++) {
+      const lp = legParams[leg];
+      for (let seg = 0; seg < SEGMENTS_PER_LEG; seg++, meshIdx++) {
+        const m = legMeshRefs.current[meshIdx];
+        if (!m) continue;
+        getSegmentEndpoints(
+          leg, seg, MINI_BODY_SIZE,
+          null,  // no hop
+          1.0,   // always crawl
+          lp.phase, lp.freq, lp.lift,
+          t, _segScratch,
+        );
+        // Endpoints are body-local (origin = body center on surface,
+        // y=0 at body bottom). Big shpider adds halfBody to Y so the
+        // body is centered correctly; do the same here.
+        _segScratch.start.y += halfBody;
+        _segScratch.end.y += halfBody;
+
+        _segMid.addVectors(_segScratch.start, _segScratch.end).multiplyScalar(0.5);
+        _segDir.subVectors(_segScratch.end, _segScratch.start);
+        const len = _segDir.length();
+        if (len < 1e-4) continue;
+        _segDir.normalize();
+
+        m.position.copy(_segMid);
+        m.quaternion.setFromUnitVectors(_segUp, _segDir);
+        m.scale.set(1, len, 1);
+      }
     }
   });
 
@@ -270,39 +317,18 @@ function EggInstance({
       {/* Translucent outer shell */}
       <mesh geometry={shellGeometry} material={shellMaterial} renderOrder={2} />
 
-      {/* Mini-shpider — body + head + legs, all rotating together */}
-      <group ref={bodyGroupRef}>
-        {/* Body */}
-        <mesh geometry={bodyGeometry} material={bodyMaterial} />
-
-        {/* Head — small cube using the same body texture, offset
-            forward (+Z is "front"). Same material as the big shpiders. */}
-        <mesh geometry={headGeometry} material={bodyMaterial} position={[0, 0, HEAD_OFFSET]} />
-
-        {/* 6 legs around the body equator. Each leg is a Group rooted
-            at the body's surface point, with the leg cylinder shifted
-            so its base sits at the group origin and the leg extends
-            outward + slightly downward. */}
-        {legAnchors.map((a, l) => (
-          <group
-            key={l}
-            ref={(g) => { legRefs.current[l] = g; }}
-            position={[a.x, 0, a.z]}
-            // Orient so the leg's +Y axis points away from the body
-            // center (outward radially). Then rotate to angle outward
-            // and slightly down.
-            rotation={[0, -a.angle, -Math.PI / 2 + 0.3]}
-          >
-            {/* Cylinder geometry's local +Y is the cylinder long axis;
-                shift down by half its length so the group origin sits
-                at the leg's BASE (where it attaches to the body), not
-                its middle. */}
-            <mesh
-              geometry={legGeometry}
-              material={legMaterial}
-              position={[0, LEG_LENGTH / 2, 0]}
-            />
-          </group>
+      {/* Mini-shpider — body + head + 8 legs × 3 segments, all parented
+          to one group so they tumble together with the shell. */}
+      <group ref={shpiderGroupRef}>
+        <mesh ref={bodyMeshRef} geometry={bodyGeometry} material={bodyMaterial} />
+        <mesh ref={headMeshRef} geometry={headGeometry} material={bodyMaterial} />
+        {Array.from({ length: LEGS_PER_SHPIDER * SEGMENTS_PER_LEG }).map((_, i) => (
+          <mesh
+            key={i}
+            ref={(m) => { legMeshRefs.current[i] = m; }}
+            geometry={legGeometry}
+            material={legMaterial}
+          />
         ))}
       </group>
     </group>
