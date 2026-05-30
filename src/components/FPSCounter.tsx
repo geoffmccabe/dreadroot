@@ -559,7 +559,17 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
                       </div>
                     </span>
                   ) : 'unowned'}</div>
-                  {inspectData.sources.state.createdAt && <div>Created: {new Date(inspectData.sources.state.createdAt).toLocaleDateString()}</div>}
+                  <div>Created: {inspectData.sources.state.createdAt ? (() => {
+                    const d = new Date(inspectData.sources.state.createdAt);
+                    if (isNaN(d.getTime())) return 'invalid';
+                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    const y = d.getFullYear();
+                    const m = months[d.getMonth()];
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const hh = String(d.getHours()).padStart(2, '0');
+                    const mm = String(d.getMinutes()).padStart(2, '0');
+                    return `${y}-${m}-${day} ${hh}:${mm}`;
+                  })() : 'unknown'}</div>
                   {inspectData.sources.state.expiresAt && <div>Expires: {inspectData.sources.state.expiresAt}</div>}
                 </div>
               </div>

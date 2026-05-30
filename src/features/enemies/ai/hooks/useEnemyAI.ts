@@ -19,6 +19,7 @@ import { ShombieAdapter, type ShombieWithAI, setShombieLocomotionContext } from 
 import { WalapaAdapter, type WalapaWithAI, setWalapaLocomotionContext } from '../adapters/WalapaAdapter';
 import { ShtickmanAdapter, type ShtickmanWithAI, setShtickmanLocomotionContext } from '../adapters/ShtickmanAdapter';
 import { frameLoop } from '@/lib/frameLoop';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import type { ShnakeInstance } from '@/features/shnake/types';
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
 import type { ShombieInstance } from '@/features/shombie/types';
@@ -268,18 +269,13 @@ export function useEnemyAI({
     EnemyManager.setAIControlled(aiControlled);
     EnemyManager.initialize();
     
-    // Register player position updater with frameLoop (priority 35: before enemyAI at 40)
+    // Register player position updater with frameLoop (priority 35: before enemyAI at 40).
+    // Reads the canonical snapshot — post-L2 this becomes reconciled server state.
     const unregisterPlayerUpdate = frameLoop.register(
       'enemyAI-playerPos',
       () => {
-        const camera = cameraRef.current;
-        if (camera) {
-          EnemyManager.setPlayerPosition(
-            camera.position.x,
-            camera.position.y,
-            camera.position.z
-          );
-        }
+        const snap = getLocalPlayerSnapshot();
+        EnemyManager.setPlayerPosition(snap.x, snap.y, snap.z);
       },
       35
     );

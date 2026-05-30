@@ -7,7 +7,7 @@
  */
 
 import * as THREE from 'three';
-import { collisionGrid } from '@/lib/spatialHashGrid';
+import { collisionGrid, numPosKey, NUMPOSKEY_X_STRIDE, NUMPOSKEY_Y_STRIDE } from '@/lib/spatialHashGrid';
 import type { ShnakeInstance } from '@/features/shnake/types';
 import type { PlantedTree } from '@/features/trees/types';
 import type { BehaviorResult } from '../types';
@@ -123,20 +123,16 @@ function isTouchingTree(
   const tierMap = treeBlocksByTier?.get(tier);
   if (!tierMap) return false;
 
-  // Numeric position key — matches the +32768 offset used by
-  // useShnakeSystem.key (the map's writer). Each shnake hits this 6×
-  // per movement step; switching from template-literal strings to a
-  // pure-int key eliminated ~300 string allocations per frame in the
-  // 50-shnake case (post-trace optimization, see useShnakeSystem.ts).
-  const yOff = (y + 32768) * 65536;
-  const xOff = (x + 32768) * 4294967296;
-  const zOff = (z + 32768);
-  if (tierMap.has(xOff + 4294967296 + yOff + zOff)) return true; // x+1
-  if (tierMap.has(xOff - 4294967296 + yOff + zOff)) return true; // x-1
-  if (tierMap.has(xOff + (yOff + 65536) + zOff)) return true;    // y+1
-  if (tierMap.has(xOff + (yOff - 65536) + zOff)) return true;    // y-1
-  if (tierMap.has(xOff + yOff + (zOff + 1))) return true;        // z+1
-  if (tierMap.has(xOff + yOff + (zOff - 1))) return true;        // z-1
+  // Numeric position key from canonical encoder. Six face-neighbor checks
+  // use stride constants to avoid recomputing the key (per-frame hot path,
+  // 6× per shnake per movement step — kept zero-alloc).
+  const k = numPosKey(x, y, z);
+  if (tierMap.has(k + NUMPOSKEY_X_STRIDE)) return true; // x+1
+  if (tierMap.has(k - NUMPOSKEY_X_STRIDE)) return true; // x-1
+  if (tierMap.has(k + NUMPOSKEY_Y_STRIDE)) return true; // y+1
+  if (tierMap.has(k - NUMPOSKEY_Y_STRIDE)) return true; // y-1
+  if (tierMap.has(k + 1)) return true;                  // z+1
+  if (tierMap.has(k - 1)) return true;                  // z-1
 
   return false;
 }

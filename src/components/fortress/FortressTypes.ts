@@ -187,6 +187,17 @@ export interface SceneProps {
   /** Fired when a shpider dies. Used by Fortress.tsx to bump
    *  user_combat_stats so the Kills panel shows them. */
   onShpiderKilled?: (tier: number) => void;
+  /** Fired when a PET shpider dies (hatched from a thrown egg).
+   *  Parent inserts a world_eggs row so the owner can pick it back up
+   *  with a 1-hour cooldown. */
+  onPetShpiderDied?: (info: {
+    tier: number;
+    petOwnerUserId: string;
+    eggInventoryRowId: string | null;
+    x: number;
+    y: number;
+    z: number;
+  }) => void;
   // Shtickman system
   shtickmanDefinitions?: ShtickmanDefinition[];
   onShtickmanKilled?: (tier: number) => void;
@@ -238,11 +249,27 @@ export interface SceneProps {
    *  tier. Returns null if no grenade is held. Inventory is owned by
    *  Fortress.tsx so the throw mechanism delegates here. */
   consumeGrenade?: () => number | null;
+  /** Throw a shpider egg now. Returns true if one was thrown. */
+  onThrowEgg?: () => boolean;
+  /** Y-key handler — parent decides whether to arm. */
+  onEggTogglePress?: () => void;
+  /** True while an egg is armed for throw. */
+  eggReady?: boolean;
+  /** Consume one shpider egg from inventory. Returns the row id + tier
+   *  so the spawned pet can refund the same row (with cooldown) on
+   *  death. Skips cooldown-locked rows. */
+  consumeEgg?: () => { tier: number; eggInventoryRowId: string } | null;
   /** Admin/superadmin only: grant 1 grenade and auto-equip to hotbar
    *  slot 6 if free. Wired to Cmd+G in FortressControls. */
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: grant 1 health potion (same equip rule). */
   onAdminGrantHealthPotion?: () => Promise<boolean>;
+  /** Cmd+M opens this panel. Open to all roles; superadmin paint/erase
+   *  + admin tooltip detail is gated inside the panel itself. */
+  onOpenGodMap?: () => void;
+  /** Mutable ref the scene populates each frame with the player's
+   *  current world position. Read by the God Map panel. */
+  playerPositionRef?: React.RefObject<THREE.Vector3 | null>;
   /** Vault: parent state, scene reports proximity, V opens. */
   vaultInRange?: boolean;
   onVaultProximityChange?: (inRange: boolean) => void;
@@ -325,12 +352,20 @@ export interface FirstPersonControlsProps {
   onGrenadeTogglePress?: () => void;
   /** True while grenade is armed. */
   grenadeReady?: boolean;
+  /** Throw a shpider egg now. */
+  onThrowEgg?: () => boolean;
+  /** Parent Y-press handler. */
+  onEggTogglePress?: () => void;
+  /** True while an egg is armed. */
+  eggReady?: boolean;
   /** H-press handler. */
   onHealthPotionUse?: () => void;
   /** Admin/superadmin only: Cmd+G grants a grenade. */
   onAdminGrantGrenade?: () => Promise<boolean>;
   /** Admin/superadmin only: Cmd+H grants a health potion. */
   onAdminGrantHealthPotion?: () => Promise<boolean>;
+  /** Cmd+M opens the God Map. */
+  onOpenGodMap?: () => void;
   /** V key handler — Fortress.tsx only wires this when player is in
    *  the vault's back-wall trigger zone. */
   onOpenVault?: () => void;

@@ -32,3 +32,4 @@ dist-ssr
 # perftest auth/session state — never commit
 .perftest/
 perftest-results/
+3d_assets/

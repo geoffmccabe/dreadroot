@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { numPosKey } from '@/lib/spatialHashGrid';
 import { frameLoop } from '@/lib/frameLoop';
 import { ATLAS_GRID_SIZE } from '@/lib/textureAtlas';
 // enqueueJob no longer used — atlas rebuild uses its own RAF loop
@@ -76,11 +77,6 @@ function getCachedAnimInfo(blockType: string) {
   return info;
 }
 
-// Numeric position key: collision-free for block coords in [-32768, 32767]
-// Eliminates string allocation that causes GC pressure during incremental updates
-function numPosKey(x: number, y: number, z: number): number {
-  return (x + 32768) * 4294967296 + (y + 32768) * 65536 + (z + 32768);
-}
 
 // Threshold for auto-enabling performance mode
 // ── Cross-chunk frame-budgeted rebuild scheduler ──────────────────────────────

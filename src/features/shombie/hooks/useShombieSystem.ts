@@ -14,6 +14,7 @@ import {
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '../constants';
 
 // Head movement type randomizer - 1/3 each
@@ -88,22 +89,16 @@ export function useShombieSystem({
     // Play moans even when natural spawning is disabled (for manually spawned shombies)
 
     const moanCheck = () => {
-      const camera = cameraRef.current;
-      if (!camera) return;
       if (shombiesRef.current.length === 0) return;
+      const p = getLocalPlayerSnapshot();
 
       for (const shombie of shombiesRef.current) {
         if (!shombie.isActive) continue;
-        
-        // 10% chance per zombie
         if (Math.random() < MOAN_CHANCE) {
-          // Calculate distance to camera
-          const dx = shombie.position.x - camera.position.x;
-          const dy = shombie.position.y - camera.position.y;
-          const dz = shombie.position.z - camera.position.z;
+          const dx = shombie.position.x - p.x;
+          const dy = shombie.position.y - p.y;
+          const dz = shombie.position.z - p.z;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          
-          // Play spatial audio with distance-based volume
           playSpatialSound(MOAN_SOUND_URL, distance, { baseVolume: MOAN_VOLUME });
         }
       }
@@ -111,19 +106,18 @@ export function useShombieSystem({
 
     const interval = setInterval(moanCheck, MOAN_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isEnabled, cameraRef]);
+  }, [isEnabled]);
 
   /**
    * Get player's current chunk
    */
   const getPlayerChunk = useCallback((): { x: number; z: number } | null => {
-    const camera = cameraRef.current;
-    if (!camera) return null;
+    const p = getLocalPlayerSnapshot();
     return {
-      x: Math.floor(camera.position.x / CHUNK_SIZE),
-      z: Math.floor(camera.position.z / CHUNK_SIZE),
+      x: Math.floor(p.x / CHUNK_SIZE),
+      z: Math.floor(p.z / CHUNK_SIZE),
     };
-  }, [cameraRef]);
+  }, []);
 
   /**
    * Count shombies in a specific chunk
@@ -221,20 +215,14 @@ export function useShombieSystem({
       return;
     }
 
-    const camera = cameraRef.current;
-    if (!camera) {
-      console.warn('[Shombie] Cannot spawn group - no camera');
-      return;
-    }
-
-    // Spawn in front of player, spread in a semicircle
-    const forward = new THREE.Vector3(0, 0, -1);
-    forward.applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
-
-    const baseX = camera.position.x + forward.x * 8; // 8 blocks in front
-    const baseZ = camera.position.z + forward.z * 8;
+    // Spawn 8 blocks in front of the player, spread in a semicircle.
+    // Forward derived from snapshot yaw — at yaw=0 the player looks
+    // down -Z, so forward = (-sin yaw, 0, -cos yaw).
+    const p = getLocalPlayerSnapshot();
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    const baseX = p.x + fx * 8;
+    const baseZ = p.z + fz * 8;
 
     for (let i = 0; i < spawnCount; i++) {
       // Spread around the base position
@@ -294,7 +282,11 @@ export function useShombieSystem({
     damage: number,
     knockbackDir?: THREE.Vector3,
     isHeadshot: boolean = false,
-    bulletDirection?: THREE.Vector3
+    bulletDirection?: THREE.Vector3,
+    /** Strength of the knockback impulse. Bullets default to ~1 m/s;
+     *  grenade blasts pass a much larger value (post-falloff). The
+     *  knockbackDir Y component lets blasts launch shombies upward. */
+    kbStrength: number = 1.0,
   ): boolean => {
     const shombie = shombiesRef.current.find(s => s.id === shombieId);
     if (!shombie || !shombie.isActive) return false;
@@ -314,10 +306,15 @@ export function useShombieSystem({
       // Clear velocity when knocked down
       shombie.velocity.set(0, 0, 0);
     } else if (knockbackDir) {
-      // Body shot: 1 block knockback + 1 second stun
-      shombie.velocity.x = knockbackDir.x * 1.0;
-      shombie.velocity.z = knockbackDir.z * 1.0;
-      shombie.stunUntil = Date.now() + 1000; // 1 second stun
+      // Apply the impulse on all three axes. Grenade source passes a
+      // unit-length knockbackDir with a 0–45° upward tilt baked in;
+      // bullets pass horizontal-only at kbStrength=1.
+      shombie.velocity.x = knockbackDir.x * kbStrength;
+      shombie.velocity.z = knockbackDir.z * kbStrength;
+      if (knockbackDir.y > 0) {
+        shombie.velocity.y = knockbackDir.y * kbStrength;
+      }
+      shombie.stunUntil = Date.now() + 1000;
     }
 
     if (shombie.currentHealth <= 0) {
@@ -433,8 +430,14 @@ export function useShombieSystem({
         };
       },
       applyDamage: (s, info) => {
-        dirScratch.set(info.knockbackDirX, 0, info.knockbackDirZ);
-        return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch);
+        dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
+        // Grenade blast: pass the falloff-scaled impulse magnitude so
+        // explosions actually punt shombies. Bullets keep the gentle
+        // 1 m/s tap that the body-shot stun rule expects.
+        const kbStrength = info.source === 'explosion'
+          ? (info.bulletSpeed || 1.0)
+          : 1.0;
+        return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
     });

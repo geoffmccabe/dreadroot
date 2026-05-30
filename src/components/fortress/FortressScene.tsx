@@ -67,9 +67,17 @@ import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBO
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
+import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer } from '@/features/shpider-eggs';
 import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
 import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { isPointInFlameCone, FLAME_HALF_ANGLE, flameDpsForTier, flameBurnSecondsForTier } from '@/features/combat';
+import { updateLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { usePlayerCombatAdapter } from '@/features/players/combat/PlayerCombatAdapter';
+
+// Module-level scratch Euler used by the snapshot updater. YXZ order
+// matches the camera quaternion convention.
+const _snapEuler = new THREE.Euler();
 import { getHeightBlocks } from '@/features/shtickman/types';
 
 // Tree system imports
@@ -132,6 +140,8 @@ export function FortressScene({
   onModeChange,
   onOpenPanel,
   onOpenMarketplace,
+  onOpenGodMap,
+  playerPositionRef,
   onToggleInventory,
   crosshairsEnabled,
   getBlockQuantity,
@@ -187,9 +197,13 @@ export function FortressScene({
   consumeGrenade,
   onGrenadeTogglePress,
   grenadeReady,
+  consumeEgg,
+  onEggTogglePress,
+  eggReady,
   onHealthPotionUse,
   onGrowthProximityChange,
   onShpiderKilled,
+  onPetShpiderDied,
   onAdminGrantGrenade,
   onAdminGrantHealthPotion,
   vaultInRange,
@@ -233,6 +247,13 @@ export function FortressScene({
     plantedTrees,
     treeFruits,
     worldId: currentWorldId,
+    userId: currentUserId ?? null,
+    cameraRef,
+  });
+
+  // World eggs (dropped on pet death). Owner-scoped fetch + realtime;
+  // F-key prompt + pickup. See useWorldEggs for the row-shape contract.
+  const { eggs: worldEggs, findClosestEgg, pickupClosestEgg } = useWorldEggs({
     userId: currentUserId ?? null,
     cameraRef,
   });
@@ -484,17 +505,42 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     playerLevel,
   });
 
+  // PvP combat adapter stub — no-op until PLAYER_PVP_ADAPTER_ENABLED
+  // is flipped on, but the call site lives here for the L2 migration.
+  usePlayerCombatAdapter(currentUserId ?? null);
+
   // Shpider system — Phase 3 static. Spawn via Ctrl+P (admin) or
   // window.__spawnShpiders(tier, count) in the console.
   const { data: shpiderDefinitionsData } = useShpiderDefinitions();
   const shpiderDefinitions = shpiderDefinitionsData ?? [];
-  const { shpidersRef, fragmentsRef: shpiderFragmentsRef, spawnShpiderGroup, damageShpider } = useShpiderSystem({
+  const { shpidersRef, fragmentsRef: shpiderFragmentsRef, spawnShpiderGroup, spawnShpiderAt, damageShpider } = useShpiderSystem({
     definitions: shpiderDefinitions,
     cameraRef,
     isEnabled: enemiesEnabled,
     userRoles,
     onShpiderKilled,
+    onPetDied: onPetShpiderDied,
   });
+
+  // Shpider Egg system — eggs hatch into a tier-matched PET shpider on
+  // rest. The pet is owned by the local thrower; pet AI targets nearby
+  // hostile enemies instead of the owner, and pet death leaves a
+  // world egg the owner can pick back up.
+  const { eggsRef, throwEgg } = useShpiderEggSystem({
+    cameraRef,
+    onHatch: ({ tier, position, eggInventoryRowId }) => {
+      const def = shpiderDefinitions.find(d => d.tier === tier)
+        ?? shpiderDefinitions[0];
+      if (!def) return;
+      spawnShpiderAt(def, position.x, position.z, currentUserId ?? null, eggInventoryRowId);
+    },
+  });
+  const handleThrowEgg = useCallback((): boolean => {
+    if (!consumeEgg) return false;
+    const consumed = consumeEgg();
+    if (!consumed) return false;
+    return throwEgg(consumed.tier, consumed.eggInventoryRowId);
+  }, [consumeEgg, throwEgg]);
 
   // Walapa system - floating whale creatures that travel between tall trees
   // Memoized: only recomputes when plantedTrees changes (not on every call)
@@ -1258,6 +1304,27 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // grenade hook accepts a ref it can read at explosion time.
   applyBurnRef.current = burnSystem.applyBurn;
 
+  // Keep the God Map's player-position ref AND the global player
+  // snapshot fresh. The snapshot is what enemy AI hooks read each
+  // frame — the L2 DO migration will swap its source from camera to
+  // server-reconciled state without changing any AI code.
+  useFrame(() => {
+    if (playerPositionRef) {
+      if (!playerPositionRef.current) {
+        (playerPositionRef as React.MutableRefObject<THREE.Vector3 | null>).current = new THREE.Vector3();
+      }
+      playerPositionRef.current!.copy(camera.position);
+    }
+    _snapEuler.setFromQuaternion(camera.quaternion, 'YXZ');
+    updateLocalPlayerSnapshot({
+      x: camera.position.x,
+      y: camera.position.y,
+      z: camera.position.z,
+      yaw: _snapEuler.y,
+      pitch: _snapEuler.x,
+    });
+  });
+
   useFrame((_, delta) => {
     if (!flamethrower.isActiveRef.current) return;
 
@@ -1267,20 +1334,24 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     flameDamageTickRef.current = 0;
 
     const { tier, distance, colors, colorMode } = configRef_flame.current;
-    const dps = 10 * tier;
+    const dps = flameDpsForTier(tier);
     const tickDamage = Math.round(dps * tickDelta);
     if (tickDamage <= 0) return;
-    // Tier-scaled burn duration. T1 = 5s, T10 = 14s. Higher tier
-    // weapons make the residual flame stick around longer for more
-    // total DOT damage.
-    const burnSecondsForTier = 5 + (tier - 1);
+    const burnSecondsForTier = flameBurnSecondsForTier(tier);
 
     // Flame direction from camera
     const origin = camera.position;
     const dir = _flameDirVec.current.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    const halfAngle = Math.PI / 9; // ~20 degrees — matches visual flame spread
+    const halfAngle = FLAME_HALF_ANGLE;
 
-    // Helper: check if a position is within flame cone
+    // Helper: check if a position is within flame cone. Geometry lives
+    // in @/features/combat so the same test runs on the L2 DO.
+    const flameCone = {
+      originX: origin.x, originY: origin.y, originZ: origin.z,
+      dirX: dir.x, dirY: dir.y, dirZ: dir.z,
+      maxDistance: distance,
+      halfAngle,
+    };
     const isInCone = (pos: THREE.Vector3): boolean => {
       const toEnemy = _flameEnemyDir.current.copy(pos).sub(origin);
       const dist = toEnemy.length();
@@ -1371,6 +1442,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onWideTreePlace={onWideTreePlace}
         onOpenPanel={onOpenPanel}
         onOpenMarketplace={onOpenMarketplace}
+        onOpenGodMap={onOpenGodMap}
         onToggleInventory={onToggleInventory}
         onModeChange={onModeChange}
         getBlockQuantity={getBlockQuantity}
@@ -1411,6 +1483,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onThrowGrenade={handleThrowGrenade}
         onGrenadeTogglePress={onGrenadeTogglePress}
         grenadeReady={grenadeReady}
+        onThrowEgg={handleThrowEgg}
+        onEggTogglePress={onEggTogglePress}
+        eggReady={eggReady}
         onHealthPotionUse={onHealthPotionUse}
         onAdminGrantGrenade={onAdminGrantGrenade}
         onAdminGrantHealthPotion={onAdminGrantHealthPotion}
@@ -1427,7 +1502,15 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         isFlameGloveSelected={isFlameGloveSelected}
         onFlameStart={handleFlameStart}
         onFlameStop={handleFlameStop}
-        onHarvestFruit={harvestNearest}
+        onHarvestFruit={async () => {
+          // Eggs take priority over fruit on the F key — easy to walk
+          // past a freshly-dropped egg if a tree's right there.
+          if (findClosestEgg()) {
+            await pickupClosestEgg();
+            return;
+          }
+          harvestNearest();
+        }}
         checkIsInWater={worldPonds.checkIsInWater}
         getWaterType={worldPonds.getWaterType}
         loadedChunksRef={chunksRef}
@@ -1507,10 +1590,17 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         cameraRef={cameraRef}
         definitions={shpiderDefinitions}
         onPlayerHit={handleShpiderPlayerHit}
+        localUserId={currentUserId}
       />
 
       {/* Grenade Renderer — instanced spheres for live grenades. */}
       <GrenadeRenderer grenadesRef={grenadesRef} />
+
+      {/* Shpider Egg Renderer — per-tier shpider body texture. */}
+      <ShpiderEggRenderer eggsRef={eggsRef} definitions={shpiderDefinitions} />
+
+      {/* Dropped pet-shpider eggs in the world (owner-scoped). */}
+      <WorldEggRenderer eggs={worldEggs} definitions={shpiderDefinitions} />
 
       {/* Grenade explosion FX — shockwave ring + bright flash. Sits
           on top of the existing flame plumes for the "concussion"

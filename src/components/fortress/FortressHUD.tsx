@@ -114,6 +114,7 @@ export function FortressHUD(props: FortressHUDProps) {
     onSelectSlot,
     onDeleteBlock,
     grenadeReadySlot = null,
+    eggReadySlot = null,
     potionDrinkingSlot = null,
     onUseHotbarSlot,
   } = props;
@@ -297,16 +298,34 @@ export function FortressHUD(props: FortressHUDProps) {
   // stacks, rowId for non-stackable rows). One entry per future tile.
   const inventoryItemsMap = useMemo(() => {
     const map = new Map<string, { gridKey: string; itemId: string; sprite: string | null; name: string | null; tier: number | null; quantity: number; isNonStackRow: boolean; cooldownUntil: number | null }>();
+    // Equipped slots claim items off the top of the inventory: one row
+    // per equipped slot for non-stack items, or the whole item_id stack
+    // for stackable items. Items "claimed" by an equipped slot don't
+    // appear in the inventory grid — they appear only in QS. That makes
+    // the user's mental model clean: each item lives in exactly one
+    // place.
+    const equippedBudget = new Map<string, number>();
+    for (const eq of equippedItems) {
+      if (eq.itemId) equippedBudget.set(eq.itemId, (equippedBudget.get(eq.itemId) ?? 0) + 1);
+    }
     for (const inv of (inventory || [])) {
       if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
       const def = itemDefs.get(inv.item_id);
       const nonStack = nonStackableItemIds.has(inv.item_id);
+      if (nonStack) {
+        // Skip this row if an equipped slot is claiming a row for this item.
+        const budget = equippedBudget.get(inv.item_id) ?? 0;
+        if (budget > 0) {
+          equippedBudget.set(inv.item_id, budget - 1);
+          continue;
+        }
+      } else {
+        // Skip the whole stack if any equipped slot points at it.
+        if (equippedItemIdSet.has(inv.item_id)) continue;
+      }
       const gridKey = nonStack ? inv.id : inv.item_id;
-      // For stackable items multiple rows would collapse; sum their qty.
       const prev = map.get(gridKey);
       const qty = nonStack ? 1 : (prev ? prev.quantity + inv.quantity : inv.quantity);
-      // Cooldown ms (epoch). Non-null when item is on heal/refresh
-      // cooldown — e.g. a recovered shpider egg. UI greys + counts down.
       const cd = (inv as any).cooldown_until
         ? new Date((inv as any).cooldown_until).getTime()
         : null;
@@ -322,7 +341,7 @@ export function FortressHUD(props: FortressHUDProps) {
       });
     }
     return map;
-  }, [inventory, itemDefs, getSpriteUrl, nonStackableItemIds]);
+  }, [inventory, itemDefs, getSpriteUrl, nonStackableItemIds, equippedItems, equippedItemIdSet]);
 
   // Sync: place new entries into the first empty slot, remove ones
   // that no longer exist (consumed, dropped, etc.).
@@ -336,31 +355,21 @@ export function FortressHUD(props: FortressHUDProps) {
       const placed = new Set(next.filter(Boolean) as string[]);
       for (const key of allKeys) {
         if (placed.has(key)) continue;
-        const entry = inventoryItemsMap.get(key);
-        // Stackable items "owned" by an equipped hotbar slot don't
-        // need a grid tile (they only render in the hotbar). Non-
-        // stackable rows always get a tile even if a hotbar slot
-        // references the same itemId — the hotbar is a shortcut, not
-        // a physical container.
-        if (entry && !entry.isNonStackRow && equippedItemIdSet.has(entry.itemId)) continue;
+        // inventoryItemsMap already excludes equipped items, so any key
+        // we see here genuinely needs a grid tile.
         const emptyIdx = next.indexOf(null);
         if (emptyIdx !== -1) next[emptyIdx] = key;
       }
       return next;
     });
-  }, [inventoryItemsMap, equippedItemIdSet]);
+  }, [inventoryItemsMap]);
 
-  // Render entries in their slot positions, hiding stackable items
-  // whose only home is the hotbar.
   const inventoryGridItems = useMemo(() => {
     return invSlots.map(key => {
       if (!key) return null;
-      const entry = inventoryItemsMap.get(key);
-      if (!entry) return null;
-      if (!entry.isNonStackRow && equippedItemIdSet.has(entry.itemId)) return null;
-      return entry;
+      return inventoryItemsMap.get(key) ?? null;
     });
-  }, [invSlots, inventoryItemsMap, equippedItemIdSet]);
+  }, [invSlots, inventoryItemsMap]);
 
   // Drag source ref — stored in ref to avoid stale closures, survives re-renders.
   //
@@ -415,27 +424,57 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
     if (src.type === 'hotbar') {
-      // Hotbar → Inventory: unequip and (for stackable items) place
-      // in target slot. Non-stackable items already have a tile per
-      // row in the grid, so placing the itemId at invSlots[targetIdx]
-      // would create a phantom key that doesn't match anything in
-      // inventoryItemsMap — the tile appears to vanish. For those
-      // we just unequip.
+      // Hotbar → Inventory. The equipped slot was previously claiming a
+      // row off the inventory grid; unequipping releases that row, and
+      // we place the resulting tile at the slot the user actually
+      // dropped on.
       const hotbarItemId = hotbarSlots.find(s => s.slot === src.slot)?.itemId;
       const hotbarIsNonStack = hotbarItemId ? nonStackableItemIds.has(hotbarItemId) : false;
-      if (updateEquippedSlot) updateEquippedSlot(src.slot, null);
-      if (hotbarItemId && !hotbarIsNonStack) {
+      if (!hotbarItemId) {
+        if (updateEquippedSlot) updateEquippedSlot(src.slot, null);
+        return;
+      }
+
+      if (hotbarIsNonStack) {
+        // For non-stack: figure out which user_inventory row id will
+        // appear in the grid after unequip. Pick any row for this item
+        // that isn't already visible in invSlots (it's the one the
+        // equipped slot was claiming).
+        const visibleSet = new Set(invSlots.filter(Boolean) as string[]);
+        const candidateRow = (inventory || []).find((inv: any) =>
+          inv.item_type === 'item'
+          && inv.item_id === hotbarItemId
+          && inv.quantity > 0
+          && !visibleSet.has(inv.id)
+        );
+        if (updateEquippedSlot) updateEquippedSlot(src.slot, null);
+        if (!candidateRow) return; // shouldn't happen, but bail safely
+        const rowId = (candidateRow as any).id;
         setInvSlots(prev => {
           const next = [...prev];
           const existing = next[targetIdx];
-          next[targetIdx] = hotbarItemId;
-          if (existing && existing !== hotbarItemId) {
+          next[targetIdx] = rowId;
+          if (existing && existing !== rowId) {
             const srcSlotIdx = next.indexOf(null);
             if (srcSlotIdx !== -1) next[srcSlotIdx] = existing;
           }
           return next;
         });
+        return;
       }
+
+      // Stackable: same idea — place the item_id (its gridKey) at target.
+      if (updateEquippedSlot) updateEquippedSlot(src.slot, null);
+      setInvSlots(prev => {
+        const next = [...prev];
+        const existing = next[targetIdx];
+        next[targetIdx] = hotbarItemId;
+        if (existing && existing !== hotbarItemId) {
+          const srcSlotIdx = next.indexOf(null);
+          if (srcSlotIdx !== -1) next[srcSlotIdx] = existing;
+        }
+        return next;
+      });
       return;
     }
 
@@ -454,7 +493,7 @@ export function FortressHUD(props: FortressHUDProps) {
         return next;
       });
     }
-  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds]);
+  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds, inventory, invSlots]);
 
   const allowDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -877,6 +916,7 @@ export function FortressHUD(props: FortressHUDProps) {
             {hotbarSlots.map((slot) => {
               const isSelected = selectedSlot === slot.slot;
               const isGrenadeReady = grenadeReadySlot === slot.slot;
+              const isEggReady = eggReadySlot === slot.slot;
               const isDrinking = potionDrinkingSlot === slot.slot;
               // Single-click: select the slot AND fire the activator
               // (drinks a potion, etc.) so the user doesn't need to
@@ -905,6 +945,7 @@ export function FortressHUD(props: FortressHUDProps) {
                     onDrop={(e) => onDropHotbar(e, slot.slot)}
                     className={
                       isGrenadeReady ? 'grenade-ready-pulse'
+                      : isEggReady ? 'egg-ready-pulse'
                       : isDrinking ? 'potion-drink-pulse'
                       : undefined
                     }
@@ -914,11 +955,13 @@ export function FortressHUD(props: FortressHUDProps) {
                       borderRadius: 'var(--hud-radius)',
                       border: isGrenadeReady
                         ? '2px solid #00ff66'
-                        : isDrinking
-                          ? '2px solid #ff3a6a'
-                          : isSelected
-                            ? '2px solid white'
-                            : '1px solid hsla(var(--hud-border))',
+                        : isEggReady
+                          ? '2px solid #000000'
+                          : isDrinking
+                            ? '2px solid #ff3a6a'
+                            : isSelected
+                              ? '2px solid white'
+                              : '1px solid hsla(var(--hud-border))',
                       background: isSelected
                         ? 'hsla(var(--hud-bg))'
                         : 'hsla(var(--hud-bg-dim))',

@@ -6,9 +6,16 @@ import { fogState } from '@/lib/fogConfig';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
-import { fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
-import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
+import {
+  ChunkSignature,
+  EMPTY_CHUNK_SIG,
+  signaturesEqual,
+  computeChunkSignature,
+  computeSurfaceVisibleBlocks,
+  sortBlocksDeterministic,
+} from '@/lib/chunkBinary';
+import { fetchChunksByRadius, fetchChunksBatched } from '@/lib/chunkFetch';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { updateChunkHeightMap, removeChunkHeightMap, clearAllHeightMaps } from '@/lib/chunkHeightMap';
 import * as THREE from 'three';
@@ -37,6 +44,13 @@ const PREFETCH_ENABLED = false;
 
 // Phase 3A: Eviction configuration
 const EVICTION_BATCH_SIZE = 10;
+// Hard ceiling on chunks evicted per call. The D-Flow trace 2026-May-27
+// showed a single eviction frame removing 33 chunks (89,310 collision
+// voxels) in one synchronous burst — that frame ran ~100ms. Capping at
+// 4/call spreads the same work across ~8 frames; chunk count drifts a
+// few above MAX_LOADED_CHUNKS for a few hundred ms but never spikes
+// the main thread.
+const MAX_EVICT_PER_TICK = 4;
 
 // Retry configuration for failed chunk loads
 const MAX_RETRY_ATTEMPTS = 3;
@@ -66,13 +80,6 @@ interface PositionSample {
 interface PrefetchHandle {
   kind: 'idle' | 'timeout';
   id: number;
-}
-
-// B4: Numeric chunk signature for O(1) world signature updates
-interface ChunkSignature {
-  count: number;
-  xor: number;
-  sum: number;
 }
 
 interface ChunkData {
@@ -127,177 +134,6 @@ const removeBlockCollider = (block: PlacedBlock): void => {
   if (shouldTime) diagnostics.recordColliderOp('remove', performance.now() - t0);
 };
 
-// Reusable occupancy buffer for surface culling — avoids allocating a new
-// Uint8Array per chunk (up to 512KB each for tall trees, causing GC storms).
-// Pre-allocate for 300-block-tall chunks (300 * 256 = 76800 bytes) to avoid
-// first-use allocation stall. Buffer grows on demand for taller chunks.
-const INITIAL_OCC_BUF_SIZE = 300 * 256;
-let _occBuf: Uint8Array = new Uint8Array(INITIAL_OCC_BUF_SIZE);
-let _occBufSize = INITIAL_OCC_BUF_SIZE;
-
-/**
- * Surface-only culling: removes fully-surrounded interior blocks per chunk.
- * Uses a compact Uint8Array occupancy grid (16×16×H) for O(1) neighbor checks.
- * Chunk-edge blocks are always kept (cross-chunk culling is too expensive).
- * This is the "Minecraft approach" — render faces, not cubes.
- */
-function computeSurfaceVisibleBlocks(chunkX: number, chunkZ: number, blocks: PlacedBlock[]): PlacedBlock[] {
-  if (blocks.length < 50) return blocks; // Not worth culling tiny sets
-
-  const originX = chunkX * CHUNK_SIZE;
-  const originZ = chunkZ * CHUNK_SIZE;
-
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i < blocks.length; i++) {
-    const y = blocks[i].position_y;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-
-  const ySpan = (maxY - minY + 1);
-  if (ySpan <= 0 || ySpan > 2048) return blocks; // Safety fallback
-
-  const stride = 256; // 16 * 16 per Y layer
-  const needed = ySpan * stride;
-  // Reuse buffer if large enough, otherwise grow
-  if (_occBufSize < needed) {
-    _occBuf = new Uint8Array(needed);
-    _occBufSize = needed;
-  }
-  const occ = _occBuf;
-  // Zero only the portion we'll use (faster than allocating new)
-  occ.fill(0, 0, needed);
-
-  // Fill occupancy grid
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    const lx = b.position_x - originX;
-    const lz = b.position_z - originZ;
-    const ly = b.position_y - minY;
-
-    if (lx < 0 || lx >= 16 || lz < 0 || lz >= 16) continue;
-    occ[(ly * stride) + (lz * 16) + lx] = 1;
-  }
-
-  // Filter: keep blocks with at least one exposed face
-  // Only cull tree blocks — user-placed blocks are always kept visible
-  const visible: PlacedBlock[] = [];
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-
-    // Never cull non-tree blocks (user-placed blocks should always render)
-    if (!isTreeBlockType(b.block_type)) {
-      visible.push(b);
-      continue;
-    }
-
-    const lx = b.position_x - originX;
-    const lz = b.position_z - originZ;
-    const ly = b.position_y - minY;
-
-    // Out-of-chunk blocks: always keep (shouldn't happen, but safe)
-    if (lx < 0 || lx >= 16 || lz < 0 || lz >= 16) {
-      visible.push(b);
-      continue;
-    }
-
-    const base = (ly * stride) + (lz * 16) + lx;
-
-    // Chunk edges = always exposed (cross-chunk neighbors unknown)
-    const exposed =
-      (lx === 0) || (lx === 15) || (lz === 0) || (lz === 15) ||
-      (ly === 0) || (ly === ySpan - 1) ||
-      (occ[base - 1] === 0) || (occ[base + 1] === 0) ||       // ±X
-      (occ[base - 16] === 0) || (occ[base + 16] === 0) ||     // ±Z
-      (occ[base - stride] === 0) || (occ[base + stride] === 0); // ±Y
-
-    if (exposed) visible.push(b);
-  }
-
-  // Safety net: if all blocks were somehow culled, return original to prevent invisible chunks
-  // This should never happen for tree structures (branches always have exposed faces)
-  if (visible.length === 0 && blocks.length > 0) {
-    console.warn(`[SurfaceCulling] All ${blocks.length} tree blocks culled for chunk (${chunkX},${chunkZ}) - returning original to prevent invisible chunk`);
-    return blocks;
-  }
-
-  // B10: Sort visible blocks deterministically to stabilize sampling-based signatures
-  // Without this, after culling removes different blocks, the sample indices shift and
-  // cheapGroupKey/InstancedAtlasBlockGroup signatures change, causing cache misses
-  sortBlocksDeterministic(visible);
-
-  return visible;
-}
-
-/**
- * B4: Fast integer mixing for numeric signatures (no strings, no allocations)
- */
-const mix32 = (n: number): number => {
-  n |= 0;
-  n = Math.imul(n ^ (n >>> 16), 0x7feb352d);
-  n = Math.imul(n ^ (n >>> 15), 0x846ca68b);
-  return (n ^ (n >>> 16)) >>> 0;
-};
-
-/**
- * B4: Compute numeric hash for a single block (no string creation)
- * Uses FNV-1a style mixing with position, block_type hash, and branch_depth
- */
-const blockSig32 = (b: PlacedBlock): number => {
-  let h = 2166136261 >>> 0; // FNV offset basis
-  h = Math.imul(h ^ mix32(b.position_x | 0), 16777619) >>> 0;
-  h = Math.imul(h ^ mix32(b.position_y | 0), 16777619) >>> 0;
-  h = Math.imul(h ^ mix32(b.position_z | 0), 16777619) >>> 0;
-  // Hash block_type string by summing char codes (fast, no allocation)
-  const bt = b.block_type || '';
-  let btHash = 0;
-  for (let i = 0; i < bt.length; i++) {
-    btHash = (btHash * 31 + bt.charCodeAt(i)) | 0;
-  }
-  h = Math.imul(h ^ mix32(btHash), 16777619) >>> 0;
-  h = Math.imul(h ^ mix32((b as any).branch_depth | 0), 16777619) >>> 0;
-  return h >>> 0;
-};
-
-/**
- * B4: Compute numeric chunk signature - O(n) but no string allocations
- * Returns {count, xor, sum} for incremental world signature updates
- */
-function computeChunkSignature(blocks: PlacedBlock[]): ChunkSignature {
-  let xor = 0 >>> 0;
-  let sum = 0 >>> 0;
-  for (let i = 0; i < blocks.length; i++) {
-    const v = blockSig32(blocks[i]);
-    xor = (xor ^ v) >>> 0;
-    sum = (sum + v) >>> 0;
-  }
-  return { count: blocks.length, xor, sum };
-}
-
-// B4: Empty signature constant
-const EMPTY_CHUNK_SIG: ChunkSignature = { count: 0, xor: 0, sum: 0 };
-
-/**
- * Sort blocks deterministically by position (y, x, z).
- * Prevents reorder churn when the same blocks arrive in different order
- * from server queries or cache reads. This stabilizes cheapGroupKey sampling
- * in PlacedBlocks.tsx, avoiding false cache misses and unnecessary re-grouping.
- * In-place sort, O(n log n) per chunk — negligible for typical chunk sizes.
- */
-const sortBlocksDeterministic = (blocks: PlacedBlock[]): void => {
-  blocks.sort((a, b) =>
-    (a.position_y - b.position_y) ||
-    (a.position_x - b.position_x) ||
-    (a.position_z - b.position_z)
-  );
-};
-
-// B4: Compare two chunk signatures for equality
-const signaturesEqual = (a: ChunkSignature, b: ChunkSignature): boolean => {
-  return a.count === b.count && a.xor === b.xor && a.sum === b.sum;
-};
-
 /**
  * Hook to manage chunk-based loading of blocks based on player position.
  * Uses a single bounding query for initial/movement loads, and per-chunk
@@ -343,6 +179,12 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
   // No mutex needed: JS is single-threaded, per-chunk cap check in the
   // processing loop sees accurate state between async yield points.
+
+  // Inflight refetch tracker. Stops concurrent refetches of the same
+  // chunk from racing (the older response can otherwise overwrite the
+  // newer one with stale data, making blocks flicker in/out as growth
+  // happens). Set entries are removed in the refetch's finally block.
+  const inflightRefetches = useRef<Set<string>>(new Set());
 
   // Ref for post-load eviction (avoids circular useCallback dependency)
   const evictAfterLoadRef = useRef<(() => void) | null>(null);
@@ -560,7 +402,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // chunk's worth of voxels) so the bigger batch is cheaper than the
     // old per-voxel grid invalidation churn.
     const overBy = chunkCount - MAX_LOADED_CHUNKS;
-    const evictTarget = Math.min(evictionCandidates.length, overBy + EVICTION_BATCH_SIZE);
+    const evictTarget = Math.min(
+      evictionCandidates.length,
+      overBy + EVICTION_BATCH_SIZE,
+      MAX_EVICT_PER_TICK,
+    );
     const toEvict = evictionCandidates.slice(0, evictTarget);
 
     if (toEvict.length > 0) {
@@ -851,60 +697,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const minChunkZ = centerChunkZ - radius;
     const maxChunkZ = centerChunkZ + radius;
 
-    // Paginated bounding query for all chunks in radius — with retry
-    const PAGE_SIZE = 1000;
-    let blocks: PlacedBlock[] | null = null;
-    let hitSafetyLimit = false;
-
-    for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-      const fetched: PlacedBlock[] = [];
-      hitSafetyLimit = false;
-      let offset = 0;
-      let hasMore = true;
-      let pageError = false;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('placed_blocks')
-          .select('*')
-          .eq('world_id', worldId)
-          .gte('chunk_x', minChunkX)
-          .lte('chunk_x', maxChunkX)
-          .gte('chunk_z', minChunkZ)
-          .lte('chunk_z', maxChunkZ)
-          .range(offset, offset + PAGE_SIZE - 1);
-
-        if (error) {
-          console.error(`[ChunkLoader] loadChunksInRadius page failed at offset ${offset} (attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS}):`, error.message);
-          pageError = true;
-          break;
-        }
-
-        if (data && data.length > 0) {
-          fetched.push(...data);
-          offset += data.length;
-          hasMore = data.length === PAGE_SIZE;
-        } else {
-          hasMore = false;
-        }
-
-        if (offset >= MAX_TOTAL_BLOCKS) {
-          console.warn(`[ChunkLoader] loadChunksInRadius hit ${MAX_TOTAL_BLOCKS} safety limit`);
-          hitSafetyLimit = true;
-          hasMore = false;
-        }
-      }
-
-      if (!pageError) {
-        blocks = fetched;
-        break;
-      }
-
-      // Retry entire fetch
-      if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-        await new Promise(r => setTimeout(r, RETRY_BASE_DELAY_MS * (2 ** attempt)));
-      }
-    }
+    const { blocks } = await fetchChunksByRadius(
+      supabase,
+      worldId,
+      { minChunkX, maxChunkX, minChunkZ, maxChunkZ },
+      {
+        pageSize: 1000,
+        maxTotalBlocks: MAX_TOTAL_BLOCKS,
+        maxRetries: MAX_RETRY_ATTEMPTS,
+        retryBaseDelayMs: RETRY_BASE_DELAY_MS,
+      },
+    );
 
     if (!blocks) {
       console.error('All retry attempts failed for loadChunksInRadius');
@@ -1318,92 +1121,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // D-Flow: Start timing fetch phase
       const fetchT0 = performance.now();
 
-      let blocks: PlacedBlock[] = [];
       let fetchFailed = false;
-      const failedChunkCoords: Array<{ x: number; z: number }> = [];
 
-      // Batched RPC fetch: 1-3 calls instead of 100-200 individual queries
-      const RPC_BATCH_SIZE = 50;
-      let useRpcFallback = false;
-
-      for (let i = 0; i < chunksToFetchFromServer.length; i += RPC_BATCH_SIZE) {
-        const batch = chunksToFetchFromServer.slice(i, i + RPC_BATCH_SIZE);
-        const chunkParams = batch.map(({ x, z }) => ({ x, z }));
-
-        const { data, error } = await supabase.rpc('fetch_chunks_batch', {
-          p_world_id: worldId,
-          p_chunks: chunkParams,
-        });
-
-        if (error) {
-          // RPC not available (migration not applied yet) — fall back to per-chunk queries
-          if (error.code === '42883' || error.message?.includes('function') || error.code === 'PGRST202') {
-            console.warn('[ChunkLoader] Batched RPC not available, falling back to per-chunk fetch');
-            useRpcFallback = true;
-            break;
-          }
-          console.error('[ChunkLoader] Batched RPC error:', error.message);
-          // Mark all chunks in this batch as failed
-          for (const { x, z } of batch) {
-            failedChunkCoords.push({ x, z });
-          }
-          continue;
-        }
-
-        if (data && data.length > 0) {
-          // RPC returns rows without created_at/updated_at — add defaults for PlacedBlock compatibility
-          for (let j = 0; j < data.length; j++) {
-            const row = data[j];
-            row.created_at = row.created_at ?? '';
-            row.updated_at = row.updated_at ?? '';
-          }
-          blocks = blocks.concat(data as PlacedBlock[]);
-        }
-      }
-
-      // Fallback: per-chunk individual queries (if RPC not available)
-      if (useRpcFallback) {
-        blocks = [];
-        const PARALLEL_FETCH_LIMIT = 10;
-        for (let i = 0; i < chunksToFetchFromServer.length; i += PARALLEL_FETCH_LIMIT) {
-          const batch = chunksToFetchFromServer.slice(i, i + PARALLEL_FETCH_LIMIT);
-          const batchPromises = batch.map(async ({ x, z }) => {
-            const PAGE_SIZE = 1000;
-            let chunkBlocks: PlacedBlock[] = [];
-            let offset = 0;
-            let hasMore = true;
-            while (hasMore) {
-              const { data: pageData, error: pageErr } = await supabase
-                .from('placed_blocks')
-                .select('*')
-                .eq('world_id', worldId)
-                .eq('chunk_x', x)
-                .eq('chunk_z', z)
-                .range(offset, offset + PAGE_SIZE - 1);
-              if (pageErr) {
-                return { x, z, blocks: null as PlacedBlock[] | null, failed: true };
-              }
-              if (pageData && pageData.length > 0) {
-                chunkBlocks = chunkBlocks.concat(pageData);
-                offset += pageData.length;
-                hasMore = pageData.length === PAGE_SIZE;
-              } else {
-                hasMore = false;
-              }
-              if (offset >= 10000) { hasMore = false; }
-            }
-            return { x, z, blocks: chunkBlocks, failed: false };
-          });
-          const batchResults = await Promise.all(batchPromises);
-          for (const result of batchResults) {
-            if (result.failed || result.blocks === null) {
-              failedChunkCoords.push({ x: result.x, z: result.z });
-            } else {
-              blocks = blocks.concat(result.blocks);
-            }
-          }
-        }
-      }
+      const fetchResult = await fetchChunksBatched(
+        supabase,
+        worldId,
+        chunksToFetchFromServer,
+        { rpcBatchSize: 50, parallelLimit: 10, pageSize: 1000, maxBlocksPerChunk: 10000 },
+      );
+      let blocks: PlacedBlock[] = fetchResult.blocks;
+      const failedChunkCoords: Array<{ x: number; z: number }> = [...fetchResult.failedChunkCoords];
+      const useRpcFallback = fetchResult.usedFallback;
 
       // D-Flow: End fetch timing
       const fetchMs = performance.now() - fetchT0;
@@ -1977,13 +1705,26 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     if (!worldId) return;
 
     const chunkKey = `chunk_${chunkX}_${chunkZ}`;
-    
+
+    // Race protection: if a refetch for this chunk is already in flight,
+    // skip the new request. The in-flight one will resolve with the
+    // current server state shortly. Without this guard two concurrent
+    // requests can finish out of order and the older one stamps stale
+    // blocks back onto the chunk, causing visible blocks to flicker
+    // away as the tree grows.
+    if (inflightRefetches.current.has(chunkKey)) {
+      return;
+    }
+    inflightRefetches.current.add(chunkKey);
+
     // Only refetch if chunk is currently loaded
     const existingChunkData = loadedChunksRef.current.get(chunkKey);
     if (!existingChunkData) {
+      inflightRefetches.current.delete(chunkKey);
       return;
     }
 
+    try {
     // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
     let serverBlocks: PlacedBlock[] | null = null;
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
@@ -2100,8 +1841,28 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       });
     }
 
+    // Option A: also recompute visibleBlocks for the 8 surrounding
+    // chunks. Their boundary view changed (this chunk now has different
+    // blocks), so any rendered boundary they showed may be stale.
+    // Recompute happens against each neighbor's existing block list —
+    // no network refetch, just a local pass through the surface culler.
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if (dx === 0 && dz === 0) continue;
+        const nKey = `chunk_${chunkX + dx}_${chunkZ + dz}`;
+        const nData = loadedChunksRef.current.get(nKey);
+        if (!nData) continue;
+        nData.visibleBlocks = computeSurfaceVisibleBlocks(
+          chunkX + dx, chunkZ + dz, nData.blocks,
+        );
+      }
+    }
+
     // Phase 3.0: Use batched emit instead of synchronous callback (only if blocks changed)
     scheduleEmit();
+    } finally {
+      inflightRefetches.current.delete(chunkKey);
+    }
   }, [worldId, scheduleEmit, fetchChunkVersions]);
 
   /**

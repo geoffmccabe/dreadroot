@@ -137,4 +137,22 @@ export interface ShpiderInstance {
   eyePupilX: number;           // smoothed toward target
   eyePupilY: number;
   eyeLastRandomLookAt: number;
+
+  // Pet state — populated only when this shpider was hatched from a
+  // thrown Shpider Egg. Wild shpiders leave these undefined.
+  //   petOwnerUserId   — auth user that threw the egg; the pet won't
+  //                      damage them on touch and falls back to their
+  //                      position when no hostile target is in range.
+  //   eggInventoryRowId — original inventory row id the egg was
+  //                      consumed from. Not load-bearing for refunds
+  //                      (refund is a fresh row created at pickup),
+  //                      kept for forensic/debug.
+  petOwnerUserId?: string | null;
+  eggInventoryRowId?: string | null;
+
+  /** Picks the world position the AI should aim its next hop at.
+   *  Wild shpiders use chaseLocalPlayer; pets use
+   *  petTargetNearestHostile. Stored once at spawn so the per-frame
+   *  loop can call it without branching on instance type. */
+  targetProvider?: (s: ShpiderInstance) => { x: number; y: number; z: number };
 }

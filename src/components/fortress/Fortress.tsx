@@ -11,6 +11,7 @@ import { AdminPanel } from '@/components/AdminPanel';
 import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
+import { worldStore } from '@/services/worldStore';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,6 +45,7 @@ import { usePathfindingConfigs } from '@/hooks/usePathfindingConfigs';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 
 import { FortressScene } from './FortressScene';
+import { GodMapPanel } from '@/features/god-map';
 import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
 import { FortressOverlays } from './FortressOverlays';
@@ -238,6 +240,18 @@ export function Fortress() {
   const [grenadeReadySlot, setGrenadeReadySlot] = useState<number | null>(null);
   const grenadeReady = grenadeReadySlot !== null;
 
+  // God Map (Cmd+M). Open to everyone for viewing; only superadmins
+  // can paint/erase no-plant zones; only admins/superadmins see other
+  // players' seed details on hover. Player position ref is populated
+  // by FortressScene's per-frame loop so the map can draw the "you
+  // are here" dot without a render-thrash subscription.
+  const [godMapOpen, setGodMapOpen] = useState(false);
+  const playerPositionRef = useRef<THREE.Vector3 | null>(null);
+
+  // Shpider Egg ready slot — same shape as grenadeReadySlot. Armed via
+  // Y, thrown on click. Eggs hatch on rest into a pet shpider.
+  const [eggReadySlot, setEggReadySlot] = useState<number | null>(null);
+
   // Vault state — proximity flag flips when player walks into the
   // back-wall trigger zone, prompt + V keybind become active. Open
   // flag controls the modal. forceCloseToken bumps when we want the
@@ -261,7 +275,7 @@ export function Fortress() {
   
   // Hooks
   const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
-  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef } = useBlocks();
+  const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
   const { isOpen: panelOpen, openPanel, isMarketplaceOpen, openMarketplace, closeMarketplace } = useUserPanel();
@@ -377,7 +391,7 @@ export function Fortress() {
       const { data } = await supabase
         .from('items')
         .select('id, key, tier')
-        .or('key.eq.grenade,key.like.grenade\\_t%,key.eq.health_potion');
+        .or('key.eq.grenade,key.like.grenade_t%,key.eq.health_potion');
       if (cancelled || !data) return;
       const map = new Map<string, number>();
       for (const row of data) {
@@ -387,7 +401,12 @@ export function Fortress() {
         }
         const tier = row.tier ?? 1;
         map.set(row.id, tier);
-        if (row.key === 'grenade') grenadeT1IdRef.current = row.id;
+        // Accept either legacy 'grenade' key OR the tiered 'grenade_t1'
+        // pattern. The Ctrl+G admin grant needs the tier-1 item id so
+        // it can drop one in the user's inventory.
+        if (tier === 1 && (row.key === 'grenade' || row.key === 'grenade_t1')) {
+          grenadeT1IdRef.current = row.id;
+        }
       }
       grenadeDefsRef.current = map;
     })();
@@ -487,20 +506,125 @@ export function Fortress() {
     if (!stillHaveAnyGrenade) setGrenadeReadySlot(null);
   }, [grenadeReadySlot, equippedItems, inventory]);
 
+  // Resolve shpider egg item UUIDs → tier. Same pattern as grenades —
+  // forging a new tier creates a fresh items row, so we refetch when
+  // the inventory id-set changes.
+  const eggDefsRef = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('items')
+        .select('id, key, tier')
+        .like('key', 'shpider_egg_t%');
+      if (cancelled || !data) return;
+      const map = new Map<string, number>();
+      for (const row of data) {
+        map.set(row.id, row.tier ?? 1);
+      }
+      eggDefsRef.current = map;
+    })();
+    return () => { cancelled = true; };
+  }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
+
+  // Pull one shpider egg out of inventory. Picks HIGHEST tier the user
+  // owns. Skips rows whose cooldown_until is still in the future. Eggs
+  // are non-stackable — consume = delete the specific row. Caller gets
+  // both the tier (for spawn) and the row id (so the pet remembers
+  // which row to refund into when it dies).
+  const consumeEgg = useCallback((): { tier: number; eggInventoryRowId: string } | null => {
+    const defs = eggDefsRef.current;
+    const now = Date.now();
+    let bestTier = 0;
+    let bestRowId: string | null = null;
+    for (const inv of inventory) {
+      if (inv.quantity <= 0 || !inv.item_id) continue;
+      const tier = defs.get(inv.item_id);
+      if (tier == null) continue;
+      const cdRaw = (inv as any).cooldown_until;
+      if (cdRaw && new Date(cdRaw).getTime() > now) continue;
+      if (tier > bestTier) {
+        bestTier = tier;
+        bestRowId = inv.id;
+      }
+    }
+    if (bestTier === 0 || !bestRowId) return null;
+    void removeInventoryRow(bestRowId);
+    setEggReadySlot(null);
+    return { tier: bestTier, eggInventoryRowId: bestRowId };
+  }, [inventory, removeInventoryRow]);
+
+  // Y key handler — only arms if a non-cooldown egg is available.
+  const handleEggTogglePress = useCallback(() => {
+    if (eggReadySlot !== null) {
+      setEggReadySlot(null);
+      return;
+    }
+    const defs = eggDefsRef.current;
+    const now = Date.now();
+    const rowIsUsable = (inv: any): boolean => {
+      if (inv.quantity <= 0 || !inv.item_id) return false;
+      if (!defs.has(inv.item_id)) return false;
+      const cd = inv.cooldown_until;
+      if (cd && new Date(cd).getTime() > now) return false;
+      return true;
+    };
+    // Step 1: equipped slot already holding a usable egg? A single
+    // item_id can map to multiple inventory rows (non-stackable, one
+    // row per egg) — equip arms if ANY matching row is usable.
+    const equippedSlotWithEgg = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(eq => defs.has(eq.itemId) && inventory.some(i => i.item_id === eq.itemId && rowIsUsable(i)));
+    if (equippedSlotWithEgg) {
+      setEggReadySlot(equippedSlotWithEgg.slot);
+      return;
+    }
+    // Step 2: inventory has a usable egg + a free hotbar slot.
+    const eggInv = inventory.find(inv => rowIsUsable(inv));
+    if (!eggInv || !eggInv.item_id) return;
+    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    let firstEmpty: number | null = null;
+    for (let i = 1; i <= 6; i++) {
+      if (!usedSlots.has(i)) { firstEmpty = i; break; }
+    }
+    if (firstEmpty === null) return;
+    void updateEquippedSlot(firstEmpty, eggInv.item_id);
+    setEggReadySlot(firstEmpty);
+  }, [eggReadySlot, equippedItems, inventory, updateEquippedSlot]);
+
+  // Auto-disarm if armed egg slot becomes empty / non-egg / cooldown-locked.
+  useEffect(() => {
+    if (eggReadySlot === null) return;
+    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(e => e.slot === eggReadySlot);
+    if (!eq) { setEggReadySlot(null); return; }
+    const defs = eggDefsRef.current;
+    if (!defs.has(eq.itemId)) { setEggReadySlot(null); return; }
+    const now = Date.now();
+    const stillUsable = inventory.some(inv =>
+      inv.quantity > 0 && inv.item_id && defs.has(inv.item_id)
+      && (!((inv as any).cooldown_until) || new Date((inv as any).cooldown_until).getTime() <= now)
+    );
+    if (!stillUsable) setEggReadySlot(null);
+  }, [eggReadySlot, equippedItems, inventory]);
+
   // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
   // Cmd+H (health potion).
   const grantAdminItem = useCallback(async (itemId: string | null): Promise<boolean> => {
-    const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
-    if (!isAdmin || !itemId) return false;
+    if (!itemId) return false;
     const ok = await addItem(itemId, 1);
     if (!ok) return false;
-    const slot6 = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === 6);
-    if (!slot6) {
-      await updateEquippedSlot(6, itemId);
+    // Equip into the RIGHTMOST empty hotbar slot (prefer 6, then 5,
+    // ..., then 1). If all six are taken, leave it in inventory only.
+    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    for (let s = 6; s >= 1; s--) {
+      if (!usedSlots.has(s)) {
+        await updateEquippedSlot(s, itemId);
+        break;
+      }
     }
     return true;
-  }, [userRoles, addItem, equippedItems, updateEquippedSlot]);
+  }, [addItem, equippedItems, updateEquippedSlot]);
 
   const grantAdminGrenade = useCallback(async (): Promise<boolean> => {
     return grantAdminItem(grenadeT1IdRef.current);
@@ -574,6 +698,34 @@ export function Fortress() {
   const handleUseHotbarSlot = useCallback(async (slot: number) => {
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === slot);
     if (!eq?.itemId) return;
+
+    // Grenade in this slot → toggle grenade-ready for THIS specific
+    // slot (digit press = same intent as G). Disarm if already armed
+    // on this slot. Synchronous via grenadeDefsRef so the digit fires
+    // before any DB roundtrip.
+    if (grenadeDefsRef.current.has(eq.itemId)) {
+      if (grenadeReadySlot === slot) {
+        setGrenadeReadySlot(null);
+      } else {
+        setEggReadySlot(null); // mutually exclusive with egg-ready
+        setGrenadeReadySlot(slot);
+        playPinPullSound();
+      }
+      return;
+    }
+
+    // Shpider egg in this slot → same toggle pattern (Y-key equivalent).
+    if (eggDefsRef.current.has(eq.itemId)) {
+      if (eggReadySlot === slot) {
+        setEggReadySlot(null);
+      } else {
+        setGrenadeReadySlot(null);
+        setEggReadySlot(slot);
+      }
+      return;
+    }
+
+    // Anything else: fall back to the per-item-type quick-use behavior.
     const { data: itemDef } = await supabase
       .from('items')
       .select('key, item_category')
@@ -583,7 +735,7 @@ export function Fortress() {
     if (itemDef.key === 'health_potion') {
       await consumePotionInSlot(slot, eq.itemId);
     }
-  }, [equippedItems, consumePotionInSlot]);
+  }, [equippedItems, consumePotionInSlot, grenadeReadySlot, eggReadySlot]);
 
   // H key handler — drinks a potion if one is reachable. Same auto-
   // equip rule as G for grenades:
@@ -685,6 +837,19 @@ export function Fortress() {
     hasGrowingTrees,
     enabled: TREE_CONFIG.ENABLED && !!user?.id,
     fastMode: growingTreeInView,
+    // Realtime can drop chunk_versions events (channel hiccup, etc.) so
+    // when the server confirms growth happened, force-refetch every
+    // currently-loaded chunk. Cheap (only fires when blocks actually
+    // grew) and guarantees the player sees their tree advance.
+    onBlocksInserted: useCallback(() => {
+      const chunks = loadedChunksRef?.current;
+      if (!chunks || !refetchSingleChunk) return;
+      for (const key of chunks.keys()) {
+        const m = key.match(/^chunk_(-?\d+)_(-?\d+)$/);
+        if (!m) continue;
+        void refetchSingleChunk(parseInt(m[1], 10), parseInt(m[2], 10));
+      }
+    }, [loadedChunksRef, refetchSingleChunk]),
   });
 
   const { plantSeed } = useSeedPlanting({
@@ -697,7 +862,8 @@ export function Fortress() {
   // Tree chopping - allows owner to destroy tree and get seed back
   // IMPORTANT: Combine plantedTrees + myIncompleteTrees + actively growing trees
   // This ensures user can chop trees at any stage (just planted, growing, or fully grown)
-  const { refetchSingleChunk, removeBlocksByPositions } = useBlocks();
+  // (refetchSingleChunk + removeBlocksByPositions are destructured up top with the
+  // rest of useBlocks() so the tree-growth poller callback can reach them.)
   
   // Build allTrees by merging DB trees with actively growing local trees
   // NOTE: Using a function instead of useMemo so we get fresh data from growingTreesRef on each render
@@ -842,26 +1008,12 @@ export function Fortress() {
       // My block — returned to my inventory
       toast({ title: "Block returned to inventory", duration: 2000 });
     } else if (block.user_id) {
-      // Someone else's block — return to their inventory
-      // Use direct insert/upsert to their inventory
+      // Someone else's block. removeBlock() above already enforced
+      // "owner or admin only," so this branch is only reachable when
+      // the caller is admin/superadmin mining another player's block.
+      // The admin grant RPC validates the role server-side.
       try {
-        const { data: existing } = await supabase
-          .from('user_inventory')
-          .select('id, quantity')
-          .eq('user_id', block.user_id)
-          .eq('item_type', 'fortress_block')
-          .maybeSingle();
-
-        if (existing) {
-          await supabase
-            .from('user_inventory')
-            .update({ quantity: existing.quantity + 1 })
-            .eq('id', existing.id);
-        } else {
-          await supabase
-            .from('user_inventory')
-            .insert({ user_id: block.user_id, item_type: 'fortress_block', quantity: 1 });
-        }
+        await worldStore.adminGrantInventoryRow(block.user_id, 'fortress_block', null, 1);
         toast({ title: "Block returned to owner", duration: 2000 });
       } catch (err) {
         console.error('[BlockMine] Failed to return block to owner:', err);
@@ -1023,33 +1175,10 @@ export function Fortress() {
         // Return block to owner's inventory (if owner exists)
         if (ownerId) {
           try {
-            // Check if owner already has this block type in inventory
-            const { data: existingItems, error: queryError } = await supabase
-              .from('user_inventory')
-              .select('id, quantity')
-              .eq('user_id', ownerId)
-              .eq('item_type', blockType)
-              .is('item_id', null);
-
-            if (queryError) {
-              console.warn('[InspectorDelete] Inventory query error:', queryError);
-            } else if (existingItems && existingItems.length > 0) {
-              // Update existing inventory entry
-              await supabase
-                .from('user_inventory')
-                .update({ quantity: existingItems[0].quantity + 1 })
-                .eq('id', existingItems[0].id);
-            } else {
-              // Create new inventory entry
-              await supabase
-                .from('user_inventory')
-                .insert({
-                  user_id: ownerId,
-                  item_type: blockType,
-                  item_id: null,
-                  quantity: 1
-                });
-            }
+            // Server-side admin grant. RPC enforces 'admin' role and
+            // handles the stack-or-insert atomically on the owner's
+            // inventory.
+            await worldStore.adminGrantInventoryRow(ownerId, blockType, null, 1);
           } catch (invError) {
             console.warn('[InspectorDelete] Failed to return to inventory:', invError);
           }
@@ -1760,6 +1889,8 @@ export function Fortress() {
           onModeChange={handleModeChange}
           onOpenPanel={handleOpenPanel}
           onOpenMarketplace={openMarketplace}
+          onOpenGodMap={() => setGodMapOpen(true)}
+          playerPositionRef={playerPositionRef}
           onToggleInventory={() => {
             setInventoryOpen(prev => {
               const next = !prev;
@@ -1943,7 +2074,7 @@ export function Fortress() {
               }
             }
           }}
-          onShpiderKilled={async (tier) => {
+          onShpiderKilled={async ({ tier, x, y, z }) => {
             // Same pattern as the other enemy kill writers — bumps
             // user_combat_stats so the Kills panel shows shpiders
             // alongside everything else. Without this they were
@@ -1967,19 +2098,77 @@ export function Fortress() {
                 .insert({ user_id: user.id, enemy_type: `shpider_t${tier}`, kills: 1 });
             }
             // 1% chance to drop a shpider egg of the killed shpider's
-            // tier. Goes straight to inventory. Pet-shpider deaths
-            // skip this — they drop a world_eggs row instead via the
-            // shpider system, since the egg has a known owner.
+            // tier. Previously this added straight to inventory which
+            // gave a misleading "dropped!" toast but no visible egg in
+            // the world. Now we insert a world_eggs row at the kill
+            // position so the killer sees a glowing egg on the ground
+            // and picks it up with F — same UX as pet-death drops.
             if (Math.random() < 0.01) {
-              const { data: eggItem } = await supabase
+              // Resolve item_id for the egg (item_number-style lookup) so
+              // the new world_eggs.item_id column gets populated. Old rows
+              // without it still work via the RPC's tier-fallback.
+              const { data: eggItemRow } = await supabase
                 .from('items')
                 .select('id')
                 .eq('key', `shpider_egg_t${tier}`)
                 .maybeSingle();
-              if (eggItem) {
-                await addItem(eggItem.id, 1);
-                toast({ title: `🥚 Shpider Egg T${tier} dropped!`, duration: 4000 });
+              const { error } = await supabase
+                .from('world_eggs' as any)
+                .insert({
+                  tier,
+                  owner_user_id: user.id,
+                  position_x: x,
+                  position_y: y,
+                  position_z: z,
+                  item_id: eggItemRow?.id ?? null,
+                } as any);
+              if (error) {
+                // world_eggs migration not applied — fall back to direct
+                // inventory grant so the drop isn't lost.
+                console.warn('[ShpiderEgg] world drop insert failed:', error.message);
+                const { data: eggItem } = await supabase
+                  .from('items')
+                  .select('id')
+                  .eq('key', `shpider_egg_t${tier}`)
+                  .maybeSingle();
+                if (eggItem) {
+                  await addItem(eggItem.id, 1);
+                  toast({ title: `🥚 Shpider Egg T${tier} dropped!`, duration: 4000 });
+                }
+              } else {
+                toast({ title: `🥚 Shpider Egg T${tier} dropped — find it on the ground!`, duration: 4000 });
               }
+            }
+          }}
+          onPetShpiderDied={async ({ tier, petOwnerUserId, x, y, z }) => {
+            // Pet shpider died — drop a world_eggs row at its position
+            // so the owner can pick it back up (with a 1-hour cooldown
+            // applied at pickup time). RLS should restrict pickup to
+            // the owner — that's enforced by the world_eggs row's
+            // owner_user_id column + table RLS policy.
+            const { data: petEggItemRow } = await supabase
+              .from('items')
+              .select('id')
+              .eq('key', `shpider_egg_t${tier}`)
+              .maybeSingle();
+            const { error } = await supabase
+              .from('world_eggs' as any)
+              .insert({
+                tier,
+                owner_user_id: petOwnerUserId,
+                position_x: x,
+                position_y: y,
+                position_z: z,
+                item_id: petEggItemRow?.id ?? null,
+              } as any);
+            if (error) {
+              // Table may not be installed yet on this DB. Log but
+              // don't crash — the pet just dies without a refund.
+              console.warn('[ShpiderEgg] world_eggs insert failed:', error.message);
+              return;
+            }
+            if (user?.id === petOwnerUserId) {
+              toast({ title: `🥚 Your pet shpider died — egg dropped`, duration: 3500 });
             }
           }}
           onWalapaKilled={async (tier) => {
@@ -2058,6 +2247,9 @@ export function Fortress() {
           consumeGrenade={consumeGrenade}
           onGrenadeTogglePress={handleGrenadeTogglePress}
           grenadeReady={grenadeReady}
+          consumeEgg={consumeEgg}
+          onEggTogglePress={handleEggTogglePress}
+          eggReady={eggReadySlot !== null}
           onHealthPotionUse={handleHealthPotionUse}
           onGrowthProximityChange={setGrowingTreeInView}
           onAdminGrantGrenade={grantAdminGrenade}
@@ -2138,7 +2330,17 @@ export function Fortress() {
         onSelectSlot={setSelectedSlot}
         onDeleteBlock={handleInspectorDeleteBlock}
         grenadeReadySlot={grenadeReadySlot}
+        eggReadySlot={eggReadySlot}
         potionDrinkingSlot={potionDrinkingSlot}
+      />
+
+      <GodMapPanel
+        open={godMapOpen}
+        onClose={() => setGodMapOpen(false)}
+        worldId={currentWorldId}
+        currentUserId={user?.id ?? null}
+        userRoles={userRoles}
+        playerPositionRef={playerPositionRef}
       />
 
       <FortressOverlays
@@ -2157,6 +2359,7 @@ export function Fortress() {
         crosshairsEnabled={crosshairsEnabled}
         bulletColor={bulletColor}
         grenadeReady={grenadeReady}
+        eggReady={eggReadySlot !== null}
         isDead={isDead}
         respawnTimer={respawnTimer}
         respawn={respawn}

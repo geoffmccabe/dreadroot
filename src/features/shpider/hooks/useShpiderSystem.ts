@@ -19,6 +19,8 @@ import {
 } from '../lib/deathFragments';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { chaseLocalPlayer, petTargetNearestHostile } from '../lib/targetSelection';
 
 // Capped at 50 because per-frame AI cost is O(N²) in the active spider
 // count (stepShpiderHopAI iterates the full `others` list for spacing
@@ -39,8 +41,21 @@ interface UseShpiderSystemOptions {
   cameraRef: React.RefObject<THREE.Camera | null>;
   isEnabled: boolean;
   userRoles: string[];
-  /** Fired whenever a shpider dies. Used to increment kill stats. */
-  onShpiderKilled?: (tier: number) => void;
+  /** Fired when a WILD shpider dies. Pet deaths route to onPetDied
+   *  instead — they don't count as a "kill" for the player. Position
+   *  is included so a wild 1% egg drop can be rendered in-world (vs
+   *  silently entering inventory). */
+  onShpiderKilled?: (info: { tier: number; x: number; y: number; z: number }) => void;
+  /** Fired when a PET shpider dies. Caller inserts a world_eggs row
+   *  so the dropped egg can be picked back up. */
+  onPetDied?: (info: {
+    tier: number;
+    petOwnerUserId: string;
+    eggInventoryRowId: string | null;
+    x: number;
+    y: number;
+    z: number;
+  }) => void;
 }
 
 function getDefinitionByTier(defs: ShpiderDefinition[], tier: number): ShpiderDefinition | null {
@@ -53,6 +68,7 @@ export function useShpiderSystem({
   isEnabled,
   userRoles,
   onShpiderKilled,
+  onPetDied,
 }: UseShpiderSystemOptions) {
   const [shpiders, setShpiders] = useState<ShpiderInstance[]>([]);
   const shpidersRef = useRef<ShpiderInstance[]>([]);
@@ -79,19 +95,22 @@ export function useShpiderSystem({
 
   /** Current chunk the player is standing in. */
   const getPlayerChunk = useCallback(() => {
-    const cam = cameraRef.current;
-    if (!cam) return null;
+    const p = getLocalPlayerSnapshot();
     return {
-      x: Math.floor(cam.position.x / CHUNK_SIZE),
-      z: Math.floor(cam.position.z / CHUNK_SIZE),
+      x: Math.floor(p.x / CHUNK_SIZE),
+      z: Math.floor(p.z / CHUNK_SIZE),
     };
-  }, [cameraRef]);
+  }, []);
 
-  /** Spawn one shpider at an exact world position. */
+  /** Spawn one shpider at an exact world position.
+   *  Pass `petOwnerUserId` to spawn it as a pet — pets target hostile
+   *  enemies instead of the player and skip damage on their owner. */
   const spawnShpiderAt = useCallback((
     definition: ShpiderDefinition,
     worldX: number,
     worldZ: number,
+    petOwnerUserId?: string | null,
+    eggInventoryRowId?: string | null,
   ): ShpiderInstance | null => {
     if (shpidersRef.current.length >= MAX_TOTAL_SHPIDERS) {
       console.warn('[Shpider] Max total reached');
@@ -146,6 +165,12 @@ export function useShpiderSystem({
         endNormalX: 0, endNormalY: 1, endNormalZ: 0,
       },
       surfaceNormal: new THREE.Vector3(0, 1, 0),
+      petOwnerUserId: petOwnerUserId ?? null,
+      eggInventoryRowId: eggInventoryRowId ?? null,
+      // Target provider bound once at spawn — pets hunt hostiles,
+      // wild shpiders chase the player. Renderer just calls this each
+      // frame; no per-frame branching on instance type.
+      targetProvider: petOwnerUserId ? petTargetNearestHostile : chaseLocalPlayer,
     };
 
     shpidersRef.current = [...shpidersRef.current, instance];
@@ -160,15 +185,14 @@ export function useShpiderSystem({
       console.warn('[Shpider] No definition for tier', tier);
       return;
     }
-    const camera = cameraRef.current;
-    if (!camera) return;
-
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    forward.y = 0;
-    forward.normalize();
-
-    const baseX = camera.position.x + forward.x * 8;
-    const baseZ = camera.position.z + forward.z * 8;
+    // Spawn 8m in front of where the player is facing. Forward derived
+    // from snapshot yaw — at yaw=0 the player looks down -Z, so
+    // forward = (-sin yaw, 0, -cos yaw).
+    const p = getLocalPlayerSnapshot();
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
+    const baseX = p.x + fx * 8;
+    const baseZ = p.z + fz * 8;
 
     for (let i = 0; i < count; i++) {
       const angle = (Math.random() - 0.5) * Math.PI;
@@ -176,7 +200,7 @@ export function useShpiderSystem({
       spawnShpiderAt(definition, baseX + Math.cos(angle) * radius, baseZ + Math.sin(angle) * radius);
     }
     console.log(`[Shpider] Spawned ${count} tier-${tier} shpiders`);
-  }, [definitions, cameraRef, spawnShpiderAt]);
+  }, [definitions, spawnShpiderAt]);
 
   /** Remove a shpider by id (used by combat). */
   const removeShpider = useCallback((id: string) => {
@@ -235,7 +259,25 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
-      onShpiderKilled?.(s.definition.tier);
+      // Pet deaths don't grant kill credit (or roll the 1% wild-drop) —
+      // they leave a world egg instead, owned by the original thrower.
+      if (s.petOwnerUserId) {
+        onPetDied?.({
+          tier: s.definition.tier,
+          petOwnerUserId: s.petOwnerUserId,
+          eggInventoryRowId: s.eggInventoryRowId ?? null,
+          x: s.position.x,
+          y: s.position.y,
+          z: s.position.z,
+        });
+      } else {
+        onShpiderKilled?.({
+          tier: s.definition.tier,
+          x: s.position.x,
+          y: s.position.y,
+          z: s.position.z,
+        });
+      }
       // Body/leg shots normally just disappear (per 2026-May-24
       // feedback). Headshots fragment. Explosion kills ALWAYS
       // fragment AND inherit the blast's radial impulse on each
@@ -254,7 +296,7 @@ export function useShpiderSystem({
       return true;
     }
     return false;
-  }, [removeShpider, onShpiderKilled]);
+  }, [removeShpider, onShpiderKilled, onPetDied]);
 
   /** Admin keybind: Ctrl+P spawns a group of T1 shpiders. */
   useEffect(() => {

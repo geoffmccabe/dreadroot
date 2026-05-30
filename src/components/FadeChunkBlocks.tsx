@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { ViewSettings, DEFAULT_VIEW_SETTINGS } from '@/components/fortress/FortressTypes';
+import { numPosKey } from '@/lib/spatialHashGrid';
 
 interface FadeChunkEntry {
   key: string;
@@ -49,13 +50,8 @@ const fragmentShader = `
   }
 `;
 
-// Numeric position key — eliminates the per-call template-literal string
-// allocation that was firing for every fading block every frame (real-world
-// trace 2026-May-19 showed this useFrame at 2.4s/6.9% of profile time, with
-// the per-frame block iteration hammering map.get/set with new strings each
-// call). Matches the pattern used by InstancedAtlasBlockGroup.numPosKey.
 function blockKey(b: PlacedBlock): number {
-  return (b.position_x + 32768) * 4294967296 + (b.position_y + 32768) * 65536 + (b.position_z + 32768);
+  return numPosKey(b.position_x, b.position_y, b.position_z);
 }
 
 function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring: number; viewSettings: ViewSettings }) {

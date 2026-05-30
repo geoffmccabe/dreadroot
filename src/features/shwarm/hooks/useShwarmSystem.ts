@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { ShwarmDefinition, ShwarmBlock, ActiveShwarm } from '../types';
 import { SHWARM_SPAWN_BOUNDS, MAX_SHWARM_BLOCKS } from '../constants';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
 /**
  * Runtime state for an active shwarm
@@ -54,26 +55,17 @@ export function useShwarmSystem({
    * Generate spawn position in front of player using raycast direction
    */
   const calculateSpawnPosition = useCallback((): THREE.Vector3 | null => {
-    const camera = cameraRef.current;
-    if (!camera) return null;
-
-    // Get direction player is looking
-    _rayDir.set(0, 0, -1);
-    _rayDir.applyQuaternion(camera.quaternion);
-    _rayDir.normalize();
-
-    // Spawn 8-12 blocks in front of player
+    const p = getLocalPlayerSnapshot();
+    // Forward derived from snapshot yaw — at yaw=0 looks down -Z.
+    const fx = -Math.sin(p.yaw);
+    const fz = -Math.cos(p.yaw);
     const distance = 8 + Math.random() * 4;
-    _spawnPos.copy(camera.position);
-    _spawnPos.addScaledVector(_rayDir, distance);
-
-    // Clamp to spawn bounds
+    _spawnPos.set(p.x + fx * distance, p.y, p.z + fz * distance);
     _spawnPos.x = Math.max(SHWARM_SPAWN_BOUNDS.minX, Math.min(SHWARM_SPAWN_BOUNDS.maxX, _spawnPos.x));
     _spawnPos.z = Math.max(SHWARM_SPAWN_BOUNDS.minZ, Math.min(SHWARM_SPAWN_BOUNDS.maxZ, _spawnPos.z));
     _spawnPos.y = Math.max(SHWARM_SPAWN_BOUNDS.minY, Math.min(SHWARM_SPAWN_BOUNDS.maxY, _spawnPos.y));
-
     return _spawnPos.clone();
-  }, [cameraRef]);
+  }, []);
 
   /**
    * Spawn a shwarm at a specific world position
@@ -331,6 +323,11 @@ export function useShwarmSystem({
         };
       },
       applyDamage: (t, info) => {
+        // Shwarm blocks are intentionally STATIC — they don't move
+        // under impulse. Knockback fields in DamageInfo are noted for
+        // adapter-contract completeness but have no physical effect
+        // on a shwarm block. Damage still applies normally.
+        void info.knockbackDirX; void info.knockbackDirY; void info.knockbackDirZ;
         const r = damageBlock(t.shwarmId, t.block.id, info.damage);
         return r.wasKilled;
       },

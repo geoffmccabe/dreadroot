@@ -4,7 +4,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
-import { checkLevelUp, getLevelForPoints } from '@/lib/levelSystem';
+import { worldStore } from '@/services/worldStore';
+import { getLevelForPoints } from '@/lib/levelSystem';
 import { initLogStep } from '@/contexts/InitializationContext';
 
 export interface UserProfile {
@@ -58,13 +59,6 @@ export const useUserData = () => {
   // Refs for instant access to current state (avoids stale closures in rapid calls)
   const tokenBalanceRef = useRef(tokenBalance);
   const inventoryRef = useRef(inventory);
-  
-  // Track pending purchases per item type (for accurate database sync)
-  const pendingPurchasesRef = useRef<Map<string, number>>(new Map());
-  // Track pending coin deductions (for accurate database sync)
-  const pendingCoinDeductionRef = useRef<number>(0);
-  // Debounce timer for database sync
-  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Keep refs in sync with state
   useEffect(() => {
@@ -157,17 +151,12 @@ export const useUserData = () => {
       }
 
       if (!tokenBalanceData) {
-        const { data: newBalance, error: createError } = await supabase
-          .from('user_token_balances')
-          .insert({
-            user_id: user.id,
-            token_theme_id: currentTheme.id,
-            coins: 100
-          })
-          .select()
-          .single();
-
-        if (!createError) setTokenBalance(newBalance);
+        try {
+          const newBalance = await worldStore.ensureTokenBalance(currentTheme.id, 100);
+          if (newBalance) setTokenBalance(newBalance);
+        } catch (err) {
+          console.error('[useUserData] ensureTokenBalance failed:', err);
+        }
       } else {
         setTokenBalance(tokenBalanceData);
       }
@@ -229,23 +218,10 @@ export const useUserData = () => {
         }
       }
 
-      // Consolidate duplicate inventory rows (same user + item_type + item_id)
+      // Duplicate-row consolidation now lives server-side (one-shot
+      // migration ran in D-final-cleanup, and the D-races advisory lock
+      // prevents new duplicates from forming). No client-side merge needed.
       const inv = inventoryData || [];
-      const seen = new Map<string, typeof inv[0]>();
-      for (const row of inv) {
-        if (row.item_type !== 'item' || !row.item_id) continue;
-        const key = `${row.item_type}:${row.item_id}`;
-        const prev = seen.get(key);
-        if (prev) {
-          // Merge: add quantity to first row, delete duplicate
-          const newQty = prev.quantity + row.quantity;
-          await supabase.from('user_inventory').update({ quantity: newQty }).eq('id', prev.id);
-          await supabase.from('user_inventory').delete().eq('id', row.id);
-          prev.quantity = newQty;
-        } else {
-          seen.set(key, row);
-        }
-      }
 
       // Ensure starter items (#15 Pistol, #193 Flame Glove) with quantity >= 4
       const { data: starterDefs } = await supabase
@@ -256,20 +232,23 @@ export const useUserData = () => {
       if (starterDefs && starterDefs.length > 0) {
         for (const sd of starterDefs) {
           const existing = inv.find(i => i.item_type === 'item' && i.item_id === sd.id);
-          if (!existing) {
-            // Insert new starter item
-            const { data: inserted } = await supabase
-              .from('user_inventory')
-              .insert({ user_id: user.id, item_type: 'item', item_id: sd.id, quantity: 4 })
-              .select();
-            if (inserted) setInventory(prev => [...prev, ...inserted]);
-          } else if (existing.quantity < 4) {
-            // Bump up to 4
-            await supabase
-              .from('user_inventory')
-              .update({ quantity: 4 })
-              .eq('id', existing.id);
-            setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: 4 } : i));
+          const needed = existing ? Math.max(0, 4 - existing.quantity) : 4;
+          if (needed === 0) continue;
+          try {
+            const result = await worldStore.grantInventoryItem(sd.id, needed);
+            if (result.rows && result.rows.length > 0) {
+              setInventory(prev => {
+                const next = [...prev];
+                for (const row of result.rows) {
+                  const idx = next.findIndex(i => i.id === row.id);
+                  if (idx >= 0) next[idx] = row as UserInventoryItem;
+                  else next.push(row as UserInventoryItem);
+                }
+                return next;
+              });
+            }
+          } catch (err) {
+            console.error('[starter items] grantInventoryItem failed:', err);
           }
         }
       }
@@ -287,19 +266,26 @@ export const useUserData = () => {
           itemId: e.item_id,
         })));
       } else {
-        // First time: equip starter items — #15 Pistol in slot 1, #193 Flame Glove in slot 2
+        // First time: equip starter items — #15 Pistol in slot 1, #193 Flame Glove in slot 2.
+        // Two separate set_equipped_slot RPC calls (one per slot).
         if (starterDefs && starterDefs.length > 0) {
           const pistol = starterDefs.find(d => d.item_number === 15);
           const glove = starterDefs.find(d => d.item_number === 193);
-          const starterEquips: Array<{ user_id: string; item_id: string; slot_type: string }> = [];
-          if (pistol) starterEquips.push({ user_id: user.id, item_id: pistol.id, slot_type: 'hotbar_1' });
-          if (glove) starterEquips.push({ user_id: user.id, item_id: glove.id, slot_type: 'hotbar_2' });
+          const starterEquips: Array<{ slot_type: string; item_id: string }> = [];
+          if (pistol) starterEquips.push({ slot_type: 'hotbar_1', item_id: pistol.id });
+          if (glove) starterEquips.push({ slot_type: 'hotbar_2', item_id: glove.id });
           if (starterEquips.length > 0) {
-            await supabase.from('user_equipped_items').insert(starterEquips);
-            setEquippedItems(starterEquips.map(e => ({
-              slot: parseInt(e.slot_type.replace('hotbar_', '')),
-              itemId: e.item_id,
-            })));
+            try {
+              for (const eq of starterEquips) {
+                await worldStore.setEquippedSlot(eq.slot_type, eq.item_id);
+              }
+              setEquippedItems(starterEquips.map(e => ({
+                slot: parseInt(e.slot_type.replace('hotbar_', '')),
+                itemId: e.item_id,
+              })));
+            } catch (err) {
+              console.error('[starter equips] setEquippedSlot failed:', err);
+            }
           }
         }
       }
@@ -406,6 +392,10 @@ export const useUserData = () => {
     };
   }, [user?.id, currentTheme?.id]);
 
+  // Atomic block purchase. The RPC deducts coins AND grants the block
+  // in a single transaction — if anything fails, both roll back so the
+  // user never loses coins for nothing. UI is still optimistic for
+  // responsiveness; we revert on RPC failure.
   const buyBlock = async (itemType: string, cost: number): Promise<boolean> => {
     if (!user?.id || !currentTheme?.id) {
       toast({
@@ -416,7 +406,6 @@ export const useUserData = () => {
       return false;
     }
 
-    // Get FRESH balance from ref
     const currentBalance = tokenBalanceRef.current;
     if (!currentBalance || currentBalance.coins < cost) {
       toast({
@@ -427,142 +416,82 @@ export const useUserData = () => {
       return false;
     }
 
-    const newCoinAmount = currentBalance.coins - cost;
-    
-    // Track pending purchase for database sync
-    const currentPending = pendingPurchasesRef.current.get(itemType) || 0;
-    pendingPurchasesRef.current.set(itemType, currentPending + 1);
-    pendingCoinDeductionRef.current += cost;
-    
-    // OPTIMISTIC UPDATE - update UI immediately using refs for fresh state
-    setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
+    const optimisticBalance = currentBalance.coins - cost;
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    setTokenBalance(prev => prev ? { ...prev, coins: optimisticBalance } : null);
     setInventory(prev => {
       const existingItem = prev.find(item => item.item_type === itemType || item.item_id === itemType);
       if (existingItem) {
-        return prev.map(item => 
-          item.id === existingItem.id 
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
+        return prev.map(item =>
+          item.id === existingItem.id ? { ...item, quantity: item.quantity + 1 } : item
         );
-      } else {
-        const tempId = `temp-${Date.now()}-${Math.random()}`;
-        return [...prev, {
-          id: tempId,
-          user_id: user.id,
-          item_type: itemType,
-          item_id: null,
-          quantity: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }];
       }
+      return [...prev, {
+        id: tempId, user_id: user.id, item_type: itemType, item_id: null, quantity: 1,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }];
     });
-    
-    toast({
-      title: "Purchase successful!",
-      description: `You bought 1 ${itemType} for ${cost} coins`,
-      duration: 2000,
-    });
+    toast({ title: "Purchase successful!", description: `You bought 1 ${itemType} for ${cost} coins`, duration: 2000 });
 
-    // Debounced database sync - collects rapid purchases into one update
-    if (syncTimerRef.current) {
-      clearTimeout(syncTimerRef.current);
+    try {
+      const result = await worldStore.buyBlock(itemType, cost, currentTheme.id);
+      // Reconcile with server result
+      setTokenBalance(prev => prev ? { ...prev, coins: result.newBalance } : null);
+      setInventory(prev => {
+        let next = prev.filter(i => i.id !== tempId);
+        for (const row of result.rows) {
+          const idx = next.findIndex(i => i.id === row.id);
+          if (idx >= 0) next[idx] = row as UserInventoryItem;
+          else next.push(row as UserInventoryItem);
+        }
+        return next;
+      });
+      return true;
+    } catch (err) {
+      console.error('[buyBlock] RPC failed:', err);
+      // Revert optimistic update
+      setTokenBalance(prev => prev ? { ...prev, coins: currentBalance.coins } : null);
+      setInventory(prev => prev.filter(i => i.id !== tempId).map(item => {
+        const existing = item.item_type === itemType || item.item_id === itemType;
+        if (existing && item.id !== tempId) {
+          return { ...item, quantity: Math.max(0, item.quantity - 1) };
+        }
+        return item;
+      }).filter(i => i.quantity > 0));
+      toast({
+        title: "Purchase failed",
+        description: "Could not complete the purchase. Please try again.",
+        variant: "destructive",
+      });
+      return false;
     }
-    
-    syncTimerRef.current = setTimeout(async () => {
-      try {
-        const userId = user.id;
-        const themeId = currentTheme.id;
-        
-        // Get current database values and apply ALL pending changes at once
-        const pendingCoins = pendingCoinDeductionRef.current;
-        const pendingItems = new Map(pendingPurchasesRef.current);
-        
-        // Clear pending counters BEFORE async operations
-        pendingCoinDeductionRef.current = 0;
-        pendingPurchasesRef.current.clear();
-        
-        // Fetch current database balance
-        const { data: dbBalance } = await supabase
-          .from('user_token_balances')
-          .select('coins')
-          .eq('user_id', userId)
-          .eq('token_theme_id', themeId)
-          .single();
-        
-        if (dbBalance) {
-          const newDbCoins = dbBalance.coins - pendingCoins;
-          await supabase
-            .from('user_token_balances')
-            .update({ coins: newDbCoins })
-            .eq('user_id', userId)
-            .eq('token_theme_id', themeId);
-        }
-
-        // Update inventory for each pending item type
-        for (const [pendingItemType, pendingCount] of pendingItems) {
-          const { data: existingInvItem } = await supabase
-            .from('user_inventory')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('item_type', pendingItemType)
-            .maybeSingle();
-
-          if (existingInvItem) {
-            await supabase
-              .from('user_inventory')
-              .update({ quantity: existingInvItem.quantity + pendingCount })
-              .eq('id', existingInvItem.id);
-          } else {
-            const { data: newItem } = await supabase
-              .from('user_inventory')
-              .insert([{ user_id: userId, item_type: pendingItemType, quantity: pendingCount }])
-              .select()
-              .single();
-            
-            // Replace temp item with real item
-            if (newItem) {
-              setInventory(prev => prev.map(item => 
-                item.id.startsWith('temp-') && item.item_type === pendingItemType
-                  ? { ...newItem } as UserInventoryItem
-                  : item
-              ));
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error syncing purchase:', error);
-      }
-    }, 300); // 300ms debounce - fast enough to feel instant, slow enough to batch
-    
-    return true;
   };
 
+  // Consume one of `itemKey` (matches by item_type for blocks or
+  // item_id for items via the RPC's OR-match). Server is authoritative:
+  // local state updates from the RPC response.
   const useBlock = async (itemKey: string) => {
-    // Use functional update to ensure we get latest state
-    let success = false;
-    let itemId: string | null = null;
-    let originalQuantity = 0;
-    
-    setInventory(prev => {
-      const item = prev.find(i => i.item_type === itemKey || i.item_id === itemKey);
-      if (!item || item.quantity <= 0) {
-        success = false;
-        return prev;
-      }
-      
-      success = true;
-      itemId = item.id;
-      originalQuantity = item.quantity;
-      
-      return prev.map(i => 
-        i.id === item.id 
-          ? { ...i, quantity: i.quantity - 1 }
-          : i
-      );
-    });
-    
-    if (!success) {
+    try {
+      const result = await worldStore.consumeInventoryTarget(itemKey, 1);
+      setInventory(prev => {
+        let next = prev;
+        if (result.deletedRowIds.length > 0) {
+          next = next.filter(i => !result.deletedRowIds.includes(i.id));
+        }
+        if (result.rows.length > 0) {
+          next = [...next];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+        }
+        return next;
+      });
+      return true;
+    } catch (err: any) {
+      // PGRST/SQL error means no matching row or insufficient quantity.
+      console.error('[useBlock] consumeInventoryTarget failed:', err);
       toast({
         title: "No blocks available",
         description: `You don't have any ${itemKey} blocks in your inventory`,
@@ -570,52 +499,17 @@ export const useUserData = () => {
       });
       return false;
     }
-
-    // Sync to database in background (non-blocking)
-    if (itemId) {
-      supabase
-        .from('user_inventory')
-        .update({ quantity: originalQuantity - 1 })
-        .eq('id', itemId)
-        .then(({ error }) => {
-          if (error) {
-            console.error('Error syncing inventory:', error);
-            // Revert optimistic update on error
-            setInventory(prev => prev.map(i => 
-              i.id === itemId 
-                ? { ...i, quantity: originalQuantity }
-                : i
-            ));
-          }
-        });
-    }
-    
-    return true;
   };
 
   const addCoins = async (amount: number) => {
     if (!user?.id || !currentTheme?.id || !tokenBalance) return false;
-
     try {
-      const newCoinAmount = tokenBalance.coins + amount;
-      const { error } = await supabase
-        .from('user_token_balances')
-        .update({ coins: newCoinAmount })
-        .eq('user_id', user.id)
-        .eq('token_theme_id', currentTheme.id);
-
-      if (error) throw error;
-
-      setTokenBalance(prev => prev ? { ...prev, coins: newCoinAmount } : null);
-      
+      const result = await worldStore.grantCurrency(currentTheme.id, amount);
+      setTokenBalance(prev => prev ? { ...prev, coins: result.newBalance } : null);
       return true;
     } catch (error) {
       console.error('Error adding coins:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add coins",
-        variant: "destructive"
-      });
+      toast({ title: "Error", description: "Failed to add coins", variant: "destructive" });
       return false;
     }
   };
@@ -711,7 +605,9 @@ export const useUserData = () => {
     await loadUserData();
   }, [loadUserData]);
 
-  // Collect wisp block (free addition to inventory)
+  // Collect wisp block via L1 Write API. The RPC validates the block
+  // key against the blocks table, handles existing-row lookup, and
+  // increments the count atomically.
   const collectWispBlock = async (blockKey: string) => {
     if (!user?.id) {
       toast({
@@ -723,83 +619,26 @@ export const useUserData = () => {
     }
 
     try {
-      // Verify block exists in blocks table
-      const { data: blockData, error: blockError } = await supabase
-        .from('blocks')
-        .select('id, name')
-        .eq('key', blockKey)
-        .maybeSingle();
-
-      if (blockError) throw blockError;
-      if (!blockData) {
-        toast({
-          title: "Block not found",
-          description: "This block type is not available",
-          variant: "destructive"
+      const result = await worldStore.grantInventoryBlock(blockKey, 1);
+      if (result.rows && result.rows.length > 0) {
+        setInventory(prev => {
+          const next = [...prev];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+          return next;
         });
-        return false;
       }
-
-      // Query database directly to avoid race conditions with local state
-      const { data: existingItems, error: queryError } = await supabase
-        .from('user_inventory')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('item_type', blockKey)
-        .is('item_id', null);
-
-      if (queryError) throw queryError;
-      
-      if (existingItems && existingItems.length > 0) {
-        // Update existing inventory item
-        const existingItem = existingItems[0];
-        const newQuantity = existingItem.quantity + 1;
-        const { error: updateError } = await supabase
-          .from('user_inventory')
-          .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
-          .eq('id', existingItem.id);
-
-        if (updateError) throw updateError;
-        
-        // Update local state
-        setInventory(prev => 
-          prev.map(i => 
-            i.id === existingItem.id 
-              ? { ...i, quantity: newQuantity, updated_at: new Date().toISOString() }
-              : i
-          )
-        );
-      } else {
-        // Create new inventory item for block (item_id is NULL for blocks)
-        const { data: newItem, error: insertError } = await supabase
-          .from('user_inventory')
-          .insert([{
-            user_id: user.id,
-            item_type: blockKey,
-            item_id: null,
-            quantity: 1
-          }])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-        
-        // Update local state
-        if (newItem) {
-          setInventory(prev => [...prev, newItem]);
-        }
-      }
-      
-      console.log(`✨ Wisp collected: +1 ${blockData.name} (${blockKey})`);
-      
+      console.log(`✨ Wisp collected: +1 ${blockKey}`);
       toast({
         title: "Wisp collected!",
         description: `You caught a ${blockKey} wisp! +1 block added to inventory`,
       });
-      
       return true;
-    } catch (error) {
-      console.error('Error collecting wisp:', error);
+    } catch (err) {
+      console.error('[collectWispBlock] grantInventoryBlock failed:', err);
       toast({
         title: "Collection failed",
         description: "Failed to add wisp block to inventory",
@@ -809,7 +648,10 @@ export const useUserData = () => {
     }
   };
 
-  // Return a seed to inventory (after chopping a tree)
+  // Return a seed to inventory (after chopping a tree) via L1 Write API.
+  // We still look up the tier client-side to construct the item_type
+  // (`seed_tier_${tier}`). The RPC validates the seedDefId against
+  // seed_definitions and handles the stack-or-insert.
   const returnSeed = async (seedDefId: string): Promise<boolean> => {
     if (!user?.id) {
       toast({
@@ -821,76 +663,33 @@ export const useUserData = () => {
     }
 
     try {
-      // Get the seed definition to find the item_type key
       const { data: seedDef, error: seedError } = await supabase
         .from('seed_definitions')
-        .select('id, name, tier')
+        .select('tier, name')
         .eq('id', seedDefId)
         .maybeSingle();
-
       if (seedError) throw seedError;
       if (!seedDef) {
         console.warn('Seed definition not found for id:', seedDefId);
         return false;
       }
 
-      // Use seed_definition_id as the item_id for seeds
-      const itemType = `seed_tier_${seedDef.tier}`;
-      const itemId = seedDefId;
-
-      // Query database directly to avoid race conditions
-      const { data: existingItems, error: queryError } = await supabase
-        .from('user_inventory')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('item_id', itemId);
-
-      if (queryError) throw queryError;
-
-      if (existingItems && existingItems.length > 0) {
-        // Update existing inventory item
-        const existingItem = existingItems[0];
-        const newQuantity = existingItem.quantity + 1;
-        const { error: updateError } = await supabase
-          .from('user_inventory')
-          .update({ quantity: newQuantity, updated_at: new Date().toISOString() })
-          .eq('id', existingItem.id);
-
-        if (updateError) throw updateError;
-
-        // Update local state
-        setInventory(prev =>
-          prev.map(i =>
-            i.id === existingItem.id
-              ? { ...i, quantity: newQuantity, updated_at: new Date().toISOString() }
-              : i
-          )
-        );
-      } else {
-        // Create new inventory item for seed
-        const { data: newItem, error: insertError } = await supabase
-          .from('user_inventory')
-          .insert([{
-            user_id: user.id,
-            item_type: itemType,
-            item_id: itemId,
-            quantity: 1
-          }])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        // Update local state
-        if (newItem) {
-          setInventory(prev => [...prev, newItem]);
-        }
+      const result = await worldStore.grantInventorySeed(seedDefId, seedDef.tier, 1);
+      if (result.rows && result.rows.length > 0) {
+        setInventory(prev => {
+          const next = [...prev];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+          return next;
+        });
       }
-
       console.log(`🌱 Seed returned: +1 ${seedDef.name || `Tier ${seedDef.tier}`} seed`);
       return true;
-    } catch (error) {
-      console.error('Error returning seed to inventory:', error);
+    } catch (err) {
+      console.error('[returnSeed] grantInventorySeed failed:', err);
       toast({
         title: "Return failed",
         description: "Failed to return seed to inventory",
@@ -900,107 +699,63 @@ export const useUserData = () => {
     }
   };
 
-  // Add points (from dealing damage to enemies)
+  // Add points (from dealing damage to enemies). Server is authoritative:
+  // RPC atomically increments total_points and recomputes level. Optimistic
+  // local update first; we reconcile from the RPC result.
   const addPoints = useCallback(async (amount: number): Promise<{ newLevel: number | null }> => {
     if (!user?.id || !profile) return { newLevel: null };
-    
-    const currentPoints = profile.total_points || 0;
-    const currentLevel = profile.current_level || 1;
-    const newPoints = currentPoints + amount;
-    const newLevel = getLevelForPoints(newPoints);
-    const leveledUp = checkLevelUp(currentPoints, newPoints);
-    
-    // Optimistic update
-    setProfile(prev => prev ? { 
-      ...prev, 
-      total_points: newPoints, 
-      current_level: newLevel 
+
+    const prevPoints = profile.total_points || 0;
+    const prevLevel = profile.current_level || 1;
+
+    setProfile(prev => prev ? {
+      ...prev,
+      total_points: prevPoints + amount,
+      current_level: getLevelForPoints(prevPoints + amount),
     } : null);
-    
-    // Sync to database in background
-    supabase
-      .from('user_profiles')
-      .update({ total_points: newPoints, current_level: newLevel })
-      .eq('user_id', user.id)
-      .then(({ error }) => {
-        if (error) {
-          console.error('Error syncing points:', error);
-          // Revert on error
-          setProfile(prev => prev ? {
-            ...prev,
-            total_points: currentPoints,
-            current_level: currentLevel
-          } : null);
-        }
-      });
-    
-    return { newLevel: leveledUp };
+
+    try {
+      const result = await worldStore.grantPoints(amount);
+      setProfile(prev => prev ? {
+        ...prev,
+        total_points: result.newTotalPoints,
+        current_level: result.newLevel,
+      } : null);
+      return { newLevel: result.leveledUp ? result.newLevel : null };
+    } catch (err) {
+      console.error('Error syncing points:', err);
+      // Revert
+      setProfile(prev => prev ? { ...prev, total_points: prevPoints, current_level: prevLevel } : null);
+      return { newLevel: null };
+    }
   }, [user?.id, profile]);
 
-  // Keys that DON'T stack — each one occupies its own inventory row /
-  // grid tile so the 18-slot grid naturally caps how many a player can
-  // carry. Grenades cover all tiers (grenade, grenade_t2..grenade_t10).
-  const isNonStackableKey = (key: string | null | undefined): boolean => {
-    if (!key) return false;
-    return key === 'health_potion'
-      || key === 'grenade' || key.startsWith('grenade_t')
-      || key === 'diamond'
-      || key.startsWith('shpider_egg_t');
-  };
-
-  // Add an item to inventory (server-verified). Looks up the item's
-  // canonical key to decide whether to stack onto an existing row or
-  // create one new row per unit (non-stackable items).
+  // Add an item to inventory via the L1 Write API. The RPC handles
+  // auth, replay protection, stackable vs non-stackable lookup, and
+  // returns the affected inventory rows. We merge those rows into
+  // local state by id (replace if present, append if new), which is
+  // duplicate-safe if the realtime channel ALSO delivers the same row.
   const addItem = async (itemId: string, quantity: number = 1): Promise<boolean> => {
     if (!user?.id) return false;
 
-    const { data: itemDef } = await supabase
-      .from('items')
-      .select('key')
-      .eq('id', itemId)
-      .maybeSingle();
-    const nonStackable = isNonStackableKey(itemDef?.key);
-
-    if (nonStackable) {
-      // One row per unit — the row IS the slot.
-      const rows = Array.from({ length: Math.max(1, quantity) }, () => ({
-        user_id: user.id, item_type: 'item', item_id: itemId, quantity: 1,
-      }));
-      const { data: inserted, error } = await supabase
-        .from('user_inventory')
-        .insert(rows)
-        .select();
-      if (error || !inserted) return false;
-      setInventory(prev => [...prev, ...inserted]);
+    try {
+      const result = await worldStore.grantInventoryItem(itemId, quantity);
+      if (result.rows && result.rows.length > 0) {
+        setInventory(prev => {
+          const next = [...prev];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+          return next;
+        });
+      }
       return true;
+    } catch (err) {
+      console.error('[addItem] grantInventoryItem failed:', err);
+      return false;
     }
-
-    const { data: existing } = await supabase
-      .from('user_inventory')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('item_type', 'item')
-      .eq('item_id', itemId)
-      .maybeSingle();
-
-    if (existing) {
-      const newQty = existing.quantity + quantity;
-      const { error } = await supabase
-        .from('user_inventory')
-        .update({ quantity: newQty, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-      if (error) return false;
-      setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: newQty } : i));
-    } else {
-      const { data: newItem, error } = await supabase
-        .from('user_inventory')
-        .insert({ user_id: user.id, item_type: 'item', item_id: itemId, quantity })
-        .select()
-        .single();
-      if (error || !newItem) return false;
-      setInventory(prev => [...prev, newItem]);
-    }
-    return true;
   };
 
   // Delete one specific inventory row. Used to consume non-stackable
@@ -1008,53 +763,76 @@ export const useUserData = () => {
   // true on success.
   const removeInventoryRow = async (rowId: string): Promise<boolean> => {
     if (!user?.id) return false;
-    setInventory(prev => prev.filter(i => i.id !== rowId));
-    const { error } = await supabase
-      .from('user_inventory')
-      .delete()
-      .eq('id', rowId);
-    if (error) {
-      // Refetch on failure — easier than reconstructing the deleted row.
+    try {
+      const result = await worldStore.deleteInventoryRow(rowId);
+      if (result.deletedRowIds.length > 0) {
+        setInventory(prev => prev.filter(i => !result.deletedRowIds.includes(i.id)));
+      }
+      return true;
+    } catch (err) {
+      console.error('[removeInventoryRow] deleteInventoryRow failed:', err);
+      // Refetch on failure to recover from any local-state drift.
       const { data } = await supabase.from('user_inventory').select('*').eq('user_id', user.id);
       if (data) setInventory(data);
       return false;
     }
-    return true;
   };
 
-  // Remove items from inventory (server-verified)
+  // Remove items from inventory via the L1 Write API. The RPC handles
+  // ownership + quantity validation server-side.
   const removeItems = async (itemId: string, quantity: number): Promise<boolean> => {
     if (!user?.id) return false;
-
-    // Server-side verify ownership and quantity
-    const { data: existing } = await supabase
-      .from('user_inventory')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('item_type', 'item')
-      .eq('item_id', itemId)
-      .maybeSingle();
-
-    if (!existing || existing.quantity < quantity) return false;
-
-    if (existing.quantity === quantity) {
-      const { error } = await supabase
-        .from('user_inventory')
-        .delete()
-        .eq('id', existing.id);
-      if (error) return false;
-      setInventory(prev => prev.filter(i => i.id !== existing.id));
-    } else {
-      const newQty = existing.quantity - quantity;
-      const { error } = await supabase
-        .from('user_inventory')
-        .update({ quantity: newQty, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-      if (error) return false;
-      setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: newQty } : i));
+    try {
+      const result = await worldStore.consumeInventoryTarget(itemId, quantity);
+      setInventory(prev => {
+        let next = prev;
+        if (result.deletedRowIds.length > 0) {
+          next = next.filter(i => !result.deletedRowIds.includes(i.id));
+        }
+        if (result.rows.length > 0) {
+          next = [...next];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+        }
+        return next;
+      });
+      return true;
+    } catch (err) {
+      console.error('[removeItems] consumeInventoryTarget failed:', err);
+      return false;
     }
-    return true;
   };
+
+  // Orphan-equipped cleanup. After consumeGrenade/consumeEgg/etc.
+  // delete the last inventory row of an item, the equipped slot is
+  // left pointing at a row that no longer exists. The slot then
+  // "looks armed" (G arms it because the slot has the grenade itemId)
+  // but throws silently fail because consumeGrenade can't find a row.
+  // This effect scans equipped slots and unequips any whose item_id
+  // has no live inventory backing. Single round-trip per orphan.
+  useEffect(() => {
+    if (!user?.id || equippedItems.length === 0) return;
+    const liveItemIds = new Set<string>();
+    for (const inv of inventory) {
+      if (inv.item_type === 'item' && inv.item_id && inv.quantity > 0) {
+        liveItemIds.add(inv.item_id);
+      }
+    }
+    const orphans = equippedItems.filter(eq => eq.itemId && !liveItemIds.has(eq.itemId));
+    if (orphans.length === 0) return;
+    (async () => {
+      const slotTypes = orphans.map(o => `hotbar_${o.slot}`);
+      try {
+        await worldStore.clearEquippedSlots(slotTypes);
+        setEquippedItems(prev => prev.filter(eq => !orphans.some(o => o.slot === eq.slot)));
+      } catch (err) {
+        console.warn('[OrphanEquip] cleanup failed:', err);
+      }
+    })();
+  }, [user?.id, inventory, equippedItems]);
 
   const updateEquippedSlot = useCallback(async (slot: number, itemId: string | null) => {
     if (!user?.id) return;
@@ -1067,32 +845,14 @@ export const useUserData = () => {
       return filtered;
     });
 
-    if (itemId) {
-      // Upsert: try update first, insert if not found
-      const { data: existing } = await supabase
-        .from('user_equipped_items')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('slot_type', slotType)
-        .maybeSingle();
-
-      if (existing) {
-        await supabase
-          .from('user_equipped_items')
-          .update({ item_id: itemId })
-          .eq('id', existing.id);
+    try {
+      if (itemId) {
+        await worldStore.setEquippedSlot(slotType, itemId);
       } else {
-        await supabase
-          .from('user_equipped_items')
-          .insert({ user_id: user.id, item_id: itemId, slot_type: slotType });
+        await worldStore.clearEquippedSlot(slotType);
       }
-    } else {
-      // Remove from slot
-      await supabase
-        .from('user_equipped_items')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('slot_type', slotType);
+    } catch (err) {
+      console.error('[updateEquippedSlot] failed:', err);
     }
   }, [user?.id]);
 
