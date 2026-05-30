@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { findInventoryItem } from '@/lib/inventoryHelpers';
+import { worldStore } from '@/services/worldStore';
 import { checkLevelUp, getLevelForPoints } from '@/lib/levelSystem';
 import { initLogStep } from '@/contexts/InitializationContext';
 
@@ -937,70 +938,32 @@ export const useUserData = () => {
     return { newLevel: leveledUp };
   }, [user?.id, profile]);
 
-  // Keys that DON'T stack — each one occupies its own inventory row /
-  // grid tile so the 18-slot grid naturally caps how many a player can
-  // carry. Grenades cover all tiers (grenade, grenade_t2..grenade_t10).
-  const isNonStackableKey = (key: string | null | undefined): boolean => {
-    if (!key) return false;
-    return key === 'health_potion'
-      || key === 'grenade' || key.startsWith('grenade_t')
-      || key === 'diamond'
-      || key.startsWith('shpider_egg_t');
-  };
-
-  // Add an item to inventory (server-verified). Looks up the item's
-  // canonical key to decide whether to stack onto an existing row or
-  // create one new row per unit (non-stackable items).
+  // Add an item to inventory via the L1 Write API. The RPC handles
+  // auth, replay protection, stackable vs non-stackable lookup, and
+  // returns the affected inventory rows. We merge those rows into
+  // local state by id (replace if present, append if new), which is
+  // duplicate-safe if the realtime channel ALSO delivers the same row.
   const addItem = async (itemId: string, quantity: number = 1): Promise<boolean> => {
     if (!user?.id) return false;
 
-    const { data: itemDef } = await supabase
-      .from('items')
-      .select('key')
-      .eq('id', itemId)
-      .maybeSingle();
-    const nonStackable = isNonStackableKey(itemDef?.key);
-
-    if (nonStackable) {
-      // One row per unit — the row IS the slot.
-      const rows = Array.from({ length: Math.max(1, quantity) }, () => ({
-        user_id: user.id, item_type: 'item', item_id: itemId, quantity: 1,
-      }));
-      const { data: inserted, error } = await supabase
-        .from('user_inventory')
-        .insert(rows)
-        .select();
-      if (error || !inserted) return false;
-      setInventory(prev => [...prev, ...inserted]);
+    try {
+      const result = await worldStore.grantInventoryItem(itemId, quantity);
+      if (result.rows && result.rows.length > 0) {
+        setInventory(prev => {
+          const next = [...prev];
+          for (const row of result.rows) {
+            const idx = next.findIndex(i => i.id === row.id);
+            if (idx >= 0) next[idx] = row as UserInventoryItem;
+            else next.push(row as UserInventoryItem);
+          }
+          return next;
+        });
+      }
       return true;
+    } catch (err) {
+      console.error('[addItem] grantInventoryItem failed:', err);
+      return false;
     }
-
-    const { data: existing } = await supabase
-      .from('user_inventory')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('item_type', 'item')
-      .eq('item_id', itemId)
-      .maybeSingle();
-
-    if (existing) {
-      const newQty = existing.quantity + quantity;
-      const { error } = await supabase
-        .from('user_inventory')
-        .update({ quantity: newQty, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
-      if (error) return false;
-      setInventory(prev => prev.map(i => i.id === existing.id ? { ...i, quantity: newQty } : i));
-    } else {
-      const { data: newItem, error } = await supabase
-        .from('user_inventory')
-        .insert({ user_id: user.id, item_type: 'item', item_id: itemId, quantity })
-        .select()
-        .single();
-      if (error || !newItem) return false;
-      setInventory(prev => [...prev, newItem]);
-    }
-    return true;
   };
 
   // Delete one specific inventory row. Used to consume non-stackable
