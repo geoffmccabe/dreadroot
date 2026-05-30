@@ -148,6 +148,101 @@ export async function deleteInventoryRow(
   return adaptConsume(data as RawConsumeRpcResult);
 }
 
+// ── Vault (D5) ──────────────────────────────────────────────────────
+
+export interface VaultRow {
+  id: string;
+  user_id: string;
+  page: number;
+  slot: number;
+  item_id: string;
+  quantity: number;
+}
+
+export interface VaultConfig {
+  user_id: string;
+  page_count: number;
+  cols: number;
+  rows: number;
+}
+
+export interface VaultWriteResult {
+  rows: VaultRow[];
+  deletedRowIds: string[];
+  replayed: boolean;
+}
+
+interface RawVaultRpcResult {
+  rows: VaultRow[];
+  deleted_row_ids?: string[];
+  replayed: boolean;
+}
+
+function adaptVault(raw: RawVaultRpcResult): VaultWriteResult {
+  return {
+    rows: raw.rows ?? [],
+    deletedRowIds: raw.deleted_row_ids ?? [],
+    replayed: raw.replayed ?? false,
+  };
+}
+
+export async function vaultSetSlot(
+  page: number,
+  slot: number,
+  itemId: string,
+  quantity: number,
+  requestId?: string,
+): Promise<VaultWriteResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('vault_set_slot', {
+    p_page: page,
+    p_slot: slot,
+    p_item_id: itemId,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptVault(data as RawVaultRpcResult);
+}
+
+export async function vaultRemoveFromSlot(
+  page: number,
+  slot: number,
+  quantity: number,
+  requestId?: string,
+): Promise<VaultWriteResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('vault_remove_from_slot', {
+    p_page: page,
+    p_slot: slot,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptVault(data as RawVaultRpcResult);
+}
+
+export async function vaultReplacePage(
+  page: number,
+  rows: Array<{ slot: number; item_id: string; quantity: number }>,
+  requestId?: string,
+): Promise<VaultWriteResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('vault_replace_page', {
+    p_page: page,
+    p_rows: rows,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return adaptVault(data as RawVaultRpcResult);
+}
+
+export async function vaultEnsureConfig(): Promise<VaultConfig | null> {
+  const { data, error } = await supabase.rpc('vault_ensure_config');
+  if (error) throw error;
+  return (data as VaultConfig) ?? null;
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -163,4 +258,8 @@ export const worldStore = {
   grantInventorySeed,
   consumeInventoryTarget,
   deleteInventoryRow,
+  vaultSetSlot,
+  vaultRemoveFromSlot,
+  vaultReplacePage,
+  vaultEnsureConfig,
 };

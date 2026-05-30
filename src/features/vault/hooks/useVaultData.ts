@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { worldStore } from '@/services/worldStore';
 import type { VaultRow, VaultConfig, VaultSlotDef } from '../types';
 
 interface ItemDef {
@@ -57,12 +58,23 @@ export function useVaultData(userId: string | null) {
           rows: (cfg as any).rows,
         });
       } else {
-        // No config row yet — first-time vault user. Create one with
-        // the defaults so future updates have something to update.
-        await supabase.from('user_vault_config' as any).insert({
-          user_id: userId, ...DEFAULT_CONFIG,
-        });
-        setConfig(DEFAULT_CONFIG);
+        // No config row yet — first-time vault user. RPC creates it
+        // idempotently and returns the row (existing or just-created).
+        try {
+          const created = await worldStore.vaultEnsureConfig();
+          if (created) {
+            setConfig({
+              page_count: created.page_count,
+              cols: created.cols,
+              rows: created.rows,
+            });
+          } else {
+            setConfig(DEFAULT_CONFIG);
+          }
+        } catch (err) {
+          console.error('[useVaultData] vaultEnsureConfig failed:', err);
+          setConfig(DEFAULT_CONFIG);
+        }
       }
 
       const itemIds = Array.from(new Set(rowsList.map(r => r.item_id)));
@@ -136,73 +148,56 @@ export function useVaultData(userId: string | null) {
     setRows((data as VaultRow[] | null) || []);
   }, [userId]);
 
-  /** Put `quantity` of an item into (page, slot). Creates the row if
-   *  empty, stacks onto an existing row if same itemId, replaces if
-   *  different (caller is expected to first pick up the existing stack
-   *  onto the cursor in that case). Returns the resulting row. */
+  /** Put `quantity` of an item into (page, slot). Server-authoritative:
+   *  the RPC stacks on same-itemId or replaces if different and returns
+   *  both the updated row and any deleted row id. Optimistic update is
+   *  applied first; on RPC failure we refetch to recover. */
   const setSlot = useCallback(async (
     page: number, slot: number, itemId: string, quantity: number
   ): Promise<VaultRow | null> => {
     if (!userId || quantity <= 0) return null;
     await ensureItemDefs([itemId]);
 
-    // Optimistic local update
     const tempId = `tmp-${Math.random().toString(36).slice(2)}`;
-    let resultingRowId: string | null = null;
     setRows(prev => {
       const existing = prev.find(r => r.page === page && r.slot === slot);
       if (existing && existing.item_id === itemId) {
-        resultingRowId = existing.id;
         return prev.map(r => r.id === existing.id
           ? { ...r, quantity: r.quantity + quantity }
           : r);
       }
-      // empty or different item — replace
       const without = prev.filter(r => !(r.page === page && r.slot === slot));
       const row: VaultRow = { id: tempId, user_id: userId, page, slot, item_id: itemId, quantity };
-      resultingRowId = tempId;
       return [...without, row];
     });
 
-    // Database: try insert; on conflict do an upsert via RPC-less flow.
-    const { data: existingDb } = await supabase
-      .from('user_vault' as any)
-      .select('*')
-      .eq('user_id', userId).eq('page', page).eq('slot', slot)
-      .maybeSingle();
-
-    if (existingDb && (existingDb as any).item_id === itemId) {
-      const newQty = (existingDb as any).quantity + quantity;
-      const { data: updated, error } = await supabase
-        .from('user_vault' as any)
-        .update({ quantity: newQty })
-        .eq('id', (existingDb as any).id)
-        .select().single();
-      if (error) { await refetch(); return null; }
-      setRows(prev => prev.map(r => r.id === resultingRowId
-        ? { ...(updated as any) } as VaultRow
-        : r));
-      return updated as any;
+    try {
+      const result = await worldStore.vaultSetSlot(page, slot, itemId, quantity);
+      setRows(prev => {
+        let next = prev;
+        if (result.deletedRowIds.length > 0) {
+          next = next.filter(r => !result.deletedRowIds.includes(r.id));
+        }
+        // Drop any tmp row at this slot, then merge real rows by id
+        next = next.filter(r => !(r.id === tempId));
+        for (const row of result.rows) {
+          const idx = next.findIndex(r => r.id === row.id);
+          if (idx >= 0) next[idx] = row;
+          else next.push(row);
+        }
+        return next;
+      });
+      return result.rows[0] ?? null;
+    } catch (err) {
+      console.error('[useVaultData] vaultSetSlot failed:', err);
+      await refetch();
+      return null;
     }
-    // Either no existing row, or different itemId. If different itemId,
-    // we already cleared it from local state — delete on DB before
-    // inserting.
-    if (existingDb) {
-      await supabase.from('user_vault' as any).delete().eq('id', (existingDb as any).id);
-    }
-    const { data: inserted, error } = await supabase
-      .from('user_vault' as any)
-      .insert({ user_id: userId, page, slot, item_id: itemId, quantity })
-      .select().single();
-    if (error) { await refetch(); return null; }
-    setRows(prev => prev.map(r => r.id === resultingRowId
-      ? { ...(inserted as any) } as VaultRow
-      : r));
-    return inserted as any;
   }, [userId, ensureItemDefs, refetch]);
 
-  /** Take `quantity` from (page, slot). Deletes the row if quantity
-   *  reaches 0. Returns the actual amount removed. */
+  /** Take `quantity` from (page, slot). Server-authoritative: RPC
+   *  decrements or deletes and returns the row delta. Optimistic
+   *  update first; refetch on failure. */
   const removeFromSlot = useCallback(async (
     page: number, slot: number, quantity: number
   ): Promise<number> => {
@@ -214,25 +209,38 @@ export function useVaultData(userId: string | null) {
 
     if (remaining <= 0) {
       setRows(prev => prev.filter(r => r.id !== row.id));
-      const { error } = await supabase.from('user_vault' as any).delete().eq('id', row.id);
-      if (error) await refetch();
     } else {
       setRows(prev => prev.map(r => r.id === row.id ? { ...r, quantity: remaining } : r));
-      const { error } = await supabase
-        .from('user_vault' as any)
-        .update({ quantity: remaining })
-        .eq('id', row.id);
-      if (error) await refetch();
+    }
+
+    try {
+      const result = await worldStore.vaultRemoveFromSlot(page, slot, take);
+      // Reconcile with server result (idempotent merge)
+      setRows(prev => {
+        let next = prev;
+        if (result.deletedRowIds.length > 0) {
+          next = next.filter(r => !result.deletedRowIds.includes(r.id));
+        }
+        for (const r of result.rows) {
+          const idx = next.findIndex(x => x.id === r.id);
+          if (idx >= 0) next[idx] = r;
+          else next.push(r);
+        }
+        return next;
+      });
+    } catch (err) {
+      console.error('[useVaultData] vaultRemoveFromSlot failed:', err);
+      await refetch();
     }
     return take;
   }, [userId, rows, refetch]);
 
-  /** Bulk replace a whole page's layout (used by ORG button). */
+  /** Bulk replace a whole page's layout (used by ORG button). Single
+   *  RPC does wipe + bulk insert atomically. */
   const replacePageLayout = useCallback(async (
     page: number, newRows: Array<{ slot: number; item_id: string; quantity: number }>
   ): Promise<void> => {
     if (!userId) return;
-    // Optimistic: rebuild local state for that page
     const otherPages = rows.filter(r => r.page !== page);
     const tempPageRows: VaultRow[] = newRows.map((r, i) => ({
       id: `tmp-${i}-${Math.random().toString(36).slice(2)}`,
@@ -244,15 +252,16 @@ export function useVaultData(userId: string | null) {
     }));
     setRows([...otherPages, ...tempPageRows]);
 
-    // DB: wipe page, re-insert. Cheap (≤ cols*rows rows).
-    await supabase.from('user_vault' as any).delete().eq('user_id', userId).eq('page', page);
-    if (newRows.length > 0) {
-      const toInsert = newRows.map(r => ({
-        user_id: userId, page, slot: r.slot, item_id: r.item_id, quantity: r.quantity,
-      }));
-      await supabase.from('user_vault' as any).insert(toInsert);
+    try {
+      const result = await worldStore.vaultReplacePage(page, newRows);
+      setRows(prev => {
+        const otherPagesNow = prev.filter(r => r.page !== page);
+        return [...otherPagesNow, ...result.rows];
+      });
+    } catch (err) {
+      console.error('[useVaultData] vaultReplacePage failed:', err);
+      await refetch();
     }
-    await refetch();
   }, [userId, rows, refetch]);
 
   return {
