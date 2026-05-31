@@ -4,6 +4,7 @@ import { Settings, Store } from 'lucide-react';
 import { FPSDisplay, DFlowOutputPanel, BlockDeleteHandler } from '@/components/FPSCounter';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
+import { useItemDetail } from '@/contexts/ItemDetailContext';
 
 // ─── Instructions Panel (bottom-right, collapsible) ──────────────
 
@@ -82,6 +83,7 @@ function InstructionsPanel({
 type FortressHUDProps = any;
 
 export function FortressHUD(props: FortressHUDProps) {
+  const { openItem: openItemDetail } = useItemDetail();
   const {
     flyingCoins,
     currentTheme,
@@ -804,6 +806,17 @@ export function FortressHUD(props: FortressHUDProps) {
                         key={`inv-${idx}`}
                         draggable={!!item}
                         onDragStart={item ? (e) => onDragStart(e, { type: 'inventory', gridKey: item.gridKey, itemId: item.itemId }) : undefined}
+                        onContextMenu={item ? (e) => {
+                          e.preventDefault();
+                          openItemDetail({
+                            itemId: item.itemId,
+                            name: item.name ?? '',
+                            sprite: item.sprite ?? null,
+                            itemNumber: null,
+                            tier: item.tier,
+                            quantity: item.quantity,
+                          });
+                        } : undefined}
                         style={{
                           width: '56px',
                           height: '56px',
@@ -943,6 +956,17 @@ export function FortressHUD(props: FortressHUDProps) {
                     onDragEnter={allowDrop}
                     onDragOver={allowDrop}
                     onDrop={(e) => onDropHotbar(e, slot.slot)}
+                    onContextMenu={slot.itemId ? (e) => {
+                      e.preventDefault();
+                      openItemDetail({
+                        itemId: slot.itemId,
+                        name: slot.name ?? '',
+                        sprite: slot.sprite ?? null,
+                        itemNumber: null,
+                        tier: slot.tier,
+                        quantity: slot.quantity ?? 1,
+                      });
+                    } : undefined}
                     className={
                       isGrenadeReady ? 'grenade-ready-pulse'
                       : isEggReady ? 'egg-ready-pulse'

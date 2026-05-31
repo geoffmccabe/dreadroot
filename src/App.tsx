@@ -12,6 +12,8 @@ import { AvatarProvider } from "@/contexts/AvatarContext";
 import { InitializationProvider } from "@/contexts/InitializationContext";
 import { BulletDefinitionsProvider } from "@/contexts/BulletDefinitionsContext";
 import { FlamethrowerTiersProvider } from "@/contexts/FlamethrowerTiersContext";
+import { ItemDetailProvider } from "@/contexts/ItemDetailContext";
+import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { InitializationOverlay } from "@/components/InitializationOverlay";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -74,8 +76,10 @@ const App = () => (
                 <AvatarProvider>
                   <UserPanelProvider>
                     <AdminPanelProvider>
+                      <ItemDetailProvider>
                       <Toaster />
                       <Sonner />
+                      <ItemDetailModal />
                       <BrowserRouter>
                         <Routes>
                           <Route path="/clear-session" element={<ClearSession />} />
@@ -102,6 +106,7 @@ const App = () => (
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </BrowserRouter>
+                      </ItemDetailProvider>
                     </AdminPanelProvider>
                   </UserPanelProvider>
                 </AvatarProvider>

@@ -19,6 +19,8 @@ import type { UserInventoryItem } from '@/hooks/useUserData';
 import { useVaultData } from '../hooks/useVaultData';
 import type { CursorStack, VaultSlotDef } from '../types';
 import { sortVaultPage } from '../lib/sortPage';
+import { setDebugStatus } from '@/lib/debugStatus';
+import { useItemDetail } from '@/contexts/ItemDetailContext';
 
 // ── Helpers ────────────────────────────────────────────────────────
 function spriteUrlForDef(def: {
@@ -78,6 +80,7 @@ export function VaultPanel({
 }: VaultPanelProps) {
   const { pages, config, setSlot, removeFromSlot, replacePageLayout } = useVaultData(userId);
   const [activePage, setActivePage] = useState(0);
+  const { openItem } = useItemDetail();
   // Clamp activePage if page_count shrinks (e.g. a future re-config).
   useEffect(() => {
     if (activePage >= config.page_count) setActivePage(0);
@@ -212,6 +215,20 @@ export function VaultPanel({
     const shift = e.shiftKey;
     const right = e.button === 2 || e.type === 'contextmenu';
 
+    // Right-click on a filled slot opens the item-detail modal
+    // (no half-pickup anymore — that's a deliberate trade per the user).
+    if (right && row && !cursor) {
+      openItem({
+        name: row.name,
+        sprite: row.textureUrl ?? null,
+        itemNumber: row.itemNumber,
+        tier: row.tier,
+        quantity: row.quantity,
+        itemId: row.itemId,
+      });
+      return;
+    }
+
     if (shift && row) {
       // Shift+click — quick-transfer vault → inventory.
       const ok = await addItem(row.itemId, row.quantity);
@@ -221,8 +238,9 @@ export function VaultPanel({
 
     if (!cursor && row) {
       // Pick up.
-      const take = right ? Math.ceil(row.quantity / 2) : row.quantity;
+      const take = row.quantity; // right-click no longer halves (modal instead)
       const removed = await removeFromSlot(page, slot, take);
+      setDebugStatus(`vault: pick ${row.name} x${removed} from p${page} s${slot}`);
       if (removed > 0) {
         setCursor({
           itemId: row.itemId, itemKey: row.itemKey, name: row.name, tier: row.tier,
@@ -235,10 +253,12 @@ export function VaultPanel({
 
     if (cursor && !row) {
       // Drop into empty slot.
-      const qty = right ? 1 : cursor.quantity;
-      await setSlot(page, slot, cursor.itemId, qty);
-      if (qty >= cursor.quantity) setCursor(null);
-      else setCursor({ ...cursor, quantity: cursor.quantity - qty });
+      const qty = cursor.quantity;
+      const result = await setSlot(page, slot, cursor.itemId, qty);
+      setDebugStatus(`vault: drop ${cursor.name} x${qty} → p${page} s${slot} ${result ? 'OK' : 'FAIL'}`);
+      if (result) setCursor(null);
+      // If failed, keep the cursor so the user can try again. Do NOT
+      // silently drop the item — that's the "bounce back" bug.
       return;
     }
 
@@ -278,6 +298,18 @@ export function VaultPanel({
     e.stopPropagation();
     const shift = e.shiftKey;
     const right = e.button === 2 || e.type === 'contextmenu';
+
+    if (right && entry && !cursor) {
+      openItem({
+        name: entry.def?.name ?? '',
+        sprite: entry.def?.texture_url ?? null,
+        itemNumber: entry.def?.item_number ?? null,
+        tier: entry.def?.tier ?? null,
+        quantity: entry.quantity,
+        itemId: entry.itemId,
+      });
+      return;
+    }
 
     if (shift && entry) {
       // Shift+click — quick-transfer inventory → vault. Find first empty
@@ -405,21 +437,14 @@ export function VaultPanel({
         )}
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
+          <DialogTitle>
             <span>Vault</span>
-            <button
-              type="button"
-              onClick={handleOrg}
-              className="text-xs px-3 py-1 rounded border border-white/30 hover:bg-white/10 transition"
-              style={{ color: 'hsl(0, 0%, 95%)' }}
-            >
-              ORG
-            </button>
           </DialogTitle>
         </DialogHeader>
 
-        {/* Page tabs — hover to switch */}
-        <div className="flex gap-1 mb-3 flex-shrink-0">
+        {/* Page tabs — hover to switch. ORG button on the right of
+            the last page tab, NOT in the header above the Inventory. */}
+        <div className="flex gap-1 mb-3 flex-shrink-0 items-center">
           {Array.from({ length: config.page_count }, (_, p) => (
             <button
               key={p}
@@ -435,6 +460,14 @@ export function VaultPanel({
               Page {p + 1}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={handleOrg}
+            className="text-xs px-3 py-1 rounded border border-white/30 hover:bg-white/10 transition ml-2"
+            style={{ color: 'hsl(0, 0%, 95%)' }}
+          >
+            ORG
+          </button>
         </div>
 
         {/* Body: vault grid (left) + inventory (right) */}
