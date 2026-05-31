@@ -176,7 +176,12 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
     const { id, created_at, updated_at, ai_config, ...rest } = currentDef as any;
     const saveData = { ...rest, ai_config: ai_config ?? null };
 
-    console.log('[ShpiderDesign] saving T' + currentDef.tier + ' id=' + id, saveData);
+    const sentBody = saveData.body_texture_url;
+    const sentLeg = saveData.leg_texture_url;
+    const sentFace = saveData.face_texture_url;
+    console.log('[ShpiderDesign] saving T' + currentDef.tier + ' id=' + id, {
+      sentBody, sentLeg, sentFace, saveData,
+    });
 
     if (!id || String(id).startsWith('temp_')) {
       toast.error('Cannot save — no row id on the current tier');
@@ -202,13 +207,22 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
       const saved = data as ShpiderDefinition;
       console.log('[ShpiderDesign] server returned:', saved);
 
+      // Visible before/after diff in a toast so we don't need the
+      // browser console to see what happened.
+      const diff = (label: string, sent: any, got: any) => {
+        const sentTxt = sent ? `…${String(sent).slice(-20)}` : 'null';
+        const gotTxt = got ? `…${String(got).slice(-20)}` : 'null';
+        return `${label}: sent ${sentTxt} → got ${gotTxt}`;
+      };
+      const lines = [
+        diff('body', sentBody, saved.body_texture_url),
+        diff('leg',  sentLeg,  saved.leg_texture_url),
+        diff('face', sentFace, saved.face_texture_url),
+      ];
+
       // Sanity-check: if any texture URL we just sent isn't on the
-      // returned row, the DB silently dropped it (RLS / trigger). DON'T
-      // overwrite local state in that case — keep the user's edits
-      // visible and surface the discrepancy.
-      const sentBody = saveData.body_texture_url;
-      const sentLeg = saveData.leg_texture_url;
-      const sentFace = saveData.face_texture_url;
+      // returned row, the DB silently dropped it. DON'T overwrite
+      // local state — keep the user's edits visible.
       const lostFields: string[] = [];
       if (sentBody && !saved.body_texture_url) lostFields.push('body');
       if (sentLeg && !saved.leg_texture_url) lostFields.push('leg');
@@ -216,8 +230,8 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
 
       if (lostFields.length > 0) {
         toast.error(
-          `Save returned without these fields: ${lostFields.join(', ')}. ` +
-          `Likely an RLS or trigger on shpider_definitions. Local state kept.`
+          `DB DROPPED: ${lostFields.join(', ')}. ${lines.join(' | ')}`,
+          { duration: 12000 }
         );
         // Don't setCurrentDef(saved) — that'd wipe the preview.
         setHasChanges(false);
@@ -229,7 +243,7 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
       setCurrentDef(saved);
       setHasChanges(false);
       queryClient.invalidateQueries({ queryKey: ['shpider-definitions'] });
-      toast.success('Shpider saved');
+      toast.success(`Saved. ${lines.join(' | ')}`, { duration: 8000 });
     } catch (err: any) {
       console.error('[ShpiderDesign] save threw:', err);
       toast.error(`Save failed: ${err?.message ?? JSON.stringify(err)}`);
@@ -350,6 +364,16 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
                           ) : (
                             <span className="text-xs text-muted-foreground">no texture</span>
                           )}
+                        </div>
+                        {/* Debug URL line — tells us whether the field is set
+                            in state. Shows last 28 chars so we can see the
+                            filename. */}
+                        <div
+                          className="text-[9px] mt-1 font-mono truncate"
+                          style={{ color: url ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))' }}
+                          title={url ?? 'unset'}
+                        >
+                          {url ? `…${url.slice(-28)}` : 'unset'}
                         </div>
                         <div className="flex gap-1 mt-2">
                           <Button
