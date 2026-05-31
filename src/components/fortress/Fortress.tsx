@@ -2331,6 +2331,8 @@ export function Fortress() {
         equippedItems={equippedItems}
         updateEquippedSlot={updateEquippedSlot}
         addItem={addItem}
+        removeInventoryRow={removeInventoryRow}
+        vaultOpen={vaultOpen}
         inventoryOpen={inventoryOpen}
         setInventoryOpen={setInventoryOpen}
         selectedSlot={selectedSlot}
@@ -2390,21 +2392,8 @@ export function Fortress() {
         cycleState={cycleStateRef.current}
       />
 
-      {/* Vault — modal that opens when V is pressed near the fortress
-          back wall. Per-account global stash. forceCloseToken makes
-          the panel run its cursor-return + close sequence when the
-          player walks out of range mid-session. */}
-      <VaultPanel
-        isOpen={vaultOpen}
-        onClose={handleCloseVault}
-        forceCloseToken={vaultForceCloseToken}
-        userId={user?.id ?? null}
-        inventory={inventory}
-        equippedItems={equippedItems}
-        addItem={addItem}
-        removeInventoryRow={removeInventoryRow}
-        updateEquippedSlot={updateEquippedSlot}
-      />
+      {/* Vault is now rendered inside FortressHUD's bottom-center
+          container (above the inventory grid). No separate mount here. */}
 
       {/* Proximity prompt — only visible when in range AND vault not
           already open. Center-bottom of the screen, HUD-style. */}

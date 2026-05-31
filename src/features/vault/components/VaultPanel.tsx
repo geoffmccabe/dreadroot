@@ -62,6 +62,10 @@ interface VaultPanelProps {
   addItem: (itemId: string, quantity: number) => Promise<boolean>;
   removeInventoryRow: (rowId: string) => Promise<boolean>;
   updateEquippedSlot: (slot: number, itemId: string | null) => Promise<void>;
+  /** Item defs preloaded by the HUD's inventory. Used as a fast path
+   *  so dropped items show their sprite + T# immediately while the
+   *  vault's own fetch fills in any rows the HUD didn't know about. */
+  preloadedDefs?: Map<string, { id: string; key: string | null; name: string; tier: number | null; item_number: number | null; texture_url: string | null }>;
 }
 
 export function VaultPanel({
@@ -70,6 +74,7 @@ export function VaultPanel({
   inventory,
   addItem,
   removeInventoryRow,
+  preloadedDefs,
 }: VaultPanelProps) {
   const { pages, config, setSlot, removeFromSlot, replacePageLayout } = useVaultData(userId);
   const [activePage, setActivePage] = useState(0);
@@ -111,15 +116,29 @@ export function VaultPanel({
     })();
   }, [isOpen, vaultItemIds.join(',')]);
 
-  // Build positional slot rows for the active page.
+  // Build positional slot rows for the active page. Prefer the
+  // vault's own fetched defs, fall back to the HUD-preloaded defs
+  // (these arrive INSTANTLY when an inventory item is dropped, while
+  // the vault's own fetch is still in flight).
   const activePageRows = useMemo(() => {
     const map = new Map<number, VaultSlotDef & { def?: ItemDef }>();
     for (const r of pages[activePage] ?? []) {
-      const def = defs.get(r.item_id);
+      const ownDef = defs.get(r.item_id);
+      const preloadedDef = preloadedDefs?.get(r.item_id);
+      const def = ownDef ?? (preloadedDef
+        ? {
+            id: preloadedDef.id,
+            key: preloadedDef.key ?? '',
+            name: preloadedDef.name,
+            tier: preloadedDef.tier,
+            item_number: preloadedDef.item_number,
+            texture_url: preloadedDef.texture_url,
+          }
+        : undefined);
       map.set(r.slot, { ...r, def });
     }
     return map;
-  }, [pages, activePage, defs]);
+  }, [pages, activePage, defs, preloadedDefs]);
 
   // ── ORG button ────────────────────────────────────────────────
   const handleOrg = useCallback(async () => {
@@ -252,26 +271,16 @@ export function VaultPanel({
 
   const slotsThisPage = config.cols * config.rows;
 
-  // Position: directly above HUD inventory. HUD inventory bottom-anchors
-  // at ~16px + ~210px (3 rows × 56 + 2 × 10 + label) + ~96px (hotbar
-  // + label + gap) + 16px breathing = ~338px from bottom. We sit
-  // immediately above that.
-  const bottomOffset = 340;
-
+  // No fixed positioning — VaultPanel is now an inline block rendered
+  // inside FortressHUD's bottom-center flex column so it stacks
+  // cleanly above the Inventory + Hotbar grids.
   return (
     <div
       style={{
-        position: 'fixed',
-        bottom: `${bottomOffset}px`,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 25,
-        background: 'hsla(211, 30%, 51%, 0.55)',
-        border: '1px solid hsla(211, 34%, 73%, 0.8)',
-        borderRadius: 8,
-        padding: 10,
-        backdropFilter: 'blur(4px)',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        background: 'hsla(211, 30%, 51%, 0.45)',
+        border: '1px solid hsla(211, 34%, 73%, 0.7)',
+        borderRadius: 6,
+        padding: 8,
       }}
     >
       {/* Page tabs + ORG button row */}

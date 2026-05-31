@@ -6,6 +6,7 @@ import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useVaultBridge } from '@/contexts/VaultBridgeContext';
+import { VaultPanel } from '@/features/vault';
 
 // ─── Instructions Panel (bottom-right, collapsible) ──────────────
 
@@ -113,6 +114,8 @@ export function FortressHUD(props: FortressHUDProps) {
     equippedItems = [],
     updateEquippedSlot,
     addItem,
+    removeInventoryRow,
+    vaultOpen,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
@@ -788,7 +791,7 @@ export function FortressHUD(props: FortressHUDProps) {
         selectedBlockType={selectedBlockType}
       />
 
-      {/* Bottom-center hotbar + inventory grid */}
+      {/* Bottom-center hotbar + inventory grid + vault */}
       <div
         style={{
           position: 'fixed',
@@ -802,6 +805,21 @@ export function FortressHUD(props: FortressHUDProps) {
           gap: '8px',
         }}
       >
+        {/* Vault rows — shown when vaultOpen (above Inventory) */}
+        {vaultOpen && (
+          <VaultPanel
+            isOpen={vaultOpen}
+            onClose={() => {}}
+            userId={user?.id ?? null}
+            inventory={inventory}
+            equippedItems={equippedItems}
+            addItem={addItem}
+            removeInventoryRow={removeInventoryRow}
+            updateEquippedSlot={updateEquippedSlot}
+            preloadedDefs={itemDefs}
+          />
+        )}
+
         {/* Inventory grid — 3 rows × 6 cols, shown when inventoryOpen */}
         {inventoryOpen && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
