@@ -486,21 +486,20 @@ export function Fortress() {
   //
   // Cleanest: re-use a useEffect that watches inventory + armed slot:
   // if armed AND the armed slot's item is no longer present, disarm.
+  // QS-as-storage: the grenade IS in the armed QS slot (no longer a
+  // reference into inv). So the only checks needed are: slot still
+  // occupied, and the occupant is still a grenade. The legacy
+  // "stillHaveAnyGrenade" inventory.some(...) check is wrong under
+  // the new model — grenades are in QS, not inv — and would disarm
+  // a valid arm whenever no extra grenades sit in inv.
   useEffect(() => {
     if (grenadeReadySlot === null) return;
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
       .find(e => e.slot === grenadeReadySlot);
     if (!eq) { setGrenadeReadySlot(null); return; }
     const defs = grenadeDefsRef.current;
-    // Slot's item still a grenade? If user dragged a non-grenade in
-    // here, drop the armed state.
     if (!defs.has(eq.itemId)) { setGrenadeReadySlot(null); return; }
-    // Still hold at least one grenade row in inventory?
-    const stillHaveAnyGrenade = inventory.some(inv =>
-      inv.quantity > 0 && inv.item_id && defs.has(inv.item_id)
-    );
-    if (!stillHaveAnyGrenade) setGrenadeReadySlot(null);
-  }, [grenadeReadySlot, equippedItems, inventory]);
+  }, [grenadeReadySlot, equippedItems]);
 
   // Resolve shpider egg item UUIDs → tier. Same pattern as grenades —
   // forging a new tier creates a fresh items row, so we refetch when
@@ -584,7 +583,12 @@ export function Fortress() {
     setEggReadySlot(firstEmpty);
   }, [eggReadySlot, equippedItems, inventory, updateEquippedSlot]);
 
-  // Auto-disarm if armed egg slot becomes empty / non-egg / cooldown-locked.
+  // Auto-disarm if armed egg slot becomes empty or non-egg.
+  // QS-as-storage: the egg IS the QS slot's occupant; no inv check
+  // needed. Cooldown enforcement on QS-stored eggs is currently lost
+  // (cooldown_until lived on user_inventory rows, but the egg has
+  // been moved into user_equipped_items which has no cooldown
+  // column). Adding cooldown to QS is a follow-up.
   useEffect(() => {
     if (eggReadySlot === null) return;
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
@@ -592,13 +596,7 @@ export function Fortress() {
     if (!eq) { setEggReadySlot(null); return; }
     const defs = eggDefsRef.current;
     if (!defs.has(eq.itemId)) { setEggReadySlot(null); return; }
-    const now = Date.now();
-    const stillUsable = inventory.some(inv =>
-      inv.quantity > 0 && inv.item_id && defs.has(inv.item_id)
-      && (!((inv as any).cooldown_until) || new Date((inv as any).cooldown_until).getTime() <= now)
-    );
-    if (!stillUsable) setEggReadySlot(null);
-  }, [eggReadySlot, equippedItems, inventory]);
+  }, [eggReadySlot, equippedItems]);
 
   // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
