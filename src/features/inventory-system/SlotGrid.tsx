@@ -15,6 +15,7 @@
 import React from 'react';
 import type { SlotLocation, SlotOccupant, SlotClickInput } from './types';
 import { useCursorStack } from './useCursorStack';
+import { ItemTileVisual } from './ItemTileVisual';
 
 const TILE = 56;
 const GAP = 6;
@@ -158,28 +159,7 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick }: SlotTile
         userSelect: 'none',
       }}
     >
-      {occupant?.tier != null && (
-        <span style={{
-          position: 'absolute', top: 2, left: 4,
-          fontSize: 10, fontWeight: 700, color: 'white',
-          textShadow: '0 0 3px rgba(0,0,0,0.8)', pointerEvents: 'none',
-        }}>T{occupant.tier}</span>
-      )}
-      {occupant?.spriteUrl && (
-        <img
-          src={occupant.spriteUrl}
-          alt={occupant.name}
-          draggable={false}
-          style={{ width: 42, height: 42, objectFit: 'contain', pointerEvents: 'none' }}
-        />
-      )}
-      {occupant && occupant.quantity > 1 && (
-        <span style={{
-          position: 'absolute', bottom: 2, right: 4,
-          fontSize: 11, fontWeight: 700, color: 'white',
-          textShadow: '0 0 3px rgba(0,0,0,0.9)', pointerEvents: 'none',
-        }}>{occupant.quantity}</span>
-      )}
+      <ItemTileVisual occupant={occupant ?? null} />
     </div>
   );
 }

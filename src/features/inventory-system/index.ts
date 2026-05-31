@@ -8,3 +8,5 @@ export type { SlotGridProps } from './SlotGrid';
 export { slotClick } from './slotClick';
 export type { SlotClickResult } from './slotClick';
 export type { Region, SlotLocation, SlotOccupant, SlotClickInput, SlotClickHandlers } from './types';
+export { ItemTileVisual } from './ItemTileVisual';
+export type { ItemTileVisualOccupant, ItemTileVisualProps } from './ItemTileVisual';

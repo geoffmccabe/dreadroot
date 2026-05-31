@@ -9,6 +9,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useCursorStack } from './useCursorStack';
+import { ItemTileVisual } from './ItemTileVisual';
 
 export function CursorSprite() {
   const cursor = useCursorStack((s) => s.cursor);
@@ -90,28 +91,14 @@ export function CursorSprite() {
         borderRadius: 'var(--hud-radius, 4px)',
       }}
     >
-      {cursor.tier != null && (
-        <span style={{
-          position: 'absolute', top: 2, left: 4,
-          fontSize: 10, fontWeight: 700, color: 'white',
-          textShadow: '0 0 3px rgba(0,0,0,0.8)',
-        }}>T{cursor.tier}</span>
-      )}
-      {cursor.spriteUrl && (
-        <img
-          src={cursor.spriteUrl}
-          alt={cursor.name}
-          draggable={false}
-          style={{ width: 42, height: 42, objectFit: 'contain' }}
-        />
-      )}
-      {cursor.quantity > 1 && (
-        <span style={{
-          position: 'absolute', bottom: 2, right: 4,
-          fontSize: 11, fontWeight: 700, color: 'white',
-          textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
-        }}>{cursor.quantity}</span>
-      )}
+      <ItemTileVisual
+        occupant={{
+          spriteUrl: cursor.spriteUrl,
+          name: cursor.name,
+          tier: cursor.tier,
+          quantity: cursor.quantity,
+        }}
+      />
     </div>
   );
 }

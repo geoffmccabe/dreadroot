@@ -1172,53 +1172,18 @@ export function FortressHUD(props: FortressHUDProps) {
                     }}
                     title={slot.name || `Slot ${slot.slot}`}
                   >
-                    {slot.tier != null && (
-                      <span style={{
-                        position: 'absolute',
-                        top: '2px',
-                        left: '4px',
-                        // Match the bottom-right qty badge style: white
-                        // text + heavy black text-shadow, no background
-                        // pill, same hud-font. Slightly smaller than
-                        // qty (9px vs 11px) per user request.
-                        fontSize: '9px',
-                        fontWeight: 700,
-                        color: 'white',
-                        fontFamily: 'var(--hud-font)',
-                        lineHeight: 1,
-                        textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
-                        pointerEvents: 'none',
-                        zIndex: 2,
-                      }}>
-                        T{slot.tier}
-                      </span>
-                    )}
-                    {slot.sprite ? (
-                      <img
-                        src={slot.sprite}
-                        alt={slot.name || ''}
-                        draggable={false}
-                        style={{ width: '42px', height: '42px', objectFit: 'contain', pointerEvents: 'none' }}
-                      />
-                    ) : null}
-                    {/* Stack-count badge (bottom-right) — only shown when
-                        more than one of this item is held. Format: "2x". */}
-                    {slot.quantity > 1 && (
-                      <span style={{
-                        position: 'absolute',
-                        bottom: '2px',
-                        right: '4px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        color: 'white',
-                        fontFamily: 'var(--hud-font)',
-                        lineHeight: 1,
-                        textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
-                        pointerEvents: 'none',
-                      }}>
-                        {slot.quantity}x
-                      </span>
-                    )}
+                    {/* SAME item-tile renderer as vault + inventory.
+                        Tier badge, sprite image, "Nx" quantity badge —
+                        one source of truth for every item display in
+                        the game. */}
+                    <ItemTileVisual
+                      occupant={slot.itemId ? {
+                        spriteUrl: slot.sprite ?? null,
+                        name: slot.name ?? '',
+                        tier: slot.tier,
+                        quantity: slot.quantity ?? 1,
+                      } : null}
+                    />
                   </div>
                   {/* Slot number — below square, 20% smaller */}
                   <span style={{
