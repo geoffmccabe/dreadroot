@@ -134,7 +134,7 @@ export const EYELASH_GEOMETRY  = buildEyelashAssembly();
 export const MANDIBLE_GEOMETRY = buildMandible();
 
 // Per-shpider mandible animation settings.
-export const MANDIBLE_OPEN_ANGLE             = Math.PI * 0.18; // ~32° splay at rest
+export const MANDIBLE_OPEN_ANGLE             = Math.PI * 0.36; // ~65° splay at rest (was 0.18 — doubled per design)
 export const MANDIBLE_CLICK_DURATION_MS      = 160;
 export const MANDIBLE_MIN_CLICK_INTERVAL_MS  = 600;
 export const MANDIBLE_MAX_CLICK_INTERVAL_MS  = 1800;

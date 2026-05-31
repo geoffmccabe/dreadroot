@@ -55,7 +55,7 @@ const EYE_WIDTH         = 0.55;   // wider than tall = football
 const EYE_HEIGHT        = 0.30;
 const EYE_OUTLINE       = 0.06;   // outline thickness (each side)
 const EYE_PUPIL_RADIUS  = 0.08;
-const EYE_LOCAL_Y       = -0.10;  // below head center (lashes sit above this)
+const EYE_LOCAL_Y       = 0.10;   // 20% of head ABOVE center (was -0.10)
 const EYE_TRACK_RANGE   = 40;
 const EYE_PUPIL_LERP    = 4.0;    // per second
 const EYE_RANDOM_LOOK_INTERVAL_MS = 2200;
@@ -467,7 +467,10 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
       // === Eyelashes ===
       // Anchor a hair forward of the head's front face.
       const eyelashOffset = headSize * 0.5 + 0.005;
-      _localPoint.set(0, headLocalY, headForward + eyelashOffset).applyQuaternion(_quat);
+      // Eyelashes moved up by 20% of head height so the eyebrow line
+      // sits high on the forehead (was at head center).
+      const eyelashLocalY = headLocalY + 0.20 * headSize;
+      _localPoint.set(0, eyelashLocalY, headForward + eyelashOffset).applyQuaternion(_quat);
       _pos.set(
         s.position.x + _localPoint.x,
         s.position.y + _localPoint.y,

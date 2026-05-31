@@ -42,7 +42,7 @@ const MINI_LEG_THICKNESS = LEG_SEGMENT_THICKNESS * MINI_BODY_SIZE; // ~0.0156 â€
 // Eye proportions (from big shpider).
 const EYE_WIDTH_RATIO = 0.55;
 const EYE_HEIGHT_RATIO = 0.30;
-const EYE_LOCAL_Y_RATIO = -0.10;
+const EYE_LOCAL_Y_RATIO = 0.10;   // 20% above head center (was -0.10)
 const EYE_PUPIL_RADIUS_RATIO = 0.08;
 
 // Float animation.
@@ -323,8 +323,10 @@ function EggInstance({
 
     // Eyelashes â€” anchored a hair forward of head's front face.
     const eyelashOffset = halfHead + 0.002;
+    // Eyelashes raised 20% of head height (matches big shpider).
+    const eyelashLocalY = headLocalY + 0.20 * MINI_HEAD_SIZE;
     if (eyelashMeshRef.current) {
-      eyelashMeshRef.current.position.set(0, headLocalY, headForward + eyelashOffset);
+      eyelashMeshRef.current.position.set(0, eyelashLocalY, headForward + eyelashOffset);
       eyelashMeshRef.current.scale.set(MINI_HEAD_SIZE, MINI_HEAD_SIZE, MINI_HEAD_SIZE);
     }
 
