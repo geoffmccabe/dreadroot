@@ -454,35 +454,19 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
 
-    // Vault → Inventory: ADD FIRST, then remove. If we removed first
-    // and the add failed (and the rollback also failed), the item
-    // would be lost — that was the v4.8.3 data-loss bug. By adding
-    // first, the worst case is a duplicate (item exists in both
-    // inventory and vault), which the user can fix by moving it again
-    // — strictly better than losing it.
+    // Vault → Inventory: single atomic RPC. Both halves succeed or
+    // neither does (server-side single transaction). Each call also
+    // writes an item_history audit row so we can prove provenance.
     if (src.type === 'vault') {
-      if (!vaultBridge || !addItem) {
-        console.warn('[HUD] vault→inv drop: bridge or addItem missing — item stays in vault');
+      if (!vaultBridge) {
+        console.warn('[HUD] vault→inv drop: bridge missing — item stays in vault');
         return;
       }
-      let added = false;
-      try {
-        added = await addItem(src.itemId, src.quantity);
-      } catch (err) {
-        console.error('[HUD] vault→inv addItem threw:', err);
-        added = false;
-      }
-      if (!added) {
-        console.error('[HUD] vault→inv: addItem returned false; LEAVING item in vault to prevent loss');
-        return;
-      }
-      // Inventory now has the item — safe to remove from vault.
-      const removed = await vaultBridge.removeFromSlot(src.page, src.slot, src.quantity);
-      if (removed <= 0) {
-        // Inventory got the copy but vault wasn't decremented —
-        // user now has a duplicate. Better than losing the item.
-        // They can drag the leftover stack out again to clean up.
-        console.warn('[HUD] vault→inv: removeFromSlot returned 0; duplicate exists in vault');
+      const ok = await vaultBridge.transferToInventory(
+        src.page, src.slot, src.quantity,
+      );
+      if (!ok) {
+        console.error('[HUD] vault→inv: atomic transfer failed; item stays in vault');
       }
       return;
     }

@@ -8,11 +8,20 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 
 export interface VaultBridge {
   /** Removes `quantity` from a vault slot. Returns how many were
-   *  actually removed (0 if slot empty / call failed). */
+   *  actually removed (0 if slot empty / call failed). Legacy 2-step
+   *  path — prefer transferToInventory for vault→inv moves. */
   removeFromSlot: (page: number, slot: number, quantity: number) => Promise<number>;
-  /** Idempotent stack-or-fill into a vault slot. Returns true on
-   *  success, false on failure. */
+  /** Idempotent stack-or-fill into a vault slot. Legacy 2-step path —
+   *  prefer transferFromInventory for inv→vault moves. */
   setSlot: (page: number, slot: number, itemId: string, quantity: number) => Promise<unknown>;
+  /** Atomic single-transaction inv→vault. ALWAYS use this for HUD
+   *  drops onto vault tiles; never the setSlot+remove dance. */
+  transferFromInventory: (
+    inventoryRowIds: string[], page: number, slot: number,
+  ) => Promise<boolean>;
+  /** Atomic single-transaction vault→inv. ALWAYS use this for HUD
+   *  drops onto inventory/hotbar tiles whose payload is type:'vault'. */
+  transferToInventory: (page: number, slot: number, quantity: number) => Promise<boolean>;
   /** Currently-open vault page (for "put it in the open page" defaults). */
   activePage: number;
 }

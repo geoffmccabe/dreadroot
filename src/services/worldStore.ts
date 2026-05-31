@@ -585,6 +585,128 @@ export async function pickupWorldDrop(
   };
 }
 
+// ── Atomic transfers (item-history foundation) ─────────────────────
+//
+// Single-transaction moves between inventory ⇄ vault. The server-side
+// RPC delete-from-source AND insert-to-destination in one transaction
+// so a half-completed transfer can NEVER lose items. Each call also
+// writes an item_history row for full audit / future blockchain.
+
+export interface TransferInvToVaultResult {
+  vaultRow: VaultRow | null;
+  removedInventoryRowIds: string[];
+  itemId: string;
+  quantity: number;
+  replayed: boolean;
+}
+
+export interface TransferVaultToInvResult {
+  inventoryRows: InventoryRow[];
+  vaultRemaining: number;
+  itemId: string;
+  quantity: number;
+  replayed: boolean;
+}
+
+export interface TransferVaultToVaultResult {
+  destinationRow: VaultRow | null;
+  itemId: string;
+  quantity: number;
+  replayed: boolean;
+}
+
+export async function transferInventoryToVault(
+  inventoryRowIds: string[],
+  targetPage: number,
+  targetSlot: number,
+  requestId?: string,
+): Promise<TransferInvToVaultResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_inventory_to_vault', {
+    p_inventory_row_ids: inventoryRowIds,
+    p_target_page: targetPage,
+    p_target_slot: targetSlot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as {
+    replayed: boolean;
+    vault_row: VaultRow[] | null;
+    removed_inventory_row_ids: string[] | null;
+    item_id: string;
+    quantity: number;
+  };
+  return {
+    vaultRow: raw.vault_row?.[0] ?? null,
+    removedInventoryRowIds: raw.removed_inventory_row_ids ?? [],
+    itemId: raw.item_id,
+    quantity: raw.quantity,
+    replayed: raw.replayed ?? false,
+  };
+}
+
+export async function transferVaultToInventory(
+  sourcePage: number,
+  sourceSlot: number,
+  quantity: number,
+  requestId?: string,
+): Promise<TransferVaultToInvResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_vault_to_inventory', {
+    p_source_page: sourcePage,
+    p_source_slot: sourceSlot,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as {
+    replayed: boolean;
+    inventory_rows: InventoryRow[] | null;
+    vault_remaining: number;
+    item_id: string;
+    quantity: number;
+  };
+  return {
+    inventoryRows: raw.inventory_rows ?? [],
+    vaultRemaining: raw.vault_remaining ?? 0,
+    itemId: raw.item_id,
+    quantity: raw.quantity,
+    replayed: raw.replayed ?? false,
+  };
+}
+
+export async function transferVaultToVault(
+  srcPage: number,
+  srcSlot: number,
+  dstPage: number,
+  dstSlot: number,
+  quantity: number,
+  requestId?: string,
+): Promise<TransferVaultToVaultResult> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_vault_to_vault', {
+    p_src_page: srcPage,
+    p_src_slot: srcSlot,
+    p_dst_page: dstPage,
+    p_dst_slot: dstSlot,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  const raw = data as {
+    replayed: boolean;
+    destination_row: VaultRow[] | null;
+    item_id: string;
+    quantity: number;
+  };
+  return {
+    destinationRow: raw.destination_row?.[0] ?? null,
+    itemId: raw.item_id,
+    quantity: raw.quantity,
+    replayed: raw.replayed ?? false,
+  };
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -616,4 +738,7 @@ export const worldStore = {
   ensureTokenBalance,
   spawnWorldDrop,
   pickupWorldDrop,
+  transferInventoryToVault,
+  transferVaultToInventory,
+  transferVaultToVault,
 };

@@ -77,7 +77,10 @@ export function VaultPanel({
   removeInventoryRow,
   preloadedDefs,
 }: VaultPanelProps) {
-  const { pages, config, setSlot, removeFromSlot, replacePageLayout } = useVaultData(userId);
+  const {
+    pages, config, setSlot, removeFromSlot, replacePageLayout,
+    transferFromInventory, transferToInventory, transferWithinVault,
+  } = useVaultData(userId);
   const [activePage, setActivePage] = useState(0);
   const { openItem } = useItemDetail();
   const registerBridge = useRegisterVaultBridge();
@@ -126,16 +129,31 @@ export function VaultPanel({
     })();
   }, [isOpen, vaultItemIds.join(',')]);
 
-  // Build positional slot rows for the active page. Prefer the
-  // vault's own fetched defs, fall back to the HUD-preloaded defs
-  // (these arrive INSTANTLY when an inventory item is dropped, while
-  // the vault's own fetch is still in flight).
+  // Build positional slot rows for the active page. Resolve def
+  // from (in priority order): the row's own pre-joined fields
+  // (populated by useVaultData's ensureItemDefs), the vault panel's
+  // local defs cache (seeded by drop payload), then the HUD-preloaded
+  // defs map. First-paint of a freshly-dropped item should resolve
+  // via at least one of these.
   const activePageRows = useMemo(() => {
     const map = new Map<number, VaultSlotDef & { def?: ItemDef }>();
     for (const r of pages[activePage] ?? []) {
-      const ownDef = defs.get(r.item_id);
-      const preloadedDef = preloadedDefs?.get(r.item_id);
-      const def = ownDef ?? (preloadedDef
+      const ownDef = defs.get(r.itemId);
+      const preloadedDef = preloadedDefs?.get(r.itemId);
+      // Synthesize a def from the row's own joined fields if either
+      // tier or textureUrl/itemNumber is already populated — saves a
+      // render frame while the defs map is still empty.
+      const rowDef: ItemDef | undefined = (r.tier != null || r.textureUrl || r.itemNumber != null || r.name)
+        ? {
+            id: r.itemId,
+            key: r.itemKey ?? '',
+            name: r.name ?? '',
+            tier: r.tier,
+            item_number: r.itemNumber,
+            texture_url: r.textureUrl,
+          }
+        : undefined;
+      const def = ownDef ?? rowDef ?? (preloadedDef
         ? {
             id: preloadedDef.id,
             key: preloadedDef.key ?? '',
@@ -191,18 +209,16 @@ export function VaultPanel({
     let src: any;
     try { src = JSON.parse(raw); } catch { return; }
 
-    // Inventory → vault
+    // Inventory → vault (atomic, single RPC)
     if (src.type === 'inventory') {
       const rows = inventory.filter(
         (i) => i.item_type === 'item' && i.item_id === src.itemId && i.quantity > 0,
       );
-      const totalQty = rows.reduce((acc, r) => acc + r.quantity, 0);
-      if (totalQty <= 0) return;
+      if (rows.length === 0) return;
 
       // Seed the local defs cache from the drag payload so the tile
-      // renders sprite + T# IMMEDIATELY, even after the source
-      // inventory row is removed (which would have caused HUD's
-      // itemDefs lookup to miss).
+      // renders sprite + T# IMMEDIATELY, before the vault refetch
+      // returns.
       if (src.defName || src.defTextureUrl || src.defItemNumber != null) {
         setDefs(prev => {
           if (prev.has(src.itemId)) return prev;
@@ -219,22 +235,14 @@ export function VaultPanel({
         });
       }
 
-      // setSlot FIRST. Only remove inventory rows if vault accepted.
-      let result: unknown = null;
-      try {
-        result = await setSlot(page, slot, src.itemId, totalQty);
-      } catch (err) {
-        console.error('[vault] inv→vault setSlot threw:', err);
-      }
-      if (!result) {
-        setDebugStatus(`vault: inv→p${page}s${slot} FAIL — item stays in inv`);
-        return;
-      }
-      setDebugStatus(`vault: inv→p${page}s${slot} x${totalQty} OK`);
-      for (const r of rows) {
-        try { await removeInventoryRow(r.id); }
-        catch (err) { console.warn('[vault] removeInventoryRow failed:', err); }
-      }
+      const ok = await transferFromInventory(
+        rows.map(r => r.id), page, slot,
+      );
+      setDebugStatus(
+        ok
+          ? `vault: inv→p${page}s${slot} OK (atomic)`
+          : `vault: inv→p${page}s${slot} FAIL — item stays in inv`,
+      );
       return;
     }
 
@@ -246,28 +254,18 @@ export function VaultPanel({
       return;
     }
 
-    // Vault → vault. Set TARGET first, then remove from SOURCE. If
-    // the rollback ever fails, the duplicate is recoverable; losing
-    // the item is not.
+    // Vault → vault (atomic, single RPC)
     if (src.type === 'vault') {
       if (src.page === page && src.slot === slot) return; // same-slot no-op
       const moveQty = src.quantity as number;
-      let setOk: unknown = null;
-      try {
-        setOk = await setSlot(page, slot, src.itemId, moveQty);
-      } catch (err) {
-        console.error('[vault] move setSlot threw:', err);
-      }
-      if (!setOk) {
-        setDebugStatus(`vault: move FAIL — item stays at source`);
-        return;
-      }
-      const removed = await removeFromSlot(src.page, src.slot, moveQty);
-      if (removed <= 0) {
-        // Source not decremented but target got the item — duplicate.
-        console.warn(`[vault] move: source not decremented, possible duplicate`);
-      }
-      setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} x${moveQty} OK`);
+      const ok = await transferWithinVault(
+        src.page, src.slot, page, slot, moveQty,
+      );
+      setDebugStatus(
+        ok
+          ? `vault: move p${src.page}s${src.slot}→p${page}s${slot} x${moveQty} OK`
+          : `vault: move FAIL — item stays at source`,
+      );
       return;
     }
   }, [inventory, setSlot, removeFromSlot, removeInventoryRow]);
@@ -279,10 +277,13 @@ export function VaultPanel({
 
   // ── Double-click vault tile → push back into inventory ─────────
   const handleDoubleClickVault = useCallback(async (row: VaultSlotDef) => {
-    const removed = await removeFromSlot(row.page, row.slot, row.quantity);
-    if (removed > 0) await addItem(row.itemId, removed);
-    setDebugStatus(`vault: dblclick vault→inv x${removed}`);
-  }, [removeFromSlot, addItem]);
+    const ok = await transferToInventory(row.page, row.slot, row.quantity);
+    setDebugStatus(
+      ok
+        ? `vault: dblclick vault→inv x${row.quantity} OK`
+        : `vault: dblclick vault→inv FAIL`,
+    );
+  }, [transferToInventory]);
 
   // ── Right-click vault tile → detail modal ─────────────────────
   const handleRightClickVault = useCallback((
@@ -308,10 +309,18 @@ export function VaultPanel({
       registerBridge(null);
       return;
     }
-    const b: VaultBridge = { removeFromSlot, setSlot, activePage };
+    const b: VaultBridge = {
+      removeFromSlot, setSlot,
+      transferFromInventory, transferToInventory,
+      activePage,
+    };
     registerBridge(b);
     return () => registerBridge(null);
-  }, [isOpen, removeFromSlot, setSlot, activePage, registerBridge]);
+  }, [
+    isOpen, removeFromSlot, setSlot,
+    transferFromInventory, transferToInventory,
+    activePage, registerBridge,
+  ]);
 
   if (!isOpen) return null;
 

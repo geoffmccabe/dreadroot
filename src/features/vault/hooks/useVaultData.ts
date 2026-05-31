@@ -264,6 +264,70 @@ export function useVaultData(userId: string | null) {
     }
   }, [userId, rows, refetch]);
 
+  // ── Atomic transfers (item-history-backed) ─────────────────────
+  // These prefer single-RPC transfers over the legacy 2-step
+  // setSlot+removeFromSlot pattern. Server side is one transaction,
+  // so a half-completed transfer can't lose items. Each call also
+  // writes an item_history audit row.
+
+  /** Move one or more inventory rows of the SAME item_id into a
+   *  vault slot (stacks on a matching item, fills if empty). */
+  const transferFromInventory = useCallback(async (
+    inventoryRowIds: string[], page: number, slot: number,
+  ): Promise<boolean> => {
+    if (!userId || inventoryRowIds.length === 0) return false;
+    try {
+      const result = await worldStore.transferInventoryToVault(
+        inventoryRowIds, page, slot,
+      );
+      await ensureItemDefs([result.itemId]);
+      // Refetch is the simplest reconcile path here — inventory rows
+      // were removed by the RPC, and the vault row got updated; both
+      // sides need to converge. Vault rows are tiny so refetch is cheap.
+      await refetch();
+      return true;
+    } catch (err) {
+      console.error('[useVaultData] transferFromInventory failed:', err);
+      await refetch();
+      return false;
+    }
+  }, [userId, ensureItemDefs, refetch]);
+
+  /** Move `quantity` from (page, slot) into inventory. */
+  const transferToInventory = useCallback(async (
+    page: number, slot: number, quantity: number,
+  ): Promise<boolean> => {
+    if (!userId || quantity <= 0) return false;
+    try {
+      await worldStore.transferVaultToInventory(page, slot, quantity);
+      await refetch();
+      return true;
+    } catch (err) {
+      console.error('[useVaultData] transferToInventory failed:', err);
+      await refetch();
+      return false;
+    }
+  }, [userId, refetch]);
+
+  /** Move `quantity` between two vault slots. */
+  const transferWithinVault = useCallback(async (
+    srcPage: number, srcSlot: number,
+    dstPage: number, dstSlot: number, quantity: number,
+  ): Promise<boolean> => {
+    if (!userId || quantity <= 0) return false;
+    try {
+      await worldStore.transferVaultToVault(
+        srcPage, srcSlot, dstPage, dstSlot, quantity,
+      );
+      await refetch();
+      return true;
+    } catch (err) {
+      console.error('[useVaultData] transferWithinVault failed:', err);
+      await refetch();
+      return false;
+    }
+  }, [userId, refetch]);
+
   return {
     pages,
     config,
@@ -273,5 +337,8 @@ export function useVaultData(userId: string | null) {
     replacePageLayout,
     ensureItemDefs,
     refetch,
+    transferFromInventory,
+    transferToInventory,
+    transferWithinVault,
   };
 }
