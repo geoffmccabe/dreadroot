@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
 import { findGroundY, pickTreeAwareTarget, findAdjacentWall } from './surfaceDetect';
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
+import { shpiderSpatialGrid } from './shpiderSpatialGrid';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 
@@ -64,20 +65,13 @@ interface StepDeps {
   others?: readonly ShpiderInstance[];
 }
 
-/** True if the candidate (x,z) is too close to another active shpider. */
+/** True if the candidate (x,z) is too close to another active shpider.
+ *  Spatial-grid lookup — O(1) average instead of the old O(N) walk. */
 function isTooCrowded(
   x: number, z: number, self: ShpiderInstance,
-  others?: readonly ShpiderInstance[],
+  _others?: readonly ShpiderInstance[], // kept for signature compat; unused
 ): boolean {
-  if (!others) return false;
-  const r2 = SHPIDER_MIN_TARGET_SPACING * SHPIDER_MIN_TARGET_SPACING;
-  for (const o of others) {
-    if (o === self || !o.isActive) continue;
-    const dx = o.position.x - x;
-    const dz = o.position.z - z;
-    if (dx * dx + dz * dz < r2) return true;
-  }
-  return false;
+  return shpiderSpatialGrid.hasNearby(x, z, SHPIDER_MIN_TARGET_SPACING, self.id);
 }
 
 /**
@@ -87,22 +81,21 @@ function isTooCrowded(
  */
 export function analyzeStack(
   self: ShpiderInstance,
-  others?: readonly ShpiderInstance[],
+  _others?: readonly ShpiderInstance[], // kept for signature compat; unused
 ): { count: number; hasAbove: boolean } {
-  if (!others) return { count: 1, hasAbove: false };
   const r = self.definition.body_size * 0.9;
-  const r2 = r * r;
   let count = 1;
   let hasAbove = false;
-  for (const o of others) {
-    if (o === self || !o.isActive) continue;
-    const dx = o.position.x - self.position.x;
-    const dz = o.position.z - self.position.z;
-    if (dx * dx + dz * dz > r2) continue;
-    // Within the column. Is it above me?
-    if (o.position.y > self.position.y + 0.2) hasAbove = true;
-    count++;
-  }
+  shpiderSpatialGrid.queryNearby(
+    self.position.x,
+    self.position.z,
+    r,
+    (_id, _ex, ey, _ez) => {
+      count++;
+      if (ey > self.position.y + 0.2) hasAbove = true;
+    },
+    self.id,
+  );
   return { count, hasAbove };
 }
 

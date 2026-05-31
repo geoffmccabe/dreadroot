@@ -21,6 +21,7 @@ import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegist
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { chaseLocalPlayer, petTargetNearestHostile } from '../lib/targetSelection';
+import { shpiderSpatialGrid } from '../lib/shpiderSpatialGrid';
 
 // Capped at 50 because per-frame AI cost is O(N²) in the active spider
 // count (stepShpiderHopAI iterates the full `others` list for spacing
@@ -184,6 +185,9 @@ export function useShpiderSystem({
 
     shpidersRef.current = [...shpidersRef.current, instance];
     setShpiders(shpidersRef.current);
+    // Register in the spatial grid so other shpiders' crowd-checks
+    // can find this one in O(1).
+    shpiderSpatialGrid.insert(id, worldX, 0, worldZ);
     return instance;
   }, []);
 
@@ -268,6 +272,7 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
+      shpiderSpatialGrid.remove(s.id);
       // Pet deaths don't grant kill credit (or roll the 1% wild-drop) —
       // they leave a world egg instead, owned by the original thrower.
       if (s.petOwnerUserId) {
@@ -383,6 +388,7 @@ export function useShpiderSystem({
         // Remove the 4 originals.
         for (const g of group) {
           g.isActive = false;
+          shpiderSpatialGrid.remove(g.id);
           consumed.add(g.id);
         }
         // Spawn the replacement at the bottom's XZ if a definition exists.

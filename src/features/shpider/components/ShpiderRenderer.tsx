@@ -23,6 +23,7 @@ import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../co
 import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
 import { getSegmentEndpoints } from '../lib/legGeometry';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { shpiderSpatialGrid } from '../lib/shpiderSpatialGrid';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import {
   EYELASH_GEOMETRY,
@@ -250,6 +251,10 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
 
       // === AI tick. Mutates position/rotation/surfaceNormal. ===
       stepShpiderHopAI(s, { now, dt, playerX: target.x, playerY: target.y, playerZ: target.z, others: list });
+
+      // Sync the spatial grid to the post-AI position so the NEXT
+      // shpider's crowd-check this frame sees up-to-date data.
+      shpiderSpatialGrid.move(s.id, s.position.x, s.position.y, s.position.z);
 
       // === Touch attack. If the shpider's center is within
       //     SHPIDER_ATTACK_RANGE of the player (3D distance) and the
