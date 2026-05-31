@@ -7,7 +7,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
-import { useToast } from '@/hooks/use-toast';
 import { playRejectionSound } from '@/components/fortress/FortressAudio';
 
 export interface WorldEgg {
@@ -35,7 +34,6 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
   const [eggs, setEggs] = useState<WorldEgg[]>([]);
   const eggsRef = useRef<WorldEgg[]>([]);
   useEffect(() => { eggsRef.current = eggs; }, [eggs]);
-  const { toast } = useToast();
 
   // Initial fetch + realtime subscription (owner-scoped via RLS).
   useEffect(() => {
@@ -112,64 +110,29 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
 
   /** Atomic world-egg pickup via worldStore. Server deletes the world
    *  row, inserts a fresh inventory row, and applies the item's
-   *  configured pickup cooldown in one transaction.
-   *
-   *  Visible UX:
-   *   - success → success toast
-   *   - no egg in range (but eggs exist) → "out of range" toast + rejection sound
-   *   - RPC failure → error toast (with reason) + rejection sound
-   *   - no eggs at all → silent (don't spam the player on every F press)
-   */
+   *  configured pickup cooldown in one transaction. Plays the
+   *  rejection sound when pickup fails (no egg in range, RPC error). */
   const pickupClosestEgg = useCallback(async (): Promise<WorldEgg | null> => {
     if (!userId) return null;
 
     const target = findClosestEgg();
     if (!target) {
-      // Out-of-range diagnostic. Only show if eggs exist somewhere —
-      // otherwise F probably means "harvest fruit" instead.
-      const cam = cameraRef.current;
-      if (cam && eggsRef.current.length > 0) {
-        const cx = cam.position.x, cz = cam.position.z;
-        let closestDist = Infinity;
-        for (const e of eggsRef.current) {
-          const d = Math.hypot(e.x - cx, e.z - cz);
-          if (d < closestDist) closestDist = d;
-        }
-        toast({
-          title: 'Egg out of reach',
-          description: `Closest egg is ${closestDist.toFixed(1)}m away — get within ${EGG_PICKUP_REACH}m.`,
-          variant: 'destructive',
-          duration: 2500,
-        });
-        const r = (window as any).__rejectionSound;
-        if (r) playRejectionSound(r);
-      }
+      const r = (window as any).__rejectionSound;
+      if (r) playRejectionSound(r);
       return null;
     }
 
     try {
       await worldStore.pickupEgg(target.id);
-      // Optimistic local removal — realtime DELETE will reconfirm.
       setEggs(prev => prev.filter(e => e.id !== target.id));
-      toast({
-        title: `Picked up T${target.tier} Shpider Egg!`,
-        duration: 2500,
-      });
       return target;
-    } catch (err: any) {
+    } catch (err) {
       console.warn('[WorldEggs] pickup failed:', err);
-      const reason = err?.message || err?.details || String(err);
-      toast({
-        title: 'Pickup failed',
-        description: reason,
-        variant: 'destructive',
-        duration: 4000,
-      });
       const r = (window as any).__rejectionSound;
       if (r) playRejectionSound(r);
       return null;
     }
-  }, [findClosestEgg, userId, cameraRef, toast]);
+  }, [findClosestEgg, userId]);
 
   return { eggs, eggsRef, findClosestEgg, pickupClosestEgg };
 }
