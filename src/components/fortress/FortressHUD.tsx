@@ -5,6 +5,7 @@ import { FPSDisplay, DFlowOutputPanel, BlockDeleteHandler } from '@/components/F
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
+import { useVaultBridge } from '@/contexts/VaultBridgeContext';
 
 // ─── Instructions Panel (bottom-right, collapsible) ──────────────
 
@@ -84,6 +85,7 @@ type FortressHUDProps = any;
 
 export function FortressHUD(props: FortressHUDProps) {
   const { openItem: openItemDetail } = useItemDetail();
+  const vaultBridge = useVaultBridge();
   const {
     flyingCoins,
     currentTheme,
@@ -384,7 +386,8 @@ export function FortressHUD(props: FortressHUDProps) {
   // because indexOf returns the first match.
   type DragSource =
     | { type: 'hotbar'; slot: number }
-    | { type: 'inventory'; gridKey: string; itemId: string };
+    | { type: 'inventory'; gridKey: string; itemId: string }
+    | { type: 'vault'; page: number; slot: number; itemId: string; quantity: number; fullQuantity: number };
   const dragRef = useRef<DragSource | null>(null);
 
   const onDragStart = useCallback((e: React.DragEvent, source: DragSource) => {
@@ -396,10 +399,21 @@ export function FortressHUD(props: FortressHUDProps) {
     }
   }, []);
 
+  // Read the drag source from dataTransfer (canonical, works for
+  // cross-component drags like vault → HUD) and fall back to dragRef
+  // for legacy paths.
+  const readDragSource = useCallback((e: React.DragEvent): DragSource | null => {
+    const raw = e.dataTransfer.getData('text/plain');
+    if (raw) {
+      try { return JSON.parse(raw) as DragSource; } catch { /* fall through */ }
+    }
+    return dragRef.current;
+  }, []);
+
   const onDropHotbar = useCallback((e: React.DragEvent, targetSlot: number) => {
     e.preventDefault();
     e.stopPropagation();
-    const src = dragRef.current;
+    const src = readDragSource(e);
     dragRef.current = null;
     if (!src || !updateEquippedSlot) return;
     if (src.type === 'inventory') {
@@ -417,14 +431,24 @@ export function FortressHUD(props: FortressHUDProps) {
       updateEquippedSlot(targetSlot, srcId);
       updateEquippedSlot(src.slot, tgtId);
     }
-  }, [updateEquippedSlot, hotbarSlots]);
+  }, [updateEquippedSlot, hotbarSlots, readDragSource]);
 
-  const onDropInventory = useCallback((e: React.DragEvent, targetIdx: number) => {
+  const onDropInventory = useCallback(async (e: React.DragEvent, targetIdx: number) => {
     e.preventDefault();
     e.stopPropagation();
-    const src = dragRef.current;
+    const src = readDragSource(e);
     dragRef.current = null;
     if (!src) return;
+
+    // Vault → Inventory drop: this path is currently a no-op because
+    // FortressHUD doesn't take addItem as a prop. Use double-click on
+    // a vault tile instead — that pushes the stack back to inventory.
+    // TODO follow-up: thread addItem into HUD and wire this drop fully.
+    if (src.type === 'vault') {
+      console.log('[HUD] vault→inv drop ignored; use double-click on the vault tile');
+      return;
+    }
+
     if (src.type === 'hotbar') {
       // Hotbar → Inventory. The equipped slot was previously claiming a
       // row off the inventory grid; unequipping releases that row, and
@@ -495,7 +519,7 @@ export function FortressHUD(props: FortressHUDProps) {
         return next;
       });
     }
-  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds, inventory, invSlots]);
+  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds, inventory, invSlots, readDragSource]);
 
   const allowDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

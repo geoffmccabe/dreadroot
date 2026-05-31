@@ -1,29 +1,44 @@
-// VaultPanel — the big-chest UI. Left half is the vault grid (page
-// tabs + cols×rows). Right half is the player's inventory grid +
-// hotbar. Drag/drop between any of the three regions follows the
-// Minecraft container model:
-//   * left-click  = pick up whole stack / drop whole stack / merge
-//   * right-click = pick up half / drop one
-//   * shift+click = quick-transfer to the other side
-// A cursor preview floats with the mouse while a stack is held. Esc
-// closes the panel and returns the held stack to its origin.
+// VaultPanel — fixed-position overlay rendered directly ABOVE the
+// HUD's inventory grid (no Dialog, no modal, no duplicate inventory
+// column). The HUD's existing inventory + hotbar grids are the ONLY
+// inventory rendering; cross-panel drag/drop works because both
+// sides speak the same drag MIME (text/plain JSON, see HUD's
+// onDragStart).
 //
-// Styling: reuses the .admin-panel-dialog class so frosted-glass blur
-// + scoped color tokens match the admin panel exactly.
+// Drag payload format (unified with FortressHUD):
+//   { type: 'inventory', gridKey, itemId }                — from HUD inv tile
+//   { type: 'hotbar',    slot }                           — from HUD QS tile
+//   { type: 'vault',     page, slot, itemId, quantity, fullQuantity } — from vault tile
+//
+// Holding Shift while starting a drag from a vault tile drags only
+// 1 item (Minecraft partial-drag).
+//
+// Right-click on a vault tile opens the item-detail modal.
+// Double-click on a vault tile takes the whole stack into inventory.
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { UserInventoryItem } from '@/hooks/useUserData';
 import { useVaultData } from '../hooks/useVaultData';
-import type { CursorStack, VaultSlotDef } from '../types';
+import type { VaultSlotDef } from '../types';
 import { sortVaultPage } from '../lib/sortPage';
 import { setDebugStatus } from '@/lib/debugStatus';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
+import { useRegisterVaultBridge, type VaultBridge } from '@/contexts/VaultBridgeContext';
+import { cn } from '@/lib/utils';
 
-// ── Helpers ────────────────────────────────────────────────────────
+const TILE = 56;
+const GAP = 6;
+
+interface ItemDef {
+  id: string;
+  key: string;
+  name: string;
+  tier: number | null;
+  item_number: number | null;
+  texture_url: string | null;
+}
+
 function spriteUrlForDef(def: {
   texture_url?: string | null;
   textureUrl?: string | null;
@@ -37,32 +52,13 @@ function spriteUrlForDef(def: {
   return null;
 }
 
-function isNonStackableKey(key: string | null | undefined): boolean {
-  if (!key) return false;
-  return key === 'health_potion' || key === 'grenade' || key.startsWith('grenade_t');
-}
-
-// ── Props ──────────────────────────────────────────────────────────
-interface ItemDef {
-  id: string;
-  key: string;
-  name: string;
-  tier: number | null;
-  item_number: number | null;
-  texture_url: string | null;
-}
-
 interface VaultPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Bump this counter to force a graceful close (e.g. player walked
-   *  out of range). Triggers the cursor-stack return-to-origin path
-   *  before the dialog unmounts so items don't vanish. */
   forceCloseToken?: number;
   userId: string | null;
   inventory: UserInventoryItem[];
   equippedItems: Array<{ slot: number; itemId: string }>;
-  // Server-verified mutators wired to useUserData.
   addItem: (itemId: string, quantity: number) => Promise<boolean>;
   removeInventoryRow: (rowId: string) => Promise<boolean>;
   updateEquippedSlot: (slot: number, itemId: string | null) => Promise<void>;
@@ -70,438 +66,133 @@ interface VaultPanelProps {
 
 export function VaultPanel({
   isOpen,
-  onClose,
-  forceCloseToken,
   userId,
   inventory,
   equippedItems,
   addItem,
   removeInventoryRow,
-  updateEquippedSlot,
 }: VaultPanelProps) {
   const { pages, config, setSlot, removeFromSlot, replacePageLayout } = useVaultData(userId);
   const [activePage, setActivePage] = useState(0);
   const { openItem } = useItemDetail();
-  // Clamp activePage if page_count shrinks (e.g. a future re-config).
-  useEffect(() => {
-    if (activePage >= config.page_count) setActivePage(0);
-  }, [config.page_count, activePage]);
+  const registerBridge = useRegisterVaultBridge();
 
-  // CRITICAL: the game uses pointer-lock for first-person controls.
-  // When the vault opens, pointer-lock is still active and every
-  // click goes to the canvas instead of the dialog — that's why the
-  // user had to press Esc (which releases pointer-lock) before clicks
-  // landed on tiles. Release it programmatically here.
+  // Release pointer-lock so clicks reach the overlay immediately.
   useEffect(() => {
     if (!isOpen) return;
     if (document.pointerLockElement) {
       try { document.exitPointerLock(); } catch { /* ignore */ }
     }
   }, [isOpen]);
-  const [cursor, setCursor] = useState<CursorStack | null>(null);
-  const [cursorXY, setCursorXY] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Item defs for the inventory side (so we can render sprites + names).
-  const inventoryItemIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const inv of inventory) if (inv.item_id && inv.quantity > 0) ids.add(inv.item_id);
-    for (const eq of equippedItems) if (eq.itemId) ids.add(eq.itemId);
-    return Array.from(ids);
-  }, [inventory, equippedItems]);
-  const [invDefs, setInvDefs] = useState<Map<string, ItemDef>>(new Map());
   useEffect(() => {
-    if (!isOpen || inventoryItemIds.length === 0) return;
+    if (activePage >= config.page_count) setActivePage(0);
+  }, [config.page_count, activePage]);
+
+  // Item def cache for the items in vault rows (so we can render
+  // sprite + tier on each tile).
+  const vaultItemIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of pages) for (const r of p) ids.add(r.item_id);
+    return Array.from(ids);
+  }, [pages]);
+  const [defs, setDefs] = useState<Map<string, ItemDef>>(new Map());
+  useEffect(() => {
+    if (!isOpen || vaultItemIds.length === 0) return;
     (async () => {
       const { data } = await supabase
         .from('items')
         .select('id, key, name, tier, item_number, texture_url')
-        .in('id', inventoryItemIds);
+        .in('id', vaultItemIds);
       if (data) {
         const m = new Map<string, ItemDef>();
         for (const d of data as ItemDef[]) m.set(d.id, d);
-        setInvDefs(m);
+        setDefs(m);
       }
     })();
-  }, [isOpen, inventoryItemIds.join(',')]);
+  }, [isOpen, vaultItemIds.join(',')]);
 
-  // Cursor follow.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onMove = (e: MouseEvent) => setCursorXY({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', onMove);
-    return () => window.removeEventListener('mousemove', onMove);
-  }, [isOpen]);
-
-  // Esc returns held stack to origin then closes.
-  const returnCursorToOrigin = useCallback(async () => {
-    if (!cursor) return;
-    if (cursor.origin.kind === 'vault') {
-      await setSlot(cursor.origin.page, cursor.origin.slot, cursor.itemId, cursor.quantity);
-    } else if (cursor.origin.kind === 'inventory') {
-      // Add back as `quantity` units. addItem already knows non-stack rules.
-      await addItem(cursor.itemId, cursor.quantity);
+  // Build positional slot rows for the active page.
+  const activePageRows = useMemo(() => {
+    const map = new Map<number, VaultSlotDef & { def?: ItemDef }>();
+    for (const r of pages[activePage] ?? []) {
+      const def = defs.get(r.item_id);
+      map.set(r.slot, { ...r, def });
     }
-    setCursor(null);
-  }, [cursor, setSlot, addItem]);
+    return map;
+  }, [pages, activePage, defs]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        void returnCursorToOrigin();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose, returnCursorToOrigin]);
+  // ── ORG button ────────────────────────────────────────────────
+  const handleOrg = useCallback(async () => {
+    const sorted = sortVaultPage(pages[activePage] || []);
+    await replacePageLayout(activePage, sorted.map((s, i) => ({
+      slot: i, item_id: s.itemId, quantity: s.quantity,
+    })));
+  }, [pages, activePage, replacePageLayout]);
 
-  // Parent-driven close (e.g. player walked out of vault range while
-  // holding a stack on the cursor). Return the stack first so items
-  // don't get dropped on the floor.
-  const lastForceCloseRef = useRef(forceCloseToken);
-  useEffect(() => {
-    if (forceCloseToken === undefined) return;
-    if (forceCloseToken === lastForceCloseRef.current) return;
-    lastForceCloseRef.current = forceCloseToken;
-    if (!isOpen) return;
-    void (async () => {
-      await returnCursorToOrigin();
-      onClose();
-    })();
-  }, [forceCloseToken, isOpen, returnCursorToOrigin, onClose]);
-
-  // ── Inventory groups (stackable items collapse, non-stack rows
-  //    stay separate). Mirrors FortressHUD logic so the UX matches.
-  //    Stackable items that are equipped to the hotbar are filtered
-  //    out — the hotbar slot owns them, just like in the main HUD.
-  //    Non-stackable rows always render (the hotbar is a shortcut,
-  //    not a physical container).
-  const equippedItemIdSet = useMemo(
-    () => new Set(equippedItems.map(e => e.itemId)),
-    [equippedItems]
-  );
-  const inventoryEntries = useMemo(() => {
-    type Entry = {
-      key: string;          // rowId for non-stack, itemId for stack
-      itemId: string;
-      def: ItemDef | undefined;
-      quantity: number;
-      isNonStackRow: boolean;
-      rowIds: string[];     // backing user_inventory rows
-    };
-    const byKey = new Map<string, Entry>();
-    for (const inv of inventory) {
-      if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
-      const def = invDefs.get(inv.item_id);
-      const nonStack = isNonStackableKey(def?.key);
-      // Skip stackable items the hotbar is showing — they'd otherwise
-      // appear in both panels.
-      if (!nonStack && equippedItemIdSet.has(inv.item_id)) continue;
-      const k = nonStack ? inv.id : inv.item_id;
-      const existing = byKey.get(k);
-      if (existing) {
-        existing.quantity += inv.quantity;
-        existing.rowIds.push(inv.id);
-      } else {
-        byKey.set(k, {
-          key: k,
-          itemId: inv.item_id,
-          def,
-          quantity: nonStack ? 1 : inv.quantity,
-          isNonStackRow: nonStack,
-          rowIds: [inv.id],
-        });
-      }
-    }
-    return Array.from(byKey.values());
-  }, [inventory, invDefs, equippedItemIdSet]);
-
-  // ── Vault slot click handler (Minecraft model) ─────────────────
-  const handleVaultClick = useCallback(async (
-    e: React.MouseEvent, page: number, slot: number
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const row = pages[page]?.find(s => s.slot === slot);
-    const shift = e.shiftKey;
-    const right = e.button === 2 || e.type === 'contextmenu';
-
-    // Right-click on a filled slot opens the item-detail modal
-    // (no half-pickup anymore — that's a deliberate trade per the user).
-    if (right && row && !cursor) {
-      openItem({
-        name: row.name,
-        sprite: row.textureUrl ?? null,
-        itemNumber: row.itemNumber,
-        tier: row.tier,
-        quantity: row.quantity,
-        itemId: row.itemId,
-      });
-      return;
-    }
-
-    if (shift && row) {
-      // Shift+click — quick-transfer vault → inventory.
-      const ok = await addItem(row.itemId, row.quantity);
-      if (ok) await removeFromSlot(page, slot, row.quantity);
-      return;
-    }
-
-    if (!cursor && row) {
-      // Pick up.
-      const take = row.quantity; // right-click no longer halves (modal instead)
-      const removed = await removeFromSlot(page, slot, take);
-      setDebugStatus(`vault: pick ${row.name} x${removed} from p${page} s${slot}`);
-      if (removed > 0) {
-        setCursor({
-          itemId: row.itemId, itemKey: row.itemKey, name: row.name, tier: row.tier,
-          itemNumber: row.itemNumber, textureUrl: row.textureUrl, quantity: removed,
-          origin: { kind: 'vault', page, slot },
-        });
-      }
-      return;
-    }
-
-    if (cursor && !row) {
-      // Drop into empty slot.
-      const qty = cursor.quantity;
-      const result = await setSlot(page, slot, cursor.itemId, qty);
-      setDebugStatus(`vault: drop ${cursor.name} x${qty} → p${page} s${slot} ${result ? 'OK' : 'FAIL'}`);
-      if (result) setCursor(null);
-      // If failed, keep the cursor so the user can try again. Do NOT
-      // silently drop the item — that's the "bounce back" bug.
-      return;
-    }
-
-    if (cursor && row && row.itemId === cursor.itemId) {
-      // Merge onto same item.
-      const qty = right ? 1 : cursor.quantity;
-      await setSlot(page, slot, cursor.itemId, qty);
-      if (qty >= cursor.quantity) setCursor(null);
-      else setCursor({ ...cursor, quantity: cursor.quantity - qty });
-      return;
-    }
-
-    if (cursor && row && row.itemId !== cursor.itemId) {
-      // Swap: pick up the slot row, drop cursor stack.
-      const pickedQty = row.quantity;
-      const droppingQty = cursor.quantity;
-      const droppingId = cursor.itemId;
-      const pickedDef = {
-        itemId: row.itemId, itemKey: row.itemKey, name: row.name, tier: row.tier,
-        itemNumber: row.itemNumber, textureUrl: row.textureUrl,
-      };
-      await removeFromSlot(page, slot, pickedQty);
-      await setSlot(page, slot, droppingId, droppingQty);
-      setCursor({
-        ...pickedDef,
-        quantity: pickedQty,
-        origin: { kind: 'vault', page, slot },
-      });
-    }
-  }, [pages, cursor, addItem, removeFromSlot, setSlot]);
-
-  // ── Inventory slot click handler ───────────────────────────────
-  const handleInventoryClick = useCallback(async (
-    e: React.MouseEvent, entry: typeof inventoryEntries[number] | null, _index: number
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const shift = e.shiftKey;
-    const right = e.button === 2 || e.type === 'contextmenu';
-
-    if (right && entry && !cursor) {
-      openItem({
-        name: entry.def?.name ?? '',
-        sprite: entry.def?.texture_url ?? null,
-        itemNumber: entry.def?.item_number ?? null,
-        tier: entry.def?.tier ?? null,
-        quantity: entry.quantity,
-        itemId: entry.itemId,
-      });
-      return;
-    }
-
-    if (shift && entry) {
-      // Shift+click — quick-transfer inventory → vault. Find first empty
-      // slot on the active page, or stack onto matching slot.
-      const stackTarget = pages[activePage].find(s => s.itemId === entry.itemId);
-      if (stackTarget) {
-        await setSlot(stackTarget.page, stackTarget.slot, entry.itemId, entry.quantity);
-      } else {
-        const used = new Set(pages[activePage].map(s => s.slot));
-        let emptySlot = -1;
-        for (let i = 0; i < config.cols * config.rows; i++) {
-          if (!used.has(i)) { emptySlot = i; break; }
-        }
-        if (emptySlot < 0) return; // page full
-        await setSlot(activePage, emptySlot, entry.itemId, entry.quantity);
-      }
-      // Remove the inventory rows that backed this entry.
-      for (const rid of entry.rowIds) await removeInventoryRow(rid);
-      return;
-    }
-
-    if (!cursor && entry) {
-      // Pick up from inventory. For non-stack rows we always take 1
-      // (each row IS one); for stacks we take all or half.
-      const take = entry.isNonStackRow
-        ? 1
-        : (right ? Math.ceil(entry.quantity / 2) : entry.quantity);
-      // For stack entries we have a single row, decrement it. For
-      // non-stack entries, delete the row.
-      if (entry.isNonStackRow) {
-        await removeInventoryRow(entry.rowIds[0]);
-      } else {
-        // Take the whole row(s). Currently stack entries are exactly
-        // one row; delete it (addItem will re-create on return).
-        for (const rid of entry.rowIds) await removeInventoryRow(rid);
-        // If a partial take, add the remainder back.
-        if (take < entry.quantity) {
-          await addItem(entry.itemId, entry.quantity - take);
-        }
-      }
-      setCursor({
-        itemId: entry.itemId,
-        itemKey: entry.def?.key ?? '',
-        name: entry.def?.name ?? '',
-        tier: entry.def?.tier ?? null,
-        itemNumber: entry.def?.item_number ?? null,
-        textureUrl: entry.def?.texture_url ?? null,
-        quantity: take,
-        origin: { kind: 'inventory', rowId: entry.rowIds[0] },
-      });
-      return;
-    }
-
-    if (cursor && !entry) {
-      // Drop into inventory. addItem handles non-stack splitting.
-      const qty = right ? 1 : cursor.quantity;
-      await addItem(cursor.itemId, qty);
-      if (qty >= cursor.quantity) setCursor(null);
-      else setCursor({ ...cursor, quantity: cursor.quantity - qty });
-      return;
-    }
-
-    if (cursor && entry && entry.itemId === cursor.itemId) {
-      // Merge — add 1 or all to inventory.
-      const qty = right ? 1 : cursor.quantity;
-      await addItem(cursor.itemId, qty);
-      if (qty >= cursor.quantity) setCursor(null);
-      else setCursor({ ...cursor, quantity: cursor.quantity - qty });
-      return;
-    }
-
-    if (cursor && entry && entry.itemId !== cursor.itemId) {
-      // Swap: take inventory entry onto cursor, drop the held stack
-      // into inventory. Only left-click swaps in Minecraft; right-click
-      // on a different-item slot does nothing.
-      if (right) return;
-      const pickedDef = {
-        itemId: entry.itemId,
-        itemKey: entry.def?.key ?? '',
-        name: entry.def?.name ?? '',
-        tier: entry.def?.tier ?? null,
-        itemNumber: entry.def?.item_number ?? null,
-        textureUrl: entry.def?.texture_url ?? null,
-        quantity: entry.quantity,
-      };
-      // Remove the rows that backed the inventory entry.
-      for (const rid of entry.rowIds) await removeInventoryRow(rid);
-      // Drop the cursor stack into the inventory.
-      await addItem(cursor.itemId, cursor.quantity);
-      // Cursor now holds what was in the slot.
-      setCursor({
-        ...pickedDef,
-        origin: { kind: 'inventory', rowId: entry.rowIds[0] },
-      });
-    }
-  }, [cursor, pages, activePage, config, addItem, removeInventoryRow, setSlot]);
-
-  // ── HTML5 drag/drop handlers ──────────────────────────────────
-  // Drag source payload, encoded in dataTransfer as JSON:
-  //   { kind: 'inv', itemId, rowIds, quantity }
-  //   { kind: 'vault', page, slot, itemId, quantity }
-  const DRAG_MIME = 'application/x-dreadroot-vault';
-
-  const handleDragStartInventory = useCallback((
-    e: React.DragEvent, entry: typeof inventoryEntries[number],
-  ) => {
-    e.dataTransfer.effectAllowed = 'move';
-    // Minecraft-style modifier: plain drag = whole stack, shift+drag = 1 item.
-    const moveQty = e.shiftKey ? 1 : entry.quantity;
-    const payload = {
-      kind: 'inv' as const,
-      itemId: entry.itemId,
-      rowIds: entry.rowIds,
-      quantity: moveQty,
-      fullQuantity: entry.quantity,
-    };
-    e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload));
-    e.dataTransfer.setData('text/plain', entry.def?.name ?? '');
-  }, []);
-
+  // ── Drag start (vault tile) ───────────────────────────────────
   const handleDragStartVault = useCallback((
     e: React.DragEvent, row: VaultSlotDef,
   ) => {
     e.dataTransfer.effectAllowed = 'move';
+    // Shift+drag = drag only 1 item (Minecraft partial). Otherwise
+    // drag the whole stack.
     const moveQty = e.shiftKey ? 1 : row.quantity;
     const payload = {
-      kind: 'vault' as const,
+      type: 'vault' as const,
       page: row.page,
       slot: row.slot,
       itemId: row.itemId,
       quantity: moveQty,
       fullQuantity: row.quantity,
     };
-    e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload));
-    e.dataTransfer.setData('text/plain', row.name);
-  }, []);
-
-  const allowDrop = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes(DRAG_MIME)) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+    if (e.currentTarget instanceof HTMLElement) {
+      e.dataTransfer.setDragImage(e.currentTarget, 28, 28);
     }
   }, []);
 
-  // Drop onto a VAULT slot at (page, slot).
+  // ── Drop on vault tile ────────────────────────────────────────
   const handleDropOnVault = useCallback(async (
     e: React.DragEvent, page: number, slot: number,
   ) => {
     e.preventDefault();
-    const raw = e.dataTransfer.getData(DRAG_MIME);
+    e.stopPropagation();
+    const raw = e.dataTransfer.getData('text/plain');
     if (!raw) return;
     let src: any;
     try { src = JSON.parse(raw); } catch { return; }
 
-    if (src.kind === 'vault' && src.page === page && src.slot === slot) {
-      // Dropped on itself, no-op.
-      return;
-    }
-
-    if (src.kind === 'inv') {
-      // Inventory → vault. setSlot stacks on matching item or fills empty.
-      const moveQty = src.quantity as number;
-      const totalQty = (src.fullQuantity ?? moveQty) as number;
-      const result = await setSlot(page, slot, src.itemId, moveQty);
-      setDebugStatus(`vault: drop inv→p${page}s${slot} x${moveQty}/${totalQty} ${result ? 'OK' : 'FAIL'}`);
+    // Inventory → vault
+    if (src.type === 'inventory') {
+      // We don't have quantity on the inventory drag payload (HUD didn't
+      // send it), so we look up the live inventory rows for this itemId
+      // and move ALL of them. Future: HUD can include quantity to allow
+      // Shift+drag from inventory too.
+      const rows = inventory.filter(
+        (i) => i.item_type === 'item' && i.item_id === src.itemId && i.quantity > 0,
+      );
+      const totalQty = rows.reduce((acc, r) => acc + r.quantity, 0);
+      if (totalQty <= 0) return;
+      const result = await setSlot(page, slot, src.itemId, totalQty);
+      setDebugStatus(`vault: inv→p${page}s${slot} x${totalQty} ${result ? 'OK' : 'FAIL'}`);
       if (result) {
-        // Remove ALL source rows then re-add remainder so source ends
-        // up with exactly (totalQty - moveQty) items.
-        for (const rid of src.rowIds as string[]) await removeInventoryRow(rid);
-        const remainder = totalQty - moveQty;
-        if (remainder > 0) {
-          await addItem(src.itemId, remainder);
-        }
+        for (const r of rows) await removeInventoryRow(r.id);
       }
       return;
     }
 
-    if (src.kind === 'vault') {
-      // Vault → vault. removeFromSlot already supports partial qty.
+    // Hotbar → vault: not currently supported (hotbar slot doesn't carry
+    // the actual item — unequip first by dragging to inventory). Silently
+    // ignore.
+    if (src.type === 'hotbar') {
+      setDebugStatus(`vault: hotbar→vault not supported — drop on inventory first`);
+      return;
+    }
+
+    // Vault → vault
+    if (src.type === 'vault') {
+      if (src.page === page && src.slot === slot) return; // same-slot no-op
       const moveQty = src.quantity as number;
       const removed = await removeFromSlot(src.page, src.slot, moveQty);
       if (removed <= 0) {
@@ -515,330 +206,160 @@ export function VaultPanel({
       }
       return;
     }
-  }, [setSlot, removeFromSlot, removeInventoryRow, addItem]);
+  }, [inventory, setSlot, removeFromSlot, removeInventoryRow]);
 
-  // Drop onto an INVENTORY tile. We don't care which tile — the
-  // 18-slot grid auto-fills via setInventory order. Effect: pull
-  // vault items into inventory.
-  const handleDropOnInventory = useCallback(async (e: React.DragEvent) => {
+  const allowDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const raw = e.dataTransfer.getData(DRAG_MIME);
-    if (!raw) return;
-    let src: any;
-    try { src = JSON.parse(raw); } catch { return; }
-    if (src.kind === 'inv') return; // intra-inventory rearrange not supported
-    if (src.kind === 'vault') {
-      const removed = await removeFromSlot(src.page, src.slot, src.quantity);
-      if (removed <= 0) {
-        setDebugStatus(`vault: inv-drop FAIL (source empty)`);
-        return;
-      }
-      const ok = await addItem(src.itemId, removed);
-      setDebugStatus(`vault: vault→inv x${removed} ${ok ? 'OK' : 'FAIL'}`);
-      if (!ok) {
-        // Roll back.
-        await setSlot(src.page, src.slot, src.itemId, removed);
-      }
+    e.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  // ── Double-click vault tile → push back into inventory ─────────
+  const handleDoubleClickVault = useCallback(async (row: VaultSlotDef) => {
+    const removed = await removeFromSlot(row.page, row.slot, row.quantity);
+    if (removed > 0) await addItem(row.itemId, removed);
+    setDebugStatus(`vault: dblclick vault→inv x${removed}`);
+  }, [removeFromSlot, addItem]);
+
+  // ── Right-click vault tile → detail modal ─────────────────────
+  const handleRightClickVault = useCallback((
+    e: React.MouseEvent, row: VaultSlotDef & { def?: ItemDef },
+  ) => {
+    e.preventDefault();
+    openItem({
+      itemId: row.itemId,
+      name: row.def?.name ?? '',
+      sprite: row.def ? spriteUrlForDef(row.def) : null,
+      itemNumber: row.def?.item_number ?? null,
+      tier: row.def?.tier ?? null,
+      quantity: row.quantity,
+    });
+  }, [openItem]);
+
+  // ── Bridge registration: expose vault ops to HUD ──────────────
+  // HUD inventory + hotbar drop handlers call this when they receive
+  // a drag payload with type: 'vault' so they can decrement the
+  // source vault slot.
+  useEffect(() => {
+    if (!isOpen) {
+      registerBridge(null);
       return;
     }
-  }, [removeFromSlot, addItem, setSlot]);
+    const b: VaultBridge = { removeFromSlot, setSlot, activePage };
+    registerBridge(b);
+    return () => registerBridge(null);
+  }, [isOpen, removeFromSlot, setSlot, activePage, registerBridge]);
 
-  // ── Double-click inventory item → auto-move to vault ──────────
-  // Stack on an existing matching item if one exists on the active
-  // page; otherwise drop into the first empty slot on that page.
-  // Silently no-ops if the page is full and no matching item exists.
-  const handleInventoryDoubleClick = useCallback(async (
-    entry: typeof inventoryEntries[number] | null,
-  ) => {
-    if (!entry || cursor) return;
-    const page = pages[activePage] ?? [];
-
-    // Look for a same-item stack we can merge onto.
-    const stackTarget = page.find(s => s.itemId === entry.itemId);
-    let targetSlot: number;
-    if (stackTarget) {
-      targetSlot = stackTarget.slot;
-    } else {
-      // Find the first-available slot, scanning left-to-right
-      // top-to-bottom — matches the user's "top-left first" rule.
-      const used = new Set(page.map(s => s.slot));
-      const cap = config.cols * config.rows;
-      let empty = -1;
-      for (let i = 0; i < cap; i++) {
-        if (!used.has(i)) { empty = i; break; }
-      }
-      if (empty < 0) {
-        setDebugStatus(`vault: page ${activePage + 1} full, no stack target — ignored`);
-        return;
-      }
-      targetSlot = empty;
-    }
-
-    const result = await setSlot(activePage, targetSlot, entry.itemId, entry.quantity);
-    if (result) {
-      for (const rid of entry.rowIds) await removeInventoryRow(rid);
-      setDebugStatus(`vault: dblclick ${entry.def?.name ?? '?'} → p${activePage} s${targetSlot}`);
-    } else {
-      setDebugStatus(`vault: dblclick FAIL ${entry.def?.name ?? '?'}`);
-    }
-  }, [cursor, pages, activePage, config, setSlot, removeInventoryRow]);
-
-  // ── ORG button ─────────────────────────────────────────────────
-  const handleOrg = useCallback(async () => {
-    const sorted = sortVaultPage(pages[activePage] || []);
-    await replacePageLayout(activePage, sorted.map((s, i) => ({
-      slot: i, item_id: s.itemId, quantity: s.quantity,
-    })));
-  }, [pages, activePage, replacePageLayout]);
-
-  // ── Render ─────────────────────────────────────────────────────
   if (!isOpen) return null;
 
   const slotsThisPage = config.cols * config.rows;
-  const vaultMap = new Map<number, VaultSlotDef>();
-  for (const s of (pages[activePage] || [])) vaultMap.set(s.slot, s);
 
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { void returnCursorToOrigin(); onClose(); } }}>
-      <DialogContent
-        // Don't auto-focus the first focusable element — Radix's default
-        // focus-trap was capturing the first click and we had to press
-        // Esc to "wake up" the panel before clicks landed on tiles.
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        ref={(node: HTMLDivElement | null) => {
-          if (node) {
-            node.style.setProperty('background', 'hsla(211, 30%, 51%, 0.35)', 'important');
-            node.style.setProperty('border', '1px solid hsla(211, 34%, 73%, 0.8)', 'important');
-            node.style.setProperty('border-radius', '6px', 'important');
-          }
-        }}
-        className={cn(
-          "admin-panel-dialog w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
-        )}
-      >
-        <DialogHeader>
-          <DialogTitle>
-            <span>Vault</span>
-          </DialogTitle>
-        </DialogHeader>
+  // Position: directly above HUD inventory. HUD inventory bottom-anchors
+  // at ~16px + ~210px (3 rows × 56 + 2 × 10 + label) + ~96px (hotbar
+  // + label + gap) + 16px breathing = ~338px from bottom. We sit
+  // immediately above that.
+  const bottomOffset = 340;
 
-        {/* Page tabs — hover to switch. ORG button on the right of
-            the last page tab, NOT in the header above the Inventory. */}
-        <div className="flex gap-1 mb-3 flex-shrink-0 items-center">
-          {Array.from({ length: config.page_count }, (_, p) => (
-            <button
-              key={p}
-              type="button"
-              onMouseEnter={() => setActivePage(p)}
-              onClick={() => setActivePage(p)}
-              className={cn(
-                "text-xs px-3 py-1 rounded border transition",
-                p === activePage ? "bg-white/15 border-white/50" : "border-white/20 hover:bg-white/5"
-              )}
-              style={{ color: 'hsl(0, 0%, 95%)' }}
-            >
-              Page {p + 1}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={handleOrg}
-            className="text-xs px-3 py-1 rounded border border-white/30 hover:bg-white/10 transition ml-2"
-            style={{ color: 'hsl(0, 0%, 95%)' }}
-          >
-            ORG
-          </button>
-        </div>
-
-        {/* Body: vault grid (left) + inventory (right) */}
-        <div className="flex gap-6 flex-1 overflow-hidden">
-          {/* VAULT GRID */}
-          <div className="flex-1">
-            <div
-              className="grid gap-1"
-              style={{ gridTemplateColumns: `repeat(${config.cols}, 56px)` }}
-            >
-              {Array.from({ length: slotsThisPage }, (_, i) => {
-                const entry = vaultMap.get(i);
-                return (
-                  <VaultTile
-                    key={`v-${activePage}-${i}`}
-                    sprite={entry ? spriteUrlForDef(entry) : null}
-                    name={entry?.name ?? null}
-                    tier={entry?.tier ?? null}
-                    quantity={entry?.quantity ?? 0}
-                    onContextMenu={(e) => handleVaultClick(e, activePage, i)}
-                    draggable={!!entry}
-                    onDragStart={entry ? (e) => handleDragStartVault(e, entry) : undefined}
-                    onDragOver={allowDrop}
-                    onDrop={(e) => handleDropOnVault(e, activePage, i)}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          {/* INVENTORY */}
-          <div style={{ width: 6 * 56 + 5 * 4 }}>
-            <div className="text-xs mb-2 opacity-80" style={{ color: 'hsl(0, 0%, 95%)' }}>
-              Inventory
-            </div>
-            <div
-              className="grid gap-1 mb-4"
-              style={{ gridTemplateColumns: `repeat(6, 56px)` }}
-            >
-              {Array.from({ length: 18 }, (_, i) => {
-                const entry = inventoryEntries[i] || null;
-                return (
-                  <VaultTile
-                    key={`i-${i}`}
-                    sprite={entry ? spriteUrlForDef(entry.def ?? {}) : null}
-                    name={entry?.def?.name ?? null}
-                    tier={entry?.def?.tier ?? null}
-                    quantity={entry?.quantity ?? 0}
-                    onContextMenu={(e) => handleInventoryClick(e, entry, i)}
-                    onDoubleClick={() => handleInventoryDoubleClick(entry)}
-                    draggable={!!entry}
-                    onDragStart={entry ? (e) => handleDragStartInventory(e, entry) : undefined}
-                    onDragOver={allowDrop}
-                    onDrop={handleDropOnInventory}
-                  />
-                );
-              })}
-            </div>
-
-            <div className="text-xs mb-2 opacity-80" style={{ color: 'hsl(0, 0%, 95%)' }}>
-              Hotbar
-            </div>
-            <div
-              className="grid gap-1"
-              style={{ gridTemplateColumns: `repeat(6, 56px)` }}
-            >
-              {Array.from({ length: 6 }, (_, i) => {
-                const slot = i + 1;
-                const eq = equippedItems.find(e => e.slot === slot);
-                const def = eq ? invDefs.get(eq.itemId) : undefined;
-                const qty = eq
-                  ? inventory.filter(inv => inv.item_id === eq.itemId).reduce((a, inv) => a + inv.quantity, 0)
-                  : 0;
-                return (
-                  <VaultTile
-                    key={`h-${i}`}
-                    sprite={def ? spriteUrlForDef(def) : null}
-                    name={def?.name ?? null}
-                    tier={def?.tier ?? null}
-                    quantity={qty}
-                    border="hotbar"
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-      </DialogContent>
-
-      {/* Cursor preview — portal'd to document.body so it escapes the
-          Dialog's transform: translate(-50%,-50%). Without the portal,
-          position: fixed gets measured from the transformed Dialog
-          (sliding ~half a dialog width to the right), which made the
-          cursor appear far from the mouse. */}
-      {cursor && typeof document !== 'undefined' && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            left: cursorXY.x + 8,
-            top: cursorXY.y + 8,
-            pointerEvents: 'none',
-            zIndex: 99999,
-            width: 48, height: 48,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))',
-          }}
-        >
-          {(() => {
-            const s = spriteUrlForDef(cursor);
-            return s ? (
-              <img src={s} alt={cursor.name} style={{ width: 42, height: 42, objectFit: 'contain' }} />
-            ) : (
-              <div style={{ width: 42, height: 42, background: 'hsla(211, 30%, 51%, 0.8)', borderRadius: 4 }} />
-            );
-          })()}
-          {cursor.quantity > 1 && (
-            <span style={{
-              position: 'absolute', bottom: -2, right: -2,
-              fontSize: 11, fontWeight: 700, color: 'white',
-              textShadow: '0 0 3px rgba(0,0,0,0.9)',
-            }}>{cursor.quantity}</span>
-          )}
-        </div>,
-        document.body,
-      )}
-    </Dialog>
-  );
-}
-
-// ── Single tile ────────────────────────────────────────────────────
-function VaultTile({
-  sprite, name, tier, quantity, onClick, onContextMenu, onDoubleClick,
-  draggable, onDragStart, onDragOver, onDrop,
-  border,
-}: {
-  sprite: string | null;
-  name: string | null;
-  tier: number | null;
-  quantity: number;
-  onClick?: (e: React.MouseEvent) => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
-  draggable?: boolean;
-  onDragStart?: (e: React.DragEvent) => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDrop?: (e: React.DragEvent) => void;
-  border?: 'hotbar';
-}) {
   return (
     <div
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      onDoubleClick={onDoubleClick}
-      draggable={draggable}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnter={onDragOver}
-      onDrop={onDrop}
-      title={name ?? undefined}
       style={{
-        width: 56, height: 56,
-        borderRadius: 'var(--hud-radius)',
-        border: border === 'hotbar'
-          ? '1px solid hsla(45, 80%, 60%, 0.6)'
-          : '1px solid hsla(var(--hud-border))',
-        background: 'hsla(var(--hud-bg-dim))',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        overflow: 'hidden', position: 'relative',
-        cursor: onClick ? 'pointer' : 'default',
+        position: 'fixed',
+        bottom: `${bottomOffset}px`,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 25,
+        background: 'hsla(211, 30%, 51%, 0.55)',
+        border: '1px solid hsla(211, 34%, 73%, 0.8)',
+        borderRadius: 8,
+        padding: 10,
+        backdropFilter: 'blur(4px)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
       }}
     >
-      {tier != null && quantity > 0 && (
-        <span style={{
-          position: 'absolute', top: 2, left: 4,
-          fontSize: 10, fontWeight: 700, color: 'white',
-          fontFamily: 'var(--hud-font)', lineHeight: 1,
-          textShadow: '0 0 3px rgba(0,0,0,0.8)', pointerEvents: 'none',
-        }}>T{tier}</span>
-      )}
-      {sprite && (
-        <img src={sprite} alt={name ?? ''} draggable={false}
-          style={{ width: 42, height: 42, objectFit: 'contain', pointerEvents: 'none' }} />
-      )}
-      {quantity > 1 && (
-        <span style={{
-          position: 'absolute', bottom: 2, right: 4,
-          fontSize: 11, fontWeight: 700, color: 'white',
-          textShadow: '0 0 3px rgba(0,0,0,0.9)', pointerEvents: 'none',
-        }}>{quantity}</span>
-      )}
+      {/* Page tabs + ORG button row */}
+      <div className="flex gap-1 mb-2 items-center">
+        {Array.from({ length: config.page_count }, (_, p) => (
+          <button
+            key={p}
+            type="button"
+            onMouseEnter={() => setActivePage(p)}
+            onClick={() => setActivePage(p)}
+            className={cn(
+              "text-xs px-2 py-1 rounded border transition",
+              p === activePage ? "bg-white/20 border-white/60" : "border-white/20 hover:bg-white/10"
+            )}
+            style={{ color: 'hsl(0, 0%, 95%)' }}
+          >
+            Page {p + 1}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={handleOrg}
+          className="text-xs px-2 py-1 rounded border border-white/30 hover:bg-white/10 transition ml-2"
+          style={{ color: 'hsl(0, 0%, 95%)' }}
+        >
+          ORG
+        </button>
+        <span className="ml-auto text-[10px] opacity-70" style={{ color: 'hsl(0,0%,95%)' }}>
+          VAULT — drag to/from inventory
+        </span>
+      </div>
+
+      {/* Vault grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${config.cols}, ${TILE}px)`,
+          gap: `${GAP}px`,
+        }}
+      >
+        {Array.from({ length: slotsThisPage }, (_, i) => {
+          const row = activePageRows.get(i);
+          const sprite = row?.def ? spriteUrlForDef(row.def) : null;
+          return (
+            <div
+              key={`v-${activePage}-${i}`}
+              draggable={!!row}
+              onDragStart={row ? (e) => handleDragStartVault(e, row) : undefined}
+              onDragEnter={allowDrop}
+              onDragOver={allowDrop}
+              onDrop={(e) => handleDropOnVault(e, activePage, i)}
+              onDoubleClick={row ? () => handleDoubleClickVault(row) : undefined}
+              onContextMenu={row ? (e) => handleRightClickVault(e, row) : undefined}
+              title={row?.def?.name ?? `Slot ${i}`}
+              style={{
+                width: TILE,
+                height: TILE,
+                borderRadius: 'var(--hud-radius, 4px)',
+                border: '1px solid hsla(var(--hud-border, 0 0% 100% / 0.3))',
+                background: 'hsla(var(--hud-bg-dim, 0 0% 0% / 0.4))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden', position: 'relative',
+                cursor: row ? 'grab' : 'default',
+              }}
+            >
+              {row?.def?.tier != null && (
+                <span style={{
+                  position: 'absolute', top: 2, left: 4,
+                  fontSize: 10, fontWeight: 700, color: 'white',
+                  textShadow: '0 0 3px rgba(0,0,0,0.8)', pointerEvents: 'none',
+                }}>T{row.def.tier}</span>
+              )}
+              {sprite && (
+                <img src={sprite} alt={row?.def?.name ?? ''} draggable={false}
+                  style={{ width: 42, height: 42, objectFit: 'contain', pointerEvents: 'none' }} />
+              )}
+              {row && row.quantity > 1 && (
+                <span style={{
+                  position: 'absolute', bottom: 2, right: 4,
+                  fontSize: 11, fontWeight: 700, color: 'white',
+                  textShadow: '0 0 3px rgba(0,0,0,0.9)', pointerEvents: 'none',
+                }}>{row.quantity}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

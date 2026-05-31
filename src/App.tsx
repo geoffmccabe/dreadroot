@@ -14,6 +14,7 @@ import { BulletDefinitionsProvider } from "@/contexts/BulletDefinitionsContext";
 import { FlamethrowerTiersProvider } from "@/contexts/FlamethrowerTiersContext";
 import { ItemDetailProvider } from "@/contexts/ItemDetailContext";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
+import { VaultBridgeProvider } from "@/contexts/VaultBridgeContext";
 import { InitializationOverlay } from "@/components/InitializationOverlay";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -77,6 +78,7 @@ const App = () => (
                   <UserPanelProvider>
                     <AdminPanelProvider>
                       <ItemDetailProvider>
+                      <VaultBridgeProvider>
                       <Toaster />
                       <Sonner />
                       <ItemDetailModal />
@@ -106,6 +108,7 @@ const App = () => (
                           <Route path="*" element={<NotFound />} />
                         </Routes>
                       </BrowserRouter>
+                      </VaultBridgeProvider>
                       </ItemDetailProvider>
                     </AdminPanelProvider>
                   </UserPanelProvider>
