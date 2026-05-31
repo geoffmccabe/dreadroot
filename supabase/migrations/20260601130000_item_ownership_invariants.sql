@@ -85,6 +85,8 @@ END$$;
 -- and SEED rows (item_type=seed_tier_N) for completeness — both are
 -- always stackable.
 DO $$
+DECLARE
+  v_merged INTEGER;
 BEGIN
   WITH grouped AS (
     SELECT user_id, item_type, item_id,
@@ -113,7 +115,8 @@ BEGIN
      WHERE ui.id = g.keep_id
     RETURNING ui.id
   )
-  SELECT 1 FROM updates;
+  SELECT COUNT(*) INTO v_merged FROM updates;
+  RAISE NOTICE 'Re-consolidated % block/seed groups', v_merged;
 END$$;
 
 -- ────────────────────────────────────────────────────────────────────
