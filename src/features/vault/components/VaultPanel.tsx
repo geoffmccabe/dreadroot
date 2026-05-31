@@ -16,7 +16,7 @@
 // Right-click on a vault tile opens the item-detail modal.
 // Double-click on a vault tile takes the whole stack into inventory.
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { UserInventoryItem } from '@/hooks/useUserData';
 import { useVaultData } from '../hooks/useVaultData';
@@ -68,7 +68,6 @@ export function VaultPanel({
   isOpen,
   userId,
   inventory,
-  equippedItems,
   addItem,
   removeInventoryRow,
 }: VaultPanelProps) {

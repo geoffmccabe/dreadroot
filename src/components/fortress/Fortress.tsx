@@ -259,7 +259,13 @@ export function Fortress() {
   const [vaultInRange, setVaultInRange] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultForceCloseToken, setVaultForceCloseToken] = useState(0);
-  const handleOpenVault = useCallback(() => setVaultOpen(true), []);
+  const handleOpenVault = useCallback(() => {
+    setVaultOpen(true);
+    // Force the inventory open too — the vault renders directly above
+    // the inventory grid; with inventory closed the vault would float
+    // above empty space.
+    setInventoryOpen(true);
+  }, []);
   const handleCloseVault = useCallback(() => setVaultOpen(false), []);
   // Auto-close vault if the player walks out of range while it's open.
   // Bump the token so the panel can return any held cursor stack to
@@ -2324,6 +2330,7 @@ export function Fortress() {
         isGliding={jetBoostState.isGliding}
         equippedItems={equippedItems}
         updateEquippedSlot={updateEquippedSlot}
+        addItem={addItem}
         inventoryOpen={inventoryOpen}
         setInventoryOpen={setInventoryOpen}
         selectedSlot={selectedSlot}

@@ -112,6 +112,7 @@ export function FortressHUD(props: FortressHUDProps) {
     isOxygenCritical = false,
     equippedItems = [],
     updateEquippedSlot,
+    addItem,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
@@ -440,12 +441,18 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
 
-    // Vault → Inventory drop: this path is currently a no-op because
-    // FortressHUD doesn't take addItem as a prop. Use double-click on
-    // a vault tile instead — that pushes the stack back to inventory.
-    // TODO follow-up: thread addItem into HUD and wire this drop fully.
+    // Vault → Inventory: remove from vault, add to inventory. addItem
+    // handles the stack-vs-non-stack rules. Source vault slot is
+    // restored on failure.
     if (src.type === 'vault') {
-      console.log('[HUD] vault→inv drop ignored; use double-click on the vault tile');
+      if (!vaultBridge || !addItem) return;
+      const removed = await vaultBridge.removeFromSlot(src.page, src.slot, src.quantity);
+      if (removed <= 0) return;
+      const ok = await addItem(src.itemId, removed);
+      if (!ok) {
+        // Rollback into the source vault slot.
+        await vaultBridge.setSlot(src.page, src.slot, src.itemId, removed);
+      }
       return;
     }
 
@@ -519,7 +526,7 @@ export function FortressHUD(props: FortressHUDProps) {
         return next;
       });
     }
-  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds, inventory, invSlots, readDragSource]);
+  }, [updateEquippedSlot, hotbarSlots, nonStackableItemIds, inventory, invSlots, readDragSource, vaultBridge, addItem]);
 
   const allowDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
