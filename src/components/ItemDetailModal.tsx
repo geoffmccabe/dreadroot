@@ -4,13 +4,10 @@
 
 import React from 'react';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
+import { getItemSpriteUrl } from '@/lib/itemSprite';
 
 function spriteFor(itemNumber: number | null, texture_url: string | null): string | null {
-  if (texture_url) return texture_url;
-  if (itemNumber != null && itemNumber >= 0 && itemNumber <= 228) {
-    return `/item-sprites/${itemNumber}.webp`;
-  }
-  return null;
+  return getItemSpriteUrl({ item_number: itemNumber, texture_url });
 }
 
 // Pretty label for an item-def field. Keys not in this map fall back

@@ -14,15 +14,21 @@ export interface VaultBridge {
   /** Idempotent stack-or-fill into a vault slot. Legacy 2-step path —
    *  prefer transferFromInventory for inv→vault moves. */
   setSlot: (page: number, slot: number, itemId: string, quantity: number) => Promise<unknown>;
-  /** Atomic single-transaction inv→vault. ALWAYS use this for HUD
-   *  drops onto vault tiles; never the setSlot+remove dance. */
+  /** Atomic single-transaction inv→vault. */
   transferFromInventory: (
     inventoryRowIds: string[], page: number, slot: number,
   ) => Promise<boolean>;
-  /** Atomic single-transaction vault→inv. ALWAYS use this for HUD
-   *  drops onto inventory/hotbar tiles whose payload is type:'vault'. */
+  /** Atomic single-transaction vault→inv. */
   transferToInventory: (page: number, slot: number, quantity: number) => Promise<boolean>;
-  /** Currently-open vault page (for "put it in the open page" defaults). */
+  /** Atomic single-transaction vault→vault (used by cursor-stack drops
+   *  between vault slots). */
+  transferWithinVault: (
+    srcPage: number, srcSlot: number, dstPage: number, dstSlot: number, quantity: number,
+  ) => Promise<boolean>;
+  /** Find the first unoccupied vault slot. Preferred page first; falls
+   *  back to scanning all pages. Used by shift-click inv→vault. */
+  findFirstEmptySlot: (preferPage?: number) => { page: number; slot: number } | null;
+  /** Currently-open vault page. */
   activePage: number;
 }
 

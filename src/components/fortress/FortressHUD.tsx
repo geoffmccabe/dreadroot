@@ -7,6 +7,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useVaultBridge } from '@/contexts/VaultBridgeContext';
 import { VaultPanel } from '@/features/vault';
+import { getItemSpriteUrl as itemSpriteUrl } from '@/lib/itemSprite';
+import {
+  useCursorStack,
+  SlotGrid,
+  CursorSprite,
+  slotClick,
+  type SlotClickInput,
+  type SlotClickHandlers,
+  type SlotOccupant,
+} from '@/features/inventory-system';
 
 // ─── Instructions Panel (bottom-right, collapsible) ──────────────
 
@@ -242,12 +252,10 @@ export function FortressHUD(props: FortressHUDProps) {
 
   useEffect(() => { loadItemDefs(); }, [loadItemDefs]);
 
-  // Helper: get sprite URL from item def
+  // Helper: get sprite URL from item def (delegates to the shared
+  // resolver so the cache-busting query string stays consistent).
   const getSpriteUrl = useCallback((def: { texture_url: string | null; item_number: number | null } | undefined): string | null => {
-    if (!def) return null;
-    if (def.texture_url) return def.texture_url;
-    if (def.item_number != null && def.item_number >= 0 && def.item_number <= 228) return `/item-sprites/${def.item_number}.webp`;
-    return null;
+    return itemSpriteUrl(def);
   }, []);
 
   // Quantity lookup by item UUID — built from the inventory list so
@@ -380,6 +388,102 @@ export function FortressHUD(props: FortressHUDProps) {
     });
   }, [invSlots, inventoryItemsMap]);
 
+  // ── Cursor-stack occupants (built from inventoryGridItems) ─────
+  // SlotGrid expects an occupants Map<slotIndex, SlotOccupant>. Each
+  // entry carries the underlying inventory row id so atomic transfer
+  // RPCs can target it directly.
+  const inventoryOccupants = useMemo(() => {
+    const m = new Map<number, SlotOccupant>();
+    inventoryGridItems.forEach((item, idx) => {
+      if (!item) return;
+      // For non-stack items gridKey IS the rowId. For stackable items
+      // gridKey is the itemId; we need to find any matching inv row to
+      // pass to transferInvToVault. Pick the first row of this itemId.
+      let rowId = item.gridKey;
+      if (!item.isNonStackRow) {
+        const invRow = (inventory || []).find((r: any) =>
+          r.item_type === 'item' && r.item_id === item.itemId && r.quantity > 0
+        );
+        if (invRow) rowId = (invRow as any).id;
+      }
+      const def = itemDefs.get(item.itemId);
+      m.set(idx, {
+        itemId: item.itemId,
+        itemKey: (def as any)?.key ?? '',
+        quantity: item.quantity,
+        name: item.name ?? '',
+        tier: item.tier,
+        spriteUrl: item.sprite,
+        nonStackable: item.isNonStackRow,
+        rowId,
+      });
+    });
+    return m;
+  }, [inventoryGridItems, inventory, itemDefs]);
+
+  // ── Cursor-stack inventory system ──────────────────────────────
+  // The cursor-stack model replaces the legacy HTML5 drag/drop:
+  // ONE floating sprite follows the mouse, ONE reducer handles every
+  // click on every slot in every region (vault, inventory, hotbar).
+  // The legacy handlers below this block are no longer used and will
+  // be removed in a follow-up cleanup.
+  const cursor = useCursorStack((s) => s.cursor);
+  const setCursor = useCursorStack((s) => s.setCursor);
+
+  // First-empty resolvers for shift-click. invSlots is local; hotbar
+  // is derived from equippedItems; vault is owned by the VaultBridge.
+  const findFirstEmptyInventorySlot = useCallback((): number | null => {
+    for (let i = 0; i < invSlots.length; i++) if (!invSlots[i]) return i;
+    return null;
+  }, [invSlots]);
+  const findFirstEmptyHotbarSlot = useCallback((): number | null => {
+    const occupied = new Set(equippedItems.map(e => e.slot));
+    for (let i = 0; i < 10; i++) if (!occupied.has(i)) return i;
+    return null;
+  }, [equippedItems]);
+
+  // Local positional swap for inv↔inv moves (no DB write).
+  const swapInventorySlots = useCallback((a: number, b: number) => {
+    setInvSlots(prev => {
+      if (a === b) return prev;
+      const next = [...prev];
+      [next[a], next[b]] = [next[b], next[a]];
+      return next;
+    });
+  }, []);
+
+  // Unified handler bag passed into the slotClick reducer.
+  const slotClickHandlers: SlotClickHandlers = useMemo(() => ({
+    transferInvToVault: async (rowIds, page, slot) => {
+      if (!vaultBridge) return false;
+      return vaultBridge.transferFromInventory(rowIds, page, slot);
+    },
+    transferVaultToInv: async (page, slot, qty) => {
+      if (!vaultBridge) return false;
+      return vaultBridge.transferToInventory(page, slot, qty);
+    },
+    transferVaultToVault: async (srcPage, srcSlot, dstPage, dstSlot, qty) => {
+      if (!vaultBridge) return false;
+      return vaultBridge.transferWithinVault(srcPage, srcSlot, dstPage, dstSlot, qty);
+    },
+    swapInventorySlots,
+    setHotbarSlot: async (slot, itemId) => {
+      if (updateEquippedSlot) await updateEquippedSlot(slot, itemId);
+    },
+    findFirstEmptyInventorySlot,
+    findFirstEmptyHotbarSlot,
+    findFirstEmptyVaultSlot: (preferPage) => vaultBridge?.findFirstEmptySlot(preferPage) ?? null,
+    activeVaultPage: vaultBridge?.activePage ?? 0,
+  }), [vaultBridge, updateEquippedSlot, swapInventorySlots,
+       findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot]);
+
+  // The single entry point every slot click goes through.
+  const handleSlotClick = useCallback(async (input: SlotClickInput) => {
+    const result = await slotClick(input, cursor, slotClickHandlers);
+    setCursor(result.cursorAfter);
+  }, [cursor, slotClickHandlers, setCursor]);
+
+  // ── Drag source ref (legacy — preserved temporarily) ──────────
   // Drag source ref — stored in ref to avoid stale closures, survives re-renders.
   //
   // For inventory drags the source carries BOTH the grid key (rowId
@@ -843,6 +947,7 @@ export function FortressHUD(props: FortressHUDProps) {
             removeInventoryRow={removeInventoryRow}
             updateEquippedSlot={updateEquippedSlot}
             preloadedDefs={itemDefs}
+            onSlotClick={handleSlotClick}
           />
         )}
 
@@ -858,142 +963,18 @@ export function FortressHUD(props: FortressHUDProps) {
             }}>
               INVENTORY
             </span>
-            <div
-              ref={invGridRef}
-              onDragEnter={allowDrop}
-              onDragOver={allowDrop}
-              onDrop={onDropInventoryGrid}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(6, 56px)',
-                gap: '10px',
-              }}
-            >
-              {(() => {
-                const cells: React.ReactNode[] = [];
-                // Render top row first (idx 12-17), then middle (6-11), then bottom (0-5)
-                for (let row = 2; row >= 0; row--) {
-                  for (let col = 0; col < 6; col++) {
-                    const idx = row * 6 + col;
-                    const item = inventoryGridItems[idx];
-                    cells.push(
-                      <div
-                        key={`inv-${idx}`}
-                        draggable={!!item}
-                        onDragStart={item ? (e) => {
-                          // Look up the full def so the destination can
-                          // render the tile without its own fetch.
-                          const def = itemDefs.get(item.itemId);
-                          onDragStart(e, {
-                            type: 'inventory',
-                            gridKey: item.gridKey,
-                            itemId: item.itemId,
-                            defName: def?.name ?? item.name ?? null,
-                            defTier: def?.tier ?? item.tier ?? null,
-                            defItemNumber: (def as any)?.item_number ?? null,
-                            defTextureUrl: def?.texture_url ?? null,
-                          });
-                        } : undefined}
-                        onContextMenu={item ? (e) => {
-                          e.preventDefault();
-                          openItemDetail({
-                            itemId: item.itemId,
-                            name: item.name ?? '',
-                            sprite: item.sprite ?? null,
-                            itemNumber: null,
-                            tier: item.tier,
-                            quantity: item.quantity,
-                          });
-                        } : undefined}
-                        style={{
-                          width: '56px',
-                          height: '56px',
-                          borderRadius: 'var(--hud-radius)',
-                          border: '1px solid hsla(var(--hud-border))',
-                          background: 'hsla(var(--hud-bg-dim))',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          overflow: 'hidden',
-                          position: 'relative',
-                          cursor: item ? 'grab' : 'default',
-                        }}
-                      >
-                        {item && (
-                          <>
-                            {item.tier != null && (
-                              <span style={{
-                                position: 'absolute',
-                                top: '2px',
-                                left: '4px',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                color: 'white',
-                                fontFamily: 'var(--hud-font)',
-                                lineHeight: 1,
-                                textShadow: '0 0 3px rgba(0,0,0,0.8)',
-                                pointerEvents: 'none',
-                              }}>
-                                T{item.tier}
-                              </span>
-                            )}
-                            {item.sprite && (
-                              <img
-                                src={item.sprite}
-                                alt={item.name || ''}
-                                draggable={false}
-                                style={{ width: '42px', height: '42px', objectFit: 'contain', pointerEvents: 'none' }}
-                              />
-                            )}
-                            {item.quantity > 1 && (
-                              <span style={{
-                                position: 'absolute',
-                                bottom: '2px',
-                                right: '4px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                color: 'white',
-                                fontFamily: 'var(--hud-font)',
-                                lineHeight: 1,
-                                textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
-                                pointerEvents: 'none',
-                              }}>
-                                {item.quantity}x
-                              </span>
-                            )}
-                            {(item as any).cooldownUntil && (item as any).cooldownUntil > Date.now() && (
-                              <>
-                                <div style={{
-                                  position: 'absolute', inset: 0,
-                                  background: 'rgba(0,0,0,0.6)',
-                                  borderRadius: 'inherit',
-                                  pointerEvents: 'none',
-                                }} />
-                                <span style={{
-                                  position: 'absolute', inset: 0,
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  color: '#fff', fontWeight: 700, fontSize: 11,
-                                  fontFamily: 'var(--hud-font)',
-                                  textShadow: '0 0 3px rgba(0,0,0,0.9)',
-                                  pointerEvents: 'none',
-                                }}>
-                                  {(() => {
-                                    const ms = (item as any).cooldownUntil - Date.now();
-                                    const mins = Math.ceil(ms / 60000);
-                                    return mins >= 60 ? `${Math.ceil(mins/60)}h` : `${mins}m`;
-                                  })()}
-                                </span>
-                              </>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    );
-                  }
-                }
-                return cells;
-              })()}
-            </div>
+            <SlotGrid
+              rows={3}
+              cols={6}
+              occupants={inventoryOccupants}
+              locationOf={(i) => ({ region: 'inventory', gridSlot: i })}
+              onSlotClick={handleSlotClick}
+              isSlotGhosted={(i) =>
+                cursor?.origin.region === 'inventory'
+                  ? cursor.origin.gridSlot === i
+                  : false
+              }
+            />
           </div>
         )}
 
@@ -1019,13 +1000,22 @@ export function FortressHUD(props: FortressHUDProps) {
               const isGrenadeReady = grenadeReadySlot === slot.slot;
               const isEggReady = eggReadySlot === slot.slot;
               const isDrinking = potionDrinkingSlot === slot.slot;
-              // Single-click: select the slot AND fire the activator
-              // (drinks a potion, etc.) so the user doesn't need to
-              // hit the digit key separately.
-              const handleSlotClick = () => {
-                setSelectedSlot(slot.slot);
-                if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(slot.slot);
-              };
+              const def = slot.itemId ? itemDefs.get(slot.itemId) : undefined;
+              const slotOccupant: SlotOccupant | null = slot.itemId ? {
+                itemId: slot.itemId,
+                itemKey: (def as any)?.key ?? '',
+                quantity: slot.quantity ?? 1,
+                name: slot.name ?? '',
+                tier: slot.tier,
+                spriteUrl: slot.sprite ?? null,
+                nonStackable: nonStackableItemIds.has(slot.itemId),
+                rowId: '', // hotbar items don't carry a direct inv rowId here
+              } : null;
+              // Cursor-stack mode kicks in only when the inventory UI is
+              // open OR a cursor stack is currently held OR shift is
+              // pressed. Otherwise the hotbar keeps its existing
+              // single-click-to-use behavior.
+              const cursorStackActive = cursor !== null;
               return (
                 <div
                   key={slot.slot}
@@ -1035,26 +1025,44 @@ export function FortressHUD(props: FortressHUDProps) {
                     alignItems: 'center',
                     gap: '3px',
                   }}
-                  onClick={handleSlotClick}
                 >
                   {/* Slot square */}
                   <div
-                    draggable={!!slot.itemId}
-                    onDragStart={slot.itemId ? (e) => onDragStart(e, { type: 'hotbar', slot: slot.slot }) : undefined}
-                    onDragEnter={allowDrop}
-                    onDragOver={allowDrop}
-                    onDrop={(e) => onDropHotbar(e, slot.slot)}
-                    onContextMenu={slot.itemId ? (e) => {
-                      e.preventDefault();
-                      openItemDetail({
-                        itemId: slot.itemId,
-                        name: slot.name ?? '',
-                        sprite: slot.sprite ?? null,
-                        itemNumber: null,
-                        tier: slot.tier,
-                        quantity: slot.quantity ?? 1,
-                      });
-                    } : undefined}
+                    onPointerDown={(e) => {
+                      // Right click: always open detail modal (no
+                      // browser context menu, no select).
+                      if (e.button === 2) {
+                        if (slot.itemId) {
+                          openItemDetail({
+                            itemId: slot.itemId,
+                            name: slot.name ?? '',
+                            sprite: slot.sprite ?? null,
+                            itemNumber: null,
+                            tier: slot.tier,
+                            quantity: slot.quantity ?? 1,
+                          });
+                        }
+                        return;
+                      }
+                      // Left click. If the cursor-stack model is active
+                      // (cursor non-empty, shift held, or inventory
+                      // panel open) → route through slotClick reducer.
+                      const stackMode = cursorStackActive || e.shiftKey || inventoryOpen || vaultOpen;
+                      if (stackMode) {
+                        handleSlotClick({
+                          location: { region: 'hotbar', slot: slot.slot },
+                          occupant: slotOccupant,
+                          button: 'left',
+                          shift: e.shiftKey,
+                          doubleClick: false,
+                        });
+                        return;
+                      }
+                      // Normal use-slot behavior.
+                      setSelectedSlot(slot.slot);
+                      if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(slot.slot);
+                    }}
+                    onContextMenu={(e) => { e.preventDefault(); }}
                     className={
                       isGrenadeReady ? 'grenade-ready-pulse'
                       : isEggReady ? 'egg-ready-pulse'
@@ -1151,6 +1159,10 @@ export function FortressHUD(props: FortressHUDProps) {
           </div>
         </div>
       </div>
+
+      {/* Cursor-stack floating sprite — one DOM node, follows mouse,
+          renders only when a cursor stack is active. */}
+      <CursorSprite />
     </>
   );
 }
