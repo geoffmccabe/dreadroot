@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
 import { playRejectionSound } from '@/components/fortress/FortressAudio';
+import { setDebugStatus } from '@/lib/debugStatus';
 
 export interface WorldEgg {
   id: string;
@@ -113,10 +114,27 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
    *  configured pickup cooldown in one transaction. Plays the
    *  rejection sound when pickup fails (no egg in range, RPC error). */
   const pickupClosestEgg = useCallback(async (): Promise<WorldEgg | null> => {
-    if (!userId) return null;
+    if (!userId) {
+      setDebugStatus('egg: no user');
+      return null;
+    }
 
     const target = findClosestEgg();
     if (!target) {
+      // Out-of-range: compute distance to closest egg so the HUD line
+      // tells us how far away it actually is.
+      const cam = cameraRef.current;
+      if (cam && eggsRef.current.length > 0) {
+        const cx = cam.position.x, cz = cam.position.z;
+        let closestDist = Infinity;
+        for (const e of eggsRef.current) {
+          const d = Math.hypot(e.x - cx, e.z - cz);
+          if (d < closestDist) closestDist = d;
+        }
+        setDebugStatus(`egg: OOR ${closestDist.toFixed(1)}m (need ≤${EGG_PICKUP_REACH}m)`);
+      } else {
+        setDebugStatus('egg: no eggs in world');
+      }
       const r = (window as any).__rejectionSound;
       if (r) playRejectionSound(r);
       return null;
@@ -125,14 +143,17 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
     try {
       await worldStore.pickupEgg(target.id);
       setEggs(prev => prev.filter(e => e.id !== target.id));
+      setDebugStatus(`egg: OK T${target.tier} picked up`);
       return target;
-    } catch (err) {
+    } catch (err: any) {
+      const reason = err?.message || err?.code || err?.details || String(err);
       console.warn('[WorldEggs] pickup failed:', err);
+      setDebugStatus(`egg: ERR ${reason.slice(0, 80)}`);
       const r = (window as any).__rejectionSound;
       if (r) playRejectionSound(r);
       return null;
     }
-  }, [findClosestEgg, userId]);
+  }, [findClosestEgg, userId, cameraRef]);
 
   return { eggs, eggsRef, findClosestEgg, pickupClosestEgg };
 }

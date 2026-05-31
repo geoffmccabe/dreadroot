@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { supabase } from '@/integrations/supabase/client';
 import { APP_VERSION } from '@/version';
+import { useDebugStatus } from '@/lib/debugStatus';
 
 let globalFps = 0;
 let globalPlayerPos = { x: 0, y: 0, z: 0 };
@@ -695,6 +696,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
 }
 
 function VersionBadge() {
+  const debug = useDebugStatus();
   return (
     <div
       className="pointer-events-none"
@@ -707,10 +709,18 @@ function VersionBadge() {
         fontSize: '11px',
         fontWeight: 600,
         letterSpacing: '0.03em',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2px',
       }}
       title="Build version — bumped on every code push"
     >
-      v{APP_VERSION}
+      <span>v{APP_VERSION}</span>
+      {debug && (
+        <span style={{ fontSize: '10px', fontWeight: 400, opacity: 0.85 }}>
+          {debug}
+        </span>
+      )}
     </div>
   );
 }
