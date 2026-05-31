@@ -430,11 +430,14 @@ export function VaultPanel({
     e: React.DragEvent, entry: typeof inventoryEntries[number],
   ) => {
     e.dataTransfer.effectAllowed = 'move';
+    // Minecraft-style modifier: plain drag = whole stack, shift+drag = 1 item.
+    const moveQty = e.shiftKey ? 1 : entry.quantity;
     const payload = {
       kind: 'inv' as const,
       itemId: entry.itemId,
       rowIds: entry.rowIds,
-      quantity: entry.quantity,
+      quantity: moveQty,
+      fullQuantity: entry.quantity,
     };
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload));
     e.dataTransfer.setData('text/plain', entry.def?.name ?? '');
@@ -444,12 +447,14 @@ export function VaultPanel({
     e: React.DragEvent, row: VaultSlotDef,
   ) => {
     e.dataTransfer.effectAllowed = 'move';
+    const moveQty = e.shiftKey ? 1 : row.quantity;
     const payload = {
       kind: 'vault' as const,
       page: row.page,
       slot: row.slot,
       itemId: row.itemId,
-      quantity: row.quantity,
+      quantity: moveQty,
+      fullQuantity: row.quantity,
     };
     e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload));
     e.dataTransfer.setData('text/plain', row.name);
@@ -479,32 +484,38 @@ export function VaultPanel({
 
     if (src.kind === 'inv') {
       // Inventory → vault. setSlot stacks on matching item or fills empty.
-      const result = await setSlot(page, slot, src.itemId, src.quantity);
-      setDebugStatus(`vault: drop inv→p${page}s${slot} ${result ? 'OK' : 'FAIL'}`);
+      const moveQty = src.quantity as number;
+      const totalQty = (src.fullQuantity ?? moveQty) as number;
+      const result = await setSlot(page, slot, src.itemId, moveQty);
+      setDebugStatus(`vault: drop inv→p${page}s${slot} x${moveQty}/${totalQty} ${result ? 'OK' : 'FAIL'}`);
       if (result) {
+        // Remove ALL source rows then re-add remainder so source ends
+        // up with exactly (totalQty - moveQty) items.
         for (const rid of src.rowIds as string[]) await removeInventoryRow(rid);
+        const remainder = totalQty - moveQty;
+        if (remainder > 0) {
+          await addItem(src.itemId, remainder);
+        }
       }
       return;
     }
 
     if (src.kind === 'vault') {
-      // Vault → vault. Move qty from source slot to target slot. The
-      // setSlot RPC will stack onto a matching target or replace an
-      // empty/different target. We first remove from source, then add.
-      const removed = await removeFromSlot(src.page, src.slot, src.quantity);
+      // Vault → vault. removeFromSlot already supports partial qty.
+      const moveQty = src.quantity as number;
+      const removed = await removeFromSlot(src.page, src.slot, moveQty);
       if (removed <= 0) {
         setDebugStatus(`vault: move FAIL (source empty)`);
         return;
       }
       const result = await setSlot(page, slot, src.itemId, removed);
-      setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} ${result ? 'OK' : 'FAIL'}`);
+      setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} x${removed} ${result ? 'OK' : 'FAIL'}`);
       if (!result) {
-        // Roll back into source slot — best-effort.
         await setSlot(src.page, src.slot, src.itemId, removed);
       }
       return;
     }
-  }, [setSlot, removeFromSlot, removeInventoryRow]);
+  }, [setSlot, removeFromSlot, removeInventoryRow, addItem]);
 
   // Drop onto an INVENTORY tile. We don't care which tile — the
   // 18-slot grid auto-fills via setInventory order. Effect: pull
