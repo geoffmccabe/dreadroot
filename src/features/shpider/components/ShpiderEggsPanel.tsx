@@ -73,10 +73,13 @@ export function ShpiderEggsPanel() {
         .from('block-textures')
         .getPublicUrl(path);
 
-      const { error: dbErr } = await supabase
-        .from('items')
-        .update({ texture_url: publicUrl })
-        .eq('id', egg.id);
+      // items table RLS only allows superadmin direct UPDATE.
+      // admin_set_item_texture is a SECURITY DEFINER RPC that lets
+      // admin OR superadmin write texture_url.
+      const { error: dbErr } = await supabase.rpc('admin_set_item_texture', {
+        p_item_id: egg.id,
+        p_texture_url: publicUrl,
+      });
       if (dbErr) throw dbErr;
 
       setEggs(prev => prev.map(e => e.tier === tier ? { ...e, texture_url: publicUrl } : e));
@@ -93,10 +96,10 @@ export function ShpiderEggsPanel() {
     const egg = eggs.find(e => e.tier === tier);
     if (!egg || !egg.texture_url) return;
     try {
-      const { error: dbErr } = await supabase
-        .from('items')
-        .update({ texture_url: null })
-        .eq('id', egg.id);
+      const { error: dbErr } = await supabase.rpc('admin_set_item_texture', {
+        p_item_id: egg.id,
+        p_texture_url: null,
+      });
       if (dbErr) throw dbErr;
       setEggs(prev => prev.map(e => e.tier === tier ? { ...e, texture_url: null } : e));
       toast.success(`T${tier} sprite removed`);

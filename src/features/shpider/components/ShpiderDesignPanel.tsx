@@ -89,19 +89,39 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
   const handleTextureUpload = async (field: TextureField, file: File) => {
     if (!currentDef) return;
     setIsUploading(field);
+    const part = field.replace('_texture_url', '');
     try {
       const ext = file.name.split('.').pop() || 'webp';
-      const part = field.replace('_texture_url', '');
       const path = `shpider/t${currentDef.tier}/${part}_${Date.now()}.${ext}`;
+      console.log(`[ShpiderDesign] uploading ${part} for T${currentDef.tier} → ${path}`);
 
       const { error: uploadError } = await supabase.storage
         .from('block-textures')
         .upload(path, file, { cacheControl: '3600', upsert: true });
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('[ShpiderDesign] storage upload failed:', uploadError);
+        toast.error(`Storage upload failed: ${uploadError.message ?? JSON.stringify(uploadError)}`);
+        throw uploadError;
+      }
+      console.log(`[ShpiderDesign] storage upload OK`);
 
       const { data: { publicUrl } } = supabase.storage
         .from('block-textures')
         .getPublicUrl(path);
+      console.log(`[ShpiderDesign] publicUrl = ${publicUrl}`);
+
+      // Quick reachability probe — if the URL doesn't load the texture
+      // upload effectively failed even though storage said OK (private
+      // bucket, missing public-read policy, CORS, etc.).
+      try {
+        const probe = await fetch(publicUrl, { method: 'HEAD' });
+        if (!probe.ok) {
+          console.warn(`[ShpiderDesign] publicUrl probe returned ${probe.status}`);
+          toast.error(`Uploaded but public URL returned ${probe.status} — bucket may not be public-readable. Path: ${path}`);
+        }
+      } catch (probeErr: any) {
+        console.warn('[ShpiderDesign] publicUrl probe threw:', probeErr);
+      }
 
       updateDef(field, publicUrl);
 
@@ -114,9 +134,10 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
           .update({ [field]: publicUrl })
           .eq('id', rowId) as any);
         if (dbErr) {
-          console.warn('[ShpiderDesign] DB persist failed:', dbErr);
-          toast.error(`Uploaded but DB save failed: ${dbErr.message ?? dbErr}`);
+          console.error('[ShpiderDesign] DB persist failed:', dbErr);
+          toast.error(`Uploaded but DB save failed: ${dbErr.message ?? JSON.stringify(dbErr)}`);
         } else {
+          console.log(`[ShpiderDesign] DB updated`);
           toast.success(`${part} texture uploaded`);
         }
       } else {
@@ -272,7 +293,15 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
                         <Label className="text-xs capitalize">{label}</Label>
                         <div className="aspect-square w-full bg-muted/30 rounded mt-1 flex items-center justify-center overflow-hidden">
                           {url ? (
-                            <img src={url} alt={label} className="object-cover w-full h-full" />
+                            <img
+                              src={url}
+                              alt={label}
+                              className="object-cover w-full h-full"
+                              onError={() => {
+                                console.warn(`[ShpiderDesign] img failed to load: ${url}`);
+                                toast.error(`${label}: image URL failed to load. Check that the block-textures bucket is public-readable.`);
+                              }}
+                            />
                           ) : (
                             <span className="text-xs text-muted-foreground">no texture</span>
                           )}
