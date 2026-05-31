@@ -102,31 +102,37 @@ interface SlotTileProps {
 function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick }: SlotTileProps) {
   const cursor = useCursorStack((s) => s.cursor);
   const cursorActive = cursor !== null;
+  const [isHovered, setIsHovered] = React.useState(false);
+
+  // Drop-target highlight: only show a hover highlight when a cursor
+  // stack is being held AND this slot would accept the drop. Empty
+  // slot = always accepts. Slot with the same stackable item = accepts
+  // (would merge). Slot with a different item = no highlight (swap
+  // isn't supported yet). The ghosted source slot also doesn't
+  // highlight — releasing there is a no-op.
+  const wouldAcceptDrop =
+    cursorActive && isHovered && !ghosted &&
+    (!occupant || (occupant.itemId === cursor!.itemId && !occupant.nonStackable));
 
   return (
     <div
       onPointerDown={(e) => {
-        // Left-button = pickup (or merge/swap if cursor already
-        // holding). Right-button = inspect or take-half via reducer.
         if (e.button === 0) onClick('left', e.shiftKey, false);
         else if (e.button === 2) onClick('right', e.shiftKey, false);
       }}
       onPointerUp={(e) => {
-        // Press-and-drag support. If the user pressed on a source
-        // tile (picked up), dragged, and released on a DIFFERENT
-        // tile, treat the release as a drop here. Releasing on the
-        // source tile (ghosted = "this slot is the cursor's origin")
-        // is a no-op — the user picked up but didn't drag, cursor
-        // stays held for a follow-up click.
+        // Press-and-drag support. Releasing the pointer on a
+        // DIFFERENT tile than the pickup completes the drop in a
+        // single gesture. Releasing on the source tile (ghosted) is
+        // a no-op; the cursor stays held for a follow-up click.
         if (e.button !== 0) return;
         if (!cursor) return;
         if (ghosted) return;
         onClick('left', e.shiftKey, false);
       }}
-      onContextMenu={(e) => {
-        // Always suppress the browser context menu on inventory slots.
-        e.preventDefault();
-      }}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
+      onContextMenu={(e) => { e.preventDefault(); }}
       onDoubleClick={(e) => {
         onClick('left', e.shiftKey, true);
       }}
@@ -134,14 +140,21 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick }: SlotTile
         width: TILE,
         height: TILE,
         borderRadius: 'var(--hud-radius, 4px)',
-        border: highlight
-          ? '1px solid hsla(45, 100%, 60%, 0.9)'
-          : '1px solid hsla(var(--hud-border, 0 0% 100% / 0.3))',
-        background: 'hsla(var(--hud-bg-dim, 0 0% 0% / 0.4))',
+        border: wouldAcceptDrop
+          ? '2px solid hsla(120, 100%, 60%, 0.95)'   // green = will drop here
+          : highlight
+            ? '1px solid hsla(45, 100%, 60%, 0.9)'
+            : '1px solid hsla(var(--hud-border, 0 0% 100% / 0.3))',
+        background: wouldAcceptDrop
+          ? 'hsla(120, 60%, 25%, 0.35)'              // subtle green tint
+          : 'hsla(var(--hud-bg-dim, 0 0% 0% / 0.4))',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflow: 'hidden', position: 'relative',
         cursor: cursorActive ? 'pointer' : (occupant ? 'pointer' : 'default'),
-        opacity: ghosted ? 0.35 : 1,
+        // 80% transparency on the ghosted source tile so the user can
+        // see it's been picked up while the original silhouette stays
+        // visible.
+        opacity: ghosted ? 0.2 : 1,
         userSelect: 'none',
       }}
     >
