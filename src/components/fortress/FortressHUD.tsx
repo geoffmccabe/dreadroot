@@ -388,10 +388,19 @@ export function FortressHUD(props: FortressHUDProps) {
   // prev.indexOf(itemId) returned -1 and the swap silently failed.
   // Also caused "dragging the 2nd grenade swaps the 1st grenade"
   // because indexOf returns the first match.
+  // We also embed a lightweight def payload (name, tier, sprite,
+  // item_number) on inventory drags so the destination (vault) can
+  // render the tile immediately without waiting for its own items
+  // fetch to complete.
   type DragSource =
     | { type: 'hotbar'; slot: number }
-    | { type: 'inventory'; gridKey: string; itemId: string }
-    | { type: 'vault'; page: number; slot: number; itemId: string; quantity: number; fullQuantity: number };
+    | { type: 'inventory'; gridKey: string; itemId: string;
+        defName?: string | null; defTier?: number | null;
+        defItemNumber?: number | null; defTextureUrl?: string | null }
+    | { type: 'vault'; page: number; slot: number; itemId: string;
+        quantity: number; fullQuantity: number;
+        defName?: string | null; defTier?: number | null;
+        defItemNumber?: number | null; defTextureUrl?: string | null };
   const dragRef = useRef<DragSource | null>(null);
 
   const onDragStart = useCallback((e: React.DragEvent, source: DragSource) => {
@@ -854,7 +863,20 @@ export function FortressHUD(props: FortressHUDProps) {
                       <div
                         key={`inv-${idx}`}
                         draggable={!!item}
-                        onDragStart={item ? (e) => onDragStart(e, { type: 'inventory', gridKey: item.gridKey, itemId: item.itemId }) : undefined}
+                        onDragStart={item ? (e) => {
+                          // Look up the full def so the destination can
+                          // render the tile without its own fetch.
+                          const def = itemDefs.get(item.itemId);
+                          onDragStart(e, {
+                            type: 'inventory',
+                            gridKey: item.gridKey,
+                            itemId: item.itemId,
+                            defName: def?.name ?? item.name ?? null,
+                            defTier: def?.tier ?? item.tier ?? null,
+                            defItemNumber: (def as any)?.item_number ?? null,
+                            defTextureUrl: def?.texture_url ?? null,
+                          });
+                        } : undefined}
                         onContextMenu={item ? (e) => {
                           e.preventDefault();
                           openItemDetail({

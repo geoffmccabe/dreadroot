@@ -183,15 +183,32 @@ export function VaultPanel({
 
     // Inventory → vault
     if (src.type === 'inventory') {
-      // We don't have quantity on the inventory drag payload (HUD didn't
-      // send it), so we look up the live inventory rows for this itemId
-      // and move ALL of them. Future: HUD can include quantity to allow
-      // Shift+drag from inventory too.
       const rows = inventory.filter(
         (i) => i.item_type === 'item' && i.item_id === src.itemId && i.quantity > 0,
       );
       const totalQty = rows.reduce((acc, r) => acc + r.quantity, 0);
       if (totalQty <= 0) return;
+
+      // Seed the local defs cache from the drag payload so the tile
+      // renders sprite + T# IMMEDIATELY, even after the source
+      // inventory row is removed (which would have caused HUD's
+      // itemDefs lookup to miss).
+      if (src.defName || src.defTextureUrl || src.defItemNumber != null) {
+        setDefs(prev => {
+          if (prev.has(src.itemId)) return prev;
+          const next = new Map(prev);
+          next.set(src.itemId, {
+            id: src.itemId,
+            key: '',
+            name: src.defName ?? '',
+            tier: src.defTier ?? null,
+            item_number: src.defItemNumber ?? null,
+            texture_url: src.defTextureUrl ?? null,
+          });
+          return next;
+        });
+      }
+
       const result = await setSlot(page, slot, src.itemId, totalQty);
       setDebugStatus(`vault: inv→p${page}s${slot} x${totalQty} ${result ? 'OK' : 'FAIL'}`);
       if (result) {
