@@ -100,19 +100,28 @@ interface SlotTileProps {
 }
 
 function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick }: SlotTileProps) {
-  const cursorActive = useCursorStack((s) => s.cursor !== null);
+  const cursor = useCursorStack((s) => s.cursor);
+  const cursorActive = cursor !== null;
 
   return (
     <div
       onPointerDown={(e) => {
-        // e.detail counts clicks within a dblclick window. Gate at
-        // ===1 so a fast double-click doesn't fire two pickups + a
-        // dblclick (which would yield three slotClicks for one
-        // gesture). The second click of a dblclick reaches us via
-        // onDoubleClick instead.
-        if (e.detail !== 1) return;
+        // Left-button = pickup (or merge/swap if cursor already
+        // holding). Right-button = inspect or take-half via reducer.
         if (e.button === 0) onClick('left', e.shiftKey, false);
         else if (e.button === 2) onClick('right', e.shiftKey, false);
+      }}
+      onPointerUp={(e) => {
+        // Press-and-drag support. If the user pressed on a source
+        // tile (picked up), dragged, and released on a DIFFERENT
+        // tile, treat the release as a drop here. Releasing on the
+        // source tile (ghosted = "this slot is the cursor's origin")
+        // is a no-op — the user picked up but didn't drag, cursor
+        // stays held for a follow-up click.
+        if (e.button !== 0) return;
+        if (!cursor) return;
+        if (ghosted) return;
+        onClick('left', e.shiftKey, false);
       }}
       onContextMenu={(e) => {
         // Always suppress the browser context menu on inventory slots.
