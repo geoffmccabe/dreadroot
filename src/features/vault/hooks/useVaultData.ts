@@ -116,6 +116,16 @@ export function useVaultData(userId: string | null) {
     for (const id of missing) fetchingRef.current.delete(id);
   }, [itemDefs]);
 
+  // Auto-refresh defs every time the rows list changes — catches
+  // items added by refetch() (e.g. after a transfer) whose defs
+  // weren't included in the initial mount-time fetch. Without this,
+  // newly-transferred vault rows render as blank tiles forever.
+  useEffect(() => {
+    if (rows.length === 0) return;
+    const ids = Array.from(new Set(rows.map(r => r.item_id)));
+    ensureItemDefs(ids);
+  }, [rows, ensureItemDefs]);
+
   // Build the per-page slot list every render. With ~100 rows max, this
   // is essentially free; no memoization needed.
   const pages: VaultSlotDef[][] = [];

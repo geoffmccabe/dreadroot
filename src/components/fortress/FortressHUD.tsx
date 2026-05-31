@@ -454,9 +454,10 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
 
-    // Vault → Inventory: single atomic RPC. Both halves succeed or
-    // neither does (server-side single transaction). Each call also
-    // writes an item_history audit row so we can prove provenance.
+    // Vault → Inventory: atomic single-RPC transfer first (writes
+    // item_history audit row). Fallback: legacy ADD-FIRST then remove
+    // if the atomic RPC isn't deployed yet — worst case is a duplicate,
+    // never data loss.
     if (src.type === 'vault') {
       if (!vaultBridge) {
         console.warn('[HUD] vault→inv drop: bridge missing — item stays in vault');
@@ -465,8 +466,21 @@ export function FortressHUD(props: FortressHUDProps) {
       const ok = await vaultBridge.transferToInventory(
         src.page, src.slot, src.quantity,
       );
-      if (!ok) {
-        console.error('[HUD] vault→inv: atomic transfer failed; item stays in vault');
+      if (ok) return;
+      if (!addItem) {
+        console.error('[HUD] vault→inv: atomic failed and no addItem fallback; item stays in vault');
+        return;
+      }
+      let added = false;
+      try { added = await addItem(src.itemId, src.quantity); }
+      catch (err) { console.error('[HUD] vault→inv fallback addItem threw:', err); }
+      if (!added) {
+        console.error('[HUD] vault→inv: fallback addItem failed; item stays in vault');
+        return;
+      }
+      const removed = await vaultBridge.removeFromSlot(src.page, src.slot, src.quantity);
+      if (removed <= 0) {
+        console.warn('[HUD] vault→inv: removeFromSlot returned 0; duplicate exists in vault');
       }
       return;
     }

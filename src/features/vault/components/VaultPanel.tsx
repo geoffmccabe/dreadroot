@@ -101,7 +101,10 @@ export function VaultPanel({
   // sprite + tier on each tile).
   const vaultItemIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const p of pages) for (const r of p) ids.add(r.item_id);
+    // VaultSlotDef uses camelCase `itemId` — NOT snake_case `item_id`.
+    // Reading the wrong field silently produces [undefined] and the
+    // items fetch returns 0 rows → no sprites in the entire panel.
+    for (const p of pages) for (const r of p) if (r.itemId) ids.add(r.itemId);
     return Array.from(ids);
   }, [pages]);
   const [defs, setDefs] = useState<Map<string, ItemDef>>(new Map());
@@ -238,11 +241,24 @@ export function VaultPanel({
       const ok = await transferFromInventory(
         rows.map(r => r.id), page, slot,
       );
-      setDebugStatus(
-        ok
-          ? `vault: inv→p${page}s${slot} OK (atomic)`
-          : `vault: inv→p${page}s${slot} FAIL — item stays in inv`,
-      );
+      if (ok) {
+        setDebugStatus(`vault: inv→p${page}s${slot} OK (atomic)`);
+        return;
+      }
+      // Fallback: ADD-to-vault first, then remove inventory rows.
+      const totalQty = rows.reduce((acc, r) => acc + r.quantity, 0);
+      let setOk: unknown = null;
+      try { setOk = await setSlot(page, slot, src.itemId, totalQty); }
+      catch (err) { console.error('[vault] inv→vault fallback setSlot threw:', err); }
+      if (!setOk) {
+        setDebugStatus(`vault: inv→p${page}s${slot} FAIL — item stays in inv`);
+        return;
+      }
+      for (const r of rows) {
+        try { await removeInventoryRow(r.id); }
+        catch (err) { console.warn('[vault] removeInventoryRow failed:', err); }
+      }
+      setDebugStatus(`vault: inv→p${page}s${slot} OK (fallback)`);
       return;
     }
 
@@ -254,18 +270,28 @@ export function VaultPanel({
       return;
     }
 
-    // Vault → vault (atomic, single RPC)
+    // Vault → vault (atomic, single RPC) with legacy fallback.
     if (src.type === 'vault') {
       if (src.page === page && src.slot === slot) return; // same-slot no-op
       const moveQty = src.quantity as number;
       const ok = await transferWithinVault(
         src.page, src.slot, page, slot, moveQty,
       );
-      setDebugStatus(
-        ok
-          ? `vault: move p${src.page}s${src.slot}→p${page}s${slot} x${moveQty} OK`
-          : `vault: move FAIL — item stays at source`,
-      );
+      if (ok) {
+        setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} OK (atomic)`);
+        return;
+      }
+      // Fallback: SET target first, then remove from source. Same
+      // duplicate-over-loss preference as elsewhere.
+      let setOk: unknown = null;
+      try { setOk = await setSlot(page, slot, src.itemId, moveQty); }
+      catch (err) { console.error('[vault] move fallback setSlot threw:', err); }
+      if (!setOk) {
+        setDebugStatus(`vault: move FAIL — item stays at source`);
+        return;
+      }
+      await removeFromSlot(src.page, src.slot, moveQty);
+      setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} OK (fallback)`);
       return;
     }
   }, [inventory, setSlot, removeFromSlot, removeInventoryRow]);
@@ -276,14 +302,31 @@ export function VaultPanel({
   }, []);
 
   // ── Double-click vault tile → push back into inventory ─────────
+  // Try atomic transfer first (one-RPC, item_history-backed). If
+  // that fails (e.g. migration not yet deployed → RPC 404), fall
+  // back to ADD-FIRST + removeFromSlot so we still never lose the
+  // item. Worst case is a duplicate; never data loss.
   const handleDoubleClickVault = useCallback(async (row: VaultSlotDef) => {
     const ok = await transferToInventory(row.page, row.slot, row.quantity);
+    if (ok) {
+      setDebugStatus(`vault: dblclick vault→inv x${row.quantity} OK (atomic)`);
+      return;
+    }
+    // Fallback: legacy 2-step, ADD-FIRST so the item can't be lost.
+    let added = false;
+    try { added = await addItem(row.itemId, row.quantity); }
+    catch (err) { console.error('[vault] dblclick fallback addItem threw:', err); }
+    if (!added) {
+      setDebugStatus(`vault: dblclick FAIL — item stays in vault`);
+      return;
+    }
+    const removed = await removeFromSlot(row.page, row.slot, row.quantity);
     setDebugStatus(
-      ok
-        ? `vault: dblclick vault→inv x${row.quantity} OK`
-        : `vault: dblclick vault→inv FAIL`,
+      removed > 0
+        ? `vault: dblclick vault→inv x${row.quantity} OK (fallback)`
+        : `vault: dblclick — added to inv, vault not decremented (duplicate)`,
     );
-  }, [transferToInventory]);
+  }, [transferToInventory, addItem, removeFromSlot]);
 
   // ── Right-click vault tile → detail modal ─────────────────────
   const handleRightClickVault = useCallback((
@@ -398,7 +441,10 @@ export function VaultPanel({
               onDragOver={allowDrop}
               onDrop={(e) => handleDropOnVault(e, activePage, i)}
               onDoubleClick={row ? () => handleDoubleClickVault(row) : undefined}
-              onContextMenu={row ? (e) => handleRightClickVault(e, row) : undefined}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (row) handleRightClickVault(e, row);
+              }}
               title={row?.def?.name ?? `Slot ${i}`}
               style={{
                 width: TILE,
