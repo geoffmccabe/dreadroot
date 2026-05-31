@@ -50,11 +50,15 @@ export interface SlotClickHandlers {
     srcPage: number, srcSlot: number, dstPage: number, dstSlot: number, qty: number,
   ) => Promise<boolean>;
 
+  // ── QS-as-storage transfers (single-RPC, MOVE not bind) ──────────
+  transferInvToQs: (inventoryRowId: string, qsSlot: number) => Promise<boolean>;
+  transferQsToInv: (qsSlot: number) => Promise<boolean>;
+  transferQsToVault: (qsSlot: number, vaultPage: number, vaultSlot: number) => Promise<boolean>;
+  transferVaultToQs: (vaultPage: number, vaultSlot: number, qsSlot: number) => Promise<boolean>;
+
   // ── Within-region moves ─────────────────────────────────────────
   /** Swap two inventory gridSlots — purely local positional state. */
   swapInventorySlots: (slotA: number, slotB: number) => void;
-  /** Equip an inventory row into a hotbar slot. itemId of null = unequip. */
-  setHotbarSlot: (slot: number, itemId: string | null) => Promise<void>;
 
   // ── First-empty-slot resolvers (for shift-click) ─────────────────
   findFirstEmptyInventorySlot: () => number | null;

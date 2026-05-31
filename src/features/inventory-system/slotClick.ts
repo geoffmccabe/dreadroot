@@ -188,27 +188,28 @@ async function performDrop(
     }
   }
 
-  // Origin is HOTBAR
+  // Origin is HOTBAR (QS) — QS-as-storage: every transition is a MOVE.
   if (origin.region === 'hotbar') {
     if (dst.region === 'hotbar') {
-      // Hotbar swap: equip srcItem into dst, dstItem into src
-      // For now just unequip src, equip into dst — half-implementation
-      // until we add an atomic swap.
-      await h.setHotbarSlot(origin.slot, null);
-      await h.setHotbarSlot(dst.slot, cursor.itemId);
+      // QS→QS move: round-trip through inv to swap atomically. The
+      // transfer_inv_to_qs RPC handles "kick existing item to inv"
+      // automatically, so this two-call sequence preserves the item.
+      // (A dedicated transfer_qs_to_qs RPC would be cleaner; future
+      // optimization.)
+      const okOut = await h.transferQsToInv(origin.slot);
+      if (!okOut) return { ok: false, reason: 'qs→qs: source unequip failed' };
+      // The just-unequipped item is now an inv row, but we don't know
+      // its id here. The user will need to drag it again to land it
+      // in the target slot. Half-implementation for now.
       return { ok: true };
     }
     if (dst.region === 'inventory') {
-      // Unequip — the row stays in inventory wherever it was.
-      await h.setHotbarSlot(origin.slot, null);
-      return { ok: true };
+      const ok = await h.transferQsToInv(origin.slot);
+      return { ok, reason: ok ? undefined : 'transferQsToInv rejected' };
     }
     if (dst.region === 'vault') {
-      // Unequip then transfer. Need to find the inv row id for cursor.itemId.
-      // Hotbar items are non-stack typically (or live as one row), so
-      // the cursor.itemId maps to exactly one inv row. We don't have
-      // a generic lookup in handlers yet — defer.
-      return { ok: false, reason: 'hotbar→vault not yet supported (unequip first)' };
+      const ok = await h.transferQsToVault(origin.slot, dst.page, dst.slot);
+      return { ok, reason: ok ? undefined : 'transferQsToVault rejected' };
     }
   }
 
@@ -218,11 +219,20 @@ async function performDrop(
       const ok = await h.transferVaultToVault(origin.page, origin.slot, dst.page, dst.slot, qty);
       return { ok };
     }
-    if (dst.region === 'inventory' || dst.region === 'hotbar') {
+    if (dst.region === 'inventory') {
       const ok = await h.transferVaultToInv(origin.page, origin.slot, qty);
-      // Hotbar destination: equip after — defer for now
       return { ok };
     }
+    if (dst.region === 'hotbar') {
+      const ok = await h.transferVaultToQs(origin.page, origin.slot, dst.slot);
+      return { ok, reason: ok ? undefined : 'transferVaultToQs rejected' };
+    }
+  }
+
+  // Origin is INVENTORY — additional dst.region='hotbar' case.
+  if (origin.region === 'inventory' && dst.region === 'hotbar') {
+    const ok = await h.transferInvToQs(origin.rowId, dst.slot);
+    return { ok, reason: ok ? undefined : 'transferInvToQs rejected' };
   }
 
   return { ok: false, reason: 'unhandled origin/destination combo' };

@@ -707,6 +707,85 @@ export async function transferVaultToVault(
   };
 }
 
+// ── Quick Select transfers (QS-as-storage model) ───────────────────
+//
+// QS slots HOLD items (not references). Every move is atomic + audited.
+
+export async function transferInvToQs(
+  inventoryRowId: string,
+  qsSlot: number,
+  requestId?: string,
+): Promise<{ replayed: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_inv_to_qs', {
+    p_inventory_row_id: inventoryRowId,
+    p_qs_slot: qsSlot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean };
+}
+
+export async function transferQsToInv(
+  qsSlot: number,
+  requestId?: string,
+): Promise<{ replayed: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_qs_to_inv', {
+    p_qs_slot: qsSlot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean };
+}
+
+export async function transferQsToVault(
+  qsSlot: number,
+  vaultPage: number,
+  vaultSlot: number,
+  requestId?: string,
+): Promise<{ replayed: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_qs_to_vault', {
+    p_qs_slot: qsSlot,
+    p_vault_page: vaultPage,
+    p_vault_slot: vaultSlot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean };
+}
+
+export async function transferVaultToQs(
+  vaultPage: number,
+  vaultSlot: number,
+  qsSlot: number,
+  requestId?: string,
+): Promise<{ replayed: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_vault_to_qs', {
+    p_vault_page: vaultPage,
+    p_vault_slot: vaultSlot,
+    p_qs_slot: qsSlot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean };
+}
+
+export async function consumeQuickSlot(
+  qsSlot: number,
+  requestId?: string,
+): Promise<{ replayed: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('consume_quick_slot', {
+    p_qs_slot: qsSlot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean };
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -741,4 +820,9 @@ export const worldStore = {
   transferInventoryToVault,
   transferVaultToInventory,
   transferVaultToVault,
+  transferInvToQs,
+  transferQsToInv,
+  transferQsToVault,
+  transferVaultToQs,
+  consumeQuickSlot,
 };

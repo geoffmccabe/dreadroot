@@ -4,6 +4,7 @@ import { Settings, Store } from 'lucide-react';
 import { FPSDisplay, DFlowOutputPanel, BlockDeleteHandler } from '@/components/FPSCounter';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
+import { worldStore } from '@/services/worldStore';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useVaultBridge } from '@/contexts/VaultBridgeContext';
 import { VaultPanel } from '@/features/vault';
@@ -291,9 +292,10 @@ export function FortressHUD(props: FortressHUDProps) {
           tier: def?.tier ?? null,
           // For non-stackable items the count badge would imply "stack",
           // which contradicts the rule (each grenade / potion is its own
-          // row). Show 0 here so the badge is suppressed in the render
-          // path; the inventory grid shows each one as its own tile.
-          quantity: isNonStack ? 0 : (quantityByItemId.get(eq.itemId) ?? 0),
+          // QS-as-storage: each QS slot holds exactly ONE item (never
+          // stacks). Quantity is always 1; the badge is suppressed
+          // (ItemTileVisual hides the badge when qty<=1).
+          quantity: 1,
           isNonStack,
         });
       } else {
@@ -317,31 +319,16 @@ export function FortressHUD(props: FortressHUDProps) {
 
   // All renderable inventory entries, keyed by grid key (itemId for
   // stacks, rowId for non-stackable rows). One entry per future tile.
+  //
+  // QS-as-storage: items in QS live in user_equipped_items, NOT in
+  // user_inventory. There's no claim/budget bookkeeping needed —
+  // every row in user_inventory is a tile in the inv grid, period.
   const inventoryItemsMap = useMemo(() => {
     const map = new Map<string, { gridKey: string; itemId: string; sprite: string | null; name: string | null; tier: number | null; quantity: number; isNonStackRow: boolean; cooldownUntil: number | null }>();
-    // Equipped slots claim items off the top of the inventory: one row
-    // per equipped slot for non-stack items, or the whole item_id stack
-    // for stackable items. Items "claimed" by an equipped slot don't
-    // appear in the inventory grid — they appear only in QS. That makes
-    // the user's mental model clean: each item lives in exactly one
-    // place.
-    const equippedBudget = new Map<string, number>();
-    for (const eq of equippedItems) {
-      if (eq.itemId) equippedBudget.set(eq.itemId, (equippedBudget.get(eq.itemId) ?? 0) + 1);
-    }
     for (const inv of (inventory || [])) {
       if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
       const def = itemDefs.get(inv.item_id);
       const nonStack = nonStackableItemIds.has(inv.item_id);
-      if (nonStack) {
-        // Non-stackable: each row is a discrete object (e.g. a single
-        // grenade). Equipping one CLAIMS that row from the inv grid.
-        const budget = equippedBudget.get(inv.item_id) ?? 0;
-        if (budget > 0) {
-          equippedBudget.set(inv.item_id, budget - 1);
-          continue;
-        }
-      }
       // Stackable: the inv stack IS the same stack the equipped slot
       // draws from. Equipping doesn't deplete it. Inv shows the full
       // count; QS also shows the full count (same number, one stack).
@@ -364,7 +351,7 @@ export function FortressHUD(props: FortressHUDProps) {
       });
     }
     return map;
-  }, [inventory, itemDefs, getSpriteUrl, nonStackableItemIds, equippedItems, equippedItemIdSet]);
+  }, [inventory, itemDefs, getSpriteUrl, nonStackableItemIds]);
 
   // Sync: place new entries into the first empty slot, remove ones
   // that no longer exist (consumed, dropped, etc.).
@@ -395,52 +382,17 @@ export function FortressHUD(props: FortressHUDProps) {
   }, [invSlots, inventoryItemsMap]);
 
   // ── Cursor-stack occupants (built from inventoryGridItems) ─────
-  // SlotGrid expects an occupants Map<slotIndex, SlotOccupant>. Each
-  // entry carries the underlying inventory row id so atomic transfer
-  // RPCs can target it directly.
-  //
-  // For STACKABLE items the gridKey is the itemId; we resolve a rowId
-  // by .find() but MUST skip rows currently claimed by the hotbar
-  // (otherwise shift-click inv→vault yanks a hotbar row out from
-  // under the equipped slot, silently breaking the QS tile).
-  const equippedRowIdSet = useMemo(() => {
-    const s = new Set<string>();
-    // The hotbar can only equip items via inventory row id; the
-    // inventoryItemsMap claims `equippedBudget` rows per itemId.
-    // Reconstruct: claim the OLDEST-created row per (itemId × equipped
-    // count) so we never pick that one in .find() below.
-    const claimed = new Map<string, number>();
-    for (const eq of equippedItems) {
-      if (eq.itemId) claimed.set(eq.itemId, (claimed.get(eq.itemId) ?? 0) + 1);
-    }
-    // Walk inventory ordered by created_at; mark the first N rows of
-    // each itemId as equipped.
-    const sorted = [...(inventory || [])].sort((a, b) => {
-      const ax = (a as any).created_at ?? '';
-      const bx = (b as any).created_at ?? '';
-      return ax < bx ? -1 : ax > bx ? 1 : 0;
-    });
-    for (const inv of sorted) {
-      if (inv.item_type !== 'item' || !inv.item_id) continue;
-      const claim = claimed.get(inv.item_id) ?? 0;
-      if (claim <= 0) continue;
-      s.add(inv.id);
-      claimed.set(inv.item_id, claim - 1);
-    }
-    return s;
-  }, [equippedItems, inventory]);
-
+  // Under QS-as-storage, items in QS are NOT in inv. So every inv
+  // row genuinely needs a tile and the rowId resolves cleanly to its
+  // user_inventory.id. No equipped-claim bookkeeping needed.
   const inventoryOccupants = useMemo(() => {
     const m = new Map<number, SlotOccupant>();
     inventoryGridItems.forEach((item, idx) => {
       if (!item) return;
       let rowId = item.gridKey;
       if (!item.isNonStackRow) {
-        // Skip equipped-claimed rows so shift-click can't yank from
-        // under the hotbar.
         const invRow = (inventory || []).find((r: any) =>
-          r.item_type === 'item' && r.item_id === item.itemId
-          && r.quantity > 0 && !equippedRowIdSet.has(r.id)
+          r.item_type === 'item' && r.item_id === item.itemId && r.quantity > 0
         );
         if (invRow) rowId = (invRow as any).id;
       }
@@ -457,7 +409,7 @@ export function FortressHUD(props: FortressHUDProps) {
       });
     });
     return m;
-  }, [inventoryGridItems, inventory, itemDefs, equippedRowIdSet]);
+  }, [inventoryGridItems, inventory, itemDefs]);
 
   // ── Cursor-stack inventory system ──────────────────────────────
   // The cursor-stack model replaces the legacy HTML5 drag/drop:
@@ -491,6 +443,8 @@ export function FortressHUD(props: FortressHUDProps) {
   }, []);
 
   // Unified handler bag passed into the slotClick reducer.
+  // QS-as-storage: every cross-region move is an atomic single-RPC
+  // transfer; no setHotbarSlot binding step.
   const slotClickHandlers: SlotClickHandlers = useMemo(() => ({
     transferInvToVault: async (rowIds, page, slot) => {
       if (!vaultBridge) return false;
@@ -504,15 +458,28 @@ export function FortressHUD(props: FortressHUDProps) {
       if (!vaultBridge) return false;
       return vaultBridge.transferWithinVault(srcPage, srcSlot, dstPage, dstSlot, qty);
     },
-    swapInventorySlots,
-    setHotbarSlot: async (slot, itemId) => {
-      if (updateEquippedSlot) await updateEquippedSlot(slot, itemId);
+    transferInvToQs: async (invRowId, qsSlot) => {
+      try { await worldStore.transferInvToQs(invRowId, qsSlot); return true; }
+      catch (err) { console.error('[HUD] transferInvToQs failed:', err); return false; }
     },
+    transferQsToInv: async (qsSlot) => {
+      try { await worldStore.transferQsToInv(qsSlot); return true; }
+      catch (err) { console.error('[HUD] transferQsToInv failed:', err); return false; }
+    },
+    transferQsToVault: async (qsSlot, vaultPage, vaultSlot) => {
+      try { await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot); return true; }
+      catch (err) { console.error('[HUD] transferQsToVault failed:', err); return false; }
+    },
+    transferVaultToQs: async (vaultPage, vaultSlot, qsSlot) => {
+      try { await worldStore.transferVaultToQs(vaultPage, vaultSlot, qsSlot); return true; }
+      catch (err) { console.error('[HUD] transferVaultToQs failed:', err); return false; }
+    },
+    swapInventorySlots,
     findFirstEmptyInventorySlot,
     findFirstEmptyHotbarSlot,
     findFirstEmptyVaultSlot: (preferPage) => vaultBridge?.findFirstEmptySlot(preferPage) ?? null,
     activeVaultPage: vaultBridge?.activePage ?? 0,
-  }), [vaultBridge, updateEquippedSlot, swapInventorySlots,
+  }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot]);
 
   // The single entry point every slot click goes through.

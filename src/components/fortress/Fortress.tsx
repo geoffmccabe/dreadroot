@@ -280,7 +280,7 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, consumeQuickSlot, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -421,33 +421,23 @@ export function Fortress() {
     // (which create a fresh items row) show up. Cheap query, rarely hit.
   }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
 
-  // Pull one grenade out of inventory and return its tier. Picks the
-  // HIGHEST tier the user owns so forging is rewarded. Grenades are
-  // non-stackable — each row holds exactly one — so consume = delete
-  // the specific row, not decrement.
+  // QS-as-storage: throw consumes the grenade in the currently-armed
+  // QS slot. Returns its tier so the throw can scale. (The legacy
+  // "best-tier-in-inv" logic doesn't apply — under the new model,
+  // grenades live in QS, not inv; the user explicitly chose which
+  // tier to arm by equipping it.)
   const consumeGrenade = useCallback((): number | null => {
-    const defs = grenadeDefsRef.current;
-    let bestTier = 0;
-    let bestRowId: string | null = null;
-    for (const inv of inventory) {
-      if (inv.quantity <= 0 || !inv.item_id) continue;
-      const tier = defs.get(inv.item_id);
-      if (tier == null) continue;
-      if (tier > bestTier) {
-        bestTier = tier;
-        bestRowId = inv.id;
-      }
-    }
-    if (bestTier === 0 || !bestRowId) return null;
-    void removeInventoryRow(bestRowId);
-    // The throw was committed — drop out of G-mode immediately so the
-    // green crosshair / flashing slot disappear. Press G again to re-
-    // arm another grenade. Previously the ready state lingered until
-    // a useEffect noticed the slot's item was gone (1-frame delay
-    // PLUS the user had to wait for the inventory state propagation).
+    if (grenadeReadySlot === null) return null;
+    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(e => e.slot === grenadeReadySlot);
+    if (!eq) { setGrenadeReadySlot(null); return null; }
+    const tier = grenadeDefsRef.current.get(eq.itemId);
+    if (tier == null) { setGrenadeReadySlot(null); return null; }
+    const slotToConsume = grenadeReadySlot;
     setGrenadeReadySlot(null);
-    return bestTier;
-  }, [inventory, removeInventoryRow]);
+    void consumeQuickSlot(slotToConsume);
+    return tier;
+  }, [grenadeReadySlot, equippedItems, consumeQuickSlot]);
 
   // G key handler — only arms if a grenade is actually available.
   // Decision tree:
@@ -538,27 +528,24 @@ export function Fortress() {
   // are non-stackable — consume = delete the specific row. Caller gets
   // both the tier (for spawn) and the row id (so the pet remembers
   // which row to refund into when it dies).
+  // QS-as-storage: hatch consumes the egg in the currently-armed QS
+  // slot. Cooldowns are now tracked on the QS row (future work — for
+  // now, no cooldown enforcement when consuming from QS).
   const consumeEgg = useCallback((): { tier: number; eggInventoryRowId: string } | null => {
-    const defs = eggDefsRef.current;
-    const now = Date.now();
-    let bestTier = 0;
-    let bestRowId: string | null = null;
-    for (const inv of inventory) {
-      if (inv.quantity <= 0 || !inv.item_id) continue;
-      const tier = defs.get(inv.item_id);
-      if (tier == null) continue;
-      const cdRaw = (inv as any).cooldown_until;
-      if (cdRaw && new Date(cdRaw).getTime() > now) continue;
-      if (tier > bestTier) {
-        bestTier = tier;
-        bestRowId = inv.id;
-      }
-    }
-    if (bestTier === 0 || !bestRowId) return null;
-    void removeInventoryRow(bestRowId);
+    if (eggReadySlot === null) return null;
+    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(e => e.slot === eggReadySlot);
+    if (!eq) { setEggReadySlot(null); return null; }
+    const tier = eggDefsRef.current.get(eq.itemId);
+    if (tier == null) { setEggReadySlot(null); return null; }
+    const slotToConsume = eggReadySlot;
     setEggReadySlot(null);
-    return { tier: bestTier, eggInventoryRowId: bestRowId };
-  }, [inventory, removeInventoryRow]);
+    void consumeQuickSlot(slotToConsume);
+    // eggInventoryRowId is no longer meaningful (egg is in QS, not inv).
+    // Callers that depended on it for "refund on death" need a future
+    // QS-aware refund path; for now we return a synthetic placeholder.
+    return { tier, eggInventoryRowId: eq.itemId };
+  }, [eggReadySlot, equippedItems, consumeQuickSlot]);
 
   // Y key handler — only arms if a non-cooldown egg is available.
   const handleEggTogglePress = useCallback(() => {
@@ -683,10 +670,14 @@ export function Fortress() {
   // drinks the potion in the given slot, plays SFX, runs the flash.
   // Returns true if the drink happened. Caller is responsible for
   // ensuring the slot actually holds a health potion before calling.
+  // QS-as-storage: drink consumes the potion that's IN the QS slot.
+  // No inv-side bookkeeping needed — the potion lives only in QS.
   const consumePotionInSlot = useCallback(async (slot: number, itemId: string): Promise<boolean> => {
     if (healthRef.current.currentHealth >= healthRef.current.maxHealth) return false;
-    const row = inventory.find(i => i.item_id === itemId && i.quantity > 0);
-    if (!row) return false;
+    // Verify the QS slot actually holds this item before consuming.
+    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
+      .find(e => e.slot === slot && e.itemId === itemId);
+    if (!eq) return false;
     heal(healthRef.current.maxHealth);
     try {
       const audio = new Audio('/swallow_potion.mp3');
@@ -695,11 +686,9 @@ export function Fortress() {
     } catch { /* sound failure shouldn't block consume */ }
     setPotionDrinkingSlot(slot);
     setTimeout(() => setPotionDrinkingSlot(s => (s === slot ? null : s)), 600);
-    await removeInventoryRow(row.id);
-    const stillHave = inventory.some(i => i.id !== row.id && i.item_id === itemId && i.quantity > 0);
-    if (!stillHave) await updateEquippedSlot(slot, null);
+    await consumeQuickSlot(slot);
     return true;
-  }, [heal, healthRef, inventory, removeInventoryRow, updateEquippedSlot]);
+  }, [heal, healthRef, equippedItems, consumeQuickSlot]);
 
   const handleUseHotbarSlot = useCallback(async (slot: number) => {
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === slot);

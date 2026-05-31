@@ -834,11 +834,17 @@ export const useUserData = () => {
     })();
   }, [user?.id, inventory, equippedItems]);
 
+  // QS-as-storage model: equipping moves the item from inv to QS;
+  // unequipping moves it back. The atomic transfer RPCs handle the
+  // delete-from-inv / insert-into-QS pair in a single transaction so
+  // an item is never in both places at once. The legacy callers
+  // (Fortress.tsx grenade-ready, egg-ready, drink-potion auto-equip)
+  // keep their (slot, itemId) signature; we resolve the inv row id
+  // internally.
   const updateEquippedSlot = useCallback(async (slot: number, itemId: string | null) => {
     if (!user?.id) return;
-    const slotType = `hotbar_${slot}`;
 
-    // Optimistic update
+    // Optimistic UI update first.
     setEquippedItems(prev => {
       const filtered = prev.filter(e => e.slot !== slot);
       if (itemId) filtered.push({ slot, itemId });
@@ -847,12 +853,36 @@ export const useUserData = () => {
 
     try {
       if (itemId) {
-        await worldStore.setEquippedSlot(slotType, itemId);
+        // Find an inv row of this item to move into the QS slot.
+        const invRow = inventoryRef.current.find(r =>
+          r.item_type === 'item' && r.item_id === itemId && r.quantity > 0
+        );
+        if (!invRow) {
+          // Item is not in inventory — caller assumed it was. Roll
+          // back the optimistic update and log; this is a caller bug.
+          console.warn(`[updateEquippedSlot] no inv row for item ${itemId}; cannot equip`);
+          setEquippedItems(prev => prev.filter(e => e.slot !== slot));
+          return;
+        }
+        await worldStore.transferInvToQs(invRow.id, slot);
       } else {
-        await worldStore.clearEquippedSlot(slotType);
+        await worldStore.transferQsToInv(slot);
       }
     } catch (err) {
       console.error('[updateEquippedSlot] failed:', err);
+    }
+  }, [user?.id]);
+
+  // Consume the item in a QS slot (item destroyed, not moved). Used
+  // by grenade throw, egg hatch, potion drink. Atomic single-RPC.
+  const consumeQuickSlot = useCallback(async (slot: number) => {
+    if (!user?.id) return;
+    // Optimistic remove from local state.
+    setEquippedItems(prev => prev.filter(e => e.slot !== slot));
+    try {
+      await worldStore.consumeQuickSlot(slot);
+    } catch (err) {
+      console.error('[consumeQuickSlot] failed:', err);
     }
   }, [user?.id]);
 
@@ -900,6 +930,7 @@ export const useUserData = () => {
     removeInventoryRow,
     updateBlockchainAddress,
     updateEquippedSlot,
+    consumeQuickSlot,
     updateDisplayName,
     updateAvatarUrl,
     updateVisualDistance,
