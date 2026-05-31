@@ -333,27 +333,22 @@ export function FortressHUD(props: FortressHUDProps) {
       if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
       const def = itemDefs.get(inv.item_id);
       const nonStack = nonStackableItemIds.has(inv.item_id);
-      let visibleQty = inv.quantity;
       if (nonStack) {
-        // Skip this row if an equipped slot is claiming a row for this item.
+        // Non-stackable: each row is a discrete object (e.g. a single
+        // grenade). Equipping one CLAIMS that row from the inv grid.
         const budget = equippedBudget.get(inv.item_id) ?? 0;
         if (budget > 0) {
           equippedBudget.set(inv.item_id, budget - 1);
           continue;
         }
-      } else {
-        // Stackable: subtract the equipped count from the displayed
-        // quantity (one stack, multiple equipped slots each claim 1
-        // unit). Skipping the whole stack — the previous behavior —
-        // hid the rest from view, which became visible after the
-        // uniqueness trigger consolidates everything into one row.
-        const claimed = equippedBudget.get(inv.item_id) ?? 0;
-        visibleQty = inv.quantity - claimed;
-        if (visibleQty <= 0) continue;
       }
+      // Stackable: the inv stack IS the same stack the equipped slot
+      // draws from. Equipping doesn't deplete it. Inv shows the full
+      // count; QS also shows the full count (same number, one stack).
+      // The user understands these aren't two separate piles.
       const gridKey = nonStack ? inv.id : inv.item_id;
       const prev = map.get(gridKey);
-      const qty = nonStack ? 1 : (prev ? prev.quantity + visibleQty : visibleQty);
+      const qty = nonStack ? 1 : (prev ? prev.quantity + inv.quantity : inv.quantity);
       const cd = (inv as any).cooldown_until
         ? new Date((inv as any).cooldown_until).getTime()
         : null;
