@@ -1156,6 +1156,8 @@ export function FortressHUD(props: FortressHUDProps) {
                       background: isSelected
                         ? 'hsla(var(--hud-bg))'
                         : 'hsla(var(--hud-bg-dim))',
+                      backdropFilter: 'blur(8px) saturate(140%)',
+                      WebkitBackdropFilter: 'blur(8px) saturate(140%)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1163,7 +1165,7 @@ export function FortressHUD(props: FortressHUDProps) {
                       transition: 'border 0.15s, background 0.15s',
                       position: 'relative',
                       cursor: slot.itemId ? 'grab' : 'pointer',
-                      opacity: isGhosted ? 0.35 : 1,
+                      opacity: isGhosted ? 0.2 : 1,
                     }}
                     title={slot.name || `Slot ${slot.slot}`}
                   >

@@ -85,8 +85,10 @@ export function CursorSprite() {
         justifyContent: 'center',
         // Same tile background as a real slot — picked-up tile should
         // look identical to where it came from, not get a "drag mode"
-        // dark chrome.
+        // dark chrome. Dim + frosted-glass blur matches SlotTile.
         background: 'hsla(var(--hud-bg-dim, 0 0% 0% / 0.4))',
+        backdropFilter: 'blur(8px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(8px) saturate(140%)',
         border: '1px solid hsla(var(--hud-border, 0 0% 100% / 0.3))',
         borderRadius: 'var(--hud-radius, 4px)',
       }}
