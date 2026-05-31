@@ -220,22 +220,24 @@ export function FortressHUD(props: FortressHUDProps) {
     return Array.from(ids);
   }, [equippedItems, inventory]);
 
-  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null }>>(new Map());
+  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean }>>(new Map());
 
   const loadItemDefs = useCallback(async () => {
     if (allItemIds.length === 0) { setItemDefs(new Map()); return; }
     const { data } = await supabase
       .from('items')
-      .select('id, key, name, item_number, texture_url, tier')
+      .select('id, key, name, item_number, texture_url, tier, stackable')
       .in('id', allItemIds);
-    const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null }>();
-    for (const d of data || []) map.set(d.id, d);
+    const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean }>();
+    // Default stackable=true if the column is missing (older row).
+    for (const d of data || []) map.set(d.id, { ...d, stackable: d.stackable ?? true });
     setItemDefs(map);
   }, [allItemIds]);
 
-  // Item keys that don't stack — each row gets its own grid tile so
-  // the 18-slot cap naturally limits how many a player can carry.
-  // Mirrors useUserData.isNonStackableKey.
+  // Stackability is now driven by items.stackable (single source of
+  // truth, enforced by the user_inventory uniqueness trigger). The
+  // key-based fallback is kept only for items that loaded before the
+  // stackable column existed.
   const isNonStackableKey = useCallback((key: string | null | undefined): boolean => {
     if (!key) return false;
     return key === 'health_potion'
@@ -246,7 +248,8 @@ export function FortressHUD(props: FortressHUDProps) {
   const nonStackableItemIds = useMemo(() => {
     const s = new Set<string>();
     for (const [id, def] of itemDefs) {
-      if (isNonStackableKey(def.key)) s.add(id);
+      if (def.stackable === false) s.add(id);
+      else if (isNonStackableKey(def.key)) s.add(id);
     }
     return s;
   }, [itemDefs, isNonStackableKey]);
@@ -330,6 +333,7 @@ export function FortressHUD(props: FortressHUDProps) {
       if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
       const def = itemDefs.get(inv.item_id);
       const nonStack = nonStackableItemIds.has(inv.item_id);
+      let visibleQty = inv.quantity;
       if (nonStack) {
         // Skip this row if an equipped slot is claiming a row for this item.
         const budget = equippedBudget.get(inv.item_id) ?? 0;
@@ -338,12 +342,18 @@ export function FortressHUD(props: FortressHUDProps) {
           continue;
         }
       } else {
-        // Skip the whole stack if any equipped slot points at it.
-        if (equippedItemIdSet.has(inv.item_id)) continue;
+        // Stackable: subtract the equipped count from the displayed
+        // quantity (one stack, multiple equipped slots each claim 1
+        // unit). Skipping the whole stack — the previous behavior —
+        // hid the rest from view, which became visible after the
+        // uniqueness trigger consolidates everything into one row.
+        const claimed = equippedBudget.get(inv.item_id) ?? 0;
+        visibleQty = inv.quantity - claimed;
+        if (visibleQty <= 0) continue;
       }
       const gridKey = nonStack ? inv.id : inv.item_id;
       const prev = map.get(gridKey);
-      const qty = nonStack ? 1 : (prev ? prev.quantity + inv.quantity : inv.quantity);
+      const qty = nonStack ? 1 : (prev ? prev.quantity + visibleQty : visibleQty);
       const cd = (inv as any).cooldown_until
         ? new Date((inv as any).cooldown_until).getTime()
         : null;

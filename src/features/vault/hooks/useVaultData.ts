@@ -19,6 +19,7 @@ interface ItemDef {
   tier: number | null;
   item_number: number | null;
   texture_url: string | null;
+  stackable?: boolean;
 }
 
 const DEFAULT_CONFIG: VaultConfig = { page_count: 4, cols: 5, rows: 5 };
@@ -81,7 +82,7 @@ export function useVaultData(userId: string | null) {
       if (itemIds.length > 0) {
         const { data: defs } = await supabase
           .from('items')
-          .select('id, key, name, tier, item_number, texture_url')
+          .select('id, key, name, tier, item_number, texture_url, stackable')
           .in('id', itemIds);
         if (defs && !cancelled) {
           const map = new Map<string, ItemDef>();

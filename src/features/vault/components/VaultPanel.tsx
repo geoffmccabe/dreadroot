@@ -24,9 +24,17 @@ interface ItemDef {
   tier: number | null;
   item_number: number | null;
   texture_url: string | null;
+  stackable?: boolean;
 }
 
-const NON_STACK_KEYS = (k: string | undefined | null): boolean => {
+// Single source of truth is items.stackable (set in
+// 20260601130000_item_ownership_invariants.sql). Key-based fallback
+// only kicks in for legacy item defs that loaded before the column
+// existed.
+const isNonStackable = (def: ItemDef | undefined): boolean => {
+  if (!def) return false;
+  if (def.stackable === false) return true;
+  const k = def.key;
   if (!k) return false;
   return k === 'health_potion'
     || k === 'grenade' || k.startsWith('grenade_t')
@@ -128,7 +136,7 @@ export function VaultPanel({
     (async () => {
       const { data, error } = await supabase
         .from('items')
-        .select('id, key, name, tier, item_number, texture_url')
+        .select('id, key, name, tier, item_number, texture_url, stackable')
         .in('id', vaultItemIds);
       if (error) {
         setDebugStatus(`vault: defs fetch ERR ${error.message ?? String(error)}`);
@@ -179,7 +187,7 @@ export function VaultPanel({
         name: def?.name ?? r.name ?? '',
         tier: def?.tier ?? r.tier,
         spriteUrl: getItemSpriteUrl(def ?? { item_number: r.itemNumber, texture_url: r.textureUrl }),
-        nonStackable: NON_STACK_KEYS(def?.key ?? r.itemKey),
+        nonStackable: isNonStackable(def),
         rowId: r.rowId,
       };
       map.set(r.slot, occ);
