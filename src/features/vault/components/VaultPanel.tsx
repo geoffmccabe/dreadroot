@@ -12,6 +12,7 @@
 // + scoped color tokens match the admin panel exactly.
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -407,6 +408,46 @@ export function VaultPanel({
     }
   }, [cursor, pages, activePage, config, addItem, removeInventoryRow, setSlot]);
 
+  // ── Double-click inventory item → auto-move to vault ──────────
+  // Stack on an existing matching item if one exists on the active
+  // page; otherwise drop into the first empty slot on that page.
+  // Silently no-ops if the page is full and no matching item exists.
+  const handleInventoryDoubleClick = useCallback(async (
+    entry: typeof inventoryEntries[number] | null,
+  ) => {
+    if (!entry || cursor) return;
+    const page = pages[activePage] ?? [];
+
+    // Look for a same-item stack we can merge onto.
+    const stackTarget = page.find(s => s.itemId === entry.itemId);
+    let targetSlot: number;
+    if (stackTarget) {
+      targetSlot = stackTarget.slot;
+    } else {
+      // Find the first-available slot, scanning left-to-right
+      // top-to-bottom — matches the user's "top-left first" rule.
+      const used = new Set(page.map(s => s.slot));
+      const cap = config.cols * config.rows;
+      let empty = -1;
+      for (let i = 0; i < cap; i++) {
+        if (!used.has(i)) { empty = i; break; }
+      }
+      if (empty < 0) {
+        setDebugStatus(`vault: page ${activePage + 1} full, no stack target — ignored`);
+        return;
+      }
+      targetSlot = empty;
+    }
+
+    const result = await setSlot(activePage, targetSlot, entry.itemId, entry.quantity);
+    if (result) {
+      for (const rid of entry.rowIds) await removeInventoryRow(rid);
+      setDebugStatus(`vault: dblclick ${entry.def?.name ?? '?'} → p${activePage} s${targetSlot}`);
+    } else {
+      setDebugStatus(`vault: dblclick FAIL ${entry.def?.name ?? '?'}`);
+    }
+  }, [cursor, pages, activePage, config, setSlot, removeInventoryRow]);
+
   // ── ORG button ─────────────────────────────────────────────────
   const handleOrg = useCallback(async () => {
     const sorted = sortVaultPage(pages[activePage] || []);
@@ -425,6 +466,10 @@ export function VaultPanel({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { void returnCursorToOrigin(); onClose(); } }}>
       <DialogContent
+        // Don't auto-focus the first focusable element — Radix's default
+        // focus-trap was capturing the first click and we had to press
+        // Esc to "wake up" the panel before clicks landed on tiles.
+        onOpenAutoFocus={(e) => e.preventDefault()}
         ref={(node: HTMLDivElement | null) => {
           if (node) {
             node.style.setProperty('background', 'hsla(211, 30%, 51%, 0.35)', 'important');
@@ -515,6 +560,7 @@ export function VaultPanel({
                     quantity={entry?.quantity ?? 0}
                     onClick={(e) => handleInventoryClick(e, entry, i)}
                     onContextMenu={(e) => handleInventoryClick(e, entry, i)}
+                    onDoubleClick={() => handleInventoryDoubleClick(entry)}
                   />
                 );
               })}
@@ -549,45 +595,51 @@ export function VaultPanel({
           </div>
         </div>
 
-        {/* Cursor preview (portal'd via fixed position) */}
-        {cursor && (
-          <div
-            style={{
-              position: 'fixed',
-              left: cursorXY.x + 8,
-              top: cursorXY.y + 8,
-              pointerEvents: 'none',
-              zIndex: 9999,
-              width: 48, height: 48,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))',
-            }}
-          >
-            {(() => {
-              const s = spriteUrlForDef(cursor);
-              return s ? (
-                <img src={s} alt={cursor.name} style={{ width: 42, height: 42, objectFit: 'contain' }} />
-              ) : (
-                <div style={{ width: 42, height: 42, background: 'hsla(211, 30%, 51%, 0.8)', borderRadius: 4 }} />
-              );
-            })()}
-            {cursor.quantity > 1 && (
-              <span style={{
-                position: 'absolute', bottom: -2, right: -2,
-                fontSize: 11, fontWeight: 700, color: 'white',
-                textShadow: '0 0 3px rgba(0,0,0,0.9)',
-              }}>{cursor.quantity}</span>
-            )}
-          </div>
-        )}
       </DialogContent>
+
+      {/* Cursor preview — portal'd to document.body so it escapes the
+          Dialog's transform: translate(-50%,-50%). Without the portal,
+          position: fixed gets measured from the transformed Dialog
+          (sliding ~half a dialog width to the right), which made the
+          cursor appear far from the mouse. */}
+      {cursor && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: cursorXY.x + 8,
+            top: cursorXY.y + 8,
+            pointerEvents: 'none',
+            zIndex: 99999,
+            width: 48, height: 48,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))',
+          }}
+        >
+          {(() => {
+            const s = spriteUrlForDef(cursor);
+            return s ? (
+              <img src={s} alt={cursor.name} style={{ width: 42, height: 42, objectFit: 'contain' }} />
+            ) : (
+              <div style={{ width: 42, height: 42, background: 'hsla(211, 30%, 51%, 0.8)', borderRadius: 4 }} />
+            );
+          })()}
+          {cursor.quantity > 1 && (
+            <span style={{
+              position: 'absolute', bottom: -2, right: -2,
+              fontSize: 11, fontWeight: 700, color: 'white',
+              textShadow: '0 0 3px rgba(0,0,0,0.9)',
+            }}>{cursor.quantity}</span>
+          )}
+        </div>,
+        document.body,
+      )}
     </Dialog>
   );
 }
 
 // ── Single tile ────────────────────────────────────────────────────
 function VaultTile({
-  sprite, name, tier, quantity, onClick, onContextMenu, border,
+  sprite, name, tier, quantity, onClick, onContextMenu, onDoubleClick, border,
 }: {
   sprite: string | null;
   name: string | null;
@@ -595,12 +647,14 @@ function VaultTile({
   quantity: number;
   onClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  onDoubleClick?: (e: React.MouseEvent) => void;
   border?: 'hotbar';
 }) {
   return (
     <div
       onClick={onClick}
       onContextMenu={onContextMenu}
+      onDoubleClick={onDoubleClick}
       title={name ?? undefined}
       style={{
         width: 56, height: 56,
