@@ -41,6 +41,10 @@ interface UseShpiderSystemOptions {
   cameraRef: React.RefObject<THREE.Camera | null>;
   isEnabled: boolean;
   userRoles: string[];
+  /** Local auth user id — used so the shpider combat adapter can
+   *  zero out damage (but keep knockback) when the local player
+   *  shoots their own pet shpider. */
+  localUserId?: string | null;
   /** Fired when a WILD shpider dies. Pet deaths route to onPetDied
    *  instead — they don't count as a "kill" for the player. Position
    *  is included so a wild 1% egg drop can be rendered in-world (vs
@@ -67,9 +71,14 @@ export function useShpiderSystem({
   cameraRef,
   isEnabled,
   userRoles,
+  localUserId,
   onShpiderKilled,
   onPetDied,
 }: UseShpiderSystemOptions) {
+  // Ref-backed local user id so the combat adapter (which is registered
+  // once via useEffect) sees the latest value without re-registering.
+  const localUserIdRef = useRef<string | null>(localUserId ?? null);
+  useEffect(() => { localUserIdRef.current = localUserId ?? null; }, [localUserId]);
   const [shpiders, setShpiders] = useState<ShpiderInstance[]>([]);
   const shpidersRef = useRef<ShpiderInstance[]>([]);
   const [spawningEnabled, setSpawningEnabled] = useState(true);
@@ -475,28 +484,28 @@ export function useShpiderSystem({
       },
       applyDamage: (s, info) => {
         dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
-        // Explosion source: force fragmentation on kill and pass an
-        // outward impulse so each fragment inherits the blast's
-        // momentum (radial + a touch of upward kick). bulletSpeed in
-        // the explosion DamageInfo is the falloff-scaled knockback
-        // strength (set by the grenade explode loop).
+
+        // Own pet protection: if the local player is shooting their
+        // own pet shpider, zero out the damage (no friendly fire) but
+        // still apply the knockback so the pet visibly bounces.
+        const isOwnPet = s.petOwnerUserId != null
+          && s.petOwnerUserId === localUserIdRef.current;
+        const effectiveDamage = isOwnPet ? 0 : info.damage;
+
         if (info.source === 'explosion') {
           const speed = info.bulletSpeed || 0;
           const impulse = new THREE.Vector3(
             info.knockbackDirX * speed,
-            speed * 0.35, // upward kick — fragments arc out, not just slide
+            speed * 0.35,
             info.knockbackDirZ * speed,
           );
-          // Explicit knockback velocity for live shpiders too — the
-          // bullet-speed formula doesn't scale below 60 m/s so the
-          // doubled grenade constants would otherwise have no effect.
-          return damageShpider(s.id, info.damage, dirScratch, info.bulletSpeed || 0, info.isHeadshot, {
-            forceFragment: true,
+          return damageShpider(s.id, effectiveDamage, dirScratch, info.bulletSpeed || 0, info.isHeadshot, {
+            forceFragment: !isOwnPet,
             fragmentImpulse: impulse,
             explicitV0: speed,
           });
         }
-        return damageShpider(s.id, info.damage, dirScratch, info.bulletSpeed || 0, info.isHeadshot);
+        return damageShpider(s.id, effectiveDamage, dirScratch, info.bulletSpeed || 0, info.isHeadshot);
       },
       getHitSoundUrl: () => '/bullet_impact_2.mp3',
       // Head zone = full headSize / (bodySize+headSize). Matches the

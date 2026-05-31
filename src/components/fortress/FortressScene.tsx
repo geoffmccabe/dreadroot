@@ -501,6 +501,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     cameraRef,
     isEnabled: enemiesEnabled,
     userRoles,
+    localUserId: currentUserId ?? null,
     onShpiderKilled,
     onPetDied: onPetShpiderDied,
   });

@@ -22,6 +22,7 @@ import type { ShpiderDefinition, ShpiderInstance } from '../types';
 import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../constants';
 import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
 import { getSegmentEndpoints } from '../lib/legGeometry';
+import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import {
   EYELASH_GEOMETRY,
@@ -261,6 +262,8 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
       //     PETS skip touch damage on their owner (the local player).
       const isPet = s.petOwnerUserId != null;
       const skipPlayerTouch = isPet && s.petOwnerUserId === localUserId;
+      const bodyRadius = (s.definition.body_size ?? 1) * s.scale * 0.5;
+
       if (onPlayerHit && !skipPlayerTouch) {
         const attackDX = playerX - s.position.x;
         const attackDY = playerY - s.position.y;
@@ -270,7 +273,6 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
         // hit at a bigger radius than tiny ones. body_size × scale ×
         // 0.5 is the shpider's body radius; SHPIDER_ATTACK_REACH adds
         // a little reach for the legs/mandibles.
-        const bodyRadius = (s.definition.body_size ?? 1) * s.scale * 0.5;
         const range = bodyRadius + SHPIDER_ATTACK_REACH;
         if (attackDistSq < range * range && now - s.lastAttackAt >= SHPIDER_ATTACK_COOLDOWN_MS) {
           s.lastAttackAt = now;
@@ -281,6 +283,50 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
           // since high tiers should yeet the player.
           const knockback = Math.max(4, damage);
           onPlayerHit(damage, knockback, _hitDirScratch);
+        }
+      }
+
+      // === Pet touch attack on hostile enemies ===
+      // Pets damage any nearby huntable enemy on contact. Same cooldown
+      // and damage formula as the player touch — adapter.applyDamage
+      // handles the per-enemy logic (HP loss, knockback, death VFX).
+      if (isPet && now - s.lastAttackAt >= SHPIDER_ATTACK_COOLDOWN_MS) {
+        const attackRange = bodyRadius + SHPIDER_ATTACK_REACH;
+        outerEnemyLoop: for (const adapter of enemyCombatRegistry.getAdapters()) {
+          if (adapter.petAttackable === false) continue;
+          const enemies = adapter.getActiveEnemies();
+          for (const enemy of enemies) {
+            // No friendly fire among shpiders (own pets and other pets).
+            if (adapter.type === 'shpider') {
+              if ((enemy as any).id === s.id) continue;
+              if ((enemy as any).petOwnerUserId != null) continue;
+            }
+            const hb = adapter.getHitbox(enemy);
+            if (!hb) continue;
+            const eCenterY = (hb.bottomY + hb.topY) * 0.5;
+            const edx = hb.centerX - s.position.x;
+            const edy = eCenterY - s.position.y;
+            const edz = hb.centerZ - s.position.z;
+            const edistSq = edx*edx + edy*edy + edz*edz;
+            const er = attackRange + hb.radius;
+            if (edistSq > er * er) continue;
+            // Hit! Apply damage with knockback away from the pet.
+            const ed = Math.sqrt(edistSq) || 1;
+            adapter.applyDamage(enemy, {
+              damage: s.definition.damage_per_hit,
+              knockbackDirX: edx / ed,
+              knockbackDirY: 0,
+              knockbackDirZ: edz / ed,
+              bulletSpeed: 60, // makes knockback formula resolve to "normal" magnitude
+              hitX: hb.centerX,
+              hitY: eCenterY,
+              hitZ: hb.centerZ,
+              isHeadshot: false,
+              source: 'melee',
+            });
+            s.lastAttackAt = now;
+            break outerEnemyLoop;
+          }
         }
       }
 
