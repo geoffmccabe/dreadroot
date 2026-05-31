@@ -9,9 +9,12 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { Save, Upload, X, Bug } from 'lucide-react';
+import { Save, Upload, X, Bug, Egg } from 'lucide-react';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
 import type { ShpiderDefinition } from '../types';
+import { ShpiderEggsPanel } from './ShpiderEggsPanel';
+
+type LeftSelection = { kind: 'tier'; tier: number } | { kind: 'eggs' };
 
 type TextureField = 'body_texture_url' | 'leg_texture_url' | 'face_texture_url';
 
@@ -28,6 +31,7 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
   const queryClient = useQueryClient();
   const [definitions, setDefinitions] = useState<ShpiderDefinition[]>([]);
   const [selectedTier, setSelectedTier] = useState<number>(1);
+  const [leftSelection, setLeftSelection] = useState<LeftSelection>({ kind: 'tier', tier: 1 });
   const [currentDef, setCurrentDef] = useState<ShpiderDefinition | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -64,7 +68,13 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
 
   const selectTier = (tier: number) => {
     setSelectedTier(tier);
+    setLeftSelection({ kind: 'tier', tier });
     setCurrentDef(definitions.find(d => d.tier === tier) ?? null);
+    setHasChanges(false);
+  };
+
+  const selectEggs = () => {
+    setLeftSelection({ kind: 'eggs' });
     setHasChanges(false);
   };
 
@@ -196,7 +206,7 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
                 {definitions.map(def => (
                   <Button
                     key={def.tier}
-                    variant={selectedTier === def.tier ? 'default' : 'ghost'}
+                    variant={leftSelection.kind === 'tier' && leftSelection.tier === def.tier ? 'default' : 'ghost'}
                     size="sm"
                     className="w-full justify-between text-xs"
                     onClick={() => selectTier(def.tier)}
@@ -205,6 +215,18 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
                     <span className="text-muted-foreground">{RARITY_NAMES[def.tier]}</span>
                   </Button>
                 ))}
+
+                {/* Eggs section — sub-link below the tier list */}
+                <div className="pt-2 mt-2 border-t" />
+                <Button
+                  variant={leftSelection.kind === 'eggs' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start text-xs gap-2"
+                  onClick={selectEggs}
+                >
+                  <Egg className="h-3 w-3" />
+                  Shpider Eggs
+                </Button>
               </div>
             </ScrollArea>
           </div>
@@ -212,7 +234,9 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
 
         {/* Editor */}
         <div className="col-span-9">
-          {!currentDef ? (
+          {leftSelection.kind === 'eggs' ? (
+            <ShpiderEggsPanel />
+          ) : !currentDef ? (
             <p className="text-sm text-muted-foreground">Select a tier on the left.</p>
           ) : (
             <ScrollArea className="h-[500px] pr-4">
