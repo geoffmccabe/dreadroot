@@ -167,27 +167,72 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
   const saveDef = async () => {
     if (!currentDef) return;
     setIsSaving(true);
+
+    // Direct UPDATE by id (was upsert with onConflict:'tier'). Avoids
+    // the "did this update or insert?" ambiguity. We also strip server-
+    // owned columns (id/created_at/updated_at) AND log everything so
+    // when a save mysteriously drops a column we can see what was sent
+    // and what came back.
     const { id, created_at, updated_at, ai_config, ...rest } = currentDef as any;
     const saveData = { ...rest, ai_config: ai_config ?? null };
+
+    console.log('[ShpiderDesign] saving T' + currentDef.tier + ' id=' + id, saveData);
+
+    if (!id || String(id).startsWith('temp_')) {
+      toast.error('Cannot save — no row id on the current tier');
+      setIsSaving(false);
+      return;
+    }
 
     try {
       const { data, error } = await (supabase
         .from('shpider_definitions' as any)
-        .upsert(saveData, { onConflict: 'tier' })
+        .update(saveData)
+        .eq('id', id)
         .select()
         .single() as any);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[ShpiderDesign] save error:', error);
+        toast.error(`Save failed: ${error.message ?? JSON.stringify(error)}`);
+        setIsSaving(false);
+        return;
+      }
 
       const saved = data as ShpiderDefinition;
+      console.log('[ShpiderDesign] server returned:', saved);
+
+      // Sanity-check: if any texture URL we just sent isn't on the
+      // returned row, the DB silently dropped it (RLS / trigger). DON'T
+      // overwrite local state in that case — keep the user's edits
+      // visible and surface the discrepancy.
+      const sentBody = saveData.body_texture_url;
+      const sentLeg = saveData.leg_texture_url;
+      const sentFace = saveData.face_texture_url;
+      const lostFields: string[] = [];
+      if (sentBody && !saved.body_texture_url) lostFields.push('body');
+      if (sentLeg && !saved.leg_texture_url) lostFields.push('leg');
+      if (sentFace && !saved.face_texture_url) lostFields.push('face');
+
+      if (lostFields.length > 0) {
+        toast.error(
+          `Save returned without these fields: ${lostFields.join(', ')}. ` +
+          `Likely an RLS or trigger on shpider_definitions. Local state kept.`
+        );
+        // Don't setCurrentDef(saved) — that'd wipe the preview.
+        setHasChanges(false);
+        setIsSaving(false);
+        return;
+      }
+
       setDefinitions(prev => prev.map(d => d.tier === saved.tier ? saved : d));
       setCurrentDef(saved);
       setHasChanges(false);
       queryClient.invalidateQueries({ queryKey: ['shpider-definitions'] });
       toast.success('Shpider saved');
     } catch (err: any) {
-      console.error('[ShpiderDesign] save error:', err);
-      toast.error(`Failed to save: ${err?.message ?? err}`);
+      console.error('[ShpiderDesign] save threw:', err);
+      toast.error(`Save failed: ${err?.message ?? JSON.stringify(err)}`);
     } finally {
       setIsSaving(false);
     }
