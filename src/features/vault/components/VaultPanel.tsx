@@ -14,7 +14,7 @@ import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useRegisterVaultBridge, type VaultBridge } from '@/contexts/VaultBridgeContext';
 import { cn } from '@/lib/utils';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
-import { SlotGrid, useCursorStack } from '@/features/inventory-system';
+import { SlotGrid, useCursorStack, cursorStackApi } from '@/features/inventory-system';
 import type { SlotClickInput, SlotOccupant } from '@/features/inventory-system';
 
 interface ItemDef {
@@ -99,6 +99,7 @@ function VaultSlotGridWithGhost({
 export function VaultPanel({
   isOpen,
   onClose,
+  forceCloseToken,
   userId,
   preloadedDefs,
   onSlotClick,
@@ -117,6 +118,16 @@ export function VaultPanel({
       try { document.exitPointerLock(); } catch { /* ignore */ }
     }
   }, [isOpen]);
+
+  // forceCloseToken bumps whenever the parent wants the vault closed
+  // imperatively (player walks out of range, etc.). Clear the cursor
+  // and close. Initial value 0 → the effect's no-op guard prevents
+  // firing on mount.
+  useEffect(() => {
+    if (!forceCloseToken || forceCloseToken <= 0) return;
+    cursorStackApi.setCursor(null);
+    onClose();
+  }, [forceCloseToken, onClose]);
 
   useEffect(() => {
     if (activePage >= config.page_count) setActivePage(0);

@@ -28,6 +28,7 @@ interface InventoryItemWithDef {
 }
 
 import { getItemSpriteUrl } from '@/lib/itemSprite';
+import { ItemTileVisual } from '@/features/inventory-system';
 
 function getSpriteUrl(def: ItemDef): string | null {
   return getItemSpriteUrl(def);
@@ -49,77 +50,60 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
         width: '100%',
       }}
     >
-      {items.map((item) => {
-        const sprite = getSpriteUrl(item.def);
-        return (
-          <div
-            key={item.inventoryId}
+      {items.map((item) => (
+        <div
+          key={item.inventoryId}
+          style={{
+            background: 'hsla(var(--hud-bg-dim))',
+            border: '1px solid hsla(var(--hud-border))',
+            borderRadius: 'var(--hud-radius)',
+            padding: '6px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '2px',
+            minWidth: 0,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Canonical item-tile renderer — same component used in
+              vault, inventory, hotbar, and cursor. Single source of
+              truth for tier badge, sprite, and quantity badge. */}
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: '64px',
+            aspectRatio: '1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <ItemTileVisual
+              occupant={{
+                spriteUrl: getSpriteUrl(item.def),
+                name: item.def.name,
+                tier: item.def.tier > 0 ? item.def.tier : null,
+                quantity: item.quantity,
+              }}
+              spriteSize={56}
+            />
+          </div>
+          <span
             style={{
-              background: 'hsla(var(--hud-bg-dim))',
-              border: '1px solid hsla(var(--hud-border))',
-              borderRadius: 'var(--hud-radius)',
-              padding: '6px',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '2px',
-              minWidth: 0,
+              fontSize: '10px',
+              fontWeight: 500,
+              lineHeight: '1.2',
               overflow: 'hidden',
-              position: 'relative',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              width: '100%',
             }}
           >
-            {item.quantity > 1 && (
-              <Badge
-                className="absolute top-1 right-1 text-[9px] px-1 py-0 z-10"
-                variant="secondary"
-              >
-                {item.quantity}x
-              </Badge>
-            )}
-            {sprite ? (
-              <img
-                src={sprite}
-                alt={item.def.name}
-                style={{
-                  width: '100%',
-                  maxWidth: '64px',
-                  aspectRatio: '1',
-                  objectFit: 'contain',
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: '100%',
-                  maxWidth: '64px',
-                  aspectRatio: '1',
-                  background: 'hsla(var(--hud-bg))',
-                  borderRadius: 'var(--hud-radius)',
-                }}
-              />
-            )}
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 500,
-                lineHeight: '1.2',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                width: '100%',
-              }}
-            >
-              {item.def.name}
-            </span>
-            {item.def.tier > 0 && (
-              <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>
-                Tier {item.def.tier}
-              </span>
-            )}
-          </div>
-        );
-      })}
+            {item.def.name}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
