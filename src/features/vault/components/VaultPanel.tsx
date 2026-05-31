@@ -86,6 +86,18 @@ export function VaultPanel({
   useEffect(() => {
     if (activePage >= config.page_count) setActivePage(0);
   }, [config.page_count, activePage]);
+
+  // CRITICAL: the game uses pointer-lock for first-person controls.
+  // When the vault opens, pointer-lock is still active and every
+  // click goes to the canvas instead of the dialog — that's why the
+  // user had to press Esc (which releases pointer-lock) before clicks
+  // landed on tiles. Release it programmatically here.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (document.pointerLockElement) {
+      try { document.exitPointerLock(); } catch { /* ignore */ }
+    }
+  }, [isOpen]);
   const [cursor, setCursor] = useState<CursorStack | null>(null);
   const [cursorXY, setCursorXY] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -408,6 +420,118 @@ export function VaultPanel({
     }
   }, [cursor, pages, activePage, config, addItem, removeInventoryRow, setSlot]);
 
+  // ── HTML5 drag/drop handlers ──────────────────────────────────
+  // Drag source payload, encoded in dataTransfer as JSON:
+  //   { kind: 'inv', itemId, rowIds, quantity }
+  //   { kind: 'vault', page, slot, itemId, quantity }
+  const DRAG_MIME = 'application/x-dreadroot-vault';
+
+  const handleDragStartInventory = useCallback((
+    e: React.DragEvent, entry: typeof inventoryEntries[number],
+  ) => {
+    e.dataTransfer.effectAllowed = 'move';
+    const payload = {
+      kind: 'inv' as const,
+      itemId: entry.itemId,
+      rowIds: entry.rowIds,
+      quantity: entry.quantity,
+    };
+    e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload));
+    e.dataTransfer.setData('text/plain', entry.def?.name ?? '');
+  }, []);
+
+  const handleDragStartVault = useCallback((
+    e: React.DragEvent, row: VaultSlotDef,
+  ) => {
+    e.dataTransfer.effectAllowed = 'move';
+    const payload = {
+      kind: 'vault' as const,
+      page: row.page,
+      slot: row.slot,
+      itemId: row.itemId,
+      quantity: row.quantity,
+    };
+    e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload));
+    e.dataTransfer.setData('text/plain', row.name);
+  }, []);
+
+  const allowDrop = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes(DRAG_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    }
+  }, []);
+
+  // Drop onto a VAULT slot at (page, slot).
+  const handleDropOnVault = useCallback(async (
+    e: React.DragEvent, page: number, slot: number,
+  ) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData(DRAG_MIME);
+    if (!raw) return;
+    let src: any;
+    try { src = JSON.parse(raw); } catch { return; }
+
+    if (src.kind === 'vault' && src.page === page && src.slot === slot) {
+      // Dropped on itself, no-op.
+      return;
+    }
+
+    if (src.kind === 'inv') {
+      // Inventory → vault. setSlot stacks on matching item or fills empty.
+      const result = await setSlot(page, slot, src.itemId, src.quantity);
+      setDebugStatus(`vault: drop inv→p${page}s${slot} ${result ? 'OK' : 'FAIL'}`);
+      if (result) {
+        for (const rid of src.rowIds as string[]) await removeInventoryRow(rid);
+      }
+      return;
+    }
+
+    if (src.kind === 'vault') {
+      // Vault → vault. Move qty from source slot to target slot. The
+      // setSlot RPC will stack onto a matching target or replace an
+      // empty/different target. We first remove from source, then add.
+      const removed = await removeFromSlot(src.page, src.slot, src.quantity);
+      if (removed <= 0) {
+        setDebugStatus(`vault: move FAIL (source empty)`);
+        return;
+      }
+      const result = await setSlot(page, slot, src.itemId, removed);
+      setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} ${result ? 'OK' : 'FAIL'}`);
+      if (!result) {
+        // Roll back into source slot — best-effort.
+        await setSlot(src.page, src.slot, src.itemId, removed);
+      }
+      return;
+    }
+  }, [setSlot, removeFromSlot, removeInventoryRow]);
+
+  // Drop onto an INVENTORY tile. We don't care which tile — the
+  // 18-slot grid auto-fills via setInventory order. Effect: pull
+  // vault items into inventory.
+  const handleDropOnInventory = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData(DRAG_MIME);
+    if (!raw) return;
+    let src: any;
+    try { src = JSON.parse(raw); } catch { return; }
+    if (src.kind === 'inv') return; // intra-inventory rearrange not supported
+    if (src.kind === 'vault') {
+      const removed = await removeFromSlot(src.page, src.slot, src.quantity);
+      if (removed <= 0) {
+        setDebugStatus(`vault: inv-drop FAIL (source empty)`);
+        return;
+      }
+      const ok = await addItem(src.itemId, removed);
+      setDebugStatus(`vault: vault→inv x${removed} ${ok ? 'OK' : 'FAIL'}`);
+      if (!ok) {
+        // Roll back.
+        await setSlot(src.page, src.slot, src.itemId, removed);
+      }
+      return;
+    }
+  }, [removeFromSlot, addItem, setSlot]);
+
   // ── Double-click inventory item → auto-move to vault ──────────
   // Stack on an existing matching item if one exists on the active
   // page; otherwise drop into the first empty slot on that page.
@@ -532,8 +656,11 @@ export function VaultPanel({
                     name={entry?.name ?? null}
                     tier={entry?.tier ?? null}
                     quantity={entry?.quantity ?? 0}
-                    onClick={(e) => handleVaultClick(e, activePage, i)}
                     onContextMenu={(e) => handleVaultClick(e, activePage, i)}
+                    draggable={!!entry}
+                    onDragStart={entry ? (e) => handleDragStartVault(e, entry) : undefined}
+                    onDragOver={allowDrop}
+                    onDrop={(e) => handleDropOnVault(e, activePage, i)}
                   />
                 );
               })}
@@ -558,9 +685,12 @@ export function VaultPanel({
                     name={entry?.def?.name ?? null}
                     tier={entry?.def?.tier ?? null}
                     quantity={entry?.quantity ?? 0}
-                    onClick={(e) => handleInventoryClick(e, entry, i)}
                     onContextMenu={(e) => handleInventoryClick(e, entry, i)}
                     onDoubleClick={() => handleInventoryDoubleClick(entry)}
+                    draggable={!!entry}
+                    onDragStart={entry ? (e) => handleDragStartInventory(e, entry) : undefined}
+                    onDragOver={allowDrop}
+                    onDrop={handleDropOnInventory}
                   />
                 );
               })}
@@ -639,7 +769,9 @@ export function VaultPanel({
 
 // ── Single tile ────────────────────────────────────────────────────
 function VaultTile({
-  sprite, name, tier, quantity, onClick, onContextMenu, onDoubleClick, border,
+  sprite, name, tier, quantity, onClick, onContextMenu, onDoubleClick,
+  draggable, onDragStart, onDragOver, onDrop,
+  border,
 }: {
   sprite: string | null;
   name: string | null;
@@ -648,6 +780,10 @@ function VaultTile({
   onClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
   border?: 'hotbar';
 }) {
   return (
@@ -655,6 +791,11 @@ function VaultTile({
       onClick={onClick}
       onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnter={onDragOver}
+      onDrop={onDrop}
       title={name ?? undefined}
       style={{
         width: 56, height: 56,
