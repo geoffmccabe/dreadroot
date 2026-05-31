@@ -833,7 +833,7 @@ export function FortressHUD(props: FortressHUDProps) {
                                 textShadow: '0 0 3px rgba(0,0,0,0.8)',
                                 pointerEvents: 'none',
                               }}>
-                                {item.tier}
+                                T{item.tier}
                               </span>
                             )}
                             {item.sprite && (

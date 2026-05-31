@@ -587,7 +587,7 @@ function VaultTile({
           fontSize: 10, fontWeight: 700, color: 'white',
           fontFamily: 'var(--hud-font)', lineHeight: 1,
           textShadow: '0 0 3px rgba(0,0,0,0.8)', pointerEvents: 'none',
-        }}>{tier}</span>
+        }}>T{tier}</span>
       )}
       {sprite && (
         <img src={sprite} alt={name ?? ''} draggable={false}
