@@ -2333,6 +2333,7 @@ export function Fortress() {
         addItem={addItem}
         removeInventoryRow={removeInventoryRow}
         vaultOpen={vaultOpen}
+        onCloseVault={handleCloseVault}
         inventoryOpen={inventoryOpen}
         setInventoryOpen={setInventoryOpen}
         selectedSlot={selectedSlot}

@@ -116,6 +116,7 @@ export function FortressHUD(props: FortressHUDProps) {
     addItem,
     removeInventoryRow,
     vaultOpen,
+    onCloseVault,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
@@ -453,17 +454,35 @@ export function FortressHUD(props: FortressHUDProps) {
     dragRef.current = null;
     if (!src) return;
 
-    // Vault → Inventory: remove from vault, add to inventory. addItem
-    // handles the stack-vs-non-stack rules. Source vault slot is
-    // restored on failure.
+    // Vault → Inventory: ADD FIRST, then remove. If we removed first
+    // and the add failed (and the rollback also failed), the item
+    // would be lost — that was the v4.8.3 data-loss bug. By adding
+    // first, the worst case is a duplicate (item exists in both
+    // inventory and vault), which the user can fix by moving it again
+    // — strictly better than losing it.
     if (src.type === 'vault') {
-      if (!vaultBridge || !addItem) return;
+      if (!vaultBridge || !addItem) {
+        console.warn('[HUD] vault→inv drop: bridge or addItem missing — item stays in vault');
+        return;
+      }
+      let added = false;
+      try {
+        added = await addItem(src.itemId, src.quantity);
+      } catch (err) {
+        console.error('[HUD] vault→inv addItem threw:', err);
+        added = false;
+      }
+      if (!added) {
+        console.error('[HUD] vault→inv: addItem returned false; LEAVING item in vault to prevent loss');
+        return;
+      }
+      // Inventory now has the item — safe to remove from vault.
       const removed = await vaultBridge.removeFromSlot(src.page, src.slot, src.quantity);
-      if (removed <= 0) return;
-      const ok = await addItem(src.itemId, removed);
-      if (!ok) {
-        // Rollback into the source vault slot.
-        await vaultBridge.setSlot(src.page, src.slot, src.itemId, removed);
+      if (removed <= 0) {
+        // Inventory got the copy but vault wasn't decremented —
+        // user now has a duplicate. Better than losing the item.
+        // They can drag the leftover stack out again to clean up.
+        console.warn('[HUD] vault→inv: removeFromSlot returned 0; duplicate exists in vault');
       }
       return;
     }
@@ -818,7 +837,7 @@ export function FortressHUD(props: FortressHUDProps) {
         {vaultOpen && (
           <VaultPanel
             isOpen={vaultOpen}
-            onClose={() => {}}
+            onClose={onCloseVault ?? (() => {})}
             userId={user?.id ?? null}
             inventory={inventory}
             equippedItems={equippedItems}

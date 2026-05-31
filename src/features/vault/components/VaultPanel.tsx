@@ -70,6 +70,7 @@ interface VaultPanelProps {
 
 export function VaultPanel({
   isOpen,
+  onClose,
   userId,
   inventory,
   addItem,
@@ -104,15 +105,24 @@ export function VaultPanel({
   useEffect(() => {
     if (!isOpen || vaultItemIds.length === 0) return;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('items')
         .select('id, key, name, tier, item_number, texture_url')
         .in('id', vaultItemIds);
-      if (data) {
-        const m = new Map<string, ItemDef>();
-        for (const d of data as ItemDef[]) m.set(d.id, d);
-        setDefs(m);
+      if (error) {
+        console.error('[vault] item def fetch failed:', error);
+        setDebugStatus(`vault: defs fetch ERR ${error.message ?? String(error)}`);
+        return;
       }
+      // MERGE into existing defs rather than replace — the drop
+      // handler seeds defs from the drag payload before this fetch
+      // returns, so we mustn't wipe that.
+      setDefs(prev => {
+        const m = new Map(prev);
+        for (const d of (data ?? []) as ItemDef[]) m.set(d.id, d);
+        return m;
+      });
+      setDebugStatus(`vault: defs fetched ${data?.length ?? 0}/${vaultItemIds.length}`);
     })();
   }, [isOpen, vaultItemIds.join(',')]);
 
@@ -209,10 +219,21 @@ export function VaultPanel({
         });
       }
 
-      const result = await setSlot(page, slot, src.itemId, totalQty);
-      setDebugStatus(`vault: inv→p${page}s${slot} x${totalQty} ${result ? 'OK' : 'FAIL'}`);
-      if (result) {
-        for (const r of rows) await removeInventoryRow(r.id);
+      // setSlot FIRST. Only remove inventory rows if vault accepted.
+      let result: unknown = null;
+      try {
+        result = await setSlot(page, slot, src.itemId, totalQty);
+      } catch (err) {
+        console.error('[vault] inv→vault setSlot threw:', err);
+      }
+      if (!result) {
+        setDebugStatus(`vault: inv→p${page}s${slot} FAIL — item stays in inv`);
+        return;
+      }
+      setDebugStatus(`vault: inv→p${page}s${slot} x${totalQty} OK`);
+      for (const r of rows) {
+        try { await removeInventoryRow(r.id); }
+        catch (err) { console.warn('[vault] removeInventoryRow failed:', err); }
       }
       return;
     }
@@ -225,20 +246,28 @@ export function VaultPanel({
       return;
     }
 
-    // Vault → vault
+    // Vault → vault. Set TARGET first, then remove from SOURCE. If
+    // the rollback ever fails, the duplicate is recoverable; losing
+    // the item is not.
     if (src.type === 'vault') {
       if (src.page === page && src.slot === slot) return; // same-slot no-op
       const moveQty = src.quantity as number;
-      const removed = await removeFromSlot(src.page, src.slot, moveQty);
-      if (removed <= 0) {
-        setDebugStatus(`vault: move FAIL (source empty)`);
+      let setOk: unknown = null;
+      try {
+        setOk = await setSlot(page, slot, src.itemId, moveQty);
+      } catch (err) {
+        console.error('[vault] move setSlot threw:', err);
+      }
+      if (!setOk) {
+        setDebugStatus(`vault: move FAIL — item stays at source`);
         return;
       }
-      const result = await setSlot(page, slot, src.itemId, removed);
-      setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} x${removed} ${result ? 'OK' : 'FAIL'}`);
-      if (!result) {
-        await setSlot(src.page, src.slot, src.itemId, removed);
+      const removed = await removeFromSlot(src.page, src.slot, moveQty);
+      if (removed <= 0) {
+        // Source not decremented but target got the item — duplicate.
+        console.warn(`[vault] move: source not decremented, possible duplicate`);
       }
+      setDebugStatus(`vault: move p${src.page}s${src.slot}→p${page}s${slot} x${moveQty} OK`);
       return;
     }
   }, [inventory, setSlot, removeFromSlot, removeInventoryRow]);
@@ -300,7 +329,7 @@ export function VaultPanel({
         padding: 8,
       }}
     >
-      {/* Page tabs + ORG button row */}
+      {/* Page tabs + ORG button + X close */}
       <div className="flex gap-1 mb-2 items-center">
         {Array.from({ length: config.page_count }, (_, p) => (
           <button
@@ -325,9 +354,19 @@ export function VaultPanel({
         >
           ORG
         </button>
-        <span className="ml-auto text-[10px] opacity-70" style={{ color: 'hsl(0,0%,95%)' }}>
-          VAULT — drag to/from inventory
+        <span className="ml-3 text-[10px] opacity-70" style={{ color: 'hsl(0,0%,95%)' }}>
+          VAULT
         </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto text-base px-2 py-0.5 rounded hover:bg-white/15 transition leading-none"
+          style={{ color: 'hsl(0, 0%, 95%)' }}
+          title="Close vault (V)"
+          aria-label="Close vault"
+        >
+          ×
+        </button>
       </div>
 
       {/* Vault grid */}
