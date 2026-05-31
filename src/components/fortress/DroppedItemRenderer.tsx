@@ -9,6 +9,7 @@ import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
 import type { DroppedWorldItem } from '@/features/shwarm/types';
+import { getItemSpriteUrl } from '@/lib/itemSprite';
 
 const EXCLUSIVITY_MS = 30_000;
 const PICKUP_RANGE = 2.0; // must match useLootPickup
@@ -30,7 +31,11 @@ function getItemTexture(itemNumber: number): THREE.Texture {
     return textureCache.get(itemNumber)!;
   }
 
-  const url = `/item-sprites/${itemNumber}.webp`;
+  // Use the central sprite-URL helper so the cache-bust query string
+  // matches the inventory tiles. Single source of truth — bumping
+  // APP_VERSION invalidates the texture cache for every sprite,
+  // everywhere.
+  const url = getItemSpriteUrl({ item_number: itemNumber }) ?? `/item-sprites/${itemNumber}.webp`;
   const texture = textureLoader.load(url);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;

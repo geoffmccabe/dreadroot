@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,11 +42,7 @@ function SiegeWorldsGrid({ items }: { items: ItemRow[] }) {
       }}
     >
       {items.map((item) => {
-        const hasSprite =
-          item.item_number != null && item.item_number >= 0 && item.item_number <= 228;
-        const spriteUrl = hasSprite
-          ? `/item-sprites/${item.item_number}.webp`
-          : item.texture_url;
+        const spriteUrl = getItemSpriteUrl(item);
 
         return (
           <div

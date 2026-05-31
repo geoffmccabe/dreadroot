@@ -27,12 +27,10 @@ interface InventoryItemWithDef {
   def: ItemDef;
 }
 
+import { getItemSpriteUrl } from '@/lib/itemSprite';
+
 function getSpriteUrl(def: ItemDef): string | null {
-  if (def.texture_url) return def.texture_url;
-  if (def.item_number != null && def.item_number >= 0 && def.item_number <= 228) {
-    return `/item-sprites/${def.item_number}.webp`;
-  }
-  return null;
+  return getItemSpriteUrl(def);
 }
 
 // ─── Items Grid ──────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { useVaultData } from '../hooks/useVaultData';
 import type { VaultSlotDef } from '../types';
 import { sortVaultPage } from '../lib/sortPage';
 import { setDebugStatus } from '@/lib/debugStatus';
+import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useRegisterVaultBridge, type VaultBridge } from '@/contexts/VaultBridgeContext';
 import { cn } from '@/lib/utils';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
@@ -51,8 +52,8 @@ interface VaultPanelProps {
   onSlotClick: (input: SlotClickInput) => void;
 }
 
-// Tiny wrapper that adds ghost-source-slot rendering to the vault grid.
-// Kept inline because it's vault-specific and tiny.
+// Tiny wrapper that adds ghost-source-slot rendering + inspect modal
+// wiring to the vault grid. Kept inline because it's vault-specific.
 function VaultSlotGridWithGhost({
   rows, cols, occupants, activePage, onSlotClick,
 }: {
@@ -62,6 +63,7 @@ function VaultSlotGridWithGhost({
   onSlotClick: (input: SlotClickInput) => void;
 }) {
   const cursor = useCursorStack((s) => s.cursor);
+  const { openItem } = useItemDetail();
   return (
     <SlotGrid
       rows={rows}
@@ -69,6 +71,14 @@ function VaultSlotGridWithGhost({
       occupants={occupants}
       locationOf={(i) => ({ region: 'vault', page: activePage, slot: i })}
       onSlotClick={onSlotClick}
+      onSlotInspect={(occ) => openItem({
+        itemId: occ.itemId,
+        name: occ.name,
+        sprite: occ.spriteUrl,
+        itemNumber: null,
+        tier: occ.tier,
+        quantity: occ.quantity,
+      })}
       isSlotGhosted={(i) =>
         cursor?.origin.region === 'vault'
           && cursor.origin.page === activePage

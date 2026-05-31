@@ -21,13 +21,46 @@ export function CursorSprite() {
     const handler = (e: PointerEvent) => {
       const el = ref.current;
       if (el) {
-        // +14/+8 offset so the sprite sits below-right of the actual
-        // pointer tip, matching the Minecraft cursor stack rendering.
-        el.style.transform = `translate3d(${e.clientX + 14}px, ${e.clientY + 8}px, 0)`;
+        // Center the 48×48 sprite ON the pointer so it lifts from the
+        // exact click point — no jump to an offset. The mouse position
+        // still indicates the drop target; the sprite is just attached
+        // to (and centered on) the cursor.
+        el.style.transform = `translate3d(${e.clientX - 24}px, ${e.clientY - 24}px, 0)`;
       }
     };
     window.addEventListener('pointermove', handler);
     return () => window.removeEventListener('pointermove', handler);
+  }, []);
+
+  // On mount of a NEW cursor stack, also set position immediately
+  // (otherwise the sprite renders at 0,0 until the next mousemove).
+  useEffect(() => {
+    if (!cursor) return;
+    const el = ref.current;
+    if (!el) return;
+    // Best-effort: use the last known pointer position. If we don't
+    // have one, fall back to viewport center so the sprite at least
+    // appears somewhere visible.
+    const lastX = (window as any).__lastPointerX as number | undefined;
+    const lastY = (window as any).__lastPointerY as number | undefined;
+    if (lastX != null && lastY != null) {
+      el.style.transform = `translate3d(${lastX - 24}px, ${lastY - 24}px, 0)`;
+    }
+  }, [cursor]);
+
+  // Track the latest pointer position on the window so the cursor
+  // sprite can position itself the moment it appears.
+  useEffect(() => {
+    const tracker = (e: PointerEvent) => {
+      (window as any).__lastPointerX = e.clientX;
+      (window as any).__lastPointerY = e.clientY;
+    };
+    window.addEventListener('pointermove', tracker);
+    window.addEventListener('pointerdown', tracker);
+    return () => {
+      window.removeEventListener('pointermove', tracker);
+      window.removeEventListener('pointerdown', tracker);
+    };
   }, []);
 
   if (!cursor) return null;

@@ -28,6 +28,12 @@ export interface SlotGridProps {
   locationOf: (slotIndex: number) => SlotLocation;
   /** Called for every click on every slot. */
   onSlotClick: (input: SlotClickInput) => void;
+  /** Optional: called on right-click when the cursor stack is empty.
+   *  If provided, takes precedence over slotClick's right-click ("take
+   *  half") so right-click can open an info / detail modal instead.
+   *  Hold Shift while right-clicking to bypass and fall through to
+   *  slotClick (take-half). */
+  onSlotInspect?: (occupant: SlotOccupant) => void;
   /** Optional: highlight a particular slot (e.g. equipped indicator). */
   highlightSlot?: number;
   /** Optional: dim a slot (e.g. ghosted while on cursor). */
@@ -35,9 +41,10 @@ export interface SlotGridProps {
 }
 
 export function SlotGrid({
-  rows, cols, occupants, locationOf, onSlotClick, highlightSlot, isSlotGhosted,
+  rows, cols, occupants, locationOf, onSlotClick, onSlotInspect, highlightSlot, isSlotGhosted,
 }: SlotGridProps) {
   const totalSlots = rows * cols;
+  const cursor = useCursorStack((s) => s.cursor);
 
   return (
     <div
@@ -58,13 +65,24 @@ export function SlotGrid({
             occupant={occ}
             ghosted={ghosted}
             highlight={highlight}
-            onClick={(button, shift, doubleClick) => onSlotClick({
-              location: locationOf(i),
-              occupant: occ ?? null,
-              button,
-              shift,
-              doubleClick,
-            })}
+            onClick={(button, shift, doubleClick) => {
+              // Right-click + empty cursor + onSlotInspect provided +
+              // not holding shift → open detail modal instead of
+              // take-half. Restores prior UX where right-click was
+              // always "info." Shift+right-click goes through slotClick
+              // so the Minecraft take-half gesture is still reachable.
+              if (button === 'right' && !shift && !cursor && occ && onSlotInspect) {
+                onSlotInspect(occ);
+                return;
+              }
+              onSlotClick({
+                location: locationOf(i),
+                occupant: occ ?? null,
+                button,
+                shift,
+                doubleClick,
+              });
+            }}
           />
         );
       })}
@@ -87,6 +105,12 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick }: SlotTile
   return (
     <div
       onPointerDown={(e) => {
+        // e.detail counts clicks within a dblclick window. Gate at
+        // ===1 so a fast double-click doesn't fire two pickups + a
+        // dblclick (which would yield three slotClicks for one
+        // gesture). The second click of a dblclick reaches us via
+        // onDoubleClick instead.
+        if (e.detail !== 1) return;
         if (e.button === 0) onClick('left', e.shiftKey, false);
         else if (e.button === 2) onClick('right', e.shiftKey, false);
       }}
@@ -95,9 +119,6 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick }: SlotTile
         e.preventDefault();
       }}
       onDoubleClick={(e) => {
-        // Don't double-fire — onPointerDown fired first for the left
-        // click; only the second click in the dblclick produces the
-        // dblclick event. Use it for collect-all style actions.
         onClick('left', e.shiftKey, true);
       }}
       style={{

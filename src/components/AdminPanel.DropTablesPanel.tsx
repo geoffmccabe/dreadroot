@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ChevronDown, Trash2, Plus, Save, Copy } from 'lucide-react';
+import { getItemSpriteUrl } from '@/lib/itemSprite';
 
 interface DropTable {
   id: string;
@@ -318,9 +319,7 @@ export function DropTablesPanel() {
         .eq('item_number', entry.item_number)
         .maybeSingle();
 
-      const spriteUrl = entry.item_number >= 0 && entry.item_number <= 228
-        ? `/item-sprites/${entry.item_number}.webp`
-        : null;
+      const spriteUrl = getItemSpriteUrl({ item_number: entry.item_number });
 
       if (!existingItem) {
         // Create item from drop table entry

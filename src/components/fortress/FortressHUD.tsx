@@ -127,6 +127,7 @@ export function FortressHUD(props: FortressHUDProps) {
     removeInventoryRow,
     vaultOpen,
     onCloseVault,
+    vaultForceCloseToken,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
@@ -392,17 +393,49 @@ export function FortressHUD(props: FortressHUDProps) {
   // SlotGrid expects an occupants Map<slotIndex, SlotOccupant>. Each
   // entry carries the underlying inventory row id so atomic transfer
   // RPCs can target it directly.
+  //
+  // For STACKABLE items the gridKey is the itemId; we resolve a rowId
+  // by .find() but MUST skip rows currently claimed by the hotbar
+  // (otherwise shift-click inv→vault yanks a hotbar row out from
+  // under the equipped slot, silently breaking the QS tile).
+  const equippedRowIdSet = useMemo(() => {
+    const s = new Set<string>();
+    // The hotbar can only equip items via inventory row id; the
+    // inventoryItemsMap claims `equippedBudget` rows per itemId.
+    // Reconstruct: claim the OLDEST-created row per (itemId × equipped
+    // count) so we never pick that one in .find() below.
+    const claimed = new Map<string, number>();
+    for (const eq of equippedItems) {
+      if (eq.itemId) claimed.set(eq.itemId, (claimed.get(eq.itemId) ?? 0) + 1);
+    }
+    // Walk inventory ordered by created_at; mark the first N rows of
+    // each itemId as equipped.
+    const sorted = [...(inventory || [])].sort((a, b) => {
+      const ax = (a as any).created_at ?? '';
+      const bx = (b as any).created_at ?? '';
+      return ax < bx ? -1 : ax > bx ? 1 : 0;
+    });
+    for (const inv of sorted) {
+      if (inv.item_type !== 'item' || !inv.item_id) continue;
+      const claim = claimed.get(inv.item_id) ?? 0;
+      if (claim <= 0) continue;
+      s.add(inv.id);
+      claimed.set(inv.item_id, claim - 1);
+    }
+    return s;
+  }, [equippedItems, inventory]);
+
   const inventoryOccupants = useMemo(() => {
     const m = new Map<number, SlotOccupant>();
     inventoryGridItems.forEach((item, idx) => {
       if (!item) return;
-      // For non-stack items gridKey IS the rowId. For stackable items
-      // gridKey is the itemId; we need to find any matching inv row to
-      // pass to transferInvToVault. Pick the first row of this itemId.
       let rowId = item.gridKey;
       if (!item.isNonStackRow) {
+        // Skip equipped-claimed rows so shift-click can't yank from
+        // under the hotbar.
         const invRow = (inventory || []).find((r: any) =>
-          r.item_type === 'item' && r.item_id === item.itemId && r.quantity > 0
+          r.item_type === 'item' && r.item_id === item.itemId
+          && r.quantity > 0 && !equippedRowIdSet.has(r.id)
         );
         if (invRow) rowId = (invRow as any).id;
       }
@@ -419,7 +452,7 @@ export function FortressHUD(props: FortressHUDProps) {
       });
     });
     return m;
-  }, [inventoryGridItems, inventory, itemDefs]);
+  }, [inventoryGridItems, inventory, itemDefs, equippedRowIdSet]);
 
   // ── Cursor-stack inventory system ──────────────────────────────
   // The cursor-stack model replaces the legacy HTML5 drag/drop:
@@ -482,6 +515,25 @@ export function FortressHUD(props: FortressHUDProps) {
     const result = await slotClick(input, cursor, slotClickHandlers);
     setCursor(result.cursorAfter);
   }, [cursor, slotClickHandlers, setCursor]);
+
+  // Clear the cursor stack when ALL inventory UIs close. Otherwise
+  // the floating sprite stays on screen with an origin pointing at an
+  // unmounted panel — next click would target a stale slot.
+  useEffect(() => {
+    if (!inventoryOpen && !vaultOpen) {
+      setCursor(null);
+    }
+  }, [inventoryOpen, vaultOpen, setCursor]);
+
+  // ESC clears the cursor without closing the panel — the player can
+  // change their mind mid-carry.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCursor(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setCursor]);
 
   // ── Drag source ref (legacy — preserved temporarily) ──────────
   // Drag source ref — stored in ref to avoid stale closures, survives re-renders.
@@ -940,6 +992,7 @@ export function FortressHUD(props: FortressHUDProps) {
           <VaultPanel
             isOpen={vaultOpen}
             onClose={onCloseVault ?? (() => {})}
+            forceCloseToken={vaultForceCloseToken}
             userId={user?.id ?? null}
             inventory={inventory}
             equippedItems={equippedItems}
@@ -969,6 +1022,14 @@ export function FortressHUD(props: FortressHUDProps) {
               occupants={inventoryOccupants}
               locationOf={(i) => ({ region: 'inventory', gridSlot: i })}
               onSlotClick={handleSlotClick}
+              onSlotInspect={(occ) => openItemDetail({
+                itemId: occ.itemId,
+                name: occ.name,
+                sprite: occ.spriteUrl,
+                itemNumber: null,
+                tier: occ.tier,
+                quantity: occ.quantity,
+              })}
               isSlotGhosted={(i) =>
                 cursor?.origin.region === 'inventory'
                   ? cursor.origin.gridSlot === i
@@ -1016,6 +1077,11 @@ export function FortressHUD(props: FortressHUDProps) {
               // pressed. Otherwise the hotbar keeps its existing
               // single-click-to-use behavior.
               const cursorStackActive = cursor !== null;
+              // Ghost this hotbar tile while it's the cursor's origin
+              // so the user sees the item on the cursor, not duplicated
+              // in the hotbar.
+              const isGhosted = cursor?.origin.region === 'hotbar'
+                && cursor.origin.slot === slot.slot;
               return (
                 <div
                   key={slot.slot}
@@ -1092,6 +1158,7 @@ export function FortressHUD(props: FortressHUDProps) {
                       transition: 'border 0.15s, background 0.15s',
                       position: 'relative',
                       cursor: slot.itemId ? 'grab' : 'pointer',
+                      opacity: isGhosted ? 0.35 : 1,
                     }}
                     title={slot.name || `Slot ${slot.slot}`}
                   >
