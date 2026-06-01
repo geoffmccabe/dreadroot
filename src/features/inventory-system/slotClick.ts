@@ -177,6 +177,7 @@ async function performDrop(
   h: SlotClickHandlers,
 ): Promise<{ ok: boolean; reason?: string }> {
   const origin = cursor.origin;
+  console.warn('[DROP]', { origin, dst, qty });
 
   // Origin is INVENTORY
   if (origin.region === 'inventory') {

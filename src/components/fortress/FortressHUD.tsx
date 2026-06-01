@@ -493,16 +493,25 @@ export function FortressHUD(props: FortressHUDProps) {
   // why a transfer failed (e.g. "transferInvToQs rejected — RPC not
   // deployed") instead of staring at a silently-stuck cursor.
   const handleSlotClick = useCallback(async (input: SlotClickInput) => {
+    console.warn('[CLICK]', {
+      region: input.location.region,
+      loc: input.location,
+      occupant: input.occupant ? { itemId: input.occupant.itemId, rowId: input.occupant.rowId, qty: input.occupant.quantity } : null,
+      button: input.button,
+      shift: input.shift,
+      dbl: input.doubleClick,
+      cursor: cursor ? { region: cursor.origin.region, itemId: cursor.itemId, qty: cursor.quantity } : null,
+    });
     try {
       const result = await slotClick(input, cursor, slotClickHandlers);
+      console.warn('[CLICK→RESULT]', { status: result.status, cursorAfter: result.cursorAfter ? 'set' : 'null' });
       setCursor(result.cursorAfter);
       if (result.status) {
         setDebugStatus(result.status);
-        console.log('[slot]', result.status);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[slot] threw:', err);
+      console.error('[CLICK→THREW]', err);
       setDebugStatus(`slot ERR: ${msg}`);
     }
   }, [cursor, slotClickHandlers, setCursor]);
