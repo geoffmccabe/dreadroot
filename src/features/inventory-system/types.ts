@@ -40,31 +40,27 @@ export interface SlotClickInput {
   doubleClick: boolean;
 }
 
-/** Handler bag the reducer needs to actually mutate state. Each region
- *  provides its own implementation; the reducer is region-agnostic. */
+/** Handler bag the reducer needs to actually mutate state. v4.11.0
+ *  unified — every cross-region move is one transferSlot call;
+ *  within-region inv→inv is a positional swap. */
 export interface SlotClickHandlers {
-  // ── Cross-region atomic transfers (all single-RPC) ───────────────
-  transferInvToVault: (rowIds: string[], page: number, slot: number) => Promise<boolean>;
-  transferVaultToInv: (page: number, slot: number, qty: number) => Promise<boolean>;
-  transferVaultToVault: (
-    srcPage: number, srcSlot: number, dstPage: number, dstSlot: number, qty: number,
+  /** Move any item between any two slots in any regions. One RPC for
+   *  every transfer combo (inv↔qs, inv↔vault, qs↔vault, vault↔vault). */
+  transferSlot: (
+    from: { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+    to:   { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+    quantity: number,
   ) => Promise<boolean>;
 
-  // ── QS-as-storage transfers (single-RPC, MOVE not bind) ──────────
-  transferInvToQs: (inventoryRowId: string, qsSlot: number) => Promise<boolean>;
-  transferQsToInv: (qsSlot: number) => Promise<boolean>;
-  transferQsToVault: (qsSlot: number, vaultPage: number, vaultSlot: number) => Promise<boolean>;
-  transferVaultToQs: (vaultPage: number, vaultSlot: number, qsSlot: number) => Promise<boolean>;
-
-  // ── Within-region moves ─────────────────────────────────────────
+  // ── Within-region positional move (no RPC) ──────────────────────
   /** Swap two inventory gridSlots — purely local positional state. */
   swapInventorySlots: (slotA: number, slotB: number) => void;
 
-  // ── First-empty-slot resolvers (for shift-click) ─────────────────
+  // ── First-empty-slot resolvers (for shift-click) ────────────────
   findFirstEmptyInventorySlot: () => number | null;
   findFirstEmptyHotbarSlot: () => number | null;
   findFirstEmptyVaultSlot: (preferPage?: number) => { page: number; slot: number } | null;
 
-  // ── Currently-active vault page (for "drop into open vault") ────
+  // ── Currently-active vault page ─────────────────────────────────
   activeVaultPage: number;
 }

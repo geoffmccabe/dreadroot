@@ -448,70 +448,20 @@ export function FortressHUD(props: FortressHUDProps) {
     });
   }, []);
 
-  // Unified handler bag passed into the slotClick reducer.
-  // QS-as-storage: every cross-region move is an atomic single-RPC
-  // transfer; no setHotbarSlot binding step.
+  // v4.11.0 unified handler bag. ONE transferSlot RPC covers every
+  // cross-region move. user_slots realtime + refetch keep state in
+  // sync. The old 7 region-pair handlers + their compat shims are
+  // gone.
   const slotClickHandlers: SlotClickHandlers = useMemo(() => ({
-    transferInvToVault: async (rowIds, page, slot) => {
-      if (!vaultBridge) return false;
-      return vaultBridge.transferFromInventory(rowIds, page, slot);
-    },
-    transferVaultToInv: async (page, slot, qty) => {
-      if (!vaultBridge) return false;
-      return vaultBridge.transferToInventory(page, slot, qty);
-    },
-    transferVaultToVault: async (srcPage, srcSlot, dstPage, dstSlot, qty) => {
-      if (!vaultBridge) return false;
-      return vaultBridge.transferWithinVault(srcPage, srcSlot, dstPage, dstSlot, qty);
-    },
-    // QS transfer wrappers — let errors propagate to handleSlotClick's
-    // outer catch so the FULL error message reaches the debug badge.
-    // ALSO do optimistic local state updates so the UI updates the
-    // INSTANT the RPC succeeds — the realtime sub on user_equipped_items
-    // is meant to handle this but has been flaky in practice.
-    // Full optimistic updates on BOTH sides of each move — neither
-    // user_inventory nor user_equipped_items realtime has proven
-    // reliable enough to be the primary state source. Pattern:
-    //   1. snapshot the source's identity (rowId/itemId) BEFORE RPC
-    //   2. await RPC
-    //   3. mutate local state to reflect the move
-    // Realtime now serves as eventual-consistency reconciliation.
-    // Pattern for every QS transfer:
-    //   1. Optimistic local mutation (instant feedback)
-    //   2. RPC call (server truth)
-    //   3. Force refetch (kill any drift between client and DB)
-    // Step 3 is the brute-force fix for realtime not reliably
-    // delivering DELETE/INSERT events for these tables. Cost: one
-    // extra round-trip per transfer. Gain: state can't go stale.
-    transferInvToQs: async (invRowId, qsSlot) => {
-      const invRow = (inventory || []).find((r: any) => r.id === invRowId);
-      const movedItemId = invRow?.item_id ?? null;
-      if (removeInventoryRowOptimistic) removeInventoryRowOptimistic(invRowId);
-      if (movedItemId && setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, movedItemId);
-      await worldStore.transferInvToQs(invRowId, qsSlot);
-      if (refetchInventoryAndQs) void refetchInventoryAndQs();
-      return true;
-    },
-    transferQsToInv: async (qsSlot) => {
-      const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
-        .find(e => e.slot === qsSlot);
-      const movedItemId = eq?.itemId ?? null;
-      if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
-      if (movedItemId && addInventoryRowOptimistic) addInventoryRowOptimistic(movedItemId);
-      await worldStore.transferQsToInv(qsSlot);
-      if (refetchInventoryAndQs) void refetchInventoryAndQs();
-      return true;
-    },
-    transferQsToVault: async (qsSlot, vaultPage, vaultSlot) => {
-      if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
-      await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot);
-      if (refetchInventoryAndQs) void refetchInventoryAndQs();
-      return true;
-    },
-    transferVaultToQs: async (vaultPage, vaultSlot, qsSlot) => {
-      await worldStore.transferVaultToQs(vaultPage, vaultSlot, qsSlot);
-      if (refetchInventoryAndQs) void refetchInventoryAndQs();
-      return true;
+    transferSlot: async (from, to, quantity) => {
+      try {
+        await worldStore.transferSlot(from, to, quantity);
+        if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        return true;
+      } catch (err) {
+        console.error('[transferSlot] failed:', err);
+        return false;
+      }
     },
     swapInventorySlots,
     findFirstEmptyInventorySlot,
@@ -520,8 +470,6 @@ export function FortressHUD(props: FortressHUDProps) {
     activeVaultPage: vaultBridge?.activePage ?? 0,
   }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
-       inventory, equippedItems,
-       setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic,
        refetchInventoryAndQs]);
 
   // The single entry point every slot click goes through. Surfaces

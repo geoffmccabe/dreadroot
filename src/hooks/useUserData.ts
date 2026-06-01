@@ -85,11 +85,15 @@ export const useUserData = () => {
       loadingRef.current = true;
       setIsLoading(true);
       
-      // Load profile, token balance, inventory, roles, and all token balances in parallel
+      // Load profile, token balance, inventory (blocks/seeds), slots
+      // (items in inv/qs/vault), roles, and all token balances in parallel.
+      // v4.11.0: items live in user_slots; user_inventory keeps only
+      // blocks (item_id IS NULL) and seeds (item_type LIKE 'seed_tier_%').
       const [
         { data: existingProfile, error: profileError },
         { data: tokenBalanceData, error: tokenBalanceError },
         { data: inventoryData, error: inventoryError },
+        { data: userSlotsData },
         { data: rolesData, error: rolesError },
         { data: allBalancesData, error: allBalancesError }
       ] = await Promise.all([
@@ -106,6 +110,10 @@ export const useUserData = () => {
           .maybeSingle(),
         supabase
           .from('user_inventory')
+          .select('*')
+          .eq('user_id', user.id),
+        supabase
+          .from('user_slots' as any)
           .select('*')
           .eq('user_id', user.id),
         supabase
@@ -191,7 +199,22 @@ export const useUserData = () => {
       initLogStep('useUserData.ts', `Roles: ${roles.length > 0 ? roles.join(', ') : 'user'}`);
       
       setProfile(existingProfile);
-      setInventory(inventoryData || []);
+      // v4.11.0: merged inventory = items (from user_slots) + blocks/seeds (from user_inventory).
+      const slotItemRows: UserInventoryItem[] = ((userSlotsData as any[]) ?? [])
+        .filter((s: any) => s.region === 'inventory')
+        .map((s: any) => ({
+          id: s.id, user_id: s.user_id, item_type: 'item',
+          item_id: s.item_id, quantity: 1,
+          created_at: s.created_at, updated_at: s.updated_at,
+        }));
+      const legacyBlocksSeedsRows = (inventoryData || [])
+        .filter(r => r.item_type !== 'item' || r.item_id === null);
+      setInventory([...slotItemRows, ...legacyBlocksSeedsRows]);
+      // QS equipped state: derive from user_slots region='quick_select'.
+      const qsRows = ((userSlotsData as any[]) ?? [])
+        .filter((s: any) => s.region === 'quick_select')
+        .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
+      setEquippedItems(qsRows);
       setUserRoles(roles);
 
       // One-time avatar backfill from OAuth metadata. If the profile
@@ -253,42 +276,10 @@ export const useUserData = () => {
         }
       }
 
-      // Load equipped items (hotbar slots 1-6)
-      const { data: equippedData } = await supabase
-        .from('user_equipped_items')
-        .select('slot_type, item_id')
-        .eq('user_id', user.id)
-        .like('slot_type', 'hotbar_%');
-
-      if (equippedData && equippedData.length > 0) {
-        setEquippedItems(equippedData.map(e => ({
-          slot: parseInt(e.slot_type.replace('hotbar_', '')),
-          itemId: e.item_id,
-        })));
-      } else {
-        // First time: equip starter items — #15 Pistol in slot 1, #193 Flame Glove in slot 2.
-        // Two separate set_equipped_slot RPC calls (one per slot).
-        if (starterDefs && starterDefs.length > 0) {
-          const pistol = starterDefs.find(d => d.item_number === 15);
-          const glove = starterDefs.find(d => d.item_number === 193);
-          const starterEquips: Array<{ slot_type: string; item_id: string }> = [];
-          if (pistol) starterEquips.push({ slot_type: 'hotbar_1', item_id: pistol.id });
-          if (glove) starterEquips.push({ slot_type: 'hotbar_2', item_id: glove.id });
-          if (starterEquips.length > 0) {
-            try {
-              for (const eq of starterEquips) {
-                await worldStore.setEquippedSlot(eq.slot_type, eq.item_id);
-              }
-              setEquippedItems(starterEquips.map(e => ({
-                slot: parseInt(e.slot_type.replace('hotbar_', '')),
-                itemId: e.item_id,
-              })));
-            } catch (err) {
-              console.error('[starter equips] setEquippedSlot failed:', err);
-            }
-          }
-        }
-      }
+      // QS equipped state is now sourced from user_slots region='quick_select'
+      // (set earlier in this function). user_equipped_items is legacy and
+      // empty post-migration. Starter equip happens via grant_slot + transfer
+      // RPCs and is handled at a different layer.
 
       setAllTokenBalances(allBalancesData || []);
     } catch (error: any) {
@@ -386,44 +377,44 @@ export const useUserData = () => {
         }
       )
       .on(
-        // QS-as-storage: user_equipped_items rows ARE the QS items.
-        // The atomic transfer RPCs (transfer_inv_to_qs, etc.) write
-        // here; without realtime sync the QS region renders stale
-        // and items appear to "disappear" after a drop.
+        // v4.11.0: user_slots is the unified inv/QS/vault table for
+        // items. Realtime here drives both inventory items and QS
+        // state simultaneously — no more 3-table sync drift.
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'user_equipped_items',
+          table: 'user_slots',
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          const rowToSlot = (row: any): { slot: number; itemId: string } | null => {
-            if (!row?.slot_type || typeof row.slot_type !== 'string') return null;
-            const m = row.slot_type.match(/^hotbar_(\d+)$/);
-            if (!m) return null;
-            return { slot: parseInt(m[1], 10), itemId: row.item_id };
-          };
-          if (payload.eventType === 'INSERT' && payload.new) {
-            const eq = rowToSlot(payload.new);
-            if (!eq) return;
-            setEquippedItems(prev => {
-              const filtered = prev.filter(e => e.slot !== eq.slot);
-              filtered.push(eq);
-              return filtered;
-            });
-          } else if (payload.eventType === 'UPDATE' && payload.new) {
-            const eq = rowToSlot(payload.new);
-            if (!eq) return;
-            setEquippedItems(prev => {
-              const filtered = prev.filter(e => e.slot !== eq.slot);
-              filtered.push(eq);
-              return filtered;
-            });
-          } else if (payload.eventType === 'DELETE' && payload.old) {
-            const eq = rowToSlot(payload.old);
-            if (!eq) return;
-            setEquippedItems(prev => prev.filter(e => e.slot !== eq.slot));
+          const row: any = payload.new ?? payload.old;
+          if (!row) return;
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            if (row.region === 'inventory') {
+              // Item row → derive UserInventoryItem and inject.
+              const invRow: UserInventoryItem = {
+                id: row.id, user_id: row.user_id, item_type: 'item',
+                item_id: row.item_id, quantity: 1,
+                created_at: row.created_at, updated_at: row.updated_at,
+              };
+              setInventory(prev => {
+                const filtered = prev.filter(i => i.id !== row.id);
+                return [...filtered, invRow];
+              });
+            } else if (row.region === 'quick_select') {
+              setEquippedItems(prev => {
+                const filtered = prev.filter(e => e.slot !== row.slot);
+                return [...filtered, { slot: row.slot, itemId: row.item_id }];
+              });
+            }
+            // vault changes are read by useVaultData via its own select; not handled here.
+          } else if (payload.eventType === 'DELETE') {
+            if (row.region === 'inventory') {
+              setInventory(prev => prev.filter(i => i.id !== row.id));
+            } else if (row.region === 'quick_select') {
+              setEquippedItems(prev => prev.filter(e => e.slot !== row.slot));
+            }
           }
         }
       )
@@ -876,17 +867,12 @@ export const useUserData = () => {
     })();
   }, [user?.id, inventory, equippedItems]);
 
-  // QS-as-storage model: equipping moves the item from inv to QS;
-  // unequipping moves it back. The atomic transfer RPCs handle the
-  // delete-from-inv / insert-into-QS pair in a single transaction so
-  // an item is never in both places at once. The legacy callers
-  // (Fortress.tsx grenade-ready, egg-ready, drink-potion auto-equip)
-  // keep their (slot, itemId) signature; we resolve the inv row id
-  // internally.
+  // v4.11.0: unified user_slots model. Equip = move item from inv
+  // slot to QS slot via transferSlot. Unequip = move from QS to first
+  // empty inv slot. Legacy callers keep their (slot, itemId) signature.
   const updateEquippedSlot = useCallback(async (slot: number, itemId: string | null) => {
     if (!user?.id) return;
 
-    // Optimistic UI update first.
     setEquippedItems(prev => {
       const filtered = prev.filter(e => e.slot !== slot);
       if (itemId) filtered.push({ slot, itemId });
@@ -895,20 +881,34 @@ export const useUserData = () => {
 
     try {
       if (itemId) {
-        // Find an inv row of this item to move into the QS slot.
-        const invRow = inventoryRef.current.find(r =>
-          r.item_type === 'item' && r.item_id === itemId && r.quantity > 0
-        );
-        if (!invRow) {
-          // Item is not in inventory — caller assumed it was. Roll
-          // back the optimistic update and log; this is a caller bug.
-          console.warn(`[updateEquippedSlot] no inv row for item ${itemId}; cannot equip`);
+        // Find the inv slot holding this item. inventoryRef has the
+        // synthesized rows from user_slots region='inventory'.
+        // For now: query user_slots directly to find the slot index.
+        const { data: srcRow } = await supabase.from('user_slots' as any)
+          .select('slot').eq('user_id', user.id).eq('region', 'inventory')
+          .eq('item_id', itemId).limit(1).maybeSingle();
+        if (!srcRow) {
+          console.warn(`[updateEquippedSlot] no inv slot for item ${itemId}`);
           setEquippedItems(prev => prev.filter(e => e.slot !== slot));
           return;
         }
-        await worldStore.transferInvToQs(invRow.id, slot);
+        await worldStore.transferSlot(
+          { region: 'inventory', page: 0, slot: (srcRow as any).slot },
+          { region: 'quick_select', page: 0, slot },
+          1,
+        );
       } else {
-        await worldStore.transferQsToInv(slot);
+        // Find first empty inv slot.
+        const { data: occupiedRows } = await supabase.from('user_slots' as any)
+          .select('slot').eq('user_id', user.id).eq('region', 'inventory');
+        const occupied = new Set(((occupiedRows as any[]) ?? []).map((r: any) => r.slot));
+        let dstSlot = 0;
+        while (occupied.has(dstSlot)) dstSlot++;
+        await worldStore.transferSlot(
+          { region: 'quick_select', page: 0, slot },
+          { region: 'inventory', page: 0, slot: dstSlot },
+          1,
+        );
       }
     } catch (err) {
       console.error('[updateEquippedSlot] failed:', err);

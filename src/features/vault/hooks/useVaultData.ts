@@ -45,12 +45,23 @@ export function useVaultData(userId: string | null) {
     let cancelled = false;
     (async () => {
       setIsLoading(true);
-      const [{ data: vaultRows }, { data: cfg }] = await Promise.all([
-        supabase.from('user_vault' as any).select('*').eq('user_id', userId),
+      // v4.11.0: vault items live in user_slots region='vault'.
+      // Schema mirrors the legacy user_vault row shape, so the
+      // existing VaultRow type works after we synthesize.
+      const [{ data: slotRows }, { data: cfg }] = await Promise.all([
+        supabase.from('user_slots' as any)
+          .select('*').eq('user_id', userId).eq('region', 'vault'),
         supabase.from('user_vault_config' as any).select('*').eq('user_id', userId).maybeSingle(),
       ]);
       if (cancelled) return;
-      const rowsList = (vaultRows as VaultRow[] | null) || [];
+      const rowsList: VaultRow[] = ((slotRows as any[]) ?? []).map((s: any) => ({
+        id: s.id,
+        user_id: s.user_id,
+        page: s.page,
+        slot: s.slot,
+        item_id: s.item_id,
+        quantity: s.quantity,
+      }));
       setRows(rowsList);
       if (cfg) {
         setConfig({
@@ -155,8 +166,14 @@ export function useVaultData(userId: string | null) {
 
   const refetch = useCallback(async () => {
     if (!userId) return;
-    const { data } = await supabase.from('user_vault' as any).select('*').eq('user_id', userId);
-    setRows((data as VaultRow[] | null) || []);
+    const { data } = await supabase.from('user_slots' as any)
+      .select('*').eq('user_id', userId).eq('region', 'vault');
+    const rowsList: VaultRow[] = ((data as any[]) ?? []).map((s: any) => ({
+      id: s.id, user_id: s.user_id,
+      page: s.page, slot: s.slot,
+      item_id: s.item_id, quantity: s.quantity,
+    }));
+    setRows(rowsList);
   }, [userId]);
 
   /** Put `quantity` of an item into (page, slot). Server-authoritative:

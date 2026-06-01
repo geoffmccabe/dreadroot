@@ -64,33 +64,52 @@ export async function slotClick(
   const { location, occupant, button, shift, doubleClick } = input;
 
   // ── SHIFT + LEFT: instant transfer to opposite region ──────────
-  // Vault → Inv. Inv → Vault if vault open, else Inv → QS (first
-  // empty). QS → Inv. The "opposite region" choice prioritizes the
-  // currently-open chest if any.
+  // All via the unified transferSlot.
   if (shift && button === 'left' && !doubleClick) {
     if (!occupant) return { cursorAfter: cursor, status: 'shift-click: slot empty' };
 
     if (location.region === 'vault') {
-      const ok = await handlers.transferVaultToInv(location.page, location.slot, occupant.quantity);
+      // Vault → first empty inv slot.
+      const dstSlot = handlers.findFirstEmptyInventorySlot();
+      if (dstSlot == null) return { cursorAfter: cursor, status: 'shift-xfer: inv full' };
+      const ok = await handlers.transferSlot(
+        { region: 'vault', page: location.page, slot: location.slot },
+        { region: 'inventory', page: 0, slot: dstSlot },
+        1,
+      );
       return { cursorAfter: cursor, status: ok ? 'shift-xfer vault→inv OK' : 'shift-xfer vault→inv FAIL' };
     }
     if (location.region === 'inventory') {
-      // Prefer vault if it's open; otherwise auto-equip to first empty QS slot.
+      // Prefer vault (first empty slot of active page); fall back to QS.
       const vaultTarget = handlers.findFirstEmptyVaultSlot(handlers.activeVaultPage);
       if (vaultTarget) {
-        const ok = await handlers.transferInvToVault([occupant.rowId], vaultTarget.page, vaultTarget.slot);
+        const ok = await handlers.transferSlot(
+          { region: 'inventory', page: 0, slot: location.gridSlot },
+          { region: 'vault', page: vaultTarget.page, slot: vaultTarget.slot },
+          1,
+        );
         return { cursorAfter: cursor, status: ok ? `shift-xfer inv→v${vaultTarget.page}s${vaultTarget.slot} OK` : 'shift-xfer FAIL' };
       }
       const qsTarget = handlers.findFirstEmptyHotbarSlot();
       if (qsTarget != null) {
-        const ok = await handlers.transferInvToQs(occupant.rowId, qsTarget);
+        const ok = await handlers.transferSlot(
+          { region: 'inventory', page: 0, slot: location.gridSlot },
+          { region: 'quick_select', page: 0, slot: qsTarget },
+          1,
+        );
         return { cursorAfter: cursor, status: ok ? `shift-xfer inv→QS${qsTarget} OK` : 'shift-xfer FAIL' };
       }
       return { cursorAfter: cursor, status: 'shift-xfer: vault + QS both full' };
     }
     if (location.region === 'hotbar') {
-      // QS-as-storage: MOVE the QS row back to inv.
-      const ok = await handlers.transferQsToInv(location.slot);
+      // QS → first empty inv slot.
+      const dstSlot = handlers.findFirstEmptyInventorySlot();
+      if (dstSlot == null) return { cursorAfter: cursor, status: 'shift-xfer: inv full' };
+      const ok = await handlers.transferSlot(
+        { region: 'quick_select', page: 0, slot: location.slot },
+        { region: 'inventory', page: 0, slot: dstSlot },
+        1,
+      );
       return { cursorAfter: cursor, status: ok ? 'shift-xfer QS→inv OK' : 'shift-xfer QS→inv FAIL' };
     }
   }
@@ -155,13 +174,17 @@ export async function slotClick(
   }
 
   // ── DOUBLE-CLICK ───────────────────────────────────────────────
+  // Vault tile → send first unit to inventory (preserves legacy UX).
   if (doubleClick) {
-    // Defer collect-all-matching; double-click on vault tile in the
-    // legacy UI did "send to inventory" — preserve that behavior here
-    // by short-circuiting to a shift-click style transfer.
     if (!cursor && occupant && location.region === 'vault') {
-      const ok = await handlers.transferVaultToInv(location.page, location.slot, occupant.quantity);
-      return { cursorAfter: null, status: ok ? `dblclick vault→inv x${occupant.quantity} OK` : 'dblclick vault→inv FAIL' };
+      const dstSlot = handlers.findFirstEmptyInventorySlot();
+      if (dstSlot == null) return { cursorAfter: cursor, status: 'dblclick: inv full' };
+      const ok = await handlers.transferSlot(
+        { region: 'vault', page: location.page, slot: location.slot },
+        { region: 'inventory', page: 0, slot: dstSlot },
+        1,
+      );
+      return { cursorAfter: null, status: ok ? `dblclick vault→inv OK` : 'dblclick vault→inv FAIL' };
     }
     return { cursorAfter: cursor, status: '' };
   }
@@ -169,7 +192,7 @@ export async function slotClick(
   return { cursorAfter: cursor, status: '' };
 }
 
-// ── performDrop: routes cursor → slot through the right RPC ────────
+// ── performDrop: routes cursor → slot through the unified transfer ────
 async function performDrop(
   cursor: CursorStackPayload,
   qty: number,
@@ -179,65 +202,29 @@ async function performDrop(
   const origin = cursor.origin;
   console.warn('[DROP]', { origin, dst, qty });
 
-  // Origin is INVENTORY
-  if (origin.region === 'inventory') {
-    if (dst.region === 'vault') {
-      // Whole inventory row only (transfer takes row ids).
-      const ok = await h.transferInvToVault([origin.rowId], dst.page, dst.slot);
-      return { ok, reason: ok ? undefined : 'transferInvToVault rejected' };
-    }
-    if (dst.region === 'inventory') {
-      // Pure positional swap, no RPC needed.
-      h.swapInventorySlots(origin.gridSlot, dst.gridSlot);
-      return { ok: true };
-    }
-    if (dst.region === 'hotbar') {
-      // QS-as-storage: MOVE the inv row into the QS slot. Atomic RPC.
-      const ok = await h.transferInvToQs(origin.rowId, dst.slot);
-      return { ok, reason: ok ? undefined : 'transferInvToQs rejected' };
-    }
+  // Inv → Inv: purely positional swap, no RPC.
+  if (origin.region === 'inventory' && dst.region === 'inventory') {
+    h.swapInventorySlots(origin.gridSlot, dst.gridSlot);
+    return { ok: true };
   }
 
-  // Origin is HOTBAR (QS) — QS-as-storage: every transition is a MOVE.
-  if (origin.region === 'hotbar') {
-    if (dst.region === 'hotbar') {
-      // QS→QS move: round-trip through inv to swap atomically. The
-      // transfer_inv_to_qs RPC handles "kick existing item to inv"
-      // automatically, so this two-call sequence preserves the item.
-      // (A dedicated transfer_qs_to_qs RPC would be cleaner; future
-      // optimization.)
-      const okOut = await h.transferQsToInv(origin.slot);
-      if (!okOut) return { ok: false, reason: 'qs→qs: source unequip failed' };
-      // The just-unequipped item is now an inv row, but we don't know
-      // its id here. The user will need to drag it again to land it
-      // in the target slot. Half-implementation for now.
-      return { ok: true };
-    }
-    if (dst.region === 'inventory') {
-      const ok = await h.transferQsToInv(origin.slot);
-      return { ok, reason: ok ? undefined : 'transferQsToInv rejected' };
-    }
-    if (dst.region === 'vault') {
-      const ok = await h.transferQsToVault(origin.slot, dst.page, dst.slot);
-      return { ok, reason: ok ? undefined : 'transferQsToVault rejected' };
-    }
-  }
+  // Everything else: ONE transferSlot call. Region mapping:
+  // hotbar (cursor origin) ↔ quick_select (DB region)
+  const regionOf = (loc: typeof origin | typeof dst): 'inventory' | 'quick_select' | 'vault' => {
+    if (loc.region === 'hotbar') return 'quick_select';
+    return loc.region;
+  };
+  const slotOf = (loc: typeof origin | typeof dst): number => {
+    if (loc.region === 'inventory') return loc.gridSlot;
+    return loc.slot;
+  };
+  const pageOf = (loc: typeof origin | typeof dst): number =>
+    loc.region === 'vault' ? loc.page : 0;
 
-  // Origin is VAULT
-  if (origin.region === 'vault') {
-    if (dst.region === 'vault') {
-      const ok = await h.transferVaultToVault(origin.page, origin.slot, dst.page, dst.slot, qty);
-      return { ok };
-    }
-    if (dst.region === 'inventory') {
-      const ok = await h.transferVaultToInv(origin.page, origin.slot, qty);
-      return { ok };
-    }
-    if (dst.region === 'hotbar') {
-      const ok = await h.transferVaultToQs(origin.page, origin.slot, dst.slot);
-      return { ok, reason: ok ? undefined : 'transferVaultToQs rejected' };
-    }
-  }
-
-  return { ok: false, reason: 'unhandled origin/destination combo' };
+  const ok = await h.transferSlot(
+    { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) },
+    { region: regionOf(dst), page: pageOf(dst), slot: slotOf(dst) },
+    qty,
+  );
+  return { ok, reason: ok ? undefined : 'transferSlot rejected' };
 }

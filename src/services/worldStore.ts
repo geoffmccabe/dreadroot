@@ -707,6 +707,75 @@ export async function transferVaultToVault(
   };
 }
 
+// ── Unified user_slots transfer (v4.11.0+) ─────────────────────────
+//
+// ONE RPC replaces 7. Handles every inv/qs/vault transfer combo. The
+// from_/to_ region pair determines stacking + capacity rules; the
+// RPC body enforces them and writes one item_history audit row.
+
+export interface SlotRegion {
+  region: 'inventory' | 'quick_select' | 'vault';
+  page: number;
+  slot: number;
+}
+
+export async function transferSlot(
+  from: SlotRegion,
+  to: SlotRegion,
+  quantity: number,
+  requestId?: string,
+): Promise<{ replayed: boolean; itemId?: string; quantity?: number; noop?: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('transfer_slot', {
+    p_from_region: from.region,
+    p_from_page: from.page,
+    p_from_slot: from.slot,
+    p_to_region: to.region,
+    p_to_page: to.page,
+    p_to_slot: to.slot,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean; itemId?: string; quantity?: number; noop?: boolean };
+}
+
+export async function grantSlot(
+  region: 'inventory' | 'quick_select' | 'vault',
+  itemId: string,
+  quantity: number = 1,
+  requestId?: string,
+): Promise<{ replayed: boolean; granted: number }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('grant_slot', {
+    p_region: region,
+    p_item_id: itemId,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean; granted: number };
+}
+
+export async function consumeSlot(
+  region: 'inventory' | 'quick_select' | 'vault',
+  page: number,
+  slot: number,
+  quantity: number = 1,
+  requestId?: string,
+): Promise<{ replayed: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('consume_slot', {
+    p_region: region,
+    p_page: page,
+    p_slot: slot,
+    p_quantity: quantity,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean };
+}
+
 // ── Quick Select transfers (QS-as-storage model) ───────────────────
 //
 // QS slots HOLD items (not references). Every move is atomic + audited.
@@ -792,13 +861,8 @@ export async function consumeQuickSlot(
   qsSlot: number,
   requestId?: string,
 ): Promise<{ replayed: boolean }> {
-  const reqId = requestId ?? crypto.randomUUID();
-  const { data, error } = await supabase.rpc('consume_quick_slot', {
-    p_qs_slot: qsSlot,
-    p_client_request_id: reqId,
-  });
-  if (error) rethrowMissingRpc('consume_quick_slot', QS_MIGRATION, error);
-  return data as { replayed: boolean };
+  // v4.11.0: route through the unified consume_slot RPC.
+  return consumeSlot('quick_select', 0, qsSlot, 1, requestId);
 }
 
 // ── Namespace export ────────────────────────────────────────────────
@@ -840,4 +904,8 @@ export const worldStore = {
   transferQsToVault,
   transferVaultToQs,
   consumeQuickSlot,
+  // Unified API (v4.11.0+) — prefer these over the region-pair RPCs.
+  transferSlot,
+  grantSlot,
+  consumeSlot,
 };
