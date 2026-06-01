@@ -13,6 +13,7 @@ import {
   useCursorStack,
   SlotGrid,
   CursorSprite,
+  ItemTileVisual,
   slotClick,
   type SlotClickInput,
   type SlotClickHandlers,
