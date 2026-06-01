@@ -929,10 +929,8 @@ export const useUserData = () => {
   }, [user?.id]);
 
   // Optimistic equip — used by the cursor-stack reducer's QS transfer
-  // handlers so the UI updates instantly without waiting for the
-  // user_equipped_items realtime sub (which is sometimes flaky on
-  // Supabase setups where the publication isn't fully configured).
-  // Pass itemId=null to optimistically clear the slot.
+  // handlers so the UI updates instantly without waiting for realtime
+  // (which has been flaky in practice for these tables).
   const setEquippedSlotOptimistic = useCallback((slot: number, itemId: string | null) => {
     setEquippedItems(prev => {
       const filtered = prev.filter(e => e.slot !== slot);
@@ -940,6 +938,35 @@ export const useUserData = () => {
       return filtered;
     });
   }, []);
+
+  // Optimistic inv row removal — called after a transfer RPC moves
+  // an inv row to QS or vault. Realtime SHOULD also deliver the
+  // DELETE event and remove the row, but the local mutation makes
+  // the UI snap immediately. The realtime path becomes a no-op
+  // dedupe (filter on an id that's already gone).
+  const removeInventoryRowOptimistic = useCallback((rowId: string) => {
+    setInventory(prev => prev.filter(r => r.id !== rowId));
+  }, []);
+
+  // Optimistic inv row add — used when a QS→Inv or Vault→Inv transfer
+  // succeeds and we want the new tile to appear instantly. The real
+  // row gets reconciled in by realtime/refetch later; this synthetic
+  // row carries the same itemId so the inventory grid renders the
+  // correct sprite.
+  const addInventoryRowOptimistic = useCallback((itemId: string) => {
+    setInventory(prev => {
+      const synthetic: UserInventoryItem = {
+        id: `tmp-${Math.random().toString(36).slice(2)}`,
+        user_id: user?.id ?? '',
+        item_type: 'item',
+        item_id: itemId,
+        quantity: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      return [...prev, synthetic];
+    });
+  }, [user?.id]);
 
   const updateDisplayName = useCallback(async (name: string) => {
     if (!user?.id) return;
@@ -987,6 +1014,8 @@ export const useUserData = () => {
     updateEquippedSlot,
     consumeQuickSlot,
     setEquippedSlotOptimistic,
+    removeInventoryRowOptimistic,
+    addInventoryRowOptimistic,
     updateDisplayName,
     updateAvatarUrl,
     updateVisualDistance,

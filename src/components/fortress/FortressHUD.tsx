@@ -132,6 +132,8 @@ export function FortressHUD(props: FortressHUDProps) {
     onCloseVault,
     vaultForceCloseToken,
     setEquippedSlotOptimistic,
+    removeInventoryRowOptimistic,
+    addInventoryRowOptimistic,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
@@ -466,35 +468,44 @@ export function FortressHUD(props: FortressHUDProps) {
     // ALSO do optimistic local state updates so the UI updates the
     // INSTANT the RPC succeeds — the realtime sub on user_equipped_items
     // is meant to handle this but has been flaky in practice.
+    // Full optimistic updates on BOTH sides of each move — neither
+    // user_inventory nor user_equipped_items realtime has proven
+    // reliable enough to be the primary state source. Pattern:
+    //   1. snapshot the source's identity (rowId/itemId) BEFORE RPC
+    //   2. await RPC
+    //   3. mutate local state to reflect the move
+    // Realtime now serves as eventual-consistency reconciliation.
     transferInvToQs: async (invRowId, qsSlot) => {
-      // Look up the item being moved so we know what to put in the QS slot.
       const invRow = (inventory || []).find((r: any) => r.id === invRowId);
       const movedItemId = invRow?.item_id ?? null;
       await worldStore.transferInvToQs(invRowId, qsSlot);
-      // Optimistic QS state update.
-      if (movedItemId && setEquippedSlotOptimistic) {
-        setEquippedSlotOptimistic(qsSlot, movedItemId);
-      }
+      if (removeInventoryRowOptimistic) removeInventoryRowOptimistic(invRowId);
+      if (movedItemId && setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, movedItemId);
       return true;
     },
     transferQsToInv: async (qsSlot) => {
+      const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
+        .find(e => e.slot === qsSlot);
+      const movedItemId = eq?.itemId ?? null;
       await worldStore.transferQsToInv(qsSlot);
       if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
+      if (movedItemId && addInventoryRowOptimistic) addInventoryRowOptimistic(movedItemId);
       return true;
     },
     transferQsToVault: async (qsSlot, vaultPage, vaultSlot) => {
       await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot);
       if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
+      // Vault side updates via useVaultData's own optimistic logic.
       return true;
     },
     transferVaultToQs: async (vaultPage, vaultSlot, qsSlot) => {
-      // The vault row's item_id is what lands in QS. Find it from the
-      // bridge's vault state — we get it cheaply from the cursor's
-      // origin payload via the reducer's input, but here we don't
-      // have it directly. Fall back to relying on realtime / refetch
-      // for VaultToQs visibility; the inv side won't render anything
-      // weird in the meantime.
+      // Look up the vault row's item_id so we can optimistically equip it.
+      const vaultRow = vaultBridge ? null : null; // bridge doesn't expose rows; defer
       await worldStore.transferVaultToQs(vaultPage, vaultSlot, qsSlot);
+      // The QS state will update via the next inventoryItemsMap pass
+      // once the vault row's item_id reaches us. For now we rely on
+      // realtime / re-render once useVaultData's optimistic decrement
+      // settles. (Acceptable since vault→QS is rarer.)
       return true;
     },
     swapInventorySlots,
@@ -504,7 +515,8 @@ export function FortressHUD(props: FortressHUDProps) {
     activeVaultPage: vaultBridge?.activePage ?? 0,
   }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
-       inventory, setEquippedSlotOptimistic]);
+       inventory, equippedItems,
+       setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic]);
 
   // The single entry point every slot click goes through. Surfaces
   // status from the reducer to the debug badge so the user can SEE
@@ -1224,6 +1236,9 @@ export function FortressHUD(props: FortressHUDProps) {
                       position: 'relative',
                       cursor: slot.itemId ? 'grab' : 'pointer',
                       opacity: isGhosted ? 0.2 : 1,
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      WebkitTouchCallout: 'none',
                     }}
                     title={slot.name || `Slot ${slot.slot}`}
                   >
