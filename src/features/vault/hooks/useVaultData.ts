@@ -281,6 +281,12 @@ export function useVaultData(userId: string | null) {
   // so a half-completed transfer can't lose items. Each call also
   // writes an item_history audit row.
 
+  // Refetches run fire-and-forget so the UI updates instantly when
+  // the RPC returns, instead of blocking for a second full vault
+  // SELECT round-trip. The local state is also patched optimistically
+  // below for instant visual feedback; refetch then reconciles with
+  // server truth in the background.
+
   /** Move one or more inventory rows of the SAME item_id into a
    *  vault slot (stacks on a matching item, fills if empty). */
   const transferFromInventory = useCallback(async (
@@ -291,15 +297,31 @@ export function useVaultData(userId: string | null) {
       const result = await worldStore.transferInventoryToVault(
         inventoryRowIds, page, slot,
       );
-      await ensureItemDefs([result.itemId]);
-      // Refetch is the simplest reconcile path here — inventory rows
-      // were removed by the RPC, and the vault row got updated; both
-      // sides need to converge. Vault rows are tiny so refetch is cheap.
-      await refetch();
+      // Optimistic: bump the target vault row's qty by the transfer
+      // count locally so the UI updates without waiting for refetch.
+      setRows(prev => {
+        const existingIdx = prev.findIndex(r => r.page === page && r.slot === slot);
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], quantity: next[existingIdx].quantity + result.quantity };
+          return next;
+        }
+        // New slot — synthesize a row from result for instant render.
+        const newRow: VaultRow = {
+          id: result.vaultRow?.id ?? `tmp-${Math.random().toString(36).slice(2)}`,
+          user_id: userId,
+          page, slot,
+          item_id: result.itemId,
+          quantity: result.quantity,
+        };
+        return [...prev, newRow];
+      });
+      void ensureItemDefs([result.itemId]);
+      void refetch(); // background reconcile
       return true;
     } catch (err) {
       console.error('[useVaultData] transferFromInventory failed:', err);
-      await refetch();
+      void refetch();
       return false;
     }
   }, [userId, ensureItemDefs, refetch]);
@@ -311,11 +333,21 @@ export function useVaultData(userId: string | null) {
     if (!userId || quantity <= 0) return false;
     try {
       await worldStore.transferVaultToInventory(page, slot, quantity);
-      await refetch();
+      // Optimistic: decrement source vault row.
+      setRows(prev => {
+        const idx = prev.findIndex(r => r.page === page && r.slot === slot);
+        if (idx < 0) return prev;
+        const nextQty = prev[idx].quantity - quantity;
+        if (nextQty <= 0) return prev.filter((_, i) => i !== idx);
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: nextQty };
+        return next;
+      });
+      void refetch();
       return true;
     } catch (err) {
       console.error('[useVaultData] transferToInventory failed:', err);
-      await refetch();
+      void refetch();
       return false;
     }
   }, [userId, refetch]);
@@ -327,14 +359,39 @@ export function useVaultData(userId: string | null) {
   ): Promise<boolean> => {
     if (!userId || quantity <= 0) return false;
     try {
-      await worldStore.transferVaultToVault(
+      const result = await worldStore.transferVaultToVault(
         srcPage, srcSlot, dstPage, dstSlot, quantity,
       );
-      await refetch();
+      // Optimistic: decrement src, increment/create dst.
+      setRows(prev => {
+        let next = prev;
+        const srcIdx = next.findIndex(r => r.page === srcPage && r.slot === srcSlot);
+        if (srcIdx >= 0) {
+          const nextQty = next[srcIdx].quantity - quantity;
+          if (nextQty <= 0) next = next.filter((_, i) => i !== srcIdx);
+          else { next = [...next]; next[srcIdx] = { ...next[srcIdx], quantity: nextQty }; }
+        }
+        const dstIdx = next.findIndex(r => r.page === dstPage && r.slot === dstSlot);
+        if (dstIdx >= 0) {
+          next = [...next];
+          next[dstIdx] = { ...next[dstIdx], quantity: next[dstIdx].quantity + quantity };
+        } else if (result.itemId) {
+          const newRow: VaultRow = {
+            id: result.destinationRow?.id ?? `tmp-${Math.random().toString(36).slice(2)}`,
+            user_id: userId,
+            page: dstPage, slot: dstSlot,
+            item_id: result.itemId,
+            quantity,
+          };
+          next = [...next, newRow];
+        }
+        return next;
+      });
+      void refetch();
       return true;
     } catch (err) {
       console.error('[useVaultData] transferWithinVault failed:', err);
-      await refetch();
+      void refetch();
       return false;
     }
   }, [userId, refetch]);

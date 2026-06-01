@@ -503,6 +503,10 @@ export function FortressHUD(props: FortressHUDProps) {
     }
   }, [cursor, slotClickHandlers, setCursor]);
 
+  // Which hotbar slot the pointer is currently hovering — used for
+  // drop-target highlight + onPointerUp drop dispatch.
+  const [hoveredHotbarSlot, setHoveredHotbarSlot] = useState<number | null>(null);
+
   // Clear the cursor stack when ALL inventory UIs close. Otherwise
   // the floating sprite stays on screen with an origin pointing at an
   // unmounted panel — next click would target a stale slot.
@@ -1069,6 +1073,12 @@ export function FortressHUD(props: FortressHUDProps) {
               // in the hotbar.
               const isGhosted = cursor?.origin.region === 'hotbar'
                 && cursor.origin.slot === slot.slot;
+              // Drop-target highlight: green when a cursor is held AND
+              // this slot would accept the drop (empty, same item, or
+              // is the source itself for return-cancel).
+              const isHovered = hoveredHotbarSlot === slot.slot;
+              const wouldAcceptDrop = cursorStackActive && isHovered &&
+                (isGhosted || !slot.itemId || slot.itemId === cursor!.itemId);
               return (
                 <div
                   key={slot.slot}
@@ -1115,6 +1125,37 @@ export function FortressHUD(props: FortressHUDProps) {
                       setSelectedSlot(slot.slot);
                       if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(slot.slot);
                     }}
+                    onPointerUp={(e) => {
+                      // Press-and-drag release on a hotbar tile drops
+                      // the cursor here. Releasing on the source tile
+                      // (ghosted) returns the cursor (no DB call).
+                      if (e.button !== 0) return;
+                      if (!cursor) return;
+                      if (isGhosted) {
+                        // Return-to-source: just clear the cursor.
+                        // We can't easily import cursorStackApi here
+                        // without growing deps — route through the
+                        // reducer with the slot as both source & dst
+                        // and let the no-op fall through to ESC-equiv.
+                        handleSlotClick({
+                          location: { region: 'hotbar', slot: slot.slot },
+                          occupant: slotOccupant,
+                          button: 'left',
+                          shift: e.shiftKey,
+                          doubleClick: false,
+                        });
+                        return;
+                      }
+                      handleSlotClick({
+                        location: { region: 'hotbar', slot: slot.slot },
+                        occupant: slotOccupant,
+                        button: 'left',
+                        shift: e.shiftKey,
+                        doubleClick: false,
+                      });
+                    }}
+                    onPointerEnter={() => setHoveredHotbarSlot(slot.slot)}
+                    onPointerLeave={() => setHoveredHotbarSlot(s => s === slot.slot ? null : s)}
                     onContextMenu={(e) => { e.preventDefault(); }}
                     className={
                       isGrenadeReady ? 'grenade-ready-pulse'
@@ -1126,18 +1167,22 @@ export function FortressHUD(props: FortressHUDProps) {
                       width: '56px',
                       height: '56px',
                       borderRadius: 'var(--hud-radius)',
-                      border: isGrenadeReady
-                        ? '2px solid #00ff66'
-                        : isEggReady
-                          ? '2px solid #000000'
-                          : isDrinking
-                            ? '2px solid #ff3a6a'
-                            : isSelected
-                              ? '2px solid white'
-                              : '1px solid hsla(var(--hud-border))',
-                      background: isSelected
-                        ? 'hsla(var(--hud-bg))'
-                        : 'hsla(var(--hud-bg-dim))',
+                      border: wouldAcceptDrop
+                        ? '2px solid hsla(120, 100%, 60%, 0.95)'
+                        : isGrenadeReady
+                          ? '2px solid #00ff66'
+                          : isEggReady
+                            ? '2px solid #000000'
+                            : isDrinking
+                              ? '2px solid #ff3a6a'
+                              : isSelected
+                                ? '2px solid white'
+                                : '1px solid hsla(var(--hud-border))',
+                      background: wouldAcceptDrop
+                        ? 'hsla(120, 60%, 25%, 0.35)'
+                        : isSelected
+                          ? 'hsla(var(--hud-bg))'
+                          : 'hsla(var(--hud-bg-dim))',
                       backdropFilter: 'blur(8px) saturate(140%)',
                       WebkitBackdropFilter: 'blur(8px) saturate(140%)',
                       display: 'flex',
