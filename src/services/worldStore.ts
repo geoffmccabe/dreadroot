@@ -711,6 +711,21 @@ export async function transferVaultToVault(
 //
 // QS slots HOLD items (not references). Every move is atomic + audited.
 
+// Detect Supabase "function not found" errors and rewrite them with
+// the migration filename the user needs to run. Otherwise the user
+// sees an opaque PostgREST PGRST202 with no clear remediation.
+function rethrowMissingRpc(rpcName: string, migrationFile: string, error: any): never {
+  const msg = String(error?.message ?? error);
+  if (msg.includes('Could not find the function') || error?.code === 'PGRST202') {
+    throw new Error(
+      `[migration not deployed] RPC "${rpcName}" missing. Run ${migrationFile} in the Supabase SQL editor.`
+    );
+  }
+  throw error;
+}
+
+const QS_MIGRATION = '20260601160000_quick_slots_are_storage.sql';
+
 export async function transferInvToQs(
   inventoryRowId: string,
   qsSlot: number,
@@ -722,7 +737,7 @@ export async function transferInvToQs(
     p_qs_slot: qsSlot,
     p_client_request_id: reqId,
   });
-  if (error) throw error;
+  if (error) rethrowMissingRpc('transfer_inv_to_qs', QS_MIGRATION, error);
   return data as { replayed: boolean };
 }
 
@@ -735,7 +750,7 @@ export async function transferQsToInv(
     p_qs_slot: qsSlot,
     p_client_request_id: reqId,
   });
-  if (error) throw error;
+  if (error) rethrowMissingRpc('transfer_qs_to_inv', QS_MIGRATION, error);
   return data as { replayed: boolean };
 }
 
@@ -752,7 +767,7 @@ export async function transferQsToVault(
     p_vault_slot: vaultSlot,
     p_client_request_id: reqId,
   });
-  if (error) throw error;
+  if (error) rethrowMissingRpc('transfer_qs_to_vault', QS_MIGRATION, error);
   return data as { replayed: boolean };
 }
 
@@ -769,7 +784,7 @@ export async function transferVaultToQs(
     p_qs_slot: qsSlot,
     p_client_request_id: reqId,
   });
-  if (error) throw error;
+  if (error) rethrowMissingRpc('transfer_vault_to_qs', QS_MIGRATION, error);
   return data as { replayed: boolean };
 }
 
@@ -782,7 +797,7 @@ export async function consumeQuickSlot(
     p_qs_slot: qsSlot,
     p_client_request_id: reqId,
   });
-  if (error) throw error;
+  if (error) rethrowMissingRpc('consume_quick_slot', QS_MIGRATION, error);
   return data as { replayed: boolean };
 }
 
