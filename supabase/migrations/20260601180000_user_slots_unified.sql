@@ -76,18 +76,21 @@ DECLARE
   v_eq  INT := 0;
   v_v   INT := 0;
 BEGIN
-  -- Inventory items → user_slots region='inventory'. Assign slot
-  -- indices by created_at order, per user.
+  -- Inventory items → user_slots region='inventory'. Cap at slot 17
+  -- (18 slots total). Items past index 18 per user are excess from
+  -- the earlier "invisible inventory" bug — drop them rather than
+  -- pollute the vault. (They were never visible or usable anyway.)
   WITH numbered AS (
-    SELECT id, user_id, item_id, quantity, created_at,
-           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at) - 1 AS slot_idx
+    SELECT id, user_id, item_id, created_at,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at) - 1 AS idx
       FROM user_inventory
      WHERE item_type = 'item' AND item_id IS NOT NULL
   ),
   inserted AS (
     INSERT INTO user_slots (id, user_id, region, page, slot, item_id, quantity, created_at, updated_at)
-    SELECT id, user_id, 'inventory', 0, slot_idx, item_id, 1, created_at, created_at
+    SELECT id, user_id, 'inventory', 0, idx, item_id, 1, created_at, created_at
       FROM numbered
+     WHERE idx < 18
     ON CONFLICT (user_id, region, page, slot) DO NOTHING
     RETURNING 1
   )
