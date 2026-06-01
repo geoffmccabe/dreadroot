@@ -995,6 +995,91 @@ export const useUserData = () => {
     }));
   }, []);
 
+  // v4.12.6: optimistic cross-region swap/move. Handles inv↔QS in
+  // one synchronous update so the visual doesn't bounce through the
+  // source slot before refetch arrives. Returns a callback that
+  // reverts the change for the catch path.
+  const applySwapOptimistic = useCallback((
+    from: { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
+    to:   { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
+  ): (() => void) => {
+    // INV → INV swap (also handles move-to-empty)
+    if (from.region === 'inventory' && to.region === 'inventory') {
+      setInventory(prev => prev.map(r => {
+        if ((r as any).slot === from.slot) return { ...r, slot: to.slot } as any;
+        if ((r as any).slot === to.slot)   return { ...r, slot: from.slot } as any;
+        return r;
+      }));
+      return () => setInventory(prev => prev.map(r => {
+        if ((r as any).slot === from.slot) return { ...r, slot: to.slot } as any;
+        if ((r as any).slot === to.slot)   return { ...r, slot: from.slot } as any;
+        return r;
+      }));
+    }
+    // INV → QS  (or QS → INV)  swap. Snapshot ids so we can revert.
+    if ((from.region === 'inventory' && to.region === 'quick_select')
+        || (from.region === 'quick_select' && to.region === 'inventory')) {
+      const invSide = from.region === 'inventory' ? from : to;
+      const qsSide  = from.region === 'inventory' ? to : from;
+      let invRowSnap: any = null;
+      let qsItemSnap: string | null = null;
+      setInventory(prev => {
+        const row = prev.find(r => (r as any).slot === invSide.slot && r.item_type === 'item');
+        invRowSnap = row ? { ...row } : null;
+        if (!row) return prev;
+        // Pull the QS occupant's itemId (best effort — snapshot below).
+        return prev.map(r => {
+          if ((r as any).slot === invSide.slot && r.id === row.id) {
+            // We'll patch item_id after we read equippedItems below.
+            return r;
+          }
+          return r;
+        });
+      });
+      setEquippedItems(prev => {
+        const eq = prev.find(e => e.slot === qsSide.slot);
+        qsItemSnap = eq?.itemId ?? null;
+        if (!eq || !invRowSnap) return prev;
+        // Put inv's item into the QS slot.
+        return prev.map(e => e.slot === qsSide.slot
+          ? { ...e, itemId: (invRowSnap as any).item_id }
+          : e);
+      });
+      // Now patch the inv row's item_id to QS's old itemId.
+      setInventory(prev => prev.map(r => {
+        if ((r as any).slot === invSide.slot && invRowSnap && r.id === (invRowSnap as any).id) {
+          return { ...r, item_id: qsItemSnap } as any;
+        }
+        return r;
+      }));
+      return () => {
+        if (!invRowSnap) return;
+        const origItem = (invRowSnap as any).item_id;
+        setInventory(prev => prev.map(r => {
+          if (r.id === (invRowSnap as any).id) return { ...r, item_id: origItem } as any;
+          return r;
+        }));
+        setEquippedItems(prev => prev.map(e => e.slot === qsSide.slot
+          ? { ...e, itemId: qsItemSnap! }
+          : e));
+      };
+    }
+    // QS → QS swap
+    if (from.region === 'quick_select' && to.region === 'quick_select') {
+      setEquippedItems(prev => prev.map(e => {
+        if (e.slot === from.slot) return { ...e, slot: to.slot };
+        if (e.slot === to.slot)   return { ...e, slot: from.slot };
+        return e;
+      }));
+      return () => setEquippedItems(prev => prev.map(e => {
+        if (e.slot === from.slot) return { ...e, slot: to.slot };
+        if (e.slot === to.slot)   return { ...e, slot: from.slot };
+        return e;
+      }));
+    }
+    return () => {};
+  }, []);
+
   // Brute-force resync of inventory + QS state from server. Called
   // after every QS transfer so client state can't drift from DB —
   // realtime has proven too unreliable to depend on. The cost is
@@ -1080,6 +1165,7 @@ export const useUserData = () => {
     addInventoryRowOptimistic,
     swapInventoryRowsOptimistic,
     moveInventoryRowOptimistic,
+    applySwapOptimistic,
     refetchInventoryAndQs,
     updateDisplayName,
     updateAvatarUrl,

@@ -137,6 +137,7 @@ export function FortressHUD(props: FortressHUDProps) {
     addInventoryRowOptimistic,
     swapInventoryRowsOptimistic,
     moveInventoryRowOptimistic,
+    applySwapOptimistic,
     refetchInventoryAndQs,
     inventoryOpen = false,
     setInventoryOpen,
@@ -148,6 +149,7 @@ export function FortressHUD(props: FortressHUDProps) {
     potionDrinkingSlot = null,
     onUseHotbarSlot,
     playerPositionRef,
+    playerForwardRef,
   } = props;
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
@@ -485,28 +487,40 @@ export function FortressHUD(props: FortressHUDProps) {
       }
     },
     swapSlot: async (from, to) => {
-      // Optimistic inv↔inv swap so the visual snaps instantly. Other
-      // region combos still wait for refetch (less common and the
-      // local state isn't a clean swap target).
-      const inv2inv = from.region === 'inventory' && to.region === 'inventory';
-      if (inv2inv) swapInventoryRowsOptimistic?.(from.slot, to.slot);
+      // Apply the optimistic swap BEFORE the RPC so the cursor clear
+      // doesn't briefly reveal the source slot with its old item.
+      // applySwapOptimistic returns a revert callback we call on
+      // failure. Works for inv↔inv, inv↔QS, QS↔QS today; vault
+      // combos fall through to refetch reconciliation.
+      const revert = applySwapOptimistic?.(from, to) ?? (() => {});
       try {
         await worldStore.swapSlot(from, to);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
         return true;
       } catch (err) {
-        if (inv2inv) swapInventoryRowsOptimistic?.(from.slot, to.slot); // toggle back
+        revert();
         console.error('[swapSlot] failed:', err);
         return false;
       }
     },
     ejectSlotToWorld: async (from) => {
       try {
-        // Fall back to (0, 64, 0) if the player ref isn't populated
-        // yet — better to drop SOMEWHERE than silently lose the item.
+        // Drop 2m in front of the player's view so the item is
+        // visible the moment it lands. Falls back to player position
+        // if the camera-forward ref isn't populated, then to (0,64,0)
+        // if the player ref is also empty.
         const ref = playerPositionRef?.current;
-        const pos = ref ? { x: ref.x, y: ref.y, z: ref.z } : { x: 0, y: 64, z: 0 };
-        if (!ref) console.warn('[ejectSlotToWorld] no player position; using fallback', pos);
+        const fwd = playerForwardRef?.current;
+        let pos = { x: 0, y: 64, z: 0 };
+        if (ref) {
+          if (fwd) {
+            pos = { x: ref.x + fwd.x * 2, y: ref.y + fwd.y * 2, z: ref.z + fwd.z * 2 };
+          } else {
+            pos = { x: ref.x, y: ref.y, z: ref.z };
+          }
+        } else {
+          console.warn('[ejectSlotToWorld] no player position; using fallback', pos);
+        }
         await worldStore.ejectSlotToWorld(from, pos);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
         return true;
@@ -522,8 +536,9 @@ export function FortressHUD(props: FortressHUDProps) {
     activeVaultPage: vaultBridge?.activePage ?? 0,
   }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
-       refetchInventoryAndQs, playerPositionRef,
-       swapInventoryRowsOptimistic, moveInventoryRowOptimistic]);
+       refetchInventoryAndQs, playerPositionRef, playerForwardRef,
+       swapInventoryRowsOptimistic, moveInventoryRowOptimistic,
+       applySwapOptimistic]);
 
   // The single entry point every slot click goes through. Surfaces
   // status from the reducer to the debug badge so the user can SEE

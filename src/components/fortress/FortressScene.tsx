@@ -143,6 +143,7 @@ export function FortressScene({
   onOpenMarketplace,
   onOpenGodMap,
   playerPositionRef,
+  playerForwardRef,
   onToggleInventory,
   crosshairsEnabled,
   getBlockQuantity,
@@ -1298,6 +1299,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         (playerPositionRef as React.MutableRefObject<THREE.Vector3 | null>).current = new THREE.Vector3();
       }
       playerPositionRef.current!.copy(camera.position);
+    }
+    if (playerForwardRef) {
+      if (!playerForwardRef.current) {
+        (playerForwardRef as React.MutableRefObject<THREE.Vector3 | null>).current = new THREE.Vector3();
+      }
+      camera.getWorldDirection(playerForwardRef.current!);
     }
     _snapEuler.setFromQuaternion(camera.quaternion, 'YXZ');
     updateLocalPlayerSnapshot({

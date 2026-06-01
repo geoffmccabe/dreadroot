@@ -247,6 +247,10 @@ export function Fortress() {
   // are here" dot without a render-thrash subscription.
   const [godMapOpen, setGodMapOpen] = useState(false);
   const playerPositionRef = useRef<THREE.Vector3 | null>(null);
+  // Camera look direction (unit vector) — refreshed per-frame in
+  // FortressScene from camera.getWorldDirection(). Used by the eject-
+  // to-world handler to drop items 2m in front of the player's view.
+  const playerForwardRef = useRef<THREE.Vector3 | null>(null);
 
   // Shpider Egg ready slot — same shape as grenadeReadySlot. Armed via
   // Y, thrown on click. Eggs hatch on rest into a pet shpider.
@@ -280,7 +284,7 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, swapInventoryRowsOptimistic, moveInventoryRowOptimistic, refetchInventoryAndQs, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, swapInventoryRowsOptimistic, moveInventoryRowOptimistic, applySwapOptimistic, refetchInventoryAndQs, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -1884,6 +1888,7 @@ export function Fortress() {
           onOpenMarketplace={openMarketplace}
           onOpenGodMap={() => setGodMapOpen(true)}
           playerPositionRef={playerPositionRef}
+          playerForwardRef={playerForwardRef}
           onToggleInventory={() => {
             setInventoryOpen(prev => {
               const next = !prev;
@@ -2322,6 +2327,7 @@ export function Fortress() {
         addInventoryRowOptimistic={addInventoryRowOptimistic}
         swapInventoryRowsOptimistic={swapInventoryRowsOptimistic}
         moveInventoryRowOptimistic={moveInventoryRowOptimistic}
+        applySwapOptimistic={applySwapOptimistic}
         refetchInventoryAndQs={refetchInventoryAndQs}
         addItem={addItem}
         removeInventoryRow={removeInventoryRow}
@@ -2335,6 +2341,8 @@ export function Fortress() {
         grenadeReadySlot={grenadeReadySlot}
         eggReadySlot={eggReadySlot}
         potionDrinkingSlot={potionDrinkingSlot}
+        playerPositionRef={playerPositionRef}
+        playerForwardRef={playerForwardRef}
       />
 
       <GodMapPanel
