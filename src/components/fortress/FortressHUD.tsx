@@ -485,6 +485,7 @@ export function FortressHUD(props: FortressHUDProps) {
       shift: input.shift,
       dbl: input.doubleClick,
       cursor: cursor ? { region: cursor.origin.region, itemId: cursor.itemId, qty: cursor.quantity } : null,
+      clientEqState: (equippedItems as any[]).map((e: any) => `${e.slot}:${e.itemId?.slice(0, 8) ?? '?'}`),
     });
     try {
       const result = await slotClick(input, cursor, slotClickHandlers);

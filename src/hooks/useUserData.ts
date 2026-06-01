@@ -214,6 +214,16 @@ export const useUserData = () => {
       const qsRows = ((userSlotsData as any[]) ?? [])
         .filter((s: any) => s.region === 'quick_select')
         .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
+      // Diagnostic: confirm what came back from the server. If
+      // qsRows is empty but you have equipped items, RLS / realtime /
+      // query is the culprit.
+      console.warn('[LOAD]', {
+        userSlotsRows: ((userSlotsData as any[]) ?? []).length,
+        inventoryFromSlots: slotItemRows.length,
+        qsFromSlots: qsRows.length,
+        qsSlotsList: qsRows.map(r => `${r.slot}:${r.itemId.slice(0, 8)}`),
+        vaultFromSlots: ((userSlotsData as any[]) ?? []).filter((s: any) => s.region === 'vault').length,
+      });
       setEquippedItems(qsRows);
       setUserRoles(roles);
 
