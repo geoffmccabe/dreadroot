@@ -859,33 +859,12 @@ export const useUserData = () => {
     }
   };
 
-  // Orphan-equipped cleanup. After consumeGrenade/consumeEgg/etc.
-  // delete the last inventory row of an item, the equipped slot is
-  // left pointing at a row that no longer exists. The slot then
-  // "looks armed" (G arms it because the slot has the grenade itemId)
-  // but throws silently fail because consumeGrenade can't find a row.
-  // This effect scans equipped slots and unequips any whose item_id
-  // has no live inventory backing. Single round-trip per orphan.
-  useEffect(() => {
-    if (!user?.id || equippedItems.length === 0) return;
-    const liveItemIds = new Set<string>();
-    for (const inv of inventory) {
-      if (inv.item_type === 'item' && inv.item_id && inv.quantity > 0) {
-        liveItemIds.add(inv.item_id);
-      }
-    }
-    const orphans = equippedItems.filter(eq => eq.itemId && !liveItemIds.has(eq.itemId));
-    if (orphans.length === 0) return;
-    (async () => {
-      const slotTypes = orphans.map(o => `hotbar_${o.slot}`);
-      try {
-        await worldStore.clearEquippedSlots(slotTypes);
-        setEquippedItems(prev => prev.filter(eq => !orphans.some(o => o.slot === eq.slot)));
-      } catch (err) {
-        console.warn('[OrphanEquip] cleanup failed:', err);
-      }
-    })();
-  }, [user?.id, inventory, equippedItems]);
+  // Orphan-equipped cleanup was needed in the OLD model where QS slots
+  // pointed at user_inventory rows by item_id, and a slot could be
+  // left pointing at a row that had already been consumed. Under the
+  // v4.11.0 unified user_slots model, the QS row IS the item — there
+  // is no inventory-side row to be orphaned from. The cleanup is now
+  // a no-op (kept here as documentation of the prior behavior).
 
   // v4.11.0: unified user_slots model. Equip = move item from inv
   // slot to QS slot via transferSlot. Unequip = move from QS to first
@@ -992,21 +971,31 @@ export const useUserData = () => {
   // after every QS transfer so client state can't drift from DB —
   // realtime has proven too unreliable to depend on. The cost is
   // one extra round-trip per transfer; the gain is correctness.
+  //
+  // v4.11.0+: items live in user_slots, blocks/seeds still in
+  // user_inventory. Both must be re-read and merged the same way as
+  // the initial load.
   const refetchInventoryAndQs = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const [invRes, eqRes] = await Promise.all([
+      const [invRes, slotRes] = await Promise.all([
         supabase.from('user_inventory').select('*').eq('user_id', user.id),
-        supabase.from('user_equipped_items').select('slot_type, item_id')
-          .eq('user_id', user.id).like('slot_type', 'hotbar_%'),
+        supabase.from('user_slots' as any).select('*').eq('user_id', user.id),
       ]);
-      if (invRes.data) setInventory(invRes.data as UserInventoryItem[]);
-      if (eqRes.data) {
-        setEquippedItems(eqRes.data.map((e: any) => ({
-          slot: parseInt(String(e.slot_type).replace('hotbar_', ''), 10),
-          itemId: e.item_id,
-        })));
-      }
+      const slotItemRows: UserInventoryItem[] = (((slotRes as any).data as any[]) ?? [])
+        .filter((s: any) => s.region === 'inventory')
+        .map((s: any) => ({
+          id: s.id, user_id: s.user_id, item_type: 'item',
+          item_id: s.item_id, quantity: 1,
+          created_at: s.created_at, updated_at: s.updated_at,
+        }));
+      const legacyBlocksSeedsRows = (invRes.data || [])
+        .filter((r: any) => r.item_type !== 'item' || r.item_id === null);
+      setInventory([...slotItemRows, ...legacyBlocksSeedsRows]);
+      const qsRows = (((slotRes as any).data as any[]) ?? [])
+        .filter((s: any) => s.region === 'quick_select')
+        .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
+      setEquippedItems(qsRows);
     } catch (err) {
       console.error('[refetchInventoryAndQs] failed:', err);
     }
