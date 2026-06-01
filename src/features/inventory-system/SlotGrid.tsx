@@ -24,7 +24,7 @@ const HELP_HOVER_DELAY_MS = 1000;
 export interface SlotGridProps {
   rows: number;
   cols: number;
-  /** map slotIndex (0..rows*cols-1) → occupant (or null if empty) */
+  /** map slotIndex (1..rows*cols) → occupant (or null if empty) */
   occupants: Map<number, SlotOccupant>;
   /** Build the SlotLocation for a given slotIndex. */
   locationOf: (slotIndex: number) => SlotLocation;
@@ -54,19 +54,20 @@ export function SlotGrid({
       }}
     >
       {Array.from({ length: totalSlots }, (_, i) => {
-        const occ = occupants.get(i);
-        const ghosted = isSlotGhosted?.(i) ?? false;
-        const highlight = i === highlightSlot;
+        const slotIdx = i + 1;
+        const occ = occupants.get(slotIdx);
+        const ghosted = isSlotGhosted?.(slotIdx) ?? false;
+        const highlight = slotIdx === highlightSlot;
         return (
           <SlotTile
-            key={i}
-            slotIndex={i}
+            key={slotIdx}
+            slotIndex={slotIdx}
             occupant={occ}
             ghosted={ghosted}
             highlight={highlight}
             onInspect={onSlotInspect}
             onClick={(button, shift, doubleClick) => onSlotClick({
-              location: locationOf(i),
+              location: locationOf(slotIdx),
               occupant: occ ?? null,
               button,
               shift,

@@ -317,11 +317,15 @@ export function FortressHUD(props: FortressHUDProps) {
     [equippedItems]
   );
 
-  // Fixed 18-slot inventory grid. Each slot holds a "grid key" — for
-  // stackable items the key is the itemId (one tile per itemId, stacks
-  // count via quantity badge), for non-stackable items the key is the
-  // inventory row.id (each grenade / potion gets its own tile).
-  const [invSlots, setInvSlots] = useState<Array<string | null>>(new Array(18).fill(null));
+  // Fixed 18-slot inventory grid, 1-indexed. invSlots[0] is unused
+  // dead space; the real slots are invSlots[1..18]. We keep an
+  // index-0 hole so every code path reads/writes the same number the
+  // DB stores (the DB slot column is 1..18). Each cell holds a
+  // "grid key" — for stackable items the key is the itemId (one tile
+  // per itemId, stacks count via quantity badge), for non-stackable
+  // items the key is the inventory row.id (each grenade / potion gets
+  // its own tile).
+  const [invSlots, setInvSlots] = useState<Array<string | null>>(new Array(19).fill(null));
 
   // All renderable inventory entries, keyed by grid key (itemId for
   // stacks, rowId for non-stackable rows). One entry per future tile.
@@ -360,26 +364,33 @@ export function FortressHUD(props: FortressHUDProps) {
   }, [inventory, itemDefs, getSpriteUrl, nonStackableItemIds]);
 
   // Sync: place new entries into the first empty slot, remove ones
-  // that no longer exist (consumed, dropped, etc.).
+  // that no longer exist (consumed, dropped, etc.). 1-indexed: skip
+  // invSlots[0].
   useEffect(() => {
     setInvSlots(prev => {
       const next = [...prev];
       const allKeys = new Set(inventoryItemsMap.keys());
-      for (let i = 0; i < 18; i++) {
+      for (let i = 1; i <= 18; i++) {
         if (next[i] && !allKeys.has(next[i]!)) next[i] = null;
       }
-      const placed = new Set(next.filter(Boolean) as string[]);
+      const placed = new Set<string>();
+      for (let i = 1; i <= 18; i++) {
+        if (next[i]) placed.add(next[i]!);
+      }
       for (const key of allKeys) {
         if (placed.has(key)) continue;
-        // inventoryItemsMap already excludes equipped items, so any key
-        // we see here genuinely needs a grid tile.
-        const emptyIdx = next.indexOf(null);
+        let emptyIdx = -1;
+        for (let i = 1; i <= 18; i++) {
+          if (next[i] === null) { emptyIdx = i; break; }
+        }
         if (emptyIdx !== -1) next[emptyIdx] = key;
       }
       return next;
     });
   }, [inventoryItemsMap]);
 
+  // 1-indexed list of length 19; [0] is always null. Consumers iterate
+  // 1..18 and pass that index as the slot to the SlotGrid + RPCs.
   const inventoryGridItems = useMemo(() => {
     return invSlots.map(key => {
       if (!key) return null;
@@ -393,8 +404,10 @@ export function FortressHUD(props: FortressHUDProps) {
   // user_inventory.id. No equipped-claim bookkeeping needed.
   const inventoryOccupants = useMemo(() => {
     const m = new Map<number, SlotOccupant>();
-    inventoryGridItems.forEach((item, idx) => {
-      if (!item) return;
+    // inventoryGridItems is 1-indexed (length 19, [0] is null).
+    for (let idx = 1; idx <= 18; idx++) {
+      const item = inventoryGridItems[idx];
+      if (!item) continue;
       let rowId = item.gridKey;
       if (!item.isNonStackRow) {
         const invRow = (inventory || []).find((r: any) =>
@@ -413,7 +426,7 @@ export function FortressHUD(props: FortressHUDProps) {
         nonStackable: item.isNonStackRow,
         rowId,
       });
-    });
+    }
     return m;
   }, [inventoryGridItems, inventory, itemDefs]);
 
@@ -429,12 +442,12 @@ export function FortressHUD(props: FortressHUDProps) {
   // First-empty resolvers for shift-click. invSlots is local; hotbar
   // is derived from equippedItems; vault is owned by the VaultBridge.
   const findFirstEmptyInventorySlot = useCallback((): number | null => {
-    for (let i = 0; i < invSlots.length; i++) if (!invSlots[i]) return i;
+    for (let i = 1; i <= 18; i++) if (!invSlots[i]) return i;
     return null;
   }, [invSlots]);
   const findFirstEmptyHotbarSlot = useCallback((): number | null => {
     const occupied = new Set(equippedItems.map(e => e.slot));
-    for (let i = 0; i < 10; i++) if (!occupied.has(i)) return i;
+    for (let i = 1; i <= 6; i++) if (!occupied.has(i)) return i;
     return null;
   }, [equippedItems]);
 

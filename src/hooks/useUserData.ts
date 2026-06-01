@@ -256,11 +256,21 @@ export const useUserData = () => {
       // prevents new duplicates from forming). No client-side merge needed.
       const inv = inventoryData || [];
 
-      // Ensure starter items (#15 Pistol, #193 Flame Glove) with quantity >= 4
-      const { data: starterDefs } = await supabase
-        .from('items')
-        .select('id, item_number')
-        .in('item_number', [15, 193]);
+      // Starter items (#15 Pistol, #193 Flame Glove) are for brand-new
+      // players. If the user already has ANY user_slots rows
+      // (inventory or QS), they're not a new player — skip the grant
+      // entirely. Without this guard, every login tries to top up to
+      // 4-of-each, which overflows into QS when inventory is full and
+      // creates phantom items the user can't see.
+      const hasAnySlots = ((userSlotsData as any[]) ?? []).some(
+        (s: any) => s.region === 'inventory' || s.region === 'quick_select'
+      );
+      const { data: starterDefs } = hasAnySlots
+        ? { data: null as any[] | null }
+        : await supabase
+            .from('items')
+            .select('id, item_number')
+            .in('item_number', [15, 193]);
 
       if (starterDefs && starterDefs.length > 0) {
         for (const sd of starterDefs) {

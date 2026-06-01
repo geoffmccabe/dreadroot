@@ -210,7 +210,7 @@ export function VaultPanel({
   const handleOrg = useCallback(async () => {
     const sorted = sortVaultPage(pages[activePage] || []);
     await replacePageLayout(activePage, sorted.map((s, i) => ({
-      slot: i, item_id: s.itemId, quantity: s.quantity,
+      slot: i + 1, item_id: s.itemId, quantity: s.quantity,
     })));
   }, [pages, activePage, replacePageLayout]);
 
@@ -222,7 +222,7 @@ export function VaultPanel({
     const tryPage = (p: number): number | null => {
       const occupied = new Set((pages[p] ?? []).map(r => r.slot));
       const cap = config.cols * config.rows;
-      for (let s = 0; s < cap; s++) if (!occupied.has(s)) return s;
+      for (let s = 1; s <= cap; s++) if (!occupied.has(s)) return s;
       return null;
     };
     const order: number[] = [];
