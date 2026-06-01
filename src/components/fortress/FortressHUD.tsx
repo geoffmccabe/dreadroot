@@ -134,6 +134,7 @@ export function FortressHUD(props: FortressHUDProps) {
     setEquippedSlotOptimistic,
     removeInventoryRowOptimistic,
     addInventoryRowOptimistic,
+    refetchInventoryAndQs,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
@@ -475,37 +476,41 @@ export function FortressHUD(props: FortressHUDProps) {
     //   2. await RPC
     //   3. mutate local state to reflect the move
     // Realtime now serves as eventual-consistency reconciliation.
+    // Pattern for every QS transfer:
+    //   1. Optimistic local mutation (instant feedback)
+    //   2. RPC call (server truth)
+    //   3. Force refetch (kill any drift between client and DB)
+    // Step 3 is the brute-force fix for realtime not reliably
+    // delivering DELETE/INSERT events for these tables. Cost: one
+    // extra round-trip per transfer. Gain: state can't go stale.
     transferInvToQs: async (invRowId, qsSlot) => {
       const invRow = (inventory || []).find((r: any) => r.id === invRowId);
       const movedItemId = invRow?.item_id ?? null;
-      await worldStore.transferInvToQs(invRowId, qsSlot);
       if (removeInventoryRowOptimistic) removeInventoryRowOptimistic(invRowId);
       if (movedItemId && setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, movedItemId);
+      await worldStore.transferInvToQs(invRowId, qsSlot);
+      if (refetchInventoryAndQs) void refetchInventoryAndQs();
       return true;
     },
     transferQsToInv: async (qsSlot) => {
       const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
         .find(e => e.slot === qsSlot);
       const movedItemId = eq?.itemId ?? null;
-      await worldStore.transferQsToInv(qsSlot);
       if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
       if (movedItemId && addInventoryRowOptimistic) addInventoryRowOptimistic(movedItemId);
+      await worldStore.transferQsToInv(qsSlot);
+      if (refetchInventoryAndQs) void refetchInventoryAndQs();
       return true;
     },
     transferQsToVault: async (qsSlot, vaultPage, vaultSlot) => {
-      await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot);
       if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
-      // Vault side updates via useVaultData's own optimistic logic.
+      await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot);
+      if (refetchInventoryAndQs) void refetchInventoryAndQs();
       return true;
     },
     transferVaultToQs: async (vaultPage, vaultSlot, qsSlot) => {
-      // Look up the vault row's item_id so we can optimistically equip it.
-      const vaultRow = vaultBridge ? null : null; // bridge doesn't expose rows; defer
       await worldStore.transferVaultToQs(vaultPage, vaultSlot, qsSlot);
-      // The QS state will update via the next inventoryItemsMap pass
-      // once the vault row's item_id reaches us. For now we rely on
-      // realtime / re-render once useVaultData's optimistic decrement
-      // settles. (Acceptable since vault→QS is rarer.)
+      if (refetchInventoryAndQs) void refetchInventoryAndQs();
       return true;
     },
     swapInventorySlots,
@@ -516,7 +521,8 @@ export function FortressHUD(props: FortressHUDProps) {
   }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
        inventory, equippedItems,
-       setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic]);
+       setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic,
+       refetchInventoryAndQs]);
 
   // The single entry point every slot click goes through. Surfaces
   // status from the reducer to the debug badge so the user can SEE

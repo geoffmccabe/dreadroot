@@ -968,6 +968,30 @@ export const useUserData = () => {
     });
   }, [user?.id]);
 
+  // Brute-force resync of inventory + QS state from server. Called
+  // after every QS transfer so client state can't drift from DB —
+  // realtime has proven too unreliable to depend on. The cost is
+  // one extra round-trip per transfer; the gain is correctness.
+  const refetchInventoryAndQs = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const [invRes, eqRes] = await Promise.all([
+        supabase.from('user_inventory').select('*').eq('user_id', user.id),
+        supabase.from('user_equipped_items').select('slot_type, item_id')
+          .eq('user_id', user.id).like('slot_type', 'hotbar_%'),
+      ]);
+      if (invRes.data) setInventory(invRes.data as UserInventoryItem[]);
+      if (eqRes.data) {
+        setEquippedItems(eqRes.data.map((e: any) => ({
+          slot: parseInt(String(e.slot_type).replace('hotbar_', ''), 10),
+          itemId: e.item_id,
+        })));
+      }
+    } catch (err) {
+      console.error('[refetchInventoryAndQs] failed:', err);
+    }
+  }, [user?.id]);
+
   const updateDisplayName = useCallback(async (name: string) => {
     if (!user?.id) return;
     const trimmed = name.trim() || null;
@@ -1016,6 +1040,7 @@ export const useUserData = () => {
     setEquippedSlotOptimistic,
     removeInventoryRowOptimistic,
     addInventoryRowOptimistic,
+    refetchInventoryAndQs,
     updateDisplayName,
     updateAvatarUrl,
     updateVisualDistance,

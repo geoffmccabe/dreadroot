@@ -280,7 +280,7 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, refetchInventoryAndQs, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -2320,6 +2320,7 @@ export function Fortress() {
         setEquippedSlotOptimistic={setEquippedSlotOptimistic}
         removeInventoryRowOptimistic={removeInventoryRowOptimistic}
         addInventoryRowOptimistic={addInventoryRowOptimistic}
+        refetchInventoryAndQs={refetchInventoryAndQs}
         addItem={addItem}
         removeInventoryRow={removeInventoryRow}
         vaultOpen={vaultOpen}
