@@ -460,21 +460,25 @@ export function FortressHUD(props: FortressHUDProps) {
       if (!vaultBridge) return false;
       return vaultBridge.transferWithinVault(srcPage, srcSlot, dstPage, dstSlot, qty);
     },
+    // QS transfer wrappers — let errors propagate to handleSlotClick's
+    // outer catch so the FULL error message (including any "migration
+    // not deployed" hint from worldStore) reaches the debug badge.
+    // Catching here would replace it with a generic "rejected" status.
     transferInvToQs: async (invRowId, qsSlot) => {
-      try { await worldStore.transferInvToQs(invRowId, qsSlot); return true; }
-      catch (err) { console.error('[HUD] transferInvToQs failed:', err); return false; }
+      await worldStore.transferInvToQs(invRowId, qsSlot);
+      return true;
     },
     transferQsToInv: async (qsSlot) => {
-      try { await worldStore.transferQsToInv(qsSlot); return true; }
-      catch (err) { console.error('[HUD] transferQsToInv failed:', err); return false; }
+      await worldStore.transferQsToInv(qsSlot);
+      return true;
     },
     transferQsToVault: async (qsSlot, vaultPage, vaultSlot) => {
-      try { await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot); return true; }
-      catch (err) { console.error('[HUD] transferQsToVault failed:', err); return false; }
+      await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot);
+      return true;
     },
     transferVaultToQs: async (vaultPage, vaultSlot, qsSlot) => {
-      try { await worldStore.transferVaultToQs(vaultPage, vaultSlot, qsSlot); return true; }
-      catch (err) { console.error('[HUD] transferVaultToQs failed:', err); return false; }
+      await worldStore.transferVaultToQs(vaultPage, vaultSlot, qsSlot);
+      return true;
     },
     swapInventorySlots,
     findFirstEmptyInventorySlot,

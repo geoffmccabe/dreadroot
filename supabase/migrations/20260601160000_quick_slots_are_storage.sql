@@ -34,6 +34,7 @@
 DO $$
 DECLARE
   v_claimed INTEGER := 0;
+  equipped  RECORD;
 BEGIN
   FOR equipped IN
     SELECT user_id, slot_type, item_id FROM user_equipped_items

@@ -8,6 +8,51 @@
 -- insert per-unit. Splits existing stacked seed rows.
 
 -- ────────────────────────────────────────────────────────────────────
+-- 0. Loosen the stackable-uniqueness trigger BEFORE the split.
+--
+-- The trigger from 20260601130000 enforced "at most one row per
+-- (user, item_type, item_id)" for seeds — but the new rule is
+-- "each seed is its own row" (multiple rows of same blueprint OK).
+-- Rewrite the trigger to keep block-uniqueness but drop the seed
+-- branch. Otherwise the seed split below would fire 23505 on every
+-- INSERT.
+-- ────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.enforce_inventory_stackable_uniqueness()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_dup_count INT;
+BEGIN
+  IF NEW.item_type = 'item' THEN
+    -- Items: all stackable=false now (per 20260601140000). The
+    -- enforce_item_inventory_unit_quantity trigger handles qty=1.
+    -- No uniqueness constraint needed here.
+    RETURN NEW;
+  ELSIF NEW.item_type LIKE 'seed_tier_%' THEN
+    -- Seeds: each seed is its own row. NO uniqueness constraint —
+    -- multiple rows of the same (user, type, item_id) are valid.
+    RETURN NEW;
+  ELSE
+    -- Block: item_type=blockKey, item_id IS NULL. Always stackable.
+    IF NEW.item_id IS NOT NULL THEN RETURN NEW; END IF;
+    SELECT COUNT(*) INTO v_dup_count FROM user_inventory
+     WHERE user_id = NEW.user_id
+       AND item_type = NEW.item_type
+       AND item_id IS NULL
+       AND id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
+    IF v_dup_count > 0 THEN
+      RAISE EXCEPTION
+        'Duplicate block row blocked by invariant (user=%, type=%)',
+        NEW.user_id, NEW.item_type
+        USING ERRCODE = '23505';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- ────────────────────────────────────────────────────────────────────
 -- 1. Split existing seed rows with qty > 1 into N rows of qty=1
 -- ────────────────────────────────────────────────────────────────────
 DO $$
