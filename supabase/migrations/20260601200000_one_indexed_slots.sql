@@ -23,8 +23,12 @@ DELETE FROM public.user_slots
 ALTER TABLE public.user_slots
   DROP CONSTRAINT IF EXISTS user_slots_slot_check;
 
--- Step 3: shift every slot value by +1.
-UPDATE public.user_slots SET slot = slot + 1;
+-- Step 3: shift every slot value by +1. Done in two passes through a
+-- high offset to avoid intra-statement collisions on the UNIQUE
+-- (user_id, region, page, slot) constraint (e.g. row at slot=0
+-- becoming slot=1 would collide with the existing slot=1 row).
+UPDATE public.user_slots SET slot = slot + 10000;
+UPDATE public.user_slots SET slot = slot - 9999;
 
 -- Step 4: rewrite the capacity helper. Returns the MAX valid slot
 -- number for the region (range is 1..return_value, inclusive).
