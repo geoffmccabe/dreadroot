@@ -135,6 +135,8 @@ export function FortressHUD(props: FortressHUDProps) {
     setEquippedSlotOptimistic,
     removeInventoryRowOptimistic,
     addInventoryRowOptimistic,
+    swapInventoryRowsOptimistic,
+    moveInventoryRowOptimistic,
     refetchInventoryAndQs,
     inventoryOpen = false,
     setInventoryOpen,
@@ -404,33 +406,31 @@ export function FortressHUD(props: FortressHUDProps) {
   // Under QS-as-storage, items in QS are NOT in inv. So every inv
   // row genuinely needs a tile and the rowId resolves cleanly to its
   // user_inventory.id. No equipped-claim bookkeeping needed.
+  // v4.12.5: build inventoryOccupants DIRECTLY from inventory rows'
+  // .slot field (set by useUserData from user_slots.slot). The DB is
+  // the source of truth for positioning. The legacy invSlots /
+  // inventoryGridItems pipeline is bypassed.
   const inventoryOccupants = useMemo(() => {
     const m = new Map<number, SlotOccupant>();
-    // inventoryGridItems is 1-indexed (length 19, [0] is null).
-    for (let idx = 1; idx <= 18; idx++) {
-      const item = inventoryGridItems[idx];
-      if (!item) continue;
-      let rowId = item.gridKey;
-      if (!item.isNonStackRow) {
-        const invRow = (inventory || []).find((r: any) =>
-          r.item_type === 'item' && r.item_id === item.itemId && r.quantity > 0
-        );
-        if (invRow) rowId = (invRow as any).id;
-      }
-      const def = itemDefs.get(item.itemId);
-      m.set(idx, {
-        itemId: item.itemId,
+    for (const inv of (inventory || [])) {
+      if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
+      const slot = (inv as any).slot;
+      if (slot == null || slot < 1 || slot > 18) continue;
+      const def = itemDefs.get(inv.item_id);
+      const nonStack = nonStackableItemIds.has(inv.item_id);
+      m.set(slot, {
+        itemId: inv.item_id,
         itemKey: (def as any)?.key ?? '',
-        quantity: item.quantity,
-        name: item.name ?? '',
-        tier: item.tier,
-        spriteUrl: item.sprite,
-        nonStackable: item.isNonStackRow,
-        rowId,
+        quantity: 1,
+        name: def?.name ?? '',
+        tier: def?.tier ?? null,
+        spriteUrl: getSpriteUrl(def),
+        nonStackable: nonStack,
+        rowId: inv.id,
       });
     }
     return m;
-  }, [inventoryGridItems, inventory, itemDefs]);
+  }, [inventory, itemDefs, getSpriteUrl, nonStackableItemIds]);
 
   // ── Cursor-stack inventory system ──────────────────────────────
   // The cursor-stack model replaces the legacy HTML5 drag/drop:
@@ -469,21 +469,33 @@ export function FortressHUD(props: FortressHUDProps) {
   // gone.
   const slotClickHandlers: SlotClickHandlers = useMemo(() => ({
     transferSlot: async (from, to, quantity) => {
+      // Optimistic local move for inv → inv when dest is empty: snap
+      // the source row's .slot to the new position before the RPC.
+      const inv2inv = from.region === 'inventory' && to.region === 'inventory';
+      if (inv2inv) moveInventoryRowOptimistic?.(from.slot, to.slot);
       try {
         await worldStore.transferSlot(from, to, quantity);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
         return true;
       } catch (err) {
+        // Revert the optimistic move.
+        if (inv2inv) moveInventoryRowOptimistic?.(to.slot, from.slot);
         console.error('[transferSlot] failed:', err);
         return false;
       }
     },
     swapSlot: async (from, to) => {
+      // Optimistic inv↔inv swap so the visual snaps instantly. Other
+      // region combos still wait for refetch (less common and the
+      // local state isn't a clean swap target).
+      const inv2inv = from.region === 'inventory' && to.region === 'inventory';
+      if (inv2inv) swapInventoryRowsOptimistic?.(from.slot, to.slot);
       try {
         await worldStore.swapSlot(from, to);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
         return true;
       } catch (err) {
+        if (inv2inv) swapInventoryRowsOptimistic?.(from.slot, to.slot); // toggle back
         console.error('[swapSlot] failed:', err);
         return false;
       }
@@ -510,7 +522,8 @@ export function FortressHUD(props: FortressHUDProps) {
     activeVaultPage: vaultBridge?.activePage ?? 0,
   }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
-       refetchInventoryAndQs, playerPositionRef]);
+       refetchInventoryAndQs, playerPositionRef,
+       swapInventoryRowsOptimistic, moveInventoryRowOptimistic]);
 
   // The single entry point every slot click goes through. Surfaces
   // status from the reducer to the debug badge so the user can SEE

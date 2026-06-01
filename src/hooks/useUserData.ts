@@ -200,13 +200,19 @@ export const useUserData = () => {
       
       setProfile(existingProfile);
       // v4.11.0: merged inventory = items (from user_slots) + blocks/seeds (from user_inventory).
+      // v4.12.5: preserve the user_slots.slot value on the synthesized
+      // row so the UI can position by DB slot instead of a separate
+      // local array. The legacy UserInventoryItem type doesn't have
+      // a slot field, but we attach it via `as any` and read it
+      // back the same way in FortressHUD.
       const slotItemRows: UserInventoryItem[] = ((userSlotsData as any[]) ?? [])
         .filter((s: any) => s.region === 'inventory')
         .map((s: any) => ({
           id: s.id, user_id: s.user_id, item_type: 'item',
           item_id: s.item_id, quantity: 1,
+          slot: s.slot,
           created_at: s.created_at, updated_at: s.updated_at,
-        }));
+        } as any));
       const legacyBlocksSeedsRows = (inventoryData || [])
         .filter(r => r.item_type !== 'item' || r.item_id === null);
       setInventory([...slotItemRows, ...legacyBlocksSeedsRows]);
@@ -967,6 +973,28 @@ export const useUserData = () => {
     });
   }, [user?.id]);
 
+  // v4.12.5: optimistic inv↔inv swap. Switches the slot fields of two
+  // inventory rows by their grid position. The reducer fires this
+  // BEFORE awaiting the swap_slot RPC so the UI updates instantly;
+  // refetch reconciles afterward.
+  const swapInventoryRowsOptimistic = useCallback((slotA: number, slotB: number) => {
+    setInventory(prev => prev.map(r => {
+      if ((r as any).slot === slotA) return { ...r, slot: slotB } as any;
+      if ((r as any).slot === slotB) return { ...r, slot: slotA } as any;
+      return r;
+    }));
+  }, []);
+
+  // v4.12.5: optimistic single-row slot reassignment. Used when an
+  // inv → inv MOVE lands on an empty destination (no swap, just a
+  // position change).
+  const moveInventoryRowOptimistic = useCallback((fromSlot: number, toSlot: number) => {
+    setInventory(prev => prev.map(r => {
+      if ((r as any).slot === fromSlot) return { ...r, slot: toSlot } as any;
+      return r;
+    }));
+  }, []);
+
   // Brute-force resync of inventory + QS state from server. Called
   // after every QS transfer so client state can't drift from DB —
   // realtime has proven too unreliable to depend on. The cost is
@@ -987,8 +1015,9 @@ export const useUserData = () => {
         .map((s: any) => ({
           id: s.id, user_id: s.user_id, item_type: 'item',
           item_id: s.item_id, quantity: 1,
+          slot: s.slot,
           created_at: s.created_at, updated_at: s.updated_at,
-        }));
+        } as any));
       const legacyBlocksSeedsRows = (invRes.data || [])
         .filter((r: any) => r.item_type !== 'item' || r.item_id === null);
       setInventory([...slotItemRows, ...legacyBlocksSeedsRows]);
@@ -1049,6 +1078,8 @@ export const useUserData = () => {
     setEquippedSlotOptimistic,
     removeInventoryRowOptimistic,
     addInventoryRowOptimistic,
+    swapInventoryRowsOptimistic,
+    moveInventoryRowOptimistic,
     refetchInventoryAndQs,
     updateDisplayName,
     updateAvatarUrl,
