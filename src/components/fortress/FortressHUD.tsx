@@ -12,6 +12,7 @@ import { VaultPanel } from '@/features/vault';
 import { getItemSpriteUrl as itemSpriteUrl } from '@/lib/itemSprite';
 import {
   useCursorStack,
+  cursorStackApi,
   SlotGrid,
   CursorSprite,
   ItemTileVisual,
@@ -144,6 +145,7 @@ export function FortressHUD(props: FortressHUDProps) {
     eggReadySlot = null,
     potionDrinkingSlot = null,
     onUseHotbarSlot,
+    playerPositionRef,
   } = props;
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
@@ -476,6 +478,28 @@ export function FortressHUD(props: FortressHUDProps) {
         return false;
       }
     },
+    swapSlot: async (from, to) => {
+      try {
+        await worldStore.swapSlot(from, to);
+        if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        return true;
+      } catch (err) {
+        console.error('[swapSlot] failed:', err);
+        return false;
+      }
+    },
+    ejectSlotToWorld: async (from) => {
+      try {
+        const pos = playerPositionRef?.current;
+        if (!pos) { console.warn('[ejectSlotToWorld] no player position'); return false; }
+        await worldStore.ejectSlotToWorld(from, { x: pos.x, y: pos.y, z: pos.z });
+        if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        return true;
+      } catch (err) {
+        console.error('[ejectSlotToWorld] failed:', err);
+        return false;
+      }
+    },
     swapInventorySlots,
     findFirstEmptyInventorySlot,
     findFirstEmptyHotbarSlot,
@@ -483,7 +507,7 @@ export function FortressHUD(props: FortressHUDProps) {
     activeVaultPage: vaultBridge?.activePage ?? 0,
   }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
-       refetchInventoryAndQs]);
+       refetchInventoryAndQs, playerPositionRef]);
 
   // The single entry point every slot click goes through. Surfaces
   // status from the reducer to the debug badge so the user can SEE
@@ -536,6 +560,39 @@ export function FortressHUD(props: FortressHUDProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [setCursor]);
+
+  // Drop-outside-panel: if the cursor is held and pointerup fires on
+  // anything OUTSIDE the inventory / vault panel, eject the item into
+  // the world at the player's current position. Slot tiles call
+  // event.stopPropagation on their own pointerup, so this only sees
+  // releases that missed every tile.
+  useEffect(() => {
+    const onPointerUp = (e: PointerEvent) => {
+      const c = cursorStackApi.getCursor();
+      if (!c) return;
+      // Only left-button releases count.
+      if (e.button !== 0) return;
+      // The 3D game world is a <canvas>; the HUD is plain DOM nodes.
+      // If the release landed on the canvas (or inside it), the
+      // player meant to throw the item into the world. Releases on
+      // anywhere else (panel background, hotbar gap, modal, etc.)
+      // keep the cursor so a near-miss doesn't lose the item.
+      const target = e.target as HTMLElement | null;
+      const onGameCanvas = target?.tagName === 'CANVAS' || !!target?.closest('canvas');
+      if (!onGameCanvas) return;
+      const origin = c.origin;
+      const from = (() => {
+        if (origin.region === 'inventory') return { region: 'inventory' as const, page: 0, slot: origin.gridSlot };
+        if (origin.region === 'hotbar') return { region: 'quick_select' as const, page: 0, slot: origin.slot };
+        return { region: 'vault' as const, page: origin.page, slot: origin.slot };
+      })();
+      slotClickHandlers.ejectSlotToWorld(from).then((ok) => {
+        if (ok) setCursor(null);
+      });
+    };
+    window.addEventListener('pointerup', onPointerUp);
+    return () => window.removeEventListener('pointerup', onPointerUp);
+  }, [slotClickHandlers, setCursor]);
 
   // ── Drag source ref (legacy — preserved temporarily) ──────────
   // Drag source ref — stored in ref to avoid stale closures, survives re-renders.
@@ -1008,7 +1065,7 @@ export function FortressHUD(props: FortressHUDProps) {
 
         {/* Inventory grid — 3 rows × 6 cols, shown when inventoryOpen */}
         {inventoryOpen && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div data-inventory-panel="true" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <span style={{
               fontSize: '11px',
               fontWeight: 700,

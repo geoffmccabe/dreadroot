@@ -776,6 +776,44 @@ export async function consumeSlot(
   return data as { replayed: boolean };
 }
 
+export async function swapSlot(
+  from: SlotRegion,
+  to: SlotRegion,
+  requestId?: string,
+): Promise<{ replayed: boolean; swapped?: boolean; moved?: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('swap_slot', {
+    p_from_region: from.region,
+    p_from_page: from.page,
+    p_from_slot: from.slot,
+    p_to_region: to.region,
+    p_to_page: to.page,
+    p_to_slot: to.slot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean; swapped?: boolean; moved?: boolean };
+}
+
+export async function ejectSlotToWorld(
+  from: SlotRegion,
+  position: { x: number; y: number; z: number },
+  requestId?: string,
+): Promise<{ replayed: boolean; drop_id?: string }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('eject_slot_to_world', {
+    p_from_region: from.region,
+    p_from_page: from.page,
+    p_from_slot: from.slot,
+    p_position_x: position.x,
+    p_position_y: position.y,
+    p_position_z: position.z,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean; drop_id?: string };
+}
+
 // ── Quick Select transfers (QS-as-storage model) ───────────────────
 //
 // QS slots HOLD items (not references). Every move is atomic + audited.
@@ -908,4 +946,6 @@ export const worldStore = {
   transferSlot,
   grantSlot,
   consumeSlot,
+  swapSlot,
+  ejectSlotToWorld,
 };

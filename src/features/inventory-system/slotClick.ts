@@ -156,21 +156,26 @@ export async function slotClick(
       return { cursorAfter: null, status: `dropped x${cursor.quantity} → ${location.region}` };
     }
 
-    // Cursor + slot have SAME item → merge cursor into slot
-    if (cursor && occupant && occupant.itemId === cursor.itemId && !cursor.nonStackable) {
+    // Cursor + slot have SAME item → merge cursor into slot only when
+    // the destination is the vault (vault stacks; inv/qs don't).
+    // For inv/qs, treat the collision as a swap-via-cursor so the
+    // user can rearrange tiles.
+    if (cursor && occupant && occupant.itemId === cursor.itemId && !cursor.nonStackable
+        && location.region === 'vault') {
       const dropped = await performDrop(cursor, cursor.quantity, location, handlers);
       if (!dropped.ok) return { cursorAfter: cursor, status: `merge FAIL: ${dropped.reason}` };
       return { cursorAfter: null, status: `merged x${cursor.quantity} into ${location.region}` };
     }
 
-    // Cursor + slot have DIFFERENT items → swap (deferred — needs
-    // atomic swap RPC; for now refuse so the user has to clear).
-    if (cursor && occupant && occupant.itemId !== cursor.itemId) {
-      return { cursorAfter: cursor, status: 'swap not yet supported — clear slot first' };
+    // Cursor + slot collision (any region, any item): SWAP. Source
+    // slot gets dst's old item, dst slot gets the cursor's item.
+    if (cursor && occupant) {
+      const swapped = await performSwap(cursor, location, handlers);
+      if (!swapped.ok) return { cursorAfter: cursor, status: `swap FAIL: ${swapped.reason}` };
+      return { cursorAfter: null, status: `swapped ${location.region}` };
     }
 
-    // Cursor + slot both non-stackable same item → no merge possible
-    return { cursorAfter: cursor, status: 'non-stackable: cannot merge' };
+    return { cursorAfter: cursor, status: '' };
   }
 
   // ── DOUBLE-CLICK ───────────────────────────────────────────────
@@ -192,7 +197,26 @@ export async function slotClick(
   return { cursorAfter: cursor, status: '' };
 }
 
-// ── performDrop: routes cursor → slot through the unified transfer ────
+// ── Region/slot helpers shared by performDrop and performSwap ─────────
+function regionOf(
+  loc: CursorStackPayload['origin'] | SlotClickInput['location']
+): 'inventory' | 'quick_select' | 'vault' {
+  if (loc.region === 'hotbar') return 'quick_select';
+  return loc.region;
+}
+function slotOf(
+  loc: CursorStackPayload['origin'] | SlotClickInput['location']
+): number {
+  if (loc.region === 'inventory') return loc.gridSlot;
+  return loc.slot;
+}
+function pageOf(
+  loc: CursorStackPayload['origin'] | SlotClickInput['location']
+): number {
+  return loc.region === 'vault' ? loc.page : 0;
+}
+
+// ── performDrop: cursor → empty (or same-stack vault) slot ────────────
 async function performDrop(
   cursor: CursorStackPayload,
   qty: number,
@@ -202,29 +226,26 @@ async function performDrop(
   const origin = cursor.origin;
   console.warn('[DROP]', { origin, dst, qty });
 
-  // Inv → Inv: purely positional swap, no RPC.
-  if (origin.region === 'inventory' && dst.region === 'inventory') {
-    h.swapInventorySlots(origin.gridSlot, dst.gridSlot);
-    return { ok: true };
-  }
-
-  // Everything else: ONE transferSlot call. Region mapping:
-  // hotbar (cursor origin) ↔ quick_select (DB region)
-  const regionOf = (loc: typeof origin | typeof dst): 'inventory' | 'quick_select' | 'vault' => {
-    if (loc.region === 'hotbar') return 'quick_select';
-    return loc.region;
-  };
-  const slotOf = (loc: typeof origin | typeof dst): number => {
-    if (loc.region === 'inventory') return loc.gridSlot;
-    return loc.slot;
-  };
-  const pageOf = (loc: typeof origin | typeof dst): number =>
-    loc.region === 'vault' ? loc.page : 0;
-
   const ok = await h.transferSlot(
     { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) },
-    { region: regionOf(dst), page: pageOf(dst), slot: slotOf(dst) },
+    { region: regionOf(dst),    page: pageOf(dst),    slot: slotOf(dst) },
     qty,
   );
   return { ok, reason: ok ? undefined : 'transferSlot rejected' };
+}
+
+// ── performSwap: cursor → occupied slot (different item, or inv/qs same) ─
+async function performSwap(
+  cursor: CursorStackPayload,
+  dst: SlotClickInput['location'],
+  h: SlotClickHandlers,
+): Promise<{ ok: boolean; reason?: string }> {
+  const origin = cursor.origin;
+  console.warn('[SWAP]', { origin, dst });
+
+  const ok = await h.swapSlot(
+    { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) },
+    { region: regionOf(dst),    page: pageOf(dst),    slot: slotOf(dst) },
+  );
+  return { ok, reason: ok ? undefined : 'swapSlot rejected' };
 }

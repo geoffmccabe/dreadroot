@@ -52,6 +52,19 @@ export interface SlotClickHandlers {
     quantity: number,
   ) => Promise<boolean>;
 
+  /** Swap the contents of two slots (or move if dest empty). Used
+   *  when the cursor drops onto an occupied tile of a different item. */
+  swapSlot: (
+    from: { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+    to:   { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+  ) => Promise<boolean>;
+
+  /** Eject the slot's item into the world at a position. Used when the
+   *  cursor releases outside any panel — the item lands in the game. */
+  ejectSlotToWorld: (
+    from: { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+  ) => Promise<boolean>;
+
   // ── Within-region positional move (no RPC) ──────────────────────
   /** Swap two inventory gridSlots — purely local positional state. */
   swapInventorySlots: (slotA: number, slotB: number) => void;
