@@ -131,6 +131,7 @@ export function FortressHUD(props: FortressHUDProps) {
     vaultOpen,
     onCloseVault,
     vaultForceCloseToken,
+    setEquippedSlotOptimistic,
     inventoryOpen = false,
     setInventoryOpen,
     selectedSlot: selectedSlotProp = 1,
@@ -461,22 +462,38 @@ export function FortressHUD(props: FortressHUDProps) {
       return vaultBridge.transferWithinVault(srcPage, srcSlot, dstPage, dstSlot, qty);
     },
     // QS transfer wrappers — let errors propagate to handleSlotClick's
-    // outer catch so the FULL error message (including any "migration
-    // not deployed" hint from worldStore) reaches the debug badge.
-    // Catching here would replace it with a generic "rejected" status.
+    // outer catch so the FULL error message reaches the debug badge.
+    // ALSO do optimistic local state updates so the UI updates the
+    // INSTANT the RPC succeeds — the realtime sub on user_equipped_items
+    // is meant to handle this but has been flaky in practice.
     transferInvToQs: async (invRowId, qsSlot) => {
+      // Look up the item being moved so we know what to put in the QS slot.
+      const invRow = (inventory || []).find((r: any) => r.id === invRowId);
+      const movedItemId = invRow?.item_id ?? null;
       await worldStore.transferInvToQs(invRowId, qsSlot);
+      // Optimistic QS state update.
+      if (movedItemId && setEquippedSlotOptimistic) {
+        setEquippedSlotOptimistic(qsSlot, movedItemId);
+      }
       return true;
     },
     transferQsToInv: async (qsSlot) => {
       await worldStore.transferQsToInv(qsSlot);
+      if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
       return true;
     },
     transferQsToVault: async (qsSlot, vaultPage, vaultSlot) => {
       await worldStore.transferQsToVault(qsSlot, vaultPage, vaultSlot);
+      if (setEquippedSlotOptimistic) setEquippedSlotOptimistic(qsSlot, null);
       return true;
     },
     transferVaultToQs: async (vaultPage, vaultSlot, qsSlot) => {
+      // The vault row's item_id is what lands in QS. Find it from the
+      // bridge's vault state — we get it cheaply from the cursor's
+      // origin payload via the reducer's input, but here we don't
+      // have it directly. Fall back to relying on realtime / refetch
+      // for VaultToQs visibility; the inv side won't render anything
+      // weird in the meantime.
       await worldStore.transferVaultToQs(vaultPage, vaultSlot, qsSlot);
       return true;
     },
@@ -486,7 +503,8 @@ export function FortressHUD(props: FortressHUDProps) {
     findFirstEmptyVaultSlot: (preferPage) => vaultBridge?.findFirstEmptySlot(preferPage) ?? null,
     activeVaultPage: vaultBridge?.activePage ?? 0,
   }), [vaultBridge, swapInventorySlots,
-       findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot]);
+       findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
+       inventory, setEquippedSlotOptimistic]);
 
   // The single entry point every slot click goes through. Surfaces
   // status from the reducer to the debug badge so the user can SEE

@@ -928,6 +928,19 @@ export const useUserData = () => {
     }
   }, [user?.id]);
 
+  // Optimistic equip — used by the cursor-stack reducer's QS transfer
+  // handlers so the UI updates instantly without waiting for the
+  // user_equipped_items realtime sub (which is sometimes flaky on
+  // Supabase setups where the publication isn't fully configured).
+  // Pass itemId=null to optimistically clear the slot.
+  const setEquippedSlotOptimistic = useCallback((slot: number, itemId: string | null) => {
+    setEquippedItems(prev => {
+      const filtered = prev.filter(e => e.slot !== slot);
+      if (itemId) filtered.push({ slot, itemId });
+      return filtered;
+    });
+  }, []);
+
   const updateDisplayName = useCallback(async (name: string) => {
     if (!user?.id) return;
     const trimmed = name.trim() || null;
@@ -973,6 +986,7 @@ export const useUserData = () => {
     updateBlockchainAddress,
     updateEquippedSlot,
     consumeQuickSlot,
+    setEquippedSlotOptimistic,
     updateDisplayName,
     updateAvatarUrl,
     updateVisualDistance,
