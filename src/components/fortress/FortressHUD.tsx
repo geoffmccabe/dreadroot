@@ -5,6 +5,7 @@ import { FPSDisplay, DFlowOutputPanel, BlockDeleteHandler } from '@/components/F
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
+import { setDebugStatus } from '@/lib/debugStatus';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useVaultBridge } from '@/contexts/VaultBridgeContext';
 import { VaultPanel } from '@/features/vault';
@@ -483,10 +484,23 @@ export function FortressHUD(props: FortressHUDProps) {
   }), [vaultBridge, swapInventorySlots,
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot]);
 
-  // The single entry point every slot click goes through.
+  // The single entry point every slot click goes through. Surfaces
+  // status from the reducer to the debug badge so the user can SEE
+  // why a transfer failed (e.g. "transferInvToQs rejected — RPC not
+  // deployed") instead of staring at a silently-stuck cursor.
   const handleSlotClick = useCallback(async (input: SlotClickInput) => {
-    const result = await slotClick(input, cursor, slotClickHandlers);
-    setCursor(result.cursorAfter);
+    try {
+      const result = await slotClick(input, cursor, slotClickHandlers);
+      setCursor(result.cursorAfter);
+      if (result.status) {
+        setDebugStatus(result.status);
+        console.log('[slot]', result.status);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[slot] threw:', err);
+      setDebugStatus(`slot ERR: ${msg}`);
+    }
   }, [cursor, slotClickHandlers, setCursor]);
 
   // Clear the cursor stack when ALL inventory UIs close. Otherwise

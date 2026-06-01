@@ -64,25 +64,34 @@ export async function slotClick(
   const { location, occupant, button, shift, doubleClick } = input;
 
   // ── SHIFT + LEFT: instant transfer to opposite region ──────────
+  // Vault → Inv. Inv → Vault if vault open, else Inv → QS (first
+  // empty). QS → Inv. The "opposite region" choice prioritizes the
+  // currently-open chest if any.
   if (shift && button === 'left' && !doubleClick) {
     if (!occupant) return { cursorAfter: cursor, status: 'shift-click: slot empty' };
 
-    // vault → inventory (always; vault is "the chest")
     if (location.region === 'vault') {
       const ok = await handlers.transferVaultToInv(location.page, location.slot, occupant.quantity);
       return { cursorAfter: cursor, status: ok ? 'shift-xfer vault→inv OK' : 'shift-xfer vault→inv FAIL' };
     }
-    // inventory → vault (first empty slot in active page, else any page)
     if (location.region === 'inventory') {
-      const target = handlers.findFirstEmptyVaultSlot(handlers.activeVaultPage);
-      if (!target) return { cursorAfter: cursor, status: 'shift-xfer: vault full' };
-      const ok = await handlers.transferInvToVault([occupant.rowId], target.page, target.slot);
-      return { cursorAfter: cursor, status: ok ? `shift-xfer inv→v${target.page}s${target.slot} OK` : 'shift-xfer FAIL' };
+      // Prefer vault if it's open; otherwise auto-equip to first empty QS slot.
+      const vaultTarget = handlers.findFirstEmptyVaultSlot(handlers.activeVaultPage);
+      if (vaultTarget) {
+        const ok = await handlers.transferInvToVault([occupant.rowId], vaultTarget.page, vaultTarget.slot);
+        return { cursorAfter: cursor, status: ok ? `shift-xfer inv→v${vaultTarget.page}s${vaultTarget.slot} OK` : 'shift-xfer FAIL' };
+      }
+      const qsTarget = handlers.findFirstEmptyHotbarSlot();
+      if (qsTarget != null) {
+        const ok = await handlers.transferInvToQs(occupant.rowId, qsTarget);
+        return { cursorAfter: cursor, status: ok ? `shift-xfer inv→QS${qsTarget} OK` : 'shift-xfer FAIL' };
+      }
+      return { cursorAfter: cursor, status: 'shift-xfer: vault + QS both full' };
     }
-    // hotbar → inventory: just unequip; the row already lives in inventory
     if (location.region === 'hotbar') {
-      await handlers.setHotbarSlot(location.slot, null);
-      return { cursorAfter: cursor, status: 'shift-xfer hotbar→inv OK' };
+      // QS-as-storage: MOVE the QS row back to inv.
+      const ok = await handlers.transferQsToInv(location.slot);
+      return { cursorAfter: cursor, status: ok ? 'shift-xfer QS→inv OK' : 'shift-xfer QS→inv FAIL' };
     }
   }
 
@@ -182,9 +191,9 @@ async function performDrop(
       return { ok: true };
     }
     if (dst.region === 'hotbar') {
-      // Equip this inventory item into a hotbar slot.
-      await h.setHotbarSlot(dst.slot, cursor.itemId);
-      return { ok: true };
+      // QS-as-storage: MOVE the inv row into the QS slot. Atomic RPC.
+      const ok = await h.transferInvToQs(origin.rowId, dst.slot);
+      return { ok, reason: ok ? undefined : 'transferInvToQs rejected' };
     }
   }
 
@@ -227,12 +236,6 @@ async function performDrop(
       const ok = await h.transferVaultToQs(origin.page, origin.slot, dst.slot);
       return { ok, reason: ok ? undefined : 'transferVaultToQs rejected' };
     }
-  }
-
-  // Origin is INVENTORY — additional dst.region='hotbar' case.
-  if (origin.region === 'inventory' && dst.region === 'hotbar') {
-    const ok = await h.transferInvToQs(origin.rowId, dst.slot);
-    return { ok, reason: ok ? undefined : 'transferInvToQs rejected' };
   }
 
   return { ok: false, reason: 'unhandled origin/destination combo' };
