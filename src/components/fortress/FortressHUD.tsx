@@ -138,6 +138,7 @@ export function FortressHUD(props: FortressHUDProps) {
     swapInventoryRowsOptimistic,
     moveInventoryRowOptimistic,
     applySwapOptimistic,
+    applyTransferOptimistic,
     refetchInventoryAndQs,
     inventoryOpen = false,
     setInventoryOpen,
@@ -471,17 +472,17 @@ export function FortressHUD(props: FortressHUDProps) {
   // gone.
   const slotClickHandlers: SlotClickHandlers = useMemo(() => ({
     transferSlot: async (from, to, quantity) => {
-      // Optimistic local move for inv → inv when dest is empty: snap
-      // the source row's .slot to the new position before the RPC.
-      const inv2inv = from.region === 'inventory' && to.region === 'inventory';
-      if (inv2inv) moveInventoryRowOptimistic?.(from.slot, to.slot);
+      // Apply optimistic update for the SPECIFIC region pair so the
+      // source slot clears and destination fills before the RPC
+      // awaits. applyTransferOptimistic covers every combo; returns
+      // a revert callback for the catch path.
+      const revert = applyTransferOptimistic?.(from, to) ?? (() => {});
       try {
         await worldStore.transferSlot(from, to, quantity);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
         return true;
       } catch (err) {
-        // Revert the optimistic move.
-        if (inv2inv) moveInventoryRowOptimistic?.(to.slot, from.slot);
+        revert();
         console.error('[transferSlot] failed:', err);
         return false;
       }
@@ -505,18 +506,31 @@ export function FortressHUD(props: FortressHUDProps) {
     },
     ejectSlotToWorld: async (from) => {
       try {
-        // Drop 2m in front of the player's view so the item is
-        // visible the moment it lands. Falls back to player position
-        // if the camera-forward ref isn't populated, then to (0,64,0)
-        // if the player ref is also empty.
+        // Drop 2m in front of the player at FOOT level, not camera
+        // level. Camera sits ~1.7m above the player's feet; without
+        // the offset the item floats in mid-air when the player is
+        // looking straight ahead. The forward vector's horizontal
+        // component (ignoring its Y) keeps the drop on the same
+        // ground plane regardless of look pitch.
+        const PLAYER_EYE_HEIGHT = 1.7;
         const ref = playerPositionRef?.current;
         const fwd = playerForwardRef?.current;
         let pos = { x: 0, y: 64, z: 0 };
         if (ref) {
           if (fwd) {
-            pos = { x: ref.x + fwd.x * 2, y: ref.y + fwd.y * 2, z: ref.z + fwd.z * 2 };
+            // Project forward onto the horizontal plane so an
+            // upward/downward look doesn't lift/sink the drop.
+            const horizLenSq = fwd.x * fwd.x + fwd.z * fwd.z;
+            const horizLen = horizLenSq > 1e-6 ? Math.sqrt(horizLenSq) : 1;
+            const fx = fwd.x / horizLen;
+            const fz = fwd.z / horizLen;
+            pos = {
+              x: ref.x + fx * 2,
+              y: ref.y - PLAYER_EYE_HEIGHT + 0.3,
+              z: ref.z + fz * 2,
+            };
           } else {
-            pos = { x: ref.x, y: ref.y, z: ref.z };
+            pos = { x: ref.x, y: ref.y - PLAYER_EYE_HEIGHT + 0.3, z: ref.z };
           }
         } else {
           console.warn('[ejectSlotToWorld] no player position; using fallback', pos);
@@ -538,7 +552,7 @@ export function FortressHUD(props: FortressHUDProps) {
        findFirstEmptyInventorySlot, findFirstEmptyHotbarSlot,
        refetchInventoryAndQs, playerPositionRef, playerForwardRef,
        swapInventoryRowsOptimistic, moveInventoryRowOptimistic,
-       applySwapOptimistic]);
+       applySwapOptimistic, applyTransferOptimistic]);
 
   // The single entry point every slot click goes through. Surfaces
   // status from the reducer to the debug badge so the user can SEE

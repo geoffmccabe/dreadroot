@@ -106,6 +106,64 @@ export function useVaultData(userId: string | null) {
     return () => { cancelled = true; };
   }, [userId]);
 
+  // v4.12.7: subscribe to user_slots realtime so the vault picks up
+  // rows added by cross-region transfers (transfer_slot / swap_slot
+  // from inv/QS). Without this, dropping an item from inv into the
+  // vault doesn't show up until the user reopens the panel.
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`vault_user_slots_${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_slots', filter: `user_id=eq.${userId}` },
+        (payload: any) => {
+          const newRow = payload.new as any;
+          const oldRow = payload.old as any;
+          const newIsVault = newRow?.region === 'vault';
+          const oldIsVault = oldRow?.region === 'vault';
+          // Only care about events that touch the vault region.
+          if (!newIsVault && !oldIsVault) return;
+          if (payload.eventType === 'INSERT' && newIsVault) {
+            setRows(prev => {
+              if (prev.some(r => r.id === newRow.id)) return prev;
+              return [...prev, {
+                id: newRow.id, user_id: newRow.user_id,
+                page: newRow.page, slot: newRow.slot,
+                item_id: newRow.item_id, quantity: newRow.quantity,
+              }];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            if (newIsVault) {
+              setRows(prev => {
+                const exists = prev.some(r => r.id === newRow.id);
+                if (exists) {
+                  return prev.map(r => r.id === newRow.id ? {
+                    id: newRow.id, user_id: newRow.user_id,
+                    page: newRow.page, slot: newRow.slot,
+                    item_id: newRow.item_id, quantity: newRow.quantity,
+                  } : r);
+                }
+                // Row moved INTO vault from another region.
+                return [...prev, {
+                  id: newRow.id, user_id: newRow.user_id,
+                  page: newRow.page, slot: newRow.slot,
+                  item_id: newRow.item_id, quantity: newRow.quantity,
+                }];
+              });
+            } else if (oldIsVault) {
+              // Row moved OUT of vault.
+              setRows(prev => prev.filter(r => r.id !== oldRow.id));
+            }
+          } else if (payload.eventType === 'DELETE' && oldIsVault) {
+            setRows(prev => prev.filter(r => r.id !== oldRow.id));
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [userId]);
+
   // Re-fetch item defs lazily when a new itemId enters the vault (e.g.
   // user moves an unknown item from inventory). Cheap — only fires on
   // unseen ids, and only one query at a time per id.

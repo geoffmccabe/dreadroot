@@ -59,15 +59,20 @@ export const useUserData = () => {
   // Refs for instant access to current state (avoids stale closures in rapid calls)
   const tokenBalanceRef = useRef(tokenBalance);
   const inventoryRef = useRef(inventory);
-  
+  const equippedItemsRef = useRef(equippedItems);
+
   // Keep refs in sync with state
   useEffect(() => {
     tokenBalanceRef.current = tokenBalance;
   }, [tokenBalance]);
-  
+
   useEffect(() => {
     inventoryRef.current = inventory;
   }, [inventory]);
+
+  useEffect(() => {
+    equippedItemsRef.current = equippedItems;
+  }, [equippedItems]);
 
   const loadUserData = useCallback(async () => {
     if (loadingRef.current) return;
@@ -995,87 +1000,151 @@ export const useUserData = () => {
     }));
   }, []);
 
-  // v4.12.6: optimistic cross-region swap/move. Handles inv↔QS in
-  // one synchronous update so the visual doesn't bounce through the
-  // source slot before refetch arrives. Returns a callback that
-  // reverts the change for the catch path.
+  // v4.12.7: optimistic cross-region transfer (dst empty). Mirrors
+  // what transfer_slot does server-side so the visual snaps without
+  // waiting for realtime / refetch. Returns a revert function.
+  const applyTransferOptimistic = useCallback((
+    from: { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
+    to:   { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
+  ): (() => void) => {
+    const inv = inventoryRef.current;
+    const eq  = equippedItemsRef.current;
+    // ── INV → INV ────────────────────────────────────────────────
+    if (from.region === 'inventory' && to.region === 'inventory') {
+      const row = inv.find(r => (r as any).slot === from.slot && r.item_type === 'item');
+      if (!row) return () => {};
+      setInventory(prev => prev.map(r => r.id === row.id ? { ...r, slot: to.slot } as any : r));
+      return () => setInventory(prev => prev.map(r => r.id === row.id ? { ...r, slot: from.slot } as any : r));
+    }
+    // ── INV → QS ─────────────────────────────────────────────────
+    if (from.region === 'inventory' && to.region === 'quick_select') {
+      const row = inv.find(r => (r as any).slot === from.slot && r.item_type === 'item');
+      if (!row) return () => {};
+      const itemId = (row as any).item_id as string;
+      setInventory(prev => prev.filter(r => r.id !== row.id));
+      setEquippedItems(prev => [...prev.filter(e => e.slot !== to.slot), { slot: to.slot, itemId }]);
+      return () => {
+        setInventory(prev => [...prev, row]);
+        setEquippedItems(prev => prev.filter(e => e.slot !== to.slot));
+      };
+    }
+    // ── QS → INV ─────────────────────────────────────────────────
+    if (from.region === 'quick_select' && to.region === 'inventory') {
+      const e = eq.find(x => x.slot === from.slot);
+      if (!e) return () => {};
+      const itemId = e.itemId;
+      const tempRow: any = {
+        id: `tmp-${Math.random().toString(36).slice(2)}`,
+        user_id: '', item_type: 'item', item_id: itemId, quantity: 1,
+        slot: to.slot, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      };
+      setEquippedItems(prev => prev.filter(x => x.slot !== from.slot));
+      setInventory(prev => [...prev, tempRow]);
+      return () => {
+        setEquippedItems(prev => [...prev, e]);
+        setInventory(prev => prev.filter(r => r.id !== tempRow.id));
+      };
+    }
+    // ── QS → QS ──────────────────────────────────────────────────
+    if (from.region === 'quick_select' && to.region === 'quick_select') {
+      const e = eq.find(x => x.slot === from.slot);
+      if (!e) return () => {};
+      setEquippedItems(prev => prev
+        .filter(x => x.slot !== from.slot && x.slot !== to.slot)
+        .concat({ slot: to.slot, itemId: e.itemId }));
+      return () => setEquippedItems(prev => prev
+        .filter(x => x.slot !== to.slot && x.slot !== from.slot)
+        .concat({ slot: from.slot, itemId: e.itemId }));
+    }
+    // ── INV → VAULT ──────────────────────────────────────────────
+    // Just clear the inv side; useVaultData's user_slots realtime
+    // will add the vault row.
+    if (from.region === 'inventory' && to.region === 'vault') {
+      const row = inv.find(r => (r as any).slot === from.slot && r.item_type === 'item');
+      if (!row) return () => {};
+      setInventory(prev => prev.filter(r => r.id !== row.id));
+      return () => setInventory(prev => [...prev, row]);
+    }
+    // ── QS → VAULT ───────────────────────────────────────────────
+    if (from.region === 'quick_select' && to.region === 'vault') {
+      const e = eq.find(x => x.slot === from.slot);
+      if (!e) return () => {};
+      setEquippedItems(prev => prev.filter(x => x.slot !== from.slot));
+      return () => setEquippedItems(prev => [...prev, e]);
+    }
+    // ── VAULT → INV / VAULT → QS ────────────────────────────────
+    // Vault state lives in useVaultData; that hook's own realtime
+    // listener will remove the vault row. We just need to add to the
+    // inv/QS destination.
+    if (from.region === 'vault' && to.region === 'inventory') {
+      // We don't know the itemId without reading useVaultData state.
+      // Skip the optimistic add — refetch + realtime will deliver it
+      // (still fast). Vault side handled by its own realtime.
+      return () => {};
+    }
+    if (from.region === 'vault' && to.region === 'quick_select') {
+      return () => {};
+    }
+    return () => {};
+  }, []);
+
+  // v4.12.7: optimistic cross-region swap. Reads CURRENT state
+  // synchronously from refs (sidestepping React 18's batched
+  // functional-updater race) and pushes one setX call per state
+  // slice with the final post-swap data. Returns a revert function.
   const applySwapOptimistic = useCallback((
     from: { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
     to:   { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
   ): (() => void) => {
-    // INV → INV swap (also handles move-to-empty)
+    // ── INV ↔ INV swap (also handles move-to-empty) ──────────────
     if (from.region === 'inventory' && to.region === 'inventory') {
-      setInventory(prev => prev.map(r => {
+      const apply = () => setInventory(prev => prev.map(r => {
         if ((r as any).slot === from.slot) return { ...r, slot: to.slot } as any;
         if ((r as any).slot === to.slot)   return { ...r, slot: from.slot } as any;
         return r;
       }));
-      return () => setInventory(prev => prev.map(r => {
-        if ((r as any).slot === from.slot) return { ...r, slot: to.slot } as any;
-        if ((r as any).slot === to.slot)   return { ...r, slot: from.slot } as any;
-        return r;
-      }));
+      apply();
+      return apply; // swap is its own inverse
     }
-    // INV → QS  (or QS → INV)  swap. Snapshot ids so we can revert.
+    // ── INV ↔ QS swap ─────────────────────────────────────────────
     if ((from.region === 'inventory' && to.region === 'quick_select')
         || (from.region === 'quick_select' && to.region === 'inventory')) {
       const invSide = from.region === 'inventory' ? from : to;
       const qsSide  = from.region === 'inventory' ? to : from;
-      let invRowSnap: any = null;
-      let qsItemSnap: string | null = null;
-      setInventory(prev => {
-        const row = prev.find(r => (r as any).slot === invSide.slot && r.item_type === 'item');
-        invRowSnap = row ? { ...row } : null;
-        if (!row) return prev;
-        // Pull the QS occupant's itemId (best effort — snapshot below).
-        return prev.map(r => {
-          if ((r as any).slot === invSide.slot && r.id === row.id) {
-            // We'll patch item_id after we read equippedItems below.
-            return r;
-          }
-          return r;
-        });
-      });
-      setEquippedItems(prev => {
-        const eq = prev.find(e => e.slot === qsSide.slot);
-        qsItemSnap = eq?.itemId ?? null;
-        if (!eq || !invRowSnap) return prev;
-        // Put inv's item into the QS slot.
-        return prev.map(e => e.slot === qsSide.slot
-          ? { ...e, itemId: (invRowSnap as any).item_id }
-          : e);
-      });
-      // Now patch the inv row's item_id to QS's old itemId.
-      setInventory(prev => prev.map(r => {
-        if ((r as any).slot === invSide.slot && invRowSnap && r.id === (invRowSnap as any).id) {
-          return { ...r, item_id: qsItemSnap } as any;
-        }
-        return r;
-      }));
+      const inv = inventoryRef.current;
+      const eq  = equippedItemsRef.current;
+      const invRow = inv.find(r => (r as any).slot === invSide.slot && r.item_type === 'item');
+      const qsEntry = eq.find(e => e.slot === qsSide.slot);
+      if (!invRow || !qsEntry) return () => {};
+      const invItemSnap = (invRow as any).item_id as string;
+      const qsItemSnap  = qsEntry.itemId;
+      // Swap the visible item at each slot. Inventory row keeps its
+      // id (refetch will reconcile with the real new ids); QS entry
+      // keeps its slot.
+      setInventory(prev => prev.map(r => r.id === invRow.id
+        ? { ...r, item_id: qsItemSnap } as any
+        : r));
+      setEquippedItems(prev => prev.map(e => e.slot === qsSide.slot
+        ? { ...e, itemId: invItemSnap }
+        : e));
       return () => {
-        if (!invRowSnap) return;
-        const origItem = (invRowSnap as any).item_id;
-        setInventory(prev => prev.map(r => {
-          if (r.id === (invRowSnap as any).id) return { ...r, item_id: origItem } as any;
-          return r;
-        }));
+        setInventory(prev => prev.map(r => r.id === invRow.id
+          ? { ...r, item_id: invItemSnap } as any
+          : r));
         setEquippedItems(prev => prev.map(e => e.slot === qsSide.slot
-          ? { ...e, itemId: qsItemSnap! }
+          ? { ...e, itemId: qsItemSnap }
           : e));
       };
     }
-    // QS → QS swap
+    // ── QS ↔ QS swap ─────────────────────────────────────────────
     if (from.region === 'quick_select' && to.region === 'quick_select') {
-      setEquippedItems(prev => prev.map(e => {
+      const apply = () => setEquippedItems(prev => prev.map(e => {
         if (e.slot === from.slot) return { ...e, slot: to.slot };
         if (e.slot === to.slot)   return { ...e, slot: from.slot };
         return e;
       }));
-      return () => setEquippedItems(prev => prev.map(e => {
-        if (e.slot === from.slot) return { ...e, slot: to.slot };
-        if (e.slot === to.slot)   return { ...e, slot: from.slot };
-        return e;
-      }));
+      apply();
+      return apply;
     }
     return () => {};
   }, []);
@@ -1166,6 +1235,7 @@ export const useUserData = () => {
     swapInventoryRowsOptimistic,
     moveInventoryRowOptimistic,
     applySwapOptimistic,
+    applyTransferOptimistic,
     refetchInventoryAndQs,
     updateDisplayName,
     updateAvatarUrl,
