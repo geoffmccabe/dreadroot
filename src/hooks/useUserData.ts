@@ -385,6 +385,48 @@ export const useUserData = () => {
           }
         }
       )
+      .on(
+        // QS-as-storage: user_equipped_items rows ARE the QS items.
+        // The atomic transfer RPCs (transfer_inv_to_qs, etc.) write
+        // here; without realtime sync the QS region renders stale
+        // and items appear to "disappear" after a drop.
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_equipped_items',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const rowToSlot = (row: any): { slot: number; itemId: string } | null => {
+            if (!row?.slot_type || typeof row.slot_type !== 'string') return null;
+            const m = row.slot_type.match(/^hotbar_(\d+)$/);
+            if (!m) return null;
+            return { slot: parseInt(m[1], 10), itemId: row.item_id };
+          };
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const eq = rowToSlot(payload.new);
+            if (!eq) return;
+            setEquippedItems(prev => {
+              const filtered = prev.filter(e => e.slot !== eq.slot);
+              filtered.push(eq);
+              return filtered;
+            });
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            const eq = rowToSlot(payload.new);
+            if (!eq) return;
+            setEquippedItems(prev => {
+              const filtered = prev.filter(e => e.slot !== eq.slot);
+              filtered.push(eq);
+              return filtered;
+            });
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            const eq = rowToSlot(payload.old);
+            if (!eq) return;
+            setEquippedItems(prev => prev.filter(e => e.slot !== eq.slot));
+          }
+        }
+      )
       .subscribe();
 
     return () => {
