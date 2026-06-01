@@ -490,9 +490,12 @@ export function FortressHUD(props: FortressHUDProps) {
     },
     ejectSlotToWorld: async (from) => {
       try {
-        const pos = playerPositionRef?.current;
-        if (!pos) { console.warn('[ejectSlotToWorld] no player position'); return false; }
-        await worldStore.ejectSlotToWorld(from, { x: pos.x, y: pos.y, z: pos.z });
+        // Fall back to (0, 64, 0) if the player ref isn't populated
+        // yet — better to drop SOMEWHERE than silently lose the item.
+        const ref = playerPositionRef?.current;
+        const pos = ref ? { x: ref.x, y: ref.y, z: ref.z } : { x: 0, y: 64, z: 0 };
+        if (!ref) console.warn('[ejectSlotToWorld] no player position; using fallback', pos);
+        await worldStore.ejectSlotToWorld(from, pos);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
         return true;
       } catch (err) {
