@@ -15,6 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Upload, X, Egg } from 'lucide-react';
+import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 
 interface EggItem {
   id: string;
@@ -62,11 +63,28 @@ export function ShpiderEggsPanel() {
     }
     setUploadingTier(tier);
     try {
-      const ext = file.name.split('.').pop() || 'webp';
-      const path = `shpider/eggs/t${tier}_${Date.now()}.${ext}`;
+      // v4.12.13: route animated uploads through the strip pipeline.
+      let uploadBlob: Blob = file;
+      let path: string;
+      const isAnimated = await needsAnimationProcessing(file);
+      if (isAnimated) {
+        toast.info('Converting animation to strip texture...');
+        try {
+          const result = await convertAnimationToStrip(file, { frameSize: 256, maxFrames: 24 });
+          uploadBlob = result.stripBlob;
+          path = `shpider/eggs/t${tier}_${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
+        } catch (err: any) {
+          toast.error(`Animation conversion failed: ${err.message}`);
+          setUploadingTier(null);
+          return;
+        }
+      } else {
+        const ext = file.name.split('.').pop() || 'webp';
+        path = `shpider/eggs/t${tier}_${Date.now()}.${ext}`;
+      }
       const { error: uploadError } = await supabase.storage
         .from('block-textures')
-        .upload(path, file, { cacheControl: '3600', upsert: true });
+        .upload(path, uploadBlob, { cacheControl: '3600', upsert: true });
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage

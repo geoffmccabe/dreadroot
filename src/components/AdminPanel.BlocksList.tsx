@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
+import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { KtxBackfillButton } from './KtxBackfillButton';
 import { ChevronDown, ChevronRight, Plus, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -131,14 +132,38 @@ export function BlocksList({ userRoles }: BlocksListProps) {
     setUploadingBlockId(blockId);
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${blockId}-${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      // v4.12.13: route animated uploads through the strip pipeline.
+      // GIFs and animated WebP were previously stored raw and decoded
+      // by useAnimatedTexture per-tick at runtime — a major lag source.
+      // Strip conversion happens ONCE at upload; runtime animates via
+      // shader UV offset on a single static WebP. Matches the
+      // entity-design-panel pattern (shombie/shwarm/etc).
+      let uploadBlob: Blob = file;
+      let filePath: string;
+      const isAnimated = await needsAnimationProcessing(file);
+      if (isAnimated) {
+        toast({ title: 'Converting animation to strip texture...' });
+        try {
+          const result = await convertAnimationToStrip(file, {
+            frameSize: 256,
+            maxFrames: 24,
+          });
+          uploadBlob = result.stripBlob;
+          filePath = `${blockId}-${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
+          toast({ title: `Converted ${result.originalFrameCount} frames to ${result.frameCount}-frame strip` });
+        } catch (err: any) {
+          toast({ title: 'Animation conversion failed', description: err.message, variant: 'destructive' });
+          return;
+        }
+      } else {
+        const fileExt = file.name.split('.').pop();
+        filePath = `${blockId}-${Date.now()}.${fileExt}`;
+      }
 
       // Upload to storage
       const { error: uploadError } = await supabase.storage
         .from('block-textures')
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, uploadBlob, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -214,14 +239,34 @@ export function BlocksList({ userRoles }: BlocksListProps) {
 
       let textureUrl = null;
 
-      // Upload texture if provided
+      // Upload texture if provided. Same strip-conversion path as
+      // handleTextureUpload above — keeps the create-block flow from
+      // being a back-door for raw GIFs.
       if (newBlockData.texture) {
-        const fileExt = newBlockData.texture.name.split('.').pop();
-        const fileName = `${newBlockData.key}-${Date.now()}.${fileExt}`;
-        
+        let uploadBlob: Blob = newBlockData.texture;
+        let fileName: string;
+        const isAnimated = await needsAnimationProcessing(newBlockData.texture);
+        if (isAnimated) {
+          toast({ title: 'Converting animation to strip texture...' });
+          try {
+            const result = await convertAnimationToStrip(newBlockData.texture, {
+              frameSize: 256,
+              maxFrames: 24,
+            });
+            uploadBlob = result.stripBlob;
+            fileName = `${newBlockData.key}-${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
+          } catch (err: any) {
+            toast({ title: 'Animation conversion failed', description: err.message, variant: 'destructive' });
+            return;
+          }
+        } else {
+          const fileExt = newBlockData.texture.name.split('.').pop();
+          fileName = `${newBlockData.key}-${Date.now()}.${fileExt}`;
+        }
+
         const { error: uploadError } = await supabase.storage
           .from('block-textures')
-          .upload(fileName, newBlockData.texture);
+          .upload(fileName, uploadBlob);
 
         if (uploadError) throw uploadError;
 

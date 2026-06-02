@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { useQueryClient } from '@tanstack/react-query';
 import { Save, Upload, X, Bug, Egg } from 'lucide-react';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
@@ -91,13 +92,32 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
     setIsUploading(field);
     const part = field.replace('_texture_url', '');
     try {
-      const ext = file.name.split('.').pop() || 'webp';
-      const path = `shpider/t${currentDef.tier}/${part}_${Date.now()}.${ext}`;
+      // v4.12.13: convert animated input to a horizontal-strip WebP
+      // at upload time so runtime never has to decode a GIF.
+      let uploadBlob: Blob = file;
+      let path: string;
+      const isAnimated = await needsAnimationProcessing(file);
+      if (isAnimated) {
+        toast.info('Converting animation to strip texture...');
+        try {
+          const result = await convertAnimationToStrip(file, { frameSize: 256, maxFrames: 24 });
+          uploadBlob = result.stripBlob;
+          path = `shpider/t${currentDef.tier}/${part}_${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
+          toast.success(`Converted ${result.originalFrameCount} frames to ${result.frameCount}-frame strip`);
+        } catch (err: any) {
+          toast.error(`Animation conversion failed: ${err.message}`);
+          setIsUploading(null);
+          return;
+        }
+      } else {
+        const ext = file.name.split('.').pop() || 'webp';
+        path = `shpider/t${currentDef.tier}/${part}_${Date.now()}.${ext}`;
+      }
       console.log(`[ShpiderDesign] uploading ${part} for T${currentDef.tier} → ${path}`);
 
       const { error: uploadError } = await supabase.storage
         .from('block-textures')
-        .upload(path, file, { cacheControl: '3600', upsert: true });
+        .upload(path, uploadBlob, { cacheControl: '3600', upsert: true });
       if (uploadError) {
         console.error('[ShpiderDesign] storage upload failed:', uploadError);
         toast.error(`Storage upload failed: ${uploadError.message ?? JSON.stringify(uploadError)}`);
