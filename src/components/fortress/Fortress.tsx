@@ -443,44 +443,62 @@ export function Fortress() {
     return tier;
   }, [grenadeReadySlot, equippedItems, consumeQuickSlot]);
 
-  // G key handler — only arms if a grenade is actually available.
-  // Decision tree:
+  // G key handler — only arms if a grenade is actually available IN
+  // THE DATABASE. v4.12.12 fix: previous version trusted client state
+  // (equippedItems / inventory), which could hold phantom rows from
+  // failed optimistic updates or stale realtime. That let players
+  // press G with nothing and still throw a "free" grenade because
+  // both the arm path and the throw path consulted the same lying
+  // client state. Now we query user_slots fresh and decide the arm
+  // path based on what the server actually has.
+  //
   //   1. Already armed → second G cancels (disarm).
-  //   2. Grenade in equipped hotbar slot → arm that slot.
-  //   3. Grenade in inventory + free hotbar slot → auto-equip into
-  //      first free slot, arm it.
-  //   4. Grenade in inventory but hotbar full → no-op (G doesn't work).
-  //   5. No grenade anywhere → no-op.
-  const handleGrenadeTogglePress = useCallback(() => {
+  //   2. Real QS grenade exists → arm that slot.
+  //   3. Real inventory grenade + free QS slot → transfer + arm.
+  //   4. No real grenade OR no free QS slot → no-op.
+  const handleGrenadeTogglePress = useCallback(async () => {
     if (grenadeReadySlot !== null) {
-      // Cancel arm.
       setGrenadeReadySlot(null);
       return;
     }
     const defs = grenadeDefsRef.current;
-    // Step 2: any equipped slot already holding a grenade?
-    const equippedSlotWithGrenade = (equippedItems as Array<{ slot: number; itemId: string }>)
-      .find(eq => defs.has(eq.itemId));
-    if (equippedSlotWithGrenade) {
-      setGrenadeReadySlot(equippedSlotWithGrenade.slot);
+    if (!user?.id) return;
+    const { data: rows } = await supabase
+      .from('user_slots' as any)
+      .select('region, slot, item_id')
+      .eq('user_id', user.id)
+      .in('region', ['inventory', 'quick_select']);
+    const allRows = ((rows as any[]) ?? []);
+    // Step 2: QS already holds a grenade — arm it.
+    const qsGrenade = allRows.find(r => r.region === 'quick_select' && defs.has(r.item_id));
+    if (qsGrenade) {
+      setGrenadeReadySlot(qsGrenade.slot);
       playPinPullSound();
       return;
     }
-    // Step 3: inventory has a grenade and a hotbar slot is free?
-    const grenadeInv = inventory.find(inv =>
-      inv.quantity > 0 && inv.item_id && defs.has(inv.item_id)
-    );
-    if (!grenadeInv || !grenadeInv.item_id) return; // no grenade anywhere
-    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    // Step 3: inventory holds a grenade — try to equip then arm.
+    const invGrenade = allRows.find(r => r.region === 'inventory' && defs.has(r.item_id));
+    if (!invGrenade) return;
+    const usedQs = new Set(allRows.filter(r => r.region === 'quick_select').map(r => r.slot));
     let firstEmpty: number | null = null;
     for (let i = 1; i <= 6; i++) {
-      if (!usedSlots.has(i)) { firstEmpty = i; break; }
+      if (!usedQs.has(i)) { firstEmpty = i; break; }
     }
-    if (firstEmpty === null) return; // hotbar full — G doesn't work
-    void updateEquippedSlot(firstEmpty, grenadeInv.item_id);
+    if (firstEmpty === null) return;
+    try {
+      await worldStore.transferSlot(
+        { region: 'inventory', page: 0, slot: invGrenade.slot },
+        { region: 'quick_select', page: 0, slot: firstEmpty },
+        1,
+      );
+    } catch (err) {
+      console.error('[handleGrenadeTogglePress] transfer failed:', err);
+      return;
+    }
+    if (refetchInventoryAndQs) void refetchInventoryAndQs();
     setGrenadeReadySlot(firstEmpty);
     playPinPullSound();
-  }, [grenadeReadySlot, equippedItems, inventory, updateEquippedSlot]);
+  }, [grenadeReadySlot, user?.id, refetchInventoryAndQs]);
 
   // Throw flow needs to clear the armed slot when the click consumes
   // the grenade. We can't modify onThrowGrenade itself (it lives in

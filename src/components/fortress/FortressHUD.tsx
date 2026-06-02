@@ -587,6 +587,14 @@ export function FortressHUD(props: FortressHUDProps) {
   // drop-target highlight + onPointerUp drop dispatch.
   const [hoveredHotbarSlot, setHoveredHotbarSlot] = useState<number | null>(null);
 
+  // v4.12.12: hotbar press-hold-drag tracking. Clicking a QS tile
+  // activates the slot's item; only drag-past-threshold picks it up.
+  // pressRef captures the start position so onPointerMove can tell
+  // a true drag from a wobble; cursorStackApi.getCursor() reads
+  // synchronously at pointerUp time to decide click-vs-drop.
+  const pressRef = useRef<{ x: number; y: number; slot: number; occupant: SlotOccupant | null; didDrag: boolean } | null>(null);
+  const DRAG_THRESHOLD_SQ = 36; // 6px²
+
   // Clear the cursor stack when ALL inventory UIs close. Otherwise
   // the floating sprite stays on screen with an origin pointing at an
   // unmounted panel — next click would target a stale slot.
@@ -1220,45 +1228,62 @@ export function FortressHUD(props: FortressHUDProps) {
                         }
                         return;
                       }
-                      // Left click. If the cursor-stack model is active
-                      // (cursor non-empty, shift held, or inventory
-                      // panel open) → route through slotClick reducer.
-                      const stackMode = cursorStackActive || e.shiftKey || inventoryOpen || vaultOpen;
-                      if (stackMode) {
-                        handleSlotClick({
-                          location: { region: 'hotbar', slot: slot.slot },
-                          occupant: slotOccupant,
-                          button: 'left',
-                          shift: e.shiftKey,
-                          doubleClick: false,
-                        });
-                        return;
-                      }
-                      // Normal use-slot behavior.
-                      setSelectedSlot(slot.slot);
-                      if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(slot.slot);
+                      if (e.button !== 0) return;
+                      // v4.12.12: defer pickup until the pointer moves
+                      // past the drag threshold. A pure click activates
+                      // the slot's item; only press-and-drag picks it
+                      // up into the cursor. Document-level listeners
+                      // track the gesture; per-tile onPointerUp below
+                      // handles drops when cursor is already held.
+                      pressRef.current = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        slot: slot.slot,
+                        occupant: slotOccupant,
+                        didDrag: false,
+                      };
+                      const onMove = (ev: PointerEvent) => {
+                        const p = pressRef.current;
+                        if (!p || p.didDrag) return;
+                        const dx = ev.clientX - p.x;
+                        const dy = ev.clientY - p.y;
+                        if (dx * dx + dy * dy > DRAG_THRESHOLD_SQ) {
+                          p.didDrag = true;
+                          handleSlotClick({
+                            location: { region: 'hotbar', slot: p.slot },
+                            occupant: p.occupant,
+                            button: 'left',
+                            shift: ev.shiftKey,
+                            doubleClick: false,
+                          });
+                        }
+                      };
+                      const onUp = (ev: PointerEvent) => {
+                        document.removeEventListener('pointermove', onMove);
+                        document.removeEventListener('pointerup', onUp);
+                        const p = pressRef.current;
+                        pressRef.current = null;
+                        if (!p) return;
+                        if (ev.button !== 0) return;
+                        // If a cursor is held (whether from this drag
+                        // or a prior pickup), let the per-tile or
+                        // global pointerUp handler deliver the drop.
+                        if (cursorStackApi.getCursor()) return;
+                        // Pure click with no cursor → activate the slot.
+                        if (!p.didDrag) {
+                          setSelectedSlot(p.slot);
+                          if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
+                        }
+                      };
+                      document.addEventListener('pointermove', onMove);
+                      document.addEventListener('pointerup', onUp);
                     }}
                     onPointerUp={(e) => {
-                      // Press-and-drag release on a hotbar tile drops
-                      // the cursor here. Releasing on the source tile
-                      // (ghosted) returns the cursor (no DB call).
+                      // Drop the cursor when it's released over a tile.
+                      // No-op when no cursor is held — the pure-click
+                      // path runs in the document-level pointerup above.
                       if (e.button !== 0) return;
                       if (!cursor) return;
-                      if (isGhosted) {
-                        // Return-to-source: just clear the cursor.
-                        // We can't easily import cursorStackApi here
-                        // without growing deps — route through the
-                        // reducer with the slot as both source & dst
-                        // and let the no-op fall through to ESC-equiv.
-                        handleSlotClick({
-                          location: { region: 'hotbar', slot: slot.slot },
-                          occupant: slotOccupant,
-                          button: 'left',
-                          shift: e.shiftKey,
-                          doubleClick: false,
-                        });
-                        return;
-                      }
                       handleSlotClick({
                         location: { region: 'hotbar', slot: slot.slot },
                         occupant: slotOccupant,
