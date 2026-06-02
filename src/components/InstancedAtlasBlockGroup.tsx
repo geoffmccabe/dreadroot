@@ -33,6 +33,41 @@ import { shrineTracker } from '@/lib/shrineTracker';
 import { meshWorkerPool } from '@/lib/meshWorker/meshWorkerPool';
 import { packChunkBlocks } from '@/lib/meshWorker/blockPack';
 
+// ─── GC pressure counters (v4.12.8) ──────────────────────────────────
+// One-line tallies so we can verify which apply-path branches actually
+// fire under normal play. Read from the dev console:
+//   window.__gcProbe()
+// Reports total allocation events and approximate bytes since reset.
+//   window.__gcProbe(true)  → also resets counters
+const __gcCounters = {
+  uvSliceCalls: 0,
+  uvSliceBytes: 0,
+  colorSliceCalls: 0,
+  colorSliceBytes: 0,
+  posMapEntries: 0,
+  posMapBytesApprox: 0,
+  startedAt: typeof performance !== 'undefined' ? performance.now() : 0,
+};
+if (typeof window !== 'undefined') {
+  (window as any).__gcProbe = (reset = false) => {
+    const elapsed = (performance.now() - __gcCounters.startedAt) / 1000;
+    const out = {
+      elapsedSec: +elapsed.toFixed(1),
+      uvSlice: { calls: __gcCounters.uvSliceCalls, MB: +(__gcCounters.uvSliceBytes / 1e6).toFixed(2) },
+      colorSlice: { calls: __gcCounters.colorSliceCalls, MB: +(__gcCounters.colorSliceBytes / 1e6).toFixed(2) },
+      posMap: { entries: __gcCounters.posMapEntries, MB: +(__gcCounters.posMapBytesApprox / 1e6).toFixed(2) },
+      mbPerSec: +(((__gcCounters.uvSliceBytes + __gcCounters.colorSliceBytes + __gcCounters.posMapBytesApprox) / 1e6) / Math.max(elapsed, 0.001)).toFixed(2),
+    };
+    if (reset) {
+      __gcCounters.uvSliceCalls = 0; __gcCounters.uvSliceBytes = 0;
+      __gcCounters.colorSliceCalls = 0; __gcCounters.colorSliceBytes = 0;
+      __gcCounters.posMapEntries = 0; __gcCounters.posMapBytesApprox = 0;
+      __gcCounters.startedAt = performance.now();
+    }
+    return out;
+  };
+}
+
 // #2 Phase 2a: off-thread mesh build — ON, with budgeted apply (2026-May-19).
 // Worker builds matrices/uv/color off-thread. The .then handler does the
 // fast finalize (Float32Array.set / bounds / count / frustumCulled) inline
@@ -594,6 +629,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
               (uvOffsetAttrRef.current.array as Float32Array).set(res.uvOffsets.subarray(0, n * 2));
               uvOffsetAttrRef.current.needsUpdate = true;
             } else {
+              __gcCounters.uvSliceCalls++;
+              __gcCounters.uvSliceBytes += n * 2 * 4; // Float32 = 4 bytes
               const a = new THREE.InstancedBufferAttribute(res.uvOffsets.slice(0, n * 2), 2);
               a.needsUpdate = true;
               m.geometry.setAttribute('instanceUvOffset', a);
@@ -605,6 +642,8 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
                 (colorAttrRef.current.array as Float32Array).set(res.colors.subarray(0, n * 3));
                 colorAttrRef.current.needsUpdate = true;
               } else {
+                __gcCounters.colorSliceCalls++;
+                __gcCounters.colorSliceBytes += n * 3 * 4; // Float32 = 4 bytes
                 const c = new THREE.InstancedBufferAttribute(res.colors.slice(0, n * 3), 3);
                 c.needsUpdate = true;
                 m.geometry.setAttribute('instanceColor', c);
@@ -649,6 +688,10 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
                   x: b.position_x, y: b.position_y, z: b.position_z,
                 });
               }
+              const added = end - from;
+              __gcCounters.posMapEntries += added;
+              // Rough size: 6 fields × ~16 bytes (V8 small-object overhead avg)
+              __gcCounters.posMapBytesApprox += added * 96;
             };
             if (n <= POSMAP_INLINE_LIMIT) {
               buildPosMapRange(0, n);
