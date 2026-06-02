@@ -3,12 +3,17 @@ import * as THREE from 'three';
 import { parseGIF, decompressFrames } from 'gifuct-js';
 import { blockDB } from './useIndexedDB';
 
-interface GIFFrame {
-  dims: { width: number; height: number; top: number; left: number };
-  patch: Uint8ClampedArray;
-  delay: number;
-  disposalType: number;
-}
+// v4.12.9: GIF storage rewritten to drop the decoded-frame array
+// after a one-time composition into a horizontal strip canvas.
+// Previously framesRef held every frame's raw RGBA bytes in JS heap
+// forever (~1 MB/frame); heap snapshots showed 1.1 GB of GIFFrame
+// objects ({pixels, dims, colorTable, delay, disposalType, patch}).
+// The strip canvas pixels live in browser graphics memory, not JS
+// heap, so the JS retention goes to roughly zero per animated GIF.
+//
+// Trade-off: strip composition runs once at load (cost = same as
+// rendering all frames anyway, just done eagerly). Animation cost
+// per tick is one drawImage from strip → texture canvas.
 
 // Track ongoing background refreshes to prevent duplicates
 const refreshTimers = new Map<string, number>();
@@ -16,12 +21,11 @@ const refreshTimers = new Map<string, number>();
 export const useAnimatedTexture = (url: string) => {
   const [texture, setTexture] = useState<THREE.Texture | null>(null);
   const textureRef = useRef<THREE.Texture | null>(null); // Track current texture for cleanup
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const backupCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const tempCanvasRef = useRef<HTMLCanvasElement | null>(null); // REUSABLE temp canvas - no allocation per frame!
-  const tempCtxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const imageDataRef = useRef<ImageData | null>(null); // REUSABLE ImageData - no allocation per frame!
-  const framesRef = useRef<GIFFrame[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null); // Texture-backing canvas
+  const stripCanvasRef = useRef<HTMLCanvasElement | null>(null); // All frames composed horizontally
+  const frameDelaysRef = useRef<number[]>([]); // Per-frame timing in ms (numbers only — no pixel data)
+  const frameWidthRef = useRef(0);
+  const frameHeightRef = useRef(0);
   const currentFrameRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
   const isGifRef = useRef(false);
@@ -63,19 +67,13 @@ export const useAnimatedTexture = (url: string) => {
         textureRef.current.dispose();
         textureRef.current = null;
       }
-      
-      // Clean up canvases
-      if (canvasRef.current) {
-        canvasRef.current = null;
-      }
-      if (backupCanvasRef.current) {
-        backupCanvasRef.current = null;
-      }
-      if (tempCanvasRef.current) {
-        tempCanvasRef.current = null;
-        tempCtxRef.current = null;
-      }
-      imageDataRef.current = null;
+
+      // Drop canvases. The browser will release the underlying graphics
+      // memory once nothing references them. frameDelaysRef is a tiny
+      // number array — no special handling needed.
+      canvasRef.current = null;
+      stripCanvasRef.current = null;
+      frameDelaysRef.current = [];
     };
   }, [url]);
 
@@ -193,63 +191,120 @@ export const useAnimatedTexture = (url: string) => {
   const loadAnimatedGifFromBlob = async (blob: Blob) => {
     try {
       const buffer = await blob.arrayBuffer();
-      
+
       if (!isMountedRef.current) return;
-      
-      // Parse GIF
+
+      // Parse + decompress. The `frames` array is held LOCALLY only —
+      // not stored on a ref — so it becomes garbage as soon as this
+      // function returns. Only the strip canvas survives.
       const gif = parseGIF(buffer);
       const frames = decompressFrames(gif, true);
-      
+
       if (frames.length === 0) {
         console.warn('No frames found in GIF');
         return;
       }
 
-      framesRef.current = frames as GIFFrame[];
-      
-      // Create canvas for rendering frames
-      const canvas = document.createElement('canvas');
-      canvas.width = frames[0].dims.width;
-      canvas.height = frames[0].dims.height;
-      canvasRef.current = canvas;
+      const W = frames[0].dims.width;
+      const H = frames[0].dims.height;
+      const N = frames.length;
+      frameWidthRef.current = W;
+      frameHeightRef.current = H;
 
-      // Create backup canvas for disposal type 3
-      const backupCanvas = document.createElement('canvas');
-      backupCanvas.width = frames[0].dims.width;
-      backupCanvas.height = frames[0].dims.height;
-      backupCanvasRef.current = backupCanvas;
+      // Composition canvas: builds each frame's full visible state
+      // (honoring disposal types) before stamping it into the strip.
+      const compose = document.createElement('canvas');
+      compose.width = W;
+      compose.height = H;
+      const composeCtx = compose.getContext('2d');
+      if (!composeCtx) return;
 
-      // Create REUSABLE temp canvas for frame rendering (avoid allocation per frame!)
-      const tempCanvas = document.createElement('canvas');
-      // Size to GIF full dimensions (frames may have smaller patches)
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      tempCanvasRef.current = tempCanvas;
-      tempCtxRef.current = tempCanvas.getContext('2d');
-      
-      // ImageData will be created on-demand in renderFrame when we know the actual frame size
-      imageDataRef.current = null;
+      // Backup canvas for disposal type 3 (restore previous)
+      const backup = document.createElement('canvas');
+      backup.width = W;
+      backup.height = H;
+      const backupCtx = backup.getContext('2d');
 
-      // Initialize with transparent background
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Temp canvas for stamping each frame's patch
+      const tmp = document.createElement('canvas');
+      tmp.width = W;
+      tmp.height = H;
+      const tmpCtx = tmp.getContext('2d');
+      if (!tmpCtx) return;
+
+      // Strip canvas: N frames laid out horizontally. This is the ONLY
+      // surface kept after load. Browser graphics memory, not JS heap.
+      const strip = document.createElement('canvas');
+      strip.width = W * N;
+      strip.height = H;
+      const stripCtx = strip.getContext('2d');
+      if (!stripCtx) return;
+
+      const delays: number[] = new Array(N);
+
+      for (let i = 0; i < N; i++) {
+        const f = frames[i];
+        delays[i] = f.delay || 100;
+
+        // Apply disposal of the PREVIOUS frame
+        if (i > 0) {
+          const prev = frames[i - 1];
+          const prevLeft = prev.dims.left || 0;
+          const prevTop = prev.dims.top || 0;
+          if (prev.disposalType === 2) {
+            composeCtx.clearRect(prevLeft, prevTop, prev.dims.width, prev.dims.height);
+          } else if (prev.disposalType === 3 && backupCtx) {
+            composeCtx.clearRect(0, 0, W, H);
+            composeCtx.drawImage(backup, 0, 0);
+          }
+        } else {
+          composeCtx.clearRect(0, 0, W, H);
+        }
+
+        // Back up pre-state if this frame uses disposal 3
+        if (f.disposalType === 3 && backupCtx) {
+          backupCtx.clearRect(0, 0, W, H);
+          backupCtx.drawImage(compose, 0, 0);
+        }
+
+        // Stamp this frame's patch onto the compose canvas
+        const fw = f.dims.width;
+        const fh = f.dims.height;
+        const fl = f.dims.left || 0;
+        const ft = f.dims.top || 0;
+        const imageData = tmpCtx.createImageData(fw, fh);
+        imageData.data.set(f.patch);
+        tmpCtx.clearRect(0, 0, fw, fh);
+        tmpCtx.putImageData(imageData, 0, 0);
+        composeCtx.drawImage(tmp, 0, 0, fw, fh, fl, ft, fw, fh);
+
+        // Copy the composed frame into the strip at position i
+        stripCtx.clearRect(i * W, 0, W, H);
+        stripCtx.drawImage(compose, i * W, 0);
       }
 
-      // Render first frame BEFORE creating texture
-      renderFrame(0);
+      // `frames` and all its {pixels, patch, colorTable, ...} objects
+      // are now unreachable and eligible for GC. The strip canvas
+      // alone carries the entire animation.
+      stripCanvasRef.current = strip;
+      frameDelaysRef.current = delays;
 
-      // Create texture from canvas AFTER first frame is rendered
+      // Texture-backing canvas: one frame size, painted per tick
+      // from a strip viewport. THREE samples this canvas as a texture.
+      const canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      canvasRef.current = canvas;
+      drawFrameFromStrip(0);
+
       const canvasTexture = new THREE.CanvasTexture(canvas);
       canvasTexture.minFilter = THREE.LinearFilter;
       canvasTexture.magFilter = THREE.LinearFilter;
-      canvasTexture.needsUpdate = true; // Mark for initial upload
-      
+      canvasTexture.needsUpdate = true;
+
       if (isMountedRef.current) {
         textureRef.current = canvasTexture;
         setTexture(canvasTexture);
-        
-        // Start animation loop for GIFs
         scheduleNextFrame();
       } else {
         canvasTexture.dispose();
@@ -259,107 +314,39 @@ export const useAnimatedTexture = (url: string) => {
     }
   };
 
-  const renderFrame = (frameIndex: number) => {
-    if (!canvasRef.current || framesRef.current.length === 0) return;
-
-    const frame = framesRef.current[frameIndex];
-    const ctx = canvasRef.current.getContext('2d');
+  // Paint frame N onto the texture canvas by copying the matching
+  // slice of the strip canvas. Single drawImage; no pixel allocations.
+  const drawFrameFromStrip = (frameIndex: number) => {
+    const canvas = canvasRef.current;
+    const strip = stripCanvasRef.current;
+    if (!canvas || !strip) return;
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    // Default position to 0,0 if not specified
-    const left = frame.dims.left || 0;
-    const top = frame.dims.top || 0;
-
-    // Handle disposal of previous frame FIRST (before drawing new frame)
-    if (frameIndex > 0) {
-      const prevFrame = framesRef.current[frameIndex - 1];
-      const prevLeft = prevFrame.dims.left || 0;
-      const prevTop = prevFrame.dims.top || 0;
-      
-      // Disposal Type:
-      // 0 or 1: No disposal (leave as is, stack frames)
-      // 2: Restore to background color (clear the frame area)
-      // 3: Restore to previous (restore the area to what it was before the last frame)
-      
-      if (prevFrame.disposalType === 2) {
-        // Clear the previous frame's area
-        ctx.clearRect(
-          prevLeft,
-          prevTop,
-          prevFrame.dims.width,
-          prevFrame.dims.height
-        );
-      } else if (prevFrame.disposalType === 3 && backupCanvasRef.current) {
-        // Restore from backup
-        const backupCtx = backupCanvasRef.current.getContext('2d');
-        if (backupCtx) {
-          ctx.drawImage(backupCanvasRef.current, 0, 0);
-        }
-      }
-      // Disposal type 0 or 1: Do nothing, keep previous frame
-    } else {
-      // First frame - clear canvas
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    }
-
-    // Backup current state if this frame will need restoration later
-    if (frame.disposalType === 3 && backupCanvasRef.current) {
-      const backupCtx = backupCanvasRef.current.getContext('2d');
-      if (backupCtx) {
-        backupCtx.clearRect(0, 0, backupCanvasRef.current.width, backupCanvasRef.current.height);
-        backupCtx.drawImage(canvasRef.current, 0, 0);
-      }
-    }
-
-    // REUSE temp canvas and ImageData instead of creating new ones per frame!
-    const tempCanvas = tempCanvasRef.current;
-    const tempCtx = tempCtxRef.current;
-    
-    if (tempCtx && tempCanvas) {
-      // Resize temp canvas only if frame dims are larger
-      if (frame.dims.width > tempCanvas.width || frame.dims.height > tempCanvas.height) {
-        tempCanvas.width = Math.max(tempCanvas.width, frame.dims.width);
-        tempCanvas.height = Math.max(tempCanvas.height, frame.dims.height);
-      }
-      
-      // Clear just the area we need
-      tempCtx.clearRect(0, 0, frame.dims.width, frame.dims.height);
-      
-      // Create or reuse ImageData - ensure it matches the exact frame dimensions
-      let imageData = imageDataRef.current;
-      if (!imageData || imageData.width !== frame.dims.width || imageData.height !== frame.dims.height) {
-        imageData = tempCtx.createImageData(frame.dims.width, frame.dims.height);
-        imageDataRef.current = imageData;
-      }
-      
-      // Copy patch data directly - sizes now match exactly
-      imageData.data.set(frame.patch);
-      tempCtx.putImageData(imageData, 0, 0);
-      
-      // Draw temp canvas onto main canvas (respects alpha/transparency)
-      ctx.drawImage(tempCanvas, 0, 0, frame.dims.width, frame.dims.height, left, top, frame.dims.width, frame.dims.height);
-    }
+    const W = frameWidthRef.current;
+    const H = frameHeightRef.current;
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(strip, frameIndex * W, 0, W, H, 0, 0, W, H);
   };
 
-  // Self-scheduling animation loop - each GIF animates on its own timer
+  // Self-scheduling animation loop — each GIF animates on its own
+  // timer. Reads delay from the per-frame numbers array (tiny) and
+  // paints from the strip canvas (no pixel allocations).
   const scheduleNextFrame = () => {
-    if (!isMountedRef.current || !isGifRef.current || framesRef.current.length <= 1) return;
-    
-    const currentFrame = framesRef.current[currentFrameRef.current];
-    const frameDelay = currentFrame.delay || 100;
-    
+    const delays = frameDelaysRef.current;
+    if (!isMountedRef.current || !isGifRef.current || delays.length <= 1) return;
+
+    const frameDelay = delays[currentFrameRef.current] || 100;
+
     animationTimerRef.current = window.setTimeout(() => {
       if (!isMountedRef.current || !textureRef.current) return;
-      
-      // Advance to next frame
-      currentFrameRef.current = (currentFrameRef.current + 1) % framesRef.current.length;
-      renderFrame(currentFrameRef.current);
-      
+
+      currentFrameRef.current = (currentFrameRef.current + 1) % delays.length;
+      drawFrameFromStrip(currentFrameRef.current);
+
       if (textureRef.current instanceof THREE.CanvasTexture) {
         textureRef.current.needsUpdate = true;
       }
-      
-      // Schedule next frame
+
       scheduleNextFrame();
     }, frameDelay);
   };
