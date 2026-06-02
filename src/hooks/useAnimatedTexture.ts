@@ -33,6 +33,30 @@ export const useAnimatedTexture = (url: string) => {
   const backgroundRefreshTimerRef = useRef<number | null>(null);
   const animationTimerRef = useRef<number | null>(null);
 
+  // v4.12.10: lazy strip composition. v4.12.9 composed every frame
+  // synchronously at load — a single 32-frame GIF was 100+ canvas ops
+  // in a tight loop. Multiplied across all animated textures it
+  // produced 1.9-second main-thread stalls during chunk load.
+  //
+  // New scheme: render only frame 0 at load (so the texture is valid),
+  // stash frame data in pendingComposeRef, then compose subsequent
+  // frames JUST-IN-TIME inside the animation tick (one frame per
+  // tick). Composition cost per tick is ~1-2ms instead of a single
+  // multi-hundred-ms blocker. Once every frame has been composed
+  // once, the pending data is released — the strip canvas alone
+  // carries the rest of the animation forever after.
+  const pendingComposeRef = useRef<{
+    frames: any[];
+    composed: boolean[];
+    composeCtx: CanvasRenderingContext2D;
+    backupCtx: CanvasRenderingContext2D | null;
+    tmpCtx: CanvasRenderingContext2D;
+    stripCtx: CanvasRenderingContext2D;
+    W: number;
+    H: number;
+    composedCount: number;
+  } | null>(null);
+
   useEffect(() => {
     isMountedRef.current = true;
     const isGif = url.toLowerCase().endsWith('.gif');
@@ -74,6 +98,7 @@ export const useAnimatedTexture = (url: string) => {
       canvasRef.current = null;
       stripCanvasRef.current = null;
       frameDelaysRef.current = [];
+      pendingComposeRef.current = null;
     };
   }, [url]);
 
@@ -241,53 +266,28 @@ export const useAnimatedTexture = (url: string) => {
       if (!stripCtx) return;
 
       const delays: number[] = new Array(N);
+      for (let i = 0; i < N; i++) delays[i] = frames[i].delay || 100;
 
-      for (let i = 0; i < N; i++) {
-        const f = frames[i];
-        delays[i] = f.delay || 100;
-
-        // Apply disposal of the PREVIOUS frame
-        if (i > 0) {
-          const prev = frames[i - 1];
-          const prevLeft = prev.dims.left || 0;
-          const prevTop = prev.dims.top || 0;
-          if (prev.disposalType === 2) {
-            composeCtx.clearRect(prevLeft, prevTop, prev.dims.width, prev.dims.height);
-          } else if (prev.disposalType === 3 && backupCtx) {
-            composeCtx.clearRect(0, 0, W, H);
-            composeCtx.drawImage(backup, 0, 0);
-          }
-        } else {
-          composeCtx.clearRect(0, 0, W, H);
-        }
-
-        // Back up pre-state if this frame uses disposal 3
-        if (f.disposalType === 3 && backupCtx) {
-          backupCtx.clearRect(0, 0, W, H);
-          backupCtx.drawImage(compose, 0, 0);
-        }
-
-        // Stamp this frame's patch onto the compose canvas
-        const fw = f.dims.width;
-        const fh = f.dims.height;
-        const fl = f.dims.left || 0;
-        const ft = f.dims.top || 0;
-        const imageData = tmpCtx.createImageData(fw, fh);
-        imageData.data.set(f.patch);
-        tmpCtx.clearRect(0, 0, fw, fh);
-        tmpCtx.putImageData(imageData, 0, 0);
-        composeCtx.drawImage(tmp, 0, 0, fw, fh, fl, ft, fw, fh);
-
-        // Copy the composed frame into the strip at position i
-        stripCtx.clearRect(i * W, 0, W, H);
-        stripCtx.drawImage(compose, i * W, 0);
-      }
-
-      // `frames` and all its {pixels, patch, colorTable, ...} objects
-      // are now unreachable and eligible for GC. The strip canvas
-      // alone carries the entire animation.
+      // Stash everything needed for incremental composition. Frame
+      // data lives in JS heap UNTIL each frame is composed once;
+      // composeFrameIfNeeded nulls patches as it goes so memory
+      // drains gradually rather than peaking forever.
+      const pending = {
+        frames,
+        composed: new Array(N).fill(false) as boolean[],
+        composeCtx,
+        backupCtx,
+        tmpCtx,
+        stripCtx,
+        W, H,
+        composedCount: 0,
+      };
+      pendingComposeRef.current = pending;
       stripCanvasRef.current = strip;
       frameDelaysRef.current = delays;
+
+      // Compose frame 0 immediately so the texture has something to show.
+      composeFrameIfNeeded(0);
 
       // Texture-backing canvas: one frame size, painted per tick
       // from a strip viewport. THREE samples this canvas as a texture.
@@ -311,6 +311,77 @@ export const useAnimatedTexture = (url: string) => {
       }
     } catch (error) {
       console.error('Failed to load animated GIF:', error);
+    }
+  };
+
+  // Compose ONE frame from the cached gifuct-js patch into the strip
+  // canvas if it hasn't already been composed. The frame is composed
+  // sequentially — to render frame i correctly we need frames 0..i-1
+  // composed first so the disposal-type chain is honored. The most
+  // common access pattern (forward playback) is already sequential,
+  // so this is fine in practice.
+  //
+  // After a frame is composed, its `.patch` is set to null so the
+  // big pixel buffer can be garbage collected.
+  const composeFrameIfNeeded = (target: number) => {
+    const p = pendingComposeRef.current;
+    if (!p) return;
+    if (target < 0 || target >= p.frames.length) return;
+    // Walk forward from the last composed frame to target.
+    while (p.composedCount <= target) {
+      const i = p.composedCount;
+      const f = p.frames[i];
+      if (!f) { p.composedCount++; continue; }
+
+      // Disposal of previous frame
+      if (i > 0) {
+        const prev = p.frames[i - 1];
+        if (prev) {
+          const prevLeft = prev.dims.left || 0;
+          const prevTop = prev.dims.top || 0;
+          if (prev.disposalType === 2) {
+            p.composeCtx.clearRect(prevLeft, prevTop, prev.dims.width, prev.dims.height);
+          } else if (prev.disposalType === 3 && p.backupCtx) {
+            p.composeCtx.clearRect(0, 0, p.W, p.H);
+            p.composeCtx.drawImage(p.backupCtx.canvas, 0, 0);
+          }
+        }
+      } else {
+        p.composeCtx.clearRect(0, 0, p.W, p.H);
+      }
+
+      // Backup before drawing if this frame uses disposal 3
+      if (f.disposalType === 3 && p.backupCtx) {
+        p.backupCtx.clearRect(0, 0, p.W, p.H);
+        p.backupCtx.drawImage(p.composeCtx.canvas, 0, 0);
+      }
+
+      // Stamp patch
+      const fw = f.dims.width;
+      const fh = f.dims.height;
+      const fl = f.dims.left || 0;
+      const ft = f.dims.top || 0;
+      const id = p.tmpCtx.createImageData(fw, fh);
+      id.data.set(f.patch);
+      p.tmpCtx.clearRect(0, 0, fw, fh);
+      p.tmpCtx.putImageData(id, 0, 0);
+      p.composeCtx.drawImage(p.tmpCtx.canvas, 0, 0, fw, fh, fl, ft, fw, fh);
+
+      // Stamp into strip
+      p.stripCtx.clearRect(i * p.W, 0, p.W, p.H);
+      p.stripCtx.drawImage(p.composeCtx.canvas, i * p.W, 0);
+
+      p.composed[i] = true;
+      // Drop the heaviest field (the pixel buffer). Disposal info on
+      // this frame is still needed for the NEXT frame's compose, so
+      // we keep the frame object — patch is what costs MB though.
+      f.patch = null;
+      p.composedCount++;
+    }
+    // Once every frame has been composed, release the pending state
+    // entirely so frames + the helper canvases can be collected.
+    if (p.composedCount >= p.frames.length) {
+      pendingComposeRef.current = null;
     }
   };
 
@@ -341,6 +412,9 @@ export const useAnimatedTexture = (url: string) => {
       if (!isMountedRef.current || !textureRef.current) return;
 
       currentFrameRef.current = (currentFrameRef.current + 1) % delays.length;
+      // Lazy compose: make sure this frame is in the strip before drawing.
+      // Cost ~1ms; bounded by the animation rate (typically 10Hz).
+      composeFrameIfNeeded(currentFrameRef.current);
       drawFrameFromStrip(currentFrameRef.current);
 
       if (textureRef.current instanceof THREE.CanvasTexture) {
