@@ -30,6 +30,7 @@ import { FlameEffectsPanel } from './AdminPanel.FlameEffectsPanel';
 import { SolanaPanel } from './AdminPanel.SolanaPanel';
 import { AtlasDebugPanel } from './AdminPanel.AtlasDebugPanel';
 import { ViewSettingsPanel } from './AdminPanel.ViewSettings';
+import { GifMigrationPanel } from './AdminPanel.GifMigration';
 import type { AdminPanelProps } from './adminPanel.types';
 
 export function AdminPanel({
@@ -113,7 +114,7 @@ export function AdminPanel({
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-11 flex-shrink-0">
+          <TabsList className="grid w-full grid-cols-12 flex-shrink-0">
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
             <TabsTrigger value="weather">Weather</TabsTrigger>
@@ -125,6 +126,7 @@ export function AdminPanel({
             <TabsTrigger value="items">Items</TabsTrigger>
             <TabsTrigger value="effects">Effects</TabsTrigger>
             <TabsTrigger value="worlds">Worlds</TabsTrigger>
+            <TabsTrigger value="migrate">Migrate</TabsTrigger>
           </TabsList>
 
           <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
@@ -356,6 +358,10 @@ export function AdminPanel({
                 </ScrollArea>
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          <TabsContent value="migrate" className="mt-4 flex-1 overflow-hidden">
+            <GifMigrationPanel />
           </TabsContent>
         </Tabs>
       </DialogContent>
