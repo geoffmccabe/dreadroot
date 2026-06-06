@@ -6,6 +6,8 @@ import { useBlocksData } from '@/hooks/useBlocksData';
 import { calculatePlacementFast } from '@/lib/voxelRaycast';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
 import { frameLoop } from '@/lib/frameLoop';
+import { parseStripMetadata } from '@/lib/animationToStrip';
+import { applyStripAnimation } from '@/lib/stripAnimationMaterial';
 
 interface BlockPreviewProps {
   blockType: string;
@@ -28,14 +30,35 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   // Load texture with animated GIF support - use block's texture or default grass texture
   const textureUrl = blockDef?.texture?.diffuse || '/grass_texture_seamless.webp';
   const { texture } = useAnimatedTexture(textureUrl);
-  
+
+  // v4.12.15: if the texture URL is a sprite-strip WebP, animate it on the
+  // GPU via shader UV-offset (zero per-tick CPU cost) instead of the legacy
+  // GIF decode. parseStripMetadata returns null for plain static textures,
+  // so the non-strip path below is untouched.
+  const strip = useMemo(() => parseStripMetadata(textureUrl), [textureUrl]);
+
   // Set up texture properties
   useMemo(() => {
     if (!texture) return;
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(1, 1);
-  }, [texture]);
+    if (strip) {
+      // Strip UVs are computed in-shader and stay within [0,1); clamp wrap
+      // avoids any edge bleed at the strip boundaries.
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+    } else {
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(1, 1);
+    }
+  }, [texture, strip]);
+
+  // Attach the strip-animation shader to the preview material once both the
+  // texture and strip metadata are ready.
+  useEffect(() => {
+    if (!strip || !meshRef.current) return;
+    const material = meshRef.current.material as THREE.MeshBasicMaterial;
+    applyStripAnimation(material, strip.frames, strip.delay);
+  }, [strip, texture]);
 
   // Store refs to props for use in frame callback
   const visibleRef = useRef(visible);
