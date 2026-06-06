@@ -903,6 +903,73 @@ export async function consumeQuickSlot(
   return consumeSlot('quick_select', 0, qsSlot, 1, requestId);
 }
 
+// ── World blocks (Track 1B: validated place/mine RPCs) ──────────────
+
+// Detects "this RPC isn't deployed yet" so the client can fall back to the
+// direct write during the deploy→run-SQL window. PostgREST returns PGRST202
+// for an unknown function; Postgres 42883 = function does not exist.
+// TRANSITIONAL — delete these fallbacks at Track 1D (RLS lockdown).
+function isMissingFunction(error: any): boolean {
+  const code = error?.code;
+  const msg = String(error?.message ?? '');
+  return code === 'PGRST202' || code === '42883'
+    || /could not find the function|function .* does not exist/i.test(msg);
+}
+
+/** Persist a placed block via the validated place_block RPC. Server
+ *  enforces auth, world existence, spatial bounds, and caller-owns.
+ *  Client placement stays optimistic; this is fire-and-forget like the
+ *  prior upsert. Returns the persisted row. Falls back to a direct
+ *  upsert if the RPC isn't deployed yet. */
+export async function placeBlock(params: {
+  worldId: string;
+  x: number; y: number; z: number;
+  blockType: string;
+  textureUrl?: string | null;
+  expiresAt?: string | null;
+}): Promise<any> {
+  const { data, error } = await supabase.rpc('place_block', {
+    p_world_id: params.worldId,
+    p_x: params.x, p_y: params.y, p_z: params.z,
+    p_block_type: params.blockType,
+    p_texture_url: params.textureUrl ?? null,
+    p_expires_at: params.expiresAt ?? null,
+  });
+  if (!error) return data;
+  if (!isMissingFunction(error)) throw error;
+  // Fallback: pre-migration direct upsert (RLS still enforces ownership).
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = session?.user?.id;
+  if (!uid) throw error;
+  const row: any = {
+    user_id: uid, world_id: params.worldId,
+    position_x: params.x, position_y: params.y, position_z: params.z,
+    block_type: params.blockType,
+  };
+  if (params.textureUrl) row.texture_url = params.textureUrl;
+  if (params.expiresAt) row.expires_at = params.expiresAt;
+  const { data: up, error: upErr } = await supabase
+    .from('placed_blocks')
+    .upsert(row, { onConflict: 'world_id,position_x,position_y,position_z', ignoreDuplicates: false })
+    .select().single();
+  if (upErr) throw upErr;
+  return up;
+}
+
+/** Remove a placed block via the validated mine_block RPC. Server
+ *  enforces auth + (owner OR admin) and enqueues the tree-hole check.
+ *  Idempotent. Falls back to a direct delete if the RPC isn't deployed
+ *  yet (overlap-enqueue is skipped in that transitional window only). */
+export async function mineBlock(blockId: string): Promise<{ removed: boolean }> {
+  const { data, error } = await supabase.rpc('mine_block', { p_block_id: blockId });
+  if (!error) return (data as { removed: boolean }) ?? { removed: false };
+  if (!isMissingFunction(error)) throw error;
+  // Fallback: pre-migration direct delete (RLS still enforces ownership).
+  const { error: delErr } = await supabase.from('placed_blocks').delete().eq('id', blockId);
+  if (delErr) throw delErr;
+  return { removed: true };
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -948,4 +1015,7 @@ export const worldStore = {
   consumeSlot,
   swapSlot,
   ejectSlotToWorld,
+  // Track 1B — validated world-block writes.
+  placeBlock,
+  mineBlock,
 };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { worldStore } from '@/services/worldStore';
 import { useToast } from '@/hooks/use-toast';
 import { useIndexedDB, blockDB } from './useIndexedDB';
 import { PlacedBlock } from '../types/blocks';
@@ -674,41 +675,27 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const cachedUserId = cachedUserRef.current?.id || await getCachedUserId();
       if (!cachedUserId) return;
 
-      const blockData: any = {
-        user_id: cachedUserId,
-        position_x: dbBlock.position_x,
-        position_y: dbBlock.position_y,
-        position_z: dbBlock.position_z,
-        block_type: dbBlock.block_type,
-      };
-      
-      // Add expiration if provided
-      if (dbBlock.expires_at) {
-        blockData.expires_at = dbBlock.expires_at;
+      // Track 1B: persist via the validated place_block RPC instead of a
+      // direct upsert. world_id is required server-side — use the block's
+      // own world_id, falling back to the hook's current world.
+      const wid = (dbBlock as any).world_id || worldId;
+      if (!wid) {
+        console.warn('[place] no world_id; skipping sync for', dbBlock.id);
+        return;
       }
-      
-      // Add world_id if present
-      if ((dbBlock as any).world_id) {
-        blockData.world_id = (dbBlock as any).world_id;
-      }
-      
-      // Add texture_url if present
-      if ((dbBlock as any).texture_url) {
-        blockData.texture_url = (dbBlock as any).texture_url;
-      }
-
-      // Use upsert to handle conflicts gracefully - now world-scoped
-      const { data, error } = await supabase
-        .from('placed_blocks')
-        .upsert(blockData, {
-          onConflict: 'world_id,position_x,position_y,position_z',
-          ignoreDuplicates: false
-        })
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === '23505') {
+      let data: any;
+      try {
+        data = await worldStore.placeBlock({
+          worldId: wid,
+          x: dbBlock.position_x,
+          y: dbBlock.position_y,
+          z: dbBlock.position_z,
+          blockType: dbBlock.block_type,
+          textureUrl: (dbBlock as any).texture_url ?? null,
+          expiresAt: dbBlock.expires_at ?? null,
+        });
+      } catch (error: any) {
+        if (error?.code === '23505') {
           await removeFromDB(dbBlock.id);
           return;
         }
@@ -736,7 +723,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       console.error('Error syncing block to Supabase:', error);
       throw error;
     }
-  }, [getCachedUserId, removeFromDB, updateBlock]);
+  }, [getCachedUserId, removeFromDB, updateBlock, worldId]);
 
   // Keep the ref in sync with the callback
   useEffect(() => {
@@ -809,13 +796,13 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const chunkKey = getChunkKey(blockToRemove.position_x, blockToRemove.position_z);
       recentlyModifiedChunks.current.set(chunkKey, Date.now());
       
-      // Remove from Supabase (RLS will enforce ownership)
-      const { error } = await supabase
-        .from('placed_blocks')
-        .delete()
-        .eq('id', blockId);
-      
-      if (error) {
+      // Track 1B: remove via the validated mine_block RPC. The server
+      // re-checks ownership/admin (authoritative; the client check above
+      // is just for instant UX), deletes the row, and enqueues the
+      // tree-hole overlap check — all in one transaction.
+      try {
+        await worldStore.mineBlock(blockId);
+      } catch (error) {
         toast({
           title: "Failed to remove block",
           description: "Could not remove this block",
@@ -827,29 +814,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         await chunkLoader.refetchSingleChunk(blockChunkX, blockChunkZ);
         return false;
       }
-      
+
       await removeFromDB(blockId);
-      
-      // Phase 6: Add to overlap check queue for tree hole filling
-      // Only for blocks above ground level (y > 0)
-      if (worldId && blockToRemove.position_y > 0) {
-        // Fire-and-forget: don't await, don't block UI
-        (async () => {
-          try {
-            await supabase
-              .from('overlap_check_queue')
-              .upsert({
-                world_id: worldId,
-                position_x: Math.floor(blockToRemove.position_x),
-                position_y: Math.floor(blockToRemove.position_y),
-                position_z: Math.floor(blockToRemove.position_z),
-              }, { onConflict: 'world_id,position_x,position_y,position_z' });
-          } catch {
-            // Silently ignore errors
-          }
-        })();
-      }
-      
+
+      // (overlap-check enqueue is now done server-side inside mine_block)
+
       toast({
         title: "Block removed",
         description: "Block removed successfully",
