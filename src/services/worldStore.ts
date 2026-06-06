@@ -956,6 +956,31 @@ export async function placeBlock(params: {
   return up;
 }
 
+/** Credit a kill via the validated record_kill RPC (server-side
+ *  increment of user_combat_stats). Fire-and-forget from kill handlers;
+ *  falls back to a no-op-safe throw if the RPC isn't deployed yet.
+ *  enemy_type encodes the tier, e.g. `shwarm_t3`. */
+export async function recordKill(enemyType: string): Promise<void> {
+  const { error } = await supabase.rpc('record_kill', { p_enemy_type: enemyType });
+  if (error && !isMissingFunction(error)) throw error;
+  if (error && isMissingFunction(error)) {
+    // Pre-migration fallback: direct select-then-update/insert.
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const { data: existing } = await supabase.from('user_combat_stats')
+      .select('id, kills').eq('user_id', uid).eq('enemy_type', enemyType).maybeSingle();
+    if (existing) {
+      await supabase.from('user_combat_stats')
+        .update({ kills: (existing as any).kills + 1, updated_at: new Date().toISOString() })
+        .eq('id', (existing as any).id);
+    } else {
+      await supabase.from('user_combat_stats')
+        .insert({ user_id: uid, enemy_type: enemyType, kills: 1 });
+    }
+  }
+}
+
 /** Remove a placed block via the validated mine_block RPC. Server
  *  enforces auth + (owner OR admin) and enqueues the tree-hole check.
  *  Idempotent. Falls back to a direct delete if the RPC isn't deployed
@@ -1018,4 +1043,5 @@ export const worldStore = {
   // Track 1B — validated world-block writes.
   placeBlock,
   mineBlock,
+  recordKill,
 };

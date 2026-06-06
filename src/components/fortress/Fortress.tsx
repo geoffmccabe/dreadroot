@@ -1981,35 +1981,9 @@ export function Fortress() {
               return;
             }
             
-            // Increment kill count in database
-            const { data: existing, error: fetchError } = await supabase
-              .from('user_combat_stats')
-              .select('*')
-              .eq('user_id', user.id)
-              .eq('enemy_type', `shwarm_t${tier}`)
-              .maybeSingle();
-            
-            if (fetchError) {
-              console.error('[Fortress] Error fetching combat stats:', fetchError);
-              return;
-            }
-            
-            if (existing) {
-              const { error: updateError } = await supabase
-                .from('user_combat_stats')
-                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-              if (updateError) {
-                console.error('[Fortress] Error updating kill count:', updateError);
-              }
-            } else {
-              const { error: insertError } = await supabase
-                .from('user_combat_stats')
-                .insert({ user_id: user.id, enemy_type: `shwarm_t${tier}`, kills: 1 });
-              if (insertError) {
-                console.error('[Fortress] Error inserting kill count:', insertError);
-              }
-            }
+            // Track 1B: kill credit via validated RPC (server-side increment).
+            try { await worldStore.recordKill(`shwarm_t${tier}`); }
+            catch (e) { console.error('[Fortress] recordKill shwarm failed:', e); }
           }}
           onShnakeKilled={async (tier) => {
             console.log(`[Fortress] Shnake killed - tier ${tier}, user: ${user?.id}`);
@@ -2021,35 +1995,9 @@ export function Fortress() {
             // Play kill sound
             playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
             
-            // Increment kill count in database
-            const { data: existing, error: fetchError } = await supabase
-              .from('user_combat_stats')
-              .select('*')
-              .eq('user_id', user.id)
-              .eq('enemy_type', `shnake_t${tier}`)
-              .maybeSingle();
-            
-            if (fetchError) {
-              console.error('[Fortress] Error fetching shnake combat stats:', fetchError);
-              return;
-            }
-            
-            if (existing) {
-              const { error: updateError } = await supabase
-                .from('user_combat_stats')
-                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-              if (updateError) {
-                console.error('[Fortress] Error updating shnake kill count:', updateError);
-              }
-            } else {
-              const { error: insertError } = await supabase
-                .from('user_combat_stats')
-                .insert({ user_id: user.id, enemy_type: `shnake_t${tier}`, kills: 1 });
-              if (insertError) {
-                console.error('[Fortress] Error inserting shnake kill count:', insertError);
-              }
-            }
+            // Track 1B: kill credit via validated RPC.
+            try { await worldStore.recordKill(`shnake_t${tier}`); }
+            catch (e) { console.error('[Fortress] recordKill shnake failed:', e); }
           }}
           onShombieKilled={async (tier) => {
             console.log(`[Fortress] Shombie killed - tier ${tier}, user: ${user?.id}`);
@@ -2061,35 +2009,9 @@ export function Fortress() {
             // Play kill sound
             playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
             
-            // Increment kill count in database
-            const { data: existing, error: fetchError } = await supabase
-              .from('user_combat_stats')
-              .select('*')
-              .eq('user_id', user.id)
-              .eq('enemy_type', `shombie_t${tier}`)
-              .maybeSingle();
-            
-            if (fetchError) {
-              console.error('[Fortress] Error fetching shombie combat stats:', fetchError);
-              return;
-            }
-            
-            if (existing) {
-              const { error: updateError } = await supabase
-                .from('user_combat_stats')
-                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-              if (updateError) {
-                console.error('[Fortress] Error updating shombie kill count:', updateError);
-              }
-            } else {
-              const { error: insertError } = await supabase
-                .from('user_combat_stats')
-                .insert({ user_id: user.id, enemy_type: `shombie_t${tier}`, kills: 1 });
-              if (insertError) {
-                console.error('[Fortress] Error inserting shombie kill count:', insertError);
-              }
-            }
+            // Track 1B: kill credit via validated RPC.
+            try { await worldStore.recordKill(`shombie_t${tier}`); }
+            catch (e) { console.error('[Fortress] recordKill shombie failed:', e); }
           }}
           onShpiderKilled={async ({ tier, x, y, z }) => {
             // Same pattern as the other enemy kill writers — bumps
@@ -2098,22 +2020,9 @@ export function Fortress() {
             // killable but invisible in the stats screen.
             if (!user?.id) return;
             playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
-            const { data: existing } = await supabase
-              .from('user_combat_stats')
-              .select('*')
-              .eq('user_id', user.id)
-              .eq('enemy_type', `shpider_t${tier}`)
-              .maybeSingle();
-            if (existing) {
-              await supabase
-                .from('user_combat_stats')
-                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-            } else {
-              await supabase
-                .from('user_combat_stats')
-                .insert({ user_id: user.id, enemy_type: `shpider_t${tier}`, kills: 1 });
-            }
+            // Track 1B: kill credit via validated RPC.
+            try { await worldStore.recordKill(`shpider_t${tier}`); }
+            catch (e) { console.error('[Fortress] recordKill shpider failed:', e); }
             // 1% chance to drop a shpider egg of the killed shpider's
             // tier. Previously this added straight to inventory which
             // gave a misleading "dropped!" toast but no visible egg in
@@ -2193,22 +2102,9 @@ export function Fortress() {
             // handler before so kills never reached the DB.
             if (!user?.id) return;
             playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
-            const { data: existing } = await supabase
-              .from('user_combat_stats')
-              .select('*')
-              .eq('user_id', user.id)
-              .eq('enemy_type', `walapa_t${tier}`)
-              .maybeSingle();
-            if (existing) {
-              await supabase
-                .from('user_combat_stats')
-                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-            } else {
-              await supabase
-                .from('user_combat_stats')
-                .insert({ user_id: user.id, enemy_type: `walapa_t${tier}`, kills: 1 });
-            }
+            // Track 1B: kill credit via validated RPC.
+            try { await worldStore.recordKill(`walapa_t${tier}`); }
+            catch (e) { console.error('[Fortress] recordKill walapa failed:', e); }
           }}
           onShtickmanKilled={async (tier) => {
             console.log(`[Fortress] Shtickman killed - tier ${tier}, user: ${user?.id}`);
@@ -2220,35 +2116,9 @@ export function Fortress() {
             // Play kill sound
             playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
 
-            // Increment kill count in database
-            const { data: existing, error: fetchError } = await supabase
-              .from('user_combat_stats')
-              .select('*')
-              .eq('user_id', user.id)
-              .eq('enemy_type', `shtickman_t${tier}`)
-              .maybeSingle();
-
-            if (fetchError) {
-              console.error('[Fortress] Error fetching shtickman combat stats:', fetchError);
-              return;
-            }
-
-            if (existing) {
-              const { error: updateError } = await supabase
-                .from('user_combat_stats')
-                .update({ kills: existing.kills + 1, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-              if (updateError) {
-                console.error('[Fortress] Error updating shtickman kill count:', updateError);
-              }
-            } else {
-              const { error: insertError } = await supabase
-                .from('user_combat_stats')
-                .insert({ user_id: user.id, enemy_type: `shtickman_t${tier}`, kills: 1 });
-              if (insertError) {
-                console.error('[Fortress] Error inserting shtickman kill count:', insertError);
-              }
-            }
+            // Track 1B: kill credit via validated RPC.
+            try { await worldStore.recordKill(`shtickman_t${tier}`); }
+            catch (e) { console.error('[Fortress] recordKill shtickman failed:', e); }
           }}
           respawnPosition={respawnPosition}
           onRespawnComplete={() => setRespawnPosition(null)}
