@@ -104,6 +104,7 @@ import { useSpawnCommands } from '@/features/enemies/hooks/useSpawnCommands';
 import { useDropTableCache } from '@/features/loot/useDropTableCache';
 import { useLootPickup } from '@/features/loot/useLootPickup';
 import { useWorldDrops } from '@/features/loot/useWorldDrops';
+import { worldStore } from '@/services/worldStore';
 import { DroppedItemRenderer } from './DroppedItemRenderer';
 import type { DroppedWorldItem, ShwarmDefinition } from '@/features/shwarm/types';
 
@@ -311,27 +312,30 @@ export function FortressScene({
     onShwarmGroupKilled?.(tier);
   }, [onShwarmGroupKilled]);
 
-  // Callback when an individual shwarm block is killed - roll loot drop
-  // Use current definition (not baked-in spawn-time snapshot) so admin panel changes take effect immediately
-  const handleShwarmBlockKilled = useCallback((definition: ShwarmDefinition, blockPosition: THREE.Vector3) => {
-    if (!dropTablesLoaded) {
-      console.warn(`[Loot] Block killed but drop tables not loaded yet — skipping`);
+  // Callback when an individual shwarm block is killed — roll loot drop.
+  // Track 1B: the SERVER rolls (rate + table looked up server-side) and
+  // spawns the world_drop; realtime delivers the visual. The client no
+  // longer rolls or chooses the item. If the RPC isn't deployed yet, fall
+  // back to the legacy client-side roll so drops keep working in the
+  // deploy→run-SQL window.
+  const handleShwarmBlockKilled = useCallback(async (definition: ShwarmDefinition, blockPosition: THREE.Vector3) => {
+    if (!currentUserId) return;
+    let handled = false;
+    try {
+      handled = await worldStore.rollShwarmDrop(
+        definition.tier, blockPosition.x, blockPosition.y, blockPosition.z,
+      );
+    } catch (e) {
+      console.error('[Loot] rollShwarmDrop failed:', e);
       return;
     }
-    // Look up current definition by tier so admin panel changes apply to existing shwarms
+    if (handled) return;
+    // Fallback: RPC not deployed — legacy client-side roll.
+    if (!dropTablesLoaded) return;
     const currentDef = shwarmDefinitions?.find(d => d.tier === definition.tier) ?? definition;
-    console.log(`[Loot] Block killed T${currentDef.tier}, drop_rate=${currentDef.drop_rate}, table=${currentDef.drop_table_code}`);
     const drop = rollDrop(currentDef.drop_rate, currentDef.drop_table_code);
-    if (drop) {
-      if (!currentUserId) {
-        console.warn(`[Loot] Drop rolled successfully but currentUserId is null — skipping`);
-        return;
-      }
-      console.log(`[Loot] Spawning world item: ${drop.itemName} at (${blockPosition.x.toFixed(1)}, ${blockPosition.y.toFixed(1)}, ${blockPosition.z.toFixed(1)})`);
-      // Fire-and-forget spawn. Realtime INSERT will populate state.
-      void spawnDrop(drop.itemId, drop.itemNumber, drop.itemName, blockPosition);
-    }
-  }, [rollDrop, currentUserId, dropTablesLoaded, shwarmDefinitions, spawnDrop]);
+    if (drop) void spawnDrop(drop.itemId, drop.itemNumber, drop.itemName, blockPosition);
+  }, [currentUserId, dropTablesLoaded, shwarmDefinitions, rollDrop, spawnDrop]);
   
   const { shwarms, shwarmsRef, damageBlock, spawnShwarmByTier, spawnShwarmAt } = useShwarmSystem({
     definitions: shwarmDefinitions,

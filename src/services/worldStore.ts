@@ -981,6 +981,23 @@ export async function recordKill(enemyType: string): Promise<void> {
   }
 }
 
+/** Server-authoritative loot roll for a killed shwarm. The server looks
+ *  up the drop rate + table, rolls, and spawns the world_drop (realtime
+ *  delivers the visual). Returns true if the RPC ran; false ONLY when the
+ *  RPC isn't deployed yet, so the caller can fall back to the legacy
+ *  client-side roll during the deploy→run-SQL window. */
+export async function rollShwarmDrop(
+  tier: number, x: number, y: number, z: number,
+): Promise<boolean> {
+  const { error } = await supabase.rpc('roll_shwarm_drop', {
+    p_tier: tier, p_x: x, p_y: y, p_z: z,
+    p_client_request_id: crypto.randomUUID(),
+  });
+  if (!error) return true;
+  if (isMissingFunction(error)) return false;
+  throw error;
+}
+
 /** Remove a placed block via the validated mine_block RPC. Server
  *  enforces auth + (owner OR admin) and enqueues the tree-hole check.
  *  Idempotent. Falls back to a direct delete if the RPC isn't deployed
@@ -1044,4 +1061,5 @@ export const worldStore = {
   placeBlock,
   mineBlock,
   recordKill,
+  rollShwarmDrop,
 };
