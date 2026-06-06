@@ -38,6 +38,11 @@ const DEFAULT_MAX_TOTAL_BLOCKS = 50_000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_BASE_MS = 2000;
 
+// Track 3D: once we learn the cached-blob RPC isn't deployed, stop retrying
+// it (avoids a wasted round-trip per batch until the migration is run).
+// Resets on reload, so it picks up the RPC after the SQL is applied.
+let cacheRpcAvailable = true;
+
 export interface ChunkFetchBatchedTunables {
   /** Chunks per fetch_chunks_batch RPC call. Default 50. */
   rpcBatchSize?: number;
@@ -171,10 +176,33 @@ export async function fetchChunksBatched(
     const batch = chunks.slice(i, i + rpcBatchSize);
     const chunkParams = batch.map(({ x, z }) => ({ x, z }));
 
-    const { data, error } = await sb.rpc('fetch_chunks_batch', {
-      p_world_id: worldId,
-      p_chunks: chunkParams,
-    });
+    // Track 3D: prefer the cached-blob RPC (skips re-scanning placed_blocks
+    // for unchanged chunks). Fall back to the live aggregate RPC if the cache
+    // isn't deployed yet — module flag avoids retrying it every call.
+    let data: any, error: any;
+    if (cacheRpcAvailable) {
+      ({ data, error } = await sb.rpc('fetch_chunks_cached', {
+        p_world_id: worldId,
+        p_chunks: chunkParams,
+      }));
+      if (error) {
+        // Permanently disable only when the RPC truly isn't deployed;
+        // for any other error just fall back to the live aggregate for
+        // this batch so loading never breaks on a cache hiccup.
+        if (error.code === '42883' || error.code === 'PGRST202' || error.message?.includes('function')) {
+          cacheRpcAvailable = false;
+        }
+        ({ data, error } = await sb.rpc('fetch_chunks_batch', {
+          p_world_id: worldId,
+          p_chunks: chunkParams,
+        }));
+      }
+    } else {
+      ({ data, error } = await sb.rpc('fetch_chunks_batch', {
+        p_world_id: worldId,
+        p_chunks: chunkParams,
+      }));
+    }
 
     if (error) {
       // RPC not deployed yet — fall through to per-chunk SELECT.
