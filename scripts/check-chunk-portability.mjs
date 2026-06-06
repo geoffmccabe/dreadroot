@@ -47,6 +47,12 @@ function walk(file) {
   if (visited.has(file)) return;
   visited.add(file);
   const code = readFileSync(file, 'utf8');
+  // Dynamic imports: `import('three')` / `await import("react")`.
+  for (const m of code.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+    if (FORBIDDEN.some((re) => re.test(m[1]))) {
+      violations.push({ file: file.replace(ROOT + '/', ''), spec: `import(${m[1]})` });
+    }
+  }
   for (const m of code.matchAll(IMPORT_RE)) {
     const typeOnly = !!m[2];
     const spec = m[3];

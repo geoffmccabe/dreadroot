@@ -56,11 +56,13 @@ export class ChunkDeltaBatcher {
     return `${worldId}|${numPosKey(x, y, z)}`;
   }
 
-  /** Record a block becoming solid (place / grow). */
-  add(block: PlacedBlock): void {
-    const k = this.keyOf(block.world_id as string, block.position_x, block.position_y, block.position_z);
+  /** Record a block becoming solid (place / grow). worldId is passed
+   *  explicitly because PlacedBlock has no world_id field (RPC projections
+   *  omit it) — relying on block.world_id silently produced undefined keys. */
+  add(worldId: string, block: PlacedBlock): void {
+    const k = this.keyOf(worldId, block.position_x, block.position_y, block.position_z);
     this.cells.set(k, {
-      worldId: block.world_id as string,
+      worldId,
       x: block.position_x, y: block.position_y, z: block.position_z,
       block,
     });
@@ -110,17 +112,23 @@ function coalesceCells(cells: Iterable<CellState>): ChunkDeltaBatch[] {
   return Array.from(byChunk.values());
 }
 
+/** A single ordered world change. Order matters: the LAST change to a cell
+ *  wins, so the caller must pass changes in the sequence they occurred. */
+export type BlockChange =
+  | { op: 'add'; worldId: string; block: PlacedBlock }
+  | { op: 'remove'; worldId: string; x: number; y: number; z: number };
+
 /**
- * One-shot pure coalesce of a raw change list into per-chunk batches.
- * Later changes to the same cell win (last-writer-wins).
+ * One-shot pure coalesce of an ORDERED change list into per-chunk batches.
+ * Takes a single ordered list (not separate add/remove arrays) so a cell that
+ * is both removed and re-added resolves to its true final state — matching
+ * the stateful ChunkDeltaBatcher.
  */
-export function coalesceToChunkDeltas(
-  added: ReadonlyArray<PlacedBlock>,
-  removed: ReadonlyArray<{ worldId: string; x: number; y: number; z: number }>,
-): ChunkDeltaBatch[] {
+export function coalesceToChunkDeltas(changes: ReadonlyArray<BlockChange>): ChunkDeltaBatch[] {
   const b = new ChunkDeltaBatcher();
-  // Apply in order so later entries override earlier same-cell ones.
-  for (const block of added) b.add(block);
-  for (const r of removed) b.remove(r.worldId, r.x, r.y, r.z);
+  for (const c of changes) {
+    if (c.op === 'add') b.add(c.worldId, c.block);
+    else b.remove(c.worldId, c.x, c.y, c.z);
+  }
   return b.flush();
 }
