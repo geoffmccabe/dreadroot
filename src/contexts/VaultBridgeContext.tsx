@@ -30,6 +30,10 @@ export interface VaultBridge {
   findFirstEmptySlot: (preferPage?: number) => { page: number; slot: number } | null;
   /** Currently-open vault page. */
   activePage: number;
+  /** Re-read vault rows from the DB. Called by the HUD after any
+   *  transfer/swap that touches the vault, so the vault reflects truth
+   *  even when realtime lags (which strands a phantom source tile). */
+  refetch: () => void | Promise<void>;
 }
 
 interface VaultBridgeContextType {

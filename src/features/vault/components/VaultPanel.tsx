@@ -106,7 +106,7 @@ export function VaultPanel({
 }: VaultPanelProps) {
   const {
     pages, config, setSlot, removeFromSlot, replacePageLayout,
-    transferFromInventory, transferToInventory, transferWithinVault,
+    transferFromInventory, transferToInventory, transferWithinVault, refetch,
   } = useVaultData(userId);
   const [activePage, setActivePage] = useState(0);
   const registerBridge = useRegisterVaultBridge();
@@ -245,13 +245,14 @@ export function VaultPanel({
       transferFromInventory, transferToInventory, transferWithinVault,
       findFirstEmptySlot,
       activePage,
+      refetch,
     };
     registerBridge(b);
     return () => registerBridge(null);
   }, [
     isOpen, removeFromSlot, setSlot,
     transferFromInventory, transferToInventory, transferWithinVault,
-    findFirstEmptySlot, activePage, registerBridge,
+    findFirstEmptySlot, activePage, registerBridge, refetch,
   ]);
 
   if (!isOpen) return null;

@@ -488,6 +488,10 @@ export function FortressHUD(props: FortressHUDProps) {
       try {
         await worldStore.transferSlot(from, to, quantity);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        // The vault has no optimistic source-removal; refetch it after
+        // any vault-involving move so a moved-out item's source tile
+        // clears (and a moved-in item appears) even if realtime lags.
+        if (from.region === 'vault' || to.region === 'vault') void vaultBridge?.refetch();
         return true;
       } catch (err) {
         revert();
@@ -505,6 +509,7 @@ export function FortressHUD(props: FortressHUDProps) {
       try {
         await worldStore.swapSlot(from, to);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        if (from.region === 'vault' || to.region === 'vault') void vaultBridge?.refetch();
         return true;
       } catch (err) {
         revert();
@@ -612,10 +617,10 @@ export function FortressHUD(props: FortressHUDProps) {
   }, [setCursor]);
 
   // Drop-outside-panel: if the cursor is held and pointerup fires on
-  // anything OUTSIDE the inventory / vault panel, eject the item into
-  // the world at the player's current position. Slot tiles call
-  // event.stopPropagation on their own pointerup, so this only sees
-  // releases that missed every tile.
+  // the game CANVAS (not a panel/tile), eject the item into the world
+  // at the player's position. We gate on the release target being the
+  // canvas (target.closest('canvas') below), so releases on slot tiles
+  // or panel chrome never reach the eject path.
   useEffect(() => {
     const onPointerUp = (e: PointerEvent) => {
       const c = cursorStackApi.getCursor();
@@ -1244,9 +1249,16 @@ export function FortressHUD(props: FortressHUDProps) {
                           });
                         }
                       };
+                      const onCancel = () => {
+                        document.removeEventListener('pointermove', onMove);
+                        document.removeEventListener('pointerup', onUp);
+                        document.removeEventListener('pointercancel', onCancel);
+                        pressRef.current = null;
+                      };
                       const onUp = (ev: PointerEvent) => {
                         document.removeEventListener('pointermove', onMove);
                         document.removeEventListener('pointerup', onUp);
+                        document.removeEventListener('pointercancel', onCancel);
                         const p = pressRef.current;
                         pressRef.current = null;
                         if (!p) return;
@@ -1277,6 +1289,7 @@ export function FortressHUD(props: FortressHUDProps) {
                       };
                       document.addEventListener('pointermove', onMove);
                       document.addEventListener('pointerup', onUp);
+                      document.addEventListener('pointercancel', onCancel);
                     }}
                     onPointerUp={(e) => {
                       // Drop the cursor when it's released over a tile.

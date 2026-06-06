@@ -107,6 +107,11 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
   // won't also fire a drop; across a real drag React has re-rendered,
   // so the release tile drops correctly.
   const pressRef = React.useRef<{ x: number; y: number; cursorWasHeld: boolean; didDrag: boolean } | null>(null);
+  // Tears down the in-flight document listeners. Held in a ref so an
+  // unmount mid-press (panel closes, ESC) can run it — otherwise the
+  // pointermove/up/cancel listeners would leak and keep firing.
+  const cleanupRef = React.useRef<(() => void) | null>(null);
+  React.useEffect(() => () => { cleanupRef.current?.(); }, []);
 
   // Drop-target highlight: when cursor is held and the mouse hovers
   // a slot, the slot gets a green outline + tint if it would accept
@@ -128,6 +133,12 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
         if (e.shiftKey) { onClick('left', true, false); return; }
         const cursorWasHeld = cursorStackApi.getCursor() !== null;
         pressRef.current = { x: e.clientX, y: e.clientY, cursorWasHeld, didDrag: false };
+        const cleanup = () => {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onCancel);
+          cleanupRef.current = null;
+        };
         const onMove = (ev: PointerEvent) => {
           const p = pressRef.current;
           if (!p || p.didDrag) return;
@@ -140,13 +151,17 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
             if (!p.cursorWasHeld && occupant) onClick('left', ev.shiftKey, false);
           }
         };
+        const onCancel = () => { pressRef.current = null; cleanup(); };
         const onUp = (ev: PointerEvent) => {
-          document.removeEventListener('pointermove', onMove);
-          document.removeEventListener('pointerup', onUp);
+          cleanup();
           const p = pressRef.current;
           pressRef.current = null;
           if (!p || ev.button !== 0) return;
           if (p.didDrag) return; // drag drop handled by the release tile's onPointerUp
+          // Skip pickup on the clicks of a double-click (detail>=2) so
+          // the dblclick handler's vault→inv shortcut isn't fighting a
+          // half-completed cursor pickup.
+          if (ev.detail >= 2) return;
           // Discrete click with no drag. Drops/returns (cursor already
           // held) are handled by this tile's onPointerUp; only the
           // PICKUP case is left to do here.
@@ -156,6 +171,8 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
         };
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onCancel);
+        cleanupRef.current = cleanup;
       }}
       onPointerUp={(e) => {
         if (e.button !== 0) return;
