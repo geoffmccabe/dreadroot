@@ -2,12 +2,18 @@
 -- client doing select-then-update/insert on user_combat_stats directly
 -- (6 enemy types × inline blocks in Fortress.tsx).
 --
--- Behavior preserved: one row per (user, enemy_type) where enemy_type
--- encodes the tier (e.g. 'shwarm_t3'); kills increments by 1. NOT a plain
--- UPSERT — the unique constraint is (user_id, enemy_type, tier) with tier
--- nullable, so NULL tiers don't dedupe; we replicate the client's
--- match-on-enemy_type logic, guarded by an advisory lock to fix the
+-- Behavior preserved EXACTLY (matches the old inline client code): the
+-- tier is encoded in enemy_type (e.g. 'shwarm_t3') and the separate `tier`
+-- column (INTEGER NOT NULL DEFAULT 0) is left at 0, exactly as before. So
+-- there is one row per (user, enemy_type) and we match on enemy_type, not a
+-- plain UPSERT. An advisory lock serializes concurrent kills to fix the
 -- read-then-write race the client had.
+--
+-- KNOWN PRE-EXISTING BUG (not introduced here, fix in the stats slice):
+-- get_kill_leaderboard filters enemy_type='shwarm' AND tier=3, but rows are
+-- stored as enemy_type='shwarm_t3', tier=0 — so the PER-TIER leaderboard
+-- matches nothing. The Kills tab works (keys off the _t{tier} string). Fix
+-- = split enemy_type into base name + numeric tier + backfill existing rows.
 --
 -- Pre-DO note: combat is still client-side, so the server can't yet prove
 -- the kill happened — this RPC validates identity + serializes the write

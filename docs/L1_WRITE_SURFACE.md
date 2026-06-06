@@ -72,6 +72,7 @@ and the `vault_*` family.
 - A24 planted_trees delete (chop) — useLocalGrowth.ts:180 — WORLD-VANDALISM
 - A25 world_ponds insert — pondGenerator.ts:160 — WORLD-VANDALISM (owner/system)
 - A9 worlds view_settings save — Fortress.tsx:309 — COSMETIC (world owner)
+- A63 world_no_plant_chunks upsert/delete (god-map no-plant paint) — useGodMap.ts:212,228 — WORLD-VANDALISM (owner/admin)
 
 ### Owner-driven (keep client, ensure RLS owner = auth.uid())
 - A26 marketplace_listings edit — useListings.ts:87 — OWNERSHIP (RLS seller_id)
