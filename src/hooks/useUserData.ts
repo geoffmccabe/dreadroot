@@ -423,12 +423,17 @@ export const useUserData = () => {
           if (!row) return;
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             if (row.region === 'inventory') {
-              // Item row → derive UserInventoryItem and inject.
+              // Item row → derive UserInventoryItem and inject. Carry the
+              // user_slots.slot through (cast) so realtime-delivered rows
+              // — e.g. a world-drop pickup — render in the correct slot
+              // instead of defaulting to slot 0. Matches the slot
+              // preservation done in loadUserData (v4.12.5).
               const invRow: UserInventoryItem = {
                 id: row.id, user_id: row.user_id, item_type: 'item',
                 item_id: row.item_id, quantity: 1,
                 created_at: row.created_at, updated_at: row.updated_at,
-              };
+                ...(row.slot != null ? { slot: row.slot } : {}),
+              } as any;
               setInventory(prev => {
                 const filtered = prev.filter(i => i.id !== row.id);
                 return [...filtered, invRow];
