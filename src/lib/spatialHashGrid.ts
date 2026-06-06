@@ -26,19 +26,13 @@ const MAX_NEARBY_RESULTS = 128;
 // Track 7 safety contract: lifting COORD_OFFSET past ~100,000 would push
 // the max key past Number.MAX_SAFE_INTEGER. At that point switch to
 // Morton encoding (NEVER BigInt or strings — see L123 plan perf trap #3).
-// Strides are DERIVED from COORD_OFFSET to enforce that they stay in
-// lockstep on any future change.
-export const COORD_OFFSET = 32768;
-const COORD_RANGE = COORD_OFFSET * 2;                       // 65536
-export const NUMPOSKEY_Y_STRIDE = COORD_RANGE;              // 65536
-export const NUMPOSKEY_X_STRIDE = COORD_RANGE * COORD_RANGE; // 4_294_967_296
-
-export const xzPosKey = (x: number, z: number): number =>
-  (Math.floor(x) + COORD_OFFSET) * NUMPOSKEY_Y_STRIDE + (Math.floor(z) + COORD_OFFSET);
-export const numPosKey = (x: number, y: number, z: number): number =>
-  (Math.floor(x) + COORD_OFFSET) * NUMPOSKEY_X_STRIDE +
-  (Math.floor(y) + COORD_OFFSET) * NUMPOSKEY_Y_STRIDE +
-  (Math.floor(z) + COORD_OFFSET);
+//
+// The packing itself now lives in the pure (React/THREE-free) ./voxelKey
+// module so a Node/Cloudflare-DO chunk builder (Track 3) can share the exact
+// same encoding. Re-exported here so every existing
+// `from '@/lib/spatialHashGrid'` import of these keeps working unchanged.
+import { COORD_OFFSET, NUMPOSKEY_X_STRIDE, NUMPOSKEY_Y_STRIDE, xzPosKey, numPosKey } from './voxelKey';
+export { COORD_OFFSET, NUMPOSKEY_X_STRIDE, NUMPOSKEY_Y_STRIDE, xzPosKey, numPosKey };
 
 // NOTE: Cache variables are now PER-INSTANCE (see private fields in class)
 // This is critical when using multiple grids to prevent cross-grid cache pollution.
