@@ -998,6 +998,47 @@ export async function rollShwarmDrop(
   throw error;
 }
 
+/** Server-rolled 1% shpider-egg drop on a wild-shpider kill (owner =
+ *  caller). Returns whether an egg dropped. Falls back to the legacy
+ *  client roll+insert if the RPC isn't deployed yet. */
+export async function rollShpiderEgg(
+  tier: number, x: number, y: number, z: number,
+): Promise<{ dropped: boolean }> {
+  const { data, error } = await supabase.rpc('roll_shpider_egg', {
+    p_tier: tier, p_x: x, p_y: y, p_z: z, p_client_request_id: crypto.randomUUID(),
+  });
+  if (!error) return (data as { dropped: boolean }) ?? { dropped: false };
+  if (!isMissingFunction(error)) throw error;
+  // Fallback: client 1% roll + direct insert (pre-migration).
+  if (Math.random() >= 0.01) return { dropped: false };
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = session?.user?.id;
+  if (!uid) return { dropped: false };
+  const { data: item } = await supabase.from('items').select('id').eq('key', `shpider_egg_t${tier}`).maybeSingle();
+  await supabase.from('world_eggs' as any).insert({
+    tier, owner_user_id: uid, position_x: x, position_y: y, position_z: z, item_id: (item as any)?.id ?? null,
+  } as any);
+  return { dropped: true };
+}
+
+/** Pet-death egg refund (owner = pet owner). Centralized insert; falls
+ *  back to a direct insert if the RPC isn't deployed yet. */
+export async function spawnPetEgg(
+  tier: number, ownerUserId: string, x: number, y: number, z: number,
+): Promise<boolean> {
+  const { error } = await supabase.rpc('spawn_pet_egg', {
+    p_tier: tier, p_owner_user_id: ownerUserId, p_x: x, p_y: y, p_z: z,
+    p_client_request_id: crypto.randomUUID(),
+  });
+  if (!error) return true;
+  if (!isMissingFunction(error)) throw error;
+  const { data: item } = await supabase.from('items').select('id').eq('key', `shpider_egg_t${tier}`).maybeSingle();
+  const { error: insErr } = await supabase.from('world_eggs' as any).insert({
+    tier, owner_user_id: ownerUserId, position_x: x, position_y: y, position_z: z, item_id: (item as any)?.id ?? null,
+  } as any);
+  return !insErr;
+}
+
 /** Remove a placed block via the validated mine_block RPC. Server
  *  enforces auth + (owner OR admin) and enqueues the tree-hole check.
  *  Idempotent. Falls back to a direct delete if the RPC isn't deployed
@@ -1062,4 +1103,6 @@ export const worldStore = {
   mineBlock,
   recordKill,
   rollShwarmDrop,
+  rollShpiderEgg,
+  spawnPetEgg,
 };

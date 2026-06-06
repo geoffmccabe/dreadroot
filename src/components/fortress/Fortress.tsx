@@ -2023,47 +2023,16 @@ export function Fortress() {
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shpider_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shpider failed:', e); }
-            // 1% chance to drop a shpider egg of the killed shpider's
-            // tier. Previously this added straight to inventory which
-            // gave a misleading "dropped!" toast but no visible egg in
-            // the world. Now we insert a world_eggs row at the kill
-            // position so the killer sees a glowing egg on the ground
-            // and picks it up with F — same UX as pet-death drops.
-            if (Math.random() < 0.01) {
-              // Resolve item_id for the egg (item_number-style lookup) so
-              // the new world_eggs.item_id column gets populated. Old rows
-              // without it still work via the RPC's tier-fallback.
-              const { data: eggItemRow } = await supabase
-                .from('items')
-                .select('id')
-                .eq('key', `shpider_egg_t${tier}`)
-                .maybeSingle();
-              const { error } = await supabase
-                .from('world_eggs' as any)
-                .insert({
-                  tier,
-                  owner_user_id: user.id,
-                  position_x: x,
-                  position_y: y,
-                  position_z: z,
-                  item_id: eggItemRow?.id ?? null,
-                } as any);
-              if (error) {
-                // world_eggs migration not applied — fall back to direct
-                // inventory grant so the drop isn't lost.
-                console.warn('[ShpiderEgg] world drop insert failed:', error.message);
-                const { data: eggItem } = await supabase
-                  .from('items')
-                  .select('id')
-                  .eq('key', `shpider_egg_t${tier}`)
-                  .maybeSingle();
-                if (eggItem) {
-                  await addItem(eggItem.id, 1);
-                  toast({ title: `🥚 Shpider Egg T${tier} dropped!`, duration: 4000 });
-                }
-              } else {
+            // Track 1B: the SERVER rolls the 1% egg drop and inserts the
+            // world_eggs row (owner = killer); realtime shows the egg. The
+            // client no longer rolls or inserts.
+            try {
+              const egg = await worldStore.rollShpiderEgg(tier, x, y, z);
+              if (egg.dropped) {
                 toast({ title: `🥚 Shpider Egg T${tier} dropped — find it on the ground!`, duration: 4000 });
               }
+            } catch (e) {
+              console.error('[ShpiderEgg] roll failed:', e);
             }
           }}
           onPetShpiderDied={async ({ tier, petOwnerUserId, x, y, z }) => {
@@ -2072,28 +2041,15 @@ export function Fortress() {
             // applied at pickup time). RLS should restrict pickup to
             // the owner — that's enforced by the world_eggs row's
             // owner_user_id column + table RLS policy.
-            const { data: petEggItemRow } = await supabase
-              .from('items')
-              .select('id')
-              .eq('key', `shpider_egg_t${tier}`)
-              .maybeSingle();
-            const { error } = await supabase
-              .from('world_eggs' as any)
-              .insert({
-                tier,
-                owner_user_id: petOwnerUserId,
-                position_x: x,
-                position_y: y,
-                position_z: z,
-                item_id: petEggItemRow?.id ?? null,
-              } as any);
-            if (error) {
-              // Table may not be installed yet on this DB. Log but
-              // don't crash — the pet just dies without a refund.
-              console.warn('[ShpiderEgg] world_eggs insert failed:', error.message);
+            // Track 1B: centralized pet-egg refund via RPC (owner = pet owner).
+            let ok = false;
+            try {
+              ok = await worldStore.spawnPetEgg(tier, petOwnerUserId, x, y, z);
+            } catch (e) {
+              console.warn('[ShpiderEgg] spawnPetEgg failed:', e);
               return;
             }
-            if (user?.id === petOwnerUserId) {
+            if (ok && user?.id === petOwnerUserId) {
               toast({ title: `🥚 Your pet shpider died — egg dropped`, duration: 3500 });
             }
           }}
