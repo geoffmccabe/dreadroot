@@ -149,11 +149,19 @@ export async function slotClick(
       return { cursorAfter: occupantToCursor(occupant, location, occupant.quantity), status: `cursor: picked up x${occupant.quantity}` };
     }
 
-    // Cursor has item, slot empty → drop entire cursor
+    // Cursor has item, slot empty → drop into the slot. Vault slots
+    // stack, so the whole cursor lands there; inventory/QS slots hold
+    // exactly one unit, so only ONE unit drops and the cursor keeps the
+    // remainder (lets a vault stack be peeled out one slot at a time).
     if (cursor && !occupant) {
-      const dropped = await performDrop(cursor, cursor.quantity, location, handlers);
+      const dropQty = location.region === 'vault' ? cursor.quantity : 1;
+      const dropped = await performDrop(cursor, dropQty, location, handlers);
       if (!dropped.ok) return { cursorAfter: cursor, status: `drop FAIL: ${dropped.reason}` };
-      return { cursorAfter: null, status: `dropped x${cursor.quantity} → ${location.region}` };
+      const remaining = cursor.quantity - dropQty;
+      return {
+        cursorAfter: remaining > 0 ? { ...cursor, quantity: remaining } : null,
+        status: `dropped x${dropQty} → ${location.region}`,
+      };
     }
 
     // Cursor + slot have SAME item → merge cursor into slot only when

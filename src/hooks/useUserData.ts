@@ -917,8 +917,16 @@ export const useUserData = () => {
         const { data: occupiedRows } = await supabase.from('user_slots' as any)
           .select('slot').eq('user_id', user.id).eq('region', 'inventory');
         const occupied = new Set(((occupiedRows as any[]) ?? []).map((r: any) => r.slot));
-        let dstSlot = 0;
-        while (occupied.has(dstSlot)) dstSlot++;
+        // Slots are 1-indexed (inventory holds 1..18). Starting at 0
+        // always picked the never-occupied slot 0, which the DB CHECK
+        // (slot >= 1) then rejected — unequip-by-drag silently failed.
+        let dstSlot = 1;
+        while (dstSlot <= 18 && occupied.has(dstSlot)) dstSlot++;
+        if (dstSlot > 18) {
+          console.warn('[updateEquippedSlot] inventory full; cannot unequip');
+          await loadUserData();
+          return;
+        }
         await worldStore.transferSlot(
           { region: 'quick_select', page: 0, slot },
           { region: 'inventory', page: 0, slot: dstSlot },
@@ -1011,6 +1019,11 @@ export const useUserData = () => {
   const applyTransferOptimistic = useCallback((
     from: { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
     to:   { region: 'inventory' | 'quick_select' | 'vault'; slot: number },
+    // itemId is supplied for vault→inv / vault→qs, where the moving
+    // item's id isn't in inventory/QS state yet — the drag cursor holds
+    // it. Without it those two paths can't add the destination tile
+    // optimistically and the move looks broken until refetch/realtime.
+    itemId?: string,
   ): (() => void) => {
     const inv = inventoryRef.current;
     const eq  = equippedItemsRef.current;
@@ -1078,17 +1091,24 @@ export const useUserData = () => {
       return () => setEquippedItems(prev => [...prev, e]);
     }
     // ── VAULT → INV / VAULT → QS ────────────────────────────────
-    // Vault state lives in useVaultData; that hook's own realtime
-    // listener will remove the vault row. We just need to add to the
-    // inv/QS destination.
+    // The vault SOURCE row is removed/decremented by useVaultData's own
+    // user_slots realtime listener. Here we add the inv/QS DESTINATION
+    // tile using the itemId carried by the drag cursor. Always qty=1
+    // (inv/QS never stack); the caller clamps the transfer to 1 unit.
     if (from.region === 'vault' && to.region === 'inventory') {
-      // We don't know the itemId without reading useVaultData state.
-      // Skip the optimistic add — refetch + realtime will deliver it
-      // (still fast). Vault side handled by its own realtime.
-      return () => {};
+      if (!itemId) return () => {};
+      const tempRow: any = {
+        id: `tmp-${Math.random().toString(36).slice(2)}`,
+        user_id: '', item_type: 'item', item_id: itemId, quantity: 1,
+        slot: to.slot, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      };
+      setInventory(prev => [...prev, tempRow]);
+      return () => setInventory(prev => prev.filter(r => r.id !== tempRow.id));
     }
     if (from.region === 'vault' && to.region === 'quick_select') {
-      return () => {};
+      if (!itemId) return () => {};
+      setEquippedItems(prev => [...prev.filter(e => e.slot !== to.slot), { slot: to.slot, itemId }]);
+      return () => setEquippedItems(prev => prev.filter(e => e.slot !== to.slot));
     }
     return () => {};
   }, []);

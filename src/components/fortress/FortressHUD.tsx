@@ -475,8 +475,11 @@ export function FortressHUD(props: FortressHUDProps) {
       // Apply optimistic update for the SPECIFIC region pair so the
       // source slot clears and destination fills before the RPC
       // awaits. applyTransferOptimistic covers every combo; returns
-      // a revert callback for the catch path.
-      const revert = applyTransferOptimistic?.(from, to) ?? (() => {});
+      // a revert callback for the catch path. For vault→inv/qs the
+      // moving item's id isn't in inv/QS state yet — pass the held
+      // cursor's itemId so the destination tile can render instantly.
+      const heldItemId = cursorStackApi.getCursor()?.itemId;
+      const revert = applyTransferOptimistic?.(from, to, heldItemId) ?? (() => {});
       try {
         await worldStore.transferSlot(from, to, quantity);
         if (refetchInventoryAndQs) void refetchInventoryAndQs();
@@ -1269,10 +1272,24 @@ export function FortressHUD(props: FortressHUDProps) {
                         // or a prior pickup), let the per-tile or
                         // global pointerUp handler deliver the drop.
                         if (cursorStackApi.getCursor()) return;
-                        // Pure click with no cursor → activate the slot.
+                        // Pure click with no cursor. When an inventory
+                        // or vault panel is open, the QS grid is in
+                        // cursor-stack mode — a click PICKS UP (spec §6),
+                        // it does not activate the item. With both panels
+                        // closed, a click activates (use) the slot.
                         if (!p.didDrag) {
-                          setSelectedSlot(p.slot);
-                          if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
+                          if (inventoryOpen || vaultOpen) {
+                            handleSlotClick({
+                              location: { region: 'hotbar', slot: p.slot },
+                              occupant: p.occupant,
+                              button: 'left',
+                              shift: ev.shiftKey,
+                              doubleClick: false,
+                            });
+                          } else {
+                            setSelectedSlot(p.slot);
+                            if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
+                          }
                         }
                       };
                       document.addEventListener('pointermove', onMove);
