@@ -168,6 +168,7 @@ export function FortressScene({
   hoveredBlockId,
   setHoveredBlockId,
   collectWispBlock,
+  refetchInventoryAndQs,
   toast,
   waterfallEnabled = true,
   onGodModeChange,
@@ -296,6 +297,7 @@ export function FortressScene({
     userId: currentUserId ?? null,
     cameraRef,
     pickup: pickupDrop,
+    onPickedUp: refetchInventoryAndQs,
   });
 
   // Callback when entire shwarm group is killed - play yay sound, notify parent

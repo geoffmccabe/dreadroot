@@ -934,7 +934,12 @@ export const useUserData = () => {
         );
       }
     } catch (err) {
+      // The equip/unequip optimistically mutated equippedItems BEFORE
+      // the transfer. If the RPC failed the DB is unchanged, so the
+      // optimistic edit is now wrong (e.g. unequip cleared the QS tile
+      // but the row still exists) → re-sync from DB truth.
       console.error('[updateEquippedSlot] failed:', err);
+      await loadUserData();
     }
   }, [user?.id]);
 

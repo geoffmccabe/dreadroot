@@ -444,12 +444,16 @@ export function FortressHUD(props: FortressHUDProps) {
   const cursor = useCursorStack((s) => s.cursor);
   const setCursor = useCursorStack((s) => s.setCursor);
 
-  // First-empty resolvers for shift-click. invSlots is local; hotbar
-  // is derived from equippedItems; vault is owned by the VaultBridge.
+  // First-empty resolvers for shift-click. Inventory empties are read
+  // from inventoryOccupants — the SAME DB-slot map the grid renders, so
+  // shift-transfer can't disagree with what the user sees. (The legacy
+  // invSlots array could drift from DB truth and target an occupied
+  // slot → transfer_slot 23505 refusal.) Hotbar derives from
+  // equippedItems; vault is owned by the VaultBridge.
   const findFirstEmptyInventorySlot = useCallback((): number | null => {
-    for (let i = 1; i <= 18; i++) if (!invSlots[i]) return i;
+    for (let i = 1; i <= 18; i++) if (!inventoryOccupants.has(i)) return i;
     return null;
-  }, [invSlots]);
+  }, [inventoryOccupants]);
   const findFirstEmptyHotbarSlot = useCallback((): number | null => {
     const occupied = new Set(equippedItems.map(e => e.slot));
     for (let i = 1; i <= 6; i++) if (!occupied.has(i)) return i;

@@ -1939,6 +1939,7 @@ export function Fortress() {
           hoveredBlockId={hoveredBlockId}
           setHoveredBlockId={setHoveredBlockId}
           collectWispBlock={collectWispBlock}
+          refetchInventoryAndQs={refetchInventoryAndQs}
           toast={toast}
           waterfallEnabled={waterfallEnabled}
           onGodModeChange={setGodMode}

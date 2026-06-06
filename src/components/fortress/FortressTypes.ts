@@ -146,6 +146,10 @@ export interface SceneProps {
   hoveredBlockId: string | null;
   setHoveredBlockId: (id: string | null) => void;
   collectWispBlock: (blockKey: string) => Promise<boolean>;
+  // Force-refresh inventory + QS from the DB. Used after a world-drop
+  // pickup so the picked-up item shows reliably (realtime alone has
+  // proven flaky elsewhere in the codebase).
+  refetchInventoryAndQs?: () => void;
   toast: any;
   waterfallEnabled?: boolean;
   onGodModeChange?: (enabled: boolean) => void;

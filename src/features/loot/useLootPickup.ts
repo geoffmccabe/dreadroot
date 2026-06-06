@@ -25,6 +25,9 @@ interface UseLootPickupOptions {
   cameraRef: React.RefObject<THREE.Camera>;
   /** Server-side atomic pickup. Returns true on success. */
   pickup: (dropId: string) => Promise<boolean>;
+  /** Called after a successful pickup so the HUD can refresh inv/QS
+   *  from the DB (realtime alone has proven flaky). */
+  onPickedUp?: () => void;
 }
 
 export function useLootPickup({
@@ -32,6 +35,7 @@ export function useLootPickup({
   userId,
   cameraRef,
   pickup,
+  onPickedUp,
 }: UseLootPickupOptions) {
   const lastPickupRef = useRef(0);
   const { toast } = useToast();
@@ -72,11 +76,21 @@ export function useLootPickup({
     const success = await pickup(closestItem.id);
     if (success) {
       toast({ title: `Picked up ${closestItem.itemName}!` });
+      // Force-refresh inv/QS so the item shows even if realtime lags.
+      onPickedUp?.();
       // Realtime DELETE will remove the row from droppedItemsRef.
     } else {
+      // The only server-side refusal is a full inventory + quick-select.
+      // Tell the player instead of failing silently; the drop persists
+      // so nothing is lost — they can free space and grab it again.
       closestItem.pickedUp = false;
+      toast({
+        title: 'Inventory full',
+        description: 'Vault or use some items to make room, then pick it up.',
+        variant: 'destructive',
+      });
     }
-  }, [userId, cameraRef, droppedItemsRef, pickup, toast]);
+  }, [userId, cameraRef, droppedItemsRef, pickup, toast, onPickedUp]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
