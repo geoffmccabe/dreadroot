@@ -14,6 +14,7 @@ import {
   useCursorStack,
   cursorStackApi,
   SlotGrid,
+  HelpCornerOverlay,
   CursorSprite,
   ItemTileVisual,
   slotClick,
@@ -566,19 +567,8 @@ export function FortressHUD(props: FortressHUDProps) {
   // why a transfer failed (e.g. "transferInvToQs rejected — RPC not
   // deployed") instead of staring at a silently-stuck cursor.
   const handleSlotClick = useCallback(async (input: SlotClickInput) => {
-    console.warn('[CLICK]', {
-      region: input.location.region,
-      loc: input.location,
-      occupant: input.occupant ? { itemId: input.occupant.itemId, rowId: input.occupant.rowId, qty: input.occupant.quantity } : null,
-      button: input.button,
-      shift: input.shift,
-      dbl: input.doubleClick,
-      cursor: cursor ? { region: cursor.origin.region, itemId: cursor.itemId, qty: cursor.quantity } : null,
-      clientEqState: (equippedItems as any[]).map((e: any) => `${e.slot}:${e.itemId?.slice(0, 8) ?? '?'}`),
-    });
     try {
       const result = await slotClick(input, cursor, slotClickHandlers);
-      console.warn('[CLICK→RESULT]', { status: result.status, cursorAfter: result.cursorAfter ? 'set' : 'null' });
       setCursor(result.cursorAfter);
       if (result.status) {
         setDebugStatus(result.status);
@@ -1220,21 +1210,10 @@ export function FortressHUD(props: FortressHUDProps) {
                   {/* Slot square */}
                   <div
                     onPointerDown={(e) => {
-                      // Right click: always open detail modal (no
-                      // browser context menu, no select).
-                      if (e.button === 2) {
-                        if (slot.itemId) {
-                          openItemDetail({
-                            itemId: slot.itemId,
-                            name: slot.name ?? '',
-                            sprite: slot.sprite ?? null,
-                            itemNumber: null,
-                            tier: slot.tier,
-                            quantity: slot.quantity ?? 1,
-                          });
-                        }
-                        return;
-                      }
+                      // Right-click is reserved (no detail modal here).
+                      // Detail opens via the hover-"?" badge, matching
+                      // inventory/vault tiles (v4.12.19).
+                      if (e.button === 2) return;
                       if (e.button !== 0) return;
                       // v4.12.12: defer pickup until the pointer moves
                       // past the drag threshold. A pure click activates
@@ -1370,6 +1349,17 @@ export function FortressHUD(props: FortressHUDProps) {
                         quantity: slot.quantity ?? 1,
                       } : null}
                     />
+                    {/* Hover-"?" detail affordance — same as inv/vault. */}
+                    {slot.itemId && !isGhosted && (
+                      <HelpCornerOverlay onActivate={() => openItemDetail({
+                        itemId: slot.itemId!,
+                        name: slot.name ?? '',
+                        sprite: slot.sprite ?? null,
+                        itemNumber: null,
+                        tier: slot.tier,
+                        quantity: slot.quantity ?? 1,
+                      })} />
+                    )}
                   </div>
                   {/* Slot number — below square, 20% smaller */}
                   <span style={{

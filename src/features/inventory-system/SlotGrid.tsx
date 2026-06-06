@@ -20,6 +20,9 @@ import { ItemTileVisual } from './ItemTileVisual';
 const TILE = 56;
 const GAP = 6;
 const HELP_HOVER_DELAY_MS = 1000;
+// Pointer travel (squared px) past which a press counts as a DRAG rather
+// than a discrete click. Matches the hotbar's threshold.
+const DRAG_THRESHOLD_SQ = 36; // 6px²
 
 export interface SlotGridProps {
   rows: number;
@@ -94,6 +97,16 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
   const cursor = useCursorStack((s) => s.cursor);
   const cursorActive = cursor !== null;
   const [isHovered, setIsHovered] = React.useState(false);
+  // Tracks the in-flight press so we can tell a discrete click from a
+  // drag. Pickup now happens on drag-start (pointermove) or on a
+  // discrete release (pointerup), NOT on pointerdown — otherwise a
+  // single click would pick up on down and immediately return on the
+  // same-tile up. Drops/returns stay on the per-tile onPointerUp below,
+  // which intentionally reads the STALE closure `cursor`: within one
+  // event tick a just-completed pickup hasn't re-rendered, so the tile
+  // won't also fire a drop; across a real drag React has re-rendered,
+  // so the release tile drops correctly.
+  const pressRef = React.useRef<{ x: number; y: number; cursorWasHeld: boolean; didDrag: boolean } | null>(null);
 
   // Drop-target highlight: when cursor is held and the mouse hovers
   // a slot, the slot gets a green outline + tint if it would accept
@@ -109,11 +122,45 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
   return (
     <div
       onPointerDown={(e) => {
-        if (e.button === 0) onClick('left', e.shiftKey, false);
-        else if (e.button === 2) onClick('right', e.shiftKey, false);
+        if (e.button === 2) { onClick('right', e.shiftKey, false); return; }
+        if (e.button !== 0) return;
+        // Shift = instant-transfer to the opposite region; no cursor gesture.
+        if (e.shiftKey) { onClick('left', true, false); return; }
+        const cursorWasHeld = cursorStackApi.getCursor() !== null;
+        pressRef.current = { x: e.clientX, y: e.clientY, cursorWasHeld, didDrag: false };
+        const onMove = (ev: PointerEvent) => {
+          const p = pressRef.current;
+          if (!p || p.didDrag) return;
+          const dx = ev.clientX - p.x, dy = ev.clientY - p.y;
+          if (dx * dx + dy * dy > DRAG_THRESHOLD_SQ) {
+            p.didDrag = true;
+            // Drag begun on an empty cursor → lift this tile's item onto
+            // the cursor so it rides the drag; the release tile's
+            // onPointerUp performs the drop.
+            if (!p.cursorWasHeld && occupant) onClick('left', ev.shiftKey, false);
+          }
+        };
+        const onUp = (ev: PointerEvent) => {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          const p = pressRef.current;
+          pressRef.current = null;
+          if (!p || ev.button !== 0) return;
+          if (p.didDrag) return; // drag drop handled by the release tile's onPointerUp
+          // Discrete click with no drag. Drops/returns (cursor already
+          // held) are handled by this tile's onPointerUp; only the
+          // PICKUP case is left to do here.
+          if (!p.cursorWasHeld && cursorStackApi.getCursor() === null && occupant) {
+            onClick('left', ev.shiftKey, false); // pick up; cursor stays held
+          }
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
       }}
       onPointerUp={(e) => {
         if (e.button !== 0) return;
+        // Stale closure `cursor` on purpose (see pressRef note above):
+        // a same-tick pickup hasn't re-rendered, so we won't double-fire.
         if (!cursor) return;
         if (ghosted) {
           // Release on the SOURCE tile → return the item. Cursor
@@ -122,7 +169,7 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
           cursorStackApi.setCursor(null);
           return;
         }
-        // Press-and-drag release on a DIFFERENT tile = drop.
+        // Cursor held + released on a different tile = drop / swap.
         onClick('left', e.shiftKey, false);
       }}
       onPointerEnter={() => setIsHovered(true)}
@@ -167,7 +214,7 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
 //
 // Right-click is now reserved for "take half" (Minecraft canonical)
 // — this overlay is the new path to the detail modal.
-function HelpCornerOverlay({ onActivate }: { onActivate: () => void }) {
+export function HelpCornerOverlay({ onActivate }: { onActivate: () => void }) {
   const [showHelp, setShowHelp] = React.useState(false);
   const timerRef = React.useRef<number | null>(null);
 

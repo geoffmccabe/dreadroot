@@ -232,8 +232,6 @@ async function performDrop(
   h: SlotClickHandlers,
 ): Promise<{ ok: boolean; reason?: string }> {
   const origin = cursor.origin;
-  console.warn('[DROP]', { origin, dst, qty });
-
   const ok = await h.transferSlot(
     { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) },
     { region: regionOf(dst),    page: pageOf(dst),    slot: slotOf(dst) },
@@ -249,8 +247,6 @@ async function performSwap(
   h: SlotClickHandlers,
 ): Promise<{ ok: boolean; reason?: string }> {
   const origin = cursor.origin;
-  console.warn('[SWAP]', { origin, dst });
-
   const ok = await h.swapSlot(
     { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) },
     { region: regionOf(dst),    page: pageOf(dst),    slot: slotOf(dst) },
