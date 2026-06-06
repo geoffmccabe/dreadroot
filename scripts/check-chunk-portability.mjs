@@ -21,6 +21,8 @@ const SEEDS = [
   'src/lib/chunkBuilder.ts',
   'src/lib/chunkDelta.ts',
   'src/lib/chunkBinary.ts',
+  'src/lib/voxelTrace.ts',
+  'src/features/combat/ricochet.ts',
 ];
 
 const FORBIDDEN = [/^react$/, /^react-dom$/, /^three$/, /^@react-three\//];
