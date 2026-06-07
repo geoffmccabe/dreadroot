@@ -21,7 +21,12 @@ import {
   KNOCKDOWN_TOTAL_DURATION_MS,
   KNOCKDOWN_TILT_DURATION_MS,
   KNOCKDOWN_SLIDE_DURATION_MS,
+  SHOMBIE_SEPARATION_RADIUS,
+  SHOMBIE_SEPARATION_FORCE,
+  SHOMBIE_LANE_HALF_WIDTH,
+  SHOMBIE_LANE_BREAK_DISTANCE,
 } from '@/features/shombie/constants';
+import { getNearbyShombies } from '@/features/shombie/shombieSpatialHash';
 import { isPointInFSZ, clampPositionOutsideFSZ } from '../fortressSafeZone';
 
 // Module-level locomotion context
@@ -46,6 +51,8 @@ export function setShombieLocomotionContext(ctx: typeof locomotionContext): void
 export interface ShombieWithAI extends ShombieInstance {
   /** Managed by AI system */
   _aiLastTick?: number;
+  /** Stable per-shombie lateral lane offset for row formation (computed once). */
+  _laneOffset?: number;
 }
 
 /**
@@ -213,13 +220,34 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     const isEmerging = timeSinceSpawn < 3000;
 
     if (result.kind === 'move' && !isEmerging) {
-      // Calculate direction to target
-      _direction.set(
-        result.tx - shombie.position.x,
-        0,
-        result.tz - shombie.position.z
-      );
+      // ── Lane/row formation ──────────────────────────────────────────
+      // Aim at a point offset sideways from the target (the player) by a
+      // stable per-shombie amount, so the horde fans into parallel rows
+      // instead of piling onto one point. Within BREAK_DISTANCE, drop the
+      // lane and charge the target directly.
+      if (shombie._laneOffset === undefined) {
+        // Stable pseudo-random offset in [-HALF_WIDTH, +HALF_WIDTH] from id.
+        let h = 0;
+        for (let i = 0; i < shombie.id.length; i++) h = (h * 31 + shombie.id.charCodeAt(i)) | 0;
+        const frac = ((h >>> 0) % 1000) / 1000; // 0..1
+        shombie._laneOffset = (frac - 0.5) * 2 * SHOMBIE_LANE_HALF_WIDTH;
+      }
 
+      const tdx = result.tx - shombie.position.x;
+      const tdz = result.tz - shombie.position.z;
+      const tdist = Math.sqrt(tdx * tdx + tdz * tdz);
+
+      let aimX = result.tx;
+      let aimZ = result.tz;
+      if (tdist > SHOMBIE_LANE_BREAK_DISTANCE && tdist > 0.001) {
+        const ndx = tdx / tdist, ndz = tdz / tdist;
+        // Perpendicular (left) of the approach direction.
+        aimX = result.tx + (-ndz) * shombie._laneOffset;
+        aimZ = result.tz + (ndx) * shombie._laneOffset;
+      }
+
+      // Direction to the (lane-adjusted) aim point.
+      _direction.set(aimX - shombie.position.x, 0, aimZ - shombie.position.z);
       const dist = _direction.length();
       if (dist > 0.1) {
         _direction.normalize();
@@ -236,6 +264,30 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
 
         // Face movement direction
         shombie.rotation = Math.atan2(_direction.x, _direction.z);
+      }
+
+      // ── Local separation ────────────────────────────────────────────
+      // Push gently away from immediate neighbors so shombies don't overlap.
+      // Cheap: only checks shombies in adjacent hash cells.
+      const neighbors = getNearbyShombies(
+        shombie.position.x, shombie.position.z, SHOMBIE_SEPARATION_RADIUS, shombie.id,
+      );
+      let sepX = 0, sepZ = 0;
+      for (let i = 0; i < neighbors.length; i++) {
+        const n = neighbors[i];
+        const ddx = shombie.position.x - n.position.x;
+        const ddz = shombie.position.z - n.position.z;
+        const d2 = ddx * ddx + ddz * ddz;
+        if (d2 > 0.0001 && d2 < SHOMBIE_SEPARATION_RADIUS * SHOMBIE_SEPARATION_RADIUS) {
+          const d = Math.sqrt(d2);
+          const strength = (SHOMBIE_SEPARATION_RADIUS - d) / SHOMBIE_SEPARATION_RADIUS; // 0..1
+          sepX += (ddx / d) * strength;
+          sepZ += (ddz / d) * strength;
+        }
+      }
+      if (sepX !== 0 || sepZ !== 0) {
+        shombie.position.x += sepX * SHOMBIE_SEPARATION_FORCE * deltaSeconds;
+        shombie.position.z += sepZ * SHOMBIE_SEPARATION_FORCE * deltaSeconds;
       }
     }
 

@@ -141,6 +141,17 @@ export const KNOCKDOWN_TOTAL_DURATION_MS = KNOCKDOWN_TILT_DURATION_MS + KNOCKDOW
 // Shombie-to-shombie collision avoidance
 export const SHOMBIE_COLLISION_RADIUS = 0.8; // Radius for shombie-shombie collisions
 export const SHOMBIE_SEPARATION_FORCE = 5.0; // Force to push shombies apart
+// Within this distance, two shombies push apart (cheap local separation so
+// they don't overlap — no per-pair pathfinding).
+export const SHOMBIE_SEPARATION_RADIUS = 1.4; // blocks
+
+// Lane/row formation: instead of all aiming at the exact player point (which
+// piles them up), each shombie aims at a point offset sideways toward the
+// player by a stable per-shombie amount in [-HALF_WIDTH, +HALF_WIDTH], so they
+// fan into parallel rows. Within BREAK_DISTANCE they drop the lane and charge
+// the player directly.
+export const SHOMBIE_LANE_HALF_WIDTH = 8;     // blocks (band half-width)
+export const SHOMBIE_LANE_BREAK_DISTANCE = 12; // blocks
 
 // Body fire settings (pinned to body parts when hit)
 export const BODY_FIRE_SIZE = 0.3;
