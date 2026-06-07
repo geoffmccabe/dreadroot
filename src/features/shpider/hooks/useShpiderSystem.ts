@@ -22,7 +22,8 @@ import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { chaseLocalPlayer, petTargetNearestHostile } from '../lib/targetSelection';
-import { shpiderSpatialGrid } from '../lib/shpiderSpatialGrid';
+import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
+import type { EnemyEntry } from '@/features/enemies/ai/types';
 
 // Death sound: the shpider's own sound pitched down to ~0 with a glitchy
 // on/off stutter — a stuttering power-down. Starts at 50% pitch (matching the
@@ -199,10 +200,34 @@ export function useShpiderSystem({
 
     shpidersRef.current = [...shpidersRef.current, instance];
     setShpiders(shpidersRef.current);
-    // Register in the spatial grid so other shpiders' crowd-checks
-    // can find this one in O(1).
-    shpiderSpatialGrid.insert(id, worldX, 0, worldZ);
+    // No per-shpider grid insert: shpiders are fed into the shared
+    // EnemySpatialIndex each frame via the external-entries provider below.
     return instance;
+  }, []);
+
+  // Feed shpiders into the SHARED enemy spatial index each frame (they aren't
+  // AI-managed, so they register as an external entries provider). This unifies
+  // them onto the one grid for cross-entity physics + the L2 DO registry.
+  // mass ≈ body-cube volume (same-density model); radius matches the crowd
+  // radius. Inactive shpiders are skipped, so deaths/collapses drop out.
+  useEffect(() => {
+    const buf: EnemyEntry[] = [];
+    EnemyManager.setExternalEntriesProvider(() => {
+      buf.length = 0;
+      const list = shpidersRef.current;
+      for (let i = 0; i < list.length; i++) {
+        const s = list[i];
+        if (!s.isActive) continue;
+        const bs = s.definition.body_size;
+        buf.push({
+          id: s.id, type: 'shpider',
+          x: s.position.x, y: s.position.y, z: s.position.z,
+          mass: bs * bs * bs, radius: bs * 0.9,
+        });
+      }
+      return buf;
+    });
+    return () => EnemyManager.setExternalEntriesProvider(null);
   }, []);
 
   /** Spawn a group near the player camera (admin/debug). */
@@ -286,7 +311,7 @@ export function useShpiderSystem({
 
     if (s.currentHealth <= 0) {
       s.isActive = false;
-      shpiderSpatialGrid.remove(s.id);
+      // (shared index drops it next frame since the provider skips !isActive)
 
       // Death sound: shpider's own sound, pitched down to ~0 with a glitchy
       // stutter (powering down). Capped + overlapping for group deaths.
@@ -418,7 +443,6 @@ export function useShpiderSystem({
         // Remove the 4 originals.
         for (const g of group) {
           g.isActive = false;
-          shpiderSpatialGrid.remove(g.id);
           consumed.add(g.id);
         }
         // Spawn the replacement at the bottom's XZ if a definition exists.

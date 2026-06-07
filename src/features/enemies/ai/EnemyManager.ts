@@ -53,6 +53,10 @@ class EnemyManagerClass {
   
   // Pre-allocated array for spatial entries (reused each frame)
   private spatialEntries: EnemyEntry[] = [];
+  // Non-AI enemy systems (e.g. shpiders) feed their entries into the single
+  // shared index each frame via this provider — so the grid is ALL enemies,
+  // not just AI-managed ones. Type-agnostic; the DO will feed the same way.
+  private externalEntriesProvider: (() => readonly EnemyEntry[]) | null = null;
   
   // Squared LOD distances for faster comparison (no sqrt needed)
   private readonly LOD_FULL_DIST_SQ = LOD_CONFIG.FULL_DISTANCE * LOD_CONFIG.FULL_DISTANCE;
@@ -167,6 +171,14 @@ class EnemyManagerClass {
    */
   getEntry(enemyId: string): RegisteredEnemy | undefined {
     return this.enemies.get(enemyId);
+  }
+
+  /**
+   * Register a provider of extra (non-AI-managed) enemy entries to merge into
+   * the shared spatial index each frame. Pass null to clear.
+   */
+  setExternalEntriesProvider(fn: (() => readonly EnemyEntry[]) | null): void {
+    this.externalEntriesProvider = fn;
   }
   
   /**
@@ -307,6 +319,12 @@ class EnemyManagerClass {
       reg.adapter.applyResult(reg.enemy, result, elapsed, this.sharedContext);
     }
     
+    // Merge non-AI enemies (shpiders, etc.) into the same shared index.
+    if (this.externalEntriesProvider) {
+      const ext = this.externalEntriesProvider();
+      for (let i = 0; i < ext.length; i++) this.spatialEntries.push(ext[i]);
+    }
+
     // Batch update spatial index
     this.spatialIndex.update(this.spatialEntries);
     

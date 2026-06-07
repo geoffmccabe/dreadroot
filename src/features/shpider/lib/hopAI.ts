@@ -17,7 +17,7 @@ import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
 import { findGroundY, pickTreeAwareTarget, findAdjacentWall } from './surfaceDetect';
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
-import { shpiderSpatialGrid } from './shpiderSpatialGrid';
+import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 
@@ -68,18 +68,23 @@ interface StepDeps {
 }
 
 /** True if the candidate (x,z) is too close to another active shpider.
- *  Spatial-grid lookup — O(1) average instead of the old O(N) walk. */
+ *  Queries the shared enemy index (filtered to shpiders). */
 function isTooCrowded(
   x: number, z: number, self: ShpiderInstance,
   _others?: readonly ShpiderInstance[], // kept for signature compat; unused
 ): boolean {
-  return shpiderSpatialGrid.hasNearby(x, z, SHPIDER_MIN_TARGET_SPACING, self.id);
+  const near = EnemyManager.getSpatialIndex().getNearby(x, z, SHPIDER_MIN_TARGET_SPACING);
+  for (let i = 0; i < near.length; i++) {
+    const n = near[i];
+    if (n.type === 'shpider' && n.id !== self.id) return true;
+  }
+  return false;
 }
 
 /**
  * Inspect the vertical stack of shpiders sharing this column with
  * `self`. Returns the count INCLUDING self and whether anyone is
- * directly above. "Same column" = within bodySize × 1.0 in XZ.
+ * directly above. "Same column" = within bodySize × 0.9 in XZ.
  */
 export function analyzeStack(
   self: ShpiderInstance,
@@ -88,16 +93,13 @@ export function analyzeStack(
   const r = self.definition.body_size * 0.9;
   let count = 1;
   let hasAbove = false;
-  shpiderSpatialGrid.queryNearby(
-    self.position.x,
-    self.position.z,
-    r,
-    (_id, _ex, ey, _ez) => {
-      count++;
-      if (ey > self.position.y + 0.2) hasAbove = true;
-    },
-    self.id,
-  );
+  const near = EnemyManager.getSpatialIndex().getNearby(self.position.x, self.position.z, r);
+  for (let i = 0; i < near.length; i++) {
+    const n = near[i];
+    if (n.type !== 'shpider' || n.id === self.id) continue;
+    count++;
+    if (n.y > self.position.y + 0.2) hasAbove = true;
+  }
   return { count, hasAbove };
 }
 
