@@ -624,12 +624,20 @@ export function Fortress() {
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
   // Cmd+H (health potion).
   const grantAdminItem = useCallback(async (itemId: string | null): Promise<boolean> => {
-    if (!itemId) return false;
+    if (!itemId || !user?.id) return false;
     const ok = await addItem(itemId, 1);
     if (!ok) return false;
-    // Equip into the RIGHTMOST empty hotbar slot (prefer 6, then 5,
-    // ..., then 1). If all six are taken, leave it in inventory only.
-    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
+    // Equip into the RIGHTMOST empty hotbar slot (6→1). Read the occupied QS
+    // slots FRESH from the server, not the `equippedItems` closure: that
+    // snapshot goes stale between rapid grants, so every Ctrl+G was targeting
+    // slot 6 and overwriting the previous grenade — the "can only add one" bug.
+    // If all six are taken, the new item just stays in inventory.
+    const { data: qsRows } = await supabase
+      .from('user_slots' as any)
+      .select('slot')
+      .eq('user_id', user.id)
+      .eq('region', 'quick_select');
+    const usedSlots = new Set((qsRows ?? []).map((r: any) => r.slot as number));
     for (let s = 6; s >= 1; s--) {
       if (!usedSlots.has(s)) {
         await updateEquippedSlot(s, itemId);
@@ -637,7 +645,7 @@ export function Fortress() {
       }
     }
     return true;
-  }, [addItem, equippedItems, updateEquippedSlot]);
+  }, [addItem, updateEquippedSlot, user?.id]);
 
   const grantAdminGrenade = useCallback(async (): Promise<boolean> => {
     return grantAdminItem(grenadeT1IdRef.current);

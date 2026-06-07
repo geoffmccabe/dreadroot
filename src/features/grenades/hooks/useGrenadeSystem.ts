@@ -293,7 +293,7 @@ export function useGrenadeSystem({
           // DOT damage: ~25% of the impact damage per second, tier-
           // scaled duration (3s + 0.5s/tier). A T1 grenade burns the
           // target for 3.5s @ ~20 dps; T10 for 8s @ ~180 dps.
-          const burnDps = Math.max(1, Math.round(damage * 0.25));
+          const burnDps = Math.max(1, Math.round(blast.damage * 0.25));
           const burnSeconds = 3 + g.tier * 0.5;
           applyBurnRef.current(
             adapter.type,

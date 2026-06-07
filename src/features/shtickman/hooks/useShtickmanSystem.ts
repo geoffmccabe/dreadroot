@@ -181,6 +181,8 @@ export function useShtickmanSystem({
   const spawnShtickmanByTier = useCallback((tier: number) => {
     const definition = getDefinitionByTier(tier);
     if (!definition) {
+      const want = tier === 0 ? 10 : tier;
+      console.warn(`[Shtickman] No definition for tier ${want} (have tiers: ${(definitions ?? []).map(d => d.tier).join(', ') || 'none'}) — spawn skipped`);
       return null;
     }
 
