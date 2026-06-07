@@ -31,7 +31,13 @@ export const useAnimatedTexture = (url: string) => {
 
   useEffect(() => {
     isMountedRef.current = true;
-    const isGif = url.toLowerCase().endsWith('.gif');
+    // EMERGENCY MEMORY FIX: the GIF decode path retains every frame in the JS
+    // heap (~660MB across the world's remaining GIFs → GC freezes). Until the
+    // GIFs are migrated to sprite-strips (then animated on the GPU), load them
+    // as STATIC images instead — the browser keeps any frames in native memory,
+    // not the JS heap. Flip ANIMATE_GIFS_IN_JS back to re-enable the old path.
+    const ANIMATE_GIFS_IN_JS = false;
+    const isGif = url.toLowerCase().endsWith('.gif') && ANIMATE_GIFS_IN_JS;
     isGifRef.current = isGif;
 
     loadTextureWithCache(url, isGif);
