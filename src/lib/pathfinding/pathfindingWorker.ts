@@ -193,6 +193,36 @@ function findNearestWalkable(
 
 const MAX_PATH_LENGTH = 500;
 
+// Reconstruct a packed Float32Array path [x0,z0,x1,z1,...] from a node chain,
+// dropping collinear waypoints. Used for both a full path (goal reached) and a
+// best-effort partial path (closest node when the goal can't be reached).
+function buildPath(endNode: PathNode): Float32Array {
+  const waypoints: Array<{ x: number; z: number }> = [];
+  let node: PathNode | null = endNode;
+  while (node !== null && waypoints.length < MAX_PATH_LENGTH) {
+    waypoints.push({ x: node.x, z: node.z });
+    node = node.parent;
+  }
+  waypoints.reverse();
+  const simplified: Array<{ x: number; z: number }> = [waypoints[0]];
+  for (let i = 1; i < waypoints.length - 1; i++) {
+    const prev = simplified[simplified.length - 1];
+    const curr = waypoints[i];
+    const next = waypoints[i + 1];
+    if (Math.sign(curr.x - prev.x) !== Math.sign(next.x - curr.x) ||
+        Math.sign(curr.z - prev.z) !== Math.sign(next.z - curr.z)) {
+      simplified.push(curr);
+    }
+  }
+  if (waypoints.length > 1) simplified.push(waypoints[waypoints.length - 1]);
+  const path = new Float32Array(simplified.length * 2);
+  for (let i = 0; i < simplified.length; i++) {
+    path[i * 2] = simplified[i].x;
+    path[i * 2 + 1] = simplified[i].z;
+  }
+  return path;
+}
+
 function runAStar(
   startX: number,
   startZ: number,
@@ -244,6 +274,11 @@ function runAStar(
   openSet.push(startNode);
   openMap.set(nodeKeyInt(sx, sz), startNode);
 
+  // Closest-to-goal node reached so far. If the goal can't be reached within
+  // the iteration budget, we return a partial path to this node (progress)
+  // instead of failing — which would stall the entity.
+  let bestNode = startNode;
+
   const DIAG_COST = gridSize * 1.414;
   const dirs = [
     { dx: 1, dz: 0, cost: gridSize },
@@ -265,38 +300,11 @@ function runAStar(
     const currentKey = nodeKeyInt(current.x, current.z);
     openMap.delete(currentKey);
     closedSet.set(currentKey, current);
+    if (current.h < bestNode.h) bestNode = current;
 
     // Reached goal
     if (current.x === gx && current.z === gz) {
-      // Reconstruct path
-      const waypoints: Array<{ x: number; z: number }> = [];
-      let node: PathNode | null = current;
-      while (node !== null && waypoints.length < MAX_PATH_LENGTH) {
-        waypoints.push({ x: node.x, z: node.z });
-        node = node.parent;
-      }
-      waypoints.reverse();
-
-      // Simplify: remove collinear waypoints
-      const simplified: Array<{ x: number; z: number }> = [waypoints[0]];
-      for (let i = 1; i < waypoints.length - 1; i++) {
-        const prev = simplified[simplified.length - 1];
-        const curr = waypoints[i];
-        const next = waypoints[i + 1];
-        if (Math.sign(curr.x - prev.x) !== Math.sign(next.x - curr.x) ||
-            Math.sign(curr.z - prev.z) !== Math.sign(next.z - curr.z)) {
-          simplified.push(curr);
-        }
-      }
-      if (waypoints.length > 1) simplified.push(waypoints[waypoints.length - 1]);
-
-      // Pack into Float32Array [x0,z0, x1,z1, ...]
-      const path = new Float32Array(simplified.length * 2);
-      for (let i = 0; i < simplified.length; i++) {
-        path[i * 2] = simplified[i].x;
-        path[i * 2 + 1] = simplified[i].z;
-      }
-      return { path, nodesExplored: iterations };
+      return { path: buildPath(current), nodesExplored: iterations };
     }
 
     // Explore neighbors
@@ -338,7 +346,13 @@ function runAStar(
     }
   }
 
-  return { path: null, nodesExplored: iterations };
+  // Goal unreachable within the iteration budget — return a best-effort
+  // partial path toward the closest node found, so the entity keeps moving
+  // (no stall). Only null if we made literally no progress from the start.
+  return {
+    path: bestNode !== startNode ? buildPath(bestNode) : null,
+    nodesExplored: iterations,
+  };
 }
 
 // ---- Worker message handler ----

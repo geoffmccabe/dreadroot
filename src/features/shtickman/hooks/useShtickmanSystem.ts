@@ -36,7 +36,7 @@ const PATHFIND_INTERVAL_MS = 1500; // More frequent recalculation for better nav
 // every cycle (the CPU hog). Instead we only path this far ahead toward the
 // target each cycle: a small, cheap local search that still dodges trunks and
 // branches. Each re-path advances the horizon, so they reach the tree anyway.
-const PATHFIND_HORIZON = 32; // blocks
+const PATHFIND_HORIZON = 100; // blocks — large enough to route around big trees
 
 // How close to waypoint before moving to next (larger for grid size 2)
 const WAYPOINT_REACH_DISTANCE = 3.0;
