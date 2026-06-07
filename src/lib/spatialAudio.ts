@@ -88,33 +88,50 @@ export async function playSpatialSound(
     baseVolume?: number;
     playbackRate?: number;
     detune?: number;
+    /** If > 0, ramp playback rate (pitch + speed) down toward 0 and fade the
+     *  gain out over this many ms, then stop — an "powering down" effect. */
+    pitchDownMs?: number;
   } = {}
 ): Promise<void> {
-  const { baseVolume = 0.5, playbackRate = 1.0, detune = 0 } = options;
-  
+  const { baseVolume = 0.5, playbackRate = 1.0, detune = 0, pitchDownMs = 0 } = options;
+
   const volume = calculateVolumeFromDistance(distance) * baseVolume;
   if (volume <= 0.01) return; // Too quiet to hear
-  
+
   const ctx = getAudioContext();
   if (!ctx) return;
-  
+
   try {
     const buffer = await loadAudioBuffer(url);
     if (!buffer) return;
-    
+
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = playbackRate;
     if (detune !== 0) {
       source.detune.value = detune;
     }
-    
+
     const gainNode = ctx.createGain();
     gainNode.gain.value = volume;
-    
+
     source.connect(gainNode);
     gainNode.connect(ctx.destination);
-    source.start(0);
+
+    if (pitchDownMs > 0) {
+      // Powering-down: ramp pitch/speed toward ~0 while fading out, then stop.
+      // (playbackRate can't be exactly 0, so ramp to a tiny value.)
+      const t0 = ctx.currentTime;
+      const t1 = t0 + pitchDownMs / 1000;
+      source.playbackRate.setValueAtTime(playbackRate, t0);
+      source.playbackRate.linearRampToValueAtTime(0.0001, t1);
+      gainNode.gain.setValueAtTime(volume, t0);
+      gainNode.gain.linearRampToValueAtTime(0.0001, t1);
+      source.start(0);
+      source.stop(t1 + 0.05);
+    } else {
+      source.start(0);
+    }
   } catch (e) {
     // Silently fail - audio is non-critical
   }

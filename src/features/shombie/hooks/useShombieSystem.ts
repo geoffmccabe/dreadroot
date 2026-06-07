@@ -47,6 +47,13 @@ const MOAN_CHECK_INTERVAL_MS = 5000; // Check every 5 seconds
 const MOAN_CHANCE = 0.1; // 10% chance per zombie per check
 const MOAN_VOLUME = 0.5; // 50% volume
 
+// Death sound: the shombie's own moan pitched down to ~0 — an electronic
+// zombie powering down. Capped so a horde wiped by one grenade plays a few
+// overlapping power-downs simultaneously, not 100 in sequence.
+const DEATH_SOUND_VOLUME = 0.6;
+const DEATH_SOUND_PITCH_DOWN_MS = 1300;
+const MAX_CONCURRENT_DEATH_SOUNDS = 6;
+
 // Preload shombie sounds
 preloadSpatialSounds([MOAN_SOUND_URL]);
 
@@ -83,6 +90,8 @@ export function useShombieSystem({
   // re-render); this compacts the array + syncs React state once per second,
   // so a horde wiped by one grenade costs ONE re-render, not 100.
   const deadPendingRef = useRef(false);
+  // Concurrent power-down death sounds in flight (capped).
+  const deathSoundCountRef = useRef(0);
   useEffect(() => {
     const id = setInterval(() => {
       if (!deadPendingRef.current) return;
@@ -356,6 +365,24 @@ export function useShombieSystem({
     if (shombie.currentHealth <= 0) {
       shombie.isActive = false;
       onShombieKilled?.(shombie.definition.tier);
+
+      // Death sound: the shombie's own moan, pitched down to ~0 (powering down).
+      // Capped + overlapping so a horde death plays a few at once, not 100 in
+      // sequence. Slots release after the power-down completes.
+      if (deathSoundCountRef.current < MAX_CONCURRENT_DEATH_SOUNDS) {
+        const p = getLocalPlayerSnapshot();
+        const ddx = shombie.position.x - p.x;
+        const ddy = shombie.position.y - p.y;
+        const ddz = shombie.position.z - p.z;
+        const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+        deathSoundCountRef.current++;
+        playSpatialSound(MOAN_SOUND_URL, dist, {
+          baseVolume: DEATH_SOUND_VOLUME,
+          pitchDownMs: DEATH_SOUND_PITCH_DOWN_MS,
+        });
+        setTimeout(() => { deathSoundCountRef.current--; }, DEATH_SOUND_PITCH_DOWN_MS);
+      }
+
       // Do NOT filter + setShombies per death: a grenade killing a whole horde
       // would fire one full scene re-render per kill — the FPS-0 freeze. The
       // renderer, combat hitboxes and separation hash all skip !isActive

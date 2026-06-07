@@ -2006,9 +2006,9 @@ export function Fortress() {
               return;
             }
             
-            // Play kill sound
-            playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
-            
+            // No shared "yay" chime for shombies — the shombie death sound is
+            // now its own moan pitched down to ~0 (powering down), played
+            // spatially + capped in useShombieSystem.
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shombie_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shombie failed:', e); }
