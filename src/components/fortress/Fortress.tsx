@@ -2019,7 +2019,8 @@ export function Fortress() {
             // alongside everything else. Without this they were
             // killable but invisible in the stats screen.
             if (!user?.id) return;
-            playSound(getSoundUrl('level_up', '/yay_sound.mp3'), 0.3);
+            // No shared "yay" chime — the shpider death sound is now its own
+            // stuttering pitch-down power-down (in useShpiderSystem).
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shpider_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shpider failed:', e); }

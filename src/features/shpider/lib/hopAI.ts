@@ -38,6 +38,8 @@ const WORLD_FLOOR_Y = 0;   // hard floor of the playable world
 const DEFAULT_HOP_SOUND_URL = '/shpider_jump.mp3';
 // 50% of native volume per design.
 const HOP_BASE_VOLUME = 0.5;
+// Play all shpider sounds an octave-ish lower (half pitch) per design.
+const SHPIDER_PITCH = 0.5;
 
 /**
  * Play the per-shpider hop sound through the shared spatial-audio
@@ -52,7 +54,7 @@ function playHopSound(
   if (typeof window === 'undefined') return;
   const finalUrl = url && url.length > 0 ? url : DEFAULT_HOP_SOUND_URL;
   const dist = Math.hypot(spX - listenerX, spY - listenerY, spZ - listenerZ);
-  void playSpatialSound(finalUrl, dist, { baseVolume: HOP_BASE_VOLUME });
+  void playSpatialSound(finalUrl, dist, { baseVolume: HOP_BASE_VOLUME, playbackRate: SHPIDER_PITCH });
 }
 
 interface StepDeps {

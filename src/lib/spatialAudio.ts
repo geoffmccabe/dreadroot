@@ -91,9 +91,13 @@ export async function playSpatialSound(
     /** If > 0, ramp playback rate (pitch + speed) down toward 0 and fade the
      *  gain out over this many ms, then stop — an "powering down" effect. */
     pitchDownMs?: number;
+    /** If > 0 (with pitchDownMs), hard-gate the gain on/off every this-many ms
+     *  during the ramp — a glitchy/stuttering power-down instead of a smooth
+     *  fade. */
+    stutterMs?: number;
   } = {}
 ): Promise<void> {
-  const { baseVolume = 0.5, playbackRate = 1.0, detune = 0, pitchDownMs = 0 } = options;
+  const { baseVolume = 0.5, playbackRate = 1.0, detune = 0, pitchDownMs = 0, stutterMs = 0 } = options;
 
   const volume = calculateVolumeFromDistance(distance) * baseVolume;
   if (volume <= 0.01) return; // Too quiet to hear
@@ -125,8 +129,21 @@ export async function playSpatialSound(
       const t1 = t0 + pitchDownMs / 1000;
       source.playbackRate.setValueAtTime(playbackRate, t0);
       source.playbackRate.linearRampToValueAtTime(0.0001, t1);
-      gainNode.gain.setValueAtTime(volume, t0);
-      gainNode.gain.linearRampToValueAtTime(0.0001, t1);
+      if (stutterMs > 0) {
+        // Glitchy power-down: hard-gate the gain on/off every stutterMs while
+        // the overall level fades, instead of a smooth fade.
+        const step = stutterMs / 1000;
+        let on = true;
+        for (let t = t0; t < t1; t += step) {
+          const frac = (t - t0) / (t1 - t0);
+          gainNode.gain.setValueAtTime(on ? volume * (1 - frac) : 0.0001, t);
+          on = !on;
+        }
+        gainNode.gain.setValueAtTime(0.0001, t1);
+      } else {
+        gainNode.gain.setValueAtTime(volume, t0);
+        gainNode.gain.linearRampToValueAtTime(0.0001, t1);
+      }
       source.start(0);
       source.stop(t1 + 0.05);
     } else {

@@ -20,8 +20,20 @@ import {
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { playSpatialSound } from '@/lib/spatialAudio';
 import { chaseLocalPlayer, petTargetNearestHostile } from '../lib/targetSelection';
 import { shpiderSpatialGrid } from '../lib/shpiderSpatialGrid';
+
+// Death sound: the shpider's own sound pitched down to ~0 with a glitchy
+// on/off stutter — a stuttering power-down. Starts at 50% pitch (matching the
+// lowered live shpider pitch). Capped + overlapping so a wiped group plays a
+// few at once, not a long sequence.
+const SHPIDER_DEATH_SOUND_URL = '/shpider_jump.mp3';
+const SHPIDER_DEATH_VOLUME = 0.6;
+const SHPIDER_DEATH_PITCH_START = 0.5;
+const SHPIDER_DEATH_PITCH_DOWN_MS = 1300;
+const SHPIDER_DEATH_STUTTER_MS = 100;
+const SHPIDER_MAX_DEATH_SOUNDS = 6;
 
 // Capped at 50 because per-frame AI cost is O(N²) in the active spider
 // count (stepShpiderHopAI iterates the full `others` list for spacing
@@ -86,6 +98,8 @@ export function useShpiderSystem({
   // Death-explosion fragments. Ref-only (rendered every frame from a
   // useFrame loop in the renderer; doesn't need React re-renders).
   const fragmentsRef = useRef<DeathFragment[]>([]);
+  // Concurrent power-down death sounds in flight (capped).
+  const deathSoundCountRef = useRef(0);
 
   // Keep ref in sync with state for cheap reads from frame loops.
   useEffect(() => {
@@ -273,6 +287,22 @@ export function useShpiderSystem({
     if (s.currentHealth <= 0) {
       s.isActive = false;
       shpiderSpatialGrid.remove(s.id);
+
+      // Death sound: shpider's own sound, pitched down to ~0 with a glitchy
+      // stutter (powering down). Capped + overlapping for group deaths.
+      if (deathSoundCountRef.current < SHPIDER_MAX_DEATH_SOUNDS) {
+        const lp = getLocalPlayerSnapshot();
+        const dist = Math.hypot(s.position.x - lp.x, s.position.y - lp.y, s.position.z - lp.z);
+        deathSoundCountRef.current++;
+        void playSpatialSound(s.definition.hop_sound_url || SHPIDER_DEATH_SOUND_URL, dist, {
+          baseVolume: SHPIDER_DEATH_VOLUME,
+          playbackRate: SHPIDER_DEATH_PITCH_START,
+          pitchDownMs: SHPIDER_DEATH_PITCH_DOWN_MS,
+          stutterMs: SHPIDER_DEATH_STUTTER_MS,
+        });
+        setTimeout(() => { deathSoundCountRef.current--; }, SHPIDER_DEATH_PITCH_DOWN_MS);
+      }
+
       // Pet deaths don't grant kill credit (or roll the 1% wild-drop) —
       // they leave a world egg instead, owned by the original thrower.
       if (s.petOwnerUserId) {
