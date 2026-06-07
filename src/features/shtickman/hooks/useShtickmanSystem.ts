@@ -31,6 +31,13 @@ const MIN_PATROL_TREE_TIER = 5;
 // How often to recalculate path (ms)
 const PATHFIND_INTERVAL_MS = 1500; // More frequent recalculation for better navigation
 
+// Shtickmen wander tree-to-tree across a huge world. Pathing all the way to a
+// distant tree is wasteful — A* overruns its iteration cap, fails, and retries
+// every cycle (the CPU hog). Instead we only path this far ahead toward the
+// target each cycle: a small, cheap local search that still dodges trunks and
+// branches. Each re-path advances the horizon, so they reach the tree anyway.
+const PATHFIND_HORIZON = 32; // blocks
+
 // How close to waypoint before moving to next (larger for grid size 2)
 const WAYPOINT_REACH_DISTANCE = 3.0;
 
@@ -343,13 +350,28 @@ export function useShtickmanSystem({
         // Increment request counter to detect stale out-of-order results
         const requestId = (shtickman as any)._pathfindRequestId = ((shtickman as any)._pathfindRequestId || 0) + 1;
 
+        // Local-horizon goal: clamp the pathfinding target to PATHFIND_HORIZON
+        // blocks toward the distant tree. Keeps each A* search small + fast
+        // (and able to actually succeed) while still routing around nearby
+        // obstacles. Within the horizon we path straight to the tree for an
+        // exact arrival.
+        let goalX = shtickman.targetPos.x;
+        let goalZ = shtickman.targetPos.z;
+        const gdx = goalX - shtickman.position.x;
+        const gdz = goalZ - shtickman.position.z;
+        const gdist = Math.sqrt(gdx * gdx + gdz * gdz);
+        if (gdist > PATHFIND_HORIZON) {
+          goalX = shtickman.position.x + (gdx / gdist) * PATHFIND_HORIZON;
+          goalZ = shtickman.position.z + (gdz / gdist) * PATHFIND_HORIZON;
+        }
+
         // Fire-and-forget async pathfind — result applied when it arrives
         pathfindingService.findPathAsync(
           pathfindingConfig,
           shtickman.position.x,
           shtickman.position.z,
-          shtickman.targetPos.x,
-          shtickman.targetPos.z,
+          goalX,
+          goalZ,
           entityRadius,
           bodyHeight,
           0 // entityFeetY — ground level
