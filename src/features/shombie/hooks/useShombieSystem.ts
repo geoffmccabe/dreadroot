@@ -79,6 +79,21 @@ export function useShombieSystem({
     }, 5);
   }, []);
 
+  // Batched dead-shombie sweep. Deaths only mark isActive=false (no per-kill
+  // re-render); this compacts the array + syncs React state once per second,
+  // so a horde wiped by one grenade costs ONE re-render, not 100.
+  const deadPendingRef = useRef(false);
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!deadPendingRef.current) return;
+      deadPendingRef.current = false;
+      const before = shombiesRef.current.length;
+      shombiesRef.current = shombiesRef.current.filter(s => s.isActive);
+      if (shombiesRef.current.length !== before) setShombies(shombiesRef.current);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // Check if user is admin
   const isAdmin = userRoles.includes('admin') || userRoles.includes('superadmin');
 
@@ -341,17 +356,18 @@ export function useShombieSystem({
     if (shombie.currentHealth <= 0) {
       shombie.isActive = false;
       onShombieKilled?.(shombie.definition.tier);
-
-      // Remove from list
-      shombiesRef.current = shombiesRef.current.filter(s => s.id !== shombieId);
-      setShombies(shombiesRef.current);
-
-      console.log(`[Shombie] Killed ${shombieId}`);
+      // Do NOT filter + setShombies per death: a grenade killing a whole horde
+      // would fire one full scene re-render per kill — the FPS-0 freeze. The
+      // renderer, combat hitboxes and separation hash all skip !isActive
+      // shombies, so the dead one is inert immediately; a once-per-second sweep
+      // (deadSweep effect) compacts the array in a single batched update.
+      deadPendingRef.current = true;
       return true;
     }
 
-    // Update state
-    setShombies([...shombiesRef.current]);
+    // No setState on non-fatal damage: health is read live from the instance
+    // by the renderer (brightness) and combat each frame. Re-rendering per hit
+    // is what stormed the GC / starved the render loop on a horde grenade.
     return false;
   }, [onShombieKilled, playerLevel]);
 
