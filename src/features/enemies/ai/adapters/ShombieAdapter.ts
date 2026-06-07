@@ -4,10 +4,11 @@
 
 import * as THREE from 'three';
 import type { ShombieInstance } from '@/features/shombie/types';
-import type { 
-  EnemyAdapter, 
-  BehaviorContext, 
-  BehaviorResult, 
+import { SHOMBIE_BODY_PARTS } from '@/features/shombie/types';
+import type {
+  EnemyAdapter,
+  BehaviorContext,
+  BehaviorResult,
   SharedContext,
   BehaviorState,
   BehaviorModule,
@@ -15,6 +16,7 @@ import type {
 import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
 import { EnemyManager } from '../EnemyManager';
+import { massFromBoxVolumes } from '../enemyMass';
 import {
   KNOCKBACK_DECAY_RATE,
   SHOMBIE_GRAVITY,
@@ -25,6 +27,7 @@ import {
   SHOMBIE_SEPARATION_FORCE,
   SHOMBIE_LANE_HALF_WIDTH,
   SHOMBIE_LANE_BREAK_DISTANCE,
+  SHOMBIE_HITBOX_RADIUS,
 } from '@/features/shombie/constants';
 import { isPointInFSZ, clampPositionOutsideFSZ } from '../fortressSafeZone';
 
@@ -72,6 +75,17 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
       y: shombie.position.y,
       z: shombie.position.z,
     };
+  },
+
+  // Physics: mass = summed box volume (same density), radius = hitbox radius.
+  // Both scale with the instance's size. Pattern any enemy type copies — the
+  // shared grid then handles its physics with no type-specific code.
+  getMass(shombie: ShombieWithAI): number {
+    return massFromBoxVolumes(SHOMBIE_BODY_PARTS, shombie.scale ?? 1);
+  },
+
+  getRadius(shombie: ShombieWithAI): number {
+    return SHOMBIE_HITBOX_RADIUS * (shombie.scale ?? 1);
   },
   
   buildContext(

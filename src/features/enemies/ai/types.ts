@@ -214,7 +214,14 @@ export interface EnemyAdapter<TEnemy> {
   
   /** Optional: get position for LOD anchor (defaults to getPosition) */
   getLodAnchor?(enemy: TEnemy): { x: number; y: number; z: number };
-  
+
+  /** Optional physics mass (volume of the body's boxes, same density). Used by
+   *  the shared spatial index for mass-based physics. Defaults if omitted. */
+  getMass?(enemy: TEnemy): number;
+
+  /** Optional horizontal collision radius. Defaults if omitted. */
+  getRadius?(enemy: TEnemy): number;
+
   /** Get behaviors enabled for this enemy */
   getBehaviors(enemy: TEnemy): BehaviorModule[];
 }
@@ -261,7 +268,15 @@ export interface EnemyEntry {
   x: number;
   z: number;
   y: number;
+  /** Physics mass (∝ body volume). For mass-based knockback etc. */
+  mass: number;
+  /** Horizontal collision radius. */
+  radius: number;
 }
+
+/** Defaults when an adapter doesn't supply mass/radius. */
+export const DEFAULT_ENEMY_MASS = 1;
+export const DEFAULT_ENEMY_RADIUS = 0.5;
 
 // =============================================================================
 // Registration Types

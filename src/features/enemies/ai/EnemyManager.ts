@@ -14,9 +14,12 @@ import {
   type EnemyAdapter,
   type RegisteredEnemy,
   type SharedContext,
+  type EnemyEntry,
   AILodLevel,
   LOD_CONFIG,
   TICK_INTERVALS_MS,
+  DEFAULT_ENEMY_MASS,
+  DEFAULT_ENEMY_RADIUS,
 } from './types';
 
 // Debug flag - disable in production for FPS
@@ -49,7 +52,7 @@ class EnemyManagerClass {
   private aiControlled = false;
   
   // Pre-allocated array for spatial entries (reused each frame)
-  private spatialEntries: Array<{ id: string; type: string; x: number; y: number; z: number }> = [];
+  private spatialEntries: EnemyEntry[] = [];
   
   // Squared LOD distances for faster comparison (no sqrt needed)
   private readonly LOD_FULL_DIST_SQ = LOD_CONFIG.FULL_DISTANCE * LOD_CONFIG.FULL_DISTANCE;
@@ -134,6 +137,11 @@ class EnemyManagerClass {
     }
     
     const type = adapter.getType();
+    // Physics: mass + radius captured once at registration (constant per
+    // instance). Type-agnostic — any adapter that implements getMass/getRadius
+    // participates in mass-based physics; others fall back to defaults.
+    const mass = adapter.getMass ? adapter.getMass(enemy) : DEFAULT_ENEMY_MASS;
+    const radius = adapter.getRadius ? adapter.getRadius(enemy) : DEFAULT_ENEMY_RADIUS;
     this.enemies.set(id, {
       enemy,
       adapter: adapter as EnemyAdapter<unknown>,
@@ -142,7 +150,7 @@ class EnemyManagerClass {
       currentBehaviorId: null,
       behaviorState: {}, // Persistent state for behaviors
       // Pre-allocated spatial entry - reused each frame (no object allocation)
-      spatialEntry: { id, type, x: 0, y: 0, z: 0 },
+      spatialEntry: { id, type, x: 0, y: 0, z: 0, mass, radius },
     });
   }
   
