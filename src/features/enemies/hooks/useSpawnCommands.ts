@@ -156,7 +156,9 @@ export function useSpawnCommands({
             const typeName = seq.type === 3 ? 'shombie' : 'shpider';
             console.log(`[SpawnCommands] ${typeName} tier ${actualTier} - press 1-9 (0=10) for count, or wait for 1`);
 
-            // Auto-spawn 1 after delay if no count entered
+            // Auto-spawn 1 if no count is entered within the window. 800ms was
+            // too tight to type the 4th key — widened so the count reliably
+            // registers; only a genuine "no count" pause falls back to 1.
             const tierCapture = tier;
             const typeCapture = seq.type;
             setTimeout(() => {
@@ -167,7 +169,7 @@ export function useSpawnCommands({
                 else                   callbacks.onSpawnShpider?.(t, 1);
                 resetSequence();
               }
-            }, 800);
+            }, 2000);
             return;
           }
         }
@@ -182,7 +184,8 @@ export function useSpawnCommands({
         const typeName = seq.type === 3 ? 'shombie' : 'shpider';
         if (/^[0-9]$/.test(e.key)) {
           const count = parseInt(e.key, 10);
-          const actualCount = count === 0 ? 10 : count;
+          // Count "0" means a big batch: 100 for shombies (hordes), 10 for shpiders.
+          const actualCount = count === 0 ? (seq.type === 3 ? 100 : 10) : count;
           const actualTier = seq.tier === 0 ? 10 : seq.tier!;
 
           console.log(`[SpawnCommands] Spawning ${actualCount} ${typeName}(s) tier ${actualTier}`);
