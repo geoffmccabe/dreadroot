@@ -23,6 +23,9 @@ const SEEDS = [
   'src/lib/chunkBinary.ts',
   'src/lib/voxelTrace.ts',
   'src/features/combat/ricochet.ts',
+  // Shared enemy spatial index — the L2 DO's authoritative enemy registry must
+  // be importable server-side (no React/Three).
+  'src/features/enemies/ai/EnemySpatialIndex.ts',
 ];
 
 const FORBIDDEN = [/^react$/, /^react-dom$/, /^three$/, /^@react-three\//];

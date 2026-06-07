@@ -26,7 +26,6 @@ import {
   SHOMBIE_LANE_HALF_WIDTH,
   SHOMBIE_LANE_BREAK_DISTANCE,
 } from '@/features/shombie/constants';
-import { getNearbyShombies } from '@/features/shombie/shombieSpatialHash';
 import { isPointInFSZ, clampPositionOutsideFSZ } from '../fortressSafeZone';
 
 // Module-level locomotion context
@@ -268,15 +267,18 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
 
       // ── Local separation ────────────────────────────────────────────
       // Push gently away from immediate neighbors so shombies don't overlap.
-      // Cheap: only checks shombies in adjacent hash cells.
-      const neighbors = getNearbyShombies(
-        shombie.position.x, shombie.position.z, SHOMBIE_SEPARATION_RADIUS, shombie.id,
+      // Queries the SHARED enemy spatial index (all types, type-tagged) and
+      // keeps shombie-vs-shombie spacing — same grid the cross-entity
+      // collision + AI use, and the future L2 DO's authoritative registry.
+      const neighbors = EnemyManager.getSpatialIndex().getNearby(
+        shombie.position.x, shombie.position.z, SHOMBIE_SEPARATION_RADIUS,
       );
       let sepX = 0, sepZ = 0;
       for (let i = 0; i < neighbors.length; i++) {
         const n = neighbors[i];
-        const ddx = shombie.position.x - n.position.x;
-        const ddz = shombie.position.z - n.position.z;
+        if (n.id === shombie.id || n.type !== 'shombie') continue;
+        const ddx = shombie.position.x - n.x;
+        const ddz = shombie.position.z - n.z;
         const d2 = ddx * ddx + ddz * ddz;
         if (d2 > 0.0001 && d2 < SHOMBIE_SEPARATION_RADIUS * SHOMBIE_SEPARATION_RADIUS) {
           const d = Math.sqrt(d2);

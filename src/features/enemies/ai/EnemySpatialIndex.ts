@@ -7,7 +7,13 @@
 
 import type { EnemyEntry } from './types';
 
-const CELL_SIZE = 16; // 16 blocks per cell (matches chunk size)
+// 4 blocks per cell. Fine enough that tight neighbor queries (e.g. ~1.5-block
+// horde separation) only scan a 3×3 cell window with a handful of candidates,
+// while wider AI/detection queries just scan proportionally more cells. This
+// is the single shared enemy grid (all types, type-tagged) — used for
+// separation, cross-entity collision, and AI neighbor checks, and pure-data so
+// it lifts to the L2 Durable Object as the authoritative enemy registry.
+const CELL_SIZE = 4;
 
 /**
  * Pack two signed 16-bit ints into one 32-bit numeric key.

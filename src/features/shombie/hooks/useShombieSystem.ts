@@ -16,8 +16,6 @@ import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '../constants';
-import { frameLoop } from '@/lib/frameLoop';
-import { rebuildShombieGrid } from '../shombieSpatialHash';
 
 // Head movement type randomizer - 1/3 each
 function randomHeadMovementType(): HeadMovementType {
@@ -78,13 +76,8 @@ export function useShombieSystem({
     shombiesRef.current = shombies;
   }, [shombies]);
 
-  // Rebuild the shombie neighbor-hash once per frame so ShombieAdapter can do
-  // cheap local separation. Early priority so it's fresh before AI movement.
-  useEffect(() => {
-    return frameLoop.register('shombie-spatial-hash', () => {
-      rebuildShombieGrid(shombiesRef.current);
-    }, 5);
-  }, []);
+  // Shombie separation now reads the shared EnemySpatialIndex (built each AI
+  // tick by EnemyManager), so no per-frame shombie-only hash rebuild is needed.
 
   // Batched dead-shombie sweep. Deaths only mark isActive=false (no per-kill
   // re-render); this compacts the array + syncs React state once per second,
