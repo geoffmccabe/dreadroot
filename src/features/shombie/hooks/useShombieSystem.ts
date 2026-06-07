@@ -50,7 +50,7 @@ const MOAN_VOLUME = 0.5; // 50% volume
 // Death sound: the shombie's own moan pitched down to ~0 — an electronic
 // zombie powering down. Capped so a horde wiped by one grenade plays a few
 // overlapping power-downs simultaneously, not 100 in sequence.
-const DEATH_SOUND_VOLUME = 0.6;
+const DEATH_SOUND_VOLUME = 1.0; // loud onset so the power-down is clearly heard
 const DEATH_SOUND_PITCH_DOWN_MS = 1300;
 const MAX_CONCURRENT_DEATH_SOUNDS = 6;
 

@@ -29,7 +29,7 @@ import { shpiderSpatialGrid } from '../lib/shpiderSpatialGrid';
 // lowered live shpider pitch). Capped + overlapping so a wiped group plays a
 // few at once, not a long sequence.
 const SHPIDER_DEATH_SOUND_URL = '/shpider_jump.mp3';
-const SHPIDER_DEATH_VOLUME = 0.6;
+const SHPIDER_DEATH_VOLUME = 1.0; // loud onset so the power-down is clearly heard
 const SHPIDER_DEATH_PITCH_START = 0.5;
 const SHPIDER_DEATH_PITCH_DOWN_MS = 1300;
 const SHPIDER_DEATH_STUTTER_MS = 100;
