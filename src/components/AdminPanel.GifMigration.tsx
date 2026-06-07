@@ -26,7 +26,7 @@ import { convertAnimationToStrip } from '@/lib/animationToStrip';
 import { CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react';
 
 interface Target {
-  table: 'blocks' | 'shpider_definitions';
+  table: 'blocks' | 'shpider_definitions' | 'seed_definitions';
   column: string;
   rowId: string | number;
   label: string;
@@ -90,6 +90,32 @@ export function GifMigrationPanel() {
         }
       }
 
+      // seed_definitions: all texture columns (trunk/branch/fruit/fungal)
+      {
+        const seedCols = [
+          'trunk_texture_url', 'branch_texture_url', 'fruit_texture_url',
+          'fungal_cap_top_texture_url', 'fungal_cap_underside_texture_url', 'fungal_stem_texture_url',
+        ];
+        const { data, error } = await supabase
+          .from('seed_definitions' as any)
+          .select(`id, tier, ${seedCols.join(', ')}`);
+        if (error) throw error;
+        for (const row of (data as any[] ?? [])) {
+          for (const col of seedCols) {
+            const u = row[col] as string | null;
+            if (u && u.toLowerCase().endsWith('.gif')) {
+              targets.push({
+                table: 'seed_definitions',
+                column: col,
+                rowId: row.id,
+                label: `seed T${row.tier} ${col.replace('_texture_url', '')}`,
+                url: u,
+              });
+            }
+          }
+        }
+      }
+
       setRows(targets.map(t => ({ target: t, status: 'pending' })));
       toast.success(`Found ${targets.length} rows to migrate`);
     } catch (err: any) {
@@ -118,7 +144,7 @@ export function GifMigrationPanel() {
       // admin panels name new uploads.
       const stripName = target.table === 'blocks'
         ? `${target.rowId}-${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`
-        : `shpider/migrated/r${target.rowId}_${target.column.replace('_texture_url', '')}_${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
+        : `${target.table}/migrated/r${target.rowId}_${target.column.replace('_texture_url', '')}_${result.frameCount}f_${result.frameDelay}ms_${Date.now()}.webp`;
 
       const { error: upErr } = await supabase.storage
         .from('block-textures')
@@ -128,7 +154,8 @@ export function GifMigrationPanel() {
       const { data: urlData } = supabase.storage.from('block-textures').getPublicUrl(stripName);
       const newUrl = urlData.publicUrl;
 
-      // Persist the new URL.
+      // Persist the new URL. blocks uses the typed client; the definition
+      // tables go through the `as any` escape hatch (same id+column shape).
       if (target.table === 'blocks') {
         const { error } = await supabase
           .from('blocks')
@@ -137,7 +164,7 @@ export function GifMigrationPanel() {
         if (error) throw error;
       } else {
         const { error } = await (supabase
-          .from('shpider_definitions' as any)
+          .from(target.table as any)
           .update({ [target.column]: newUrl })
           .eq('id', target.rowId) as any);
         if (error) throw error;
