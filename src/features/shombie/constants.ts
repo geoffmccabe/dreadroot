@@ -35,8 +35,15 @@ export const KNOCKBACK_DECAY_RATE = 8.0;
 // Gravity for shombies
 export const SHOMBIE_GRAVITY = 20.0;
 
-// Maximum render distance
+// Maximum render distance — beyond this, shombies aren't drawn at all.
 export const SHOMBIE_RENDER_DISTANCE = 80;
+// Beyond this (but within render distance) shombies are drawn but their body
+// animation is frozen (no per-part wobble trig) — they're too far to notice.
+export const SHOMBIE_ANIM_DISTANCE = 40;
+// Cap on concurrent head flames (Option A): only the nearest N shombies get
+// fire, so 1000 shombies don't thrash the shared flame budget. Keep under the
+// UniversalFlameRenderer's 80-flame cap to leave room for body fires.
+export const MAX_HEAD_FLAMES = 50;
 
 // Spawn bounds
 export const SHOMBIE_SPAWN_BOUNDS = {

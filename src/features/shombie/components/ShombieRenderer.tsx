@@ -26,6 +26,9 @@ import {
   KNOCKDOWN_TOTAL_DURATION_MS,
   BODY_FIRE_SIZE,
   BODY_FIRE_HEIGHT,
+  SHOMBIE_RENDER_DISTANCE,
+  SHOMBIE_ANIM_DISTANCE,
+  MAX_HEAD_FLAMES,
 } from '../constants';
 import particleFire from 'three-particle-fire';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
@@ -40,6 +43,16 @@ const tmpQuaternion = new THREE.Quaternion();
 const tmpColor = new THREE.Color();
 const tmpEuler = new THREE.Euler();
 const _scratchFlamePos = new THREE.Vector3();
+
+// LOD distance thresholds (squared, horizontal) for the renderer.
+const SHOMBIE_RENDER_DIST_SQ = SHOMBIE_RENDER_DISTANCE * SHOMBIE_RENDER_DISTANCE;
+const SHOMBIE_ANIM_DIST_SQ = SHOMBIE_ANIM_DISTANCE * SHOMBIE_ANIM_DISTANCE;
+// Reused identity for frozen/no-twitch parts (avoids per-part allocation).
+const SHOMBIE_TWITCH_IDENTITY = { dx: 0, dy: 0, dz: 0, dScaleX: 1, dScaleY: 1, dScaleZ: 1, rotation: 0 };
+// Reused buffers for nearest-N head-flame selection (no per-frame allocation).
+const _flameCand: { id: string; d: number }[] = [];
+const _flameNearSet = new Set<string>();
+const _byDist = (a: { d: number }, b: { d: number }) => a.d - b.d;
 
 // Shared geometry for body parts
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -261,66 +274,45 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       }
     }, []);
 
-    // Create head fire for a shombie
+    // Create head fire for a shombie (universal instanced flame system only).
+    // The old per-shombie THREE.Points fallback was removed: at horde scale it
+    // would create one draw call + geometry/material per shombie. If the
+    // universal flame renderer isn't available, shombies simply have no fire.
     const createHeadFire = useCallback((shombieId: string, tier: number, headPos: THREE.Vector3): HeadFire | null => {
+      if (!universalFlameRef?.current) return null;
+
       const tierColors = getTierColors(tier);
+      const flameId = universalFlameRef.current.spawnFlame({
+        type: 'point',
+        position: headPos.clone().add(new THREE.Vector3(0, 0.3, 0)),
+        colors: tierColors,
+        size: HEAD_FIRE_SIZE,
+        height: HEAD_FIRE_HEIGHT,
+        duration: 999999,
+        particleCount: HEAD_FIRE_PARTICLE_COUNT,
+        attachTo: `shombie_head_${shombieId}`,
+      });
+      universalHeadFlamesRef.current.set(shombieId, flameId);
+      return null;
+    }, [universalFlameRef]);
 
-      if (universalFlameRef?.current) {
-        const flameId = universalFlameRef.current.spawnFlame({
-          type: 'point',
-          position: headPos.clone().add(new THREE.Vector3(0, 0.3, 0)),
-          colors: tierColors,
-          size: HEAD_FIRE_SIZE,
-          height: HEAD_FIRE_HEIGHT,
-          duration: 999999,
-          particleCount: HEAD_FIRE_PARTICLE_COUNT,
-          attachTo: `shombie_head_${shombieId}`,
-        });
-        universalHeadFlamesRef.current.set(shombieId, flameId);
-        return null;
+    // Remove a shombie's head flame (both the universal flame and any legacy
+    // Points fire). Used when a shombie dies OR moves out of the nearest-N
+    // flame set (Option A flame cap).
+    const removeHeadFlame = useCallback((shombieId: string) => {
+      const flameId = universalHeadFlamesRef.current.get(shombieId);
+      if (flameId !== undefined) {
+        universalFlameRef?.current?.removeFlame(flameId);
+        universalHeadFlamesRef.current.delete(shombieId);
       }
-
-      ensureParticleFireInstalled();
-
-      try {
-        const tierColorHex = getTierColorHex(tier);
-
-        const fireGeometry = new particleFire.Geometry(
-          HEAD_FIRE_SIZE / 2,
-          HEAD_FIRE_HEIGHT,
-          60
-        );
-        const fireMaterial = new particleFire.Material({
-          color: hexToNumber(tierColorHex)
-        });
-
-        (fireMaterial as THREE.Material).blending = THREE.CustomBlending;
-        (fireMaterial as any).blendSrc = THREE.OneFactor;
-        (fireMaterial as any).blendDst = THREE.OneMinusSrcAlphaFactor;
-        (fireMaterial as any).blendEquation = THREE.AddEquation;
-        (fireMaterial as THREE.ShaderMaterial).depthWrite = false;
-        (fireMaterial as THREE.Material).transparent = true;
-
-        const cam = camera as THREE.PerspectiveCamera;
-        if (cam.fov) {
-          fireMaterial.setPerspective(cam.fov, window.innerHeight);
-        }
-
-        const firePoints = new THREE.Points(fireGeometry, fireMaterial);
-        firePoints.renderOrder = 999;
-        scene.add(firePoints);
-
-        return {
-          shombieId,
-          points: firePoints,
-          material: fireMaterial,
-          geometry: fireGeometry,
-        };
-      } catch (e) {
-        console.warn('[ShombieRenderer] Failed to create head fire:', e);
-        return null;
+      const hf = headFiresRef.current.get(shombieId);
+      if (hf) {
+        scene.remove(hf.points);
+        hf.geometry.dispose();
+        hf.material.dispose();
+        headFiresRef.current.delete(shombieId);
       }
-    }, [camera, scene, ensureParticleFireInstalled, universalFlameRef]);
+    }, [scene, universalFlameRef]);
 
     // Create body fire
     const createBodyFire = useCallback((shombieId: string, partName: string, duration: number, colors: string[], position?: THREE.Vector3): BodyFire | null => {
@@ -547,42 +539,61 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         if (!mesh) return;
 
         const now = performance.now() / 1000;
-        const headPositions = new Map<string, THREE.Vector3>();
 
         let instanceIndex = 0;
+        let candCount = 0; // emerged shombies eligible for head flames this frame
 
         for (const shombie of shombies) {
           if (!shombie.isActive) continue;
 
+          // LOD by horizontal distance to camera:
+          //  • beyond render distance → skip drawing entirely
+          //  • beyond anim distance   → draw, but freeze body animation
+          const cdx = shombie.position.x - cameraPosition.x;
+          const cdz = shombie.position.z - cameraPosition.z;
+          const camDistSq = cdx * cdx + cdz * cdz;
+          if (camDistSq > SHOMBIE_RENDER_DIST_SQ) continue;
+          const lodFrozen = camDistSq > SHOMBIE_ANIM_DIST_SQ;
+
           const timeSinceSpawn = Date.now() - shombie.spawnedAt;
           shombie.emergenceProgress = Math.min(1, timeSinceSpawn / SHOMBIE_EMERGENCE_DURATION_MS);
+
+          // Collect emerged shombies as head-flame candidates (nearest N win).
+          if (shombie.emergenceProgress >= 1) {
+            let e = _flameCand[candCount];
+            if (!e) { e = { id: '', d: 0 }; _flameCand[candCount] = e; }
+            e.id = shombie.id; e.d = camDistSq;
+            candCount++;
+          }
 
           const emergenceOffset = (1 - shombie.emergenceProgress) * -EMERGENCE_DEPTH;
 
           const isMoving = shombie.isChasing && shombie.velocity.length() > 0.1;
           const legMultiplier = isMoving ? SHOMBIE_LEG_ANIMATION_MULTIPLIER : 0.5;
-          shombie.animationPhase += deltaTime * 4 * legMultiplier;
+          if (!lodFrozen) shombie.animationPhase += deltaTime * 4 * legMultiplier;
 
           const phase = shombie.animationPhase;
-          const wobble = Math.sin(phase) * 0.1;
+          const wobble = lodFrozen ? 0 : Math.sin(phase) * 0.1;
 
           let headOffsetX = 0;
           let headOffsetY = 0;
           const headPhase = phase * HEAD_SLIDE_SPEED;
 
-          switch (shombie.headMovementType) {
-            case 'slide':
-              headOffsetX = Math.sin(headPhase) * HEAD_SLIDE_AMPLITUDE;
-              break;
-            case 'bob':
-              headOffsetY = Math.sin(headPhase) * HEAD_BOB_AMPLITUDE;
-              break;
-            case 'circle':
-              headOffsetX = Math.sin(headPhase) * HEAD_CIRCLE_RADIUS;
-              break;
+          if (!lodFrozen) {
+            switch (shombie.headMovementType) {
+              case 'slide':
+                headOffsetX = Math.sin(headPhase) * HEAD_SLIDE_AMPLITUDE;
+                break;
+              case 'bob':
+                headOffsetY = Math.sin(headPhase) * HEAD_BOB_AMPLITUDE;
+                break;
+              case 'circle':
+                headOffsetX = Math.sin(headPhase) * HEAD_CIRCLE_RADIUS;
+                break;
+            }
           }
 
-          const headOffsetZ = shombie.headMovementType === 'circle'
+          const headOffsetZ = (!lodFrozen && shombie.headMovementType === 'circle')
             ? Math.cos(headPhase) * HEAD_CIRCLE_RADIUS
             : 0;
 
@@ -657,50 +668,55 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             const part = SHOMBIE_BODY_PARTS[partIdx];
 
             const twitch = shombie.partTwitches[part.name];
-            const twitchResult = twitch
+            const twitchResult = (!lodFrozen && twitch)
               ? applyTwitch(twitch, now, scale)
-              : { dx: 0, dy: 0, dz: 0, dScaleX: 1, dScaleY: 1, dScaleZ: 1, rotation: 0 };
+              : SHOMBIE_TWITCH_IDENTITY;
 
             let offsetX = part.offsetX * scale + twitchResult.dx;
             let offsetY = part.offsetY * scale + twitchResult.dy;
             let offsetZ = part.offsetZ * scale + twitchResult.dz;
 
-            if (part.name === 'head') {
-              offsetX += headOffsetX * scale;
-              offsetY += headOffsetY * scale;
-              offsetZ += headOffsetZ * scale;
-              offsetY += Math.sin(phase * 2) * 0.02 * scale;
-            } else if (part.name.includes('UpperArm')) {
-              const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
-              const armSwing = Math.sin(armPhase);
+            // Per-part wobble/swing animation — skipped for frozen (distant)
+            // shombies; they hold a static pose (the trig here is the bulk of
+            // the per-frame CPU cost at horde scale).
+            if (!lodFrozen) {
+              if (part.name === 'head') {
+                offsetX += headOffsetX * scale;
+                offsetY += headOffsetY * scale;
+                offsetZ += headOffsetZ * scale;
+                offsetY += Math.sin(phase * 2) * 0.02 * scale;
+              } else if (part.name.includes('UpperArm')) {
+                const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
+                const armSwing = Math.sin(armPhase);
 
-              offsetZ -= 0.2 * scale;
-              offsetZ += armSwing * ARM_SWING_AMPLITUDE * scale;
-              offsetY += Math.abs(armSwing) * ARM_SWING_UP_DOWN * scale;
-              offsetX += armSwing * 0.05 * scale * (part.name.includes('left') ? 1 : -1);
-            } else if (part.name.includes('LowerArm')) {
-              const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
-              const armSwing = Math.sin(armPhase);
-              const bendAmount = (1 + armSwing) * 0.5;
-              const elbowBend = bendAmount * ELBOW_BEND_MAX;
+                offsetZ -= 0.2 * scale;
+                offsetZ += armSwing * ARM_SWING_AMPLITUDE * scale;
+                offsetY += Math.abs(armSwing) * ARM_SWING_UP_DOWN * scale;
+                offsetX += armSwing * 0.05 * scale * (part.name.includes('left') ? 1 : -1);
+              } else if (part.name.includes('LowerArm')) {
+                const armPhase = part.name.includes('left') ? phase : phase + Math.PI;
+                const armSwing = Math.sin(armPhase);
+                const bendAmount = (1 + armSwing) * 0.5;
+                const elbowBend = bendAmount * ELBOW_BEND_MAX;
 
-              offsetZ -= 0.2 * scale + armSwing * ARM_SWING_AMPLITUDE * 0.8 * scale;
-              offsetZ += elbowBend * scale * 0.4;
-              offsetY -= elbowBend * scale * 0.35;
-              offsetY += Math.sin(armPhase * 1.2) * 0.03 * scale;
-            } else if (part.name.includes('UpperLeg')) {
-              const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
-              offsetZ += Math.sin(legPhase) * 0.15 * scale;
-            } else if (part.name.includes('LowerLeg')) {
-              const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
-              const legBackAmount = Math.max(0, -Math.sin(legPhase));
-              const kneeBend = legBackAmount * ELBOW_BEND_MAX;
+                offsetZ -= 0.2 * scale + armSwing * ARM_SWING_AMPLITUDE * 0.8 * scale;
+                offsetZ += elbowBend * scale * 0.4;
+                offsetY -= elbowBend * scale * 0.35;
+                offsetY += Math.sin(armPhase * 1.2) * 0.03 * scale;
+              } else if (part.name.includes('UpperLeg')) {
+                const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
+                offsetZ += Math.sin(legPhase) * 0.15 * scale;
+              } else if (part.name.includes('LowerLeg')) {
+                const legPhase = part.name.includes('left') ? phase : phase + Math.PI;
+                const legBackAmount = Math.max(0, -Math.sin(legPhase));
+                const kneeBend = legBackAmount * ELBOW_BEND_MAX;
 
-              offsetZ += Math.sin(legPhase) * 0.1 * scale;
-              offsetY -= kneeBend * scale * 0.4;
-              offsetZ += kneeBend * scale * 0.2;
-            } else if (part.name === 'torso') {
-              offsetX += wobble * 0.5 * scale;
+                offsetZ += Math.sin(legPhase) * 0.1 * scale;
+                offsetY -= kneeBend * scale * 0.4;
+                offsetZ += kneeBend * scale * 0.2;
+              } else if (part.name === 'torso') {
+                offsetX += wobble * 0.5 * scale;
+              }
             }
 
             let finalOffsetX = offsetX;
@@ -736,14 +752,14 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
               shombie.position.z + finalOffsetZ
             );
 
-            if (part.name === 'head') {
-              headPositions.set(shombie.id, tmpPosition.clone());
-            }
-
-            if (!partPositionsRef.current.has(shombie.id)) {
-              partPositionsRef.current.set(shombie.id, new Map());
-            }
-            partPositionsRef.current.get(shombie.id)!.set(part.name, tmpPosition.clone());
+            // Record part position by REUSING the stored vector (no per-frame
+            // allocation — this runs PARTS_PER_SHOMBIE × N times per frame).
+            // Head position lives here too (read by the flame loop below).
+            let partMap = partPositionsRef.current.get(shombie.id);
+            if (!partMap) { partMap = new Map<string, THREE.Vector3>(); partPositionsRef.current.set(shombie.id, partMap); }
+            let pv = partMap.get(part.name);
+            if (!pv) { pv = new THREE.Vector3(); partMap.set(part.name, pv); }
+            pv.copy(tmpPosition);
 
             tmpScale.set(
               part.scaleX * scale * twitchResult.dScaleX,
@@ -782,30 +798,37 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           }
         }
 
-        // Update head fires
+        // Select the nearest N emerged shombies for head flames (Option A:
+        // cap concurrent flames so the horde doesn't thrash the flame budget).
+        for (let i = candCount; i < _flameCand.length; i++) _flameCand[i].d = Infinity;
+        _flameCand.sort(_byDist);
+        _flameNearSet.clear();
+        const flameTake = Math.min(candCount, MAX_HEAD_FLAMES);
+        for (let i = 0; i < flameTake; i++) _flameNearSet.add(_flameCand[i].id);
+
+        // Head fires: only the nearest N shombies keep fire; others lose theirs.
         for (const shombie of shombies) {
           if (!shombie.isActive) continue;
-          if (shombie.emergenceProgress < 1) continue;
 
-          const headPos = headPositions.get(shombie.id);
-          if (!headPos) continue;
-
-          const hasUniversalFlame = universalHeadFlamesRef.current.has(shombie.id);
-          let headFire = headFiresRef.current.get(shombie.id);
-
-          if (!headFire && !hasUniversalFlame) {
-            headFire = createHeadFire(shombie.id, shombie.definition.tier, headPos);
-            if (headFire) {
-              headFiresRef.current.set(shombie.id, headFire);
+          if (!_flameNearSet.has(shombie.id)) {
+            // Not in the nearest-N (too far / not emerged) — drop any fire.
+            if (universalHeadFlamesRef.current.has(shombie.id) || headFiresRef.current.has(shombie.id)) {
+              removeHeadFlame(shombie.id);
             }
+            continue;
           }
 
+          const headPos = partPositionsRef.current.get(shombie.id)?.get('head');
+          if (!headPos) continue;
+
+          if (!universalHeadFlamesRef.current.has(shombie.id) && !headFiresRef.current.has(shombie.id)) {
+            const hf = createHeadFire(shombie.id, shombie.definition.tier, headPos);
+            if (hf) headFiresRef.current.set(shombie.id, hf);
+          }
+
+          const headFire = headFiresRef.current.get(shombie.id);
           if (headFire) {
-            headFire.points.position.set(
-              headPos.x,
-              headPos.y + 0.3,
-              headPos.z
-            );
+            headFire.points.position.set(headPos.x, headPos.y + 0.3, headPos.z);
           }
         }
       },
