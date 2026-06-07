@@ -3,6 +3,8 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
+import { parseStripMetadata } from '@/lib/animationToStrip';
+import { applyStripAnimation, applyStripAnimationEmissive } from '@/lib/stripAnimationMaterial';
 import { fallingBlocksState } from './PlacedBlocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
@@ -89,6 +91,11 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   // Use textureOverride if provided (for tree blocks), otherwise use blockDef texture
   const textureUrl = textureOverride || blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
   const { texture: loadedTexture, isAnimated } = useAnimatedTexture(textureUrl);
+
+  // If the texture is a sprite-strip WebP, animate it on the GPU via a shader
+  // (zero per-frame JS-heap cost) instead of the old GIF decode that retains
+  // every frame in memory. Null for plain/static/GIF textures → unchanged path.
+  const strip = useMemo(() => parseStripMetadata(textureUrl), [textureUrl]);
   
   // C3: Canonical texture cache key - prevents signed URL query param churn
   const textureCacheKey = canonicalizeTextureUrl(textureUrl) || textureUrl;
@@ -231,9 +238,21 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
       newMaterial = new THREE.MeshLambertMaterial(materialProps);
     }
     
+    // Sprite-strip animation on the GPU: sample only the current frame from
+    // the strip via UV offset. Replaces the memory-heavy GIF path for any
+    // texture stored as a strip WebP. Emissive blocks animate the glow too.
+    if (strip) {
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      applyStripAnimation(newMaterial, strip.frames, strip.delay);
+      if (blockDef.properties?.emissive) {
+        applyStripAnimationEmissive(newMaterial, strip.frames, strip.delay);
+      }
+    }
+
     materialRef.current = newMaterial;
     return newMaterial;
-  }, [texture, blockDef, cachedIsAnimated, textureOverride]);
+  }, [texture, blockDef, cachedIsAnimated, textureOverride, strip]);
 
   // Cleanup material on unmount
   useEffect(() => {

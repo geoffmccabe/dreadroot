@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { frameLoop } from '@/lib/frameLoop';
 import { useAnimatedTexture } from '@/hooks/useAnimatedTexture';
+import { parseStripMetadata } from '@/lib/animationToStrip';
+import { applyStripAnimation, applyStripAnimationEmissive } from '@/lib/stripAnimationMaterial';
 import { getBaseTreeBlockType } from '../lib/blockTypeEncoder';
 
 interface PulsingSeedBlocksProps {
@@ -35,10 +37,14 @@ function PulsingSeedBlock({ block, textureUrl }: { block: PlacedBlock; textureUr
   const loopIdRef = useRef<string | null>(null);
   
   const { texture } = useAnimatedTexture(textureUrl || '/placeholder.svg');
-  
+
+  // Sprite-strip WebP → animate on the GPU (no per-frame JS-heap cost).
+  // Null for static/GIF textures, leaving the existing path unchanged.
+  const strip = useMemo(() => parseStripMetadata(textureUrl), [textureUrl]);
+
   // Create emissive material for pulsing glow
   const material = useMemo(() => {
-    return new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       map: texture,
       color: new THREE.Color(0xffffff),
       emissiveMap: texture,
@@ -47,7 +53,14 @@ function PulsingSeedBlock({ block, textureUrl }: { block: PlacedBlock; textureUr
       roughness: 0.6,
       metalness: 0.2,
     });
-  }, [texture]);
+    if (strip && texture) {
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      applyStripAnimation(mat, strip.frames, strip.delay);
+      applyStripAnimationEmissive(mat, strip.frames, strip.delay);
+    }
+    return mat;
+  }, [texture, strip]);
   
   // Update texture on material when it changes
   useEffect(() => {
