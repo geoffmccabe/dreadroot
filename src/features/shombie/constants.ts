@@ -5,11 +5,11 @@
 // Chunk size for spawn calculations (matches world chunk size)
 export const CHUNK_SIZE = 16;
 
-// Maximum shombies per chunk tier
-export const MAX_SHOMBIES_PER_CHUNK = 5;
+// Maximum shombies per chunk tier (10x for horde density)
+export const MAX_SHOMBIES_PER_CHUNK = 50;
 
-// Total max shombies in the world
-export const MAX_TOTAL_SHOMBIES = 100;
+// Total max shombies in the world (10x for horde density)
+export const MAX_TOTAL_SHOMBIES = 1000;
 
 // Spawn interval in ms
 export const SPAWN_CHECK_INTERVAL_MS = 5000;

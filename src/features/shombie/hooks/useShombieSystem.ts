@@ -194,11 +194,22 @@ export function useShombieSystem({
     chunkX: number,
     chunkZ: number
   ): ShombieInstance | null => {
-    // Random position within chunk
+    // Random base position within chunk.
     const worldX = chunkX * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
     const worldZ = chunkZ * CHUNK_SIZE + Math.random() * CHUNK_SIZE;
-    
-    return spawnShombieAt(definition, worldX, worldZ);
+
+    // Spawn a cluster of 1-5 near each other for a horde feel (each within
+    // SHOMBIE_GROUP_SPREAD_RADIUS of the base). spawnShombieAt enforces the
+    // total cap, so excess in a full world is harmlessly skipped.
+    const clusterSize = 1 + Math.floor(Math.random() * 5);
+    let first: ShombieInstance | null = null;
+    for (let i = 0; i < clusterSize; i++) {
+      const ox = (Math.random() - 0.5) * 2 * SHOMBIE_GROUP_SPREAD_RADIUS;
+      const oz = (Math.random() - 0.5) * 2 * SHOMBIE_GROUP_SPREAD_RADIUS;
+      const s = spawnShombieAt(definition, worldX + ox, worldZ + oz);
+      if (s && !first) first = s;
+    }
+    return first;
   }, [spawnShombieAt]);
 
   /**
