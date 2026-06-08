@@ -50,6 +50,12 @@ const _tumbleAxis = new THREE.Vector3();
 const _tumbleQuat = new THREE.Quaternion();
 const _uprightQuat = new THREE.Quaternion();
 const _offsetVec = new THREE.Vector3();
+const _upVec = new THREE.Vector3();
+// Tumble pivot = center of gravity, ~60% of body height (weighted toward the
+// heavier torso/head), in part-offset units (× shombie scale). GROUND_REST is
+// the resting half-height of a body lying flat (so it doesn't sink/float).
+const TUMBLE_PIVOT_HEIGHT = 1.2;
+const TUMBLE_GROUND_REST = 0.4;
 
 // LOD distance thresholds (squared, horizontal) for the renderer.
 const SHOMBIE_RENDER_DIST_SQ = SHOMBIE_RENDER_DISTANCE * SHOMBIE_RENDER_DISTANCE;
@@ -611,6 +617,12 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           //    the landed pose, then slerp upright. Time-driven from instance
           //    fields so it's smooth every frame.
           let tumbling = false;
+          // Rotate about the center of gravity (~60% of height, weighted toward
+          // the heavier torso/head) instead of the feet. tumbleSettleY drops a
+          // landed/tilted body so it rests on the ground rather than floating
+          // at center height.
+          let tumblePivotY = 0;
+          let tumbleSettleY = 0;
           if (shombie.isTumbling) {
             tumbling = true;
             const tnow = Date.now();
@@ -631,6 +643,15 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
                 _uprightQuat.setFromEuler(tmpEuler);
                 tmpQuaternion.copy(_tumbleQuat).slerp(_uprightQuat, t);
               }
+            }
+            tumblePivotY = TUMBLE_PIVOT_HEIGHT * shombie.scale;
+            // Settle to the ground once landed: how upright is the body? Its
+            // local up axis after rotation; .y=1 upright (no drop), .y≤0 flat
+            // (drop the center near the ground).
+            if (landedAt !== 0) {
+              _upVec.set(0, 1, 0).applyQuaternion(tmpQuaternion);
+              const upDot = Math.max(0, Math.min(1, _upVec.y));
+              tumbleSettleY = (tumblePivotY - TUMBLE_GROUND_REST * shombie.scale) * (1 - upDot);
             }
           } else if (shombie.isKnockedDown) {
             knockdownYAngle = shombie.knockdownDirection
@@ -756,12 +777,12 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             let finalOffsetZ = offsetZ;
 
             if (tumbling) {
-              // Rigid-body tumble: rotate the whole part offset by the tumble
-              // quaternion (already in tmpQuaternion, also used as the instance
-              // orientation below).
-              _offsetVec.set(offsetX, offsetY, offsetZ).applyQuaternion(tmpQuaternion);
+              // Rigid-body tumble: rotate the part offset about the center of
+              // gravity (tumblePivotY) — subtract the pivot, rotate, add it
+              // back — then settle to the ground when landed/tilted.
+              _offsetVec.set(offsetX, offsetY - tumblePivotY, offsetZ).applyQuaternion(tmpQuaternion);
               finalOffsetX = _offsetVec.x;
-              finalOffsetY = _offsetVec.y;
+              finalOffsetY = _offsetVec.y + tumblePivotY - tumbleSettleY;
               finalOffsetZ = _offsetVec.z;
             } else if (shombie.isKnockedDown && knockdownTiltAngle > 0) {
               const cosY = Math.cos(-knockdownYAngle);
