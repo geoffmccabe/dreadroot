@@ -45,6 +45,47 @@ assert(same.added.length === 0 && same.changed.length === 0 && same.removed.leng
 // Header passthrough.
 assert(d1.tick === 1 && d1.worldId === 1, 'diff carries tick/world');
 
+// ── Interpolation (RemoteWorld) ─────────────────────────────────────────────
+const { RemoteWorld } = await import('../src/features/netcode/remoteEntities.ts');
+const close = (a: number, b: number, eps: number) => Math.abs(a - b) <= eps;
+const TICK_MS = 50; // 20 Hz
+
+const world = new RemoteWorld();
+let prev: Snapshot | null = null;
+for (let tk = 0; tk <= 5; tk++) {
+  const snap = wire(tk);
+  world.ingest(diffSnapshots(prev, snap), tk * TICK_MS);
+  prev = snap;
+}
+
+const k1 = entityKey(0, 1);
+const e1a = wire(1).entities.find((e) => e.id === 1)!; // tick1 (time 50)
+const e1b = wire(2).entities.find((e) => e.id === 1)!; // tick2 (time 100)
+const out = new Map();
+
+// Sample halfway (75ms) → linear midpoint of tick1/tick2.
+world.sample(75, out);
+const mid = out.get(k1);
+assert(!!mid, 'interp: entity present');
+assert(close(mid.x, e1a.x + (e1b.x - e1a.x) * 0.5, 0.02), `interp x halfway (${mid?.x})`);
+assert(close(mid.z, e1a.z + (e1b.z - e1a.z) * 0.5, 0.02), `interp z halfway (${mid?.z})`);
+
+// Sample exactly on a tick boundary → matches that tick.
+world.sample(50, out);
+assert(close(out.get(k1).x, e1a.x, 0.02), 'sample at tick1 == tick1');
+
+// Starvation (render past the newest snapshot) → holds the newest, no crash.
+const e1newest = wire(5).entities.find((e) => e.id === 1)!;
+world.sample(10_000, out);
+assert(close(out.get(k1).x, e1newest.x, 0.02), 'starved → holds newest');
+
+// Removal: ingest across the blink-out, then sampling after it left omits it.
+const w2 = new RemoteWorld();
+let p2: Snapshot | null = null;
+for (let tk = 18; tk <= 22; tk++) { const s = wire(tk); w2.ingest(diffSnapshots(p2, s), tk * TICK_MS); p2 = s; }
+w2.sample(22 * TICK_MS - 5, out); // just before newest, blinker already gone
+assert(!out.has(entityKey(0, 99)), 'left entity omitted from interpolation');
+
 if (failures === 0) {
   console.log('✅ netcode decode→diff pipeline OK (add / change / remove / idempotence)');
   process.exit(0);
