@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { StrikeState } from '@/features/enemies/striking/strikeAnimation';
 
 /**
  * Shombie definition from database - admin-configurable enemy tiers
@@ -76,7 +77,7 @@ export interface ShombieBodyFire {
 /**
  * Runtime state for an active shombie instance
  */
-export interface ShombieInstance {
+export interface ShombieInstance extends StrikeState {
   id: string;
   definition: ShombieDefinition;
   position: THREE.Vector3;

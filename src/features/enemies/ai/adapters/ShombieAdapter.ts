@@ -15,7 +15,13 @@ import type {
 } from '../types';
 import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
-import { applyAttackResult } from '../applyAttack';
+import { applyAttackResultTo } from '../applyAttack';
+import {
+  startStrike,
+  advanceStrike,
+  isStriking,
+  computeBodyHeightFromParts,
+} from '../../striking/strikeAnimation';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -42,7 +48,11 @@ let locomotionContext: {
 
 // Scratch vector for direction calculations
 const _direction = new THREE.Vector3();
-const _knockbackDir = new THREE.Vector3();
+// Scratch for the apex strike-knockback direction (reused, no allocation).
+const _strikeHitDir = new THREE.Vector3();
+
+// Body height (scale 1) of the shombie, used as the strike reach distance.
+const SHOMBIE_BODY_LEN = computeBodyHeightFromParts(SHOMBIE_BODY_PARTS);
 
 /**
  * Set locomotion context for shombie movement execution.
@@ -161,6 +171,24 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     shared?: SharedContext
   ): void {
     if (!EnemyManager.isAIControlled()) return;
+
+    // ── Strike animation: advance the state machine EVERY frame (like gravity),
+    //    independent of the AI result kind. On the apex frame, apply the hit
+    //    ONCE to the CAPTURED victim using the captured strike vector — so the
+    //    knockback fires exactly when the limbs punch forward.
+    const strikeNow = performance.now();
+    const strikeAdv = advanceStrike(shombie, strikeNow);
+    if (strikeAdv.crossedApex) {
+      _strikeHitDir.set(shombie.strikeDirX ?? 0, 0, shombie.strikeDirZ ?? 1);
+      applyAttackResultTo(
+        shombie.strikeVictim ?? null,
+        shombie.strikeVictimType ?? null,
+        shombie.strikeDamage ?? 0,
+        shombie.strikeKnockback ?? 0,
+        _strikeHitDir,
+        locomotionContext?.onPlayerHit,
+      );
+    }
 
     const deltaSeconds = deltaMs / 1000;
 
@@ -380,11 +408,24 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     shombie.position.x = clamped.x;
     shombie.position.z = clamped.z;
 
-    if (result.kind === 'attack') {
+    if (result.kind === 'attack' && !isStriking(shombie)) {
+      // Begin a strike instead of applying damage instantly. Capture the strike
+      // vector (already points at the target), body length, and the victim
+      // (rival enemy or null=player) so the apex hit lands on the right target.
+      // lastAttackAt is set NOW so the attack behavior's cooldown won't
+      // re-trigger mid-strike.
       shombie.lastAttackAt = performance.now();
-      // Route to the player OR a rival enemy (whichever the EnemyManager picked).
-      _knockbackDir.set(result.dirX, 0, result.dirZ).normalize();
-      applyAttackResult(shared, result.damage, result.knockback, _knockbackDir, locomotionContext?.onPlayerHit);
+      startStrike(
+        shombie,
+        result.dirX,
+        result.dirZ,
+        SHOMBIE_BODY_LEN * (shombie.scale ?? 1),
+        shared?.aiTargetEnemy ?? null,
+        shared?.aiTargetEnemyType ?? null,
+        result.damage,
+        result.knockback,
+        performance.now(),
+      );
     }
   },
   

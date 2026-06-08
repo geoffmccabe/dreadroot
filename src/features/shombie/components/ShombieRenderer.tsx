@@ -36,6 +36,13 @@ import particleFire from 'three-particle-fire';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
 import { getShombieUVs, slotIndexToUVs } from '@/lib/atlasLookup';
 import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset } from '@/lib/atlasMaterial';
+import {
+  isStriking,
+  strikePartExtend,
+  strikeBodyPose,
+  strikePartTransform,
+  strikePartIsLimb,
+} from '@/features/enemies/striking/strikeAnimation';
 
 // Pre-allocated objects
 const tmpMatrix = new THREE.Matrix4();
@@ -51,6 +58,9 @@ const _tumbleQuat = new THREE.Quaternion();
 const _uprightQuat = new THREE.Quaternion();
 const _offsetVec = new THREE.Vector3();
 const _upVec = new THREE.Vector3();
+// Strike scratch: per-limb yaw quaternion (body yaw + point-at-target yaw).
+const _strikeQuat = new THREE.Quaternion();
+const _strikeEuler = new THREE.Euler();
 // Tumble pivot = center of gravity, ~60% of body height (weighted toward the
 // heavier torso/head), in part-offset units (× shombie scale). GROUND_REST is
 // the resting half-height of a body lying flat (so it doesn't sink/float).
@@ -552,6 +562,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         if (!mesh) return;
 
         const now = performance.now() / 1000;
+        const nowMs = performance.now();
 
         let instanceIndex = 0;
         let candCount = 0; // emerged shombies eligible for head flames this frame
@@ -682,6 +693,27 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             tmpQuaternion.setFromEuler(tmpEuler);
           }
 
+          // ── Strike pose: only when upright (not tumbling / knocked down).
+          //    Whole-body lean (all parts) + per-limb thrust + point-at-target.
+          const striking = !tumbling && !shombie.isKnockedDown && isStriking(shombie);
+          let strikeExtend = 0;
+          let strikeLeanX = 0;
+          let strikeLeanY = 0;
+          let strikeLeanZ = 0;
+          let strikeDirX = 0;
+          let strikeDirZ = 0;
+          let strikeBodyLen = 0;
+          if (striking) {
+            strikeExtend = strikePartExtend(shombie, nowMs);
+            const lean = strikeBodyPose(shombie, nowMs);
+            strikeLeanX = lean.leanX;
+            strikeLeanZ = lean.leanZ;
+            strikeLeanY = 0;
+            strikeDirX = shombie.strikeDirX ?? 0;
+            strikeDirZ = shombie.strikeDirZ ?? 0;
+            strikeBodyLen = shombie.strikeBodyLen ?? 0;
+          }
+
           // Get UV offset from atlas for this tier
           const uvs = getShombieUVs(shombie.definition.tier);
           let uvOffsetX = 0;
@@ -807,6 +839,29 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
               finalOffsetZ = offsetX * sinR + offsetZ * cosR;
             }
 
+            // ── Strike pose (composes on top of the upright/rotated offset) ──
+            //    Whole-body lean is added to EVERY part (head/torso lean toward
+            //    the target in unison); limbs ALSO thrust along the strike
+            //    vector and yaw their sharp/distal end toward the target.
+            let partQuat = tmpQuaternion;
+            if (striking) {
+              finalOffsetX += strikeLeanX;
+              finalOffsetY += strikeLeanY;
+              finalOffsetZ += strikeLeanZ;
+              const isLimb = strikePartIsLimb(part.name);
+              if (isLimb) {
+                const xf = strikePartTransform(strikeExtend, strikeDirX, strikeDirZ, strikeBodyLen, true);
+                finalOffsetX += xf.dx;
+                finalOffsetY += xf.dy;
+                finalOffsetZ += xf.dz;
+                if (xf.yawToTarget !== 0) {
+                  _strikeEuler.set(0, shombie.rotation + xf.yawToTarget, 0);
+                  _strikeQuat.setFromEuler(_strikeEuler);
+                  partQuat = _strikeQuat;
+                }
+              }
+            }
+
             tmpPosition.set(
               shombie.position.x + finalOffsetX,
               shombie.position.y + finalOffsetY + emergenceOffset,
@@ -827,7 +882,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
               part.scaleY * scale * twitchResult.dScaleY,
               part.scaleZ * scale * twitchResult.dScaleZ
             );
-            tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
+            tmpMatrix.compose(tmpPosition, partQuat, tmpScale);
             mesh.setMatrixAt(instanceIndex, tmpMatrix);
 
             // Set UV offset for atlas

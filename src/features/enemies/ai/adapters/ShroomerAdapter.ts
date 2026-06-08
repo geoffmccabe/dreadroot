@@ -17,7 +17,13 @@ import type {
   BehaviorModule,
 } from '../types';
 import { getBehaviorsByIds } from '../behaviors';
-import { applyAttackResult } from '../applyAttack';
+import { applyAttackResultTo } from '../applyAttack';
+import {
+  startStrike,
+  advanceStrike,
+  isStriking,
+  computeBodyHeightFromParts,
+} from '../../striking/strikeAnimation';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -44,7 +50,11 @@ let locomotionContext: {
 
 // Scratch vector for direction calculations
 const _direction = new THREE.Vector3();
-const _knockbackDir = new THREE.Vector3();
+// Scratch for the apex strike-knockback direction (reused, no allocation).
+const _strikeHitDir = new THREE.Vector3();
+
+// Body height (scale 1) of the shroomer, used as the strike reach distance.
+const SHROOMER_BODY_LEN = computeBodyHeightFromParts(SHROOMER_BODY_PARTS);
 
 /**
  * Set locomotion context for shroomer movement execution.
@@ -158,6 +168,24 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
     shared?: SharedContext
   ): void {
     if (!EnemyManager.isAIControlled()) return;
+
+    // ── Strike animation: advance the state machine EVERY frame (like gravity),
+    //    independent of the AI result kind. On the apex frame, apply the hit
+    //    ONCE to the CAPTURED victim using the captured strike vector — so the
+    //    knockback fires exactly when the limbs punch forward.
+    const strikeNow = performance.now();
+    const strikeAdv = advanceStrike(shroomer, strikeNow);
+    if (strikeAdv.crossedApex) {
+      _strikeHitDir.set(shroomer.strikeDirX ?? 0, 0, shroomer.strikeDirZ ?? 1);
+      applyAttackResultTo(
+        shroomer.strikeVictim ?? null,
+        shroomer.strikeVictimType ?? null,
+        shroomer.strikeDamage ?? 0,
+        shroomer.strikeKnockback ?? 0,
+        _strikeHitDir,
+        locomotionContext?.onPlayerHit,
+      );
+    }
 
     // Exploding (headshot-kill fragmentation): the renderer drives the flying
     // parts from a fixed origin — freeze all AI/physics on the body.
@@ -347,11 +375,24 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
     shroomer.position.x = clamped.x;
     shroomer.position.z = clamped.z;
 
-    if (result.kind === 'attack') {
+    if (result.kind === 'attack' && !isStriking(shroomer)) {
+      // Begin a strike instead of applying damage instantly. Capture the strike
+      // vector (already points at the target), body length, and the victim
+      // (rival enemy or null=player) so the apex hit lands on the right target.
+      // lastAttackAt is set NOW so the attack behavior's cooldown won't
+      // re-trigger mid-strike.
       shroomer.lastAttackAt = performance.now();
-      // Route to the player OR a rival enemy (whichever the EnemyManager picked).
-      _knockbackDir.set(result.dirX, 0, result.dirZ).normalize();
-      applyAttackResult(shared, result.damage, result.knockback, _knockbackDir, locomotionContext?.onPlayerHit);
+      startStrike(
+        shroomer,
+        result.dirX,
+        result.dirZ,
+        SHROOMER_BODY_LEN * (shroomer.scale ?? 1),
+        shared?.aiTargetEnemy ?? null,
+        shared?.aiTargetEnemyType ?? null,
+        result.damage,
+        result.knockback,
+        performance.now(),
+      );
     }
   },
 

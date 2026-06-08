@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { StrikeState } from '@/features/enemies/striking/strikeAnimation';
 
 /**
  * Shroomer definition from database - admin-configurable enemy tiers.
@@ -74,7 +75,7 @@ export interface ShroomerBodyFire {
 /**
  * Runtime state for an active shroomer instance
  */
-export interface ShroomerInstance {
+export interface ShroomerInstance extends StrikeState {
   id: string;
   definition: ShroomerDefinition;
   position: THREE.Vector3;

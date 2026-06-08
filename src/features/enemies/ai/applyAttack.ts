@@ -12,10 +12,42 @@ export function applyAttackResult(
   dir: THREE.Vector3,
   onPlayerHit?: (damage: number, knockback: number, dir: THREE.Vector3) => void,
 ): void {
-  if (shared?.aiTargetEnemy && shared.aiTargetEnemyType) {
+  applyAttackResultTo(
+    shared?.aiTargetEnemy ?? null,
+    shared?.aiTargetEnemyType ?? null,
+    damage,
+    knockback,
+    dir,
+    onPlayerHit,
+  );
+}
+
+/**
+ * Explicit-victim variant: deliver the hit to a CAPTURED victim (a rival enemy
+ * ref + its combat type, or null=player) rather than reading the per-tick
+ * shared target. The strike animation captures the victim at trigger so the
+ * apex hit lands on the right target even though shared.aiTargetEnemy changes
+ * each tick.
+ *
+ * For a rival victim, if it's no longer active/targetable (it died or despawned
+ * during the wind-up), the hit is skipped (the strike animation still plays
+ * out).
+ */
+export function applyAttackResultTo(
+  victim: unknown | null,
+  victimType: string | null,
+  damage: number,
+  knockback: number,
+  dir: THREE.Vector3,
+  onPlayerHit?: (damage: number, knockback: number, dir: THREE.Vector3) => void,
+): void {
+  if (victim && victimType) {
     // Hitting a rival enemy — deliver melee damage through its combat adapter.
-    const adapter = enemyCombatRegistry.getAdapter(shared.aiTargetEnemyType);
-    adapter?.applyDamage(shared.aiTargetEnemy, {
+    const adapter = enemyCombatRegistry.getAdapter(victimType);
+    if (!adapter) return;
+    // Skip if the captured rival is no longer active/targetable (died mid-strike).
+    if (adapter.getHitbox(victim) === null) return;
+    adapter.applyDamage(victim, {
       damage,
       bulletSpeed: 0,
       knockbackDirX: dir.x,

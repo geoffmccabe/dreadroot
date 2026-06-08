@@ -38,6 +38,13 @@ import particleFire from 'three-particle-fire';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
 import { getShroomerUVs, slotIndexToUVs } from '@/lib/atlasLookup';
 import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset } from '@/lib/atlasMaterial';
+import {
+  isStriking,
+  strikePartExtend,
+  strikeBodyPose,
+  strikePartTransform,
+  strikePartIsLimb,
+} from '@/features/enemies/striking/strikeAnimation';
 
 // Pre-allocated objects
 const tmpMatrix = new THREE.Matrix4();
@@ -53,6 +60,9 @@ const _tumbleQuat = new THREE.Quaternion();
 const _uprightQuat = new THREE.Quaternion();
 const _offsetVec = new THREE.Vector3();
 const _upVec = new THREE.Vector3();
+// Strike scratch: per-limb yaw quaternion (body yaw + point-at-target yaw).
+const _strikeQuat = new THREE.Quaternion();
+const _strikeEuler = new THREE.Euler();
 const TUMBLE_PIVOT_HEIGHT = 1.2;
 const TUMBLE_GROUND_REST = 0.4;
 
@@ -86,8 +96,18 @@ const _ctx = {
   knockdownTiltAngle: 0,
   knockdownYAngle: 0,
   quat: new THREE.Quaternion(),
+  // Strike pose (filled once per shroomer; placePartInto applies it):
+  striking: false,
+  strikeExtend: 0,
+  strikeLeanX: 0,
+  strikeLeanZ: 0,
+  strikeDirX: 0,
+  strikeDirZ: 0,
+  strikeBodyLen: 0,
 };
-const _placeResult = { px: 0, py: 0, pz: 0 };
+// placePartInto writes the part position here AND a per-part yaw (radians) the
+// caller adds to the body quaternion for striking limbs.
+const _placeResult = { px: 0, py: 0, pz: 0, yaw: 0 };
 
 // Compute a part's final world position, mirroring the shombie renderer's
 // per-part offset + animation + tumble/knockdown/rotation math exactly.
@@ -177,6 +197,23 @@ function placePartInto(
     const sinR = Math.sin(s.rotation);
     finalOffsetX = offsetX * cosR - offsetZ * sinR;
     finalOffsetZ = offsetX * sinR + offsetZ * cosR;
+  }
+
+  // ── Strike pose (composes on top of the upright/rotated offset) ──────────
+  //    Whole-body lean is added to EVERY part (head/torso/cap lean toward the
+  //    target in unison); limbs ALSO thrust along the strike vector and yaw
+  //    their sharp/distal end toward the target (returned via _placeResult.yaw).
+  _placeResult.yaw = 0;
+  if (c.striking) {
+    finalOffsetX += c.strikeLeanX;
+    finalOffsetZ += c.strikeLeanZ;
+    if (strikePartIsLimb(partName)) {
+      const xf = strikePartTransform(c.strikeExtend, c.strikeDirX, c.strikeDirZ, c.strikeBodyLen, true);
+      finalOffsetX += xf.dx;
+      finalOffsetY += xf.dy;
+      finalOffsetZ += xf.dz;
+      _placeResult.yaw = xf.yawToTarget;
+    }
   }
 
   _placeResult.px = s.position.x + finalOffsetX;
@@ -698,6 +735,7 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
         if (!bodyMesh || !headMesh || !capMesh) return;
 
         const now = performance.now() / 1000;
+        const nowMs = performance.now();
 
         let bodyIdx = 0;
         let headIdx = 0;
@@ -879,6 +917,24 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
           _ctx.knockdownYAngle = knockdownYAngle;
           _ctx.quat.copy(tmpQuaternion);
 
+          // ── Strike pose: only when upright (not tumbling / knocked down /
+          //    exploding). Whole-body lean + per-limb thrust + point-at-target.
+          const striking = !tumbling && !shroomer.isKnockedDown && !exploding && isStriking(shroomer);
+          _ctx.striking = striking;
+          if (striking) {
+            _ctx.strikeExtend = strikePartExtend(shroomer, nowMs);
+            const lean = strikeBodyPose(shroomer, nowMs);
+            _ctx.strikeLeanX = lean.leanX;
+            _ctx.strikeLeanZ = lean.leanZ;
+            _ctx.strikeDirX = shroomer.strikeDirX ?? 0;
+            _ctx.strikeDirZ = shroomer.strikeDirZ ?? 0;
+            _ctx.strikeBodyLen = shroomer.strikeBodyLen ?? 0;
+          } else {
+            _ctx.strikeExtend = 0;
+            _ctx.strikeLeanX = 0;
+            _ctx.strikeLeanZ = 0;
+          }
+
           let partMap = partPositionsRef.current.get(shroomer.id);
           if (!partMap) { partMap = new Map<string, THREE.Vector3>(); partPositionsRef.current.set(shroomer.id, partMap); }
 
@@ -894,6 +950,13 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
 
             placePartInto(part.name, part.offsetX, part.offsetY, part.offsetZ, twitch, true);
             tmpPosition.set(_placeResult.px, _placeResult.py, _placeResult.pz);
+            // Per-limb point-at-target yaw during a strike (0 otherwise).
+            let partQuat = tmpQuaternion;
+            if (_placeResult.yaw !== 0) {
+              _strikeEuler.set(0, shroomer.rotation + _placeResult.yaw, 0);
+              _strikeQuat.setFromEuler(_strikeEuler);
+              partQuat = _strikeQuat;
+            }
 
             if (exploding) {
               const ang = explodeSeed + partIdx * 2.39996; // golden-angle spread
@@ -912,7 +975,7 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
               part.scaleY * scale * twitchResult.dScaleY,
               part.scaleZ * scale * twitchResult.dScaleZ
             );
-            tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
+            tmpMatrix.compose(tmpPosition, partQuat, tmpScale);
             bodyMesh.setMatrixAt(bodyIdx, tmpMatrix);
             if (bodyUvAttr) setInstanceUvOffset(bodyUvAttr, bodyIdx, uvOffsetX, uvOffsetY);
             bodyMesh.setColorAt(bodyIdx, tmpColor);
