@@ -38,6 +38,9 @@ export class GameInstanceDO {
     }
     const { 0: client, 1: server } = new WebSocketPair();
     server.accept();
+    // Ask the runtime to deliver binary frames as ArrayBuffer (workerd defaults
+    // to Blob, like browsers). Best-effort; the message handler also copes.
+    try { (server as unknown as { binaryType: string }).binaryType = 'arraybuffer'; } catch { /* ignore */ }
     this.onConnect(server);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -48,7 +51,16 @@ export class GameInstanceDO {
     this.core.addPlayer(clientId);
 
     ws.addEventListener('message', (ev: MessageEvent) => {
-      if (ev.data instanceof ArrayBuffer) this.core.applyInput(clientId, ev.data);
+      const d = ev.data;
+      if (d instanceof ArrayBuffer) {
+        this.core.applyInput(clientId, d);
+      } else if (ArrayBuffer.isView(d)) {
+        const v = d as ArrayBufferView;
+        this.core.applyInput(clientId, v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength));
+      } else if (d && typeof (d as Blob).arrayBuffer === 'function') {
+        // workerd delivers binary as a Blob by default — unwrap it.
+        (d as Blob).arrayBuffer().then((b) => this.core.applyInput(clientId, b)).catch(() => { /* ignore */ });
+      }
     });
     const drop = () => this.onClose(ws);
     ws.addEventListener('close', drop);
