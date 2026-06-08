@@ -222,6 +222,13 @@ export interface EnemyAdapter<TEnemy> {
   /** Optional horizontal collision radius. Defaults if omitted. */
   getRadius?(enemy: TEnemy): number;
 
+  /** Optional: true when the enemy is mid-air / in special physics (e.g. a
+   *  blast-launched, tumbling shombie) and MUST keep simulating every frame
+   *  regardless of LOD — so it doesn't freeze and hang. Omit → never (normal
+   *  LOD applies). Naturally-elevated enemies (hovering shwarms) must NOT
+   *  return true here or they'd never freeze. */
+  isAirborne?(enemy: TEnemy): boolean;
+
   /** Get behaviors enabled for this enemy */
   getBehaviors(enemy: TEnemy): BehaviorModule[];
 }

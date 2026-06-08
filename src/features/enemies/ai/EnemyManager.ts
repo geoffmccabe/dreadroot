@@ -267,10 +267,11 @@ class EnemyManagerClass {
       const newLod = this.calculateLodSq(distSq, reg.lodLevel);
       reg.lodLevel = newLod;
 
-      // Airborne enemies (e.g. blast-launched) must keep simulating gravity
-      // every frame regardless of LOD/throttle — otherwise a frozen one hangs
-      // as a "phantom" in the sky until the player flies near and un-freezes it.
-      const airborne = pos.y > 0.5;
+      // Airborne enemies (e.g. blast-launched/tumbling shombies) must keep
+      // simulating every frame regardless of LOD/throttle — otherwise a frozen
+      // one hangs as a "phantom" in the sky. Opt-in per adapter so naturally-
+      // elevated enemies (hovering shwarms) still freeze normally.
+      const airborne = reg.adapter.isAirborne ? reg.adapter.isAirborne(reg.enemy) : false;
 
       // Skip frozen enemies entirely — unless airborne.
       if (newLod === AILodLevel.FROZEN && !airborne) {

@@ -89,6 +89,12 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
   getRadius(shombie: ShombieWithAI): number {
     return SHOMBIE_HITBOX_RADIUS * (shombie.scale ?? 1);
   },
+
+  // Keep blast-launched / tumbling shombies simulating every frame (gravity +
+  // tumble recovery) regardless of LOD, so they never hang as a sky-phantom.
+  isAirborne(shombie: ShombieWithAI): boolean {
+    return shombie.position.y > 0.5 || !!shombie.isTumbling;
+  },
   
   buildContext(
     shombie: ShombieWithAI, 

@@ -372,6 +372,9 @@ export function useShombieSystem({
         const ay = Math.random() * 2 - 1;
         const az = Math.random() * 2 - 1;
         const inv = 1 / (Math.hypot(ax, ay, az) || 1);
+        // A blast supersedes any in-progress headshot knockdown (which would
+        // otherwise early-return in applyResult and block the launch + tumble).
+        shombie.isKnockedDown = false;
         shombie.isTumbling = true;
         shombie.tumbleAxisX = ax * inv;
         shombie.tumbleAxisY = ay * inv;
