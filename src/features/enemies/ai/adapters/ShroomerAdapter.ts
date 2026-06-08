@@ -40,6 +40,7 @@ import {
   SHROOMER_LANE_HALF_WIDTH,
   SHROOMER_LANE_BREAK_DISTANCE,
   SHROOMER_HITBOX_RADIUS,
+  SHROOMER_HITBOX_HEIGHT,
   TUMBLE_WAIT_MS,
   TUMBLE_RECOVER_MS,
 } from '@/features/shroomer/constants';
@@ -105,6 +106,11 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
 
   getRadius(shroomer: ShroomerWithAI): number {
     return SHROOMER_HITBOX_RADIUS * (shroomer.scale ?? 1);
+  },
+
+  // Standable top height — lets the player + other enemies land on top of it.
+  getHeight(shroomer: ShroomerWithAI): number {
+    return SHROOMER_HITBOX_HEIGHT * (shroomer.scale ?? 1);
   },
 
   isAirborne(shroomer: ShroomerWithAI): boolean {
@@ -245,8 +251,11 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
     // before the clamp zeroes it — a hard landing plays the ground-impact sound.
     const fallSpeed = -shroomer.velocity.y;
     let grounded = false;
+    // Highest support beneath the feet: world ground (0), block tops (tumbling
+    // ragdolls only), and OTHER ENEMIES' tops (when falling — so shroomers
+    // land/stack on each other and on shombies).
+    let surfaceY = 0;
     if (shroomer.isTumbling && shroomer.velocity.y <= 0) {
-      let surfaceY = 0;
       const n = worldCollisionGrid.getNearby(shroomer.position.x, shroomer.position.z, 1);
       const res = worldCollisionGrid.nearbyResult;
       for (let i = 0; i < n; i++) {
@@ -258,16 +267,19 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
           surfaceY = c.max.y;
         }
       }
-      if (shroomer.position.y <= surfaceY) {
-        shroomer.position.y = surfaceY;
-        if (fallSpeed > GROUND_IMPACT_MIN_SPEED) playGroundImpact(shroomer.position.x, surfaceY, shroomer.position.z);
-        shroomer.velocity.y = 0;
-        grounded = true;
-      }
-    } else if (shroomer.position.y < 0) {
-      shroomer.position.y = 0;
-      if (fallSpeed > GROUND_IMPACT_MIN_SPEED) playGroundImpact(shroomer.position.x, 0, shroomer.position.z);
+    }
+    if (shroomer.velocity.y < 0) {
+      const eTop = EnemyManager.getStandableTopNear(
+        shroomer.position.x, shroomer.position.z, shroomer.position.y, 0.4,
+        shroomer.id, SHROOMER_HITBOX_RADIUS * (shroomer.scale ?? 1),
+      );
+      if (eTop != null && eTop > surfaceY) surfaceY = eTop;
+    }
+    if (shroomer.position.y <= surfaceY) {
+      shroomer.position.y = surfaceY;
+      if (fallSpeed > GROUND_IMPACT_MIN_SPEED) playGroundImpact(shroomer.position.x, surfaceY, shroomer.position.z);
       shroomer.velocity.y = 0;
+      grounded = true;
     }
     if (!grounded && shroomer.position.y <= 0.001) grounded = true;
 

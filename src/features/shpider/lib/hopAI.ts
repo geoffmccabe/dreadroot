@@ -153,7 +153,15 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
   if ((s.hop.phase === 'idle' || s.hop.phase === 'crawling')
       && s.surfaceNormal.y > 0.9) {
     const probedGround = findGroundY(s.position.x, s.position.y + 0.5, s.position.z, 64);
-    const supportY = probedGround === -Infinity ? WORLD_FLOOR_Y : probedGround;
+    let supportY = probedGround === -Infinity ? WORLD_FLOOR_Y : probedGround;
+    // Jump/land on top of another enemy (shroomer/shombie) if it's higher.
+    if (s.velocity.y <= 0) {
+      const eTop = EnemyManager.getStandableTopNear(
+        s.position.x, s.position.z, s.position.y, 0.5, s.id,
+        (s.definition.body_size ?? 1) * (s.scale ?? 1) * 0.5,
+      );
+      if (eTop != null && eTop > supportY) supportY = eTop;
+    }
     // Airborne if already above support OR carrying a positive upward
     // impulse (grenade blast kick). Without the second clause an
     // upward kick on a grounded shpider would be wiped in the same

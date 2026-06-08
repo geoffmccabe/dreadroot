@@ -38,6 +38,7 @@ import {
   SHOMBIE_LANE_HALF_WIDTH,
   SHOMBIE_LANE_BREAK_DISTANCE,
   SHOMBIE_HITBOX_RADIUS,
+  SHOMBIE_HITBOX_HEIGHT,
   TUMBLE_WAIT_MS,
   TUMBLE_RECOVER_MS,
 } from '@/features/shombie/constants';
@@ -106,6 +107,11 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
 
   getRadius(shombie: ShombieWithAI): number {
     return SHOMBIE_HITBOX_RADIUS * (shombie.scale ?? 1);
+  },
+
+  // Standable top height — lets the player + other enemies land on top of it.
+  getHeight(shombie: ShombieWithAI): number {
+    return SHOMBIE_HITBOX_HEIGHT * (shombie.scale ?? 1);
   },
 
   // Keep blast-launched / tumbling shombies simulating every frame (gravity +

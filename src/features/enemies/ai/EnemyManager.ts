@@ -175,6 +175,37 @@ class EnemyManagerClass {
   }
   
   /**
+   * Highest standable enemy TOP beneath a point's feet (for the player and for
+   * other enemies to land/stand on). Returns the world Y to rest at, or null.
+   *
+   * @param x,z      the standing entity's horizontal position
+   * @param feetY    its feet Y
+   * @param reach    how far ABOVE the top the feet may be and still catch it
+   *                 (the fall/landing tolerance)
+   * @param excludeId an enemy id to ignore (so an enemy doesn't stand on itself)
+   * @param footPad  extra footprint radius (e.g. the player/enemy's own radius)
+   */
+  getStandableTopNear(
+    x: number, z: number, feetY: number, reach: number,
+    excludeId?: string, footPad = 0,
+  ): number | null {
+    const near = this.spatialIndex.getNearby(x, z, 3);
+    let best = -Infinity;
+    for (let i = 0; i < near.length; i++) {
+      const e = near[i];
+      if (e.id === excludeId) continue;
+      const top = e.topY ?? 0;
+      if (top <= e.y + 0.3) continue; // no real standable height
+      const dx = e.x - x, dz = e.z - z;
+      const r = e.radius + footPad;
+      if (dx * dx + dz * dz > r * r) continue; // outside its footprint
+      // Feet at/just-above the top (catch the fall) or just-sunk (standing).
+      if (feetY <= top + reach && feetY >= top - 0.3 && top > best) best = top;
+    }
+    return best > -Infinity ? best : null;
+  }
+
+  /**
    * Force an enemy to (re)target the player — used when the player damages it,
    * so it can break off a rival fight to retaliate. Overrides the target lock.
    */
@@ -414,6 +445,9 @@ class EnemyManagerClass {
       entry.x = pos.x;
       entry.y = pos.y;
       entry.z = pos.z;
+      // Publish the standable top surface so players + other enemies can land
+      // on it (0 height → not standable).
+      entry.topY = pos.y + (reg.adapter.getHeight ? reg.adapter.getHeight(reg.enemy) : 0);
       this.spatialEntries.push(entry);
       
       // Check if enough time has passed for this LOD level

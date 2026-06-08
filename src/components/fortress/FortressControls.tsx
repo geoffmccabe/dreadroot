@@ -24,6 +24,7 @@ import {
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
+import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
 import { setGlobalInspectData, clearGlobalInspectData, toggleInspectorMode, setInspectorMode, inspectorModeEnabled, globalInspectData, type GlobalInspectData, type InspectSources } from '@/components/FPSCounter';
@@ -2661,6 +2662,16 @@ export function FirstPersonControls({
           supportY = walapaTopY;
         } else {
           supportWalapa = null; // a block/ground is higher than any walapa
+        }
+        // Stand on top of an enemy (shombie/shroomer). NO riding: it's re-checked
+        // live every frame, so the instant the enemy walks out from under you
+        // there's no support → you fall and it can attack you.
+        const enemyTop = EnemyManager.getStandableTopNear(
+          camera.position.x, camera.position.z, feetY, 0.6, undefined, playerRadius,
+        );
+        if (enemyTop != null && enemyTop > supportY) {
+          supportY = enemyTop;
+          supportWalapa = null; // standing on an enemy — not riding a walapa
         }
         const hasSupport = supportY > -Infinity;
 

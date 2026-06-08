@@ -231,6 +231,11 @@ export interface EnemyAdapter<TEnemy> {
   /** Optional horizontal collision radius. Defaults if omitted. */
   getRadius?(enemy: TEnemy): number;
 
+  /** Optional: standable height above the enemy's base (its hitbox height ×
+   *  scale). Enemies that return this can be stood/landed on by the player and
+   *  other enemies. Omit → not standable. */
+  getHeight?(enemy: TEnemy): number;
+
   /** Optional: true when the enemy is mid-air / in special physics (e.g. a
    *  blast-launched, tumbling shombie) and MUST keep simulating every frame
    *  regardless of LOD — so it doesn't freeze and hang. Omit → never (normal
@@ -288,6 +293,9 @@ export interface EnemyEntry {
   mass: number;
   /** Horizontal collision radius. */
   radius: number;
+  /** World Y of the enemy's standable top surface (its hitbox top), or its base
+   *  y when nothing can stand on it. Players + other enemies land on this. */
+  topY?: number;
 }
 
 /** Defaults when an adapter doesn't supply mass/radius. */
