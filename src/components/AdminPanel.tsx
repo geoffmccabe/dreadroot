@@ -13,6 +13,7 @@ import { useAdminPanel, type NPCSubtab, type SeedSubtab, type ItemsSubtab, type 
 import { useBlocks } from '@/contexts/BlocksContext';
 import { ShnakeDesignPanel } from '@/features/shnake';
 import { ShombieDesignPanel } from '@/features/shombie';
+import { ShroomerDesignPanel } from '@/features/shroomer';
 import { ShwarmDesignPanel } from '@/features/shwarm';
 import { WalapaDesignPanel } from '@/features/walapa';
 import { ShtickmanDesignPanel } from '@/features/shtickman';
@@ -249,6 +250,7 @@ export function AdminPanel({
                     <ShwarmDesignPanel />
                     <ShnakeDesignPanel />
                     <ShombieDesignPanel />
+                    <ShroomerDesignPanel />
                     <ShtickmanDesignPanel />
                     <ShpiderDesignPanel />
                   </div>

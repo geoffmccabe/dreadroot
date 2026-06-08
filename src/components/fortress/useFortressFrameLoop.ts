@@ -72,6 +72,10 @@ export function useFortressFrameLoop({
   shombieRendererRef,
   damageShombie,
 
+  shroomersRef,
+  shroomerRendererRef,
+  damageShroomer,
+
   walapasRef,
   updateWalapaMovement,
 
@@ -126,6 +130,10 @@ export function useFortressFrameLoop({
   shombiesRef: MutableRefObject<any[]>;
   shombieRendererRef: MutableRefObject<any>;
   damageShombie: (...args: any[]) => any;
+
+  shroomersRef: MutableRefObject<any[]>;
+  shroomerRendererRef: MutableRefObject<any>;
+  damageShroomer: (...args: any[]) => any;
 
   walapasRef: MutableRefObject<any[]>;
   updateWalapaMovement: (delta: number) => void;
@@ -1009,6 +1017,9 @@ export function useFortressFrameLoop({
 
   // Update shombie renderer
   shombieRendererRef.current?.update(camera.position, delta);
+
+  // Update shroomer renderer
+  shroomerRendererRef.current?.update(camera.position, delta);
 
   // Record total frame time for diagnostics
   const frameTime = performance.now() - frameStart;

@@ -76,6 +76,7 @@ const DEFAULT_BEHAVIORS: Record<string, string[]> = {
   shnake: ['patrol', 'chase', 'attack', 'revenge', 'returnHome', 'indignant'],
   shwarm: ['sleep', 'wander', 'chase', 'attack', 'angry'],
   shombie: ['chase', 'attack'],
+  shroomer: ['chase', 'attack'],
   walapa: ['patrol', 'indignant'],
   shtickman: ['wander', 'patrol'],
 };
@@ -101,6 +102,14 @@ const DEFAULT_AI_CONFIG: Record<string, AIConfig> = {
   },
   shombie: {
     behaviors: DEFAULT_BEHAVIORS.shombie,
+    detectionRange: 50,
+    attackRange: 1.2,
+    attackCooldownMs: 1000,
+    angrySpeedMultiplier: 1.0,
+    angryDurationMs: 0,
+  },
+  shroomer: {
+    behaviors: DEFAULT_BEHAVIORS.shroomer,
     detectionRange: 50,
     attackRange: 1.2,
     attackCooldownMs: 1000,
@@ -138,7 +147,7 @@ export interface AIConfig {
 }
 
 interface EnemyBehaviorSettingsProps {
-  enemyType?: 'shwarm' | 'shnake' | 'shombie' | 'walapa' | 'shtickman';
+  enemyType?: 'shwarm' | 'shnake' | 'shombie' | 'shroomer' | 'walapa' | 'shtickman';
   aiConfig: AIConfig | null | undefined;
   onConfigChange: (config: AIConfig) => void;
   className?: string;

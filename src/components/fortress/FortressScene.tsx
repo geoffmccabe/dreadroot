@@ -64,6 +64,7 @@ import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
 import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
 import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '@/features/shombie';
+import { useShroomerSystem, ShroomerRenderer, ShroomerRendererHandle } from '@/features/shroomer';
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
@@ -187,6 +188,7 @@ export function FortressScene({
   onShwarmGroupKilled,
   onShnakeKilled,
   onShombieKilled,
+  onShroomerKilled,
   respawnPosition,
   onRespawnComplete,
   isOwnedTreeAtPosition,
@@ -218,6 +220,7 @@ export function FortressScene({
   treeFruits = [],
   onFruitRemoved,
   shombieDefinitions,
+  shroomerDefinitions,
   walapaDefinitions,
   onWalapaKilled,
   shtickmanDefinitions,
@@ -495,6 +498,44 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     playerLevel,
   });
 
+  // Shroomer system — clone of the shombie system (different geometry + table).
+  const shroomerRendererRef = useRef<ShroomerRendererHandle>(null);
+
+  const handleShroomerPlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+    setTimeout(() => {
+      if (applyDamageWithKnockback) {
+        applyDamageWithKnockback(
+          damage,
+          direction.clone(),
+          knockbackForce,
+          { type: 'enemy', entityName: 'Shroomer' }
+        );
+      } else if (takeDamage) {
+        takeDamage(damage, direction.clone(), knockbackForce);
+      }
+
+      if (audioRefs.current.playerHit) {
+        audioRefs.current.playerHit.currentTime = 0;
+        audioRefs.current.playerHit.play().catch(() => {});
+      }
+    }, 0);
+  }, [applyDamageWithKnockback, takeDamage]);
+
+  const {
+    shroomers,
+    shroomersRef,
+    damageShroomer,
+    spawnShroomerAt,
+    spawnShroomerGroup,
+  } = useShroomerSystem({
+    definitions: shroomerDefinitions,
+    cameraRef,
+    isEnabled: enemiesEnabled,
+    userRoles,
+    onShroomerKilled,
+    playerLevel,
+  });
+
   // PvP combat adapter stub — no-op until PLAYER_PVP_ADAPTER_ENABLED
   // is flipped on, but the call site lives here for the L2 migration.
   usePlayerCombatAdapter(currentUserId ?? null);
@@ -738,7 +779,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       console.log(`[SpawnCommands] Spawning ${count} shpider(s) tier ${tier}`);
       spawnShpiderGroup(tier, count);
     },
-  }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup, spawnWalapa, spawnShtickmanByTier, spawnShpiderGroup]);
+    onSpawnShroomer: (tier: number, count: number) => {
+      console.log(`[SpawnCommands] Spawning ${count} shroomer(s) tier ${tier}`);
+      spawnShroomerGroup(tier, count);
+    },
+  }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup, spawnWalapa, spawnShtickmanByTier, spawnShpiderGroup, spawnShroomerGroup]);
   
   useSpawnCommands({
     isEnabled: true,
@@ -782,6 +827,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     shnakesRef,
     shwarmsRef,
     shombiesRef,
+    shroomersRef,
     walapasRef,
     shtickmenRef,
     isEnabled: ENABLE_ENEMY_AI,
@@ -794,6 +840,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     onIndignantRoar: handleIndignantRoar,
     onTriggerWiggle: handleTriggerWiggle,
     onShombiePlayerHit: handleShombiePlayerHit,
+    onShroomerPlayerHit: handleShroomerPlayerHit,
   });
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
@@ -1213,6 +1260,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     shombiesRef,
     shombieRendererRef,
     damageShombie,
+    shroomersRef,
+    shroomerRendererRef,
+    damageShroomer,
     walapasRef,
     updateWalapaMovement,
     shtickmenRef,
@@ -1573,6 +1623,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       
       {/* Shombie Renderer - uses UniversalFlameRenderer for head fires */}
       <ShombieRenderer ref={shombieRendererRef} shombies={shombies} universalFlameRef={universalFlameRef} />
+
+      {/* Shroomer Renderer - shombie clone with mushroom geometry */}
+      <ShroomerRenderer ref={shroomerRendererRef} shroomers={shroomers} universalFlameRef={universalFlameRef} />
 
       {/* Walapa Renderer - floating whale creatures */}
       <WalapaRenderer ref={walapaRendererRef} walapas={walapas} cameraRef={cameraRef} />
