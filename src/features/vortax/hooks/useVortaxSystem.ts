@@ -351,7 +351,9 @@ export function useVortaxSystem({
   ) => {
     const vortax = vortaxesRef.current.find(s => s.id === vortaxId);
     if (!vortax || !vortax.isActive) return;
-    const s = worldStrength / (vortax.scale ?? 1);
+    // Velocity is in part-LOCAL units (renderer ×scale). Use the blast strength
+    // directly (capped) so the cloud visibly puffs apart before regrouping.
+    const s = Math.min(worldStrength, 8);
     for (let i = 0; i < vortax.spheres.length; i++) {
       const sp = vortax.spheres[i];
       if (sp.destroyed) continue;

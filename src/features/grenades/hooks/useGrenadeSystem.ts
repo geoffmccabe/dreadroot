@@ -230,10 +230,19 @@ export function useGrenadeSystem({
       for (const enemy of adapter.getActiveEnemies()) {
         const hb = adapter.getHitbox(enemy);
         if (!hb) continue;
-        // Use hitbox center as the damage point.
-        const ex = hb.centerX;
-        const ey = (hb.bottomY + hb.topY) * 0.5;
-        const ez = hb.centerZ;
+        // Nearest point on the hitbox cylinder to the blast (NOT the center) —
+        // so a ground blast still reaches a 20m-tall giant whose center sits
+        // ~11m up. Clamp Y into the body's vertical span; pull X/Z onto the
+        // cylinder surface if the blast is outside its radius.
+        const ey = Math.max(hb.bottomY, Math.min(hb.topY, center.y));
+        const _hdx = center.x - hb.centerX;
+        const _hdz = center.z - hb.centerZ;
+        const _hlen = Math.hypot(_hdx, _hdz);
+        let ex = center.x, ez = center.z;
+        if (_hlen > hb.radius) {
+          ex = hb.centerX + (_hdx / _hlen) * hb.radius;
+          ez = hb.centerZ + (_hdz / _hlen) * hb.radius;
+        }
         // Pure resolver — falloff + damage + 0–45° upward-tilted
         // knockback all in one place, shared with the future L2 DO.
         const blast = resolveBlastHit({
