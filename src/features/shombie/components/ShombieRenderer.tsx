@@ -29,6 +29,8 @@ import {
   SHOMBIE_RENDER_DISTANCE,
   SHOMBIE_ANIM_DISTANCE,
   MAX_HEAD_FLAMES,
+  TUMBLE_WAIT_MS,
+  TUMBLE_RECOVER_MS,
 } from '../constants';
 import particleFire from 'three-particle-fire';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
@@ -43,6 +45,11 @@ const tmpQuaternion = new THREE.Quaternion();
 const tmpColor = new THREE.Color();
 const tmpEuler = new THREE.Euler();
 const _scratchFlamePos = new THREE.Vector3();
+// Blast-tumble scratch (reused — no per-frame allocation).
+const _tumbleAxis = new THREE.Vector3();
+const _tumbleQuat = new THREE.Quaternion();
+const _uprightQuat = new THREE.Quaternion();
+const _offsetVec = new THREE.Vector3();
 
 // LOD distance thresholds (squared, horizontal) for the renderer.
 const SHOMBIE_RENDER_DIST_SQ = SHOMBIE_RENDER_DISTANCE * SHOMBIE_RENDER_DISTANCE;
@@ -600,7 +607,32 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           let knockdownTiltAngle = 0;
           let knockdownYAngle = shombie.rotation;
 
-          if (shombie.isKnockedDown) {
+          // ── Blast tumble orientation (takes priority): spin in the air, hold
+          //    the landed pose, then slerp upright. Time-driven from instance
+          //    fields so it's smooth every frame.
+          let tumbling = false;
+          if (shombie.isTumbling) {
+            tumbling = true;
+            const tnow = Date.now();
+            const launchAt = shombie.tumbleLaunchAt ?? tnow;
+            const landedAt = shombie.tumbleLandedAt ?? 0;
+            const rate = shombie.tumbleRate ?? 0;
+            _tumbleAxis.set(shombie.tumbleAxisX ?? 0, shombie.tumbleAxisY ?? 1, shombie.tumbleAxisZ ?? 0);
+            if (landedAt === 0) {
+              tmpQuaternion.setFromAxisAngle(_tumbleAxis, rate * (tnow - launchAt) / 1000);
+            } else {
+              _tumbleQuat.setFromAxisAngle(_tumbleAxis, rate * (landedAt - launchAt) / 1000);
+              const sinceLand = tnow - landedAt;
+              if (sinceLand < TUMBLE_WAIT_MS) {
+                tmpQuaternion.copy(_tumbleQuat);
+              } else {
+                const t = Math.min(1, (sinceLand - TUMBLE_WAIT_MS) / TUMBLE_RECOVER_MS);
+                tmpEuler.set(0, shombie.rotation, 0);
+                _uprightQuat.setFromEuler(tmpEuler);
+                tmpQuaternion.copy(_tumbleQuat).slerp(_uprightQuat, t);
+              }
+            }
+          } else if (shombie.isKnockedDown) {
             knockdownYAngle = shombie.knockdownDirection
               ? Math.atan2(shombie.knockdownDirection.x, shombie.knockdownDirection.z)
               : shombie.rotation;
@@ -679,7 +711,7 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             // Per-part wobble/swing animation — skipped for frozen (distant)
             // shombies; they hold a static pose (the trig here is the bulk of
             // the per-frame CPU cost at horde scale).
-            if (!lodFrozen) {
+            if (!lodFrozen && !tumbling) {
               if (part.name === 'head') {
                 offsetX += headOffsetX * scale;
                 offsetY += headOffsetY * scale;
@@ -723,7 +755,15 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             let finalOffsetY = offsetY;
             let finalOffsetZ = offsetZ;
 
-            if (shombie.isKnockedDown && knockdownTiltAngle > 0) {
+            if (tumbling) {
+              // Rigid-body tumble: rotate the whole part offset by the tumble
+              // quaternion (already in tmpQuaternion, also used as the instance
+              // orientation below).
+              _offsetVec.set(offsetX, offsetY, offsetZ).applyQuaternion(tmpQuaternion);
+              finalOffsetX = _offsetVec.x;
+              finalOffsetY = _offsetVec.y;
+              finalOffsetZ = _offsetVec.z;
+            } else if (shombie.isKnockedDown && knockdownTiltAngle > 0) {
               const cosY = Math.cos(-knockdownYAngle);
               const sinY = Math.sin(-knockdownYAngle);
               const alignedX = offsetX * cosY - offsetZ * sinY;

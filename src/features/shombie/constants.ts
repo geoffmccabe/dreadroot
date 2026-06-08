@@ -32,9 +32,16 @@ export const SHOMBIE_ATTACK_COOLDOWN_MS = 1000;
 // Knockback decay rate per second
 export const KNOCKBACK_DECAY_RATE = 8.0;
 // Cap on blast-launch speed (blocks/s). The raw grenade impulse could fling a
-// shombie hundreds of blocks/seconds away; this keeps launches dramatic but
-// bounded (~10-block arc) so they return quickly.
-export const MAX_KNOCKBACK_SPEED = 30;
+// shombie absurdly far; this keeps launches big + fun but bounded. Set to ~half
+// the original uncapped magnitude per design (dramatic arcs, still return).
+export const MAX_KNOCKBACK_SPEED = 150;
+
+// Blast tumble (ragdoll-lite). After landing they hold the landed pose for
+// TUMBLE_WAIT_MS, then rise upright over TUMBLE_RECOVER_MS and resume.
+export const TUMBLE_WAIT_MS = 2000;
+export const TUMBLE_RECOVER_MS = 500;
+export const TUMBLE_RATE_MIN = 6;  // rad/s
+export const TUMBLE_RATE_MAX = 13; // rad/s
 
 // Gravity for shombies
 export const SHOMBIE_GRAVITY = 20.0;

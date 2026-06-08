@@ -15,7 +15,7 @@ import {
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
-import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED } from '../constants';
+import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX } from '../constants';
 
 // Head movement type randomizer - 1/3 each
 function randomHeadMovementType(): HeadMovementType {
@@ -363,6 +363,23 @@ export function useShombieSystem({
         shombie.velocity.z *= sc;
       }
       shombie.stunUntil = Date.now() + 1000;
+
+      // Blast (upward launch) → tumble: random 3D spin in the air, then land
+      // rotated, slide, wait, and rise upright (handled in applyResult +
+      // renderer). Bullets (y=0) just get the small knockback above.
+      if (knockbackDir.y > 0) {
+        const ax = Math.random() * 2 - 1;
+        const ay = Math.random() * 2 - 1;
+        const az = Math.random() * 2 - 1;
+        const inv = 1 / (Math.hypot(ax, ay, az) || 1);
+        shombie.isTumbling = true;
+        shombie.tumbleAxisX = ax * inv;
+        shombie.tumbleAxisY = ay * inv;
+        shombie.tumbleAxisZ = az * inv;
+        shombie.tumbleRate = TUMBLE_RATE_MIN + Math.random() * (TUMBLE_RATE_MAX - TUMBLE_RATE_MIN);
+        shombie.tumbleLaunchAt = Date.now();
+        shombie.tumbleLandedAt = 0;
+      }
     }
 
     if (shombie.currentHealth <= 0) {

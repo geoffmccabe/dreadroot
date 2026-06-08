@@ -28,6 +28,8 @@ import {
   SHOMBIE_LANE_HALF_WIDTH,
   SHOMBIE_LANE_BREAK_DISTANCE,
   SHOMBIE_HITBOX_RADIUS,
+  TUMBLE_WAIT_MS,
+  TUMBLE_RECOVER_MS,
 } from '@/features/shombie/constants';
 import { isPointInFSZ, clampPositionOutsideFSZ } from '../fortressSafeZone';
 
@@ -214,6 +216,26 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
       const decay = Math.exp(-KNOCKBACK_DECAY_RATE * deltaSeconds);
       shombie.velocity.x *= decay;
       shombie.velocity.z *= decay;
+    }
+
+    // ── Blast tumble: detect landing, then hold + recover. The air arc and
+    //    the ground slide are the physics above; here we just manage state and
+    //    suppress AI movement until the shombie has risen back upright.
+    if (shombie.isTumbling) {
+      const tnow = Date.now();
+      if (shombie.tumbleLandedAt === 0 &&
+          shombie.position.y <= 0.001 &&
+          tnow - (shombie.tumbleLaunchAt ?? tnow) > 150) {
+        shombie.tumbleLandedAt = tnow; // landed in its rotated pose; slides via decay
+      }
+      if (shombie.tumbleLandedAt && tnow - shombie.tumbleLandedAt >= TUMBLE_WAIT_MS + TUMBLE_RECOVER_MS) {
+        shombie.isTumbling = false; // upright again → fall through to normal AI
+      } else {
+        const clamped = clampPositionOutsideFSZ(shombie.position.x, shombie.position.z);
+        shombie.position.x = clamped.x;
+        shombie.position.z = clamped.z;
+        return;
+      }
     }
 
     // If stunned, skip AI movement but apply FSZ clamp

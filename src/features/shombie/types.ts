@@ -120,6 +120,21 @@ export interface ShombieInstance {
   knockdownSlideDistance?: number;
   /** Stun end time (ms timestamp) - shombie doesn't move while stunned */
   stunUntil?: number;
+  // ── Blast tumble (ragdoll-lite): spin in the air, land rotated, slide, wait,
+  //    then rise upright and resume. All time-driven so the renderer can
+  //    compute the orientation smoothly each frame from these fields.
+  /** True while tumbling from a blast (skips AI movement). */
+  isTumbling?: boolean;
+  /** Unit spin axis (random per launch). */
+  tumbleAxisX?: number;
+  tumbleAxisY?: number;
+  tumbleAxisZ?: number;
+  /** Spin rate (rad/s). */
+  tumbleRate?: number;
+  /** Launch timestamp (ms). */
+  tumbleLaunchAt?: number;
+  /** Landing timestamp (ms); 0 = still airborne. */
+  tumbleLandedAt?: number;
   /** Active fires on body parts */
   bodyFires: ShombieBodyFire[];
 }
