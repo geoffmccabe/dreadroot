@@ -39,7 +39,7 @@ interface UseShroomerSystemOptions {
 }
 
 // Audio settings (reuse shombie's moan — shroomer shares shombie sounds)
-const MOAN_SOUND_URL = '/shombie_moan_1.mp3';
+const MOAN_SOUND_URL = '/shroomers_noises.mp3';
 const MOAN_CHECK_INTERVAL_MS = 5000; // Check every 5 seconds
 const MOAN_CHANCE = 0.1; // 10% chance per zombie per check
 const MOAN_VOLUME = 0.5; // 50% volume
