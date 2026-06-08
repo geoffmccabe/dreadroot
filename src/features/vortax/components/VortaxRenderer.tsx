@@ -146,6 +146,10 @@ const sphereGeometry = new THREE.SphereGeometry(0.5, 10, 8);
 
 // Generous cap on total instanced spheres. ~170 spheres/vortax (doubled counts).
 const SPHERES_PER_VORTAX = 180;
+
+// Damped-spring constants for the post-blast regroup (~1.5s settle).
+const REGROUP_SPRING = 20;
+const REGROUP_DAMP = 6;
 const MAX_SPHERE_INSTANCES = MAX_TOTAL_VORTAXES * SPHERES_PER_VORTAX;
 
 const EMERGENCE_DEPTH = 2.0;
@@ -283,14 +287,21 @@ export const VortaxRenderer = forwardRef<VortaxRendererHandle, VortaxRendererPro
     void scene;
 
     // Create atlas material
+    // Spheres are 70% transparent (30% opaque) at all times.
+    const makeGhostly = (m: THREE.MeshStandardMaterial) => {
+      m.transparent = true;
+      m.opacity = 0.3;
+      m.depthWrite = false;
+      return m;
+    };
     const material = useMemo(() => {
       const atlasTexture = getGlobalAtlasTexture();
       if (!atlasTexture || !isAtlasReady()) {
-        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.1 });
+        const mat = makeGhostly(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.1 }));
         materialRef.current = mat;
         return mat;
       }
-      const mat = createAtlasStandardMaterial(atlasTexture, { roughness: 0.8, metalness: 0.1 });
+      const mat = makeGhostly(createAtlasStandardMaterial(atlasTexture, { roughness: 0.8, metalness: 0.1 }));
       materialRef.current = mat;
       return mat;
     }, []);
@@ -301,7 +312,7 @@ export const VortaxRenderer = forwardRef<VortaxRendererHandle, VortaxRendererPro
         if (isAtlasReady()) {
           const atlasTexture = getGlobalAtlasTexture();
           if (atlasTexture && materialRef.current && !materialRef.current.map) {
-            const newMat = createAtlasStandardMaterial(atlasTexture, { roughness: 0.8, metalness: 0.1 });
+            const newMat = makeGhostly(createAtlasStandardMaterial(atlasTexture, { roughness: 0.8, metalness: 0.1 }));
             materialRef.current = newMat;
             if (sphereMeshRef.current) sphereMeshRef.current.material = newMat;
           }
@@ -465,11 +476,29 @@ export const VortaxRenderer = forwardRef<VortaxRendererHandle, VortaxRendererPro
             const orbX = _offsetVec.x * sp.orbitRadius * scale;
             const orbY = _offsetVec.y * sp.orbitRadius * scale;
             const orbZ = _offsetVec.z * sp.orbitRadius * scale;
-            const lx = devX + orbX;
-            const lz = devZ + orbZ;
+
+            // Blast displacement: damped spring back to the orbit (regroup).
+            // Only scattered spheres pay the cost.
+            if (sp.dispX || sp.dispY || sp.dispZ || sp.velX || sp.velY || sp.velZ) {
+              sp.velX += (-REGROUP_SPRING * sp.dispX - REGROUP_DAMP * sp.velX) * deltaTime;
+              sp.velY += (-REGROUP_SPRING * sp.dispY - REGROUP_DAMP * sp.velY) * deltaTime;
+              sp.velZ += (-REGROUP_SPRING * sp.dispZ - REGROUP_DAMP * sp.velZ) * deltaTime;
+              sp.dispX += sp.velX * deltaTime;
+              sp.dispY += sp.velY * deltaTime;
+              sp.dispZ += sp.velZ * deltaTime;
+              // Snap to rest once tiny so they fully regroup.
+              if (Math.abs(sp.dispX) < 1e-3 && Math.abs(sp.dispY) < 1e-3 && Math.abs(sp.dispZ) < 1e-3 &&
+                  Math.abs(sp.velX) < 1e-3 && Math.abs(sp.velY) < 1e-3 && Math.abs(sp.velZ) < 1e-3) {
+                sp.dispX = sp.dispY = sp.dispZ = 0;
+                sp.velX = sp.velY = sp.velZ = 0;
+              }
+            }
+
+            const lx = devX + orbX + sp.dispX * scale;
+            const lz = devZ + orbZ + sp.dispZ * scale;
             tmpPosition.set(
               pc.x + (lx * cosR - lz * sinR),
-              pc.y + devY + orbY,
+              pc.y + devY + orbY + sp.dispY * scale,
               pc.z + (lx * sinR + lz * cosR),
             );
 

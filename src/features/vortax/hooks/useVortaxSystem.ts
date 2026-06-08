@@ -39,11 +39,13 @@ interface UseVortaxSystemOptions {
   onVortaxKilled?: (tier: number) => void;
 }
 
-// Audio settings (reuse the shroomer's moan for ambient/death for now)
+// Ambient: the vortax's own sound, emitted continuously while it's present
+// (3D-spatial + distance falloff via playSpatialSound). Death reuses the
+// shroomer moan pitched down for now.
+const VORTAX_AMBIENT_URL = '/vortax.mp3';
 const MOAN_SOUND_URL = '/shroomers_noises.mp3';
-const MOAN_CHECK_INTERVAL_MS = 5000;
-const MOAN_CHANCE = 0.1;
-const MOAN_VOLUME = 0.5;
+const MOAN_CHECK_INTERVAL_MS = 5000; // ≈ clip length → near-continuous loop
+const MOAN_VOLUME = 0.6;
 
 const DEATH_SOUND_VOLUME = 1.0;
 const DEATH_SOUND_PITCH_DOWN_MS = 1300;
@@ -51,11 +53,14 @@ const MAX_CONCURRENT_DEATH_SOUNDS = 6;
 
 const VORTAX_SPAWN_FREQUENCY_MULT = 1;
 
+// How long the cloud stays scattered + regrouping after a grenade blast.
+const VORTAX_REGROUP_MS = 1500;
+
 // Pop-sound throttle so a flamethrower destroying many spheres doesn't spam audio.
 const MAX_CONCURRENT_POP_SOUNDS = 8;
 
 // Preload vortax sounds (pop file may not exist yet — preload is best-effort)
-preloadSpatialSounds([MOAN_SOUND_URL, VORTAX_POP_SOUND_URL]);
+preloadSpatialSounds([VORTAX_AMBIENT_URL, MOAN_SOUND_URL, VORTAX_POP_SOUND_URL]);
 
 /**
  * Hook to manage active vortaxes with chunk-based spawning.
@@ -115,13 +120,12 @@ export function useVortaxSystem({
 
       for (const vortax of vortaxesRef.current) {
         if (!vortax.isActive) continue;
-        if (Math.random() < MOAN_CHANCE) {
-          const dx = vortax.position.x - p.x;
-          const dy = vortax.position.y - p.y;
-          const dz = vortax.position.z - p.z;
-          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          playSpatialSound(MOAN_SOUND_URL, distance, { baseVolume: MOAN_VOLUME });
-        }
+        // Every active vortax emits its sound each cycle (near-continuous).
+        const dx = vortax.position.x - p.x;
+        const dy = vortax.position.y - p.y;
+        const dz = vortax.position.z - p.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        playSpatialSound(VORTAX_AMBIENT_URL, distance, { baseVolume: MOAN_VOLUME });
       }
     };
 
@@ -299,13 +303,14 @@ export function useVortaxSystem({
     vortax.spheres[bestIdx].destroyed = true;
     vortax.liveSphereCount = Math.max(0, vortax.liveSphereCount - 1);
 
-    // POP sound at the hit point (throttled).
+    // POP sound + the normal bullet-impact thud at the hit point (throttled).
     if (popSoundCountRef.current < MAX_CONCURRENT_POP_SOUNDS) {
       const p = getLocalPlayerSnapshot();
       const ddx = hitX - p.x, ddy = hitY - p.y, ddz = hitZ - p.z;
       const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
       popSoundCountRef.current++;
       playSpatialSound(VORTAX_POP_SOUND_URL, dist, { baseVolume: 0.6 });
+      playSpatialSound('/bullet_impact_1.mp3', dist, { baseVolume: 0.6 });
       setTimeout(() => { popSoundCountRef.current--; }, 300);
     }
 
@@ -334,6 +339,28 @@ export function useVortaxSystem({
 
     return false;
   }, [onVortaxKilled]);
+
+  // Grenade blast: shove every live sphere outward (part-LOCAL velocity, so
+  // divide the world impulse by the instance scale) plus a random scatter, then
+  // mark the vortax regrouping. The renderer springs the spheres back to their
+  // orbit; the adapter pauses attacks until then.
+  const scatterVortaxSpheres = useCallback((
+    vortaxId: string,
+    blastDir: THREE.Vector3,
+    worldStrength: number,
+  ) => {
+    const vortax = vortaxesRef.current.find(s => s.id === vortaxId);
+    if (!vortax || !vortax.isActive) return;
+    const s = worldStrength / (vortax.scale ?? 1);
+    for (let i = 0; i < vortax.spheres.length; i++) {
+      const sp = vortax.spheres[i];
+      if (sp.destroyed) continue;
+      sp.velX = blastDir.x * s + (Math.random() * 2 - 1) * s * 0.7;
+      sp.velY = Math.abs(blastDir.y) * s + Math.random() * s * 0.7 + s * 0.3;
+      sp.velZ = blastDir.z * s + (Math.random() * 2 - 1) * s * 0.7;
+    }
+    vortax.regroupUntil = Date.now() + VORTAX_REGROUP_MS;
+  }, []);
 
   const clearAllVortaxes = useCallback(() => {
     vortaxesRef.current = [];
@@ -406,10 +433,14 @@ export function useVortaxSystem({
       },
       applyDamage: (s, info) => {
         dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
+        // Grenade blast: scatter the whole cloud at 20% blast strength (it
+        // regroups), instead of destroying a single sphere.
+        if (info.source === 'explosion') {
+          scatterVortaxSpheres(s.id, dirScratch, (info.bulletSpeed || 1.0) * 0.2);
+          return false;
+        }
         const kbScale = s.definition.knockback_received ?? 1;
-        const kbStrength = info.source === 'explosion'
-          ? (info.bulletSpeed || 1.0)
-          : 11 * kbScale * Math.max(1, (info.bulletSpeed || 0) / 60) / (s.scale ?? 1);
+        const kbStrength = 11 * kbScale * Math.max(1, (info.bulletSpeed || 0) / 60) / (s.scale ?? 1);
         return hitVortaxSphere(s.id, info.hitX, info.hitY, info.hitZ, dirScratch, kbStrength);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
@@ -423,7 +454,7 @@ export function useVortaxSystem({
         ];
       },
     });
-  }, [hitVortaxSphere]);
+  }, [hitVortaxSphere, scatterVortaxSpheres]);
 
   void cameraRef;
   void playerLevel;

@@ -102,6 +102,10 @@ export interface VortaxSphere {
   spinAxisZ: number;
   spinSpeed: number; // rad/s, random sign + magnitude
   spinPhase: number;
+  /** Blast displacement from the orbit position + its velocity (damped spring
+   *  back to 0). A grenade scatters the cloud; it then regroups. */
+  dispX: number; dispY: number; dispZ: number;
+  velX: number; velY: number; velZ: number;
   /** Destroyed by a bullet/flame hit → never rendered again, never respawns. */
   destroyed: boolean;
 }
@@ -142,6 +146,9 @@ export interface VortaxInstance {
   spheres: VortaxSphere[];
   /** Count of spheres not yet destroyed (cached so we don't scan every hit). */
   liveSphereCount: number;
+  /** While set & in the future, the cloud is scattered by a blast and regrouping
+   *  — the vortax pauses attacking until its spheres return. */
+  regroupUntil?: number;
 }
 
 /**
@@ -279,6 +286,8 @@ export function generateVortaxSpheres(): VortaxSphere[] {
         spinAxisX: spin.x, spinAxisY: spin.y, spinAxisZ: spin.z,
         spinSpeed: (Math.random() * 2 - 1) * 4, // ±4 rad/s self-spin
         spinPhase: Math.random() * Math.PI * 2,
+        dispX: 0, dispY: 0, dispZ: 0,
+        velX: 0, velY: 0, velZ: 0,
         destroyed: false,
       });
     }

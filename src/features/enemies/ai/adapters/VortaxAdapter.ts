@@ -154,6 +154,9 @@ export const VortaxAdapter: EnemyAdapter<VortaxWithAI> = {
   ): void {
     if (!EnemyManager.isAIControlled()) return;
 
+    // Scattered by a grenade → pause (no move/attack) until the cloud regroups.
+    if (vortax.regroupUntil && Date.now() < vortax.regroupUntil) return;
+
     const deltaSeconds = deltaMs / 1000;
 
     // Handle knockdown animation (3 phases: tilt, slide, recovery)
