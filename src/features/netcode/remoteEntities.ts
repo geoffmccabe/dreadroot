@@ -53,6 +53,8 @@ export class RemoteWorld {
   private current = new Map<number, RemoteEntity>();
   /** Time-ordered snapshots for interpolation (oldest → newest). */
   private buffer: Array<{ time: number; ents: Map<number, RemoteEntity> }> = [];
+  /** Must hold > INTERP_DELAY_MS of history to bracket the render time. 8 ticks
+   *  @20 Hz = 400 ms ≫ the 100 ms delay; raise this if INTERP_DELAY_MS grows. */
   private readonly maxBuffer = 8;
 
   /** Apply a decoded diff received at local time `timeMs`, and buffer the
@@ -74,43 +76,56 @@ export class RemoteWorld {
     return this.buffer.length ? this.buffer[this.buffer.length - 1].ents : this.current;
   }
 
+  /** Scratch: keys written this sample() call (reused → no per-frame alloc). */
+  private _written = new Set<number>();
+
   /**
    * Interpolated state at `renderTimeMs` (caller passes `now - INTERP_DELAY_MS`)
-   * into `out` (cleared + refilled, reused across frames). Entities that
-   * appeared snap to the newer value; entities that left are absent.
+   * into `out`. This is called EVERY RENDER FRAME, so it MUTATES the existing
+   * `out` entities in place (no per-frame object allocation — only a new object
+   * for an entity that just appeared) and deletes ones that left. Entities that
+   * appeared snap to the newer value; entities that left are removed.
    */
   sample(renderTimeMs: number, out: Map<number, RemoteEntity>): void {
-    out.clear();
     const buf = this.buffer;
-    if (buf.length === 0) return;
+    if (buf.length === 0) { out.clear(); return; }
+
+    // Pick the bracketing pair (older ≤ render < newer). The before/after/
+    // single-snapshot cases collapse to older === newer (no interpolation).
+    let older: { ents: Map<number, RemoteEntity> };
+    let newer: { ents: Map<number, RemoteEntity> };
+    let t = 0;
     if (renderTimeMs <= buf[0].time) {
-      for (const [k, e] of buf[0].ents) out.set(k, copyEntity(e));
-      return;
+      older = newer = buf[0];
+    } else if (renderTimeMs >= buf[buf.length - 1].time) {
+      older = newer = buf[buf.length - 1]; // starved → hold newest
+    } else {
+      let i = 0;
+      while (i < buf.length - 1 && buf[i + 1].time <= renderTimeMs) i++;
+      older = buf[i]; newer = buf[i + 1];
+      const span = newer.time - older.time;
+      t = span > 0 ? (renderTimeMs - older.time) / span : 0;
     }
-    if (renderTimeMs >= buf[buf.length - 1].time) {
-      // Starved (no future snapshot yet) → hold the newest.
-      for (const [k, e] of buf[buf.length - 1].ents) out.set(k, copyEntity(e));
-      return;
+    const interp = older !== newer;
+
+    this._written.clear();
+    for (const [k, eb] of newer.ents) {
+      const ea = interp ? older.ents.get(k) : undefined;
+      let e = out.get(k);
+      if (!e) { e = { registryOrigin: 0, entityType: 0, id: 0, x: 0, y: 0, z: 0, yaw: 0, stateBits: 0 }; out.set(k, e); }
+      e.registryOrigin = eb.registryOrigin; e.entityType = eb.entityType; e.id = eb.id; e.stateBits = eb.stateBits;
+      if (ea) {
+        e.x = ea.x + (eb.x - ea.x) * t;
+        e.y = ea.y + (eb.y - ea.y) * t;
+        e.z = ea.z + (eb.z - ea.z) * t;
+        e.yaw = lerpAngle(ea.yaw, eb.yaw, t);
+      } else {
+        e.x = eb.x; e.y = eb.y; e.z = eb.z; e.yaw = eb.yaw;
+      }
+      this._written.add(k);
     }
-    // Bracketing pair a (≤ render) … b (> render).
-    let i = 0;
-    while (i < buf.length - 1 && buf[i + 1].time <= renderTimeMs) i++;
-    const a = buf[i], b = buf[i + 1];
-    const span = b.time - a.time;
-    const t = span > 0 ? (renderTimeMs - a.time) / span : 0;
-    for (const [k, eb] of b.ents) {
-      const ea = a.ents.get(k);
-      if (!ea) { out.set(k, copyEntity(eb)); continue; } // appeared between a,b
-      out.set(k, {
-        registryOrigin: eb.registryOrigin, entityType: eb.entityType, id: eb.id,
-        x: ea.x + (eb.x - ea.x) * t,
-        y: ea.y + (eb.y - ea.y) * t,
-        z: ea.z + (eb.z - ea.z) * t,
-        yaw: lerpAngle(ea.yaw, eb.yaw, t),
-        stateBits: eb.stateBits,
-      });
-    }
-    // Entities in `a` but not `b` have left → intentionally omitted.
+    // Drop entities that left (in `out` but not this frame's snapshot).
+    for (const k of out.keys()) if (!this._written.has(k)) out.delete(k);
   }
 
   clear(): void {

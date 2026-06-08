@@ -30,6 +30,10 @@ function handleSnapshot(buf: ArrayBuffer): void {
     ctx.postMessage({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
     return;
   }
+  // Drop stale / duplicate ticks (out-of-order delivery): diffing a snapshot
+  // older than our baseline would emit a backwards diff. (`last` is reset to
+  // null on connect, so a fresh stream starting at tick 0 is accepted.)
+  if (last && snap.tick <= last.tick) return;
   // Rebuild the prev lookup from last tick (reused map → no per-tick alloc).
   prevByKey.clear();
   if (last) for (const e of last.entities) prevByKey.set(entityKey(e.registryOrigin, e.id), e);
