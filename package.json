@@ -13,7 +13,8 @@
     "check:snapshot-roundtrip": "node --experimental-strip-types scripts/check-snapshot-roundtrip.ts",
     "check:netcode-pipeline": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-netcode-pipeline.ts",
     "check:server-tick": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-server-tick.ts",
-    "check:prediction": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-prediction.ts"
+    "check:prediction": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-prediction.ts",
+    "check:lagcomp": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-lagcomp.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
