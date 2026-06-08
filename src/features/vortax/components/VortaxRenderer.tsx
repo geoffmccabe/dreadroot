@@ -287,10 +287,10 @@ export const VortaxRenderer = forwardRef<VortaxRendererHandle, VortaxRendererPro
     void scene;
 
     // Create atlas material
-    // Spheres are 70% transparent (30% opaque) at all times.
+    // Spheres are 70% opaque (30% transparent) at all times.
     const makeGhostly = (m: THREE.MeshStandardMaterial) => {
       m.transparent = true;
-      m.opacity = 0.3;
+      m.opacity = 0.7;
       m.depthWrite = false;
       return m;
     };
