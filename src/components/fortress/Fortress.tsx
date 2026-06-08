@@ -644,8 +644,12 @@ export function Fortress() {
         break;
       }
     }
+    // Refetch inventory + QS from the server so an OPEN inventory/HUD panel
+    // shows the granted item immediately (the optimistic paths don't always
+    // surface it live — it otherwise only appeared after a close/reopen).
+    await refetchInventoryAndQs();
     return true;
-  }, [addItem, updateEquippedSlot, user?.id]);
+  }, [addItem, updateEquippedSlot, user?.id, refetchInventoryAndQs]);
 
   const grantAdminGrenade = useCallback(async (): Promise<boolean> => {
     return grantAdminItem(grenadeT1IdRef.current);

@@ -184,6 +184,10 @@ export function FirstPersonControls({
   // God Mode state (fly + noclip for admins/superadmins)
   const godModeRef = useRef(false);
   const [godModeEnabled, setGodModeEnabled] = useState(false);
+  // Sticky admin: once confirmed admin/superadmin this session, latch it so a
+  // transient roles refetch/clear can't silently disable admin keybinds
+  // (God Mode toggle, Shift+E super-sprint) mid-play.
+  const adminEverRef = useRef(false);
   const onGround = useRef(true);
   const yaw = useRef(Math.PI); // Start facing outward (180 degrees)
   const pitch = useRef(0);
@@ -618,8 +622,12 @@ export function FirstPersonControls({
           document.exitPointerLock();
         }
         break;
-      case 'Backquote': // ` or ~ key for God Mode
-        if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
+      case 'Backquote': // ` or ~ key for God Mode (admin/superadmin)
+        // Allow toggling if admin now, ever-was-admin this session (sticky —
+        // survives a transient roles clear), OR if God Mode is already ON (you
+        // must always be able to turn it OFF).
+        if (godModeRef.current || adminEverRef.current ||
+            userRoles.includes('admin') || userRoles.includes('superadmin')) {
           godModeRef.current = !godModeRef.current;
           setGodModeEnabled(godModeRef.current);
           onGodModeChange?.(godModeRef.current);
@@ -1636,10 +1644,6 @@ export function FirstPersonControls({
   // Store refs for values needed in frame loop to avoid stale closures
   const collidersRef = useRef(colliders);
   const userRolesRef = useRef(userRoles);
-  // Sticky admin: once confirmed admin/superadmin this session, latch it so a
-  // transient roles refetch/clear can't silently disable admin keybinds
-  // (e.g. Shift+E super-sprint) mid-play.
-  const adminEverRef = useRef(false);
   const blockPlacementModeRef = useRef(blockPlacementMode);
   const showOwnershipOutlineRef = useRef(showOwnershipOutline);
   const currentUserIdRef = useRef(currentUserId);

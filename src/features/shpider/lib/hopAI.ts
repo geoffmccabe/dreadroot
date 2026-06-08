@@ -19,7 +19,10 @@ import { findGroundY, pickTreeAwareTarget, findAdjacentWall } from './surfaceDet
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { playSpatialSound } from '@/lib/spatialAudio';
-import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
+import { isPointInFSZ, FSZ_MIN_X, FSZ_MAX_X, FSZ_MIN_Z, FSZ_MAX_Z } from '@/features/enemies/ai/fortressSafeZone';
+
+// Slow walk-out speed when a shpider is knocked into the fortress safe zone.
+const FSZ_ESCAPE_SPEED = 3; // blocks/s
 
 const _normalScratch = new THREE.Vector3();
 const _posScratch = new THREE.Vector3();
@@ -172,6 +175,26 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
 
   // ── IDLE: pick a target and decide whether to crawl or hop.
   if (s.hop.phase === 'idle') {
+    // FSZ escape: a shpider knocked into the fortress safe zone (e.g. by a
+    // grenade) slowly walks to the nearest edge and out, every frame (ignores
+    // the hop throttle), instead of getting stuck inside.
+    if (isPointInFSZ(s.position.x, 0, s.position.z)) {
+      const dMinX = s.position.x - FSZ_MIN_X;
+      const dMaxX = FSZ_MAX_X - s.position.x;
+      const dMinZ = s.position.z - FSZ_MIN_Z;
+      const dMaxZ = FSZ_MAX_Z - s.position.z;
+      const minD = Math.min(dMinX, dMaxX, dMinZ, dMaxZ);
+      let dirX = 0, dirZ = 0;
+      if (minD === dMinX) dirX = -1;
+      else if (minD === dMaxX) dirX = 1;
+      else if (minD === dMinZ) dirZ = -1;
+      else dirZ = 1;
+      const step = FSZ_ESCAPE_SPEED * dt;
+      s.position.x += dirX * step;
+      s.position.z += dirZ * step;
+      s.rotation = Math.atan2(dirX, dirZ);
+      return;
+    }
     if (now < s.hop.nextHopAt) return;
 
     // Stacking: shpiders carrying another on top freeze. Shpiders
