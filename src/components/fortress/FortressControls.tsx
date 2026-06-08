@@ -1636,6 +1636,10 @@ export function FirstPersonControls({
   // Store refs for values needed in frame loop to avoid stale closures
   const collidersRef = useRef(colliders);
   const userRolesRef = useRef(userRoles);
+  // Sticky admin: once confirmed admin/superadmin this session, latch it so a
+  // transient roles refetch/clear can't silently disable admin keybinds
+  // (e.g. Shift+E super-sprint) mid-play.
+  const adminEverRef = useRef(false);
   const blockPlacementModeRef = useRef(blockPlacementMode);
   const showOwnershipOutlineRef = useRef(showOwnershipOutline);
   const currentUserIdRef = useRef(currentUserId);
@@ -2072,8 +2076,10 @@ export function FirstPersonControls({
       const baseSpeed = 4.0;
       const crawlSpeed = baseSpeed * 0.6;
       const godSpeed = keys.current.shift ? 16.0 : 8.0; // Faster in god mode
-      const isAdmin = userRolesRef.current.includes('admin') || userRolesRef.current.includes('superadmin');
-      const superSprintActive = isAdmin && keys.current.shift && keys.current.e;
+      if (userRolesRef.current.includes('admin') || userRolesRef.current.includes('superadmin')) {
+        adminEverRef.current = true;
+      }
+      const superSprintActive = adminEverRef.current && keys.current.shift && keys.current.e;
       const superSprintSpeed = baseSpeed * 10; // 10x normal speed for admin Shift+E
       const runSpeed = godModeRef.current
         ? godSpeed

@@ -62,11 +62,21 @@ export function resolveBlastHit(input: BlastHitInput): BlastHitResult {
   // Horizontal direction away from blast center; tilted up by a
   // random 0–45° angle so enemies fly outward + skyward. Unit length
   // preserved via cos/sin parameterization.
-  const dHoriz = Math.max(0.01, Math.hypot(dx, dz));
-  const horizX = dx / dHoriz;
-  const horizZ = dz / dHoriz;
-
   const rng = input.rng ?? Math.random;
+
+  // Horizontal direction away from blast center. If the target is basically AT
+  // the blast's XZ (dead-center), the radial direction is undefined and it would
+  // launch straight up — so pick a random horizontal direction to scatter it.
+  const horizLen = Math.hypot(dx, dz);
+  let horizX: number, horizZ: number;
+  if (horizLen < 0.5) {
+    const a = rng() * Math.PI * 2;
+    horizX = Math.cos(a);
+    horizZ = Math.sin(a);
+  } else {
+    horizX = dx / horizLen;
+    horizZ = dz / horizLen;
+  }
   const upAngle = rng() * (Math.PI / 4); // 0–45°
   const cosA = Math.cos(upAngle);
   const sinA = Math.sin(upAngle);

@@ -31,6 +31,10 @@ export const SHOMBIE_ATTACK_COOLDOWN_MS = 1000;
 
 // Knockback decay rate per second
 export const KNOCKBACK_DECAY_RATE = 8.0;
+// Cap on blast-launch speed (blocks/s). The raw grenade impulse could fling a
+// shombie hundreds of blocks/seconds away; this keeps launches dramatic but
+// bounded (~10-block arc) so they return quickly.
+export const MAX_KNOCKBACK_SPEED = 30;
 
 // Gravity for shombies
 export const SHOMBIE_GRAVITY = 20.0;

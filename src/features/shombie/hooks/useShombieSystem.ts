@@ -15,7 +15,7 @@ import {
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
-import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '../constants';
+import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED } from '../constants';
 
 // Head movement type randomizer - 1/3 each
 function randomHeadMovementType(): HeadMovementType {
@@ -351,6 +351,16 @@ export function useShombieSystem({
       shombie.velocity.z = knockbackDir.z * kbStrength;
       if (knockbackDir.y > 0) {
         shombie.velocity.y = knockbackDir.y * kbStrength;
+      }
+      // Cap total launch speed so blasts arc them a sane distance.
+      const sp2 = shombie.velocity.x * shombie.velocity.x
+        + shombie.velocity.y * shombie.velocity.y
+        + shombie.velocity.z * shombie.velocity.z;
+      if (sp2 > MAX_KNOCKBACK_SPEED * MAX_KNOCKBACK_SPEED) {
+        const sc = MAX_KNOCKBACK_SPEED / Math.sqrt(sp2);
+        shombie.velocity.x *= sc;
+        shombie.velocity.y *= sc;
+        shombie.velocity.z *= sc;
       }
       shombie.stunUntil = Date.now() + 1000;
     }

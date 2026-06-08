@@ -266,9 +266,14 @@ class EnemyManagerClass {
       // Determine LOD level with hysteresis (using squared distances)
       const newLod = this.calculateLodSq(distSq, reg.lodLevel);
       reg.lodLevel = newLod;
-      
-      // Skip frozen enemies entirely
-      if (newLod === AILodLevel.FROZEN) {
+
+      // Airborne enemies (e.g. blast-launched) must keep simulating gravity
+      // every frame regardless of LOD/throttle — otherwise a frozen one hangs
+      // as a "phantom" in the sky until the player flies near and un-freezes it.
+      const airborne = pos.y > 0.5;
+
+      // Skip frozen enemies entirely — unless airborne.
+      if (newLod === AILodLevel.FROZEN && !airborne) {
         continue;
       }
       
@@ -283,10 +288,10 @@ class EnemyManagerClass {
       const interval = TICK_INTERVALS_MS[newLod];
       const elapsed = now - reg.lastTickTime;
       
-      if (elapsed < interval) {
+      if (elapsed < interval && !airborne) {
         continue;
       }
-      
+
       // Update last tick time
       reg.lastTickTime = now;
       

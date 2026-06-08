@@ -207,10 +207,14 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
       shombie.velocity.y = 0;
     }
 
-    // Decay horizontal velocity (knockback)
-    const decay = Math.exp(-KNOCKBACK_DECAY_RATE * deltaSeconds);
-    shombie.velocity.x *= decay;
-    shombie.velocity.z *= decay;
+    // Decay horizontal knockback ONLY while grounded (ground friction). While
+    // airborne, preserve it so a blast launches them on a natural parabolic arc
+    // OUTWARD — not decaying to a straight-up-and-down column.
+    if (shombie.position.y <= 0.001) {
+      const decay = Math.exp(-KNOCKBACK_DECAY_RATE * deltaSeconds);
+      shombie.velocity.x *= decay;
+      shombie.velocity.z *= decay;
+    }
 
     // If stunned, skip AI movement but apply FSZ clamp
     if (isStunned) {

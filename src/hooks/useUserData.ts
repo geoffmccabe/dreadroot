@@ -226,7 +226,10 @@ export const useUserData = () => {
         .filter((s: any) => s.region === 'quick_select')
         .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
       setEquippedItems(qsRows);
-      setUserRoles(roles);
+      // Only update roles when the roles query actually succeeded. On a
+      // transient error, KEEP the previous roles instead of wiping them to []
+      // — a blip otherwise silently strips admin/superadmin powers mid-session.
+      if (!rolesError) setUserRoles(roles);
 
       // One-time avatar backfill from OAuth metadata. If the profile
       // has no avatar yet AND the auth user came in with a picture
