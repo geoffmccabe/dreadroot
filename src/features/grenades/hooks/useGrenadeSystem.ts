@@ -124,24 +124,22 @@ export function useGrenadeSystem({
     const cam = cameraRef.current;
     if (!cam) return false;
 
-    // Look direction projected onto the XZ plane gives the horizontal
-    // throw direction. Y comes from the upward kick + the camera's
-    // own vertical look (so aiming up throws further).
-    const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
-    const horizMag = Math.hypot(lookDir.x, lookDir.z) || 1;
+    // Throw ALONG the actual look direction so the grenade goes where you aim
+    // (straight up, steep angles, downward — all follow the crosshair), plus a
+    // small fixed upward kick for a natural arc. (Previously the horizontal was
+    // normalized to full speed and vertical decoupled, so it always flew the
+    // same forward distance no matter where you pointed.)
+    const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion); // unit
+    const vx = lookDir.x * GRENADE_THROW_SPEED;
+    const vy = lookDir.y * GRENADE_THROW_SPEED + GRENADE_THROW_UP;
+    const vz = lookDir.z * GRENADE_THROW_SPEED;
 
-    const vx = (lookDir.x / horizMag) * GRENADE_THROW_SPEED;
-    const vz = (lookDir.z / horizMag) * GRENADE_THROW_SPEED;
-    // 60% of the look's y-component contributes — so looking up
-    // throws higher but never straight at the player's feet.
-    const vy = GRENADE_THROW_UP + lookDir.y * GRENADE_THROW_SPEED * 0.6;
-
-    // Spawn slightly in front of the camera so the grenade doesn't
+    // Spawn slightly in front of the camera (along the aim) so it doesn't
     // poof inside the head.
     const spawn = new THREE.Vector3(
-      cam.position.x + (lookDir.x / horizMag) * 0.5,
-      cam.position.y - 0.2,
-      cam.position.z + (lookDir.z / horizMag) * 0.5,
+      cam.position.x + lookDir.x * 0.5,
+      cam.position.y - 0.2 + lookDir.y * 0.5,
+      cam.position.z + lookDir.z * 0.5,
     );
 
     const g: GrenadeInstance = {
