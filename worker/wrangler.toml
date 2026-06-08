@@ -17,4 +17,4 @@ class_name = "GameInstanceDO"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["GameInstanceDO"]
+new_sqlite_classes = ["GameInstanceDO"]
