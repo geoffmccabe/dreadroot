@@ -623,8 +623,18 @@ export function Fortress() {
   // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
   // Cmd+H (health potion).
+  const grantChainRef = useRef<Promise<void>>(Promise.resolve());
   const grantAdminItem = useCallback(async (itemId: string | null): Promise<boolean> => {
     if (!itemId || !user?.id) return false;
+    // Serialize grants: rapid Ctrl-G/Ctrl-H presses fire concurrently, and each
+    // queries the free QS slots fresh — run in parallel they'd all see the same
+    // free slot and overwrite each other. Chain them so each finishes (incl. its
+    // equip) before the next reads slots.
+    const prev = grantChainRef.current;
+    let release!: () => void;
+    grantChainRef.current = new Promise<void>((r) => { release = r; });
+    await prev;
+    try {
     const ok = await addItem(itemId, 1);
     if (!ok) return false;
     // Equip into the RIGHTMOST empty hotbar slot (6→1). Read the occupied QS
@@ -649,6 +659,9 @@ export function Fortress() {
     // surface it live — it otherwise only appeared after a close/reopen).
     await refetchInventoryAndQs();
     return true;
+    } finally {
+      release();
+    }
   }, [addItem, updateEquippedSlot, user?.id, refetchInventoryAndQs]);
 
   const grantAdminGrenade = useCallback(async (): Promise<boolean> => {
