@@ -65,6 +65,10 @@ export function getShroomerTextureId(tier: number): string {
   return `shroomer_t${tier}`;
 }
 
+export function getVortaxTextureId(tier: number): string {
+  return `vortax_t${tier}`;
+}
+
 export function getShnakeTextureId(tier: number, part: 'head' | 'body' | 'face'): string {
   return `shnake_t${tier}_${part}`;
 }
@@ -274,6 +278,18 @@ export function getShombieUVs(tier: number): AnimatedAtlasUVs | null {
 
 export function getShroomerUVs(tier: number): AnimatedAtlasUVs | null {
   const slot = atlasManager.getSlotForTexture(getShroomerTextureId(tier));
+  if (!slot) return null;
+  const baseUVs = slotIndexToUVs(slot.slotIndex);
+  return {
+    ...baseUVs,
+    frameCount: slot.metadata.frameCount || 1,
+    frameDelayMs: slot.metadata.frameDelayMs || 100,
+    baseSlotIndex: slot.slotIndex,
+  };
+}
+
+export function getVortaxUVs(tier: number): AnimatedAtlasUVs | null {
+  const slot = atlasManager.getSlotForTexture(getVortaxTextureId(tier));
   if (!slot) return null;
   const baseUVs = slotIndexToUVs(slot.slotIndex);
   return {

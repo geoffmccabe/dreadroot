@@ -76,6 +76,9 @@ export function useFortressFrameLoop({
   shroomerRendererRef,
   damageShroomer,
 
+  vortaxesRef,
+  vortaxRendererRef,
+
   walapasRef,
   updateWalapaMovement,
 
@@ -134,6 +137,9 @@ export function useFortressFrameLoop({
   shroomersRef: MutableRefObject<any[]>;
   shroomerRendererRef: MutableRefObject<any>;
   damageShroomer: (...args: any[]) => any;
+
+  vortaxesRef: MutableRefObject<any[]>;
+  vortaxRendererRef: MutableRefObject<any>;
 
   walapasRef: MutableRefObject<any[]>;
   updateWalapaMovement: (delta: number) => void;
@@ -1020,6 +1026,9 @@ export function useFortressFrameLoop({
 
   // Update shroomer renderer
   shroomerRendererRef.current?.update(camera.position, delta);
+
+  // Update vortax renderer
+  vortaxRendererRef.current?.update(camera.position, delta);
 
   // Record total frame time for diagnostics
   const frameTime = performance.now() - frameStart;

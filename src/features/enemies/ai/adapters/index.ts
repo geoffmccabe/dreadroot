@@ -23,3 +23,6 @@ export type { ShombieWithAI } from './ShombieAdapter';
 
 export { ShroomerAdapter, setShroomerLocomotionContext } from './ShroomerAdapter';
 export type { ShroomerWithAI } from './ShroomerAdapter';
+
+export { VortaxAdapter, setVortaxLocomotionContext } from './VortaxAdapter';
+export type { VortaxWithAI } from './VortaxAdapter';

@@ -95,7 +95,8 @@ export const SLOT_RANGES: Record<string, { start: number; end: number }> = {
   block: { start: 570, end: 839 },     // 270 slots
   fungal_tree: { start: 840, end: 929 }, // 90 slots (30 tiers × 3 types)
   shroomer: { start: 930, end: 959 },   // 30 slots (carved from unused 'misc')
-  misc: { start: 960, end: 1023 },      // 64 slots
+  vortax: { start: 960, end: 969 },     // 10 slots (tier 1 only; carved from 'misc')
+  misc: { start: 970, end: 1023 },      // 54 slots
 };
 
 // Placeholder colors for missing textures — light tan so blocks are visible, not black

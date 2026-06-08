@@ -4,6 +4,7 @@ import type { ShwarmDefinition } from '@/features/shwarm/types';
 import type { ShnakeDefinition } from '@/features/shnake/types';
 import type { ShombieDefinition } from '@/features/shombie/types';
 import type { ShroomerDefinition } from '@/features/shroomer/types';
+import type { VortaxDefinition } from '@/features/vortax/types';
 import type { WalapaDefinition, WalapaInstance } from '@/features/walapa/types';
 import type { ShtickmanDefinition } from '@/features/shtickman/types';
 // ============================================================
@@ -189,6 +190,9 @@ export interface SceneProps {
   // Shroomer system
   shroomerDefinitions?: ShroomerDefinition[];
   onShroomerKilled?: (tier: number) => void;
+  // Vortax system
+  vortaxDefinitions?: VortaxDefinition[];
+  onVortaxKilled?: (tier: number) => void;
   // Walapa system
   walapaDefinitions?: WalapaDefinition[];
   onWalapaKilled?: (tier: number) => void;

@@ -65,6 +65,7 @@ import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandl
 import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
 import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '@/features/shombie';
 import { useShroomerSystem, ShroomerRenderer, ShroomerRendererHandle } from '@/features/shroomer';
+import { useVortaxSystem, VortaxRenderer, VortaxRendererHandle } from '@/features/vortax';
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
@@ -189,6 +190,7 @@ export function FortressScene({
   onShnakeKilled,
   onShombieKilled,
   onShroomerKilled,
+  onVortaxKilled,
   respawnPosition,
   onRespawnComplete,
   isOwnedTreeAtPosition,
@@ -221,6 +223,7 @@ export function FortressScene({
   onFruitRemoved,
   shombieDefinitions,
   shroomerDefinitions,
+  vortaxDefinitions,
   walapaDefinitions,
   onWalapaKilled,
   shtickmanDefinitions,
@@ -548,6 +551,49 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     setShroomerSpawningEnabled(shombieSpawningEnabled);
   }, [shombieSpawningEnabled, setShroomerSpawningEnabled]);
 
+  // Vortax system — sphere-cloud giant, clone of the shroomer system.
+  const vortaxRendererRef = useRef<VortaxRendererHandle>(null);
+
+  const handleVortaxPlayerHit = useCallback((damage: number, knockbackForce: number, direction: THREE.Vector3) => {
+    setTimeout(() => {
+      if (applyDamageWithKnockback) {
+        applyDamageWithKnockback(
+          damage,
+          direction.clone(),
+          knockbackForce,
+          { type: 'enemy', entityName: 'Vortax' }
+        );
+      } else if (takeDamage) {
+        takeDamage(damage, direction.clone(), knockbackForce);
+      }
+
+      if (audioRefs.current.playerHit) {
+        audioRefs.current.playerHit.currentTime = 0;
+        audioRefs.current.playerHit.play().catch(() => {});
+      }
+    }, 0);
+  }, [applyDamageWithKnockback, takeDamage]);
+
+  const {
+    vortaxes,
+    vortaxesRef,
+    hitVortaxSphere,
+    spawnVortaxGroup,
+    setSpawningEnabled: setVortaxSpawningEnabled,
+  } = useVortaxSystem({
+    definitions: vortaxDefinitions,
+    cameraRef,
+    isEnabled: enemiesEnabled,
+    userRoles,
+    onVortaxKilled,
+    playerLevel,
+  });
+
+  // Vortaxes follow the same natural-spawn toggle as shombies (Ctrl+Z).
+  useEffect(() => {
+    setVortaxSpawningEnabled(shombieSpawningEnabled);
+  }, [shombieSpawningEnabled, setVortaxSpawningEnabled]);
+
   // PvP combat adapter stub — no-op until PLAYER_PVP_ADAPTER_ENABLED
   // is flipped on, but the call site lives here for the L2 migration.
   usePlayerCombatAdapter(currentUserId ?? null);
@@ -795,7 +841,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       console.log(`[SpawnCommands] Spawning ${count} shroomer(s) tier ${tier}`);
       spawnShroomerGroup(tier, count);
     },
-  }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup, spawnWalapa, spawnShtickmanByTier, spawnShpiderGroup, spawnShroomerGroup]);
+    onSpawnVortax: (_tier: number, count: number) => {
+      console.log(`[SpawnCommands] Spawning ${count} vortax(es) tier 1`);
+      spawnVortaxGroup(1, count);
+    },
+  }), [spawnShwarmByTier, handleSpawnShnake, spawnShombieGroup, spawnWalapa, spawnShtickmanByTier, spawnShpiderGroup, spawnShroomerGroup, spawnVortaxGroup]);
   
   useSpawnCommands({
     isEnabled: true,
@@ -840,6 +890,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     shwarmsRef,
     shombiesRef,
     shroomersRef,
+    vortaxesRef,
     walapasRef,
     shtickmenRef,
     isEnabled: ENABLE_ENEMY_AI,
@@ -853,6 +904,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     onTriggerWiggle: handleTriggerWiggle,
     onShombiePlayerHit: handleShombiePlayerHit,
     onShroomerPlayerHit: handleShroomerPlayerHit,
+    onVortaxPlayerHit: handleVortaxPlayerHit,
   });
   
   const shwarmRendererRef = useRef<ShwarmRendererHandle>(null);
@@ -1274,6 +1326,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     shroomersRef,
     shroomerRendererRef,
     damageShroomer,
+    vortaxesRef,
+    vortaxRendererRef,
     walapasRef,
     updateWalapaMovement,
     shtickmenRef,
@@ -1637,6 +1691,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Shroomer Renderer - shombie clone with mushroom geometry */}
       <ShroomerRenderer ref={shroomerRendererRef} shroomers={shroomers} universalFlameRef={universalFlameRef} />
+
+      {/* Vortax Renderer - 20m sphere-cloud giant */}
+      <VortaxRenderer ref={vortaxRendererRef} vortaxes={vortaxes} universalFlameRef={universalFlameRef} />
 
       {/* Walapa Renderer - floating whale creatures */}
       <WalapaRenderer ref={walapaRendererRef} walapas={walapas} cameraRef={cameraRef} />

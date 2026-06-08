@@ -40,6 +40,7 @@ import { usePlayerHealth, HealthBar, DeathOverlay, useShwarmDefinitions } from '
 import { useShnakeDefinitions } from '@/features/shnake';
 import { useShombieDefinitions } from '@/features/shombie';
 import { useShroomerDefinitions } from '@/features/shroomer';
+import { useVortaxDefinitions } from '@/features/vortax';
 import { useWalapaDefinitions } from '@/features/walapa';
 import { useShtickmanDefinitions } from '@/features/shtickman';
 import { usePathfindingConfigs } from '@/hooks/usePathfindingConfigs';
@@ -819,6 +820,9 @@ export function Fortress() {
 
   // Shroomer definitions
   const { data: shroomerDefinitions } = useShroomerDefinitions();
+
+  // Vortax definitions
+  const { data: vortaxDefinitions } = useVortaxDefinitions();
 
   // Walapa definitions
   const { definitions: walapaDefinitions } = useWalapaDefinitions();
@@ -1989,6 +1993,7 @@ export function Fortress() {
           shnakeDefinitions={shnakeDefinitions}
           shombieDefinitions={shombieDefinitions}
           shroomerDefinitions={shroomerDefinitions}
+          vortaxDefinitions={vortaxDefinitions}
           walapaDefinitions={walapaDefinitions}
           shtickmanDefinitions={shtickmanDefinitions}
           onPointsEarned={async (points) => {
@@ -2053,6 +2058,15 @@ export function Fortress() {
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shroomer_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shroomer failed:', e); }
+          }}
+          onVortaxKilled={async (tier) => {
+            console.log(`[Fortress] Vortax killed - tier ${tier}, user: ${user?.id}`);
+            if (!user?.id) {
+              console.error('[Fortress] Cannot track vortax kill - no user ID');
+              return;
+            }
+            try { await worldStore.recordKill(`vortax_t${tier}`); }
+            catch (e) { console.error('[Fortress] recordKill vortax failed:', e); }
           }}
           onShpiderKilled={async ({ tier, x, y, z }) => {
             // Same pattern as the other enemy kill writers — bumps

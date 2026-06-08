@@ -14,6 +14,7 @@ import { useBlocks } from '@/contexts/BlocksContext';
 import { ShnakeDesignPanel } from '@/features/shnake';
 import { ShombieDesignPanel } from '@/features/shombie';
 import { ShroomerDesignPanel } from '@/features/shroomer';
+import { VortaxDesignPanel } from '@/features/vortax';
 import { ShwarmDesignPanel } from '@/features/shwarm';
 import { WalapaDesignPanel } from '@/features/walapa';
 import { ShtickmanDesignPanel } from '@/features/shtickman';
@@ -251,6 +252,7 @@ export function AdminPanel({
                     <ShnakeDesignPanel />
                     <ShombieDesignPanel />
                     <ShroomerDesignPanel />
+                    <VortaxDesignPanel />
                     <ShtickmanDesignPanel />
                     <ShpiderDesignPanel />
                   </div>

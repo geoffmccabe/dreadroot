@@ -8,6 +8,7 @@
  * - !5#   = Shtickman (tier, no count)
  * - !6##  = Shpider   (tier, count)
  * - !7##  = Shroomer  (tier, count)
+ * - !8##  = Vortax    (tier=1 always, count)
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -30,6 +31,7 @@ export interface SpawnCommandCallbacks {
   onSpawnShtickman?: (tier: number) => void;
   onSpawnShpider?: (tier: number, count: number) => void;
   onSpawnShroomer?: (tier: number, count: number) => void;
+  onSpawnVortax?: (tier: number, count: number) => void;
 }
 
 interface UseSpawnCommandsOptions {
@@ -49,7 +51,7 @@ export function useSpawnCommands({
   const sequenceRef = useRef<{
     step: number; // 0=idle, 1=got !, 2=got type, 3=got tier (shombie/shpider only, waiting for count)
     startTime: number;
-    type: number | null; // 1=shwarm, 2=shnake, 3=shombie, 4=walapa, 5=shtickman, 6=shpider, 7=shroomer
+    type: number | null; // 1=shwarm, 2=shnake, 3=shombie, 4=walapa, 5=shtickman, 6=shpider, 7=shroomer, 8=vortax
     tier: number | null;
   }>({ step: 0, startTime: 0, type: null, tier: null });
 
@@ -95,7 +97,7 @@ export function useSpawnCommands({
       if (seq.step === 1) {
         if (
           e.key === '1' || e.key === '2' || e.key === '3' ||
-          e.key === '4' || e.key === '5' || e.key === '6' || e.key === '7'
+          e.key === '4' || e.key === '5' || e.key === '6' || e.key === '7' || e.key === '8'
         ) {
           if (!isAdmin) {
             console.log('[SpawnCommands] Spawn denied - admin only');
@@ -105,7 +107,7 @@ export function useSpawnCommands({
           seq.type = parseInt(e.key, 10);
           seq.step = 2;
           seq.startTime = now;
-          const typeNames: Record<number, string> = { 1: 'shwarm', 2: 'shnake', 3: 'shombie', 4: 'walapa', 5: 'shtickman', 6: 'shpider', 7: 'shroomer' };
+          const typeNames: Record<number, string> = { 1: 'shwarm', 2: 'shnake', 3: 'shombie', 4: 'walapa', 5: 'shtickman', 6: 'shpider', 7: 'shroomer', 8: 'vortax' };
           console.log(`[SpawnCommands] Type: ${typeNames[seq.type]} - press 1-9 (0=10) for tier`);
           return;
         }
@@ -150,12 +152,12 @@ export function useSpawnCommands({
             return;
           }
 
-          // For shombie + shpider + shroomer, wait for count
-          if (seq.type === 3 || seq.type === 6 || seq.type === 7) {
+          // For shombie + shpider + shroomer + vortax, wait for count
+          if (seq.type === 3 || seq.type === 6 || seq.type === 7 || seq.type === 8) {
             seq.tier = tier;
             seq.step = 3;
             seq.startTime = now;
-            const typeName = seq.type === 3 ? 'shombie' : seq.type === 6 ? 'shpider' : 'shroomer';
+            const typeName = seq.type === 3 ? 'shombie' : seq.type === 6 ? 'shpider' : seq.type === 7 ? 'shroomer' : 'vortax';
             console.log(`[SpawnCommands] ${typeName} tier ${actualTier} - press 1-9 (0=10) for count, or wait for 1`);
 
             // Auto-spawn 1 if no count is entered within the window. 800ms was
@@ -169,7 +171,8 @@ export function useSpawnCommands({
                 console.log(`[SpawnCommands] Auto-spawning 1 ${typeName} tier ${t}`);
                 if (typeCapture === 3)      callbacks.onSpawnShombie?.(t, 1);
                 else if (typeCapture === 6) callbacks.onSpawnShpider?.(t, 1);
-                else                        callbacks.onSpawnShroomer?.(t, 1);
+                else if (typeCapture === 7) callbacks.onSpawnShroomer?.(t, 1);
+                else                        callbacks.onSpawnVortax?.(1, 1);
                 resetSequence();
               }
             }, 2000);
@@ -182,28 +185,31 @@ export function useSpawnCommands({
         return;
       }
 
-      // Step 3: Wait for count (shombie + shpider + shroomer)
+      // Step 3: Wait for count (shombie + shpider + shroomer + vortax)
       if (seq.step === 3) {
-        const typeName = seq.type === 3 ? 'shombie' : seq.type === 6 ? 'shpider' : 'shroomer';
+        const typeName = seq.type === 3 ? 'shombie' : seq.type === 6 ? 'shpider' : seq.type === 7 ? 'shroomer' : 'vortax';
         if (/^[0-9]$/.test(e.key)) {
           const count = parseInt(e.key, 10);
-          // Count "0" means a big batch: 100 for shombies/shroomers (hordes), 10 for shpiders.
-          const actualCount = count === 0 ? (seq.type === 6 ? 10 : 100) : count;
-          const actualTier = seq.tier === 0 ? 10 : seq.tier!;
+          // Count "0" means a big batch: 100 for shombies/shroomers (hordes), 10 for shpiders/vortax.
+          const actualCount = count === 0 ? (seq.type === 6 || seq.type === 8 ? 10 : 100) : count;
+          // Vortax is TIER 1 ONLY.
+          const actualTier = seq.type === 8 ? 1 : (seq.tier === 0 ? 10 : seq.tier!);
 
           console.log(`[SpawnCommands] Spawning ${actualCount} ${typeName}(s) tier ${actualTier}`);
           if (seq.type === 3)      callbacks.onSpawnShombie?.(actualTier, actualCount);
           else if (seq.type === 6) callbacks.onSpawnShpider?.(actualTier, actualCount);
-          else                     callbacks.onSpawnShroomer?.(actualTier, actualCount);
+          else if (seq.type === 7) callbacks.onSpawnShroomer?.(actualTier, actualCount);
+          else                     callbacks.onSpawnVortax?.(1, actualCount);
           resetSequence();
           return;
         }
         // Any other key spawns 1
-        const actualTier = seq.tier === 0 ? 10 : seq.tier!;
+        const actualTier = seq.type === 8 ? 1 : (seq.tier === 0 ? 10 : seq.tier!);
         console.log(`[SpawnCommands] Spawning 1 ${typeName} tier ${actualTier}`);
         if (seq.type === 3)      callbacks.onSpawnShombie?.(actualTier, 1);
         else if (seq.type === 6) callbacks.onSpawnShpider?.(actualTier, 1);
-        else                     callbacks.onSpawnShroomer?.(actualTier, 1);
+        else if (seq.type === 7) callbacks.onSpawnShroomer?.(actualTier, 1);
+        else                     callbacks.onSpawnVortax?.(1, 1);
         resetSequence();
         return;
       }

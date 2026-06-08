@@ -19,6 +19,7 @@ import {
   getShwarmTextureId,
   getShombieTextureId,
   getShroomerTextureId,
+  getVortaxTextureId,
   getShnakeTextureId,
   getWalapaTextureId,
   getBlockTextureId,
@@ -92,6 +93,20 @@ export function useAtlasSync(options?: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('shroomer_definitions' as any)
+        .select('tier, texture_url')
+        .order('tier');
+      if (error) throw error;
+      return data as Array<{ tier: number; texture_url: string | null }>;
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: vortaxDefinitions } = useQuery({
+    queryKey: ['atlas-vortax-definitions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vortax_definitions' as any)
         .select('tier, texture_url')
         .order('tier');
       if (error) throw error;
@@ -231,6 +246,13 @@ export function useAtlasSync(options?: {
         }
       }
 
+      // Vortax textures (own copy — tier 1 only)
+      if (vortaxDefinitions) {
+        for (const def of vortaxDefinitions) {
+          specs.push({ textureId: getVortaxTextureId(def.tier), category: 'vortax', sourceUrl: def.texture_url || null });
+        }
+      }
+
       // Shnake textures (3 parts each)
       if (shnakeDefinitions) {
         for (const def of shnakeDefinitions) {
@@ -291,7 +313,7 @@ export function useAtlasSync(options?: {
     } finally {
       syncInProgressRef.current = false;
     }
-  }, [seedDefinitions, shwarmDefinitions, shombieDefinitions, shroomerDefinitions, shnakeDefinitions, walapaDefinitions, blockTypes]);
+  }, [seedDefinitions, shwarmDefinitions, shombieDefinitions, shroomerDefinitions, vortaxDefinitions, shnakeDefinitions, walapaDefinitions, blockTypes]);
 
   // Auto-sync when all definitions are loaded
   useEffect(() => {
@@ -381,6 +403,7 @@ export async function syncAtlasOnInit(): Promise<void> {
     shwarmsResult,
     shombiesResult,
     shroomersResult,
+    vortaxesResult,
     shnakesResult,
     walapasResult,
     blocksResult,
@@ -389,6 +412,7 @@ export async function syncAtlasOnInit(): Promise<void> {
     supabase.from('shwarm_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shombie_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shroomer_definitions' as any).select('tier, texture_url').order('tier'),
+    supabase.from('vortax_definitions' as any).select('tier, texture_url').order('tier'),
     supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url').order('tier'),
     supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
     supabase.from('block_types' as any).select('name, texture_url'),
@@ -398,6 +422,7 @@ export async function syncAtlasOnInit(): Promise<void> {
   const shwarmDefinitions = shwarmsResult.data;
   const shombieDefinitions = shombiesResult.data;
   const shroomerDefinitions = shroomersResult.error ? [] : (shroomersResult.data as Array<{ tier: number; texture_url: string | null }>);
+  const vortaxDefinitions = vortaxesResult.error ? [] : (vortaxesResult.data as Array<{ tier: number; texture_url: string | null }>);
   const shnakeDefinitions = shnakesResult.data;
   // walapa_definitions and block_types are optional — quietly fall
   // back to empty arrays when the table is missing in this Supabase
@@ -465,6 +490,12 @@ export async function syncAtlasOnInit(): Promise<void> {
   if (shroomerDefinitions) {
     for (const def of shroomerDefinitions) {
       specs.push({ textureId: getShroomerTextureId(def.tier), category: 'shroomer', sourceUrl: def.texture_url || null });
+    }
+  }
+
+  if (vortaxDefinitions) {
+    for (const def of vortaxDefinitions) {
+      specs.push({ textureId: getVortaxTextureId(def.tier), category: 'vortax', sourceUrl: def.texture_url || null });
     }
   }
 
