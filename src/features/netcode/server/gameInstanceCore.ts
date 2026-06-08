@@ -12,7 +12,7 @@
  *
  * PURE / portable (relative imports only).
  */
-import { TickLoop, type ServerEntity, type SimulateFn } from './tickLoop';
+import { TickLoop, TICK_MS, type ServerEntity, type SimulateFn } from './tickLoop';
 import { filterAoI } from './aoi';
 import { LagCompensationBuffer } from './lagCompensation';
 import { encodeSnapshot, ORIGIN_L1, type SnapshotEntity } from '../../../lib/snapshotBinary';
@@ -31,10 +31,14 @@ export interface GameInstanceConfig {
   worldId: number;
   zoneId: number;
   aoiRadius: number;
+  /** Max concurrent players in one instance (abuse cap). Default 64. */
+  maxPlayers?: number;
   /** Override the per-tick simulation (the real enemy AI plugs in here). The
    *  default applies queued player inputs via the shared stepPlayer. */
   simulate?: SimulateFn<QueuedInput>;
 }
+
+const DEFAULT_MAX_PLAYERS = 64;
 
 export class GameInstanceCore {
   private loop: TickLoop<QueuedInput>;
@@ -51,8 +55,10 @@ export class GameInstanceCore {
     this.loop = new TickLoop<QueuedInput>(cfg.simulate ?? this.defaultSimulate);
   }
 
-  /** Spawn a player entity for a newly-connected client. Returns its entity id. */
-  addPlayer(clientId: string): number {
+  /** Spawn a player entity for a newly-connected client. Returns its entity id,
+   *  or null if the instance is at its player cap (caller should reject). */
+  addPlayer(clientId: string): number | null {
+    if (this.players.size >= (this.cfg.maxPlayers ?? DEFAULT_MAX_PLAYERS)) return null;
     const id = this.nextId++;
     const key = entityKey(ORIGIN_L1, id);
     this.players.set(clientId, { id, key });
@@ -86,7 +92,10 @@ export class GameInstanceCore {
     for (const [clientId, inp] of inputs) {
       const e = entities.get(inp.playerKey);
       if (e) {
-        stepPlayer(e, inp.cmd, PLAYER_SPEED);
+        // Authoritative move with anti-cheat caps: unit move vector + dt clamped
+        // to one tick (stepPlayer enforces both). A hacked client can't speed-
+        // hack or teleport; honest input is unchanged.
+        stepPlayer(e, inp.cmd, PLAYER_SPEED, TICK_MS);
         this.lastSeq.set(clientId, inp.cmd.seq); // last input we processed (for ack)
       }
     }

@@ -52,8 +52,27 @@ const forB = decodeSnapshot(out.get('B')!);
 assert(forA.entities.some(e => e.id === aId) && !forA.entities.some(e => e.id === bId), 'AoI: A sees self, not far B');
 assert(forB.entities.some(e => e.id === bId) && !forB.entities.some(e => e.id === aId), 'AoI: B sees self, not far A');
 
+// 6. Anti-cheat: oversized move vector + teleport-sized dt are clamped to normal
+//    speed server-side (honest input is unaffected — test #3 still moved ~1.5).
+const hard = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 80 });
+const hid = hard.addPlayer('H')!;
+let hnow = 0;
+hard.tick(hnow, out); // prime
+for (let seq = 1; seq <= 5; seq++) {
+  hard.applyInput('H', input(seq, 3, 0, 0, 60000)); // move ×3 + 60s dt = cheat attempt
+  hnow += 50;
+  hard.tick(hnow, out);
+}
+const cheated = decodeSnapshot(out.get('H')!).entities.find(e => e.id === hid)!;
+assert(close(cheated.x, 1.5, 0.05), `anti-cheat clamps speed/teleport to ~1.5 (got ${cheated.x})`);
+
+// 7. Connection cap: a full instance refuses new players.
+const capped = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 80, maxPlayers: 2 });
+assert(capped.addPlayer('a') !== null && capped.addPlayer('b') !== null, 'cap: first 2 players admitted');
+assert(capped.addPlayer('c') === null, 'cap: 3rd player rejected (world full)');
+
 if (failures === 0) {
-  console.log('✅ game instance core OK (input / spawn / movement / ack / disconnect / AoI)');
+  console.log('✅ game instance core OK (input / spawn / movement / ack / disconnect / AoI / anti-cheat / cap)');
   process.exit(0);
 } else {
   console.error(`❌ ${failures} game-instance failure(s)`);

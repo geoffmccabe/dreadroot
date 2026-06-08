@@ -17,6 +17,9 @@ import { TICK_MS } from '../src/features/netcode/server/tickLoop';
 
 export interface Env {
   GAME_INSTANCE: DurableObjectNamespace;
+  /** Optional shared-secret join gate (set via `wrangler secret put JOIN_SECRET`).
+   *  Placeholder until per-user tokens are issued by L1. */
+  JOIN_SECRET?: string;
 }
 
 const AOI_RADIUS = 80;
@@ -47,8 +50,12 @@ export class GameInstanceDO {
 
   private onConnect(ws: WebSocket): void {
     const clientId = `c${this.nextClient++}`;
+    // Reject if this world is at its player cap (abuse / overload guard).
+    if (this.core.addPlayer(clientId) === null) {
+      try { ws.close(1013, 'world full'); } catch { /* already closing */ }
+      return;
+    }
     this.conns.set(ws, clientId);
-    this.core.addPlayer(clientId);
 
     ws.addEventListener('message', (ev: MessageEvent) => {
       const d = ev.data;
