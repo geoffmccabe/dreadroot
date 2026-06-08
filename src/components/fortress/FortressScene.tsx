@@ -521,12 +521,16 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     }, 0);
   }, [applyDamageWithKnockback, takeDamage]);
 
+  // ExplosionFX handle (shockwave + flash) — declared here so the shroomer's
+  // headshot-kill explosion can fire it. Back-filled by <ExplosionFX> below.
+  const explosionFxRef = useRef<ExplosionFXHandle | null>(null);
   const {
     shroomers,
     shroomersRef,
     damageShroomer,
     spawnShroomerAt,
     spawnShroomerGroup,
+    setSpawningEnabled: setShroomerSpawningEnabled,
   } = useShroomerSystem({
     definitions: shroomerDefinitions,
     cameraRef,
@@ -534,7 +538,15 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     userRoles,
     onShroomerKilled,
     playerLevel,
+    onShroomerHeadExplode: useCallback((x: number, y: number, z: number, tier: number) => {
+      explosionFxRef.current?.spawn(new THREE.Vector3(x, y, z), 2 + tier * 0.3, '#bff05a');
+    }, []),
   });
+
+  // Shroomers follow the same natural-spawn toggle as shombies (Ctrl+Z).
+  useEffect(() => {
+    setShroomerSpawningEnabled(shombieSpawningEnabled);
+  }, [shombieSpawningEnabled, setShroomerSpawningEnabled]);
 
   // PvP combat adapter stub — no-op until PLAYER_PVP_ADAPTER_ENABLED
   // is flipped on, but the call site lives here for the L2 migration.
@@ -965,7 +977,6 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // created — hook order makes the burn system mount AFTER the
   // grenade system, so we pass a ref and back-fill it.
   const applyBurnRef = useRef<((...args: any[]) => void) | null>(null);
-  const explosionFxRef = useRef<ExplosionFXHandle | null>(null);
   const { grenadesRef, throwGrenade } = useGrenadeSystem({
     universalFlameRef,
     cameraRef,

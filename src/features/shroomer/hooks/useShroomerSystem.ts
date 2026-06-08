@@ -36,6 +36,8 @@ interface UseShroomerSystemOptions {
   /** Player's current level (for knockback distance calculation) */
   playerLevel?: number;
   onShroomerKilled?: (tier: number) => void;
+  /** Fired when a HEADSHOT lands the killing blow — triggers the explosion FX. */
+  onShroomerHeadExplode?: (x: number, y: number, z: number, tier: number) => void;
 }
 
 // Audio settings (reuse shombie's moan — shroomer shares shombie sounds)
@@ -48,6 +50,9 @@ const MOAN_VOLUME = 0.5; // 50% volume
 const DEATH_SOUND_VOLUME = 1.0;
 const DEATH_SOUND_PITCH_DOWN_MS = 1300;
 const MAX_CONCURRENT_DEATH_SOUNDS = 6;
+
+// Shroomers use the shombie spawn rules but spawn 10× as frequently.
+const SHROOMER_SPAWN_FREQUENCY_MULT = 10;
 
 // Preload shroomer sounds
 preloadSpatialSounds([MOAN_SOUND_URL]);
@@ -65,6 +70,7 @@ export function useShroomerSystem({
   userRoles,
   playerLevel = 1,
   onShroomerKilled,
+  onShroomerHeadExplode,
 }: UseShroomerSystemOptions) {
   const [shroomers, setShroomers] = useState<ShroomerInstance[]>([]);
   const [spawningEnabled, setSpawningEnabled] = useState(false);
@@ -322,6 +328,17 @@ export function useShroomerSystem({
     if (shroomer.currentHealth <= 0) {
       onShroomerKilled?.(shroomer.definition.tier);
 
+      // Headshot kill → exploding death sequence at the head sphere.
+      if (isHeadshot) {
+        const sc = shroomer.scale ?? 1;
+        onShroomerHeadExplode?.(
+          shroomer.position.x,
+          shroomer.position.y + 1.7 * sc, // head sphere height (under the cap)
+          shroomer.position.z,
+          shroomer.definition.tier,
+        );
+      }
+
       if (deathSoundCountRef.current < MAX_CONCURRENT_DEATH_SOUNDS) {
         const p = getLocalPlayerSnapshot();
         const ddx = shroomer.position.x - p.x;
@@ -346,7 +363,7 @@ export function useShroomerSystem({
     }
 
     return false;
-  }, [onShroomerKilled, playerLevel]);
+  }, [onShroomerKilled, onShroomerHeadExplode, playerLevel]);
 
   /**
    * Clear all shroomers (e.g., on respawn)
@@ -393,7 +410,8 @@ export function useShroomerSystem({
 
           if (countInChunk(chunkX, chunkZ) >= MAX_SHROOMERS_PER_CHUNK) continue;
 
-          const baseChancePerMinute = tier1Def.spawn_chance_per_minute;
+          // Shroomers spawn by the same rules as shombies but 10× as often.
+          const baseChancePerMinute = tier1Def.spawn_chance_per_minute * SHROOMER_SPAWN_FREQUENCY_MULT;
           const distanceMultiplier = Math.pow(0.5, chunkDist - 1);
           const chancePerMinute = baseChancePerMinute * distanceMultiplier;
           const chancePerCheck = chancePerMinute * (SPAWN_CHECK_INTERVAL_MS / 60000);
@@ -435,9 +453,14 @@ export function useShroomerSystem({
       },
       applyDamage: (s, info) => {
         dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
+        // Shpider-style knockback: a clean backward slide. Scaled by this tier's
+        // knockback_received AND inversely by size — so bigger, higher-tier
+        // shroomers get shoved back noticeably less. Explosions keep their own
+        // blast magnitude.
+        const kbScale = s.definition.knockback_received ?? 1;
         const kbStrength = info.source === 'explosion'
           ? (info.bulletSpeed || 1.0)
-          : 1.0;
+          : 11 * kbScale * Math.max(1, (info.bulletSpeed || 0) / 60) / (s.scale ?? 1);
         return damageShroomer(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
