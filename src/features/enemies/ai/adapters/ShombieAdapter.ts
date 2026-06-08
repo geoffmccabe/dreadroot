@@ -17,6 +17,7 @@ import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
+import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import {
   KNOCKBACK_DECAY_RATE,
   SHOMBIE_GRAVITY,
@@ -205,20 +206,44 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     shombie.velocity.y -= SHOMBIE_GRAVITY * deltaSeconds;
 
     // Apply velocity (knockback + gravity)
+    const oldY = shombie.position.y;
     shombie.position.x += shombie.velocity.x * deltaSeconds;
     shombie.position.y += shombie.velocity.y * deltaSeconds;
     shombie.position.z += shombie.velocity.z * deltaSeconds;
 
-    // Ground clamp
-    if (shombie.position.y < 0) {
+    // Landing. Tumbling ragdolls respect block colliders (tree branches/blocks)
+    // so they land ON them, not only the flat ground — they find the highest
+    // block top below where they were and rest on it. Normal shombies keep the
+    // cheap flat-ground clamp.
+    let grounded = false;
+    if (shombie.isTumbling && shombie.velocity.y <= 0) {
+      let surfaceY = 0;
+      const n = worldCollisionGrid.getNearby(shombie.position.x, shombie.position.z, 1);
+      const res = worldCollisionGrid.nearbyResult;
+      for (let i = 0; i < n; i++) {
+        const c = res[i] as THREE.Box3;
+        if (!c || !c.max) continue;
+        if (shombie.position.x >= c.min.x && shombie.position.x < c.max.x &&
+            shombie.position.z >= c.min.z && shombie.position.z < c.max.z &&
+            c.max.y <= oldY + 0.1 && c.max.y > surfaceY) {
+          surfaceY = c.max.y;
+        }
+      }
+      if (shombie.position.y <= surfaceY) {
+        shombie.position.y = surfaceY;
+        shombie.velocity.y = 0;
+        grounded = true;
+      }
+    } else if (shombie.position.y < 0) {
       shombie.position.y = 0;
       shombie.velocity.y = 0;
     }
+    if (!grounded && shombie.position.y <= 0.001) grounded = true;
 
-    // Decay horizontal knockback ONLY while grounded (ground friction). While
+    // Decay horizontal knockback ONLY while grounded/resting (friction). While
     // airborne, preserve it so a blast launches them on a natural parabolic arc
     // OUTWARD — not decaying to a straight-up-and-down column.
-    if (shombie.position.y <= 0.001) {
+    if (grounded) {
       const decay = Math.exp(-KNOCKBACK_DECAY_RATE * deltaSeconds);
       shombie.velocity.x *= decay;
       shombie.velocity.z *= decay;
@@ -230,9 +255,9 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     if (shombie.isTumbling) {
       const tnow = Date.now();
       if (shombie.tumbleLandedAt === 0 &&
-          shombie.position.y <= 0.001 &&
+          grounded &&
           tnow - (shombie.tumbleLaunchAt ?? tnow) > 150) {
-        shombie.tumbleLandedAt = tnow; // landed in its rotated pose; slides via decay
+        shombie.tumbleLandedAt = tnow; // landed (ground OR a block top); slides via decay
       }
       const sinceLand = shombie.tumbleLandedAt ? tnow - shombie.tumbleLandedAt : -1;
       // Corpse: land + hold the pose, then despawn (no rise). Alive: land +
