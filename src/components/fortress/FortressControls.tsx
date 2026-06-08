@@ -23,6 +23,7 @@ import {
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
+import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
 import { setGlobalInspectData, clearGlobalInspectData, toggleInspectorMode, setInspectorMode, inspectorModeEnabled, globalInspectData, type GlobalInspectData, type InspectSources } from '@/components/FPSCounter';
@@ -202,7 +203,6 @@ export function FirstPersonControls({
   // Moving platform (walapa riding) tracking
   const currentWalapaIdRef = useRef<string | null>(null);
   const walapaLastPosRef = useRef(new THREE.Vector3());
-  const walapaDeltaRef = useRef(new THREE.Vector3());
 
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
@@ -2610,7 +2610,7 @@ export function FirstPersonControls({
         feetCheckPosRef.current.copy(camera.position);
         feetCheckPosRef.current.y = camera.position.y - GROUND_SNAP_DIST;
 
-        const groundHit = checkAxisCollisionFromCandidates(
+        let groundHit = checkAxisCollisionFromCandidates(
           feetCheckPosRef.current,
           currentColliders,
           candidateCount,
@@ -2621,58 +2621,76 @@ export function FirstPersonControls({
           onGround.current,
           velocity.current.y
         );
+        // Option B: walapas are handled LIVE below, not via their grid colliders
+        // (which lag a frame → fall-through / floating). Ignore any walapa
+        // collider returned by the block check.
+        if (groundHit && (groundHit as any).__isWalapaCollider) groundHit = null;
 
         const feetY = camera.position.y - playerHeight;
         const onWorldGround = feetY <= (SURFACE_EPS + 0.01);
 
-        if ((groundHit && velocity.current.y <= 0.05) || onWorldGround) {
-          if (groundHit && velocity.current.y < 0) {
-            camera.position.y = groundHit.max.y + playerHeight + SURFACE_EPS;
+        // ── Live walapa support: read each walapa's ACTUAL position so landing
+        //    and riding always track the real walapa, never a stale collider.
+        //    Pick the highest walapa top beneath the player within its footprint.
+        let walapaTopY = -Infinity;
+        let supportWalapa: { id: string; position: THREE.Vector3; scale?: number; velocity?: THREE.Vector3 } | null = null;
+        if (walapasRef?.current && velocity.current.y <= 0.05) {
+          for (const w of walapasRef.current) {
+            if (!w.isActive) continue;
+            const wscale = w.scale ?? 1;
+            const top = w.position.y + WALAPA_HITBOX_HEIGHT * wscale;
+            const reach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
+            const dx = camera.position.x - w.position.x;
+            const dz = camera.position.z - w.position.z;
+            if (dx * dx + dz * dz > reach * reach) continue;
+            // Feet at/just-above the top (catch the fall) or just-sunk (standing).
+            if (feetY <= top + 0.6 && feetY >= top - 0.3 && top > walapaTopY) {
+              walapaTopY = top;
+              supportWalapa = w;
+            }
+          }
+        }
+
+        // Highest support wins: solid block, live walapa, or world ground.
+        let supportY = groundHit ? groundHit.max.y : -Infinity;
+        if (walapaTopY > supportY) {
+          supportY = walapaTopY;
+        } else {
+          supportWalapa = null; // a block/ground is higher than any walapa
+        }
+        const hasSupport = supportY > -Infinity;
+
+        if ((hasSupport && velocity.current.y <= 0.05) || onWorldGround) {
+          if (hasSupport && velocity.current.y < 0) {
+            camera.position.y = supportY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
-          } else if (onWorldGround && velocity.current.y < 0) {
+          } else if (onWorldGround && !hasSupport && velocity.current.y < 0) {
             camera.position.y = playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
           }
           onGround.current = true;
 
-          // Check if standing on a walapa (moving platform)
-          const walapaCollider = groundHit as THREE.Box3 & { __isWalapaCollider?: boolean; __walapaId?: string };
-          if (walapaCollider?.__isWalapaCollider && walapaCollider.__walapaId && walapasRef?.current) {
-            const walapa = walapasRef.current.find(w => w.id === walapaCollider.__walapaId && w.isActive);
-            if (walapa) {
-              // Check if this is the same walapa we were on before
-              if (currentWalapaIdRef.current === walapa.id) {
-                // Calculate walapa movement delta and apply to player
-                walapaDeltaRef.current.set(
-                  walapa.position.x - walapaLastPosRef.current.x,
-                  walapa.position.y - walapaLastPosRef.current.y,
-                  walapa.position.z - walapaLastPosRef.current.z
-                );
-                // Apply walapa movement to player position
-                camera.position.x += walapaDeltaRef.current.x;
-                camera.position.y += walapaDeltaRef.current.y;
-                camera.position.z += walapaDeltaRef.current.z;
-              }
-              // Update tracking
-              currentWalapaIdRef.current = walapa.id;
-              walapaLastPosRef.current.copy(walapa.position);
-            } else {
-              currentWalapaIdRef.current = null;
+          // Ride the supporting walapa: follow its HORIZONTAL movement (vertical
+          // is already handled by the snap-to-top above, using its live top).
+          if (supportWalapa) {
+            if (currentWalapaIdRef.current === supportWalapa.id) {
+              camera.position.x += supportWalapa.position.x - walapaLastPosRef.current.x;
+              camera.position.z += supportWalapa.position.z - walapaLastPosRef.current.z;
             }
+            currentWalapaIdRef.current = supportWalapa.id;
+            walapaLastPosRef.current.copy(supportWalapa.position);
           } else {
-            // Not on a walapa - clear tracking
             currentWalapaIdRef.current = null;
           }
         } else {
           onGround.current = false;
-          // Player left the ground - if was on walapa, inherit its velocity
+          // Left the surface — if we were riding a walapa, inherit its
+          // horizontal velocity (so you carry momentum when stepping/jumping off).
           if (currentWalapaIdRef.current && walapasRef?.current) {
-            const walapa = walapasRef.current.find(w => w.id === currentWalapaIdRef.current && w.isActive);
-            if (walapa && walapa.velocity) {
-              // Add walapa velocity to player velocity (for jumping off)
-              velocity.current.x += walapa.velocity.x;
-              velocity.current.z += walapa.velocity.z;
-              // Don't add Y velocity - player controls their own vertical movement
+            const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
+            if (w && w.velocity) {
+              velocity.current.x += w.velocity.x;
+              velocity.current.z += w.velocity.z;
             }
           }
           currentWalapaIdRef.current = null;
