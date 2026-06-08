@@ -270,10 +270,11 @@ export function generateVortaxSpheres(): VortaxSphere[] {
       const oy = cy + (Math.random() * 2 - 1) * extentY * 0.5;
       const oz = cz + (Math.random() * 2 - 1) * extentZ * 0.5;
       const orbitRadius = Math.random() * Math.max(extentX, extentY, extentZ) * 0.5;
-      // Fixed fraction (cap = 1/9) or random 10–30% of the part's max width.
+      // Fixed fraction (cap = 1/9) or random 8–18% of the part's max width
+      // (max = 60% of the old 30%; min = 80% of the old 10%).
       const diameter = diamFrac != null
         ? maxWidth * diamFrac
-        : maxWidth * (0.1 + Math.random() * 0.2);
+        : maxWidth * (0.08 + Math.random() * 0.10);
       spheres.push({
         partName,
         diameter,
