@@ -40,7 +40,9 @@ const RIVALS: Record<string, readonly string[]> = {
 };
 const RIVAL_RANGE = 100;                 // metres
 const RIVAL_RANGE_SQ = RIVAL_RANGE * RIVAL_RANGE;
-const RETARGET_MS = 2000;                // keep a target ~2s before re-rolling
+const PLAYER_COMMIT_MS = 5000;           // how long an enemy stays on the player
+                                         // before re-evaluating (rival targets
+                                         // are strict — until dead/out-of-range)
 // Scratch: flat [id, type, id, type, …] of rival candidates (reused).
 const _rivalCand: string[] = [];
 
@@ -181,6 +183,7 @@ class EnemyManagerClass {
     if (reg) {
       reg.aiTargetType = 'player';
       reg.aiTargetEnemyId = null;
+      reg.aiRetargetAt = performance.now() + PLAYER_COMMIT_MS;
     }
   }
 
@@ -285,6 +288,7 @@ class EnemyManagerClass {
     // farther than RIVAL_RANGE.
     let valid = false;
     if (reg.aiTargetType && reg.aiTargetType !== 'player' && reg.aiTargetEnemyId) {
+      // RIVAL target: strict commit — valid until it dies/despawns or leaves 100m.
       const r = this.enemies.get(reg.aiTargetEnemyId);
       if (r) {
         const rp = r.adapter.getPosition(r.enemy);
@@ -292,12 +296,16 @@ class EnemyManagerClass {
         valid = (ddx * ddx + ddz * ddz) <= RIVAL_RANGE_SQ;
       }
     } else if (reg.aiTargetType === 'player') {
-      valid = distSqToPlayer <= RIVAL_RANGE_SQ;
+      // PLAYER target: committed only for PLAYER_COMMIT_MS, then re-evaluated —
+      // otherwise every enemy that ever picks the player gets stuck on it
+      // forever (the player never dies/leaves) and they all funnel onto you.
+      valid = distSqToPlayer <= RIVAL_RANGE_SQ && now < (reg.aiRetargetAt ?? 0);
     }
 
     if (!valid) {
       reg.aiTargetType = 'player';
       reg.aiTargetEnemyId = null;
+      reg.aiRetargetAt = now + PLAYER_COMMIT_MS;
       // Rivals only count when a player is near enough to see the fight.
       if (rivals && rivals.length > 0 && distSqToPlayer <= RIVAL_RANGE_SQ) {
         _rivalCand.length = 0;

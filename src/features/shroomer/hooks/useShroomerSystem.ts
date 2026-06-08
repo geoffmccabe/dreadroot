@@ -499,7 +499,7 @@ export function useShroomerSystem({
         const kbStrength = info.source === 'explosion'
           ? (info.bulletSpeed || 1.0)
           : info.source === 'melee'
-          ? 4.0 // melee shove from another enemy (doubled for a clearer reaction)
+          ? 12.0 // melee shove from a rival — large enough to read past the fast decay
           : 11 * kbScale * Math.max(1, (info.bulletSpeed || 0) / 60) / (s.scale ?? 1);
         // Player damage (anything but a rival's melee) → 80% chance to break off
         // and retaliate against the player.

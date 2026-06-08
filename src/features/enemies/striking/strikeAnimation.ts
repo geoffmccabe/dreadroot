@@ -26,11 +26,11 @@
 
 // ── Timing constants (the easy knobs to tune for the "feel") ────────────────
 /** Wind-up: limbs cock back. */
-export const STRIKE_WINDUP_MS = 180;
+export const STRIKE_WINDUP_MS = 380;
 /** Thrust: limbs punch forward. APEX = the end of this phase. */
-export const STRIKE_THRUST_MS = 120;
+export const STRIKE_THRUST_MS = 200;
 /** Recover: ease back to neutral. */
-export const STRIKE_RECOVER_MS = 200;
+export const STRIKE_RECOVER_MS = 360;
 
 // ── Pose magnitude knobs (easy to tune for the look) ────────────────────────
 /** How far (fraction of body length) the limbs pull BACK at the deepest part
