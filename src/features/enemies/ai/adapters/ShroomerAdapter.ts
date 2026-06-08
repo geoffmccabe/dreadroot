@@ -158,6 +158,10 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
   ): void {
     if (!EnemyManager.isAIControlled()) return;
 
+    // Exploding (headshot-kill fragmentation): the renderer drives the flying
+    // parts from a fixed origin — freeze all AI/physics on the body.
+    if (shroomer.isExploding) return;
+
     const deltaSeconds = deltaMs / 1000;
 
     // Handle knockdown animation (3 phases: tilt, slide, recovery)

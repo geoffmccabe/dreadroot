@@ -30,6 +30,9 @@ import {
   MAX_HEAD_FLAMES,
   TUMBLE_WAIT_MS,
   TUMBLE_RECOVER_MS,
+  EXPLODE_PART_SPEED,
+  EXPLODE_CAP_SPEED,
+  EXPLODE_GRAVITY,
 } from '../constants';
 import particleFire from 'three-particle-fire';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
@@ -846,6 +849,16 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
 
           const scale = shroomer.scale;
 
+          // Fragmentation explosion (headshot kill): cap launches straight up at
+          // 2× momentum; body parts + head fly out horizontally in deterministic
+          // random directions (from explodeSeed); gravity arcs them all down.
+          const exploding = !!shroomer.isExploding;
+          const explodeT = exploding
+            ? Math.max(0, (Date.now() - (shroomer.explodeStartTime ?? 0)) / 1000)
+            : 0;
+          const explodeSeed = shroomer.explodeSeed ?? 0;
+          const explodeDrop = exploding ? 0.5 * EXPLODE_GRAVITY * explodeT * explodeT : 0;
+
           // Fill the module-level transform context once per shroomer so
           // placePartInto() (module-level, no per-frame allocation) can compute
           // each part's world transform identically to the shombie renderer.
@@ -882,6 +895,13 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
             placePartInto(part.name, part.offsetX, part.offsetY, part.offsetZ, twitch, true);
             tmpPosition.set(_placeResult.px, _placeResult.py, _placeResult.pz);
 
+            if (exploding) {
+              const ang = explodeSeed + partIdx * 2.39996; // golden-angle spread
+              tmpPosition.x += Math.cos(ang) * EXPLODE_PART_SPEED * explodeT;
+              tmpPosition.z += Math.sin(ang) * EXPLODE_PART_SPEED * explodeT;
+              tmpPosition.y -= explodeDrop;
+            }
+
             let pv = partMap.get(part.name);
             if (!pv) { pv = new THREE.Vector3(); partMap.set(part.name, pv); }
             pv.copy(tmpPosition);
@@ -903,6 +923,13 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
           const headTwitch = shroomer.partTwitches['head'];
           placePartInto('head', HEAD_PART.offsetX, HEAD_PART.offsetY, HEAD_PART.offsetZ, headTwitch, true);
           tmpPosition.set(_placeResult.px, _placeResult.py, _placeResult.pz);
+
+          if (exploding) {
+            const ang = explodeSeed + PARTS_PER_SHROOMER * 2.39996;
+            tmpPosition.x += Math.cos(ang) * EXPLODE_PART_SPEED * explodeT;
+            tmpPosition.z += Math.sin(ang) * EXPLODE_PART_SPEED * explodeT;
+            tmpPosition.y -= explodeDrop;
+          }
 
           let headPv = partMap.get('head');
           if (!headPv) { headPv = new THREE.Vector3(); partMap.set('head', headPv); }
@@ -942,6 +969,11 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
             true,
           );
           tmpPosition.set(_placeResult.px, _placeResult.py, _placeResult.pz);
+
+          if (exploding) {
+            // Cap rockets straight up (2× momentum), then gravity pulls it back.
+            tmpPosition.y += EXPLODE_CAP_SPEED * explodeT - explodeDrop;
+          }
           // Wide + flat. Capsule geometry diameter (X/Z) = 2*CAP_BASE_RADIUS = 1,
           // so horizontal scale = desired diameter (CAP_DIAMETER * scale). Vertical
           // squashed flat: geometry height = 2*radius + length.

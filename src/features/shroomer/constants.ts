@@ -43,6 +43,14 @@ export const TUMBLE_RATE_MAX = 13; // rad/s
 // Gravity for shroomers
 export const SHROOMER_GRAVITY = 20.0;
 
+// Headshot-kill fragmentation explosion: cap launches straight up at 2× the
+// part speed; body parts fly out horizontally (random directions) at the normal
+// speed. Gravity arcs them down; the corpse is removed after the duration.
+export const EXPLODE_PART_SPEED = 8.0;   // horizontal, "normal" exploding velocity
+export const EXPLODE_CAP_SPEED = 16.0;   // straight up, 2× momentum
+export const EXPLODE_GRAVITY = 20.0;
+export const EXPLODE_DURATION_MS = 2000;
+
 // Maximum render distance — beyond this, shroomers aren't drawn at all.
 export const SHROOMER_RENDER_DISTANCE = 80;
 // Beyond this (but within render distance) shroomers are drawn but their body

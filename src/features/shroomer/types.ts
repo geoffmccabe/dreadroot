@@ -136,6 +136,12 @@ export interface ShroomerInstance {
   /** Dead-but-still-flying ragdoll: a blast-killed shroomer that tumbles through
    *  the air, then despawns when the tumble completes (not interactive). */
   isCorpse?: boolean;
+  /** Headshot-kill fragmentation: cap launches straight up, body parts fly out
+   *  horizontally. Renderer drives the part physics; despawns after a timeout. */
+  isExploding?: boolean;
+  explodeStartTime?: number;
+  /** Random seed (radians) so each part flies a deterministic random direction. */
+  explodeSeed?: number;
   /** Active fires on body parts */
   bodyFires: ShroomerBodyFire[];
 }

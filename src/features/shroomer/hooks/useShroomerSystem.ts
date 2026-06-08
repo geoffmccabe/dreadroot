@@ -17,7 +17,7 @@ import {
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
-import { SHROOMER_HITBOX_RADIUS, SHROOMER_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX } from '../constants';
+import { SHROOMER_HITBOX_RADIUS, SHROOMER_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX, EXPLODE_DURATION_MS } from '../constants';
 
 // Head movement type randomizer - 1/3 each
 function randomHeadMovementType(): HeadMovementType {
@@ -284,53 +284,32 @@ export function useShroomerSystem({
     shroomer.currentHealth -= damage;
     shroomer.lastDamagedAt = Date.now();
 
-    if (isHeadshot && bulletDirection) {
-      shroomer.isKnockedDown = true;
-      shroomer.knockdownDirection = bulletDirection.clone().normalize();
-      shroomer.knockdownDirection.y = 0;
-      shroomer.knockdownProgress = 0;
-      shroomer.knockdownStartTime = Date.now();
-      shroomer.knockdownSlideDistance = KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL * playerLevel * 0.5;
-      shroomer.velocity.set(0, 0, 0);
-    } else if (knockbackDir) {
+    // Simple shpider-style knockback: a clean shove straight back along the hit
+    // direction — purely horizontal, no tumble, no sideways slide, no knockdown.
+    if (knockbackDir) {
       shroomer.velocity.x = knockbackDir.x * kbStrength;
       shroomer.velocity.z = knockbackDir.z * kbStrength;
-      if (knockbackDir.y > 0) {
-        shroomer.velocity.y = knockbackDir.y * kbStrength;
-      }
-      const sp2 = shroomer.velocity.x * shroomer.velocity.x
-        + shroomer.velocity.y * shroomer.velocity.y
-        + shroomer.velocity.z * shroomer.velocity.z;
-      if (sp2 > MAX_KNOCKBACK_SPEED * MAX_KNOCKBACK_SPEED) {
-        const sc = MAX_KNOCKBACK_SPEED / Math.sqrt(sp2);
+      shroomer.velocity.y = 0;
+      const sp = Math.hypot(shroomer.velocity.x, shroomer.velocity.z);
+      if (sp > MAX_KNOCKBACK_SPEED) {
+        const sc = MAX_KNOCKBACK_SPEED / sp;
         shroomer.velocity.x *= sc;
-        shroomer.velocity.y *= sc;
         shroomer.velocity.z *= sc;
       }
-      shroomer.stunUntil = Date.now() + 1000;
-
-      if (knockbackDir.y > 0) {
-        const ax = Math.random() * 2 - 1;
-        const ay = Math.random() * 2 - 1;
-        const az = Math.random() * 2 - 1;
-        const inv = 1 / (Math.hypot(ax, ay, az) || 1);
-        shroomer.isKnockedDown = false;
-        shroomer.isTumbling = true;
-        shroomer.tumbleAxisX = ax * inv;
-        shroomer.tumbleAxisY = ay * inv;
-        shroomer.tumbleAxisZ = az * inv;
-        shroomer.tumbleRate = TUMBLE_RATE_MIN + Math.random() * (TUMBLE_RATE_MAX - TUMBLE_RATE_MIN);
-        shroomer.tumbleLaunchAt = Date.now();
-        shroomer.tumbleLandedAt = 0;
-      }
+      shroomer.stunUntil = Date.now() + 400;
     }
 
     if (shroomer.currentHealth <= 0) {
       onShroomerKilled?.(shroomer.definition.tier);
 
-      // Headshot kill → exploding death sequence at the head sphere.
+      // Headshot kill → fragmentation explosion: the renderer launches the cap
+      // straight up and the body parts out horizontally. Flag it + flash VFX.
       if (isHeadshot) {
         const sc = shroomer.scale ?? 1;
+        shroomer.isExploding = true;
+        shroomer.explodeStartTime = Date.now();
+        shroomer.explodeSeed = Math.random() * Math.PI * 2;
+        shroomer.velocity.set(0, 0, 0);
         onShroomerHeadExplode?.(
           shroomer.position.x,
           shroomer.position.y + 1.7 * sc, // head sphere height (under the cap)
@@ -353,8 +332,13 @@ export function useShroomerSystem({
         setTimeout(() => { deathSoundCountRef.current--; }, DEATH_SOUND_PITCH_DOWN_MS);
       }
 
-      if (shroomer.isTumbling) {
-        shroomer.isCorpse = true;
+      if (shroomer.isExploding) {
+        // Keep it rendered (parts flying) for the explosion, then remove.
+        const target = shroomer;
+        setTimeout(() => {
+          target.isActive = false;
+          deadPendingRef.current = true;
+        }, EXPLODE_DURATION_MS);
       } else {
         shroomer.isActive = false;
       }
@@ -441,7 +425,7 @@ export function useShroomerSystem({
       getActiveEnemies: () => shroomersRef.current,
       getId: (s) => s.id,
       getHitbox: (s) => {
-        if (!s.isActive || s.isCorpse) return null;
+        if (!s.isActive || s.isCorpse || s.isExploding) return null;
         const scale = s.scale ?? 1;
         return {
           centerX: s.position.x,
