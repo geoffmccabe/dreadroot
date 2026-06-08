@@ -42,6 +42,9 @@ interface UseShroomerSystemOptions {
 
 // Audio settings (reuse shombie's moan — shroomer shares shombie sounds)
 const MOAN_SOUND_URL = '/shroomers_noises.mp3';
+const HURT_SOUND_URL = '/shroomer_hurt.mp3';
+const HURT_SOUND_VOLUME = 0.7;
+const MAX_CONCURRENT_HURT_SOUNDS = 6;
 const MOAN_CHECK_INTERVAL_MS = 5000; // Check every 5 seconds
 const MOAN_CHANCE = 0.1; // 10% chance per zombie per check
 const MOAN_VOLUME = 0.5; // 50% volume
@@ -55,7 +58,7 @@ const MAX_CONCURRENT_DEATH_SOUNDS = 6;
 const SHROOMER_SPAWN_FREQUENCY_MULT = 10;
 
 // Preload shroomer sounds
-preloadSpatialSounds([MOAN_SOUND_URL]);
+preloadSpatialSounds([MOAN_SOUND_URL, HURT_SOUND_URL]);
 
 /**
  * Hook to manage active shroomers with chunk-based spawning.
@@ -84,6 +87,7 @@ export function useShroomerSystem({
   // Batched dead-shroomer sweep (once per second).
   const deadPendingRef = useRef(false);
   const deathSoundCountRef = useRef(0);
+  const hurtSoundCountRef = useRef(0);
   useEffect(() => {
     const id = setInterval(() => {
       deadPendingRef.current = false;
@@ -323,6 +327,20 @@ export function useShroomerSystem({
           shroomer.velocity.z *= sc;
         }
         shroomer.stunUntil = Date.now() + 400;
+      }
+    }
+
+    // Non-fatal hit → "hurt" sound (in sync with the damage + knockback above).
+    if (shroomer.currentHealth > 0) {
+      if (hurtSoundCountRef.current < MAX_CONCURRENT_HURT_SOUNDS) {
+        const p = getLocalPlayerSnapshot();
+        const hdx = shroomer.position.x - p.x;
+        const hdy = shroomer.position.y - p.y;
+        const hdz = shroomer.position.z - p.z;
+        const hdist = Math.sqrt(hdx * hdx + hdy * hdy + hdz * hdz);
+        hurtSoundCountRef.current++;
+        playSpatialSound(HURT_SOUND_URL, hdist, { baseVolume: HURT_SOUND_VOLUME });
+        setTimeout(() => { hurtSoundCountRef.current--; }, 250);
       }
     }
 

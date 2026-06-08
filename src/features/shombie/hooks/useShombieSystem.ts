@@ -41,6 +41,9 @@ const _spawnPos = new THREE.Vector3();
 
 // Audio settings
 const MOAN_SOUND_URL = '/shombie_moan_1.mp3';
+const HURT_SOUND_URL = '/shombie_hurt.mp3';
+const HURT_SOUND_VOLUME = 0.7;
+const MAX_CONCURRENT_HURT_SOUNDS = 6;
 const MOAN_CHECK_INTERVAL_MS = 5000; // Check every 5 seconds
 const MOAN_CHANCE = 0.1; // 10% chance per zombie per check
 const MOAN_VOLUME = 0.5; // 50% volume
@@ -53,7 +56,7 @@ const DEATH_SOUND_PITCH_DOWN_MS = 1300;
 const MAX_CONCURRENT_DEATH_SOUNDS = 6;
 
 // Preload shombie sounds
-preloadSpatialSounds([MOAN_SOUND_URL]);
+preloadSpatialSounds([MOAN_SOUND_URL, HURT_SOUND_URL]);
 
 /**
  * Hook to manage active shombies with chunk-based spawning
@@ -85,6 +88,7 @@ export function useShombieSystem({
   const deadPendingRef = useRef(false);
   // Concurrent power-down death sounds in flight (capped).
   const deathSoundCountRef = useRef(0);
+  const hurtSoundCountRef = useRef(0);
   useEffect(() => {
     const id = setInterval(() => {
       // Always compact: instant deaths set isActive=false here, but ragdoll
@@ -386,6 +390,22 @@ export function useShombieSystem({
         shombie.tumbleRate = TUMBLE_RATE_MIN + Math.random() * (TUMBLE_RATE_MAX - TUMBLE_RATE_MIN);
         shombie.tumbleLaunchAt = Date.now();
         shombie.tumbleLandedAt = 0;
+      }
+    }
+
+    // Non-fatal hit → "hurt" sound (in sync with the damage + knockback above).
+    // Throttled like the death sound so a horde getting peppered isn't 100 at
+    // once. The fatal hit plays the death sound instead (below).
+    if (shombie.currentHealth > 0) {
+      if (hurtSoundCountRef.current < MAX_CONCURRENT_HURT_SOUNDS) {
+        const p = getLocalPlayerSnapshot();
+        const hdx = shombie.position.x - p.x;
+        const hdy = shombie.position.y - p.y;
+        const hdz = shombie.position.z - p.z;
+        const hdist = Math.sqrt(hdx * hdx + hdy * hdy + hdz * hdz);
+        hurtSoundCountRef.current++;
+        playSpatialSound(HURT_SOUND_URL, hdist, { baseVolume: HURT_SOUND_VOLUME });
+        setTimeout(() => { hurtSoundCountRef.current--; }, 250);
       }
     }
 
