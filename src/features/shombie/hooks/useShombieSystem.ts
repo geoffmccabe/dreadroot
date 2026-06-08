@@ -87,7 +87,9 @@ export function useShombieSystem({
   const deathSoundCountRef = useRef(0);
   useEffect(() => {
     const id = setInterval(() => {
-      if (!deadPendingRef.current) return;
+      // Always compact: instant deaths set isActive=false here, but ragdoll
+      // corpses despawn later in applyResult (no deadPending signal), so we
+      // can't gate on deadPendingRef. Cheap O(n) filter once per second.
       deadPendingRef.current = false;
       const before = shombiesRef.current.length;
       shombiesRef.current = shombiesRef.current.filter(s => s.isActive);
@@ -327,7 +329,9 @@ export function useShombieSystem({
     kbStrength: number = 1.0,
   ): boolean => {
     const shombie = shombiesRef.current.find(s => s.id === shombieId);
-    if (!shombie || !shombie.isActive) return false;
+    // Corpses are already-dead ragdolls — ignore further damage (e.g. lingering
+    // burn ticks) so they don't re-trigger death / double-count the kill.
+    if (!shombie || !shombie.isActive || shombie.isCorpse) return false;
 
     shombie.currentHealth -= damage;
     shombie.lastDamagedAt = Date.now();
@@ -386,7 +390,6 @@ export function useShombieSystem({
     }
 
     if (shombie.currentHealth <= 0) {
-      shombie.isActive = false;
       onShombieKilled?.(shombie.definition.tier);
 
       // Death sound: the shombie's own moan, pitched down to ~0 (powering down).
@@ -406,11 +409,15 @@ export function useShombieSystem({
         setTimeout(() => { deathSoundCountRef.current--; }, DEATH_SOUND_PITCH_DOWN_MS);
       }
 
-      // Do NOT filter + setShombies per death: a grenade killing a whole horde
-      // would fire one full scene re-render per kill — the FPS-0 freeze. The
-      // renderer, combat hitboxes and separation hash all skip !isActive
-      // shombies, so the dead one is inert immediately; a once-per-second sweep
-      // (deadSweep effect) compacts the array in a single batched update.
+      // Blast-killed shombies fly as ragdoll CORPSES: keep rendering +
+      // simulating so they arc + tumble through the air, then despawn when the
+      // tumble finishes (in applyResult). Non-blast deaths remove immediately.
+      // Either way no per-death setShombies — the once-per-second sweep compacts.
+      if (shombie.isTumbling) {
+        shombie.isCorpse = true;
+      } else {
+        shombie.isActive = false;
+      }
       deadPendingRef.current = true;
       return true;
     }
@@ -506,7 +513,7 @@ export function useShombieSystem({
       getActiveEnemies: () => shombiesRef.current,
       getId: (s) => s.id,
       getHitbox: (s) => {
-        if (!s.isActive) return null;
+        if (!s.isActive || s.isCorpse) return null; // corpses are dead ragdolls
         const scale = s.scale ?? 1;
         return {
           centerX: s.position.x,

@@ -135,6 +135,9 @@ export interface ShombieInstance {
   tumbleLaunchAt?: number;
   /** Landing timestamp (ms); 0 = still airborne. */
   tumbleLandedAt?: number;
+  /** Dead-but-still-flying ragdoll: a blast-killed shombie that tumbles through
+   *  the air, then despawns when the tumble completes (not interactive). */
+  isCorpse?: boolean;
   /** Active fires on body parts */
   bodyFires: ShombieBodyFire[];
 }

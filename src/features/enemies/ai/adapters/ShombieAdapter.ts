@@ -234,8 +234,18 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
           tnow - (shombie.tumbleLaunchAt ?? tnow) > 150) {
         shombie.tumbleLandedAt = tnow; // landed in its rotated pose; slides via decay
       }
-      if (shombie.tumbleLandedAt && tnow - shombie.tumbleLandedAt >= TUMBLE_WAIT_MS + TUMBLE_RECOVER_MS) {
-        shombie.isTumbling = false; // upright again → fall through to normal AI
+      const sinceLand = shombie.tumbleLandedAt ? tnow - shombie.tumbleLandedAt : -1;
+      // Corpse: land + hold the pose, then despawn (no rise). Alive: land +
+      // hold + rise upright, then resume AI.
+      const done = sinceLand >= 0 && (shombie.isCorpse
+        ? sinceLand >= TUMBLE_WAIT_MS
+        : sinceLand >= TUMBLE_WAIT_MS + TUMBLE_RECOVER_MS);
+      if (done) {
+        if (shombie.isCorpse) {
+          shombie.isActive = false; // ragdoll corpse done → despawn (sweep compacts)
+          return;
+        }
+        shombie.isTumbling = false; // alive: risen upright → resume normal AI
       } else {
         const clamped = clampPositionOutsideFSZ(shombie.position.x, shombie.position.z);
         shombie.position.x = clamped.x;
