@@ -307,13 +307,11 @@ export function strikePartTransform(
   _partXf.dx = dirX * reach;
   _partXf.dy = 0;
   _partXf.dz = dirZ * reach;
-  // Yaw so the part's long axis points along the strike vector. Our body Y
-  // rotation convention is atan2(x, z) (see renderer rotation usage), and the
-  // part long axis is vertical at rest — the yaw biases the part to aim toward
-  // the target as it thrusts. Scale with how far it's extending so it only
-  // points during the punch, returning to neutral at rest.
-  const aim = Math.atan2(dirX, dirZ);
-  _partXf.yawToTarget = aim * clamp01(Math.abs(extendScalar) / STRIKE_REACH_FRAC);
+  // PITCH the limb from vertical (rest) toward horizontal so its sharp/distal
+  // end points AT the target during the punch. `yawToTarget` carries the tilt
+  // ANGLE (the renderer rotates about the strike-perpendicular axis): 0 at rest,
+  // up to ~90° at full thrust, and NEGATIVE during the wind-up (tilts back).
+  _partXf.yawToTarget = (Math.PI / 2) * (extendScalar / STRIKE_REACH_FRAC);
   return _partXf;
 }
 

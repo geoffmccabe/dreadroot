@@ -63,6 +63,7 @@ const _upVec = new THREE.Vector3();
 // Strike scratch: per-limb yaw quaternion (body yaw + point-at-target yaw).
 const _strikeQuat = new THREE.Quaternion();
 const _strikeEuler = new THREE.Euler();
+const _strikeAxis = new THREE.Vector3();
 const TUMBLE_PIVOT_HEIGHT = 1.2;
 const TUMBLE_GROUND_REST = 0.4;
 
@@ -954,11 +955,15 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
 
             placePartInto(part.name, part.offsetX, part.offsetY, part.offsetZ, twitch, true);
             tmpPosition.set(_placeResult.px, _placeResult.py, _placeResult.pz);
-            // Per-limb point-at-target yaw during a strike (0 otherwise).
+            // Per-limb forward TILT during a strike (0 otherwise): pitch the
+            // vertical limb toward the target around the strike-perpendicular
+            // horizontal axis so its sharp/distal end points at the target.
             let partQuat = tmpQuaternion;
             if (_placeResult.yaw !== 0) {
-              _strikeEuler.set(0, shroomer.rotation + _placeResult.yaw, 0);
-              _strikeQuat.setFromEuler(_strikeEuler);
+              _strikeAxis.set(-(_ctx.strikeDirZ), 0, _ctx.strikeDirX);
+              const al = Math.hypot(_strikeAxis.x, _strikeAxis.z) || 1;
+              _strikeAxis.x /= al; _strikeAxis.z /= al;
+              _strikeQuat.setFromAxisAngle(_strikeAxis, _placeResult.yaw);
               partQuat = _strikeQuat;
             }
 

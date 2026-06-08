@@ -61,6 +61,7 @@ const _upVec = new THREE.Vector3();
 // Strike scratch: per-limb yaw quaternion (body yaw + point-at-target yaw).
 const _strikeQuat = new THREE.Quaternion();
 const _strikeEuler = new THREE.Euler();
+const _strikeAxis = new THREE.Vector3();
 // Tumble pivot = center of gravity, ~60% of body height (weighted toward the
 // heavier torso/head), in part-offset units (× shombie scale). GROUND_REST is
 // the resting half-height of a body lying flat (so it doesn't sink/float).
@@ -855,8 +856,13 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
                 finalOffsetY += xf.dy;
                 finalOffsetZ += xf.dz;
                 if (xf.yawToTarget !== 0) {
-                  _strikeEuler.set(0, shombie.rotation + xf.yawToTarget, 0);
-                  _strikeQuat.setFromEuler(_strikeEuler);
+                  // Tilt the limb forward to point at the target: rotate about the
+                  // horizontal axis perpendicular to the strike direction so the
+                  // vertical limb pitches toward the strike vector.
+                  _strikeAxis.set(-strikeDirZ, 0, strikeDirX);
+                  const al = Math.hypot(_strikeAxis.x, _strikeAxis.z) || 1;
+                  _strikeAxis.x /= al; _strikeAxis.z /= al;
+                  _strikeQuat.setFromAxisAngle(_strikeAxis, xf.yawToTarget);
                   partQuat = _strikeQuat;
                 }
               }
