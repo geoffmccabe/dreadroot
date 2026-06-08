@@ -15,7 +15,7 @@ export interface EnemyDefinition {
   name: string;
   texture_url: string | null;
   rarity?: string;
-  enemyType: 'shwarm' | 'shnake' | 'shombie' | 'shtickman' | 'shpider' | 'walapa';
+  enemyType: 'shwarm' | 'shnake' | 'shombie' | 'shtickman' | 'shpider' | 'walapa' | 'shroomer' | 'vortax';
 }
 
 // Rarity order for sorting (lowest to highest)
@@ -63,9 +63,11 @@ function getShtickmanRarityFromTier(tier: number): string {
   return 'legendary';
 }
 
-// Shpider + walapa share the standard 1-10 tier rarity buckets.
+// Shpider + walapa + shroomer + vortax share the standard 1-10 tier buckets.
 const getShpiderRarityFromTier = getShtickmanRarityFromTier;
 const getWalapaRarityFromTier = getShtickmanRarityFromTier;
+const getShroomerRarityFromTier = getShtickmanRarityFromTier;
+const getVortaxRarityFromTier = getShtickmanRarityFromTier;
 
 export function useUserCombatStats() {
   const { user } = useAuth();
@@ -92,6 +94,8 @@ export function useUserCombatStats() {
         shtickmanDefsResult,
         shpiderDefsResult,
         walapaDefsResult,
+        shroomerDefsResult,
+        vortaxDefsResult,
       ] = await Promise.all([
         supabase
           .from('user_combat_stats')
@@ -122,6 +126,15 @@ export function useUserCombatStats() {
         supabase
           .from('walapa_definitions' as any)
           .select('id, tier, name, body_texture_url')
+          .order('tier', { ascending: true }),
+        supabase
+          .from('shroomer_definitions' as any)
+          .select('id, tier, name, texture_url')
+          .order('tier', { ascending: true }),
+        // vortax_definitions is optional until its migration is run.
+        supabase
+          .from('vortax_definitions' as any)
+          .select('id, tier, name, texture_url')
           .order('tier', { ascending: true }),
       ]);
 
@@ -208,6 +221,32 @@ export function useUserCombatStats() {
           enemyType: 'walapa' as const,
         }));
         allDefs.push(...walapaDefs);
+      }
+
+      // Shroomer — texture for thumbnail.
+      if (!shroomerDefsResult.error && shroomerDefsResult.data) {
+        const shroomerDefs = (shroomerDefsResult.data as any[]).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.texture_url,
+          rarity: getShroomerRarityFromTier(d.tier),
+          enemyType: 'shroomer' as const,
+        }));
+        allDefs.push(...shroomerDefs);
+      }
+
+      // Vortax — tolerates the table not existing yet.
+      if (!vortaxDefsResult.error && vortaxDefsResult.data) {
+        const vortaxDefs = (vortaxDefsResult.data as any[]).map(d => ({
+          id: d.id,
+          tier: d.tier,
+          name: d.name,
+          texture_url: d.texture_url,
+          rarity: getVortaxRarityFromTier(d.tier),
+          enemyType: 'vortax' as const,
+        }));
+        allDefs.push(...vortaxDefs);
       }
 
       setDefinitions(allDefs);

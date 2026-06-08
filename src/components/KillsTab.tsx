@@ -69,29 +69,13 @@ export const KillsTab: React.FC<KillsTabProps> = ({ height }) => {
               {!monster.texture_url && (
                 <Skull className="w-6 h-6 text-muted-foreground/50" />
               )}
-              {/* Tier badge — top-left corner. White text with heavy
-                  shadow so it's legible on any texture; matches the
-                  hotbar tier badge style. */}
-              {monster.tier != null && (
-                <span style={{
-                  position: 'absolute',
-                  top: 2,
-                  left: 4,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: 'white',
-                  lineHeight: 1,
-                  textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
-                  pointerEvents: 'none',
-                }}>
-                  T{monster.tier}
-                </span>
-              )}
             </div>
-            
-            {/* Name and Kills - bottom 1/3 */}
+
+            {/* Name and Kills - bottom 1/3. Name is prefixed "T# " (e.g. T1 Shroomer). */}
             <div className="text-center space-y-0.5">
-              <h4 className="font-medium text-[10px] truncate leading-tight">{monster.name}</h4>
+              <h4 className="font-medium text-[10px] truncate leading-tight">
+                {monster.tier != null ? `T${monster.tier} ${monster.name}` : monster.name}
+              </h4>
               <div className="flex items-center justify-center gap-0.5">
                 <Skull className="w-3 h-3 text-destructive" />
                 <span className="font-bold text-sm">{monster.kills.toLocaleString()}</span>
