@@ -143,6 +143,9 @@ export interface ShroomerInstance extends StrikeState {
   explodeStartTime?: number;
   /** Random seed (radians) so each part flies a deterministic random direction. */
   explodeSeed?: number;
+  /** Momentum scale for the fragmentation (1.0 = headshot/grenade, 0.9 = a
+   *  lower-energy inter-enemy melee kill). */
+  explodeMomentum?: number;
   /** Active fires on body parts */
   bodyFires: ShroomerBodyFire[];
 }

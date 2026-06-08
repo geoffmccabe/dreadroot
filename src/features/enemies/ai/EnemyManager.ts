@@ -173,6 +173,18 @@ class EnemyManagerClass {
   }
   
   /**
+   * Force an enemy to (re)target the player — used when the player damages it,
+   * so it can break off a rival fight to retaliate. Overrides the target lock.
+   */
+  retargetToPlayer(enemyId: string): void {
+    const reg = this.enemies.get(enemyId);
+    if (reg) {
+      reg.aiTargetType = 'player';
+      reg.aiTargetEnemyId = null;
+    }
+  }
+
+  /**
    * Unregister an enemy.
    */
   unregister(enemyId: string): void {
@@ -267,15 +279,23 @@ class EnemyManagerClass {
     const myType = reg.spatialEntry.type;
     const rivals = RIVALS[myType];
 
-    // Re-roll when the timer elapses, or when a cached rival has vanished.
-    let retarget = !reg.aiRetargetAt || now >= reg.aiRetargetAt;
-    if (!retarget && reg.aiTargetType && reg.aiTargetType !== 'player' &&
-        (!reg.aiTargetEnemyId || !this.enemies.has(reg.aiTargetEnemyId))) {
-      retarget = true;
+    // COMMIT to the chosen target — no timed re-roll (that caused the
+    // flip-flopping). Only re-pick when the current target is lost: a rival
+    // that died/despawned or drifted beyond RIVAL_RANGE, or the player getting
+    // farther than RIVAL_RANGE.
+    let valid = false;
+    if (reg.aiTargetType && reg.aiTargetType !== 'player' && reg.aiTargetEnemyId) {
+      const r = this.enemies.get(reg.aiTargetEnemyId);
+      if (r) {
+        const rp = r.adapter.getPosition(r.enemy);
+        const ddx = rp.x - pos.x, ddz = rp.z - pos.z;
+        valid = (ddx * ddx + ddz * ddz) <= RIVAL_RANGE_SQ;
+      }
+    } else if (reg.aiTargetType === 'player') {
+      valid = distSqToPlayer <= RIVAL_RANGE_SQ;
     }
 
-    if (retarget) {
-      reg.aiRetargetAt = now + RETARGET_MS;
+    if (!valid) {
       reg.aiTargetType = 'player';
       reg.aiTargetEnemyId = null;
       // Rivals only count when a player is near enough to see the fight.

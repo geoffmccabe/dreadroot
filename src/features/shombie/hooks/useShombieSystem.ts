@@ -13,6 +13,7 @@ import {
   KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX } from '../constants';
@@ -331,6 +332,9 @@ export function useShombieSystem({
      *  grenade blasts pass a much larger value (post-falloff). The
      *  knockbackDir Y component lets blasts launch shombies upward. */
     kbStrength: number = 1.0,
+    /** Inter-enemy melee kill → ragdoll-launch the corpse (the shombie's
+     *  "explosion-like" death), at reduced momentum vs a grenade. */
+    isMeleeKill: boolean = false,
   ): boolean => {
     const shombie = shombiesRef.current.find(s => s.id === shombieId);
     // Corpses are already-dead ragdolls — ignore further damage (e.g. lingering
@@ -427,6 +431,23 @@ export function useShombieSystem({
           pitchDownMs: DEATH_SOUND_PITCH_DOWN_MS,
         });
         setTimeout(() => { deathSoundCountRef.current--; }, DEATH_SOUND_PITCH_DOWN_MS);
+      }
+
+      // Inter-enemy melee kill → ragdoll-launch the corpse (the shombie's
+      // "explosion-like" death): a small upward+outward pop + tumble, at ~0.9
+      // the momentum of a grenade-grade fling.
+      if (isMeleeKill && !shombie.isTumbling) {
+        const M = 0.9;
+        shombie.velocity.x = (knockbackDir?.x ?? 0) * 8 * M;
+        shombie.velocity.z = (knockbackDir?.z ?? 0) * 8 * M;
+        shombie.velocity.y = 9 * M;
+        const ax = Math.random() * 2 - 1, ay = Math.random() * 2 - 1, az = Math.random() * 2 - 1;
+        const inv = 1 / (Math.hypot(ax, ay, az) || 1);
+        shombie.isTumbling = true;
+        shombie.tumbleAxisX = ax * inv; shombie.tumbleAxisY = ay * inv; shombie.tumbleAxisZ = az * inv;
+        shombie.tumbleRate = TUMBLE_RATE_MIN + Math.random() * (TUMBLE_RATE_MAX - TUMBLE_RATE_MIN);
+        shombie.tumbleLaunchAt = Date.now();
+        shombie.tumbleLandedAt = 0;
       }
 
       // Blast-killed shombies fly as ragdoll CORPSES: keep rendering +
@@ -550,8 +571,15 @@ export function useShombieSystem({
         // 1 m/s tap that the body-shot stun rule expects.
         const kbStrength = info.source === 'explosion'
           ? (info.bulletSpeed || 1.0)
+          : info.source === 'melee'
+          ? 2.0 // melee shove from a rival enemy (doubled for a clearer reaction)
           : 1.0;
-        return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
+        // Player damage (anything but a rival's melee) → 80% chance to break off
+        // and retaliate against the player.
+        if (info.source !== 'melee' && Math.random() < 0.8) {
+          EnemyManager.retargetToPlayer(s.id);
+        }
+        return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength, info.source === 'melee');
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
       // Body-relative flame points so a burn engulfs the whole humanoid and

@@ -15,6 +15,7 @@ import {
   KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL,
 } from '../constants';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
+import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHROOMER_HITBOX_RADIUS, SHROOMER_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX, EXPLODE_DURATION_MS } from '../constants';
@@ -281,6 +282,9 @@ export function useShroomerSystem({
     isHeadshot: boolean = false,
     bulletDirection?: THREE.Vector3,
     kbStrength: number = 1.0,
+    /** Inter-enemy melee kill → also fragment (cap up, parts out), at reduced
+     *  momentum vs a grenade-headshot fragmentation. */
+    isMeleeKill: boolean = false,
   ): boolean => {
     const shroomer = shroomersRef.current.find(s => s.id === shroomerId);
     if (!shroomer || !shroomer.isActive || shroomer.isCorpse) return false;
@@ -347,13 +351,15 @@ export function useShroomerSystem({
     if (shroomer.currentHealth <= 0) {
       onShroomerKilled?.(shroomer.definition.tier);
 
-      // Headshot kill → fragmentation explosion: the renderer launches the cap
-      // straight up and the body parts out horizontally. Flag it + flash VFX.
-      if (isHeadshot) {
+      // Fragmentation explosion (cap up, parts out): on a headshot kill (full
+      // momentum) OR an inter-enemy melee kill (90% momentum — "not a giant
+      // grenade blast").
+      if (isHeadshot || isMeleeKill) {
         const sc = shroomer.scale ?? 1;
         shroomer.isExploding = true;
         shroomer.explodeStartTime = Date.now();
         shroomer.explodeSeed = Math.random() * Math.PI * 2;
+        shroomer.explodeMomentum = isHeadshot ? 1.0 : 0.9;
         shroomer.velocity.set(0, 0, 0);
         onShroomerHeadExplode?.(
           shroomer.position.x,
@@ -493,9 +499,14 @@ export function useShroomerSystem({
         const kbStrength = info.source === 'explosion'
           ? (info.bulletSpeed || 1.0)
           : info.source === 'melee'
-          ? 2.0 // a small shove from another enemy — keeps the brawl close
+          ? 4.0 // melee shove from another enemy (doubled for a clearer reaction)
           : 11 * kbScale * Math.max(1, (info.bulletSpeed || 0) / 60) / (s.scale ?? 1);
-        return damageShroomer(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
+        // Player damage (anything but a rival's melee) → 80% chance to break off
+        // and retaliate against the player.
+        if (info.source !== 'melee' && Math.random() < 0.8) {
+          EnemyManager.retargetToPlayer(s.id);
+        }
+        return damageShroomer(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength, info.source === 'melee');
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
       // Body-relative flame points (head sphere under the cap, torso, legs) so a

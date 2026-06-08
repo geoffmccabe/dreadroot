@@ -896,6 +896,10 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
             : 0;
           const explodeSeed = shroomer.explodeSeed ?? 0;
           const explodeDrop = exploding ? 0.5 * EXPLODE_GRAVITY * explodeT * explodeT : 0;
+          // Momentum scale: 1.0 (headshot/grenade) or 0.9 (inter-enemy melee).
+          const explodeMom = shroomer.explodeMomentum ?? 1;
+          const partSpeed = EXPLODE_PART_SPEED * explodeMom;
+          const capSpeed = EXPLODE_CAP_SPEED * explodeMom;
 
           // Fill the module-level transform context once per shroomer so
           // placePartInto() (module-level, no per-frame allocation) can compute
@@ -960,8 +964,8 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
 
             if (exploding) {
               const ang = explodeSeed + partIdx * 2.39996; // golden-angle spread
-              tmpPosition.x += Math.cos(ang) * EXPLODE_PART_SPEED * explodeT;
-              tmpPosition.z += Math.sin(ang) * EXPLODE_PART_SPEED * explodeT;
+              tmpPosition.x += Math.cos(ang) * partSpeed * explodeT;
+              tmpPosition.z += Math.sin(ang) * partSpeed * explodeT;
               tmpPosition.y -= explodeDrop;
             }
 
@@ -989,8 +993,8 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
 
           if (exploding) {
             const ang = explodeSeed + PARTS_PER_SHROOMER * 2.39996;
-            tmpPosition.x += Math.cos(ang) * EXPLODE_PART_SPEED * explodeT;
-            tmpPosition.z += Math.sin(ang) * EXPLODE_PART_SPEED * explodeT;
+            tmpPosition.x += Math.cos(ang) * partSpeed * explodeT;
+            tmpPosition.z += Math.sin(ang) * partSpeed * explodeT;
             tmpPosition.y -= explodeDrop;
           }
 
@@ -1035,7 +1039,7 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
 
           if (exploding) {
             // Cap rockets straight up (2× momentum), then gravity pulls it back.
-            tmpPosition.y += EXPLODE_CAP_SPEED * explodeT - explodeDrop;
+            tmpPosition.y += capSpeed * explodeT - explodeDrop;
           }
           // Wide + flat. Capsule geometry diameter (X/Z) = 2*CAP_BASE_RADIUS = 1,
           // so horizontal scale = desired diameter (CAP_DIAMETER * scale). Vertical
