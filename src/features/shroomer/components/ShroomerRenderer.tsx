@@ -33,7 +33,7 @@ import {
 } from '../constants';
 import particleFire from 'three-particle-fire';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
-import { getShombieUVs, slotIndexToUVs } from '@/lib/atlasLookup';
+import { getShroomerUVs, slotIndexToUVs } from '@/lib/atlasLookup';
 import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset } from '@/lib/atlasMaterial';
 
 // Pre-allocated objects
@@ -813,8 +813,9 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
             tmpQuaternion.setFromEuler(tmpEuler);
           }
 
-          // Get UV offset from the SHOMBIE atlas for this tier (shared textures)
-          const uvs = getShombieUVs(shroomer.definition.tier);
+          // Get UV offset from the shroomer's own atlas tiles (seeded from
+          // shombie texture URLs via the SQL copy + useAtlasSync registration).
+          const uvs = getShroomerUVs(shroomer.definition.tier);
           let uvOffsetX = 0;
           let uvOffsetY = 0;
 

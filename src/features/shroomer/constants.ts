@@ -110,6 +110,10 @@ export const HEAD_FIRE_PARTICLE_COUNT = 60;
 
 // Spawn variation settings
 export const SHROOMER_SCALE_VARIATION = 0.2; // ±20% size variation
+// Tier sizing: T1 = 50% of the base model; +30% (additive) per tier above T1.
+// T10 = 0.5 × (1 + 0.3×9) = 1.85 (≈ +270% over T1).
+export const SHROOMER_T1_SCALE = 0.5;
+export const SHROOMER_TIER_GROWTH = 0.3;
 export const SHROOMER_EMERGENCE_DURATION_MS = 3000; // 3 seconds to rise from ground
 export const SHROOMER_GROUP_SPREAD_RADIUS = 3; // Blocks radius for group spawns
 

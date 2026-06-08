@@ -18,6 +18,7 @@ import {
   calculateFungalTreeSlotIndex,
   getShwarmTextureId,
   getShombieTextureId,
+  getShroomerTextureId,
   getShnakeTextureId,
   getWalapaTextureId,
   getBlockTextureId,
@@ -81,6 +82,20 @@ export function useAtlasSync(options?: {
         .order('tier');
       if (error) throw error;
       return data;
+    },
+    enabled,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: shroomerDefinitions } = useQuery({
+    queryKey: ['atlas-shroomer-definitions'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shroomer_definitions' as any)
+        .select('tier, texture_url')
+        .order('tier');
+      if (error) throw error;
+      return data as Array<{ tier: number; texture_url: string | null }>;
     },
     enabled,
     staleTime: 5 * 60 * 1000,
@@ -209,6 +224,13 @@ export function useAtlasSync(options?: {
         }
       }
 
+      // Shroomer textures (own copy — seeded from shombie texture URLs)
+      if (shroomerDefinitions) {
+        for (const def of shroomerDefinitions) {
+          specs.push({ textureId: getShroomerTextureId(def.tier), category: 'shroomer', sourceUrl: def.texture_url || null });
+        }
+      }
+
       // Shnake textures (3 parts each)
       if (shnakeDefinitions) {
         for (const def of shnakeDefinitions) {
@@ -269,7 +291,7 @@ export function useAtlasSync(options?: {
     } finally {
       syncInProgressRef.current = false;
     }
-  }, [seedDefinitions, shwarmDefinitions, shombieDefinitions, shnakeDefinitions, walapaDefinitions, blockTypes]);
+  }, [seedDefinitions, shwarmDefinitions, shombieDefinitions, shroomerDefinitions, shnakeDefinitions, walapaDefinitions, blockTypes]);
 
   // Auto-sync when all definitions are loaded
   useEffect(() => {
@@ -358,6 +380,7 @@ export async function syncAtlasOnInit(): Promise<void> {
     seedsResult,
     shwarmsResult,
     shombiesResult,
+    shroomersResult,
     shnakesResult,
     walapasResult,
     blocksResult,
@@ -365,6 +388,7 @@ export async function syncAtlasOnInit(): Promise<void> {
     supabase.from('seed_definitions').select('*').order('tier'),
     supabase.from('shwarm_definitions').select('tier, texture_url').order('tier'),
     supabase.from('shombie_definitions').select('tier, texture_url').order('tier'),
+    supabase.from('shroomer_definitions' as any).select('tier, texture_url').order('tier'),
     supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url').order('tier'),
     supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
     supabase.from('block_types' as any).select('name, texture_url'),
@@ -373,6 +397,7 @@ export async function syncAtlasOnInit(): Promise<void> {
   const seedDefinitions = seedsResult.data;
   const shwarmDefinitions = shwarmsResult.data;
   const shombieDefinitions = shombiesResult.data;
+  const shroomerDefinitions = shroomersResult.error ? [] : (shroomersResult.data as Array<{ tier: number; texture_url: string | null }>);
   const shnakeDefinitions = shnakesResult.data;
   // walapa_definitions and block_types are optional — quietly fall
   // back to empty arrays when the table is missing in this Supabase
@@ -434,6 +459,12 @@ export async function syncAtlasOnInit(): Promise<void> {
   if (shombieDefinitions) {
     for (const def of shombieDefinitions) {
       specs.push({ textureId: getShombieTextureId(def.tier), category: 'shombie', sourceUrl: def.texture_url || null });
+    }
+  }
+
+  if (shroomerDefinitions) {
+    for (const def of shroomerDefinitions) {
+      specs.push({ textureId: getShroomerTextureId(def.tier), category: 'shroomer', sourceUrl: def.texture_url || null });
     }
   }
 

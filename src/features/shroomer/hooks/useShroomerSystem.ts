@@ -9,6 +9,8 @@ import {
   SPAWN_CHECK_INTERVAL_MS,
   SHROOMER_SPAWN_BOUNDS,
   SHROOMER_SCALE_VARIATION,
+  SHROOMER_T1_SCALE,
+  SHROOMER_TIER_GROWTH,
   SHROOMER_GROUP_SPREAD_RADIUS,
   KNOCKDOWN_SLIDE_DISTANCE_PER_LEVEL,
 } from '../constants';
@@ -163,8 +165,11 @@ export function useShroomerSystem({
 
     const id = `shroomer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // Random scale variation ±20%
-    const scale = 1 + (Math.random() * 2 - 1) * SHROOMER_SCALE_VARIATION;
+    // Size: T1 is 50% of the base model; +30% (additive) per tier above T1, so
+    // T10 = 0.5 × (1 + 0.3×9) = 1.85 (i.e. +270% over T1). Scales the WHOLE
+    // model (cylinders, head, cap together). Then ±20% per-instance variation.
+    const tierScale = SHROOMER_T1_SCALE * (1 + SHROOMER_TIER_GROWTH * ((definition.tier ?? 1) - 1));
+    const scale = tierScale * (1 + (Math.random() * 2 - 1) * SHROOMER_SCALE_VARIATION);
 
     const chunkX = Math.floor(x / CHUNK_SIZE);
     const chunkZ = Math.floor(z / CHUNK_SIZE);
