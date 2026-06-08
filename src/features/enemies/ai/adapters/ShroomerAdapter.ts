@@ -190,6 +190,7 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
         shroomer.strikeKnockback ?? 0,
         _strikeHitDir,
         locomotionContext?.onPlayerHit,
+        shroomer.definition.tier,
       );
     }
 

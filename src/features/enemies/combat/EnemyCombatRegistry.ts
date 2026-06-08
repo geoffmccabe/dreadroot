@@ -47,6 +47,9 @@ export interface DamageInfo {
   /** True if the bullet landed in the enemy's upper-most ~25% (headshot). */
   isHeadshot: boolean;
   source: DamageSource;
+  /** Explicit knockback impulse (m/s) for melee — overrides the adapter's
+   *  default. Set by the strike system from tier difference + damage dealt. */
+  knockbackImpulse?: number;
 }
 
 /**

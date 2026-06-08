@@ -313,4 +313,7 @@ export interface RegisteredEnemy<TEnemy = unknown> {
   aiTargetType?: string | null;     // null/'player' = the player; else a rival type
   aiTargetEnemyId?: string | null;
   aiRetargetAt?: number;
+  /** Angry at the player (took player damage): stays on the player, only a 20%
+   *  chance every 10s to peel off to a rival. */
+  aiAggro?: boolean;
 }

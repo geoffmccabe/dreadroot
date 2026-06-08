@@ -193,6 +193,7 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
         shombie.strikeKnockback ?? 0,
         _strikeHitDir,
         locomotionContext?.onPlayerHit,
+        shombie.definition.tier,
       );
     }
 

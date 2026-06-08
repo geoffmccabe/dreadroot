@@ -579,7 +579,7 @@ export function useShombieSystem({
         const kbStrength = info.source === 'explosion'
           ? (info.bulletSpeed || 1.0)
           : info.source === 'melee'
-          ? 12.0 // melee shove from a rival — large enough to read past the fast decay
+          ? (info.knockbackImpulse ?? 12.0) // tier+damage-scaled melee impulse
           : 1.0;
         // Player damage (anything but a rival's melee) → 80% chance to break off
         // and retaliate against the player.

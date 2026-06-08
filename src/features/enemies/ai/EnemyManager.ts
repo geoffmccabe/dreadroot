@@ -183,7 +183,8 @@ class EnemyManagerClass {
     if (reg) {
       reg.aiTargetType = 'player';
       reg.aiTargetEnemyId = null;
-      reg.aiRetargetAt = performance.now() + PLAYER_COMMIT_MS;
+      reg.aiAggro = true; // angry — stick on the player (20%/10s to peel off)
+      reg.aiRetargetAt = performance.now() + 10000;
     }
   }
 
@@ -296,15 +297,32 @@ class EnemyManagerClass {
         valid = (ddx * ddx + ddz * ddz) <= RIVAL_RANGE_SQ;
       }
     } else if (reg.aiTargetType === 'player') {
-      // PLAYER target: committed only for PLAYER_COMMIT_MS, then re-evaluated —
-      // otherwise every enemy that ever picks the player gets stuck on it
-      // forever (the player never dies/leaves) and they all funnel onto you.
-      valid = distSqToPlayer <= RIVAL_RANGE_SQ && now < (reg.aiRetargetAt ?? 0);
+      if (distSqToPlayer > RIVAL_RANGE_SQ) {
+        valid = false;
+      } else if (reg.aiAggro) {
+        // ANGRY (took player damage): stay on the player; only a 20% chance each
+        // 10s to peel off to a rival.
+        if (now >= (reg.aiRetargetAt ?? 0)) {
+          if (Math.random() < 0.2) {
+            valid = false; // peel off — re-pick below (clears aggro)
+          } else {
+            reg.aiRetargetAt = now + 10000; // stay angry for another 10s
+            valid = true;
+          }
+        } else {
+          valid = true;
+        }
+      } else {
+        // Normal player target: committed for PLAYER_COMMIT_MS, then re-evaluate
+        // (so enemies don't all funnel onto the player forever).
+        valid = now < (reg.aiRetargetAt ?? 0);
+      }
     }
 
     if (!valid) {
       reg.aiTargetType = 'player';
       reg.aiTargetEnemyId = null;
+      reg.aiAggro = false;
       reg.aiRetargetAt = now + PLAYER_COMMIT_MS;
       // Rivals only count when a player is near enough to see the fight.
       if (rivals && rivals.length > 0 && distSqToPlayer <= RIVAL_RANGE_SQ) {
