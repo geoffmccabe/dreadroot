@@ -15,6 +15,7 @@ import type {
 } from '../types';
 import { getBehaviorsByIds } from '../behaviors';
 import { DEFAULT_AI_CONFIG } from '../types';
+import { applyAttackResult } from '../applyAttack';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -381,12 +382,9 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
 
     if (result.kind === 'attack') {
       shombie.lastAttackAt = performance.now();
-
-      // Apply damage to player
-      if (locomotionContext?.onPlayerHit) {
-        _knockbackDir.set(result.dirX, 0, result.dirZ).normalize();
-        locomotionContext.onPlayerHit(result.damage, result.knockback, _knockbackDir);
-      }
+      // Route to the player OR a rival enemy (whichever the EnemyManager picked).
+      _knockbackDir.set(result.dirX, 0, result.dirZ).normalize();
+      applyAttackResult(shared, result.damage, result.knockback, _knockbackDir, locomotionContext?.onPlayerHit);
     }
   },
   

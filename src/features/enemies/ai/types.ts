@@ -123,12 +123,21 @@ export interface BehaviorContext {
  * Contains player info and shared scratch vectors.
  */
 export interface SharedContext {
+  // playerX/Y/Z is the THIS-ENEMY-TICK target position — usually the real
+  // player, but the EnemyManager swaps it to a rival enemy when one is chosen,
+  // so the existing chase/attack behaviors home in on it unchanged.
   playerX: number;
   playerY: number;
   playerZ: number;
   deltaMs: number;
   elapsedMs: number;
-  
+
+  /** When set, the current target is a RIVAL enemy (not the player): the
+   *  enemy ref + its combat-registry type. Cleared (undefined) for player
+   *  targets. Read by adapters to route an 'attack' result to the rival. */
+  aiTargetEnemy?: unknown;
+  aiTargetEnemyType?: string;
+
   // Scratch vectors for locomotion (reused, not allocated)
   scratchVec1: THREE.Vector3;
   scratchVec2: THREE.Vector3;
@@ -299,4 +308,9 @@ export interface RegisteredEnemy<TEnemy = unknown> {
   behaviorState: BehaviorState;
   /** Pre-allocated spatial entry for zero-allocation updates */
   spatialEntry: EnemyEntry;
+  /** Inter-species targeting: cached rival target (or 'player'/null) + when to
+   *  re-roll. The enemy keeps a target for a short while so it doesn't thrash. */
+  aiTargetType?: string | null;     // null/'player' = the player; else a rival type
+  aiTargetEnemyId?: string | null;
+  aiRetargetAt?: number;
 }

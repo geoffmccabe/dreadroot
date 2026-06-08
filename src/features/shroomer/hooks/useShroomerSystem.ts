@@ -474,6 +474,8 @@ export function useShroomerSystem({
         const kbScale = s.definition.knockback_received ?? 1;
         const kbStrength = info.source === 'explosion'
           ? (info.bulletSpeed || 1.0)
+          : info.source === 'melee'
+          ? 2.0 // a small shove from another enemy — keeps the brawl close
           : 11 * kbScale * Math.max(1, (info.bulletSpeed || 0) / 60) / (s.scale ?? 1);
         return damageShroomer(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
       },

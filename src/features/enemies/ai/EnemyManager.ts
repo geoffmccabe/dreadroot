@@ -30,6 +30,20 @@ const _scratchVec1 = new THREE.Vector3();
 const _scratchVec2 = new THREE.Vector3();
 const _scratchVec3 = new THREE.Vector3();
 
+// ── Inter-species hostility ─────────────────────────────────────────────────
+// Which enemy types will fight each other (mutual). Extend freely. Rival
+// targeting only kicks in when a PLAYER is within RIVAL_RANGE of the enemy, so
+// off-screen mobs don't brawl where nobody can see it.
+const RIVALS: Record<string, readonly string[]> = {
+  shombie: ['shroomer'],
+  shroomer: ['shombie'],
+};
+const RIVAL_RANGE = 100;                 // metres
+const RIVAL_RANGE_SQ = RIVAL_RANGE * RIVAL_RANGE;
+const RETARGET_MS = 2000;                // keep a target ~2s before re-rolling
+// Scratch: flat [id, type, id, type, …] of rival candidates (reused).
+const _rivalCand: string[] = [];
+
 /**
  * Singleton manager for all enemy AI updates.
  * Registers once with frameLoop and distributes ticks based on LOD.
@@ -236,6 +250,77 @@ class EnemyManagerClass {
   /**
    * Main tick function - called every frame by frameLoop.
    */
+  /**
+   * Decide what `reg` is attacking this tick and aim the shared context at it.
+   * Default is the player; if this enemy has rivals AND a player is within
+   * RIVAL_RANGE (so it's witnessable), it may instead pick a nearby rival —
+   * flat-random among the player + every rival in range (no prioritisation).
+   * A choice sticks for ~RETARGET_MS so targets don't thrash.
+   */
+  private selectTargetInto(
+    reg: RegisteredEnemy,
+    myId: string,
+    pos: { x: number; y: number; z: number },
+    distSqToPlayer: number,
+    now: number,
+  ): void {
+    const myType = reg.spatialEntry.type;
+    const rivals = RIVALS[myType];
+
+    // Re-roll when the timer elapses, or when a cached rival has vanished.
+    let retarget = !reg.aiRetargetAt || now >= reg.aiRetargetAt;
+    if (!retarget && reg.aiTargetType && reg.aiTargetType !== 'player' &&
+        (!reg.aiTargetEnemyId || !this.enemies.has(reg.aiTargetEnemyId))) {
+      retarget = true;
+    }
+
+    if (retarget) {
+      reg.aiRetargetAt = now + RETARGET_MS;
+      reg.aiTargetType = 'player';
+      reg.aiTargetEnemyId = null;
+      // Rivals only count when a player is near enough to see the fight.
+      if (rivals && rivals.length > 0 && distSqToPlayer <= RIVAL_RANGE_SQ) {
+        _rivalCand.length = 0;
+        const near = this.spatialIndex.getNearby(pos.x, pos.z, RIVAL_RANGE);
+        for (let i = 0; i < near.length; i++) {
+          const e = near[i];
+          if (e.id === myId || !rivals.includes(e.type)) continue;
+          if (!this.enemies.has(e.id)) continue; // must be resolvable to a ref
+          _rivalCand.push(e.id, e.type);
+        }
+        const rivalCount = _rivalCand.length / 2;
+        // Flat random over [player] + each rival (player is candidate index 0).
+        const pick = Math.floor(Math.random() * (rivalCount + 1));
+        if (pick < rivalCount) {
+          reg.aiTargetEnemyId = _rivalCand[pick * 2];
+          reg.aiTargetType = _rivalCand[pick * 2 + 1];
+        }
+      }
+    }
+
+    // Resolve the (cached) target → shared context.
+    if (reg.aiTargetType && reg.aiTargetType !== 'player' && reg.aiTargetEnemyId) {
+      const rival = this.enemies.get(reg.aiTargetEnemyId);
+      if (rival) {
+        const rp = rival.adapter.getPosition(rival.enemy);
+        this.sharedContext.playerX = rp.x;
+        this.sharedContext.playerY = rp.y;
+        this.sharedContext.playerZ = rp.z;
+        this.sharedContext.aiTargetEnemy = rival.enemy;
+        this.sharedContext.aiTargetEnemyType = reg.aiTargetType;
+        return;
+      }
+      // Rival gone — fall back to the player.
+      reg.aiTargetType = 'player';
+      reg.aiTargetEnemyId = null;
+    }
+    this.sharedContext.playerX = this.playerX;
+    this.sharedContext.playerY = this.playerY;
+    this.sharedContext.playerZ = this.playerZ;
+    this.sharedContext.aiTargetEnemy = undefined;
+    this.sharedContext.aiTargetEnemyType = undefined;
+  }
+
   private tick(_delta: number, elapsedTime: number): void {
     diagnostics.startTiming('enemyAI');
     
@@ -296,6 +381,11 @@ class EnemyManagerClass {
       // Update last tick time
       reg.lastTickTime = now;
       
+      // Choose this enemy's target (the player or a nearby rival) and point the
+      // shared context's target slot at it, so the chase/attack behaviors home
+      // in on whichever was chosen.
+      this.selectTargetInto(reg, id, pos, distSq, now);
+
       // Build context and run brain (pass persistent behaviorState)
       const ctx = reg.adapter.buildContext(reg.enemy, this.sharedContext, reg.behaviorState);
       // NOTE: nearbyAllies computation removed - no behaviors currently use it.

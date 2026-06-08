@@ -17,6 +17,7 @@ import type {
   BehaviorModule,
 } from '../types';
 import { getBehaviorsByIds } from '../behaviors';
+import { applyAttackResult } from '../applyAttack';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -348,11 +349,9 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
 
     if (result.kind === 'attack') {
       shroomer.lastAttackAt = performance.now();
-
-      if (locomotionContext?.onPlayerHit) {
-        _knockbackDir.set(result.dirX, 0, result.dirZ).normalize();
-        locomotionContext.onPlayerHit(result.damage, result.knockback, _knockbackDir);
-      }
+      // Route to the player OR a rival enemy (whichever the EnemyManager picked).
+      _knockbackDir.set(result.dirX, 0, result.dirZ).normalize();
+      applyAttackResult(shared, result.damage, result.knockback, _knockbackDir, locomotionContext?.onPlayerHit);
     }
   },
 
