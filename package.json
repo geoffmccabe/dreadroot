@@ -9,7 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "check:chunk-portability": "node scripts/check-chunk-portability.mjs"
+    "check:chunk-portability": "node scripts/check-chunk-portability.mjs",
+    "check:snapshot-roundtrip": "node --experimental-strip-types scripts/check-snapshot-roundtrip.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
