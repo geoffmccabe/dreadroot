@@ -96,6 +96,12 @@ export interface VortaxSphere {
   baseX: number;
   baseY: number;
   baseZ: number;
+  /** Self-spin: the sphere rotates about its own (random) axis as it orbits. */
+  spinAxisX: number;
+  spinAxisY: number;
+  spinAxisZ: number;
+  spinSpeed: number; // rad/s, random sign + magnitude
+  spinPhase: number;
   /** Destroyed by a bullet/flame hit → never rendered again, never respawns. */
   destroyed: boolean;
 }
@@ -183,16 +189,16 @@ export function generatePartTwitches(): Record<string, PartTwitch> {
 // Each "logical" part (the cap + each whole arm/leg, summed over upper+lower)
 // gets a fixed sphere budget. Spheres orbit the part center, filling its volume.
 //
-// Per-part counts: head=5, cap=20, each arm=10, each leg=10, torso=20.
+// Per-part counts (doubled): head=10, cap=40, each arm=20, each leg=20, torso=40.
 export const SPHERE_COUNTS: Record<string, number> = {
-  head: 5,
-  torso: 20,
-  cap: 20,
-  // Each whole arm/leg = 10 spheres, split across its upper + lower sub-parts (5 each).
-  leftUpperArm: 5, leftLowerArm: 5,
-  rightUpperArm: 5, rightLowerArm: 5,
-  leftUpperLeg: 5, leftLowerLeg: 5,
-  rightUpperLeg: 5, rightLowerLeg: 5,
+  head: 10,
+  torso: 40,
+  cap: 40,
+  // Each whole arm/leg = 20 spheres, split across its upper + lower sub-parts (10 each).
+  leftUpperArm: 10, leftLowerArm: 10,
+  rightUpperArm: 10, rightLowerArm: 10,
+  leftUpperLeg: 10, leftLowerLeg: 10,
+  rightUpperLeg: 10, rightLowerLeg: 10,
 };
 
 /** The mushroom cap is a virtual part — no entry in VORTAX_BODY_PARTS, so we
@@ -246,26 +252,33 @@ export function generateVortaxSpheres(): VortaxSphere[] {
     cx: number, cy: number, cz: number,
     extentX: number, extentY: number, extentZ: number,
     maxWidth: number,
+    diamFrac?: number, // fixed diameter fraction of maxWidth; else random 10–30%
   ) => {
     for (let i = 0; i < count; i++) {
       const axis = randUnitAxis();
       const base = perpUnit(axis.x, axis.y, axis.z);
+      const spin = randUnitAxis();
       // Orbit center jittered within the part's extent so the cloud fills volume.
       const ox = cx + (Math.random() * 2 - 1) * extentX * 0.5;
       const oy = cy + (Math.random() * 2 - 1) * extentY * 0.5;
       const oz = cz + (Math.random() * 2 - 1) * extentZ * 0.5;
       const orbitRadius = Math.random() * Math.max(extentX, extentY, extentZ) * 0.5;
-      // Diameter = 10–30% of the part's max width.
-      const diameter = maxWidth * (0.1 + Math.random() * 0.2);
+      // Fixed fraction (cap = 1/9) or random 10–30% of the part's max width.
+      const diameter = diamFrac != null
+        ? maxWidth * diamFrac
+        : maxWidth * (0.1 + Math.random() * 0.2);
       spheres.push({
         partName,
         diameter,
         centerX: ox, centerY: oy, centerZ: oz,
         orbitRadius,
         axisX: axis.x, axisY: axis.y, axisZ: axis.z,
-        angularSpeed: (Math.random() * 2 - 1) * 2.5, // ±2.5 rad/s
+        angularSpeed: (Math.random() * 2 - 1) * 12.5, // ±12.5 rad/s (5× faster)
         phase: Math.random() * Math.PI * 2,
         baseX: base.x, baseY: base.y, baseZ: base.z,
+        spinAxisX: spin.x, spinAxisY: spin.y, spinAxisZ: spin.z,
+        spinSpeed: (Math.random() * 2 - 1) * 4, // ±4 rad/s self-spin
+        spinPhase: Math.random() * Math.PI * 2,
         destroyed: false,
       });
     }
@@ -292,6 +305,7 @@ export function generateVortaxSpheres(): VortaxSphere[] {
     head.offsetX, head.offsetY + head.scaleY * 0.6, head.offsetZ,
     capRadius * 2, capRadius * 0.6, capRadius * 2,
     capRadius * 2,
+    1 / 9, // each cap sphere = 1/9 the cap diameter
   );
 
   return spheres;

@@ -42,6 +42,7 @@ const tmpColor = new THREE.Color();
 const tmpEuler = new THREE.Euler();
 const _scratchFlamePos = new THREE.Vector3();
 const _offsetVec = new THREE.Vector3();
+const _spinAxis = new THREE.Vector3();
 
 // LOD distance thresholds (squared, horizontal).
 const VORTAX_RENDER_DIST_SQ = VORTAX_RENDER_DISTANCE * VORTAX_RENDER_DISTANCE;
@@ -143,8 +144,8 @@ function placePartCenterInto(
 // ── GEOMETRY: ONE unit sphere, instanced for ALL spheres of ALL vortaxes. ──
 const sphereGeometry = new THREE.SphereGeometry(0.5, 10, 8);
 
-// Generous cap on total instanced spheres. ~110 spheres/vortax.
-const SPHERES_PER_VORTAX = 110;
+// Generous cap on total instanced spheres. ~170 spheres/vortax (doubled counts).
+const SPHERES_PER_VORTAX = 180;
 const MAX_SPHERE_INSTANCES = MAX_TOTAL_VORTAXES * SPHERES_PER_VORTAX;
 
 const EMERGENCE_DEPTH = 2.0;
@@ -474,6 +475,10 @@ export const VortaxRenderer = forwardRef<VortaxRendererHandle, VortaxRendererPro
 
             const diam = sp.diameter * scale; // geometry is unit-diameter sphere
             tmpScale.set(diam, diam, diam);
+            // Self-spin: each sphere rotates about its own random axis.
+            const spinAngle = sp.spinPhase + (lodFrozen ? 0 : now * sp.spinSpeed);
+            _spinAxis.set(sp.spinAxisX, sp.spinAxisY, sp.spinAxisZ);
+            tmpQuaternion.setFromAxisAngle(_spinAxis, spinAngle);
             tmpMatrix.compose(tmpPosition, tmpQuaternion, tmpScale);
             mesh.setMatrixAt(sphereIdx, tmpMatrix);
             if (uvAttr) setInstanceUvOffset(uvAttr, sphereIdx, uvOffsetX, uvOffsetY);

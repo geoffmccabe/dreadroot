@@ -263,19 +263,9 @@ export function useVortaxSystem({
 
     vortax.lastDamagedAt = Date.now();
 
-    // Simple knockback (same shape as the shroomer).
-    if (knockbackDir) {
-      vortax.velocity.x = knockbackDir.x * kbStrength;
-      vortax.velocity.z = knockbackDir.z * kbStrength;
-      vortax.velocity.y = 0;
-      const sp = Math.hypot(vortax.velocity.x, vortax.velocity.z);
-      if (sp > MAX_KNOCKBACK_SPEED) {
-        const sc = MAX_KNOCKBACK_SPEED / sp;
-        vortax.velocity.x *= sc;
-        vortax.velocity.z *= sc;
-      }
-      vortax.stunUntil = Date.now() + 400;
-    }
+    // No knockback: the Vortax is unmovable — it ignores hits and keeps
+    // advancing on the player. (knockbackDir/kbStrength intentionally unused.)
+    void knockbackDir; void kbStrength;
 
     // Find the nearest still-alive sphere. Spheres orbit, so the exact world
     // position drifts; we approximate each sphere's world position from its
