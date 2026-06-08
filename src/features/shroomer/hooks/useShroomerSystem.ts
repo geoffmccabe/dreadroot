@@ -284,19 +284,46 @@ export function useShroomerSystem({
     shroomer.currentHealth -= damage;
     shroomer.lastDamagedAt = Date.now();
 
-    // Simple shpider-style knockback: a clean shove straight back along the hit
-    // direction — purely horizontal, no tumble, no sideways slide, no knockdown.
     if (knockbackDir) {
       shroomer.velocity.x = knockbackDir.x * kbStrength;
       shroomer.velocity.z = knockbackDir.z * kbStrength;
-      shroomer.velocity.y = 0;
-      const sp = Math.hypot(shroomer.velocity.x, shroomer.velocity.z);
-      if (sp > MAX_KNOCKBACK_SPEED) {
-        const sc = MAX_KNOCKBACK_SPEED / sp;
-        shroomer.velocity.x *= sc;
-        shroomer.velocity.z *= sc;
+      if (knockbackDir.y > 0) {
+        // Explosion (grenade): launch into the air and tumble — send them
+        // flying. Grenades pass an upward knockback component; bullets don't.
+        shroomer.velocity.y = knockbackDir.y * kbStrength;
+        const sp2 = shroomer.velocity.x * shroomer.velocity.x
+          + shroomer.velocity.y * shroomer.velocity.y
+          + shroomer.velocity.z * shroomer.velocity.z;
+        if (sp2 > MAX_KNOCKBACK_SPEED * MAX_KNOCKBACK_SPEED) {
+          const sc = MAX_KNOCKBACK_SPEED / Math.sqrt(sp2);
+          shroomer.velocity.x *= sc;
+          shroomer.velocity.y *= sc;
+          shroomer.velocity.z *= sc;
+        }
+        const ax = Math.random() * 2 - 1;
+        const ay = Math.random() * 2 - 1;
+        const az = Math.random() * 2 - 1;
+        const inv = 1 / (Math.hypot(ax, ay, az) || 1);
+        shroomer.isTumbling = true;
+        shroomer.tumbleAxisX = ax * inv;
+        shroomer.tumbleAxisY = ay * inv;
+        shroomer.tumbleAxisZ = az * inv;
+        shroomer.tumbleRate = TUMBLE_RATE_MIN + Math.random() * (TUMBLE_RATE_MAX - TUMBLE_RATE_MIN);
+        shroomer.tumbleLaunchAt = Date.now();
+        shroomer.tumbleLandedAt = 0;
+        shroomer.stunUntil = Date.now() + 1000;
+      } else {
+        // Bullet: simple shpider-style horizontal shove — no vertical, no
+        // tumble, no sideways slide.
+        shroomer.velocity.y = 0;
+        const sp = Math.hypot(shroomer.velocity.x, shroomer.velocity.z);
+        if (sp > MAX_KNOCKBACK_SPEED) {
+          const sc = MAX_KNOCKBACK_SPEED / sp;
+          shroomer.velocity.x *= sc;
+          shroomer.velocity.z *= sc;
+        }
+        shroomer.stunUntil = Date.now() + 400;
       }
-      shroomer.stunUntil = Date.now() + 400;
     }
 
     if (shroomer.currentHealth <= 0) {
@@ -339,6 +366,9 @@ export function useShroomerSystem({
           target.isActive = false;
           deadPendingRef.current = true;
         }, EXPLODE_DURATION_MS);
+      } else if (shroomer.isTumbling) {
+        // Blast-killed while airborne → keep flying as a ragdoll corpse.
+        shroomer.isCorpse = true;
       } else {
         shroomer.isActive = false;
       }
