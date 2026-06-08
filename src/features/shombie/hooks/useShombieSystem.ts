@@ -534,6 +534,17 @@ export function useShombieSystem({
         return damageShombie(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
+      // Body-relative flame points so a burn engulfs the whole humanoid and
+      // tracks it as it moves / is knocked back (the global burn system updates
+      // every point from the live hitbox center each frame).
+      getFlameAttachPoints: (s) => {
+        const sc = s.scale ?? 1;
+        return [
+          { yOffset: 1.7 * sc, size: 0.6 * sc, height: 0.8 * sc, particles: 12 }, // head
+          { yOffset: 1.0 * sc, size: 0.8 * sc, height: 1.0 * sc, particles: 16 }, // torso
+          { yOffset: 0.4 * sc, size: 0.6 * sc, height: 0.9 * sc, particles: 10 }, // legs
+        ];
+      },
     });
   }, [damageShombie]);
 

@@ -983,34 +983,13 @@ export const ShroomerRenderer = forwardRef<ShroomerRendererHandle, ShroomerRende
           if (capUvAttr) capUvAttr.needsUpdate = true;
         }
 
-        // Nearest-N emerged shroomers get head flames (Option A flame cap).
-        for (let i = candCount; i < _flameCand.length; i++) _flameCand[i].d = Infinity;
-        _flameCand.sort(_byDist);
-        _flameNearSet.clear();
-        const flameTake = Math.min(candCount, MAX_HEAD_FLAMES);
-        for (let i = 0; i < flameTake; i++) _flameNearSet.add(_flameCand[i].id);
-
+        // Shroomers have NO head flame (no flame hair, unlike shombies). Remove
+        // any that somehow exist; never create one. (Burn fire still works via
+        // the global burn system's body flame-attach points.)
+        void candCount;
         for (const shroomer of shroomers) {
-          if (!shroomer.isActive) continue;
-
-          if (!_flameNearSet.has(shroomer.id)) {
-            if (universalHeadFlamesRef.current.has(shroomer.id) || headFiresRef.current.has(shroomer.id)) {
-              removeHeadFlame(shroomer.id);
-            }
-            continue;
-          }
-
-          const headPos = partPositionsRef.current.get(shroomer.id)?.get('head');
-          if (!headPos) continue;
-
-          if (!universalHeadFlamesRef.current.has(shroomer.id) && !headFiresRef.current.has(shroomer.id)) {
-            const hf = createHeadFire(shroomer.id, shroomer.definition.tier, headPos);
-            if (hf) headFiresRef.current.set(shroomer.id, hf);
-          }
-
-          const headFire = headFiresRef.current.get(shroomer.id);
-          if (headFire) {
-            headFire.points.position.set(headPos.x, headPos.y + 0.3, headPos.z);
+          if (universalHeadFlamesRef.current.has(shroomer.id) || headFiresRef.current.has(shroomer.id)) {
+            removeHeadFlame(shroomer.id);
           }
         }
       },

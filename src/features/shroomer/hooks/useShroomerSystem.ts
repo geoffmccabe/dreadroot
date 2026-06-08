@@ -464,6 +464,17 @@ export function useShroomerSystem({
         return damageShroomer(s.id, info.damage, dirScratch, info.isHeadshot, dirScratch, kbStrength);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
+      // Body-relative flame points (head sphere under the cap, torso, legs) so a
+      // burn engulfs the whole shroomer and tracks it as it moves / is knocked
+      // back. No flame on the mushroom cap.
+      getFlameAttachPoints: (s) => {
+        const sc = s.scale ?? 1;
+        return [
+          { yOffset: 1.5 * sc, size: 0.7 * sc, height: 0.8 * sc, particles: 12 }, // head sphere
+          { yOffset: 0.9 * sc, size: 0.8 * sc, height: 1.0 * sc, particles: 16 }, // torso
+          { yOffset: 0.3 * sc, size: 0.6 * sc, height: 0.9 * sc, particles: 10 }, // legs
+        ];
+      },
     });
   }, [damageShroomer]);
 

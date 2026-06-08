@@ -332,6 +332,12 @@ export function useBurnSystem({
     // EnemyCombatAdapter's getFlameAttachPoints — or a single-flame
     // default centered on the hitbox.
     const useHitPoint = hitOff !== null;
+    // `engulf` enemies (those that expose getFlameAttachPoints) wrap their whole
+    // shape with body-relative flames that track the live body center every
+    // frame — so the fire stays ON them when shot, knocked back, or walking.
+    // They never collapse to a single fixed hit-point flame (the old behaviour
+    // that made burns appear to "stay behind" the enemy).
+    let engulf = false;
     let layout: FlamePoint[] | undefined = FLAME_LAYOUTS[entityType as keyof typeof FLAME_LAYOUTS];
     if (!layout) {
       const adapter = enemyCombatRegistry.getAdapter(entityType);
@@ -350,6 +356,7 @@ export function useBurnSystem({
               xOffset: p.xOffset ?? 0,
               zOffset: p.zOffset ?? 0,
             }) as FlamePoint);
+            engulf = true;
           }
         }
       }
@@ -358,7 +365,9 @@ export function useBurnSystem({
         layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
       }
     }
-    if (useHitPoint) layout = [layout[0]];
+    // Only legacy / oversized layouts (e.g. the 22-40m shtickman) collapse to a
+    // single flame at the hit point; engulf enemies use their full body layout.
+    if (useHitPoint && !engulf) layout = [layout[0]];
     const attachIds = layout.map((_, i) => `burn_${key}_${i}`);
 
     const entry: BurnEntry = {
@@ -377,12 +386,13 @@ export function useBurnSystem({
       lastDamageSecond: -1,
       flameIds: new Array(layout.length).fill(null),
       attachIds,
-      hitOffset: hitOff,
+      // Engulf enemies ignore the fixed hit offset and follow the body center.
+      hitOffset: engulf ? null : hitOff,
       dotSeconds,
       layout,
     };
 
-    spawnBurnFlames(entry, 1.0, useHitPoint
+    spawnBurnFlames(entry, 1.0, (useHitPoint && !engulf)
       ? _offsetPos.copy(entityPos).add(hitOff!)
       : entityPos);
     burnsRef.current.set(key, entry);
