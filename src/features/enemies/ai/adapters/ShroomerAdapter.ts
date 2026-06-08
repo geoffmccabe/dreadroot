@@ -24,6 +24,7 @@ import {
   isStriking,
   computeBodyHeightFromParts,
 } from '../../striking/strikeAnimation';
+import { playStrikeSound, preloadStrikeSounds } from '../../striking/strikeSound';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -55,6 +56,10 @@ const _strikeHitDir = new THREE.Vector3();
 
 // Body height (scale 1) of the shroomer, used as the strike reach distance.
 const SHROOMER_BODY_LEN = computeBodyHeightFromParts(SHROOMER_BODY_PARTS);
+
+// 3 strike-swing sounds; one is picked at random per strike.
+const SHROOMER_STRIKE_SOUNDS = ['/shroomer_strike_1.mp3', '/shroomer_strike_2.mp3', '/shroomer_strike_3.mp3'];
+preloadStrikeSounds(SHROOMER_STRIKE_SOUNDS);
 
 /**
  * Set locomotion context for shroomer movement execution.
@@ -393,6 +398,8 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
         result.knockback,
         performance.now(),
       );
+      // Swing sound, timed to the strike start so it reads with the motion.
+      playStrikeSound(SHROOMER_STRIKE_SOUNDS, shroomer.position.x, shroomer.position.y, shroomer.position.z);
     }
   },
 

@@ -22,6 +22,7 @@ import {
   isStriking,
   computeBodyHeightFromParts,
 } from '../../striking/strikeAnimation';
+import { playStrikeSound, preloadStrikeSounds } from '../../striking/strikeSound';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -53,6 +54,10 @@ const _strikeHitDir = new THREE.Vector3();
 
 // Body height (scale 1) of the shombie, used as the strike reach distance.
 const SHOMBIE_BODY_LEN = computeBodyHeightFromParts(SHOMBIE_BODY_PARTS);
+
+// 3 strike-swing sounds; one is picked at random per strike.
+const SHOMBIE_STRIKE_SOUNDS = ['/shombie_strike_1.mp3', '/shombie_strike_2.mp3', '/shombie_strike_3.mp3'];
+preloadStrikeSounds(SHOMBIE_STRIKE_SOUNDS);
 
 /**
  * Set locomotion context for shombie movement execution.
@@ -426,9 +431,11 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
         result.knockback,
         performance.now(),
       );
+      // Swing sound, timed to the strike start so it reads with the motion.
+      playStrikeSound(SHOMBIE_STRIKE_SOUNDS, shombie.position.x, shombie.position.y, shombie.position.z);
     }
   },
-  
+
   getBehaviors(shombie: ShombieWithAI): BehaviorModule[] {
     const behaviors = shombie.definition.ai_config?.behaviors ?? ['chase', 'attack'];
     return getBehaviorsByIds(behaviors);
