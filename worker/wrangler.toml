@@ -1,0 +1,14 @@
+# Cloudflare Worker + Durable Object config for the DreadRoot L2 game server.
+# Deploy from this directory:  wrangler deploy   (local test: wrangler dev)
+name = "dreadroot-l2"
+main = "index.ts"
+compatibility_date = "2026-06-08"
+
+# One Durable Object class = one live game instance (addressed by ?instance=<id>).
+[[durable_objects.bindings]]
+name = "GAME_INSTANCE"
+class_name = "GameInstanceDO"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["GameInstanceDO"]

@@ -8,7 +8,9 @@
  * Decoded snapshot field values are deterministic from the wire quantization,
  * so exact comparison == comparing the on-wire representation.
  */
-import type { Snapshot, SnapshotEntity } from '@/lib/snapshotBinary';
+// Relative (not `@/`) so this portable layer resolves in the Cloudflare worker
+// bundle too, with no path-alias config.
+import type { Snapshot, SnapshotEntity } from '../../lib/snapshotBinary';
 
 /** Stable key for an entity across snapshots: (registryOrigin, id). origin is a
  *  u8 and id a u32, so origin·2^32 + id stays well under 2^53 (safe integer). */

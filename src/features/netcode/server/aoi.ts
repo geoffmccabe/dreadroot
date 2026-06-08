@@ -8,7 +8,9 @@
  * in a voxel world with islands. Reads coord limits from nothing hard-coded;
  * the radius is supplied by the caller (config-driven, forward-compat).
  */
-import type { SnapshotEntity } from '@/lib/snapshotBinary';
+// Relative (not `@/`) so this server layer resolves in the Cloudflare worker
+// bundle too, with no path-alias config.
+import type { SnapshotEntity } from '../../../lib/snapshotBinary';
 
 /**
  * Filter `entities` to those within `radius` blocks (horizontal) of (cx, cz),

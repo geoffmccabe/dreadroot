@@ -11,7 +11,9 @@
  * loop is deterministic and testable. The real enemy AI/physics plugs in as the
  * `simulate` fn later (it satisfies the same signature).
  */
-import type { Snapshot, SnapshotEntity } from '@/lib/snapshotBinary';
+// Relative imports (not `@/`) so this server layer resolves in the Cloudflare
+// worker bundle too, with no path-alias config.
+import type { Snapshot, SnapshotEntity } from '../../../lib/snapshotBinary';
 import { entityKey } from '../snapshotDiff';
 
 export const TICK_HZ = 20;
