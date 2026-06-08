@@ -438,14 +438,21 @@ export function useShombieSystem({
       // the momentum of a grenade-grade fling.
       if (isMeleeKill && !shombie.isTumbling) {
         const M = 0.9;
-        shombie.velocity.x = (knockbackDir?.x ?? 0) * 8 * M;
-        shombie.velocity.z = (knockbackDir?.z ?? 0) * 8 * M;
+        const kx = knockbackDir?.x ?? 0;
+        const kz = knockbackDir?.z ?? 1;
+        const klen = Math.hypot(kx, kz) || 1;
+        shombie.velocity.x = (kx / klen) * 8 * M;
+        shombie.velocity.z = (kz / klen) * 8 * M;
         shombie.velocity.y = 9 * M;
-        const ax = Math.random() * 2 - 1, ay = Math.random() * 2 - 1, az = Math.random() * 2 - 1;
-        const inv = 1 / (Math.hypot(ax, ay, az) || 1);
+        // Fall flat onto its BACK (no random spin): rotate around the horizontal
+        // axis perpendicular to the knockback so it tips straight backward,
+        // landing ~supine by the time it hits the ground (~0.8s fly), then
+        // despawns. tumbleRate tuned so the rotation ≈ 90° at landing.
         shombie.isTumbling = true;
-        shombie.tumbleAxisX = ax * inv; shombie.tumbleAxisY = ay * inv; shombie.tumbleAxisZ = az * inv;
-        shombie.tumbleRate = TUMBLE_RATE_MIN + Math.random() * (TUMBLE_RATE_MAX - TUMBLE_RATE_MIN);
+        shombie.tumbleAxisX = -kz / klen;
+        shombie.tumbleAxisY = 0;
+        shombie.tumbleAxisZ = kx / klen;
+        shombie.tumbleRate = 2.0;
         shombie.tumbleLaunchAt = Date.now();
         shombie.tumbleLandedAt = 0;
       }
