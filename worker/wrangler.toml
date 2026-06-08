@@ -4,6 +4,12 @@ name = "dreadroot-l2"
 main = "index.ts"
 compatibility_date = "2026-06-08"
 
+# Serve the live realtime server at server.dreadroot.com. With the dreadroot.com
+# zone on this Cloudflare account, deploy auto-creates the DNS record + TLS cert.
+[[routes]]
+pattern = "server.dreadroot.com"
+custom_domain = true
+
 # One Durable Object class = one live game instance (addressed by ?instance=<id>).
 [[durable_objects.bindings]]
 name = "GAME_INSTANCE"
