@@ -19,6 +19,7 @@ import { encodeSnapshot, ORIGIN_L1, type SnapshotEntity } from '../../../lib/sna
 import { entityKey } from '../snapshotDiff';
 import { stepPlayer, PLAYER_SPEED, type PlayerInputCmd } from '../playerSim';
 import { decodeInput } from '../inputBinary';
+import { decodeFrame, type StateReport } from '../clientFrames';
 
 /** Entity-type discriminator for players in the snapshot (enemies use their own
  *  small ids; kept here until a shared registry exists). */
@@ -86,6 +87,26 @@ export class GameInstanceCore {
     const p = this.players.get(clientId);
     if (!p) return;
     this.loop.queueInput(clientId, { playerKey: p.key, cmd: decodeInput(frame) });
+  }
+
+  /** Presence: set a client's player to a reported position (client-trusted for
+   *  now). The tick loop's broadcast + AoI machinery does the rest. */
+  applyState(clientId: string, s: StateReport): void {
+    const p = this.players.get(clientId);
+    if (!p) return;
+    const e = this.loop.getEntities().get(p.key);
+    if (e) { e.x = s.x; e.y = s.y; e.z = s.z; e.yaw = s.yaw; this.lastSeq.set(clientId, s.seq); }
+  }
+
+  /** Route a typed client frame (the DO calls this for every WS message). */
+  applyClientMessage(clientId: string, frame: ArrayBuffer): void {
+    const f = decodeFrame(frame);
+    if (f.kind === 'input') {
+      const p = this.players.get(clientId);
+      if (p) this.loop.queueInput(clientId, { playerKey: p.key, cmd: f.cmd });
+    } else if (f.kind === 'state') {
+      this.applyState(clientId, f.state);
+    }
   }
 
   private defaultSimulate: SimulateFn<QueuedInput> = (entities, inputs) => {

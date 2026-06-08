@@ -2,7 +2,7 @@
 // streams inputs, and checks the authoritative player moves. Run while
 // `wrangler dev` is up:
 //   node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/smoke-do-client.ts
-import { encodeInput } from '../src/features/netcode/inputBinary.ts';
+import { encodeInputFrame } from '../src/features/netcode/clientFrames.ts';
 import { decodeSnapshot } from '../src/lib/snapshotBinary.ts';
 
 const URL = process.env.DO_URL ?? 'ws://localhost:8787/?instance=smoke';
@@ -19,7 +19,7 @@ ws.onopen = () => {
   console.log('connected →', URL);
   inputTimer = setInterval(() => {
     seq++;
-    ws.send(encodeInput({ seq, moveX: 1, moveZ: 0, yaw: 0, dtMs: 50 }));
+    ws.send(encodeInputFrame({ seq, moveX: 1, moveZ: 0, yaw: 0, dtMs: 50 }));
   }, 50);
 };
 

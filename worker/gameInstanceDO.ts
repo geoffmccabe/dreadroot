@@ -60,13 +60,13 @@ export class GameInstanceDO {
     ws.addEventListener('message', (ev: MessageEvent) => {
       const d = ev.data;
       if (d instanceof ArrayBuffer) {
-        this.core.applyInput(clientId, d);
+        this.core.applyClientMessage(clientId, d);
       } else if (ArrayBuffer.isView(d)) {
         const v = d as ArrayBufferView;
-        this.core.applyInput(clientId, v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength));
+        this.core.applyClientMessage(clientId, v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength));
       } else if (d && typeof (d as Blob).arrayBuffer === 'function') {
         // workerd delivers binary as a Blob by default — unwrap it.
-        (d as Blob).arrayBuffer().then((b) => this.core.applyInput(clientId, b)).catch(() => { /* ignore */ });
+        (d as Blob).arrayBuffer().then((b) => this.core.applyClientMessage(clientId, b)).catch(() => { /* ignore */ });
       }
     });
     const drop = () => this.onClose(ws);

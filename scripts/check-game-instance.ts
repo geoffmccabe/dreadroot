@@ -66,6 +66,18 @@ for (let seq = 1; seq <= 5; seq++) {
 const cheated = decodeSnapshot(out.get('H')!).entities.find(e => e.id === hid)!;
 assert(close(cheated.x, 1.5, 0.05), `anti-cheat clamps speed/teleport to ~1.5 (got ${cheated.x})`);
 
+// 6b. Presence: a STATE frame sets the player's position directly (client-
+//     reported), and it shows up in the snapshot (no input/simulation needed).
+const { encodeStateFrame } = await import('../src/features/netcode/clientFrames.ts');
+const pres = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 200 });
+const presId = pres.addPlayer('P')!;
+pres.tick(0, out); // prime
+pres.applyClientMessage('P', encodeStateFrame({ seq: 1, x: 42, y: 70, z: -17, yaw: 1.5 }));
+pres.tick(50, out);
+const reported = decodeSnapshot(out.get('P')!).entities.find(e => e.id === presId)!;
+assert(close(reported.x, 42, 0.1) && close(reported.z, -17, 0.1), `presence state report places player (got ${reported.x},${reported.z})`);
+assert(pres.ackSeqFor('P') === 1, 'presence ack tracks state seq');
+
 // 7. Connection cap: a full instance refuses new players.
 const capped = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 80, maxPlayers: 2 });
 assert(capped.addPlayer('a') !== null && capped.addPlayer('b') !== null, 'cap: first 2 players admitted');
