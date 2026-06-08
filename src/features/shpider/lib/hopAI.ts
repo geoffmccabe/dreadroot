@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
 import { findGroundY, pickTreeAwareTarget, findAdjacentWall } from './surfaceDetect';
+import { playGroundImpact, GROUND_IMPACT_MIN_SPEED } from '@/features/enemies/audio/groundImpactSound';
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { playSpatialSound } from '@/lib/spatialAudio';
@@ -162,6 +163,10 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
       s.velocity.y -= FALL_GRAVITY * dt;
       s.position.y += s.velocity.y * dt;
       if (s.position.y <= supportY) {
+        // Hard landing (blast-fall / tree-drop) plays the ground-impact sound.
+        if (-s.velocity.y > GROUND_IMPACT_MIN_SPEED) {
+          playGroundImpact(s.position.x, supportY, s.position.z);
+        }
         s.position.y = supportY;
         s.velocity.y = 0;
       }

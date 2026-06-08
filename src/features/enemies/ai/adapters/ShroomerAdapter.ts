@@ -25,6 +25,7 @@ import {
   computeBodyHeightFromParts,
 } from '../../striking/strikeAnimation';
 import { playStrikeSound, preloadStrikeSounds } from '../../striking/strikeSound';
+import { playGroundImpact, GROUND_IMPACT_MIN_SPEED } from '../../audio/groundImpactSound';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -239,7 +240,9 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
     shroomer.position.y += shroomer.velocity.y * deltaSeconds;
     shroomer.position.z += shroomer.velocity.z * deltaSeconds;
 
-    // Landing (block-aware for tumbling ragdolls)
+    // Landing (block-aware for tumbling ragdolls). Capture the downward speed
+    // before the clamp zeroes it — a hard landing plays the ground-impact sound.
+    const fallSpeed = -shroomer.velocity.y;
     let grounded = false;
     if (shroomer.isTumbling && shroomer.velocity.y <= 0) {
       let surfaceY = 0;
@@ -256,11 +259,13 @@ export const ShroomerAdapter: EnemyAdapter<ShroomerWithAI> = {
       }
       if (shroomer.position.y <= surfaceY) {
         shroomer.position.y = surfaceY;
+        if (fallSpeed > GROUND_IMPACT_MIN_SPEED) playGroundImpact(shroomer.position.x, surfaceY, shroomer.position.z);
         shroomer.velocity.y = 0;
         grounded = true;
       }
     } else if (shroomer.position.y < 0) {
       shroomer.position.y = 0;
+      if (fallSpeed > GROUND_IMPACT_MIN_SPEED) playGroundImpact(shroomer.position.x, 0, shroomer.position.z);
       shroomer.velocity.y = 0;
     }
     if (!grounded && shroomer.position.y <= 0.001) grounded = true;

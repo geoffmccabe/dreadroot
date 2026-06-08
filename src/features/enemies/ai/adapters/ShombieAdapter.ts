@@ -23,6 +23,7 @@ import {
   computeBodyHeightFromParts,
 } from '../../striking/strikeAnimation';
 import { playStrikeSound, preloadStrikeSounds } from '../../striking/strikeSound';
+import { playGroundImpact, GROUND_IMPACT_MIN_SPEED } from '../../audio/groundImpactSound';
 import { EnemyManager } from '../EnemyManager';
 import { massFromBoxVolumes } from '../enemyMass';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
@@ -249,6 +250,9 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     // so they land ON them, not only the flat ground — they find the highest
     // block top below where they were and rest on it. Normal shombies keep the
     // cheap flat-ground clamp.
+    // Capture the downward speed before the clamp zeroes it — a hard landing
+    // (blast-fall / tree-drop) plays the ground-impact sound.
+    const fallSpeed = -shombie.velocity.y;
     let grounded = false;
     if (shombie.isTumbling && shombie.velocity.y <= 0) {
       let surfaceY = 0;
@@ -265,11 +269,13 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
       }
       if (shombie.position.y <= surfaceY) {
         shombie.position.y = surfaceY;
+        if (fallSpeed > GROUND_IMPACT_MIN_SPEED) playGroundImpact(shombie.position.x, surfaceY, shombie.position.z);
         shombie.velocity.y = 0;
         grounded = true;
       }
     } else if (shombie.position.y < 0) {
       shombie.position.y = 0;
+      if (fallSpeed > GROUND_IMPACT_MIN_SPEED) playGroundImpact(shombie.position.x, 0, shombie.position.z);
       shombie.velocity.y = 0;
     }
     if (!grounded && shombie.position.y <= 0.001) grounded = true;
