@@ -23,12 +23,27 @@ function tick(node: CompiledNode, ctx: BTContext): BTStatus {
       }
       return 'failure';
     }
+    case 'utility': {
+      // Highest-scoring child wins, then runs (= BehaviorBrain's argmax). Ties
+      // resolve to the first (earlier child = higher authored priority).
+      let best: CompiledNode | null = null;
+      let bestScore = -Infinity;
+      for (let i = 0; i < node.children.length; i++) {
+        const c = node.children[i];
+        if (c.kind !== 'behavior') continue;
+        const s = c.score(c.params, ctx);
+        if (s > bestScore) { bestScore = s; best = c; }
+      }
+      return best ? tick(best, ctx) : 'failure';
+    }
     case 'invert':
       return tick(node.child, ctx) === 'success' ? 'failure' : 'success';
     case 'condition':
       return node.fn(node.params, ctx) ? 'success' : 'failure';
     case 'action':
       return node.fn(node.params, ctx);
+    case 'behavior':
+      return node.run(node.params, ctx);
   }
 }
 

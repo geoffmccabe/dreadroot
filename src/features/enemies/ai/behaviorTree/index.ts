@@ -5,6 +5,7 @@
  */
 export type {
   BTNode, BTStatus, BTOutput, BTContext, BTRegistry, ConditionFn, ActionFn,
+  ScoreFn, BehaviorLeaf,
 } from './types';
 export { compileTree, BTCompileError, type CompiledNode } from './compile';
 export { runTree } from './runtime';

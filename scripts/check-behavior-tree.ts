@@ -81,8 +81,41 @@ try { compileTree({ type: 'action', action: 'doesNotExist' }, reg2); }
 catch (e) { threw = e instanceof BTCompileError; }
 assert(threw, 'unknown action → BTCompileError at compile');
 
+// Utility node: reproduces BehaviorBrain (argmax of scores → run the winner).
+const utilReg: BTRegistry = {
+  conditions: {},
+  actions: {},
+  behaviors: {
+    attack: { score: (_p, ctx) => (ctx.dist as number) <= 1.5 ? 0.95 : 0,
+              run: (_p, ctx) => { ctx.output = { action: 'attack', params: {} }; return 'success'; } },
+    chase:  { score: (_p, ctx) => (ctx.dist as number) <= 32 ? 0.7 : 0.1,
+              run: (_p, ctx) => { ctx.output = { action: 'chase', params: {} }; return 'success'; } },
+    wander: { score: () => 0.5,
+              run: (_p, ctx) => { ctx.output = { action: 'wander', params: {} }; return 'success'; } },
+  },
+};
+const utilTree = compileTree({ type: 'utility', children: [
+  { type: 'behavior', behavior: 'attack' },
+  { type: 'behavior', behavior: 'chase' },
+  { type: 'behavior', behavior: 'wander' },
+] }, utilReg);
+const decideU = (dist: number) => {
+  const ctx: BTContext = { now: 0, blackboard: {}, output: null, dist };
+  return runTree(utilTree, ctx)?.action;
+};
+assert(decideU(1.0) === 'attack', `utility: closest+ready → attack (got ${decideU(1.0)})`);
+assert(decideU(20) === 'chase', `utility: aggro (0.7) beats wander (0.5) → chase (got ${decideU(20)})`);
+assert(decideU(500) === 'wander', `utility: far → wander 0.5 beats chase 0.1 (got ${decideU(500)})`);
+
+// Compile rejects a non-scored utility child.
+let utilThrew = false;
+try { compileTree({ type: 'utility', children: [{ type: 'action', action: 'x' }] },
+  { conditions: {}, actions: { x: () => 'success' } }); }
+catch (e) { utilThrew = e instanceof BTCompileError; }
+assert(utilThrew, 'utility child must be a behavior leaf');
+
 if (failures === 0) {
-  console.log('✅ behavior-tree engine OK (priority/sequence/selector/invert/compile-validation)');
+  console.log('✅ behavior-tree engine OK (priority/sequence/selector/invert/utility/compile-validation)');
   process.exit(0);
 } else {
   console.error(`❌ ${failures} behavior-tree failure(s)`);
