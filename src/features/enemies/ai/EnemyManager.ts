@@ -8,6 +8,16 @@
 import * as THREE from 'three';
 import { frameLoop } from '@/lib/frameLoop';
 import { BehaviorBrain } from './BehaviorBrain';
+import { compileTree, type CompiledNode } from './behaviorTree';
+import {
+  behaviorRegistry, defaultTree, makeCreatureCtx, runCreatureTree,
+  type CreatureBTContext,
+} from './behaviorTreeBridge';
+
+/** Creature types that run on the data-driven behavior tree instead of
+ *  BehaviorBrain. The bridge is proven-equivalent, so this is behavior-neutral;
+ *  empty this Set to instantly revert every creature to the brain. */
+const BT_ENABLED_TYPES = new Set<string>(['shombie']);
 import { EnemySpatialIndex } from './EnemySpatialIndex';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import {
@@ -53,6 +63,8 @@ const _rivalCand: string[] = [];
 class EnemyManagerClass {
   private enemies: Map<string, RegisteredEnemy> = new Map();
   private brain: BehaviorBrain = new BehaviorBrain();
+  /** Compiled behavior trees, cached by behavior-list key (compile once). */
+  private btTreeCache: Map<string, CompiledNode> = new Map();
   private spatialIndex: EnemySpatialIndex = new EnemySpatialIndex();
   
   // Player position (updated each frame from camera ref)
@@ -472,13 +484,30 @@ class EnemyManagerClass {
       // When flocking is added, compute lazily only for behaviors that need it.
       
       const behaviors = reg.adapter.getBehaviors(reg.enemy);
-      const { result, newBehaviorId } = this.brain.tick(
-        ctx,
-        behaviors,
-        reg.currentBehaviorId,
-        elapsed
-      );
-      
+      let result: BehaviorResult;
+      let newBehaviorId: string | null;
+
+      if (BT_ENABLED_TYPES.has(ctx.entityType)) {
+        // Behavior-tree path — proven drop-in for BehaviorBrain. Compile once
+        // per behavior-set (cached); reuse a per-enemy context; sync
+        // currentBehaviorId both ways so external resets are honoured.
+        const key = behaviors.map((b) => b.id).join(',');
+        let tree = this.btTreeCache.get(key);
+        if (!tree) {
+          tree = compileTree(defaultTree(behaviors), behaviorRegistry(behaviors));
+          this.btTreeCache.set(key, tree);
+        }
+        let cctx = reg.creatureCtx as CreatureBTContext | undefined;
+        if (!cctx) { cctx = makeCreatureCtx(behaviors); reg.creatureCtx = cctx; }
+        cctx.currentBehaviorId = reg.currentBehaviorId;
+        result = runCreatureTree(tree, cctx, ctx, elapsed);
+        newBehaviorId = cctx.currentBehaviorId;
+      } else {
+        const r = this.brain.tick(ctx, behaviors, reg.currentBehaviorId, elapsed);
+        result = r.result;
+        newBehaviorId = r.newBehaviorId;
+      }
+
       // Track behavior transitions
       if (newBehaviorId !== reg.currentBehaviorId) {
         diagnostics.behaviorTransitions++;

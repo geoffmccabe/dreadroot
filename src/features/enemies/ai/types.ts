@@ -314,6 +314,10 @@ export interface RegisteredEnemy<TEnemy = unknown> {
   currentBehaviorId: string | null;
   /** Persistent state for behaviors - survives across ticks */
   behaviorState: BehaviorState;
+  /** Reused behavior-tree context for tree-driven creatures (Slice 3+). Typed
+   *  `unknown` to keep this core type decoupled from the BT bridge; the
+   *  EnemyManager casts it to CreatureBTContext. */
+  creatureCtx?: unknown;
   /** Pre-allocated spatial entry for zero-allocation updates */
   spatialEntry: EnemyEntry;
   /** Inter-species targeting: cached rival target (or 'player'/null) + when to
