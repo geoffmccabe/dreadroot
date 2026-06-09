@@ -114,8 +114,54 @@ try { compileTree({ type: 'utility', children: [{ type: 'action', action: 'x' }]
 catch (e) { utilThrew = e instanceof BTCompileError; }
 assert(utilThrew, 'utility child must be a behavior leaf');
 
+// ── Bridge: the default utility tree reproduces BehaviorBrain exactly ──
+const { behaviorRegistry, defaultTree, makeCreatureCtx, runCreatureTree } =
+  await import('../src/features/enemies/ai/behaviorTreeBridge.ts');
+
+const events: string[] = [];
+const mkMod = (id: string, score: (d: number) => number) => ({
+  id, name: id,
+  evaluate: (bctx: { distToPlayer: number }) => score(bctx.distToPlayer),
+  tick: () => ({ kind: 'move' as const, tx: id.length, ty: 0, tz: 0 }),
+  enter: () => events.push(`enter:${id}`),
+  exit: () => events.push(`exit:${id}`),
+});
+const modules = [
+  mkMod('attack', (d) => (d <= 1.5 ? 0.95 : 0)),
+  mkMod('chase', (d) => (d <= 32 ? 0.7 : 0.1)),
+  mkMod('wander', () => 0.5),
+];
+// Reference = BehaviorBrain's argmax, inline.
+const refPick = (d: number) => {
+  let best = modules[0], bs = -1;
+  for (const m of modules) { const s = m.evaluate({ distToPlayer: d }); if (s > bs) { bs = s; best = m; } }
+  return best.id;
+};
+const bReg = behaviorRegistry(modules as never);
+const cTree = compileTree(defaultTree(modules as never), bReg);
+const cctx = makeCreatureCtx(modules as never);
+const pick = (d: number) => { runCreatureTree(cTree, cctx, { distToPlayer: d } as never, 16); return cctx.currentBehaviorId; };
+
+let allMatch = true;
+for (const d of [0.5, 1.5, 2, 10, 31, 32, 40, 100, 500]) {
+  if (pick(d) !== refPick(d)) { allMatch = false; console.error(`  ✗ d=${d}: bridge ${pick(d)} vs brain ${refPick(d)}`); }
+}
+assert(allMatch, 'bridge default tree == BehaviorBrain argmax across the distance sweep');
+
+// enter/exit fire only on transitions.
+events.length = 0;
+const cctx2 = makeCreatureCtx(modules as never);
+runCreatureTree(cTree, cctx2, { distToPlayer: 0.5 } as never, 16); // enter attack
+runCreatureTree(cTree, cctx2, { distToPlayer: 0.5 } as never, 16); // same → no transition
+runCreatureTree(cTree, cctx2, { distToPlayer: 10 } as never, 16);  // exit attack, enter chase
+assert(events.join(',') === 'enter:attack,exit:attack,enter:chase', `enter/exit on transitions only (got ${events.join(',')})`);
+
+// Returns the winning behavior's own tick result.
+const res = runCreatureTree(cTree, cctx2, { distToPlayer: 0.5 } as never, 16);
+assert(res.kind === 'move' && res.tx === 'attack'.length, 'returns the winning behavior result');
+
 if (failures === 0) {
-  console.log('✅ behavior-tree engine OK (priority/sequence/selector/invert/utility/compile-validation)');
+  console.log('✅ behavior-tree engine + bridge OK (utility==BehaviorBrain, enter/exit, results)');
   process.exit(0);
 } else {
   console.error(`❌ ${failures} behavior-tree failure(s)`);
