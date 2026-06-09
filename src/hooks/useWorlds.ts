@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { GAME_ID } from '@/config/game';
 import { generatePondsForWorld, type WorldPondSettings, type PondSettings } from '@/lib/pondGenerator';
 
 export interface World {
@@ -65,6 +66,7 @@ export function useWorlds() {
       const { data, error } = await supabase
         .from('worlds')
         .select('*')
+        .eq('game', GAME_ID)
         .order('is_default', { ascending: false })
         .order('name');
 

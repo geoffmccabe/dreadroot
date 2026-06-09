@@ -961,7 +961,7 @@ export async function placeBlock(params: {
  *  falls back to a no-op-safe throw if the RPC isn't deployed yet.
  *  enemy_type encodes the tier, e.g. `shwarm_t3`. */
 export async function recordKill(enemyType: string): Promise<void> {
-  const { error } = await supabase.rpc('record_kill', { p_enemy_type: enemyType });
+  const { error } = await supabase.rpc('record_kill', { p_enemy_type: enemyType, p_game: GAME_ID } as never);
   if (error && !isMissingFunction(error)) throw error;
   if (error && isMissingFunction(error)) {
     // Pre-migration fallback: direct select-then-update/insert.

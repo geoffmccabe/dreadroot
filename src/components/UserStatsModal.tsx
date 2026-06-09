@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { GAME_ID } from '@/config/game';
 import type { UserData } from './adminPanel.types';
 
 interface UserStatsRow {
@@ -125,6 +126,7 @@ export function UserStatsModal({ user, open, onOpenChange }: UserStatsModalProps
         .from('user_stats' as any)
         .select('*')
         .eq('user_id', user.id)
+        .eq('game', GAME_ID)
         .maybeSingle() as any);
       if (statRow) setStats(statRow as UserStatsRow);
 
@@ -133,6 +135,7 @@ export function UserStatsModal({ user, open, onOpenChange }: UserStatsModalProps
         .from('user_combat_stats')
         .select('enemy_type, kills')
         .eq('user_id', user.id)
+        .eq('game', GAME_ID)
         .order('kills', { ascending: false });
       if (combatRows) setCombatStats(combatRows as CombatStatRow[]);
 

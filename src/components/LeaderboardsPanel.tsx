@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Trophy, Skull } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { GAME_ID } from '@/config/game';
 
 type Metric =
   | 'shots_hit'
@@ -45,6 +46,7 @@ function LeaderboardTab({ metric, format }: { metric: Metric; format: (v: number
       const { data, error: rpcErr } = await supabase.rpc('get_leaderboard' as any, {
         p_metric: metric,
         p_limit: 100,
+        p_game: GAME_ID,
       });
       if (rpcErr) {
         console.error('[Leaderboard]', metric, rpcErr);
@@ -132,6 +134,7 @@ function KillLeaderboard({ enemyType, tier }: { enemyType: string; tier: number 
         p_enemy_type: enemyType,
         p_tier: tier,
         p_limit: 20,
+        p_game: GAME_ID,
       });
       if (rpcErr) {
         setError(rpcErr.message);

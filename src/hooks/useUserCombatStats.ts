@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { GAME_ID } from '@/config/game';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface CombatStat {
@@ -100,7 +101,8 @@ export function useUserCombatStats() {
         supabase
           .from('user_combat_stats')
           .select('*')
-          .eq('user_id', user.id),
+          .eq('user_id', user.id)
+          .eq('game', GAME_ID),
         supabase
           .from('shwarm_definitions')
           .select('id, tier, name, texture_url')
