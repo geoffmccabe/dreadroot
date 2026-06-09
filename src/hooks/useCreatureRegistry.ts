@@ -52,17 +52,26 @@ export function useCreatureRegistry() {
         return FALLBACK; // registry not seeded / unreachable → ship's defaults
       }
 
-      return data.map((row) => {
-        const creature = row.creatures as unknown as { slug: string; name: string };
-        return {
-          slug: creature.slug,
-          name: (row.name_override as string | null) ?? creature.name,
-          enabled: row.enabled,
-          colorOverrides: (row.color_overrides as Record<string, unknown>) ?? {},
-          sortOrder: row.sort_order,
-          shipped: SHIPPED.has(creature.slug),
-        };
-      });
+      const mapped = data
+        .map((row): RegistryCreature | null => {
+          // PostgREST returns a to-one embed as an object, but tolerate an array
+          // shape too so a relationship-inference quirk can't blank the panel.
+          const raw = row.creatures as unknown;
+          const creature = (Array.isArray(raw) ? raw[0] : raw) as { slug?: string; name?: string } | undefined;
+          if (!creature?.slug) return null;
+          return {
+            slug: creature.slug,
+            name: (row.name_override as string | null) ?? creature.name ?? creature.slug,
+            enabled: row.enabled,
+            colorOverrides: (row.color_overrides as Record<string, unknown>) ?? {},
+            sortOrder: row.sort_order,
+            shipped: SHIPPED.has(creature.slug),
+          };
+        })
+        .filter((c): c is RegistryCreature => c !== null);
+
+      // If the rows came back in an unexpected shape, don't show an empty roster.
+      return mapped.length > 0 ? mapped : FALLBACK;
     },
   });
 }

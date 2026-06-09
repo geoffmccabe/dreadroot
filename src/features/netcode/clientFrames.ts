@@ -10,14 +10,13 @@
  * resolves with no alias config.
  */
 import { encodeInput, decodeInput, INPUT_BYTES } from './inputBinary';
-import { POS_SCALE } from '../../lib/snapshotBinary';
+import { POS_SCALE, quantizeYaw, dequantizeYaw } from '../../lib/snapshotBinary';
 import type { PlayerInputCmd } from './playerSim';
 
 export const FRAME_INPUT = 1;
 export const FRAME_STATE = 2;
 
 const STATE_BYTES = 18; // seq u32 + x/y/z int32(×POS_SCALE) + yaw u16
-const YAW_SCALE = 65536 / (Math.PI * 2);
 
 export interface StateReport {
   seq: number;
@@ -43,9 +42,7 @@ export function encodeStateFrame(s: StateReport): ArrayBuffer {
   dv.setInt32(5, Math.round(s.x * POS_SCALE));
   dv.setInt32(9, Math.round(s.y * POS_SCALE));
   dv.setInt32(13, Math.round(s.z * POS_SCALE));
-  let yaw = s.yaw % (Math.PI * 2);
-  if (yaw < 0) yaw += Math.PI * 2;
-  dv.setUint16(17, Math.round(yaw * YAW_SCALE) & 0xffff);
+  dv.setUint16(17, quantizeYaw(s.yaw));
   return buf;
 }
 
@@ -69,7 +66,7 @@ export function decodeFrame(buf: ArrayBuffer): DecodedFrame {
         x: dv.getInt32(5) / POS_SCALE,
         y: dv.getInt32(9) / POS_SCALE,
         z: dv.getInt32(13) / POS_SCALE,
-        yaw: dv.getUint16(17) / YAW_SCALE,
+        yaw: dequantizeYaw(dv.getUint16(17)),
       },
     };
   }

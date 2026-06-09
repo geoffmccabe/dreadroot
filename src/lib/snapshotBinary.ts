@@ -26,8 +26,22 @@ export const SNAPSHOT_MAGIC = 0x44524b53; // 'DRKS'
 export const SNAPSHOT_VERSION = 1;
 /** Fixed-point scale: positions quantized to 1/16 of a block. */
 export const POS_SCALE = 16;
-/** Angle quantization: yaw mapped to a u16 (0..65535 ↔ 0..2π). */
+/** Angle quantization: yaw mapped to a u16 (0..65535 ↔ 0..2π). Shared by the
+ *  input + client-frame codecs too — one source of truth. */
 const YAW_SCALE = 65536 / (Math.PI * 2);
+const TWO_PI = Math.PI * 2;
+
+/** Quantize a yaw (radians, any range) to a u16. */
+export function quantizeYaw(yaw: number): number {
+  let y = yaw % TWO_PI;
+  if (y < 0) y += TWO_PI;
+  return Math.round(y * YAW_SCALE) & 0xffff;
+}
+
+/** Decode a u16 back to a yaw in [0, 2π). */
+export function dequantizeYaw(u16: number): number {
+  return u16 / YAW_SCALE;
+}
 
 /** registryOrigin: 0 = canonical L1. >0 = an L2 instance (resolved via the
  *  snapshot's origin table later; reserved for Track 8). */
@@ -96,10 +110,7 @@ export function encodeSnapshot(snap: Snapshot): ArrayBuffer {
     dv.setInt32(o, quantPos(e.x)); o += 4;
     dv.setInt32(o, quantPos(e.y)); o += 4;
     dv.setInt32(o, quantPos(e.z)); o += 4;
-    // Normalize yaw into [0, 2π) before quantizing.
-    let yaw = e.yaw % (Math.PI * 2);
-    if (yaw < 0) yaw += Math.PI * 2;
-    dv.setUint16(o, Math.round(yaw * YAW_SCALE) & 0xffff); o += 2;
+    dv.setUint16(o, quantizeYaw(e.yaw)); o += 2;
     dv.setUint16(o, e.stateBits & 0xffff); o += 2;
   }
   return buf;
@@ -127,7 +138,7 @@ export function decodeSnapshot(buf: ArrayBuffer): Snapshot {
     const x = dv.getInt32(o) / POS_SCALE; o += 4;
     const y = dv.getInt32(o) / POS_SCALE; o += 4;
     const z = dv.getInt32(o) / POS_SCALE; o += 4;
-    const yaw = dv.getUint16(o) / YAW_SCALE; o += 2;
+    const yaw = dequantizeYaw(dv.getUint16(o)); o += 2;
     const stateBits = dv.getUint16(o); o += 2;
     entities[i] = { registryOrigin, entityType, id, x, y, z, yaw, stateBits };
   }

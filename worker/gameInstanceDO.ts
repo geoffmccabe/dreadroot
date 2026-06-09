@@ -20,9 +20,11 @@ export interface Env {
   /** Optional shared-secret join gate (set via `wrangler secret put JOIN_SECRET`).
    *  Placeholder until per-user tokens are issued by L1. */
   JOIN_SECRET?: string;
+  /** Optional AoI radius override (blocks), e.g. per game. Default 80. */
+  AOI_RADIUS?: string;
 }
 
-const AOI_RADIUS = 80;
+const DEFAULT_AOI_RADIUS = 80;
 
 export class GameInstanceDO {
   private core: GameInstanceCore;
@@ -31,8 +33,14 @@ export class GameInstanceDO {
   private nextClient = 1;
   private outBuffers = new Map<string, ArrayBuffer>();
 
-  constructor(_state: DurableObjectState, _env: Env) {
-    this.core = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: AOI_RADIUS });
+  constructor(_state: DurableObjectState, env: Env) {
+    // worldId/zoneId are fixed at 1/0 for now (single-world per instance);
+    // multi-world routing is a Track 5 lifecycle concern.
+    this.core = new GameInstanceCore({
+      worldId: 1,
+      zoneId: 0,
+      aoiRadius: Number(env.AOI_RADIUS) || DEFAULT_AOI_RADIUS,
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
