@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      creatures: {
+        Row: {
+          id: string
+          slug: string
+          name: string
+          origin_game_id: string | null
+          description: string | null
+          default_ai_config: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          name: string
+          origin_game_id?: string | null
+          description?: string | null
+          default_ai_config?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          slug?: string
+          name?: string
+          origin_game_id?: string | null
+          description?: string | null
+          default_ai_config?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
+      games: {
+        Row: {
+          id: string
+          slug: string
+          name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          slug?: string
+          name?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      game_creatures: {
+        Row: {
+          id: string
+          game_id: string
+          creature_id: string
+          enabled: boolean
+          color_overrides: Json
+          name_override: string | null
+          ai_config_override: Json
+          sort_order: number
+        }
+        Insert: {
+          id?: string
+          game_id: string
+          creature_id: string
+          enabled?: boolean
+          color_overrides?: Json
+          name_override?: string | null
+          ai_config_override?: Json
+          sort_order?: number
+        }
+        Update: {
+          id?: string
+          game_id?: string
+          creature_id?: string
+          enabled?: boolean
+          color_overrides?: Json
+          name_override?: string | null
+          ai_config_override?: Json
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_creatures_creature_id_fkey"
+            columns: ["creature_id"]
+            isOneToOne: false
+            referencedRelation: "creatures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_creatures_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       active_shwarms: {
         Row: {
           authority_user_id: string | null

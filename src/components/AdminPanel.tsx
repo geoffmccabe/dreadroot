@@ -20,10 +20,27 @@ import { WalapaDesignPanel } from '@/features/walapa';
 import { ShtickmanDesignPanel } from '@/features/shtickman';
 import { ShpiderDesignPanel } from '@/features/shpider';
 import { SeedDesignPanel } from '@/features/trees';
+
+// Build-side capability map: which creature slugs THIS build can render, their
+// design panel, and which NPC tab they belong in. The registry decides WHICH of
+// these appear + their order (blocking a creature there removes its panel here);
+// this map just supplies the actual component a slug maps to. Pinkland ships its
+// own map for its creatures.
+const CREATURE_DESIGN_PANELS: Record<string, { Component: React.ComponentType; category: 'enemy' | 'friend' }> = {
+  shwarm: { Component: ShwarmDesignPanel, category: 'enemy' },
+  shnake: { Component: ShnakeDesignPanel, category: 'enemy' },
+  shombie: { Component: ShombieDesignPanel, category: 'enemy' },
+  shroomer: { Component: ShroomerDesignPanel, category: 'enemy' },
+  vortax: { Component: VortaxDesignPanel, category: 'enemy' },
+  shtickman: { Component: ShtickmanDesignPanel, category: 'enemy' },
+  shpider: { Component: ShpiderDesignPanel, category: 'enemy' },
+  walapa: { Component: WalapaDesignPanel, category: 'friend' },
+};
 import { AllItemsPanel } from './AdminPanel.AllItemsPanel';
 import { DropTablesPanel } from './AdminPanel.DropTablesPanel';
 import { PathfindingConfigPanel } from '@/features/pathfinding/components/PathfindingConfigPanel';
 import { useUserData } from '@/hooks/useUserData';
+import { useCreatureRegistry } from '@/hooks/useCreatureRegistry';
 import { WaterfallControls } from './AdminPanel.WaterfallControls';
 import { WeatherControls } from './AdminPanel.WeatherControls';
 import { UsersList } from './AdminPanel.UsersList';
@@ -48,6 +65,15 @@ export function AdminPanel({
   const { isOpen, activeTab, closePanel, setActiveTab } = useAdminPanel();
   const { userRoles } = useUserData();
   const { currentWorldId, setCurrentWorldId } = useBlocks();
+  // This game's creature roster from the registry (enabled + ordered), limited
+  // to slugs this build can actually render.
+  const { data: creatureRoster = [] } = useCreatureRegistry();
+  const enemyCreatures = creatureRoster.filter(
+    (c) => CREATURE_DESIGN_PANELS[c.slug]?.category === 'enemy',
+  );
+  const friendCreatures = creatureRoster.filter(
+    (c) => CREATURE_DESIGN_PANELS[c.slug]?.category === 'friend',
+  );
   const [npcSubtab, setNpcSubtab] = useState<NPCSubtab>('enemies');
   const [seedSubtab, setSeedSubtab] = useState<SeedSubtab>('ordinary');
   const [itemsSubtab, setItemsSubtab] = useState<ItemsSubtab>('all-items');
@@ -248,13 +274,10 @@ export function AdminPanel({
               <TabsContent value="enemies" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-[calc(90vh-240px)] pr-4">
                   <div className="space-y-6">
-                    <ShwarmDesignPanel />
-                    <ShnakeDesignPanel />
-                    <ShombieDesignPanel />
-                    <ShroomerDesignPanel />
-                    <VortaxDesignPanel />
-                    <ShtickmanDesignPanel />
-                    <ShpiderDesignPanel />
+                    {enemyCreatures.map((c) => {
+                      const Panel = CREATURE_DESIGN_PANELS[c.slug].Component;
+                      return <Panel key={c.slug} />;
+                    })}
                   </div>
                 </ScrollArea>
               </TabsContent>
@@ -262,7 +285,10 @@ export function AdminPanel({
               <TabsContent value="friends" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-[calc(90vh-240px)] pr-4">
                   <div className="space-y-6">
-                    <WalapaDesignPanel />
+                    {friendCreatures.map((c) => {
+                      const Panel = CREATURE_DESIGN_PANELS[c.slug].Component;
+                      return <Panel key={c.slug} />;
+                    })}
                   </div>
                 </ScrollArea>
               </TabsContent>
