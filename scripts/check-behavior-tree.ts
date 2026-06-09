@@ -115,7 +115,7 @@ catch (e) { utilThrew = e instanceof BTCompileError; }
 assert(utilThrew, 'utility child must be a behavior leaf');
 
 // ── Bridge: the default utility tree reproduces BehaviorBrain exactly ──
-const { behaviorRegistry, defaultTree, makeCreatureCtx, runCreatureTree } =
+const { behaviorRegistry, defaultTree, makeCreatureCtx, runCreatureTree, forceExitCreatureTree } =
   await import('../src/features/enemies/ai/behaviorTreeBridge.ts');
 
 const events: string[] = [];
@@ -159,6 +159,14 @@ assert(events.join(',') === 'enter:attack,exit:attack,enter:chase', `enter/exit 
 // Returns the winning behavior's own tick result.
 const res = runCreatureTree(cTree, cctx2, { distToPlayer: 0.5 } as never, 16);
 assert(res.kind === 'move' && res.tx === 'attack'.length, 'returns the winning behavior result');
+
+// forceExit (death/despawn) runs the current behavior's exit + clears selection.
+events.length = 0;
+const cctx3 = makeCreatureCtx(modules as never);
+runCreatureTree(cTree, cctx3, { distToPlayer: 0.5 } as never, 16); // enter attack
+forceExitCreatureTree(cctx3, { distToPlayer: 0.5 } as never);
+assert(events.join(',') === 'enter:attack,exit:attack' && cctx3.currentBehaviorId === null,
+  `forceExit runs exit + clears selection (got ${events.join(',')})`);
 
 if (failures === 0) {
   console.log('✅ behavior-tree engine + bridge OK (utility==BehaviorBrain, enter/exit, results)');

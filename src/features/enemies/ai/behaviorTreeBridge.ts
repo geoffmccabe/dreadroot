@@ -82,3 +82,17 @@ export function runCreatureTree(
   runTree(root, ctx);
   return ctx.behaviorResult;
 }
+
+/**
+ * Mirror of BehaviorBrain.forceExit — on creature death/despawn, run the
+ * currently-selected behavior's exit() cleanup and clear the selection. Slice 3
+ * MUST call this wherever it used to call BehaviorBrain.forceExit, or exit-on-
+ * death side effects (e.g. stopping a looping sound) would be lost.
+ */
+export function forceExitCreatureTree(ctx: CreatureBTContext, bctx: BehaviorContext): void {
+  if (ctx.currentBehaviorId) {
+    ctx.bctx = bctx;
+    ctx.modules.find((x) => x.id === ctx.currentBehaviorId)?.exit?.(bctx);
+    ctx.currentBehaviorId = null;
+  }
+}
