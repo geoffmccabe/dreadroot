@@ -53,6 +53,10 @@ const SHTICKMAN_MAD_MS = 1200;
 const SHTICKMAN_SHAKE_POS = 0.5;   // horizontal jitter (blocks)
 const SHTICKMAN_SHAKE_ROT = 0.35;  // twist jitter (radians)
 
+// Shtickmen are heavier-footed: blasts (grenades) move them only this fraction
+// of what other creatures take.
+const SHTICKMAN_BLAST_KB_FRACTION = 0.25;
+
 interface UseShtickmanSystemOptions {
   definitions: ShtickmanDefinition[] | undefined;
   cameraRef: React.RefObject<THREE.Camera>;
@@ -229,11 +233,7 @@ export function useShtickmanSystem({
     const shtickman = shtickmenRef.current.find(s => s.id === shtickmanId);
     if (!shtickman || !shtickman.isActive) return false;
 
-    // Shtickmen are INVINCIBLE by design — never lose health or die. (The bullet
-    // "shot" reaction is the shake set in applyDamage; knockback below still
-    // applies so explosions can physically punt them.) `damage` is intentionally
-    // unused.
-    void damage;
+    shtickman.currentHealth -= damage;
     shtickman.lastDamagedAt = Date.now();
 
     if (knockbackDir) {
@@ -249,7 +249,30 @@ export function useShtickmanSystem({
       }
     }
 
-    return false; // invincible — never killed
+    if (shtickman.currentHealth <= 0) {
+      shtickman.isActive = false;
+
+      // Play death sound if available
+      if (shtickman.definition.death_sound_url) {
+        const p = getLocalPlayerSnapshot();
+        const dx = shtickman.position.x - p.x;
+        const dy = shtickman.position.y - p.y;
+        const dz = shtickman.position.z - p.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        playSpatialSound(shtickman.definition.death_sound_url, distance, { baseVolume: 0.7 });
+      }
+
+      onShtickmanKilled?.(shtickman.definition.tier);
+
+      // Remove from list
+      shtickmenRef.current = shtickmenRef.current.filter(s => s.id !== shtickmanId);
+      setShtickmen(shtickmenRef.current);
+
+      return true;
+    }
+
+    setShtickmen([...shtickmenRef.current]);
+    return false;
   }, [cameraRef, onShtickmanKilled]);
 
   /**
@@ -629,24 +652,28 @@ export function useShtickmanSystem({
         };
       },
       applyDamage: (s, info) => {
-        // SHOT (bullet) → get mad and shake in place. No damage, no knockback —
-        // the shake is the whole reaction. Capture the base pose only when a new
-        // mad period starts (so repeated hits don't drift the shake origin).
+        // SHOT (bullet) → take damage (can die). No bullet knockback — if it
+        // survives, the reaction is the "get mad" shake in place. Capture the
+        // base pose only when a new mad period starts (repeated hits don't drift
+        // the shake origin).
         if (info.source === 'bullet') {
-          const now = Date.now();
-          if (!s.madUntil || now >= s.madUntil) {
-            s.madBaseX = s.position.x;
-            s.madBaseZ = s.position.z;
-            s.madBaseRot = s.rotationY;
+          const killed = damageShtickman(s.id, info.damage);
+          if (!killed && s.isActive) {
+            const now = Date.now();
+            if (!s.madUntil || now >= s.madUntil) {
+              s.madBaseX = s.position.x;
+              s.madBaseZ = s.position.z;
+              s.madBaseRot = s.rotationY;
+            }
+            s.madUntil = now + SHTICKMAN_MAD_MS;
           }
-          s.madUntil = now + SHTICKMAN_MAD_MS;
-          return false;
+          return killed;
         }
-        // Other sources (explosion/flame) still physically punt them (no damage —
-        // damageShtickman is invincible now).
+        // Explosion/flame: damage + knockback. Blasts move shtickmen only 25% as
+        // much as other creatures (they're heavier-footed).
         dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
         const kbOverride = info.source === 'explosion'
-          ? (info.bulletSpeed || undefined)
+          ? (info.bulletSpeed ? info.bulletSpeed * SHTICKMAN_BLAST_KB_FRACTION : undefined)
           : undefined;
         return damageShtickman(s.id, info.damage, dirScratch, kbOverride);
       },
