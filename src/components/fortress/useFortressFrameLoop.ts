@@ -720,6 +720,7 @@ export function useFortressFrameLoop({
               hitX, hitY, hitZ,
               isHeadshot,
               source: 'bullet',
+              bulletTier: bullet.tier,
             });
 
             if (onPointsEarned) onPointsEarned(finalDamage);

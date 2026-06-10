@@ -50,6 +50,9 @@ export interface DamageInfo {
   /** Explicit knockback impulse (m/s) for melee — overrides the adapter's
    *  default. Set by the strike system from tier difference + damage dealt. */
   knockbackImpulse?: number;
+  /** Tier of the bullet that caused this hit (bullets only). Lets a creature
+   *  gate damage by bullet tier — e.g. the walapa shrugs off bullets below T7. */
+  bulletTier?: number;
 }
 
 /**

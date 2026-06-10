@@ -48,6 +48,10 @@ const CURIOUS_RANGE = 100;
 const CURIOUS_HOVER_MS = 10 * 1000;
 const CURIOUS_ARRIVAL_DIST = 3; // close enough to start hovering
 const CURIOUS_HOVER_DIST = 4;   // hold roughly this far from the player
+// TEMP TROUBLESHOOTING: when true, the curious roll fires every 15s at 100% (if a
+// player is within range) so you can actually SEE the behavior. Set to false to
+// restore the real 10-min / 5% rarity.
+const WALAPA_CURIOUS_TEST = true;
 
 // Track if sounds have been preloaded
 let soundsPreloaded = false;
@@ -146,6 +150,19 @@ function calculatePathWaypoints(
   waypoints.push(end.clone());
 
   return waypoints;
+}
+
+/**
+ * Rider-steering hook (DORMANT). When a rider holds the (not-yet-existing)
+ * walapa-steering item, this should return the horizontal direction they want to
+ * fly, and the walapa follows it instead of touring trees. It returns null today
+ * because that item doesn't exist yet — to ACTIVATE: check `walapa.riders` for a
+ * player holding the steering item, and return that player's intended direction.
+ */
+function getWalapaSteering(_walapa: WalapaInstance): { x: number; z: number } | null {
+  // No steering item exists yet → never steers. The integration point below is
+  // ready, so wiring the item + rider input here turns it on with no other change.
+  return null;
 }
 
 /**
@@ -430,15 +447,28 @@ export function useWalapaSystem({
         continue;
       }
 
+      // Rider steering (DORMANT): if a rider is steering (future item), fly where
+      // they want and skip touring. getWalapaSteering returns null today.
+      const steer = getWalapaSteering(walapa);
+      if (steer) {
+        const steerSpeed = WALAPA_BASE_SPEED * ((walapa.definition.speed || 100) / 100);
+        walapa.position.x += steer.x * steerSpeed * deltaTime;
+        walapa.position.z += steer.z * steerSpeed * deltaTime;
+        walapa.rotation = Math.atan2(steer.x, steer.z);
+        continue;
+      }
+
       // Curious roll: every 10 min, a 5% chance to go visit a player within 100m.
       // (Single-player for now — the local player is the only candidate; a
       //  multi-player nearest-of-pool pick drops in here later.)
       if (walapa.lastCuriousRollAt === undefined) walapa.lastCuriousRollAt = now;
-      if (!walapa.curiousActive && now - walapa.lastCuriousRollAt >= CURIOUS_ROLL_INTERVAL_MS) {
+      const rollInterval = WALAPA_CURIOUS_TEST ? 15000 : CURIOUS_ROLL_INTERVAL_MS;
+      const rollChance = WALAPA_CURIOUS_TEST ? 1.0 : CURIOUS_CHANCE;
+      if (!walapa.curiousActive && now - walapa.lastCuriousRollAt >= rollInterval) {
         walapa.lastCuriousRollAt = now;
         const pl = getLocalPlayerSnapshot();
         const pdx = pl.x - walapa.position.x, pdz = pl.z - walapa.position.z;
-        if (Math.sqrt(pdx * pdx + pdz * pdz) <= CURIOUS_RANGE && Math.random() < CURIOUS_CHANCE) {
+        if (Math.sqrt(pdx * pdx + pdz * pdz) <= CURIOUS_RANGE && Math.random() < rollChance) {
           walapa.curiousActive = true;
           walapa.curiousHoverUntil = 0;
           walapa.curiousTarget = new THREE.Vector3();
@@ -732,7 +762,12 @@ export function useWalapaSystem({
             });
           }
         }
-        return damageWalapa(w.id, info.damage);
+        // Bullets below Tier 7 bounce off (no damage); T7+ punch through. Other
+        // sources (explosion/flame/melee) damage normally.
+        const dealt = info.source === 'bullet' && (info.bulletTier ?? 99) < 7
+          ? 0
+          : info.damage;
+        return damageWalapa(w.id, dealt);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
     });
