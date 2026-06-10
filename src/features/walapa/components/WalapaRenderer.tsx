@@ -380,8 +380,12 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
             }
           }
 
-          // Add collision box for body and belly blocks
-          if (part.textureType === 'body' || part.textureType === 'belly') {
+          // Add collision box for body and belly blocks — EXCEPT while the
+          // walapa is curious (flying down to a player). A solid body descending
+          // onto the player crushes/shoves them through the ground; dropping the
+          // collider during the visit keeps it harmless. Colliders return when it
+          // resumes touring.
+          if ((part.textureType === 'body' || part.textureType === 'belly') && !walapa.curiousActive) {
             const halfSize = walapa.scale / 2;
             _scratchBoxMin.set(
               tmpPosition.x - halfSize,
