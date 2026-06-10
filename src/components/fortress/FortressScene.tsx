@@ -108,6 +108,7 @@ import { useLootPickup } from '@/features/loot/useLootPickup';
 import { useWorldDrops } from '@/features/loot/useWorldDrops';
 import { worldStore } from '@/services/worldStore';
 import { DroppedItemRenderer } from './DroppedItemRenderer';
+import { FloatingCoinManager } from '@/features/coinDrops/FloatingCoinManager';
 import type { DroppedWorldItem, ShwarmDefinition } from '@/features/shwarm/types';
 
 // Universal burn system (flamethrower DOT)
@@ -1749,6 +1750,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Dropped Loot Items */}
       <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />
+      {/* Floating coin drops (docs/COIN_DROPS.md) */}
+      <FloatingCoinManager userId={currentUserId ?? null} />
 
       {/* Fruit Renderer - proximity-based fruit spheres with flame plumes */}
       <FruitRenderer

@@ -34,7 +34,7 @@ interface UseShombieSystemOptions {
   userRoles: string[];
   /** Player's current level (for knockback distance calculation) */
   playerLevel?: number;
-  onShombieKilled?: (tier: number) => void;
+  onShombieKilled?: (tier: number, x: number, y: number, z: number) => void;
 }
 
 // Pre-allocated vectors
@@ -414,7 +414,7 @@ export function useShombieSystem({
     }
 
     if (shombie.currentHealth <= 0) {
-      onShombieKilled?.(shombie.definition.tier);
+      onShombieKilled?.(shombie.definition.tier, shombie.position.x, shombie.position.y, shombie.position.z);
 
       // Death sound: the shombie's own moan, pitched down to ~0 (powering down).
       // Capped + overlapping so a horde death plays a few at once, not 100 in

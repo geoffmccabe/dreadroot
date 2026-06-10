@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Save, RotateCw } from 'lucide-react';
 import { AnimatedTexturePreview } from '@/components/AnimatedTexturePreview';
+import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
@@ -583,6 +584,11 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
                     <RotateCw className={`h-4 w-4 ${isRotating ? 'animate-spin' : ''}`} />
                   </Button>
                 </div>
+              </div>
+
+              {/* Coin Drops — game-scoped, saves itself to monster_coin_drops */}
+              <div className="mt-4">
+                <CoinDropsEditor enemyBase="shombie" tier={currentDef.tier} />
               </div>
 
               {/* Combat Summary */}

@@ -998,6 +998,35 @@ export async function rollShwarmDrop(
   throw error;
 }
 
+/** Coin drops — see docs/COIN_DROPS.md. Server reads the monster tier's
+ *  game-scoped coin_drops config, rolls each entry, and inserts floating
+ *  world_coin_drops instances (NO credit — pickup does that). Returns the
+ *  inserted instances so the client can spawn the floating sprites. Empty array
+ *  if the RPC isn't deployed yet (pre-migration) or nothing dropped. */
+export async function rollMonsterCoinDrop(
+  enemyBase: string, tier: number, worldId: string, x: number, y: number, z: number,
+): Promise<unknown[]> {
+  const { data, error } = await supabase.rpc('roll_monster_coin_drop', {
+    p_enemy_base: enemyBase, p_tier: tier, p_world_id: worldId,
+    p_x: x, p_y: y, p_z: z, p_game: GAME_ID,
+  } as never);
+  if (!error) return (data as unknown[]) ?? [];
+  if (isMissingFunction(error)) return [];
+  throw error;
+}
+
+/** Pick up a floating coin drop → credits the picker (server enforces the 60s
+ *  killer-only window + idempotency). Returns the RPC result, or null if the
+ *  RPC isn't deployed yet. */
+export async function pickupCoinDrop(
+  dropId: string,
+): Promise<{ ok: boolean; amount?: number; new_balance?: number; reason?: string } | null> {
+  const { data, error } = await supabase.rpc('pickup_coin_drop', { p_drop_id: dropId } as never);
+  if (!error) return (data as { ok: boolean }) as never;
+  if (isMissingFunction(error)) return null;
+  throw error;
+}
+
 /** Server-rolled 1% shpider-egg drop on a wild-shpider kill (owner =
  *  caller). Returns whether an egg dropped. Falls back to the legacy
  *  client roll+insert if the RPC isn't deployed yet. */
@@ -1103,6 +1132,8 @@ export const worldStore = {
   mineBlock,
   recordKill,
   rollShwarmDrop,
+  rollMonsterCoinDrop,
+  pickupCoinDrop,
   rollShpiderEgg,
   spawnPetEgg,
 };

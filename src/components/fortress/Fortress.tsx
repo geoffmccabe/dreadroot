@@ -12,6 +12,8 @@ import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
 import { worldStore } from '@/services/worldStore';
+import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
+import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -2034,19 +2036,27 @@ export function Fortress() {
             try { await worldStore.recordKill(`shnake_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shnake failed:', e); }
           }}
-          onShombieKilled={async (tier) => {
+          onShombieKilled={async (tier, kx, ky, kz) => {
             console.log(`[Fortress] Shombie killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track shombie kill - no user ID');
               return;
             }
-            
+
             // No shared "yay" chime for shombies — the shombie death sound is
             // now its own moan pitched down to ~0 (powering down), played
             // spatially + capped in useShombieSystem.
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shombie_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shombie failed:', e); }
+            // Coin drops (docs/COIN_DROPS.md): server rolls the tier's game-scoped
+            // config, then we spawn the floating coins at the monster's death spot.
+            try {
+              if (currentWorldId) {
+                const drops = await worldStore.rollMonsterCoinDrop('shombie', tier, currentWorldId, kx, ky, kz);
+                if (drops.length) spawnCoinDrops(drops as CoinDropInstance[]);
+              }
+            } catch (e) { console.error('[Fortress] coin drop shombie failed:', e); }
           }}
           onShroomerKilled={async (tier) => {
             console.log(`[Fortress] Shroomer killed - tier ${tier}, user: ${user?.id}`);
