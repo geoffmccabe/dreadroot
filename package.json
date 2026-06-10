@@ -17,6 +17,7 @@
     "check:lagcomp": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-lagcomp.ts",
     "check:game-instance": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-game-instance.ts",
     "check:behavior-tree": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-behavior-tree.ts",
+    "check:pathfinding": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-pathfinding.ts",
     "smoke:do": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/smoke-do-client.ts"
   },
   "dependencies": {
