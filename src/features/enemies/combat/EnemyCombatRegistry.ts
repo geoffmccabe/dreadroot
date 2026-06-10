@@ -94,6 +94,11 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
   /** Apply damage. Returns true if the enemy died as a result. */
   applyDamage: (enemy: TEnemy, info: DamageInfo) => boolean;
 
+  /** Optional: true if this hit harmlessly bounced off (no damage dealt) — e.g.
+   *  the walapa shrugs off sub-T7 bullets. Lets the caller skip score/effects
+   *  that should only fire on a real hit. Defaults to false when omitted. */
+  bulletBounces?: (enemy: TEnemy, info: DamageInfo) => boolean;
+
   /** Optional: which audio URL plays for impact feedback. Falls back
    *  to a generic flesh thud if omitted. */
   getHitSoundUrl?: (enemy: TEnemy) => string | null;

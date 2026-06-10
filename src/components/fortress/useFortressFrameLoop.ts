@@ -711,7 +711,7 @@ export function useFortressFrameLoop({
             const finalDamage = hitResolved.damage;
             const isHeadshot = hitResolved.isHeadshot;
 
-            adapter.applyDamage(enemy, {
+            const bulletDamageInfo = {
               damage: finalDamage,
               bulletSpeed: bullet.speed,
               knockbackDirX: hitResolved.knockbackDirX,
@@ -719,11 +719,14 @@ export function useFortressFrameLoop({
               knockbackDirZ: hitResolved.knockbackDirZ,
               hitX, hitY, hitZ,
               isHeadshot,
-              source: 'bullet',
+              source: 'bullet' as const,
               bulletTier: bullet.tier,
-            });
+            };
+            adapter.applyDamage(enemy, bulletDamageInfo);
 
-            if (onPointsEarned) onPointsEarned(finalDamage);
+            // Skip score on a harmless bounce (e.g. sub-T7 bullet off a walapa).
+            const bounced = adapter.bulletBounces?.(enemy, bulletDamageInfo) ?? false;
+            if (onPointsEarned && !bounced) onPointsEarned(finalDamage);
 
             // Impact fire — same config the legacy blocks built.
             const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;

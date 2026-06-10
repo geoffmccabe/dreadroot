@@ -165,6 +165,13 @@ function getWalapaSteering(_walapa: WalapaInstance): { x: number; z: number } | 
   return null;
 }
 
+/** A bullet below Tier 7 bounces off a walapa (no damage). The ONE place this
+ *  rule lives — used by both applyDamage (deal 0) and the combat registry's
+ *  bulletBounces (so the caller skips score/effects on a harmless bounce). */
+function walapaBulletBounces(source: string, bulletTier: number | undefined): boolean {
+  return source === 'bullet' && (bulletTier ?? 99) < 7;
+}
+
 /**
  * Hook to manage active walapas with tree-floating behavior
  */
@@ -487,11 +494,13 @@ export function useWalapaSystem({
 
         if (walapa.curiousHoverUntil && walapa.curiousHoverUntil > 0) {
           if (now >= walapa.curiousHoverUntil) {
-            // Done hovering → resume the tree tour from a fresh wait.
+            // Done hovering → resume the tour and fly off IMMEDIATELY (not after
+            // a fresh 30s wait): waitStartTime=0 makes 'waiting' pick a tree next
+            // tick instead of hovering in place at the player's spot for 30s.
             walapa.curiousActive = false;
             walapa.curiousHoverUntil = 0;
             walapa.state = 'waiting';
-            walapa.waitStartTime = now;
+            walapa.waitStartTime = 0;
             walapa.targetTreePosition = null;
             walapa.pathWaypoints = [];
           } else if (dist > CURIOUS_HOVER_DIST) {
@@ -764,11 +773,10 @@ export function useWalapaSystem({
         }
         // Bullets below Tier 7 bounce off (no damage); T7+ punch through. Other
         // sources (explosion/flame/melee) damage normally.
-        const dealt = info.source === 'bullet' && (info.bulletTier ?? 99) < 7
-          ? 0
-          : info.damage;
+        const dealt = walapaBulletBounces(info.source, info.bulletTier) ? 0 : info.damage;
         return damageWalapa(w.id, dealt);
       },
+      bulletBounces: (_w, info) => walapaBulletBounces(info.source, info.bulletTier),
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
     });
   }, [damageWalapa]);
