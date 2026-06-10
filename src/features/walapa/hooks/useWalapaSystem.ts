@@ -37,6 +37,8 @@ const WALAPA_SOUND_URL = '/walapa_v1.mp3';
 const WALAPA_SOUND_CHECK_INTERVAL_MS = 60000; // Check every 60 seconds (1 minute)
 const WALAPA_RANDOM_SOUND_CHANCE = 0.01; // 1% chance per check
 const WALAPA_SOUND_VOLUME = 0.7;
+// "Got shot" reaction: spin 1-3 fast turns. ms PER full turn (fast).
+const WALAPA_SPIN_MS_PER_TURN = 250;
 
 // Track if sounds have been preloaded
 let soundsPreloaded = false;
@@ -411,6 +413,14 @@ export function useWalapaSystem({
       walapa.bobPhase += deltaTime * WALAPA_BOB_SPEED;
       walapa.tailPhase += deltaTime * WALAPA_TAIL_SPEED;
 
+      // "Got shot" reaction: spin fast in place, skipping normal flight, until
+      // shotUntil passes — then the state machine resumes the flight in progress.
+      if (walapa.shotUntil && now < walapa.shotUntil) {
+        const spinRate = (Math.PI * 2) / (WALAPA_SPIN_MS_PER_TURN / 1000); // rad/s
+        walapa.rotation += spinRate * deltaTime;
+        continue;
+      }
+
       // State machine
       switch (walapa.state) {
         case 'waiting': {
@@ -648,19 +658,23 @@ export function useWalapaSystem({
         };
       },
       applyDamage: (w, info) => {
-        // Explosions pass info.bulletSpeed as the falloff-scaled
-        // blast magnitude — same convention shombie/shtickman use.
-        // Bullets use the bullet speed as a small impulse so kills
-        // don't snap-stop the walapa.
-        const kbStrength = info.source === 'explosion'
-          ? (info.bulletSpeed || 1)
-          : Math.max(1, info.bulletSpeed * 0.05);
-        return damageWalapa(w.id, info.damage, {
-          dirX: info.knockbackDirX,
-          dirY: info.knockbackDirY,
-          dirZ: info.knockbackDirZ,
-          strength: kbStrength,
-        });
+        // Getting SHOT (bullet) triggers the spin-react + a louder, higher cry.
+        // (The old knockback was overwritten by flight every frame and did
+        //  nothing — the intended reaction is the spin, so knockback is dropped.)
+        if (info.source === 'bullet') {
+          const spins = 1 + Math.floor(Math.random() * 3); // 1-3 fast spins
+          w.shotUntil = Date.now() + spins * WALAPA_SPIN_MS_PER_TURN;
+          const p = getLocalPlayerSnapshot();
+          const dx = w.position.x - p.x, dy = w.position.y - p.y, dz = w.position.z - p.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist < 150) {
+            playSpatialSound(WALAPA_SOUND_URL, dist, {
+              baseVolume: WALAPA_SOUND_VOLUME * 2, // double volume
+              playbackRate: 1.5,                   // +50% pitch
+            });
+          }
+        }
+        return damageWalapa(w.id, info.damage);
       },
       getHitSoundUrl: () => '/bullet_impact_1.mp3',
     });

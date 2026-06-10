@@ -88,6 +88,10 @@ export interface WalapaInstance {
   /** Time when started waiting at current tree */
   waitStartTime: number;
 
+  /** While now < shotUntil, the walapa is doing its "got shot" spin reaction
+   *  (set when hit by a bullet). Undefined = not reacting. */
+  shotUntil?: number;
+
   /** Bobbing animation phase */
   bobPhase: number;
 
