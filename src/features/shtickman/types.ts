@@ -59,6 +59,13 @@ export interface ShtickmanInstance {
   velocity: THREE.Vector3;     // for knockback smoothing
   lastDamagedAt: number;
 
+  // "Got mad" shake reaction (set when shot). While now < madUntil the shtickman
+  // shakes in place around the captured base pose, then resumes walking.
+  madUntil?: number;
+  madBaseX?: number;
+  madBaseZ?: number;
+  madBaseRot?: number;
+
   // Pathfinding state
   currentPath: THREE.Vector3[] | null; // A* path waypoints
   currentPathIndex: number;            // Current waypoint index in path

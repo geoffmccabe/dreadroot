@@ -47,6 +47,12 @@ const TREE_TOUCH_DISTANCE = 5.0;
 // Time to wait at tree before picking next (ms)
 const TREE_WAIT_TIME_MS = 2000;
 
+// "Got mad" shake reaction when shot: shake for this long, jittering position +
+// rotation around the pose at the moment of the hit, then resume walking.
+const SHTICKMAN_MAD_MS = 1200;
+const SHTICKMAN_SHAKE_POS = 0.5;   // horizontal jitter (blocks)
+const SHTICKMAN_SHAKE_ROT = 0.35;  // twist jitter (radians)
+
 interface UseShtickmanSystemOptions {
   definitions: ShtickmanDefinition[] | undefined;
   cameraRef: React.RefObject<THREE.Camera>;
@@ -223,7 +229,11 @@ export function useShtickmanSystem({
     const shtickman = shtickmenRef.current.find(s => s.id === shtickmanId);
     if (!shtickman || !shtickman.isActive) return false;
 
-    shtickman.currentHealth -= damage;
+    // Shtickmen are INVINCIBLE by design — never lose health or die. (The bullet
+    // "shot" reaction is the shake set in applyDamage; knockback below still
+    // applies so explosions can physically punt them.) `damage` is intentionally
+    // unused.
+    void damage;
     shtickman.lastDamagedAt = Date.now();
 
     if (knockbackDir) {
@@ -239,30 +249,7 @@ export function useShtickmanSystem({
       }
     }
 
-    if (shtickman.currentHealth <= 0) {
-      shtickman.isActive = false;
-
-      // Play death sound if available
-      if (shtickman.definition.death_sound_url) {
-        const p = getLocalPlayerSnapshot();
-        const dx = shtickman.position.x - p.x;
-        const dy = shtickman.position.y - p.y;
-        const dz = shtickman.position.z - p.z;
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        playSpatialSound(shtickman.definition.death_sound_url, distance, { baseVolume: 0.7 });
-      }
-
-      onShtickmanKilled?.(shtickman.definition.tier);
-
-      // Remove from list
-      shtickmenRef.current = shtickmenRef.current.filter(s => s.id !== shtickmanId);
-      setShtickmen(shtickmenRef.current);
-
-      return true;
-    }
-
-    setShtickmen([...shtickmenRef.current]);
-    return false;
+    return false; // invincible — never killed
   }, [cameraRef, onShtickmanKilled]);
 
   /**
@@ -305,6 +292,21 @@ export function useShtickmanSystem({
 
     for (const shtickman of shtickmenRef.current) {
       if (!shtickman.isActive) continue;
+
+      // "Got mad" shake: jitter position + twist around the captured base pose,
+      // skipping the walk; when it passes, restore the pose and fall through.
+      if (shtickman.madUntil) {
+        if (now < shtickman.madUntil) {
+          shtickman.position.x = (shtickman.madBaseX ?? shtickman.position.x) + (Math.random() - 0.5) * SHTICKMAN_SHAKE_POS;
+          shtickman.position.z = (shtickman.madBaseZ ?? shtickman.position.z) + (Math.random() - 0.5) * SHTICKMAN_SHAKE_POS;
+          shtickman.rotationY = (shtickman.madBaseRot ?? shtickman.rotationY) + (Math.random() - 0.5) * SHTICKMAN_SHAKE_ROT;
+          continue;
+        }
+        if (shtickman.madBaseX !== undefined) shtickman.position.x = shtickman.madBaseX;
+        if (shtickman.madBaseZ !== undefined) shtickman.position.z = shtickman.madBaseZ;
+        if (shtickman.madBaseRot !== undefined) shtickman.rotationY = shtickman.madBaseRot;
+        shtickman.madUntil = undefined;
+      }
 
       const bodyHeight = shtickman.heightBlocks * shtickman.scale;
       const entityRadius = bodyHeight * 0.06; // Hip width ratio
@@ -627,10 +629,22 @@ export function useShtickmanSystem({
         };
       },
       applyDamage: (s, info) => {
+        // SHOT (bullet) → get mad and shake in place. No damage, no knockback —
+        // the shake is the whole reaction. Capture the base pose only when a new
+        // mad period starts (so repeated hits don't drift the shake origin).
+        if (info.source === 'bullet') {
+          const now = Date.now();
+          if (!s.madUntil || now >= s.madUntil) {
+            s.madBaseX = s.position.x;
+            s.madBaseZ = s.position.z;
+            s.madBaseRot = s.rotationY;
+          }
+          s.madUntil = now + SHTICKMAN_MAD_MS;
+          return false;
+        }
+        // Other sources (explosion/flame) still physically punt them (no damage —
+        // damageShtickman is invincible now).
         dirScratch.set(info.knockbackDirX, info.knockbackDirY ?? 0, info.knockbackDirZ);
-        // Explosion: use the falloff-scaled blast magnitude so grenade
-        // hits punt shtickmen visibly (the per-tier knockback_received
-        // value is calibrated for bullet hits).
         const kbOverride = info.source === 'explosion'
           ? (info.bulletSpeed || undefined)
           : undefined;
