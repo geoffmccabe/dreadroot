@@ -2011,16 +2011,22 @@ export function Fortress() {
               });
             }
             }}
-          onShwarmGroupKilled={async (tier) => {
+          onShwarmGroupKilled={async (tier, _def, center) => {
             console.log(`[Fortress] Shwarm group killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track kill - no user ID');
               return;
             }
-            
+
             // Track 1B: kill credit via validated RPC (server-side increment).
             try { await worldStore.recordKill(`shwarm_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shwarm failed:', e); }
+            try {
+              if (currentWorldId && center) {
+                const drops = await worldStore.rollMonsterCoinDrop('shwarm', tier, currentWorldId, center.x, center.y, center.z);
+                if (drops.length) spawnCoinDrops(drops as CoinDropInstance[]);
+              }
+            } catch (e) { console.error('[Fortress] coin drop shwarm failed:', e); }
           }}
           onShnakeKilled={async (tier) => {
             console.log(`[Fortress] Shnake killed - tier ${tier}, user: ${user?.id}`);
@@ -2058,7 +2064,7 @@ export function Fortress() {
               }
             } catch (e) { console.error('[Fortress] coin drop shombie failed:', e); }
           }}
-          onShroomerKilled={async (tier) => {
+          onShroomerKilled={async (tier, kx, ky, kz) => {
             console.log(`[Fortress] Shroomer killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track shroomer kill - no user ID');
@@ -2068,8 +2074,14 @@ export function Fortress() {
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shroomer_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shroomer failed:', e); }
+            try {
+              if (currentWorldId) {
+                const drops = await worldStore.rollMonsterCoinDrop('shroomer', tier, currentWorldId, kx, ky, kz);
+                if (drops.length) spawnCoinDrops(drops as CoinDropInstance[]);
+              }
+            } catch (e) { console.error('[Fortress] coin drop shroomer failed:', e); }
           }}
-          onVortaxKilled={async (tier) => {
+          onVortaxKilled={async (tier, kx, ky, kz) => {
             console.log(`[Fortress] Vortax killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track vortax kill - no user ID');
@@ -2077,6 +2089,12 @@ export function Fortress() {
             }
             try { await worldStore.recordKill(`vortax_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill vortax failed:', e); }
+            try {
+              if (currentWorldId) {
+                const drops = await worldStore.rollMonsterCoinDrop('vortax', tier, currentWorldId, kx, ky, kz);
+                if (drops.length) spawnCoinDrops(drops as CoinDropInstance[]);
+              }
+            } catch (e) { console.error('[Fortress] coin drop vortax failed:', e); }
           }}
           onShpiderKilled={async ({ tier, x, y, z }) => {
             // Same pattern as the other enemy kill writers — bumps
@@ -2089,6 +2107,12 @@ export function Fortress() {
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shpider_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shpider failed:', e); }
+            try {
+              if (currentWorldId) {
+                const drops = await worldStore.rollMonsterCoinDrop('shpider', tier, currentWorldId, x, y, z);
+                if (drops.length) spawnCoinDrops(drops as CoinDropInstance[]);
+              }
+            } catch (e) { console.error('[Fortress] coin drop shpider failed:', e); }
             // Track 1B: the SERVER rolls the 1% egg drop and inserts the
             // world_eggs row (owner = killer); realtime shows the egg. The
             // client no longer rolls or inserts.
@@ -2119,7 +2143,7 @@ export function Fortress() {
               toast({ title: `🥚 Your pet shpider died — egg dropped`, duration: 3500 });
             }
           }}
-          onWalapaKilled={async (tier) => {
+          onWalapaKilled={async (tier, kx, ky, kz) => {
             // Walapa kill tracking — Fortress wasn't passing a
             // handler before so kills never reached the DB.
             if (!user?.id) return;
@@ -2127,8 +2151,14 @@ export function Fortress() {
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`walapa_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill walapa failed:', e); }
+            try {
+              if (currentWorldId) {
+                const drops = await worldStore.rollMonsterCoinDrop('walapa', tier, currentWorldId, kx, ky, kz);
+                if (drops.length) spawnCoinDrops(drops as CoinDropInstance[]);
+              }
+            } catch (e) { console.error('[Fortress] coin drop walapa failed:', e); }
           }}
-          onShtickmanKilled={async (tier) => {
+          onShtickmanKilled={async (tier, kx, ky, kz) => {
             console.log(`[Fortress] Shtickman killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track shtickman kill - no user ID');
@@ -2141,6 +2171,12 @@ export function Fortress() {
             // Track 1B: kill credit via validated RPC.
             try { await worldStore.recordKill(`shtickman_t${tier}`); }
             catch (e) { console.error('[Fortress] recordKill shtickman failed:', e); }
+            try {
+              if (currentWorldId) {
+                const drops = await worldStore.rollMonsterCoinDrop('shtickman', tier, currentWorldId, kx, ky, kz);
+                if (drops.length) spawnCoinDrops(drops as CoinDropInstance[]);
+              }
+            } catch (e) { console.error('[Fortress] coin drop shtickman failed:', e); }
           }}
           respawnPosition={respawnPosition}
           onRespawnComplete={() => setRespawnPosition(null)}

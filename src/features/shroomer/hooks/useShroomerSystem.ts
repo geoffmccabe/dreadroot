@@ -36,7 +36,7 @@ interface UseShroomerSystemOptions {
   userRoles: string[];
   /** Player's current level (for knockback distance calculation) */
   playerLevel?: number;
-  onShroomerKilled?: (tier: number) => void;
+  onShroomerKilled?: (tier: number, x: number, y: number, z: number) => void;
   /** Fired when a HEADSHOT lands the killing blow — triggers the explosion FX. */
   onShroomerHeadExplode?: (x: number, y: number, z: number, tier: number) => void;
 }
@@ -349,7 +349,7 @@ export function useShroomerSystem({
     }
 
     if (shroomer.currentHealth <= 0) {
-      onShroomerKilled?.(shroomer.definition.tier);
+      onShroomerKilled?.(shroomer.definition.tier, shroomer.position.x, shroomer.position.y, shroomer.position.z);
 
       // Fragmentation explosion (cap up, parts out): on a headshot kill (full
       // momentum) OR an inter-enemy melee kill (90% momentum — "not a giant

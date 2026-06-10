@@ -62,7 +62,7 @@ interface UseShtickmanSystemOptions {
   cameraRef: React.RefObject<THREE.Camera>;
   isEnabled: boolean;
   plantedTrees?: PlantedTree[]; // Trees to patrol between
-  onShtickmanKilled?: (tier: number) => void;
+  onShtickmanKilled?: (tier: number, x: number, y: number, z: number) => void;
 }
 
 /**
@@ -262,7 +262,7 @@ export function useShtickmanSystem({
         playSpatialSound(shtickman.definition.death_sound_url, distance, { baseVolume: 0.7 });
       }
 
-      onShtickmanKilled?.(shtickman.definition.tier);
+      onShtickmanKilled?.(shtickman.definition.tier, shtickman.position.x, shtickman.position.y, shtickman.position.z);
 
       // Remove from list
       shtickmenRef.current = shtickmenRef.current.filter(s => s.id !== shtickmanId);

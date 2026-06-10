@@ -36,7 +36,7 @@ interface UseVortaxSystemOptions {
   isEnabled: boolean;
   userRoles: string[];
   playerLevel?: number;
-  onVortaxKilled?: (tier: number) => void;
+  onVortaxKilled?: (tier: number, x: number, y: number, z: number) => void;
 }
 
 // Ambient: the vortax's own sound, emitted continuously while it's present
@@ -316,7 +316,7 @@ export function useVortaxSystem({
 
     // All spheres destroyed → the vortax dies.
     if (vortax.liveSphereCount <= 0) {
-      onVortaxKilled?.(vortax.definition.tier);
+      onVortaxKilled?.(vortax.definition.tier, vortax.position.x, vortax.position.y, vortax.position.z);
 
       if (deathSoundCountRef.current < MAX_CONCURRENT_DEATH_SOUNDS) {
         const p = getLocalPlayerSnapshot();

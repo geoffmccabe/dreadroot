@@ -62,7 +62,7 @@ interface UseWalapaSystemOptions {
   isEnabled: boolean;
   /** Get all trees for walapa targeting */
   getEligibleTrees: () => { id: string; position: THREE.Vector3; tier: number; topY: number }[];
-  onWalapaKilled?: (tier: number) => void;
+  onWalapaKilled?: (tier: number, x: number, y: number, z: number) => void;
 }
 
 /**
@@ -409,7 +409,7 @@ export function useWalapaSystem({
 
     if (walapa.currentHealth <= 0) {
       walapa.isActive = false;
-      onWalapaKilled?.(walapa.definition.tier);
+      onWalapaKilled?.(walapa.definition.tier, walapa.position.x, walapa.position.y, walapa.position.z);
 
       // Remove from list
       walapasRef.current = walapasRef.current.filter(w => w.id !== walapaId);
