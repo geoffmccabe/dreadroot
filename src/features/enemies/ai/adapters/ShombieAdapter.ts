@@ -170,6 +170,11 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
         damage: shombie.definition.damage_per_hit,
         knockback: 3, // Fixed knockback to player
         speed: shombie.definition.speed,
+        // Movement preset: 'direct' (old, default) or 'astar' (path around
+        // obstacles). Set ai_config.pathfindingPreset to opt a creature in.
+        pathfindingPreset:
+          (defConfig as Record<string, unknown> | undefined)?.pathfindingPreset ?? 'direct',
+        bodyHeight: SHOMBIE_HITBOX_HEIGHT * (shombie.scale ?? 1),
       },
       
       state,

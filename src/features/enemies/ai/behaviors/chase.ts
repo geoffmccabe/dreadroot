@@ -5,6 +5,9 @@
  */
 
 import type { BehaviorContext, BehaviorModule, BehaviorResult } from '../types';
+import { resolvePlanner } from '@/features/pathfinding/registry';
+import { navigate, makeNavState, type NavState } from '@/features/pathfinding/navigation';
+import { voxelPathGrid } from '@/features/pathfinding/voxelPathGrid';
 
 export const ChaseBehavior: BehaviorModule = {
   id: 'chase',
@@ -46,14 +49,25 @@ export const ChaseBehavior: BehaviorModule = {
   },
   
   tick(ctx: BehaviorContext, _deltaMs: number): BehaviorResult {
-    // Move directly toward player
-    return {
-      kind: 'move',
-      tx: ctx.px,
-      ty: ctx.py,
-      tz: ctx.pz,
-      speedMultiplier: 1.0,
-    };
+    const preset = (ctx.custom.pathfindingPreset as string | undefined) ?? 'direct';
+
+    // OLD system (default): head straight at the target. Untouched — flip a
+    // creature's preset back to 'direct' to use exactly this.
+    if (preset === 'direct') {
+      return { kind: 'move', tx: ctx.px, ty: ctx.py, tz: ctx.pz, speedMultiplier: 1.0 };
+    }
+
+    // NEW pathfinding: follow a budgeted, cached route AROUND obstacles. The
+    // waypoint is a grid cell → aim for its centre, at the target's height (the
+    // movement layer handles vertical/stepping).
+    let nav = ctx.state.navState as NavState | undefined;
+    if (!nav) { nav = makeNavState(); ctx.state.navState = nav; }
+    voxelPathGrid.setBand(ctx.ey, (ctx.custom.bodyHeight as number) ?? 1.8);
+    const wp = navigate(
+      nav, resolvePlanner(preset), voxelPathGrid,
+      ctx.ex, ctx.ez, ctx.px, ctx.pz, performance.now(),
+    );
+    return { kind: 'move', tx: wp.x + 0.5, ty: ctx.py, tz: wp.z + 0.5, speedMultiplier: 1.0 };
   },
   
   exit(_ctx: BehaviorContext): void {
