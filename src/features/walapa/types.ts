@@ -92,6 +92,14 @@ export interface WalapaInstance {
    *  (set when hit by a bullet). Undefined = not reacting. */
   shotUntil?: number;
 
+  /** Curious behavior (the 10-min / 5% "go check out a player" roll). While
+   *  curiousActive it flies to curiousTarget; once it arrives, curiousHoverUntil
+   *  is set and it hovers near the player until then, then resumes touring. */
+  curiousActive?: boolean;
+  curiousTarget?: THREE.Vector3 | null;
+  curiousHoverUntil?: number;
+  lastCuriousRollAt?: number;
+
   /** Bobbing animation phase */
   bobPhase: number;
 

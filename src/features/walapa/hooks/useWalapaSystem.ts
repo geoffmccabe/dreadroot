@@ -40,6 +40,15 @@ const WALAPA_SOUND_VOLUME = 0.7;
 // "Got shot" reaction: spin 1-3 fast turns. ms PER full turn (fast).
 const WALAPA_SPIN_MS_PER_TURN = 250;
 
+// Curious behavior: every 10 min, if a player is within 100m, 5% chance to fly
+// down and hover near them for 10s (so the player can hop on), then resume.
+const CURIOUS_ROLL_INTERVAL_MS = 10 * 60 * 1000;
+const CURIOUS_CHANCE = 0.05;
+const CURIOUS_RANGE = 100;
+const CURIOUS_HOVER_MS = 10 * 1000;
+const CURIOUS_ARRIVAL_DIST = 3; // close enough to start hovering
+const CURIOUS_HOVER_DIST = 4;   // hold roughly this far from the player
+
 // Track if sounds have been preloaded
 let soundsPreloaded = false;
 
@@ -419,6 +428,55 @@ export function useWalapaSystem({
         const spinRate = (Math.PI * 2) / (WALAPA_SPIN_MS_PER_TURN / 1000); // rad/s
         walapa.rotation += spinRate * deltaTime;
         continue;
+      }
+
+      // Curious roll: every 10 min, a 5% chance to go visit a player within 100m.
+      // (Single-player for now — the local player is the only candidate; a
+      //  multi-player nearest-of-pool pick drops in here later.)
+      if (walapa.lastCuriousRollAt === undefined) walapa.lastCuriousRollAt = now;
+      if (!walapa.curiousActive && now - walapa.lastCuriousRollAt >= CURIOUS_ROLL_INTERVAL_MS) {
+        walapa.lastCuriousRollAt = now;
+        const pl = getLocalPlayerSnapshot();
+        const pdx = pl.x - walapa.position.x, pdz = pl.z - walapa.position.z;
+        if (Math.sqrt(pdx * pdx + pdz * pdz) <= CURIOUS_RANGE && Math.random() < CURIOUS_CHANCE) {
+          walapa.curiousActive = true;
+          walapa.curiousHoverUntil = 0;
+          walapa.curiousTarget = new THREE.Vector3();
+        }
+      }
+
+      // Curious mode: descend to the player and hover 10s (so they can hop on),
+      // then resume touring.
+      if (walapa.curiousActive) {
+        const pl = getLocalPlayerSnapshot();
+        if (!walapa.curiousTarget) walapa.curiousTarget = new THREE.Vector3();
+        walapa.curiousTarget.set(pl.x, pl.y, pl.z); // track the live player's level
+        const moveSpeed = WALAPA_BASE_SPEED * ((walapa.definition.speed || 100) / 100);
+        const toTarget = new THREE.Vector3().subVectors(walapa.curiousTarget, walapa.position);
+        const dist = toTarget.length();
+
+        if (walapa.curiousHoverUntil && walapa.curiousHoverUntil > 0) {
+          if (now >= walapa.curiousHoverUntil) {
+            // Done hovering → resume the tree tour from a fresh wait.
+            walapa.curiousActive = false;
+            walapa.curiousHoverUntil = 0;
+            walapa.state = 'waiting';
+            walapa.waitStartTime = now;
+            walapa.targetTreePosition = null;
+            walapa.pathWaypoints = [];
+          } else if (dist > CURIOUS_HOVER_DIST) {
+            toTarget.normalize();
+            walapa.position.add(toTarget.multiplyScalar(moveSpeed * deltaTime));
+          }
+          walapa.rotation = Math.atan2(pl.x - walapa.position.x, pl.z - walapa.position.z); // face player
+        } else if (dist < CURIOUS_ARRIVAL_DIST) {
+          walapa.curiousHoverUntil = now + CURIOUS_HOVER_MS;
+        } else {
+          toTarget.normalize();
+          walapa.position.add(toTarget.multiplyScalar(moveSpeed * deltaTime));
+          walapa.rotation = Math.atan2(toTarget.x, toTarget.z);
+        }
+        continue; // skip touring while curious
       }
 
       // State machine
