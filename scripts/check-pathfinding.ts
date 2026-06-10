@@ -1,7 +1,8 @@
 // Tests the pathfinding planners + registry (Slice 4a). Run:
 //   node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-pathfinding.ts
-import { directPlan, aStarPlan, type PathGrid } from '../src/features/pathfinding/planners.ts';
+import { directPlan, aStarPlan, type PathGrid, type PathPlanner } from '../src/features/pathfinding/planners.ts';
 import { resolvePlanner } from '../src/features/pathfinding/registry.ts';
+import { navigate, makeNavState } from '../src/features/pathfinding/navigation.ts';
 
 let failures = 0;
 const assert = (c: boolean, m: string) => { if (!c) { console.error('  ✗ ' + m); failures++; } };
@@ -42,8 +43,41 @@ assert(resolvePlanner('astar') === aStarPlan, 'registry: astar');
 assert(resolvePlanner('nope') === directPlan, 'registry: unknown → direct');
 assert(resolvePlanner(null) === directPlan, 'registry: null → direct');
 
+// ── Navigation: budgeted, cached path-following ──
+let planCalls = 0;
+const countingAStar: PathPlanner = (fx, fz, tx, tz, grid, maxNodes) => { planCalls++; return aStarPlan(fx, fz, tx, tz, grid, maxNodes); };
+
+// Plans once on first call; the first waypoint isn't into the wall.
+const nav = makeNavState();
+planCalls = 0;
+const wp1 = navigate(nav, countingAStar, wall, 0, 0, 4, 0, 1000);
+assert(planCalls === 1, 'navigate plans once on first call');
+assert(!wall.isBlocked(wp1.x, wp1.z), 'navigate first waypoint avoids the wall');
+
+// Reuses the cached path within the budget window.
+navigate(nav, countingAStar, wall, 0, 0, 4, 0, 1100); // +100ms (< 500)
+assert(planCalls === 1, 'navigate reuses cached path within the budget');
+
+// Replans after the budget elapses.
+navigate(nav, countingAStar, wall, 0, 0, 4, 0, 1700); // +700ms (> 500)
+assert(planCalls === 2, 'navigate replans after the budget window');
+
+// Advances waypoints as the creature reaches them.
+const nav2 = makeNavState();
+const step1 = navigate(nav2, aStarPlan, openGrid, 0, 0, 3, 0, 0);
+assert(step1.x === 1 && step1.z === 0, 'navigate returns the first step toward goal');
+const step2 = navigate(nav2, aStarPlan, openGrid, 1, 0, 3, 0, 100); // creature reached (1,0)
+assert(step2.x === 2 && step2.z === 0, 'navigate advances as waypoints are reached');
+
+// A far goal jump forces an immediate replan.
+const nav3 = makeNavState();
+planCalls = 0;
+navigate(nav3, countingAStar, openGrid, 0, 0, 3, 0, 0);
+navigate(nav3, countingAStar, openGrid, 0, 0, 30, 30, 50); // goal jumped far, within budget
+assert(planCalls === 2, 'navigate replans on a far goal jump');
+
 if (failures === 0) {
-  console.log('✅ pathfinding OK (direct / astar reach / astar around wall / no-path + cap fallback / registry)');
+  console.log('✅ pathfinding OK (planners + registry + budgeted navigation)');
   process.exit(0);
 } else {
   console.error(`❌ ${failures} pathfinding failure(s)`);
