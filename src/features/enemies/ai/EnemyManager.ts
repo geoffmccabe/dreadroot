@@ -15,9 +15,14 @@ import {
 } from './behaviorTreeBridge';
 
 /** Creature types that run on the data-driven behavior tree instead of
- *  BehaviorBrain. The bridge is proven-equivalent, so this is behavior-neutral;
- *  empty this Set to instantly revert every creature to the brain. */
-const BT_ENABLED_TYPES = new Set<string>(['shombie']);
+ *  BehaviorBrain. The bridge is proven-equivalent, so this is behavior-neutral.
+ *  TOGGLE: remove a type to instantly revert it to the old brain; empty the Set
+ *  to revert everything. Only the pure brain-driven enemies belong here — the
+ *  friends (shtickman/walapa) and shpider run separate state machines and need a
+ *  rewrite, not a flag, to join (Phase B). */
+const BT_ENABLED_TYPES = new Set<string>([
+  'shombie', 'shroomer', 'vortax', 'shnake', 'shwarm',
+]);
 import { EnemySpatialIndex } from './EnemySpatialIndex';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import {
