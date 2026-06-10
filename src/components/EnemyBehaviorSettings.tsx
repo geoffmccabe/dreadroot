@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Brain, ChevronDown, ChevronUp } from 'lucide-react';
+import { AiInfoButton } from '@/components/AiInfoButton';
 
 // All available behavior modules with detailed default descriptions
 const ALL_BEHAVIORS = [
@@ -244,6 +245,7 @@ export function EnemyBehaviorSettings({
                   >
                     {behavior.label}
                   </label>
+                  <AiInfoButton id={behavior.id} />
                 </div>
               ))}
             </div>

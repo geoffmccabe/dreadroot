@@ -501,7 +501,9 @@ class EnemyManagerClass {
         if (!cctx) { cctx = makeCreatureCtx(behaviors); reg.creatureCtx = cctx; }
         cctx.currentBehaviorId = reg.currentBehaviorId;
         result = runCreatureTree(tree, cctx, ctx, elapsed);
-        newBehaviorId = cctx.currentBehaviorId;
+        // Empty behavior list → idle + forget the behavior, exactly as
+        // BehaviorBrain does (it returns newBehaviorId=null for no behaviors).
+        newBehaviorId = behaviors.length === 0 ? null : cctx.currentBehaviorId;
       } else {
         const r = this.brain.tick(ctx, behaviors, reg.currentBehaviorId, elapsed);
         result = r.result;
