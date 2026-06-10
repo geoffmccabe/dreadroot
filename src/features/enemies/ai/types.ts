@@ -318,6 +318,9 @@ export interface RegisteredEnemy<TEnemy = unknown> {
    *  `unknown` to keep this core type decoupled from the BT bridge; the
    *  EnemyManager casts it to CreatureBTContext. */
   creatureCtx?: unknown;
+  /** Resolved compiled behavior tree (cached on the enemy so the hot path does
+   *  no per-tick key/lookup). `unknown` → cast to CompiledNode in EnemyManager. */
+  btTree?: unknown;
   /** Pre-allocated spatial entry for zero-allocation updates */
   spatialEntry: EnemyEntry;
   /** Inter-species targeting: cached rival target (or 'player'/null) + when to

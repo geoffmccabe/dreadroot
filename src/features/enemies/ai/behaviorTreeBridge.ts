@@ -41,8 +41,10 @@ export function behaviorRegistry(modules: BehaviorModule[]): BTRegistry {
           m.enter?.(c.bctx);
           c.currentBehaviorId = m.id;
         }
+        // behaviorResult is what runCreatureTree returns; ctx.output (the
+        // engine's generic "what fired" slot) is unused here, so don't allocate
+        // it per tick.
         c.behaviorResult = m.tick(c.bctx, c.deltaMs);
-        c.output = { action: m.id, params: {} };
         return 'success';
       },
     };

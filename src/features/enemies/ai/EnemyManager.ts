@@ -488,21 +488,26 @@ class EnemyManagerClass {
       let newBehaviorId: string | null;
 
       if (BT_ENABLED_TYPES.has(ctx.entityType)) {
-        // Behavior-tree path — proven drop-in for BehaviorBrain. Compile once
-        // per behavior-set (cached); reuse a per-enemy context; sync
-        // currentBehaviorId both ways so external resets are honoured.
-        const key = behaviors.map((b) => b.id).join(',');
-        let tree = this.btTreeCache.get(key);
-        if (!tree) {
-          tree = compileTree(defaultTree(behaviors), behaviorRegistry(behaviors));
-          this.btTreeCache.set(key, tree);
-        }
+        // Behavior-tree path — proven drop-in for BehaviorBrain. The compiled
+        // tree + per-enemy context are resolved ONCE (first tick) and cached on
+        // reg, so the hot path is just sync + run — NO per-tick allocation.
         let cctx = reg.creatureCtx as CreatureBTContext | undefined;
-        if (!cctx) { cctx = makeCreatureCtx(behaviors); reg.creatureCtx = cctx; }
+        let tree = reg.btTree as CompiledNode | undefined;
+        if (!cctx || !tree) {
+          const key = behaviors.map((b) => b.id).join(',');
+          tree = this.btTreeCache.get(key);
+          if (!tree) {
+            tree = compileTree(defaultTree(behaviors), behaviorRegistry(behaviors));
+            this.btTreeCache.set(key, tree);
+          }
+          reg.btTree = tree;
+          cctx = makeCreatureCtx(behaviors);
+          reg.creatureCtx = cctx;
+        }
         cctx.currentBehaviorId = reg.currentBehaviorId;
         result = runCreatureTree(tree, cctx, ctx, elapsed);
         // Empty behavior list → idle + forget the behavior, exactly as
-        // BehaviorBrain does (it returns newBehaviorId=null for no behaviors).
+        // BehaviorBrain does (newBehaviorId=null for no behaviors).
         newBehaviorId = behaviors.length === 0 ? null : cctx.currentBehaviorId;
       } else {
         const r = this.brain.tick(ctx, behaviors, reg.currentBehaviorId, elapsed);
