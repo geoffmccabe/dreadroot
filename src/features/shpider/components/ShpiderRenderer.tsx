@@ -23,7 +23,6 @@ import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../co
 import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
 import { getSegmentEndpoints } from '../lib/legGeometry';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
-import { beginMeleeDamage, endMeleeDamage } from '@/features/enemies/ai/applyAttack';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import {
   EYELASH_GEOMETRY,
@@ -317,25 +316,21 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
             if (edistSq > er * er) continue;
             // Hit! Apply damage with knockback away from the pet.
             const ed = Math.sqrt(edistSq) || 1;
-            // Shpider (friendly) killing an enemy is NOT a player kill → flag it so the
-            // enemy's death callback skips loot/kill credit.
-            beginMeleeDamage();
-            try {
-              adapter.applyDamage(enemy, {
-                damage: s.definition.damage_per_hit,
-                knockbackDirX: edx / ed,
-                knockbackDirY: 0,
-                knockbackDirZ: edz / ed,
-                bulletSpeed: 60, // makes knockback formula resolve to "normal" magnitude
-                hitX: hb.centerX,
-                hitY: eCenterY,
-                hitZ: hb.centerZ,
-                isHeadshot: false,
-                source: 'melee',
-              });
-            } finally {
-              endMeleeDamage();
-            }
+            // The shpider is the player's PET — an extension of the player (like a
+            // weapon), so its kills DO drop loot/credit for the owner. Apply damage
+            // WITHOUT the melee-kill flag, so the enemy's death callback fires normally.
+            adapter.applyDamage(enemy, {
+              damage: s.definition.damage_per_hit,
+              knockbackDirX: edx / ed,
+              knockbackDirY: 0,
+              knockbackDirZ: edz / ed,
+              bulletSpeed: 60, // makes knockback formula resolve to "normal" magnitude
+              hitX: hb.centerX,
+              hitY: eCenterY,
+              hitZ: hb.centerZ,
+              isHeadshot: false,
+              source: 'melee',
+            });
             s.lastAttackAt = now;
             break outerEnemyLoop;
           }
