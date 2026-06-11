@@ -11,10 +11,14 @@
  */
 import * as THREE from 'three';
 
+// Non-linear distance fog: visibility = exp(-density·d), then the fog FACTOR is raised
+// to a power so it stays clear up close and only thickens farther out (linear-exp alone
+// fogs "too thick too quickly" near the camera). Higher power = clearer near.
+const FOG_POWER = '2.6';
 const original = THREE.ShaderChunk.fog_fragment;
 const patched = original.replace(
-  'fogDensity * fogDensity * vFogDepth * vFogDepth',
-  'fogDensity * vFogDepth',
+  '1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth )',
+  `pow( 1.0 - exp( - fogDensity * vFogDepth ), ${FOG_POWER} )`,
 );
 if (patched === original) {
   console.warn('[fogShaderPatch] did not find the FogExp2 falloff expression — Three.js version may have changed it.');

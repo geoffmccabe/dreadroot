@@ -1109,7 +1109,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const lsFogDayColor = lightningSettings?.fogDayColor ?? '#cccccc';
   const lsFogNightColor = lightningSettings?.fogNightColor ?? '#222233';
   const lsFreezeCycle = lightningSettings?.freezeCycle ?? false;
-  const lsLightingOverride = lightningSettings?.lightingOverride ?? null;
+  // Day/night cycle locked to fixed bright daytime (100): a shifting sky makes the fog
+  // colour impossible to keep matched. Static sky → fog colour matches exactly. (Ported
+  // from Pinkland — see docs/FOG_LOD_SOLUTION.md.)
+  const lsLightingOverride = 100;
 
   const fogColorDay = useMemo(() => new THREE.Color(lsFogDayColor), [lsFogDayColor]);
   const fogColorNight = useMemo(() => new THREE.Color(lsFogNightColor), [lsFogNightColor]);
@@ -1155,9 +1158,27 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     if (!fogEnabled) return;
     const interval = setInterval(() => {
       if (!scene.fog) return;
-      // Use manual override if set, otherwise use cycle state
-      const lp = (lsLightingOverride !== null ? lsLightingOverride : cycleStateRef.current.lightingPercentage) / 100;
-      fogColorCurrent.current.copy(fogColorNight).lerp(fogColorDay, lp);
+      const sky = scene.userData.skyColor as THREE.Color | undefined;
+      if (sky) {
+        // Match the fog to the visible sky (frozen at full day). The visible sky renders
+        // paler/greyer than the raw sky colour, and ACES tone-mapping compresses near the
+        // top, so: (A) per-channel trim for tone (G×0.90, B×0.84), then (B) desaturate
+        // toward luminance (k=0.45). Calibrated in Pinkland; same sky+ACES here so it
+        // transfers. See docs/FOG_LOD_SOLUTION.md.
+        const r0 = sky.r;
+        const g0 = sky.g * 0.90;
+        const b0 = sky.b * 0.84;
+        const lum = r0 * 0.299 + g0 * 0.587 + b0 * 0.114;
+        const k = 0.45;
+        fogColorCurrent.current.setRGB(
+          r0 + (lum - r0) * k,
+          g0 + (lum - g0) * k,
+          b0 + (lum - b0) * k,
+        );
+      } else {
+        const lp = (lsLightingOverride !== null ? lsLightingOverride : cycleStateRef.current.lightingPercentage) / 100;
+        fogColorCurrent.current.copy(fogColorNight).lerp(fogColorDay, lp);
+      }
       (scene.fog as THREE.Fog).color.copy(fogColorCurrent.current);
       if (scene.background instanceof THREE.Color) {
         scene.background.copy(fogColorCurrent.current);

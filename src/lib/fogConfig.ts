@@ -18,7 +18,11 @@ export const FOG_DISTANCE_CHUNKS = 4;
  * Tuned so r ≈ 0.6: visibility multiplies by 0.6 each chunk.
  * Curve: 100% / 60% / 36% / 22% / 13% at chunk distances 0..4.
  */
-export const FOG_DENSITY = 0.0319; // -ln(0.6) / 16
+// Linear-exp fog (patched, see fogShaderPatch.ts): visibility = exp(-density·dist).
+// Pick density so visibility is VIS_AT_BOUNDARY at the full-detail render edge.
+const CHUNK_SIZE = 16;
+const VIS_AT_BOUNDARY = 0.04;
+export const FOG_DENSITY = -Math.log(VIS_AT_BOUNDARY) / (FOG_DISTANCE_CHUNKS * CHUNK_SIZE); // ≈0.0503
 
 /**
  * Height-aware fog. As the player climbs, fog thins and the render radius
@@ -36,26 +40,9 @@ export const fogState = {
   distChunks: FOG_DISTANCE_CHUNKS,
 };
 
-export function updateFogForHeight(y: number): void {
-  if (y <= 100) {
-    fogState.density = FOG_DENSITY;
-    fogState.distChunks = FOG_DISTANCE_CHUNKS;
-    return;
-  }
-  if (y >= 200) {
-    fogState.density = FOG_DENSITY * 0.25;
-    fogState.distChunks = 10;
-    return;
-  }
-  // Two piecewise-linear segments: 100→150 (full→half, 4→6 chunks) and
-  // 150→200 (half→quarter, 6→10 chunks). Continuous at y=150.
-  if (y < 150) {
-    const t = (y - 100) / 50;
-    fogState.density = FOG_DENSITY * (1 - 0.5 * t);
-    fogState.distChunks = Math.round(4 + 2 * t);
-  } else {
-    const t = (y - 150) / 50;
-    fogState.density = FOG_DENSITY * (0.5 - 0.25 * t);
-    fogState.distChunks = Math.round(6 + 4 * t);
-  }
+export function updateFogForHeight(_y: number): void {
+  // Height-CONSISTENT: no altitude thinning — the old ×0.25 thinning made distant
+  // chunks stay ~50% visible when flying. Same fade at any height.
+  fogState.density = FOG_DENSITY;
+  fogState.distChunks = FOG_DISTANCE_CHUNKS;
 }
