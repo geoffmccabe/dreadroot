@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ShwarmDefinition } from '../types';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
+import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
@@ -726,6 +727,13 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
                   </p>
                 </div>
               </div>
+
+              {/* Coin Drops — game-scoped, saves to monster_coin_drops */}
+              {currentDef && (
+                <div className="mt-4">
+                  <CoinDropsEditor enemyBase="shwarm" tier={currentDef.tier} />
+                </div>
+              )}
 
               {/* Stats Summary */}
               <div className="mt-4 p-3 bg-muted/50 rounded-lg">

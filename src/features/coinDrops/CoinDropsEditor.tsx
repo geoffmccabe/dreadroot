@@ -103,9 +103,9 @@ export function CoinDropsEditor({ enemyBase, tier }: { enemyBase: string; tier: 
               <Input type="number" min={0} max={100} step="0.5" value={r.chance}
                 onChange={(e) => update(i, { chance: Math.max(0, Math.min(100, num(e.target.value))) })} />
               <Input type="number" min={1} value={r.min}
-                onChange={(e) => update(i, { min: Math.max(1, Math.round(num(e.target.value, 1))) })} />
+                onChange={(e) => { const min = Math.max(1, Math.round(num(e.target.value, 1))); update(i, { min, max: Math.max(min, r.max) }); }} />
               <Input type="number" min={1} value={r.max}
-                onChange={(e) => update(i, { max: Math.max(1, Math.round(num(e.target.value, 1))) })} />
+                onChange={(e) => update(i, { max: Math.max(r.min, Math.round(num(e.target.value, 1))) })} />
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => remove(i)}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>

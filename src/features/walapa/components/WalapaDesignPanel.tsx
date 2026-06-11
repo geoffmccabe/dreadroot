@@ -14,6 +14,7 @@ import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { rotateTexture } from '@/lib/textureRotation';
+import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import type { WalapaDefinition } from '../types';
 import { TIER_RARITY, RARITY_COLORS } from '../constants';
 import { DEFAULT_WALAPA_DEFINITION } from '../hooks/useWalapaDefinitions';
@@ -616,6 +617,13 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
                     </div>
                   </div>
                 </div>
+
+                {/* Coin Drops — game-scoped, saves to monster_coin_drops */}
+                {currentDef && (
+                  <div className="mt-4">
+                    <CoinDropsEditor enemyBase="walapa" tier={currentDef.tier} />
+                  </div>
+                )}
 
                 {/* Stats Summary */}
                 <div className="mt-4 p-3 bg-muted/50 rounded-lg">

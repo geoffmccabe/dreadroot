@@ -36,6 +36,7 @@ const MAX_PER_THEME = 256;
 
 interface Unit {
   dropId: string; themeId: string; amount: number; killer: string | null; bornMs: number;
+  lifespanMs: number;
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
   baseY: number; phase: number; scale: number;
   state: 'fall' | 'idle' | 'magnet' | 'dead';
@@ -81,6 +82,7 @@ export function FloatingCoinManager({ userId }: { userId: string | null }) {
         unitsRef.current.push({
           dropId: d.id, themeId: d.token_theme_id, amount: d.amount,
           killer: d.killer_user_id, bornMs: now,
+          lifespanMs: CFG.lifespanMsMin + Math.random() * (CFG.lifespanMsMax - CFG.lifespanMsMin),
           x: d.position_x + Math.cos(a) * r,
           y: d.position_y + 1.0,
           z: d.position_z + Math.sin(a) * r,
@@ -130,6 +132,10 @@ export function FloatingCoinManager({ userId }: { userId: string | null }) {
       for (const u of units) {
         if (u.state === 'dead') { hasDead = true; continue; }
 
+        // Despawn uncollected coins once their lifetime elapses — otherwise they
+        // accumulate forever (perf leak) and overflow the per-theme render cap.
+        if (now - u.bornMs > u.lifespanMs) { u.state = 'dead'; hasDead = true; continue; }
+
         if (u.state === 'fall') {
           u.vy -= CFG.gravity * dt;
           u.x += u.vx * dt; u.y += u.vy * dt; u.z += u.vz * dt;
@@ -178,7 +184,10 @@ export function FloatingCoinManager({ userId }: { userId: string | null }) {
           if (u.themeId !== themeId || u.state === 'dead') continue;
           if (n >= MAX_PER_THEME) break;
           p.set(u.x, u.y, u.z);
-          s.set(u.scale, u.scale, 1);
+          // Fade (shrink) over the final fadeOutMs of the coin's life.
+          const remaining = u.lifespanMs - (now - u.bornMs);
+          const fade = remaining < CFG.fadeOutMs ? Math.max(0, remaining / CFG.fadeOutMs) : 1;
+          s.set(u.scale * fade, u.scale * fade, 1);
           m.compose(p, q, s);
           mesh.setMatrixAt(n, m);
           n++;

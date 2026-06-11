@@ -9,22 +9,6 @@ import type { CoinDropBehaviorConfig } from './types';
 /** Killer-only visibility/pickup window; public afterward. Matches pickup_coin_drop. */
 export const OWNERSHIP_WINDOW_MS = 60_000;
 
-/** Max floating sprites per drop — the normalization ceiling. */
-export const MAX_FLOAT_COINS = 10;
-
-/**
- * Unit normalization: how many floating sprites represent `amount`, given the
- * drop range's `max`. clamp(round(amount / max * 10), 1, 10).
- *   range 20–100: amount 20 → 2, 100 → 10.
- *   range 35–50 : amount 35 → 7,  50 → 10.
- * Each sprite then represents amount / count coins; the credited total is amount.
- */
-export function normalizeFloatCount(amount: number, max: number): number {
-  if (max <= 0) return 1;
-  const n = Math.round((amount / max) * MAX_FLOAT_COINS);
-  return Math.min(MAX_FLOAT_COINS, Math.max(1, n));
-}
-
 export const DEFAULT_COIN_DROP_BEHAVIOR: CoinDropBehaviorConfig = {
   // Spawn
   spawnScatterRadius: 0.6,

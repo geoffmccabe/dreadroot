@@ -14,6 +14,7 @@ import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
+import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import { rotateTexture } from '@/lib/textureRotation';
 import type { VortaxDefinition } from '../types';
 
@@ -383,6 +384,13 @@ export function VortaxDesignPanel({ className }: VortaxDesignPanelProps) {
               onSoundChange={handleSoundChange}
               onVolumeChange={handleVolumeChange}
             />
+
+            {/* Coin Drops — game-scoped, saves to monster_coin_drops */}
+            {currentDef && (
+              <div className="mt-4">
+                <CoinDropsEditor enemyBase="vortax" tier={currentDef.tier} />
+              </div>
+            )}
 
             {globalDef && (
               <EnemyBehaviorSettings

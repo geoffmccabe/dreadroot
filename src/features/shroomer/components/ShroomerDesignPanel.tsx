@@ -12,6 +12,7 @@ import { Save, RotateCw } from 'lucide-react';
 import { AnimatedTexturePreview } from '@/components/AnimatedTexturePreview';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
+import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { rotateTexture } from '@/lib/textureRotation';
@@ -552,6 +553,13 @@ export function ShroomerDesignPanel({ className }: ShroomerDesignPanelProps) {
                   </Button>
                 </div>
               </div>
+
+              {/* Coin Drops — game-scoped, saves to monster_coin_drops */}
+              {currentDef && (
+                <div className="mt-4">
+                  <CoinDropsEditor enemyBase="shroomer" tier={currentDef.tier} />
+                </div>
+              )}
 
               {/* Combat Summary */}
               <div className="mt-4 p-3 bg-muted/50 rounded-lg">

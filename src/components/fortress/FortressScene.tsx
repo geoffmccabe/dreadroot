@@ -309,14 +309,16 @@ export function FortressScene({
   });
 
   // Callback when entire shwarm group is killed - play yay sound, notify parent
-  const handleShwarmGroupKilled = useCallback((tier: number, _definition: ShwarmDefinition, _centerPosition: THREE.Vector3) => {
+  const handleShwarmGroupKilled = useCallback((tier: number, definition: ShwarmDefinition, centerPosition: THREE.Vector3) => {
     if (audioRefs.current.shwarmGroupKilled) {
       audioRefs.current.shwarmGroupKilled.currentTime = 0;
       audioRefs.current.shwarmGroupKilled.play().catch(() => {});
     }
 
-    // Notify parent for kill tracking
-    onShwarmGroupKilled?.(tier);
+    // Notify parent for kill tracking + coin/loot drop. Forward the def + center
+    // position — they were being dropped here, so the coin-drop roll in Fortress
+    // (guarded by `center`) never fired and shwarm never dropped coins.
+    onShwarmGroupKilled?.(tier, definition, centerPosition);
   }, [onShwarmGroupKilled]);
 
   // Callback when an individual shwarm block is killed — roll loot drop.

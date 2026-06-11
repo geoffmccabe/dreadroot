@@ -15,6 +15,7 @@ import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animati
 import { convertTextureToKtx2 } from '@/lib/ktx2';
 import type { ShtickmanDefinition } from '../types';
 import { getHeightBlocks, getHeadSizeBlocks } from '../types';
+import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 
 interface ShtickmanDesignPanelProps {
   className?: string;
@@ -688,6 +689,13 @@ export function ShtickmanDesignPanel({ className }: ShtickmanDesignPanelProps) {
                     </div>
                   </div>
                 </div>
+
+                {/* Coin Drops — game-scoped, saves to monster_coin_drops */}
+                {currentDef && (
+                  <div className="mt-4">
+                    <CoinDropsEditor enemyBase="shtickman" tier={currentDef.tier} />
+                  </div>
+                )}
 
                 {/* AI Behavior */}
                 <div className="border-t pt-4 mt-4">

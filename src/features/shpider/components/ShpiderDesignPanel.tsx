@@ -12,6 +12,7 @@ import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animati
 import { useQueryClient } from '@tanstack/react-query';
 import { Save, Upload, X, Bug, Egg } from 'lucide-react';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
+import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import type { ShpiderDefinition } from '../types';
 import { ShpiderEggsPanel } from './ShpiderEggsPanel';
 
@@ -349,6 +350,13 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
                     {isSaving ? 'Saving…' : 'Save'}
                   </Button>
                 </div>
+
+                {/* Coin Drops — game-scoped, saves to monster_coin_drops */}
+                {currentDef && (
+                  <div>
+                    <CoinDropsEditor enemyBase="shpider" tier={currentDef.tier} />
+                  </div>
+                )}
 
                 {/* Name */}
                 <div>
