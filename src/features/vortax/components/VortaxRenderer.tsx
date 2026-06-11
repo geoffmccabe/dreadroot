@@ -291,7 +291,12 @@ export const VortaxRenderer = forwardRef<VortaxRendererHandle, VortaxRendererPro
     const makeGhostly = (m: THREE.MeshStandardMaterial) => {
       m.transparent = true;
       m.opacity = 0.7;
-      m.depthWrite = false;
+      // depthWrite TRUE: the body is ~180 overlapping instanced spheres in one mesh.
+      // With depthWrite off they blended in instance order, which made the Vortax
+      // partially vanish when viewed head-on (worst overlap) and reappear at an angle.
+      // Writing depth lets the front spheres occlude the back ones, so it renders as a
+      // consistent translucent cluster from every angle.
+      m.depthWrite = true;
       return m;
     };
     const material = useMemo(() => {

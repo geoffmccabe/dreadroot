@@ -12,6 +12,15 @@ import type { SharedContext } from './types';
 const MELEE_DAMAGE_REF = 10;
 const MELEE_DECAY = 8;
 
+// True while a MELEE attack from one monster onto another (rival-vs-rival, or a
+// shpider onto an enemy) is being applied. A monster's death callback fires
+// synchronously inside that applyDamage call, so it can read this to skip loot/kill
+// credit — drops only happen on PLAYER kills, never monster-vs-monster.
+let _meleeDamageDepth = 0;
+export function isMeleeKillInProgress(): boolean { return _meleeDamageDepth > 0; }
+export function beginMeleeDamage(): void { _meleeDamageDepth++; }
+export function endMeleeDamage(): void { _meleeDamageDepth--; }
+
 export function applyAttackResult(
   shared: SharedContext | undefined,
   damage: number,
@@ -60,17 +69,23 @@ export function applyAttackResultTo(
     const tierDiff = (attackerTier ?? victimTier) - victimTier;
     const damageFactor = Math.min(2, damage / MELEE_DAMAGE_REF);
     const dist = Math.max(0.5, 1 + tierDiff) * damageFactor;
-    adapter.applyDamage(victim, {
-      damage,
-      bulletSpeed: 0,
-      knockbackDirX: dir.x,
-      knockbackDirY: 0,
-      knockbackDirZ: dir.z,
-      hitX: 0, hitY: 0, hitZ: 0,
-      isHeadshot: false,
-      source: 'melee',
-      knockbackImpulse: dist * MELEE_DECAY,
-    });
+    // Flag the kill as monster-vs-monster so the victim's death callback skips drops.
+    beginMeleeDamage();
+    try {
+      adapter.applyDamage(victim, {
+        damage,
+        bulletSpeed: 0,
+        knockbackDirX: dir.x,
+        knockbackDirY: 0,
+        knockbackDirZ: dir.z,
+        hitX: 0, hitY: 0, hitZ: 0,
+        isHeadshot: false,
+        source: 'melee',
+        knockbackImpulse: dist * MELEE_DECAY,
+      });
+    } finally {
+      endMeleeDamage();
+    }
     return;
   }
   onPlayerHit?.(damage, knockback, dir);

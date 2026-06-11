@@ -12,6 +12,7 @@ import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
 import { worldStore } from '@/services/worldStore';
+import { isMeleeKillInProgress } from '@/features/enemies/ai/applyAttack';
 import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
 import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useBlocks } from '@/contexts/BlocksContext';
@@ -2043,6 +2044,7 @@ export function Fortress() {
             catch (e) { console.error('[Fortress] recordKill shnake failed:', e); }
           }}
           onShombieKilled={async (tier, kx, ky, kz) => {
+            if (isMeleeKillInProgress()) return; // killed by a rival monster / shpider — no drops, no kill credit
             console.log(`[Fortress] Shombie killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track shombie kill - no user ID');
@@ -2065,6 +2067,7 @@ export function Fortress() {
             } catch (e) { console.error('[Fortress] coin drop shombie failed:', e); }
           }}
           onShroomerKilled={async (tier, kx, ky, kz) => {
+            if (isMeleeKillInProgress()) return; // killed by a rival monster / shpider — no drops, no kill credit
             console.log(`[Fortress] Shroomer killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track shroomer kill - no user ID');
@@ -2082,6 +2085,7 @@ export function Fortress() {
             } catch (e) { console.error('[Fortress] coin drop shroomer failed:', e); }
           }}
           onVortaxKilled={async (tier, kx, ky, kz) => {
+            if (isMeleeKillInProgress()) return; // killed by a rival monster / shpider — no drops, no kill credit
             console.log(`[Fortress] Vortax killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track vortax kill - no user ID');
@@ -2097,6 +2101,7 @@ export function Fortress() {
             } catch (e) { console.error('[Fortress] coin drop vortax failed:', e); }
           }}
           onShpiderKilled={async ({ tier, x, y, z }) => {
+            if (isMeleeKillInProgress()) return; // killed by a rival monster — no drops, no kill credit
             // Same pattern as the other enemy kill writers — bumps
             // user_combat_stats so the Kills panel shows shpiders
             // alongside everything else. Without this they were
@@ -2144,6 +2149,7 @@ export function Fortress() {
             }
           }}
           onWalapaKilled={async (tier, kx, ky, kz) => {
+            if (isMeleeKillInProgress()) return; // killed by a rival monster / shpider — no drops, no kill credit
             // Walapa kill tracking — Fortress wasn't passing a
             // handler before so kills never reached the DB.
             if (!user?.id) return;
@@ -2159,6 +2165,7 @@ export function Fortress() {
             } catch (e) { console.error('[Fortress] coin drop walapa failed:', e); }
           }}
           onShtickmanKilled={async (tier, kx, ky, kz) => {
+            if (isMeleeKillInProgress()) return; // killed by a rival monster / shpider — no drops, no kill credit
             console.log(`[Fortress] Shtickman killed - tier ${tier}, user: ${user?.id}`);
             if (!user?.id) {
               console.error('[Fortress] Cannot track shtickman kill - no user ID');
