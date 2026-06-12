@@ -8,7 +8,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE, getVisibleChunkKeys, parseChunkKey } from '@/lib/chunkManager';
-import { fogState } from '@/lib/fogConfig';
+import { fogState, EXTRA_VIEW_CHUNKS } from '@/lib/fogConfig';
 import { renderedChunkKeys } from '@/lib/renderedChunks';
 import { CAMERA_START_X, CAMERA_START_Z } from './fortressScene.constants';
 
@@ -181,7 +181,7 @@ export function CameraTrackedBlocks({
 
   const { normalEntries, fadeEntries } = useMemo(() => {
     const normal: { key: string; blocks: PlacedBlock[]; sig?: string; dist?: number }[] = [];
-    const fade: { key: string; blocks: PlacedBlock[]; distanceFactor: number }[] = [];
+    const fade: { key: string; blocks: PlacedBlock[] }[] = [];
     const ref = loadedChunksRef?.current;
     const cache = entryCacheRef.current;
 
@@ -245,8 +245,16 @@ export function CameraTrackedBlocks({
           cache.set(chunkKey, entry);
           activeKeys.add(chunkKey);
           normal.push(entry);
+          // Near chunks are textured only — the scene fog fades them by true distance.
+          // Silhouettes are FAR-only (below) so they can never occlude textures.
+        } else if (EXTRA_VIEW_CHUNKS > 0 && chunkDist <= fogState.distChunks + EXTRA_VIEW_CHUNKS) {
+          // Far low-detail ring: cheap, textureless silhouettes (FadeChunkBlocks). The
+          // SAME scene fog that fades the textured chunks lerps these toward the sky
+          // colour by TRUE per-pixel distance, continuing the fade ~10% → ~1%.
+          fade.push({ key: chunkKey, blocks });
+          activeKeys.add(chunkKey);
         } else {
-          // Beyond the fog wall — don't render; fog has fully hidden it.
+          // Beyond the far ring — don't render; fog has fully hidden it.
           excluded.push({ key: chunkKey, dist: chunkDist, blocks: chunkData.blocks.length });
         }
       }
@@ -271,6 +279,7 @@ export function CameraTrackedBlocks({
         if (!activeKeys.has(key)) cache.delete(key);
       }
     }
+
 
     // FALLBACK: If loadedChunksRef is empty, use blocksByChunk (React state)
     if (normal.length === 0 && blocksByChunk.size > 0) {
@@ -414,7 +423,7 @@ export function CameraTrackedBlocks({
 
   return (
     <>
-      <FadeChunkBlocks entries={fadeEntries} viewSettings={viewSettings} />
+      <FadeChunkBlocks entries={fadeEntries} />
       <ProceduralGround
         visibleChunksRef={visibleChunksRef}
         renderTrigger={renderTrigger}

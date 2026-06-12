@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
-import { fogState } from '@/lib/fogConfig';
+import { fogState, EXTRA_VIEW_CHUNKS } from '@/lib/fogConfig';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
@@ -2015,7 +2015,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         // Cap the load radius at the fog's effective render distance —
         // loading chunks the fog hides is wasted CPU + memory.
-        const effectiveLoadRadius = Math.min(LOAD_RADIUS, fogState.distChunks + 1);
+        const effectiveLoadRadius = Math.min(LOAD_RADIUS, fogState.distChunks + EXTRA_VIEW_CHUNKS + 1);
 
         // Determine which chunks to load
         let chunksToLoad: Array<{ x: number; z: number }>;
@@ -2083,7 +2083,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         }
       } else {
         // No previous chunk - do full initial load (this one can block as it's startup)
-        const effectiveLoadRadius = Math.min(LOAD_RADIUS, fogState.distChunks + 1);
+        const effectiveLoadRadius = Math.min(LOAD_RADIUS, fogState.distChunks + EXTRA_VIEW_CHUNKS + 1);
         await loadChunksInRadius(newChunkX, newChunkZ, effectiveLoadRadius);
         // After initial load, clean up any stale chunks
         unloadDistantChunks(newChunkX, newChunkZ);
@@ -2285,7 +2285,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       // Cap by the FOG's effective render radius — loading chunks the player
       // can't see is wasted CPU + memory (they'd just sit invisible).
-      const radius = Math.min(loadRadiusRef.current, fogState.distChunks + 1);
+      const radius = Math.min(loadRadiusRef.current, fogState.distChunks + EXTRA_VIEW_CHUNKS + 1);
 
       // Collect ALL chunks that should be loaded but aren't
       const toLoad: Array<{ x: number; z: number }> = [];

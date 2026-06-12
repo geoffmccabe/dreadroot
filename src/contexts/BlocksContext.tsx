@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUserData } from '@/hooks/useUserData';
 import { useCurrentWorldId, World } from '@/hooks/useCurrentWorldId';
 import { getVisibleChunkKeys } from '@/lib/chunkManager';
+import { EXTRA_VIEW_CHUNKS, FOG_DISTANCE_CHUNKS } from '@/lib/fogConfig';
 // B4: Removed organizeBlocksByChunk - now using loadedChunksRef directly
 import { CAMERA_START_X, CAMERA_START_Z } from '@/components/fortress/fortressScene.constants';
 
@@ -56,7 +57,10 @@ export function BlocksProvider({ children }: { children: ReactNode }) {
   // no FPS gain. Reverted to 3. The real ceiling is the per-block collider
   // model for complete trees, not the retain-ring size.
   const visualDistanceForEmit = profile?.visual_distance || 4;
-  const FADE_EXTRA_CHUNKS = 3;
+  // Load out to the full-detail distance PLUS the silhouette ring. visual_distance
+  // can be less than the fog distance, so derive from both — else the far ring never
+  // loads (the bug that left it empty). See docs/LOD_FOG_PLAN.md Part D.
+  const FADE_EXTRA_CHUNKS = Math.max(3, FOG_DISTANCE_CHUNKS + EXTRA_VIEW_CHUNKS - visualDistanceForEmit);
   const blocksHook = usePlacedBlocksWithCache(user?.id || null, currentWorldId, visualDistanceForEmit, visualDistanceForEmit + FADE_EXTRA_CHUNKS);
   
   // Visible chunks ref - updated imperatively by CameraTrackedBlocks, read by InstancedBlockGroup

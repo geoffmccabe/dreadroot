@@ -1,217 +1,83 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+/**
+ * FadeChunkBlocks — the far low-detail ring: cheap, textureless silhouettes of the
+ * chunks just beyond the full-detail (textured) distance. See docs/LOD_FOG_PLAN.md.
+ *
+ * No custom shader, no timer. Just opaque instanced boxes with a plain
+ * MeshBasicMaterial + fog:true — the scene's (patched, linear) FogExp2 lerps their
+ * colour toward the sky colour by TRUE per-pixel distance, identical to the textured
+ * chunks, so the boundary is seamless and the far edge dissolves into the sky.
+ * Opaque ⇒ correct z-sort (no transparent overdraw); distance-only ⇒ never fades
+ * backwards. Far-ring only (the classification never feeds it near chunks), so it
+ * can't occlude your textures.
+ */
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
-import { ViewSettings, DEFAULT_VIEW_SETTINGS } from '@/components/fortress/FortressTypes';
-import { numPosKey } from '@/lib/spatialHashGrid';
+
+const MAX_INSTANCES_PER_RING = 20000;
+const SILHOUETTE_COLOR = '#5b6b78'; // muted; the fog carries it to the sky with distance
 
 interface FadeChunkEntry {
   key: string;
   blocks: PlacedBlock[];
-  distanceFactor: number; // 0..1 across fade rings
 }
 
 interface FadeChunkBlocksProps {
   entries: FadeChunkEntry[];
-  viewSettings?: ViewSettings;
 }
 
-// Increased from 5000 to handle large trees (100K+ blocks, ~30K visible after culling).
-// Fade rendering uses simple solid shaders (no textures), so higher instance counts are safe.
-const MAX_INSTANCES_PER_RING = 20000;
-const FADE_IN_DURATION = 2.0; // seconds
-
-// Vertex shader: passes per-instance opacity to fragment, includes fog
-const vertexShader = `
-  attribute float instanceOpacity;
-  varying float vInstanceOpacity;
-  #include <fog_pars_vertex>
-  void main() {
-    vInstanceOpacity = instanceOpacity;
-    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
-    #include <fog_vertex>
-  }
-`;
-
-// Fragment shader: applies base color, base opacity * per-instance opacity, then fog
-// After standard fog color blend, also fades alpha so distant chunks become transparent
-const fragmentShader = `
-  uniform vec3 baseColor;
-  uniform float baseOpacity;
-  varying float vInstanceOpacity;
-  #include <fog_pars_fragment>
-  void main() {
-    gl_FragColor = vec4(baseColor, baseOpacity * vInstanceOpacity);
-    #include <fog_fragment>
-    #ifdef USE_FOG
-      gl_FragColor.a *= (1.0 - fogFactor);
-    #endif
-  }
-`;
-
-function blockKey(b: PlacedBlock): number {
-  return numPosKey(b.position_x, b.position_y, b.position_z);
-}
-
-function FadeRing({ blocks, ring, viewSettings }: { blocks: PlacedBlock[]; ring: number; viewSettings: ViewSettings }) {
+function FadeRing({ blocks }: { blocks: PlacedBlock[] }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const tempObj = useMemo(() => new THREE.Object3D(), []);
-
-  // Pre-allocate geometry with instanceOpacity attribute
-  const geometry = useMemo(() => {
-    const geo = new THREE.BoxGeometry(1, 1, 1);
-    const arr = new Float32Array(MAX_INSTANCES_PER_RING);
-    const attr = new THREE.InstancedBufferAttribute(arr, 1);
-    attr.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('instanceOpacity', attr);
-    return geo;
-  }, []);
-
-  // Rings are 1-based: ring 1 = innermost fade, ring 2 = middle, ring 3 = outermost
-  const ringSettings = ring === 1 ? viewSettings.ring1 : ring === 2 ? viewSettings.ring2 : viewSettings.ring3;
-
-  const material = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        baseColor: { value: new THREE.Color(viewSettings.baseColor) },
-        baseOpacity: { value: ringSettings.opacity },
-        ...THREE.UniformsLib.fog,
-      },
-      vertexShader,
-      fragmentShader,
-      transparent: true,
-      depthWrite: false,
-      fog: true,
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Per-block fade progress tracking
-  const fadeMap = useRef<Map<number, number>>(new Map());
-  const fadingIndices = useRef<number[]>([]);
-
-  // Store refs for useFrame
-  const viewSettingsRef = useRef(viewSettings);
-  viewSettingsRef.current = viewSettings;
-  const blocksRef = useRef(blocks);
-  blocksRef.current = blocks;
-
-  // Track if we've warned about truncation (one-time per ring)
-  const truncationWarnedRef = useRef(false);
+  const geometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
+  // fog:true → the scene FogExp2 (patched to linear) colour-lerps toward sky by true
+  // distance. Opaque default → z-sorted, zero overdraw. No instanceOpacity / no timer.
+  const material = useMemo(() => new THREE.MeshBasicMaterial({ color: SILHOUETTE_COLOR, fog: true }), []);
+  const warnedRef = useRef(false);
 
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-
     const count = Math.min(blocks.length, MAX_INSTANCES_PER_RING);
-
-    // Warn once if blocks are truncated
-    if (blocks.length > MAX_INSTANCES_PER_RING && !truncationWarnedRef.current) {
-      truncationWarnedRef.current = true;
-      console.warn(`[FadeChunkBlocks] Ring ${ring} truncated: ${blocks.length} blocks > ${MAX_INSTANCES_PER_RING} limit`);
+    if (blocks.length > MAX_INSTANCES_PER_RING && !warnedRef.current) {
+      warnedRef.current = true;
+      console.warn(`[FadeChunkBlocks] truncated ${blocks.length} > ${MAX_INSTANCES_PER_RING}`);
     }
-    const prevMap = fadeMap.current;
-    const newMap = new Map<number, number>();
-    const fading: number[] = [];
-
-    const attr = geometry.getAttribute('instanceOpacity') as THREE.InstancedBufferAttribute;
-    const arr = attr.array as Float32Array;
-
     for (let i = 0; i < count; i++) {
-      const block = blocks[i];
-      tempObj.position.set(block.position_x + 0.5, block.position_y + 0.5, block.position_z + 0.5);
+      const b = blocks[i];
+      tempObj.position.set(b.position_x + 0.5, b.position_y + 0.5, b.position_z + 0.5);
       tempObj.scale.set(1, 1, 1);
       tempObj.updateMatrix();
       mesh.setMatrixAt(i, tempObj.matrix);
-
-      const key = blockKey(block);
-      const existing = prevMap.get(key);
-      const progress = existing ?? 0; // new blocks start at 0
-      newMap.set(key, progress);
-      arr[i] = progress;
-      if (progress < 1) fading.push(i);
     }
-
-    fadeMap.current = newMap;
-    fadingIndices.current = fading;
-    attr.needsUpdate = true;
     mesh.count = count;
     mesh.instanceMatrix.needsUpdate = true;
-  }, [blocks, tempObj, geometry]);
-
-  useFrame((_, delta) => {
-    const mat = material as THREE.ShaderMaterial;
-
-    // Update uniforms from live viewSettings (admin panel real-time tuning)
-    const vs = viewSettingsRef.current;
-    const rs = ring === 1 ? vs.ring1 : ring === 2 ? vs.ring2 : vs.ring3;
-    (mat.uniforms.baseColor.value as THREE.Color).set(vs.baseColor);
-    mat.uniforms.baseOpacity.value = rs.opacity;
-
-    // Advance per-instance fade-in
-    const indices = fadingIndices.current;
-    if (indices.length === 0) return;
-
-    const curBlocks = blocksRef.current;
-    const map = fadeMap.current;
-    const attr = geometry.getAttribute('instanceOpacity') as THREE.InstancedBufferAttribute;
-    const arr = attr.array as Float32Array;
-    // In-place compaction to avoid allocating a new array each frame
-    let writeIdx = 0;
-    for (let j = 0; j < indices.length; j++) {
-      const i = indices[j];
-      const block = curBlocks[i];
-      if (!block) continue;
-      const key = blockKey(block);
-      let progress = map.get(key) ?? 0;
-      progress = Math.min(1, progress + delta / FADE_IN_DURATION);
-      map.set(key, progress);
-      arr[i] = progress;
-      if (progress < 1) {
-        indices[writeIdx++] = i;
-      }
-    }
-    indices.length = writeIdx;
-    attr.needsUpdate = true;
-  });
+  }, [blocks, tempObj]);
 
   if (blocks.length === 0) return null;
-
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[geometry, material, MAX_INSTANCES_PER_RING]}
-      frustumCulled={false}
-      name={`fade-ring-${ring}`}
-    />
+    <instancedMesh ref={meshRef} args={[geometry, material, MAX_INSTANCES_PER_RING]} frustumCulled={false} />
   );
 }
 
-export function FadeChunkBlocks({ entries, viewSettings }: FadeChunkBlocksProps) {
-  const vs = viewSettings ?? DEFAULT_VIEW_SETTINGS;
-
-  // Bucket entries into 3 rings by distanceFactor
-  // Using 1-based indexing: ringBlocks[1], ringBlocks[2], ringBlocks[3] (index 0 unused)
-  const ringBlocks = useMemo(() => {
-    const rings: [never[], PlacedBlock[], PlacedBlock[], PlacedBlock[]] = [[], [], [], []];
-    for (const entry of entries) {
-      // Map distanceFactor (0-1) to ring 1, 2, or 3
-      const ring = Math.min(3, Math.max(1, Math.round(entry.distanceFactor * 3)));
-      for (const block of entry.blocks) {
-        rings[ring].push(block);
-      }
+export function FadeChunkBlocks({ entries }: FadeChunkBlocksProps) {
+  // Bucket into 3 meshes ONLY for the per-mesh instance cap (round-robin by index;
+  // identical material, so no banding / no per-ring opacity).
+  const rings = useMemo(() => {
+    const r: PlacedBlock[][] = [[], [], []];
+    let n = 0;
+    for (const e of entries) {
+      for (const b of e.blocks) r[(n++) % 3].push(b);
     }
-    return rings;
+    return r;
   }, [entries]);
 
   if (entries.length === 0) return null;
-
   return (
     <>
-      {ringBlocks[1].length > 0 && <FadeRing blocks={ringBlocks[1]} ring={1} viewSettings={vs} />}
-      {ringBlocks[2].length > 0 && <FadeRing blocks={ringBlocks[2]} ring={2} viewSettings={vs} />}
-      {ringBlocks[3].length > 0 && <FadeRing blocks={ringBlocks[3]} ring={3} viewSettings={vs} />}
+      {rings[0].length > 0 && <FadeRing blocks={rings[0]} />}
+      {rings[1].length > 0 && <FadeRing blocks={rings[1]} />}
+      {rings[2].length > 0 && <FadeRing blocks={rings[2]} />}
     </>
   );
 }
