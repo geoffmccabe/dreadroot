@@ -19,6 +19,7 @@ import { useWorldPonds } from '@/hooks/useWorldPonds';
 
 import { BillboardWalls } from '@/components/BillboardWalls';
 import { PlacedBlocks } from '@/components/PlacedBlocks';
+import { setSeedPositions } from '@/lib/seedPositions';
 import { ProceduralGround } from './ProceduralGround';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
@@ -248,6 +249,10 @@ export function FortressScene({
   
   // Fetch usernames for tree labels
   const { usernamesMap } = useTreePlanterNames(plantedTrees);
+
+  // Publish seed (tree-base) positions so PlacedBlocks never occlusion-culls the
+  // seed block (a planted seed at the base would otherwise show only its label).
+  useEffect(() => { setSeedPositions(plantedTrees); }, [plantedTrees]);
 
   // Camera ref — used by many subsystems below
   const cameraRef = useRef<THREE.Camera>(camera);

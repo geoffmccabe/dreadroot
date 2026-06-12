@@ -1123,6 +1123,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
       let fetchFailed = false;
 
+      // Capture chunk versions BEFORE fetching block data. Reading the version
+      // AFTER the data (the old order) opens a TOCTOU race: if a write (e.g. a
+      // growing/regrowing tree adding blocks) lands between the data read and a
+      // later version read, we cache INCOMPLETE data stamped with the NEWER
+      // version — and the load-time freshness check then trusts that stale copy
+      // forever (cached.version >= server version). Reading version-first
+      // guarantees the stored version is <= the data's true version, so any
+      // later write makes server version > cached → a correct refetch. Worst
+      // case is one redundant refetch; never a permanently poisoned chunk.
+      const preFetchVersions = await fetchChunkVersions(chunksToFetchFromServer);
+
       const fetchResult = await fetchChunksBatched(
         supabase,
         worldId,
@@ -1164,11 +1175,9 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         initLogFinishStep(fetchStepId, blocks.length);
       }
 
-      // Get current versions for caching (only for successful chunks)
-      const successfulChunks = chunksToFetchFromServer.filter(
-        c => !failedChunkCoords.some(f => f.x === c.x && f.z === c.z)
-      );
-      const currentVersions = await fetchChunkVersions(successfulChunks);
+      // Use the versions captured BEFORE the data fetch (see note above) for
+      // caching, so incomplete data can never be stamped with a future version.
+      const currentVersions = preFetchVersions;
 
       // D-Flow: Start build timing
       const buildT0 = performance.now();
@@ -1725,6 +1734,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     }
 
     try {
+    // Capture the version BEFORE the data read (same TOCTOU fix as the bulk
+    // load path): version-after-data lets a write between the two stamp
+    // incomplete data as current, poisoning the cache permanently.
+    const preVersion = (await fetchChunkVersions([{ x: chunkX, z: chunkZ }])).get(chunkKey) ?? 0;
+
     // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
     let serverBlocks: PlacedBlock[] | null = null;
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
@@ -1827,8 +1841,8 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // Phase 3D: Update cache with server data (only if no optimistic blocks)
     // We skip caching if there are optimistic blocks to avoid caching temp data
     if (optimisticBlocks.length === 0) {
-      fetchChunkVersions([{ x: chunkX, z: chunkZ }]).then(versions => {
-        const version = versions.get(chunkKey) ?? 0;
+      Promise.resolve().then(() => {
+        const version = preVersion;
         blockDB.saveCachedChunk({
           key: `${worldId}:${chunkX}:${chunkZ}`,
           worldId,

@@ -8,7 +8,8 @@ import { InstancedAtlasBlockGroup } from './InstancedAtlasBlockGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 // collisionGrid import removed — collision handled by useChunkLoader (ensureBlockCollider)
-import { isInvisiblock, isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { isInvisiblock, isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
+import { seedPositions, seedState, seedKey } from '@/lib/seedPositions';
 import { shrineTracker } from '@/lib/shrineTracker';
 import { getMaterialVariantId, fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 import { useTextureAtlas } from '@/hooks/useTextureAtlas';
@@ -449,16 +450,33 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   const culledAtlasTreeBlocks = useMemo(() => {
     if (atlasTreeBlocks.length < 50) return atlasTreeBlocks;
 
-    const treeKey = cheapGroupKey(atlasTreeBlocks);
+    const treeKey = cheapGroupKey(atlasTreeBlocks) + ':' + seedState.version;
     if (occlusionCacheRef.current && occlusionCacheRef.current.key === treeKey) {
       return occlusionCacheRef.current.culled;
     }
 
-    const culled = cullOccludedBlocks(atlasTreeBlocks);
+    // Exempt seed blocks from occlusion culling so a planted seed at the tree
+    // base never gets hidden (only the floating text label would show otherwise).
+    // Normal-tree seeds are 'fruit' (exempt by type); fungal/other seeds are
+    // exempt by position via seedPositions (published from FortressScene).
+    const exemptBlocks: PlacedBlock[] = [];
+    const cullable: PlacedBlock[] = [];
+    for (const b of atlasTreeBlocks) {
+      if (getBaseTreeBlockType(b.block_type) === 'fruit'
+          || seedPositions.has(seedKey(b.position_x, b.position_y, b.position_z))) {
+        exemptBlocks.push(b);
+      } else {
+        cullable.push(b);
+      }
+    }
+    const culled = exemptBlocks.length
+      ? [...cullOccludedBlocks(cullable), ...exemptBlocks]
+      : cullOccludedBlocks(cullable);
     occlusionCacheRef.current = { key: treeKey, culled };
 
     return culled;
-  }, [atlasTreeBlocks]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atlasTreeBlocks, seedState.version]);
 
   // Log render state to init overlay (once per session)
   if (!_loggedTreeBlocksReady && atlasTreeBlocks.length > 0) {
