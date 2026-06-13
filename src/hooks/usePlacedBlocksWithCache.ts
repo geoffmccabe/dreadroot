@@ -4,6 +4,7 @@ import { resolveWorldNumber } from '@/lib/worldNumber';
 import { worldStore } from '@/services/worldStore';
 import { useToast } from '@/hooks/use-toast';
 import { useIndexedDB, blockDB } from './useIndexedDB';
+import { loadPlayerCatalogue } from '@/lib/playerCatalogue';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
 import { getChunkKey } from '@/lib/chunkManager';
@@ -159,6 +160,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         await blockDB.clearAllChunkCache();
         localStorage.setItem(CACHE_VERSION_KEY, String(CURRENT_CACHE_VERSION));
       }
+
+      // Load the player catalogue (player_number ↔ user_id) before chunk loading, so the
+      // chunk-fetch normalizer can reverse-map a numeric user-slot back to the UUID. Safe if the
+      // table doesn't exist yet (passes through). Must complete before chunks are fetched.
+      await loadPlayerCatalogue(supabase);
 
       // Wait for block definitions to finish (should be done by now since it ran in parallel)
       // Timing is logged inside preloadBlockDefinitions() itself

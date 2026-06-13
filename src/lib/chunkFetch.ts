@@ -18,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/integrations/supabase/types';
 import type { PlacedBlock } from '@/types/blocks';
 import { resolveWorldNumber } from '@/lib/worldNumber';
+import { resolveUserId } from '@/lib/playerCatalogue';
 
 type Sb = SupabaseClient<Database>;
 
@@ -72,7 +73,7 @@ function normalizeRpcBlock(row: any): PlacedBlock {
   if (Array.isArray(row)) {
     const px = row[3] as number, pz = row[5] as number;
     return {
-      id: row[0], user_id: row[1], block_type: row[2],
+      id: row[0], user_id: resolveUserId(row[1]), block_type: row[2],
       position_x: px, position_y: row[4], position_z: pz,
       expires_at: row[6] ?? null, texture_url: row[7] ?? null,
       chunk_x: Math.floor(px / WIRE_CHUNK_SIZE), chunk_z: Math.floor(pz / WIRE_CHUNK_SIZE),
