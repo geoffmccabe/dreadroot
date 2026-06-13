@@ -17,6 +17,7 @@ import {
   WIDE_STAIR_BLOCKS_PER_ROTATION,
   WIDE_BLOCK_TYPES,
   WIDE_GLOW_BARK_COVERAGE,
+  WIDE_TIER_DEFAULTS,
   isWideTreeHollow,
 } from './wideTreeConstants';
 
@@ -38,13 +39,18 @@ export interface WideShapeConfig {
  * Create shape config from seed definition and RNG
  */
 export function createWideShapeConfig(seedDefinition: SeedDefinition | undefined, rng: () => number): WideShapeConfig {
-  const stemRandom = seedDefinition?.wide_stem_random ?? 0;
-  const leanAngle = seedDefinition?.wide_lean_angle ?? 0;
-  const sCurve = seedDefinition?.wide_s_curve ?? false;
+  // Fall back to per-tier defaults (lean 5-15°, S-curve on tiers 3/6/9) when the seed's
+  // wide_* fields are null — matching exactly what SeedDesignPanel displays. Without this
+  // the panel said "lean 10° / S-curve: Yes" while the generator used 0/false and produced
+  // a dead-straight trunk (the "wide trees don't bend" bug).
+  const tierDefaults = WIDE_TIER_DEFAULTS[Math.min(Math.max(seedDefinition?.tier ?? 0, 0), 10)];
+  const stemRandom = seedDefinition?.wide_stem_random ?? tierDefaults?.stemRandom ?? 0;
+  const leanAngle = seedDefinition?.wide_lean_angle ?? tierDefaults?.leanAngle ?? 0;
+  const sCurve = seedDefinition?.wide_s_curve ?? tierDefaults?.sCurve ?? false;
 
   const leanDir = rng() * 2 * Math.PI;
   const sCurveDir = rng() * 2 * Math.PI;
-  const baseHeight = seedDefinition?.wide_max_height ?? 100;
+  const baseHeight = seedDefinition?.wide_max_height ?? tierDefaults?.maxHeight ?? 100;
   const sCurveMagnitude = sCurve ? seededRange(baseHeight * 0.05, baseHeight * 0.15, rng) : 0;
 
   return {
