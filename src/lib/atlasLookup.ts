@@ -81,6 +81,10 @@ export function getFungalTreeTextureId(tier: number, type: 'stem' | 'cap_top' | 
   return `fungal_t${tier}_${type}`;
 }
 
+export function getWideTreeTextureId(tier: number, type: 'trunk' | 'branch' | 'fruit'): string {
+  return `wide_t${tier}_${type}`;
+}
+
 export function getBlockTextureId(blockType: string): string {
   return `block_${blockType}`;
 }
@@ -199,6 +203,37 @@ export function getFungalTreeUVs(tier: number, type: 'stem' | 'cap_top' | 'cap_u
     console.warn(`[AtlasUV] FUNGAL FALLBACK: ${textureId} → deterministic slot ${calculatedSlot}`);
   }
   return slotIndexToUVs(calculatedSlot);
+}
+
+/**
+ * Wide trees are a third tree type with their OWN textures (trunk/branch/fruit),
+ * distinct from 'original' trees. Slots are carved from the misc reserve:
+ * 970 + (tier-1)*3 + typeOffset, capped at 10 tiers (slots 970–999). Slot order
+ * within a tier: trunk, branch, fruit. Mirrors the fungal scheme.
+ */
+const WIDE_TREE_SLOT_START = 970;
+export const WIDE_TREE_MAX_TIERS = 10;
+
+export function calculateWideTreeSlotIndex(tier: number, type: 'trunk' | 'branch' | 'fruit'): number {
+  const typeOffset = type === 'trunk' ? 0 : type === 'branch' ? 1 : 2;
+  const t = Math.min(Math.max(tier, 1), WIDE_TREE_MAX_TIERS);
+  return WIDE_TREE_SLOT_START + (t - 1) * 3 + typeOffset;
+}
+
+export function getWideTreeUVs(tier: number, type: 'trunk' | 'branch' | 'fruit'): AtlasUVs | null {
+  const t = Math.min(Math.max(tier, 1), WIDE_TREE_MAX_TIERS);
+  const textureId = getWideTreeTextureId(t, type);
+  const slot = atlasManager.getSlotForTexture(textureId);
+  if (slot) return slotIndexToUVs(slot.slotIndex);
+
+  // T1 fallback for wide tiers without a unique texture.
+  if (t !== 1) {
+    const t1Slot = atlasManager.getSlotForTexture(getWideTreeTextureId(1, type));
+    if (t1Slot) return slotIndexToUVs(t1Slot.slotIndex);
+  }
+
+  // Last resort: deterministic slot.
+  return slotIndexToUVs(calculateWideTreeSlotIndex(t, type));
 }
 
 /**
@@ -382,10 +417,15 @@ export function mapTreeBlockTypeToTextureType(blockType: string): 'trunk' | 'bra
   switch (lowerType) {
     case 'trunk':
     case 'root':
+    case 'wide_trunk':
     case 'fungal_stem':
     case 'fungal_cap_top':
     case 'fungal_cap_underside':
       return 'trunk';
+    case 'wide_fruit':
+      return 'fruit';
+    case 'wide_branch':
+      return 'branch';
     case 'branch':
     case 'spike':
     case 'nob':

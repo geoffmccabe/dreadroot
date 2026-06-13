@@ -16,6 +16,9 @@ import {
   getTreeTextureId,
   getFungalTreeTextureId,
   calculateFungalTreeSlotIndex,
+  getWideTreeTextureId,
+  calculateWideTreeSlotIndex,
+  WIDE_TREE_MAX_TIERS,
   getShwarmTextureId,
   getShombieTextureId,
   getShroomerTextureId,
@@ -222,6 +225,17 @@ export function useAtlasSync(options?: {
           specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.fungal_stem_texture_url || def?.trunk_texture_url || null, slotIndex: stemSlot });
           specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_top_texture_url || def?.trunk_texture_url || null, slotIndex: capTopSlot });
           specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_underside_texture_url || def?.trunk_texture_url || null, slotIndex: capUnderSlot });
+        }
+      }
+
+      // Wide tree textures (10 tiers × 3 types) — third tree type with its OWN slots.
+      // Reads the 'wide' seed_definitions; unassigned tiers get a placeholder (null).
+      if (seedDefinitions) {
+        for (let tier = 1; tier <= WIDE_TREE_MAX_TIERS; tier++) {
+          const def = seedDefinitions.find(d => d.tier === tier && d.tree_type === 'wide');
+          specs.push({ textureId: getWideTreeTextureId(tier, 'trunk'), category: 'wide_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: calculateWideTreeSlotIndex(tier, 'trunk') });
+          specs.push({ textureId: getWideTreeTextureId(tier, 'branch'), category: 'wide_tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: calculateWideTreeSlotIndex(tier, 'branch') });
+          specs.push({ textureId: getWideTreeTextureId(tier, 'fruit'), category: 'wide_tree', sourceUrl: def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: calculateWideTreeSlotIndex(tier, 'fruit') });
         }
       }
 
@@ -472,6 +486,16 @@ export async function syncAtlasOnInit(): Promise<void> {
       specs.push({ textureId: getFungalTreeTextureId(tier, 'stem'), category: 'fungal_tree', sourceUrl: def?.fungal_stem_texture_url || def?.trunk_texture_url || null, slotIndex: stemSlot });
       specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_top'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_top_texture_url || def?.trunk_texture_url || null, slotIndex: capTopSlot });
       specs.push({ textureId: getFungalTreeTextureId(tier, 'cap_underside'), category: 'fungal_tree', sourceUrl: def?.fungal_cap_underside_texture_url || def?.trunk_texture_url || null, slotIndex: capUnderSlot });
+    }
+  }
+
+  // Wide tree textures (10 tiers × 3 types) — third tree type with its OWN slots.
+  if (seedDefinitions) {
+    for (let tier = 1; tier <= WIDE_TREE_MAX_TIERS; tier++) {
+      const def = seedDefinitions.find((d: any) => d.tier === tier && d.tree_type === 'wide');
+      specs.push({ textureId: getWideTreeTextureId(tier, 'trunk'), category: 'wide_tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: calculateWideTreeSlotIndex(tier, 'trunk') });
+      specs.push({ textureId: getWideTreeTextureId(tier, 'branch'), category: 'wide_tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: calculateWideTreeSlotIndex(tier, 'branch') });
+      specs.push({ textureId: getWideTreeTextureId(tier, 'fruit'), category: 'wide_tree', sourceUrl: def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: calculateWideTreeSlotIndex(tier, 'fruit') });
     }
   }
 

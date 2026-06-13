@@ -24,6 +24,9 @@ export const TREE_BLOCK_TYPE_MAP = {
   'fs': 'fungal_stem',
   'fct': 'fungal_cap_top',
   'fcu': 'fungal_cap_underside',
+  'wt': 'wide_trunk',
+  'wb': 'wide_branch',
+  'wf': 'wide_fruit',
   'ib': 'invisiblock',
   'gb': 'glow_bark',
   'f': 'fruit',
@@ -255,7 +258,12 @@ export function getTextureUrlForTreeBlock(
   switch (baseType) {
     case 'trunk':
     case 'root':
+    case 'wide_trunk':
       return trunkTextureUrl;
+    case 'wide_branch':
+      return branchTextureUrl || trunkTextureUrl;
+    case 'wide_fruit':
+      return fruitTextureUrl || branchTextureUrl || trunkTextureUrl;
     case 'branch':
     case 'spike':
     case 'nob':

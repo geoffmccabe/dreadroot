@@ -30,6 +30,7 @@ import {
   getGlobalTextureId,
   mapTreeBlockTypeToTextureType,
   getFungalTreeUVs,
+  getWideTreeUVs,
   slotIndexToUVs,
   type AtlasUVs,
   type AnimatedAtlasUVs,
@@ -390,6 +391,20 @@ export function getInstanceUVsForTreeBlock(
   }
   if (baseType === 'fungal_cap_underside') {
     const uvs = getFungalTreeUVs(tier, 'cap_underside')!;
+    return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
+  }
+
+  // Route wide-tree block types to their own (third tree type) texture slots.
+  if (baseType === 'wide_trunk') {
+    const uvs = getWideTreeUVs(tier, 'trunk')!;
+    return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
+  }
+  if (baseType === 'wide_branch') {
+    const uvs = getWideTreeUVs(tier, 'branch')!;
+    return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
+  }
+  if (baseType === 'wide_fruit') {
+    const uvs = getWideTreeUVs(tier, 'fruit')!;
     return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
   }
 

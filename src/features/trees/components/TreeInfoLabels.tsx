@@ -167,7 +167,11 @@ export function TreeInfoLabels({ trees, seedDefinitions, usernames, cameraRef }:
       .filter(tree => {
         const treeCx = Math.floor(tree.base_x / CHUNK_SIZE);
         const treeCz = Math.floor(tree.base_z / CHUNK_SIZE);
-        if (treeCx !== cameraChunk.cx || treeCz !== cameraChunk.cz) return false;
+        // Camera's chunk AND its 8 neighbours (3×3) — so a seed near a chunk edge
+        // shows from EVERY approach direction; the distance cull below is the real
+        // proximity test. (Exact-chunk match caused the directional "text only
+        // appears from one side / when standing right next to it" bug.)
+        if (Math.abs(treeCx - cameraChunk.cx) > 1 || Math.abs(treeCz - cameraChunk.cz) > 1) return false;
         // Distance culling
         const dx = tree.base_x - camPos.x;
         const dz = tree.base_z - camPos.z;

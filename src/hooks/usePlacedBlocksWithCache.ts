@@ -172,7 +172,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       // ONE-TIME ATLAS CACHE MIGRATION: Clear stale atlas for fruit texture fix
       const ATLAS_CACHE_VERSION_KEY = 'fortress_atlas_cache_version';
-      const CURRENT_ATLAS_VERSION = 2; // Bump to force atlas rebuild for all users
+      const CURRENT_ATLAS_VERSION = 3; // v3: redraw so the new wide_tree atlas slots (970-999) appear (wide-tree client support ported from Pinkland)
       const storedAtlasVersion = parseInt(localStorage.getItem(ATLAS_CACHE_VERSION_KEY) || '0', 10);
       if (storedAtlasVersion < CURRENT_ATLAS_VERSION) {
         console.log('[AtlasMigration] Clearing stale atlas cache (v' + storedAtlasVersion + ' -> v' + CURRENT_ATLAS_VERSION + ')');
