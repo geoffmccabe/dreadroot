@@ -29,6 +29,7 @@ import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/bloc
 import { playerTracker } from '@/lib/playerTracker';
 import { setGlobalInspectData, clearGlobalInspectData, toggleInspectorMode, setInspectorMode, inspectorModeEnabled, globalInspectData, type GlobalInspectData, type InspectSources } from '@/components/FPSCounter';
 import { blockDB } from '@/hooks/useIndexedDB';
+import { supabase } from '@/integrations/supabase/client';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { type WaterType } from '@/lib/pondGenerator';
 import { isPointInNoFireZone } from '@/features/enemies/ai/fortressSafeZone';
@@ -1442,6 +1443,43 @@ export function FirstPersonControls({
 
           setGlobalInspectData(inspectData);
           console.log(inspectData.rawInfo);
+
+          // Async Supabase (server-truth) check — logs the real DB + chunk-cache state so we can
+          // see whether a block actually persisted and whether the chunk cache is stale.
+          if (currentWorldId) {
+            (async () => {
+              try {
+                const [pbRes, cvRes, cbRes] = await Promise.all([
+                  (supabase.from('placed_blocks') as any)
+                    .select('id, block_type, world_id, world_number, chunk_x, chunk_z, created_at, user_id')
+                    .eq('world_id', currentWorldId).eq('position_x', bx).eq('position_y', by).eq('position_z', bz).maybeSingle(),
+                  (supabase.from('chunk_versions') as any)
+                    .select('version').eq('world_id', currentWorldId).eq('chunk_x', chunkX).eq('chunk_z', chunkZ).maybeSingle(),
+                  (supabase.from('chunk_blobs') as any)
+                    .select('version, blob').eq('world_id', currentWorldId).eq('chunk_x', chunkX).eq('chunk_z', chunkZ).maybeSingle(),
+                ]);
+                const pb = (pbRes as any).data;
+                const blob = (cbRes as any).data?.blob;
+                const blobArr = Array.isArray(blob) ? blob : null;
+                const blobHas = blobArr ? blobArr.some((b: any) => b.position_x === bx && b.position_y === by && b.position_z === bz) : null;
+                const liveV = (cvRes as any).data?.version ?? null;
+                const blobV = (cbRes as any).data?.version ?? null;
+                console.log('[BlockInspector:SUPABASE]', JSON.stringify({
+                  placed_blocks_row: pb ? {
+                    block_type: pb.block_type, world_id: pb.world_id, world_number: pb.world_number,
+                    chunk_x: pb.chunk_x, chunk_z: pb.chunk_z, user_id: pb.user_id, created_at: pb.created_at,
+                  } : 'NOT IN DB',
+                  chunk_live_version: liveV,
+                  chunk_blob_version: blobV,
+                  chunk_blob_is_stale: (liveV ?? 0) > (blobV ?? -1),
+                  chunk_blob_block_count: blobArr ? blobArr.length : null,
+                  chunk_blob_has_this_block: blobHas,
+                }, null, 2));
+              } catch (e) {
+                console.error('[BlockInspector:SUPABASE] query failed:', e);
+              }
+            })();
+          }
 
           // Async IndexedDB check
           if (currentWorldId) {
