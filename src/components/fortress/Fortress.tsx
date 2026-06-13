@@ -15,6 +15,7 @@ import { worldStore } from '@/services/worldStore';
 import { isMeleeKillInProgress } from '@/features/enemies/ai/applyAttack';
 import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
 import type { CoinDropInstance } from '@/features/coinDrops/types';
+import { useChat, ChatOverlay } from '@/features/chat';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -293,6 +294,19 @@ export function Fortress() {
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // In-game chat (shared module): identity from the auth user, with a stable
+  // per-user colour. Scoped to the current world via the shared realtime backend.
+  const chatUsername = (user?.email?.split('@')[0]) || 'Player';
+  const chatColor = user?.id
+    ? `hsl(${(() => { let h = 0; for (let i = 0; i < user.id.length; i++) h = (h * 31 + user.id.charCodeAt(i)) >>> 0; return h % 360; })()}, 70%, 72%)`
+    : undefined;
+  const { messages: chatMessages, send: sendChat } = useChat({
+    worldId: currentWorldId,
+    userId: user?.id ?? null,
+    username: chatUsername,
+    color: chatColor,
+  });
   const { isOpen: panelOpen, openPanel, isMarketplaceOpen, openMarketplace, closeMarketplace } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
 
@@ -2253,6 +2267,7 @@ export function Fortress() {
 
 </Canvas>
 
+      <ChatOverlay messages={chatMessages} onSend={sendChat} />
       <FortressHUD
         flyingCoins={flyingCoins}
         currentTheme={currentTheme}

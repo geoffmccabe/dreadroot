@@ -77,7 +77,7 @@ function InstructionsPanel({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        height: '74px',
+        height: '60px',
         boxSizing: 'border-box',
       }}
     >
@@ -896,6 +896,8 @@ export function FortressHUD(props: FortressHUDProps) {
             color: 'hsl(var(--hud-text))',
             fontFamily: 'var(--hud-font)',
             padding: '8px 12px',
+            height: '60px',
+            boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
@@ -908,8 +910,8 @@ export function FortressHUD(props: FortressHUDProps) {
               src={profile.avatar_url}
               alt="User"
               style={{
-                width: '48px',
-                height: '48px',
+                width: '44px',
+                height: '44px',
                 borderRadius: '50%',
                 objectFit: 'cover',
                 border: '1px solid hsla(var(--hud-border))',
@@ -1153,17 +1155,8 @@ export function FortressHUD(props: FortressHUDProps) {
           </div>
         )}
 
-        {/* Hotbar — 6 quick-select item slots */}
+        {/* Hotbar — 6 quick-select item slots (label removed per design) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{
-            fontSize: '11px',
-            fontWeight: 700,
-            color: 'hsl(var(--hud-text))',
-            fontFamily: 'var(--hud-font)',
-            letterSpacing: '0.05em',
-          }}>
-            QUICK ACCESS
-          </span>
           <div
             style={{
               display: 'flex',
@@ -1209,7 +1202,7 @@ export function FortressHUD(props: FortressHUDProps) {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '3px',
+                    position: 'relative',
                   }}
                 >
                   {/* Slot square */}
@@ -1315,8 +1308,8 @@ export function FortressHUD(props: FortressHUDProps) {
                       : undefined
                     }
                     style={{
-                      width: '56px',
-                      height: '56px',
+                      width: '60px',
+                      height: '60px',
                       borderRadius: 'var(--hud-radius)',
                       border: wouldAcceptDrop
                         ? '2px solid hsla(120, 100%, 60%, 0.95)'
@@ -1374,13 +1367,19 @@ export function FortressHUD(props: FortressHUDProps) {
                       })} />
                     )}
                   </div>
-                  {/* Slot number — below square, 20% smaller */}
+                  {/* Slot number — floats BELOW the square (out of layout) so the
+                      squares line up with the 60px panels; the number sits just beneath. */}
                   <span style={{
                     fontSize: '11px',
                     fontWeight: 700,
                     color: isSelected ? 'hsl(var(--hud-text-bright))' : 'hsl(var(--hud-text))',
                     fontFamily: 'var(--hud-font)',
                     pointerEvents: 'none',
+                    position: 'absolute',
+                    top: 'calc(100% + 1.8px)',
+                    left: 0,
+                    right: 0,
+                    textAlign: 'center',
                   }}>
                     {slot.slot}
                   </span>

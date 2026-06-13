@@ -557,6 +557,9 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyT':
+        // Plain T is the chat key now (handled by the chat overlay). Tree planting
+        // moved to SHIFT+T — Ctrl/Cmd+T are reserved by the browser (new tab).
+        if (!event.shiftKey) break;
         if (treePlacementMode || fungalPlacementMode || widePlacementMode) {
           onModeChange(null);
         } else {
