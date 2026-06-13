@@ -152,7 +152,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // ONE-TIME CACHE MIGRATION: Clear stale chunk cache for existing users
       // This ensures trees that grew before the cache invalidation fix will render
       const CACHE_VERSION_KEY = 'fortress_chunk_cache_version';
-      const CURRENT_CACHE_VERSION = 5; // v5 (FINAL): clears caches poisoned by the version-after-data TOCTOU race (incomplete chunk stamped with a future version → trusted forever). Root cause fixed in useChunkLoader (version captured BEFORE data), so this should be the last forced flush.
+      const CURRENT_CACHE_VERSION = 6; // v6: flush client chunk caches that stored type-less blocks while the server's chunk_blobs were poisoned by a mangled fetch-function projection (missing block_type). Server side fixed (full projection restored + chunk_blobs rebuilt); this forces clients to re-pull the complete chunks.
       const storedVersion = parseInt(localStorage.getItem(CACHE_VERSION_KEY) || '0', 10);
       if (storedVersion < CURRENT_CACHE_VERSION) {
         console.log('[CacheMigration] Clearing stale chunk cache (v' + storedVersion + ' -> v' + CURRENT_CACHE_VERSION + ')');
