@@ -2683,9 +2683,10 @@ export function FirstPersonControls({
 
         if ((hasSupport && velocity.current.y <= 0.05) || onWorldGround) {
           if (supportWalapa) {
-            // Riding a moving/bobbing platform — GLUE to its top so you follow it
-            // up AND down (its bob, and when it flies off to a tree), not only when
-            // falling. (Jumping sets vy>0.05, which skips this whole block → you hop off.)
+            // STANDING on a moving/bobbing platform — glue to its top so you ride
+            // it up AND down (its bob, and when it flies off to a tree). A jump
+            // (vy>0.05) skips this so you launch normally; the horizontal carry
+            // below keeps you over it so you fall back onto the top.
             camera.position.y = supportY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
           } else if (hasSupport && velocity.current.y < 0) {
@@ -2696,29 +2697,44 @@ export function FirstPersonControls({
             velocity.current.y = 0;
           }
           onGround.current = true;
-
-          // Ride the supporting walapa: follow its HORIZONTAL movement (vertical
-          // is already handled by the snap-to-top above, using its live top).
-          if (supportWalapa) {
-            if (currentWalapaIdRef.current === supportWalapa.id) {
-              camera.position.x += supportWalapa.position.x - walapaLastPosRef.current.x;
-              camera.position.z += supportWalapa.position.z - walapaLastPosRef.current.z;
-            }
-            currentWalapaIdRef.current = supportWalapa.id;
-            walapaLastPosRef.current.copy(supportWalapa.position);
-          } else {
-            currentWalapaIdRef.current = null;
-          }
         } else {
           onGround.current = false;
-          // Left the surface — if we were riding a walapa, inherit its
-          // horizontal velocity (so you carry momentum when stepping/jumping off).
-          if (currentWalapaIdRef.current && walapasRef?.current) {
-            const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
-            if (w && w.velocity) {
-              velocity.current.x += w.velocity.x;
-              velocity.current.z += w.velocity.z;
+        }
+
+        // ── Ride a walapa HORIZONTALLY — applied even while airborne, so you can
+        //    jump up and down on it and land back on top (the walapa is moving
+        //    ground). You're riding if you're standing on a walapa OR you were and
+        //    you're still horizontally over it (e.g. you jumped straight up). You
+        //    only DISMOUNT (and inherit its momentum) when you actually leave its
+        //    top — walk or jump off the edge.
+        let rideWalapa = supportWalapa;
+        if (!rideWalapa && currentWalapaIdRef.current && walapasRef?.current) {
+          const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
+          if (w) {
+            const wscale = w.scale ?? 1;
+            const wreach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
+            const wdx = camera.position.x - w.position.x;
+            const wdz = camera.position.z - w.position.z;
+            const wtop = w.position.y + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE + WALAPA_HITBOX_HEIGHT * wscale;
+            // Still horizontally over it, and within a jump's height of its top.
+            if (wdx * wdx + wdz * wdz <= wreach * wreach && feetY >= wtop - 0.5 && feetY <= wtop + 4) {
+              rideWalapa = w;
             }
+          }
+        }
+        if (rideWalapa) {
+          if (currentWalapaIdRef.current === rideWalapa.id) {
+            camera.position.x += rideWalapa.position.x - walapaLastPosRef.current.x;
+            camera.position.z += rideWalapa.position.z - walapaLastPosRef.current.z;
+          }
+          currentWalapaIdRef.current = rideWalapa.id;
+          walapaLastPosRef.current.copy(rideWalapa.position);
+        } else if (currentWalapaIdRef.current && walapasRef?.current) {
+          // Truly left the walapa → inherit its momentum, then clear.
+          const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
+          if (w && w.velocity) {
+            velocity.current.x += w.velocity.x;
+            velocity.current.z += w.velocity.z;
           }
           currentWalapaIdRef.current = null;
         }
