@@ -86,6 +86,9 @@ All colors MUST be HSL.
     --panel-bg: var(--card);
     --panel-border: var(--card-border);
     --panel-blur: blur(12px);
+    /* Strong (dark, solid) panel — modal / loading backdrops. Per-game value. */
+    --panel-bg-strong: 208 85% 8% / 0.65;
+    --panel-border-strong: 208 85% 20% / 0.5;
 
     /* Brand-specific accent colors (for blocks, icons, special elements) */
     --brand-accent-1: 208 85% 50%; /* Blue */

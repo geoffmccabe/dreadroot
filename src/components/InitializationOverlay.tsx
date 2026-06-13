@@ -100,8 +100,8 @@ export function InitializationOverlay() {
       onClick={handleDismiss}
       style={{
         cursor: isInitializing ? 'wait' : 'pointer',
-        backgroundColor: 'hsla(208, 85%, 8%, 0.65)',
-        fontFamily: 'Inter, sans-serif',
+        backgroundColor: 'hsla(var(--panel-bg-strong))',
+        fontFamily: 'var(--hud-font)',
       }}
     >
       {/* Content panel - 70% width, game UI style frame */}
@@ -110,8 +110,8 @@ export function InitializationOverlay() {
         style={{
           aspectRatio: '16 / 9',
           maxHeight: '85vh',
-          backgroundColor: 'hsla(211, 30%, 51%, 0.35)',
-          border: '1px solid hsla(211, 34%, 73%, 0.8)',
+          backgroundColor: 'hsla(var(--hud-bg))',
+          border: '1px solid hsla(var(--hud-border))',
         }}
       >
         {/* Panel content */}
@@ -119,7 +119,7 @@ export function InitializationOverlay() {
           {/* Title with live timer */}
           <h1
             className="text-3xl md:text-4xl font-bold text-center mb-4 drop-shadow-lg"
-            style={{ color: 'hsl(211, 32%, 90%)', fontFamily: 'Inter, sans-serif' }}
+            style={{ color: 'hsl(var(--hud-text))', fontFamily: 'var(--hud-font)' }}
           >
             {isInitializing
               ? `Initializing World... ${displayTime}s`
@@ -132,17 +132,17 @@ export function InitializationOverlay() {
             ref={scrollContainerRef}
             className="flex-1 rounded-lg p-4 backdrop-blur-sm overflow-y-auto min-h-0"
             style={{
-              backgroundColor: 'hsla(208, 85%, 8%, 0.65)',
-              border: '1px solid hsla(208, 85%, 20%, 0.5)',
+              backgroundColor: 'hsla(var(--panel-bg-strong))',
+              border: '1px solid hsla(var(--panel-border-strong))',
             }}
             onClick={handleDismiss}
           >
             {steps.length === 0 ? (
-              <p className="text-center py-4" style={{ color: 'hsla(211, 32%, 90%, 0.6)' }}>Starting initialization...</p>
+              <p className="text-center py-4" style={{ color: 'hsl(var(--hud-text) / 0.6)' }}>Starting initialization...</p>
             ) : (
-              <div className="space-y-1 text-xs md:text-sm" style={{ fontFamily: 'Inter, sans-serif' }}>
+              <div className="space-y-1 text-xs md:text-sm" style={{ fontFamily: 'var(--hud-font)' }}>
                 {steps.map((step) => (
-                  <div key={step.id} className="flex items-start gap-2" style={{ color: 'hsla(211, 32%, 90%, 0.9)' }}>
+                  <div key={step.id} className="flex items-start gap-2" style={{ color: 'hsl(var(--hud-text) / 0.9)' }}>
                     <span className="w-4 flex-shrink-0">
                       <StatusIndicator status={step.status} />
                     </span>
@@ -151,7 +151,7 @@ export function InitializationOverlay() {
                     </span>
                     <span className="flex-1">
                       <span className="text-cyan-400">[{step.file}]</span>{' '}
-                      <span style={{ color: 'hsl(211, 32%, 90%)' }}>{step.message}</span>
+                      <span style={{ color: 'hsl(var(--hud-text))' }}>{step.message}</span>
                       {step.count !== undefined && (
                         <span className="text-emerald-400 font-bold"> {step.count}</span>
                       )}
@@ -169,11 +169,11 @@ export function InitializationOverlay() {
 
             {/* Completion message */}
             {!isInitializing && totalDurationSecs > 0 && (
-              <div className="mt-4 pt-3" style={{ borderTop: '1px solid hsla(211, 34%, 73%, 0.3)' }}>
+              <div className="mt-4 pt-3" style={{ borderTop: '1px solid hsl(var(--hud-text) / 0.25)' }}>
                 <p className="text-xl font-bold text-emerald-400 text-center">
                   ✓ Ready to Play!
                 </p>
-                <p className="text-center mt-1 text-sm" style={{ color: 'hsla(211, 32%, 90%, 0.6)' }}>
+                <p className="text-center mt-1 text-sm" style={{ color: 'hsl(var(--hud-text) / 0.6)' }}>
                   Click anywhere to continue
                 </p>
               </div>
@@ -186,10 +186,10 @@ export function InitializationOverlay() {
               onClick={(e) => { e.stopPropagation(); handleCopy(); }}
               className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors"
               style={{
-                backgroundColor: 'hsla(211, 30%, 51%, 0.35)',
-                border: '1px solid hsla(211, 34%, 73%, 0.5)',
-                color: 'hsl(211, 32%, 90%)',
-                fontFamily: 'Inter, sans-serif',
+                backgroundColor: 'hsla(var(--hud-bg))',
+                border: '1px solid hsla(var(--hud-border))',
+                color: 'hsl(var(--hud-text))',
+                fontFamily: 'var(--hud-font)',
               }}
             >
               {copied ? (

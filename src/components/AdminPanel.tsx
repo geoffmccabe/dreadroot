@@ -120,8 +120,8 @@ export function AdminPanel({
         ref={(node: HTMLDivElement | null) => {
           dialogRef.current = node;
           if (node) {
-            node.style.setProperty('background', 'hsla(211, 30%, 51%, 0.35)', 'important');
-            node.style.setProperty('border', '1px solid hsla(211, 34%, 73%, 0.8)', 'important');
+            node.style.setProperty('background', 'hsla(var(--hud-bg))', 'important');
+            node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
             node.style.setProperty('border-radius', '6px', 'important');
           }
         }}

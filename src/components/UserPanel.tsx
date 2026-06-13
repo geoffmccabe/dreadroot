@@ -356,8 +356,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
       <DialogContent
         ref={(node: HTMLDivElement | null) => {
           if (node) {
-            node.style.setProperty('background', 'hsla(211, 30%, 51%, 0.35)', 'important');
-            node.style.setProperty('border', '1px solid hsla(211, 34%, 73%, 0.8)', 'important');
+            node.style.setProperty('background', 'hsla(var(--hud-bg))', 'important');
+            node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
             node.style.setProperty('border-radius', '6px', 'important');
           }
         }}
@@ -473,7 +473,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       <div style={{
                         position: 'absolute',
                         inset: 0,
-                        background: 'hsla(0, 0%, 0%, 0.5)',
+                        background: 'hsla(var(--overlay-dark))',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
