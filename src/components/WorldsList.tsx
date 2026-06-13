@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useWorlds, World, AmbientMusicTrack } from '@/hooks/useWorlds';
 import { supabase } from '@/integrations/supabase/client';
+import { resolveWorldNumber } from '@/lib/worldNumber';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -345,10 +346,10 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
         results.push(`  Blueprint: ${blueprint.block_count} blocks`);
 
         // 3. Check how many blocks exist in placed_blocks
-        const { count: blockCount, error: countError } = await supabase
-          .from('placed_blocks')
-          .select('*', { count: 'exact', head: true })
-          .eq('world_id', currentWorldId)
+        const _wn = await resolveWorldNumber(supabase, currentWorldId);
+        let _cq: any = supabase.from('placed_blocks').select('*', { count: 'exact', head: true });
+        _cq = _wn != null ? _cq.eq('world_number', _wn) : _cq.eq('world_id', currentWorldId);
+        const { count: blockCount, error: countError } = await _cq
           .gte('position_x', x - 50)
           .lte('position_x', x + 50)
           .gte('position_z', z - 50)

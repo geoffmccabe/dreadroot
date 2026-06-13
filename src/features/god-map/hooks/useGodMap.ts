@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { resolveWorldNumber } from '@/lib/worldNumber';
 
 export interface MapTree {
   id: string;
@@ -63,6 +64,11 @@ export function useGodMap({ worldId, enabled }: UseGodMapOptions): UseGodMapResu
     setLoading(true);
 
     (async () => {
+      // placed_blocks now filters by world_number (planted_trees + world_no_plant_chunks keep world_id).
+      const wnum = await resolveWorldNumber(supabase, worldId);
+      let blocksQ: any = supabase.from('placed_blocks').select('chunk_x, chunk_z');
+      blocksQ = wnum != null ? blocksQ.eq('world_number', wnum) : blocksQ.eq('world_id', worldId);
+      blocksQ = blocksQ.limit(500000);
       // Parallel fetches keep the panel snappy.
       const [treesRes, noPlantRes, blocksRes] = await Promise.all([
         // planted_trees + seed_definitions for tier/tree_type + user_profiles for owner name
@@ -77,13 +83,8 @@ export function useGodMap({ worldId, enabled }: UseGodMapOptions): UseGodMapResu
           .from('world_no_plant_chunks' as any)
           .select('chunk_x, chunk_z')
           .eq('world_id', worldId),
-        // Density: count placed_blocks per chunk. Bounded query — anything above
-        // 200k blocks per world would be unusual; if we hit it we'll page.
-        supabase
-          .from('placed_blocks')
-          .select('chunk_x, chunk_z')
-          .eq('world_id', worldId)
-          .limit(500000),
+        // Density: count placed_blocks per chunk (filtered by world_number, built above).
+        blocksQ,
       ]);
 
       if (cancelled) return;

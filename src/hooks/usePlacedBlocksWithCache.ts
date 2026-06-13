@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { resolveWorldNumber } from '@/lib/worldNumber';
 import { worldStore } from '@/services/worldStore';
 import { useToast } from '@/hooks/use-toast';
 import { useIndexedDB, blockDB } from './useIndexedDB';
@@ -384,10 +385,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     try {
       // Fetch current blocks for this chunk
       // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
-      const { data: blocks, error } = await supabase
-        .from('placed_blocks')
-        .select('*')
-        .eq('world_id', worldId)
+      const wnum = await resolveWorldNumber(supabase, worldId);
+      let cq: any = supabase.from('placed_blocks').select('*');
+      cq = wnum != null ? cq.eq('world_number', wnum) : cq.eq('world_id', worldId);
+      const { data: blocks, error } = await cq
         .eq('chunk_x', chunkX)
         .eq('chunk_z', chunkZ)
         .limit(20000);

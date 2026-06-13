@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { resolveWorldNumber } from '@/lib/worldNumber';
 import { PlacedBlock } from '@/types/blocks';
 import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { fogState, EXTRA_VIEW_CHUNKS } from '@/lib/fogConfig';
@@ -1741,11 +1742,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     // CRITICAL: Supabase default limit is 1000 rows - single chunks can have many blocks
     let serverBlocks: PlacedBlock[] | null = null;
+    const wnum = await resolveWorldNumber(supabase, worldId);
     for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt++) {
-      const { data, error } = await supabase
-        .from('placed_blocks')
-        .select('*')
-        .eq('world_id', worldId)
+      let q: any = supabase.from('placed_blocks').select('*');
+      q = wnum != null ? q.eq('world_number', wnum) : q.eq('world_id', worldId);
+      const { data, error } = await q
         .eq('chunk_x', chunkX)
         .eq('chunk_z', chunkZ)
         .limit(20000);
