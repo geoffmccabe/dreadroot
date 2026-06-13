@@ -897,11 +897,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
     // Phase 3D: Try to get chunks from cache
     let cachedChunks: Map<string, CachedChunk> = new Map();
-    // TEMP (cache-coherence debugging): bypass the IndexedDB chunk read-cache so every chunk
-    // loads from the server (which is proven correct). The local cache was intermittently
-    // returning an empty snapshot for edited chunks, making placed blocks "vanish" on reload.
-    // This trades reload speed for correctness while the coherence bug is fixed; re-enable after.
-    const USE_CHUNK_CACHE = false;
+    const USE_CHUNK_CACHE = true; // Re-enabled with fix
     if (USE_CHUNK_CACHE) {
       const cacheStepId = initLogStartStep('useChunkLoader.ts', `Reading IndexedDB cache (${toLoad.length} chunks)...`);
       try {
