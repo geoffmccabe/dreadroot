@@ -11,7 +11,29 @@ backfilled to 0 NULLs). `worlds.world_number` assigned (1=Default World, 2=Magor
 sequence ready for #4 onward). Fill trigger `trg_fill_block_world_number` active. Index
 `placed_blocks_worldnum_chunk_idx` built + confirmed used (Index Scan, not Seq Scan). Game still
 runs 100% on `world_id` — zero behavior change, zero risk at this checkpoint.
-**NEXT: Phase 1B cutover — its own focused, tested session. Do NOT drop `world_id` until BOTH
+**1B READS — DONE on DreadRoot (v4.24.10) + both fetch RPCs (shared SQL).** Audit correction:
+the original inventory undercounted the client reads. The COMPLETE set of `placed_blocks`-by-world
+READ sites, all now on `world_number` via `src/lib/worldNumber.ts::resolveWorldNumber` (world_id
+fallback during transition):
+  - `lib/chunkFetch.ts` :122 (radius load) + :260 (per-chunk fallback)
+  - `hooks/useChunkLoader.ts` :1746 (single-chunk REFETCH) ← was missed
+  - `hooks/usePlacedBlocksWithCache.ts` :388 (chunk→IndexedDB sync) ← was missed
+  - `components/WorldsList.tsx` :349 (admin diag count) ← was missed
+  - `features/god-map/hooks/useGodMap.ts` :83 (density) ← was missed
+  - SQL RPCs `fetch_chunks_cached` + `fetch_chunks_batch` (translate p_world_id→world_number internally)
+Clean / out of scope: `Fortress.tsx:1231` + `worldStore.ts:1080` delete BY id; `useChunkLoader:844`
+= chunk_versions; `useGodMap` paint/erase = world_no_plant_chunks; `useTreeData:102` = tree_blueprints;
+`pondBlockGenerator` = no DB (dynamic). Pinkland client read-switch still TODO before the drop.
+
+**1B WRITES + DROP — NOT STARTED (irreversible).** Remaining `world_id` write/constraint surface:
+  - `services/worldStore.ts` :952 — direct upsert `world_id` + `onConflict 'world_id,position_*'` ← switch
+  - in-memory optimistic blocks `usePlacedBlocksWithCache` :509/:572 set `world_id` (local only, not a DB
+    write — harmless, but set `world_number` too for cleanliness)
+  - SQL: 12 fns `ON CONFLICT (world_id, position…)`; version-bump triggers read `world_id`; the
+    `UNIQUE(world_id, position…)` constraint; `placed_blocks_world_fk`.
+  - Then `DROP COLUMN world_id`. Coordinate AFTER both games' clients are on world_number.
+
+**NEXT: Phase 1B writes+drop — its own focused, tested session. Do NOT drop `world_id` until BOTH
 games' clients are switched to `world_number` (the column drop is shared across both games).**
 
 ## Objective & honest framing
