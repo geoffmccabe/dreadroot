@@ -354,6 +354,11 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
 
+      // Defensive: a block with a missing/non-string block_type can't be rendered and would
+      // crash the ENTIRE render at the charCodeAt checks below (undefined.charCodeAt → white
+      // screen + lost WebGL context). One bad block must never take down the whole world — skip it.
+      if (typeof block.block_type !== 'string') continue;
+
       if (isInvisiblock(block.block_type)) {
         invisibleBlocks.push(block);
         continue;
