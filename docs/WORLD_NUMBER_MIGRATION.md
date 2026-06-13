@@ -4,6 +4,16 @@
 > Sibling phases (do NOT start until Phase 1 is fully landed): Phase 2 = player catalogue +
 > `user_id`→`player_number`; Phase 3 = drop `id`. This doc covers ONLY world_id.
 
+## STATUS (2026-Jun-13)
+**Phase 1A COMPLETE + verified, BOTH games.** Every `placed_blocks` row carries `world_number`
+(DreadRoot: 1,334,388 in world 1 "Default World" + 13 in world 2 "Magor"; Pinkland: world 3
+backfilled to 0 NULLs). `worlds.world_number` assigned (1=Default World, 2=Magor, 3=Pinkland;
+sequence ready for #4 onward). Fill trigger `trg_fill_block_world_number` active. Index
+`placed_blocks_worldnum_chunk_idx` built + confirmed used (Index Scan, not Seq Scan). Game still
+runs 100% on `world_id` — zero behavior change, zero risk at this checkpoint.
+**NEXT: Phase 1B cutover — its own focused, tested session. Do NOT drop `world_id` until BOTH
+games' clients are switched to `world_number` (the column drop is shared across both games).**
+
 ## Objective & honest framing
 Replace the 36-char world UUID on every `placed_blocks` row with a 4-byte integer
 (`world_number`). Saves ~31 chars/row on the wire + ~12 bytes/row on disk + the matching JS
