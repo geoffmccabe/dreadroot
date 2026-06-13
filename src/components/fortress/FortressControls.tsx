@@ -2637,59 +2637,73 @@ export function FirstPersonControls({
         const feetY = camera.position.y - playerHeight;
         const onWorldGround = feetY <= (SURFACE_EPS + 0.01);
 
-        // ── Live walapa support: read each walapa's ACTUAL position so landing
-        //    and riding always track the real walapa, never a stale collider.
-        //    Pick the highest walapa top beneath the player within its footprint.
+        // ── Walapa riding (a moving, bobbing platform). Find the walapa we ride:
+        //    (a) one right under the feet (land/stand); (b) failing that, KEEP the
+        //    one we're already riding while we're still horizontally over it and
+        //    within a generous vertical band — this covers a FAST rise (feet briefly
+        //    drop below the tight landing window) and jumping. Top = live position +
+        //    visual bob (position.y itself doesn't bob), never a stale collider.
         let walapaTopY = -Infinity;
-        let supportWalapa: { id: string; position: THREE.Vector3; scale?: number; velocity?: THREE.Vector3 } | null = null;
-        if (walapasRef?.current && velocity.current.y <= 0.05) {
-          for (const w of walapasRef.current) {
-            if (!w.isActive) continue;
-            const wscale = w.scale ?? 1;
-            // Include the VISUAL bob (position.y itself doesn't bob) so the rider
-            // rides the walapa up/down with it.
-            const bob = Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE;
-            const top = w.position.y + bob + WALAPA_HITBOX_HEIGHT * wscale;
-            const reach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
-            const dx = camera.position.x - w.position.x;
-            const dz = camera.position.z - w.position.z;
-            if (dx * dx + dz * dz > reach * reach) continue;
-            // Feet at/just-above the top (catch the fall) or just-sunk (standing).
-            if (feetY <= top + 0.6 && feetY >= top - 0.3 && top > walapaTopY) {
-              walapaTopY = top;
-              supportWalapa = w;
+        let rideWalapa: { id: string; position: THREE.Vector3; scale?: number; velocity?: THREE.Vector3 } | null = null;
+        if (walapasRef?.current) {
+          if (velocity.current.y <= 0.05) {
+            for (const w of walapasRef.current) {
+              if (!w.isActive) continue;
+              const wscale = w.scale ?? 1;
+              const top = w.position.y + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE + WALAPA_HITBOX_HEIGHT * wscale;
+              const reach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
+              const dx = camera.position.x - w.position.x;
+              const dz = camera.position.z - w.position.z;
+              if (dx * dx + dz * dz > reach * reach) continue;
+              if (feetY <= top + 0.6 && feetY >= top - 0.3 && top > walapaTopY) {
+                walapaTopY = top; rideWalapa = w;
+              }
+            }
+          }
+          if (!rideWalapa && currentWalapaIdRef.current) {
+            const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
+            if (w) {
+              const wscale = w.scale ?? 1;
+              const top = w.position.y + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE + WALAPA_HITBOX_HEIGHT * wscale;
+              const reach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
+              const dx = camera.position.x - w.position.x;
+              const dz = camera.position.z - w.position.z;
+              // Over it horizontally + within a generous band (fast rise / a jump).
+              if (dx * dx + dz * dz <= reach * reach && feetY >= top - 1.0 && feetY <= top + 4) {
+                walapaTopY = top; rideWalapa = w;
+              }
             }
           }
         }
 
-        // Highest support wins: solid block, live walapa, or world ground.
+        // Highest support wins: solid block/ground, the ridden walapa, or an enemy.
         let supportY = groundHit ? groundHit.max.y : -Infinity;
-        if (walapaTopY > supportY) {
-          supportY = walapaTopY;
-        } else {
-          supportWalapa = null; // a block/ground is higher than any walapa
-        }
-        // Stand on top of an enemy (shombie/shroomer). NO riding: it's re-checked
-        // live every frame, so the instant the enemy walks out from under you
-        // there's no support → you fall and it can attack you.
+        let onWalapa = false;
+        if (walapaTopY > supportY) { supportY = walapaTopY; onWalapa = true; }
+        else { rideWalapa = null; } // a block/ground is higher → not on the walapa
+        // Stand on top of an enemy (shombie/shroomer) — NO riding (re-checked live).
         const enemyTop = EnemyManager.getStandableTopNear(
           camera.position.x, camera.position.z, feetY, 0.6, undefined, playerRadius,
         );
         if (enemyTop != null && enemyTop > supportY) {
-          supportY = enemyTop;
-          supportWalapa = null; // standing on an enemy — not riding a walapa
+          supportY = enemyTop; onWalapa = false; rideWalapa = null;
         }
         const hasSupport = supportY > -Infinity;
 
-        if ((hasSupport && velocity.current.y <= 0.05) || onWorldGround) {
-          if (supportWalapa) {
-            // STANDING on a moving/bobbing platform — glue to its top so you ride
-            // it up AND down (its bob, and when it flies off to a tree). A jump
-            // (vy>0.05) skips this so you launch normally; the horizontal carry
-            // below keeps you over it so you fall back onto the top.
+        // Vertical: ON A WALAPA, glue to its top whenever NOT jumping (vy<=0.05) so
+        // you follow it up/down at ANY speed (bob, or flying off to a tree); a jump
+        // (vy>0.05) arcs freely and the horizontal carry keeps you over it so you
+        // land back on the top. Otherwise: normal ground/block/enemy support.
+        if (onWalapa) {
+          if (velocity.current.y <= 0.05) {
             camera.position.y = supportY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
-          } else if (hasSupport && velocity.current.y < 0) {
+            onGround.current = true;
+          } else {
+            onGround.current = false;
+          }
+        } else if ((hasSupport && velocity.current.y <= 0.05) || onWorldGround) {
+          if (hasSupport && velocity.current.y < 0) {
             camera.position.y = supportY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
           } else if (onWorldGround && !hasSupport && velocity.current.y < 0) {
@@ -2701,28 +2715,8 @@ export function FirstPersonControls({
           onGround.current = false;
         }
 
-        // ── Ride a walapa HORIZONTALLY — applied even while airborne, so you can
-        //    jump up and down on it and land back on top (the walapa is moving
-        //    ground). You're riding if you're standing on a walapa OR you were and
-        //    you're still horizontally over it (e.g. you jumped straight up). You
-        //    only DISMOUNT (and inherit its momentum) when you actually leave its
-        //    top — walk or jump off the edge.
-        let rideWalapa = supportWalapa;
-        if (!rideWalapa && currentWalapaIdRef.current && walapasRef?.current) {
-          const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
-          if (w) {
-            const wscale = w.scale ?? 1;
-            const wreach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
-            const wdx = camera.position.x - w.position.x;
-            const wdz = camera.position.z - w.position.z;
-            const wtop = w.position.y + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE + WALAPA_HITBOX_HEIGHT * wscale;
-            // Still horizontally over it, and within a jump's height of its top.
-            if (wdx * wdx + wdz * wdz <= wreach * wreach && feetY >= wtop - 0.5 && feetY <= wtop + 4) {
-              rideWalapa = w;
-            }
-          }
-        }
-        if (rideWalapa) {
+        // Horizontal carry (move with the walapa) + dismount momentum on leaving.
+        if (onWalapa && rideWalapa) {
           if (currentWalapaIdRef.current === rideWalapa.id) {
             camera.position.x += rideWalapa.position.x - walapaLastPosRef.current.x;
             camera.position.z += rideWalapa.position.z - walapaLastPosRef.current.z;
