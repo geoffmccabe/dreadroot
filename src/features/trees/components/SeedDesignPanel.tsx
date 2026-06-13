@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Save, TreeDeciduous, Leaf, RotateCw, CircleDot } from 'lucide-react';
+import { Upload, Save, TreeDeciduous, GitBranch, RotateCw, CircleDot } from 'lucide-react';
 import { AnimatedTexturePreview } from '@/components/AnimatedTexturePreview';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -822,12 +822,12 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
                           </Button>
                         </div>
 
-                        {/* Leaf Texture */}
+                        {/* Branch Texture */}
                         <div className="flex items-center gap-2">
                           <AnimatedTexturePreview
                             url={currentSeed.branch_texture_url}
                             size={40}
-                            fallback={<Leaf className="h-4 w-4 text-muted-foreground" />}
+                            fallback={<GitBranch className="h-4 w-4 text-muted-foreground" />}
                           />
                           <input
                             ref={branchInputRef}
@@ -843,7 +843,7 @@ export function SeedDesignPanel({ className, treeType }: SeedDesignPanelProps) {
                             onClick={() => branchInputRef.current?.click()}
                           >
                             <Upload className="h-3 w-3 mr-2" />
-                            Leaf
+                            Branch
                           </Button>
                           <Button
                             variant="outline"
