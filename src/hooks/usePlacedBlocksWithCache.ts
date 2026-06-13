@@ -715,6 +715,17 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // This keeps the chunk map in sync with rendered state
       chunkLoader.replaceBlockByPosition(data);
 
+      // PERSISTENCE FIX: the realtime refresh for our OWN edits is skipped (2s grace period),
+      // so the local IndexedDB chunk cache never picks up this saved block. On a later reload the
+      // client would trust that stale local snapshot and the block would "vanish" even though the
+      // server has it. Invalidate the chunk's local cache so the next load re-pulls fresh from the
+      // server. In-session rendering is unaffected (it uses the in-memory block). CHUNK_SIZE = 16.
+      try {
+        const cx = (data as any).chunk_x ?? Math.floor(data.position_x / 16);
+        const cz = (data as any).chunk_z ?? Math.floor(data.position_z / 16);
+        await blockDB.invalidateCachedChunk(wid, cx, cz);
+      } catch { /* best-effort cache invalidation */ }
+
       // NOTE: Cache invalidation for tree blocks is handled by the grace period timeout
       // in addBlocksBatch (after TREE_GROWTH_GRACE_PERIOD). Doing it here per-block
       // was redundant and caused performance issues during tree growth.
@@ -817,6 +828,17 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       }
 
       await removeFromDB(blockId);
+
+      // PERSISTENCE FIX (mirror of placeBlock): the own-edit realtime refresh is skipped, so the
+      // local IndexedDB chunk cache still holds the removed block — on reload it could reappear.
+      // Invalidate the chunk so the next load re-pulls from the server. CHUNK_SIZE = 16.
+      try {
+        await blockDB.invalidateCachedChunk(
+          (blockToRemove as any).world_id || worldId,
+          Math.floor(blockToRemove.position_x / 16),
+          Math.floor(blockToRemove.position_z / 16),
+        );
+      } catch { /* best-effort cache invalidation */ }
 
       // (overlap-check enqueue is now done server-side inside mine_block)
 
