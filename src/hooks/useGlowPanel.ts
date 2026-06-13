@@ -18,7 +18,7 @@ const ON_MS = 150;      // fast fade-in when it (re)triggers
 
 // Float shadow (always present) + the accent glow ring (added while glowing).
 const BASE_SHADOW = '0 10px 30px -8px rgb(0 0 0 / 0.45), 0 4px 12px -4px rgb(0 0 0 / 0.3)';
-const GLOW_RING = '0 0 0 2px hsl(var(--primary) / 0.6), 0 0 22px 3px hsl(var(--primary) / 0.4)';
+const GLOW_RING = '0 0 0 2px hsl(var(--panel-glow) / 0.7), 0 0 22px 3px hsl(var(--panel-glow) / 0.45)';
 
 export function useGlowPanel() {
   const [on, setOn] = useState(false);

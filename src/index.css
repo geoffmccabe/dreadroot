@@ -91,6 +91,8 @@ All colors MUST be HSL.
     --panel-border-strong-h: 208 85% 20%;
     --panel-bg-strong: var(--panel-bg-strong-h) / 0.65;
     --panel-border-strong: var(--panel-border-strong-h) / 0.5;
+    /* Vibrant accent for the panel glow ring (per-game: bright blue here, hot pink in PL). */
+    --panel-glow: 210 90% 60%;
 
     /* Brand-specific accent colors (for blocks, icons, special elements) */
     --brand-accent-1: 208 85% 50%; /* Blue */

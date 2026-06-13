@@ -186,13 +186,17 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     const startWidth = basePanelSize.width;
     const startHeight = basePanelSize.height;
 
+    // rAF-throttle so we update at most once per frame, not once per mousemove event.
+    let rafPending = false;
+    let curW = startWidth, curH = startHeight;
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const deltaY = moveEvent.clientY - startY;
-
-      setBasePanelSize({
-        width: Math.max(400, Math.min(1200, startWidth + deltaX)),
-        height: Math.max(400, Math.min(900, startHeight + deltaY))
+      curW = Math.max(400, Math.min(1200, startWidth + (moveEvent.clientX - startX)));
+      curH = Math.max(400, Math.min(900, startHeight + (moveEvent.clientY - startY)));
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        setBasePanelSize({ width: curW, height: curH });
       });
     };
 
@@ -372,12 +376,14 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           height: `${panelSize.height}px`,
           maxWidth: activeTab === 'p2p' ? '1200px' : '800px',
           maxHeight: '90vh',
-          transition: `width 0.3s ease-out, max-width 0.3s ease-out, ${glow.glowTransition}`,
+          // No width transition or backdrop-blur while actively resizing — both make
+          // the panel lag/jitter behind the cursor; restored on release.
+          transition: isResizing ? 'none' : `width 0.3s ease-out, max-width 0.3s ease-out, ${glow.glowTransition}`,
           boxShadow: glow.boxShadow,
           border: '1px solid hsla(var(--hud-border))',
           borderRadius: 'var(--hud-radius)',
-          backdropFilter: 'var(--hud-blur)',
-          WebkitBackdropFilter: 'var(--hud-blur)',
+          backdropFilter: isResizing ? 'none' : 'var(--hud-blur)',
+          WebkitBackdropFilter: isResizing ? 'none' : 'var(--hud-blur)',
           color: 'hsl(var(--hud-text))',
           fontFamily: 'var(--hud-font)',
         }}
