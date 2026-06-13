@@ -1087,3 +1087,19 @@ All colors MUST be HSL.
 .potion-drink-pulse {
   animation: potion-drink-pulse 0.6s ease-out 1;
 }
+
+/* ─── Kinetik-style interactive panel glow ──────────────────────────
+   A glow ring overlaid on a floating panel. Color = the per-game accent
+   (--primary: blue in DreadRoot, pink in Pinkland), so this is one shared
+   rule themed by tokens. Opacity + transition are driven by useGlowPanel
+   (fast fade-in on grab, slow 3s fade-out after release). */
+.glass-glow {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 70;
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.6),
+              0 0 22px 3px hsl(var(--primary) / 0.4);
+}
+.glass-drag-header { cursor: move; user-select: none; }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useGlowPanel } from '@/hooks/useGlowPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -101,6 +102,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [basePanelSize, setBasePanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
   const [isResizing, setIsResizing] = useState(false);
+  // Kinetik-style glow: fires on open + on resize (drag-to-move added next).
+  const glow = useGlowPanel();
+  useEffect(() => { if (isOpen) glow.trigger(); }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // P2P Marketplace state
   const [p2pSubtab, setP2pSubtab] = useState<MarketplaceTab>('browse');
@@ -175,6 +179,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
+    glow.trigger();
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -367,7 +372,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           height: `${panelSize.height}px`,
           maxWidth: activeTab === 'p2p' ? '1200px' : '800px',
           maxHeight: '90vh',
-          transition: 'width 0.3s ease-out, max-width 0.3s ease-out',
+          transition: `width 0.3s ease-out, max-width 0.3s ease-out, ${glow.glowTransition}`,
+          boxShadow: glow.boxShadow,
           border: '1px solid hsla(var(--hud-border))',
           borderRadius: 'var(--hud-radius)',
           backdropFilter: 'var(--hud-blur)',
