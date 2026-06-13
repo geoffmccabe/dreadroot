@@ -62,6 +62,31 @@ const DEFAULT_MAX_PER_CHUNK = 10_000;
 
 // world_number resolver lives in @/lib/worldNumber (shared with the chunk-sync hooks).
 
+// Wire-format normalizer. The chunk-fetch RPCs may return each block either as a named object
+// (legacy) or as a compact positional array [id, user_id, block_type, x, y, z, expires_at,
+// texture_url] (new — drops the repeated key names + the derivable chunk_x/z). Accept either and
+// produce the internal PlacedBlock shape, so the client can read the new format BEFORE the server
+// switches to it (no flag-day). chunk_x/z are derived from position.
+const WIRE_CHUNK_SIZE = 16;
+function normalizeRpcBlock(row: any): PlacedBlock {
+  if (Array.isArray(row)) {
+    const px = row[3] as number, pz = row[5] as number;
+    return {
+      id: row[0], user_id: row[1], block_type: row[2],
+      position_x: px, position_y: row[4], position_z: pz,
+      expires_at: row[6] ?? null, texture_url: row[7] ?? null,
+      chunk_x: Math.floor(px / WIRE_CHUNK_SIZE), chunk_z: Math.floor(pz / WIRE_CHUNK_SIZE),
+      created_at: '', updated_at: '',
+    } as PlacedBlock;
+  }
+  // Legacy named-object format: patch the fields the RPC omits; derive chunk_x/z if absent.
+  row.created_at = row.created_at ?? '';
+  row.updated_at = row.updated_at ?? '';
+  if (row.chunk_x == null && row.position_x != null) row.chunk_x = Math.floor(row.position_x / WIRE_CHUNK_SIZE);
+  if (row.chunk_z == null && row.position_z != null) row.chunk_z = Math.floor(row.position_z / WIRE_CHUNK_SIZE);
+  return row as PlacedBlock;
+}
+
 // ── Bounded-box fetch ───────────────────────────────────────────────
 
 export interface RadiusBounds {
@@ -221,14 +246,11 @@ export async function fetchChunksBatched(
     }
 
     if (data && (data as any[]).length > 0) {
-      // RPC returns rows without created_at/updated_at — patch defaults so
-      // PlacedBlock callers don't NPE.
+      // Normalize each block (handles both legacy named objects and the new positional arrays).
       const rows = data as any[];
-      for (let j = 0; j < rows.length; j++) {
-        rows[j].created_at = rows[j].created_at ?? '';
-        rows[j].updated_at = rows[j].updated_at ?? '';
-      }
-      blocks = blocks.concat(rows as PlacedBlock[]);
+      const normalized: PlacedBlock[] = new Array(rows.length);
+      for (let j = 0; j < rows.length; j++) normalized[j] = normalizeRpcBlock(rows[j]);
+      blocks = blocks.concat(normalized);
     }
   }
 
