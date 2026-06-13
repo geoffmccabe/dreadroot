@@ -42,7 +42,7 @@ export function PurchaseConfirmModal({
         className="max-w-md"
         style={{
           background: 'hsla(211, 30%, 35%, 0.95)',
-          border: '1px solid hsla(211, 34%, 73%, 0.8)',
+          border: '1px solid hsla(var(--hud-border))',
         }}
       >
         <DialogHeader>

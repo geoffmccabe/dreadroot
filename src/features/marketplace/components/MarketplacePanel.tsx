@@ -84,7 +84,7 @@ export function MarketplacePanel({ isOpen, onClose }: MarketplacePanelProps) {
           ref={(node: HTMLDivElement | null) => {
             if (node) {
               node.style.setProperty('background', 'hsla(211, 30%, 35%, 0.95)', 'important');
-              node.style.setProperty('border', '1px solid hsla(211, 34%, 73%, 0.8)', 'important');
+              node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
               node.style.setProperty('border-radius', '6px', 'important');
               node.style.setProperty('z-index', '99999', 'important');
             }

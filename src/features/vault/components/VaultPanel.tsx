@@ -260,8 +260,8 @@ export function VaultPanel({
   return (
     <div
       style={{
-        background: 'hsla(211, 30%, 51%, 0.45)',
-        border: '1px solid hsla(211, 34%, 73%, 0.7)',
+        background: 'hsla(var(--hud-bg-h) / 0.45)',
+        border: '1px solid hsla(var(--hud-border-h) / 0.7)',
         borderRadius: 6,
         padding: 8,
       }}

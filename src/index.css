@@ -100,10 +100,15 @@ All colors MUST be HSL.
 
     /* ─── HUD & Panel shared tokens ─────────────────────────────────── */
     /* Both FortressHUD and UserPanel reference these so they stay in sync */
-    --hud-bg: 211 30% 51% / 0.35;
-    --hud-bg-dim: 211 30% 51% / 0.15;
-    --hud-bg-hover: 211 30% 51% / 0.5;
-    --hud-border: 211 34% 73% / 0.8;
+    /* Base hues (alpha-less) — the ONLY values that change per game (blue→pink).
+       The alpha'd tokens below derive from them, and use-sites can apply any
+       alpha via hsl(var(--hud-bg-h) / 0.3). */
+    --hud-bg-h: 211 30% 51%;
+    --hud-border-h: 211 34% 73%;
+    --hud-bg: var(--hud-bg-h) / 0.35;
+    --hud-bg-dim: var(--hud-bg-h) / 0.15;
+    --hud-bg-hover: var(--hud-bg-h) / 0.5;
+    --hud-border: var(--hud-border-h) / 0.8;
     --hud-border-selected: 0 0% 100%;
     --hud-text: 211 32% 90%;
     --hud-text-dim: 211 32% 70%;

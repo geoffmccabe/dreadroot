@@ -2363,7 +2363,7 @@ export function Fortress() {
           padding: '10px 18px',
           borderRadius: 'var(--hud-radius)',
           background: 'hsla(211, 30%, 20%, 0.7)',
-          border: '1px solid hsla(211, 34%, 73%, 0.6)',
+          border: '1px solid hsla(var(--hud-border-h) / 0.6)',
           backdropFilter: 'blur(8px) saturate(140%)',
           WebkitBackdropFilter: 'blur(8px) saturate(140%)',
           color: 'hsl(0, 0%, 95%)',

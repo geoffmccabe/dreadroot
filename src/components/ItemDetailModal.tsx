@@ -83,7 +83,7 @@ export function ItemDetailModal() {
           width: 'min(540px, 92vw)',
           maxHeight: '85vh',
           background: 'hsla(211, 30%, 18%, 0.97)',
-          border: '1px solid hsla(211, 34%, 73%, 0.7)',
+          border: '1px solid hsla(var(--hud-border-h) / 0.7)',
           borderRadius: 8,
           padding: 20,
           color: 'hsl(0, 0%, 95%)',

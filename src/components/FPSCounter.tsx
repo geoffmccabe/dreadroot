@@ -337,9 +337,9 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
           className="pointer-events-none"
           style={{
             borderRadius: '6px',
-            border: '1px solid hsla(211, 34%, 73%, 0.8)',
-            background: 'hsla(211, 30%, 51%, 0.35)',
-            color: 'hsl(211, 32%, 90%)',
+            border: '1px solid hsla(var(--hud-border))',
+            background: 'hsla(var(--hud-bg))',
+            color: 'hsl(var(--hud-text))',
             fontFamily: 'Inter, sans-serif',
             padding: '4px 8px',
             display: 'flex',
@@ -681,9 +681,9 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
         className="pointer-events-none"
         style={{
           borderRadius: '6px',
-          border: '1px solid hsla(211, 34%, 73%, 0.8)',
-          background: 'hsla(211, 30%, 51%, 0.35)',
-          color: 'hsl(211, 32%, 90%)',
+          border: '1px solid hsla(var(--hud-border))',
+          background: 'hsla(var(--hud-bg))',
+          color: 'hsl(var(--hud-text))',
           fontFamily: 'Inter, sans-serif',
           padding: '4px 8px',
         }}
