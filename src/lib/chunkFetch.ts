@@ -59,6 +59,24 @@ const DEFAULT_PARALLEL = 10;
 const DEFAULT_FALLBACK_PAGE_SIZE = 1000;
 const DEFAULT_MAX_PER_CHUNK = 10_000;
 
+// world_number migration: placed_blocks is moving off the 36-char world_id UUID onto a
+// compact integer world_number. The direct SELECTs below filter by world_number (index-backed)
+// instead of world_id. We resolve worldId→world_number once per world and cache it (a handful
+// of worlds ever), so there's no per-fetch lookup cost. Returns null only if the column/row
+// isn't there yet, in which case callers fall back to the still-present world_id filter.
+const worldNumberCache = new Map<string, number>();
+async function resolveWorldNumber(sb: Sb, worldId: string): Promise<number | null> {
+  const cached = worldNumberCache.get(worldId);
+  if (cached !== undefined) return cached;
+  try {
+    const { data } = await (sb.from('worlds') as any)
+      .select('world_number').eq('id', worldId).single();
+    const n = data?.world_number;
+    if (typeof n === 'number') { worldNumberCache.set(worldId, n); return n; }
+  } catch { /* fall through to world_id */ }
+  return null;
+}
+
 // ── Bounded-box fetch ───────────────────────────────────────────────
 
 export interface RadiusBounds {
@@ -88,6 +106,7 @@ export async function fetchChunksByRadius(
   const maxTotalBlocks = opts?.maxTotalBlocks ?? DEFAULT_MAX_TOTAL_BLOCKS;
   const maxRetries = opts?.maxRetries ?? DEFAULT_MAX_RETRIES;
   const retryBaseMs = opts?.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_MS;
+  const worldNumber = await resolveWorldNumber(sb, worldId);
 
   let blocks: PlacedBlock[] | null = null;
   let hitSafetyLimit = false;
@@ -100,10 +119,9 @@ export async function fetchChunksByRadius(
     let pageError = false;
 
     while (hasMore) {
-      const { data, error } = await sb
-        .from('placed_blocks')
-        .select('*')
-        .eq('world_id', worldId)
+      let q: any = sb.from('placed_blocks').select('*');
+      q = worldNumber != null ? q.eq('world_number', worldNumber) : q.eq('world_id', worldId);
+      const { data, error } = await q
         .gte('chunk_x', bounds.minChunkX)
         .lte('chunk_x', bounds.maxChunkX)
         .gte('chunk_z', bounds.minChunkZ)
@@ -166,6 +184,7 @@ export async function fetchChunksBatched(
   const parallelLimit = opts?.parallelLimit ?? DEFAULT_PARALLEL;
   const pageSize = opts?.pageSize ?? DEFAULT_FALLBACK_PAGE_SIZE;
   const maxBlocksPerChunk = opts?.maxBlocksPerChunk ?? DEFAULT_MAX_PER_CHUNK;
+  const worldNumber = await resolveWorldNumber(sb, worldId);
 
   let blocks: PlacedBlock[] = [];
   const failedChunkCoords: Array<{ x: number; z: number }> = [];
@@ -238,10 +257,9 @@ export async function fetchChunksBatched(
         let offset = 0;
         let hasMore = true;
         while (hasMore) {
-          const { data: pageData, error: pageErr } = await sb
-            .from('placed_blocks')
-            .select('*')
-            .eq('world_id', worldId)
+          let fq: any = sb.from('placed_blocks').select('*');
+          fq = worldNumber != null ? fq.eq('world_number', worldNumber) : fq.eq('world_id', worldId);
+          const { data: pageData, error: pageErr } = await fq
             .eq('chunk_x', x)
             .eq('chunk_z', z)
             .range(offset, offset + pageSize - 1);
