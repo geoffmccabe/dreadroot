@@ -23,6 +23,9 @@ const tmpPosition = new THREE.Vector3();
 const tmpQuaternion = new THREE.Quaternion();
 const tmpColor = new THREE.Color();
 const tmpEuler = new THREE.Euler();
+const _scratchBoxMin = new THREE.Vector3();
+const _scratchBoxMax = new THREE.Vector3();
+const _scratchBox = new THREE.Box3();
 
 // Shared box geometry for all block parts (1x1x1 meter)
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -39,6 +42,13 @@ function getBodyPartsForTier(tier: number): WalapaPart[] {
     tierBodyPartsCache.set(tier, generateWalapaBodyBlocks(tier));
   }
   return tierBodyPartsCache.get(tier)!;
+}
+
+// Walapa colliders are tagged so the player physics can identify them (stand-on
+// + ride) and the cleanup can remove them.
+interface WalapaTaggedBox3 extends THREE.Box3 {
+  __walapaId?: string;
+  __isWalapaCollider?: boolean;
 }
 
 // Collider type for tracking
@@ -290,6 +300,7 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
         const hasBellyTexture = bellyUvs !== null;
         const hasEyesTexture = eyesUvs !== null;
 
+        let collisionBoxCount = 0;
         const walapaColliders: WalapaCollider[] = collidersRef.current.get(walapa.id) || [];
         let colliderIndex = 0;
 
@@ -372,12 +383,37 @@ export const WalapaRenderer = forwardRef<WalapaRendererHandle, WalapaRendererPro
             }
           }
 
-          // NO full-body player collider. The walapa is RIDDEN via the
-          // stand-on-top path in FortressControls (land on top, vertical follow,
-          // horizontal carry as it flies, dismount momentum) — a 6-sided solid
-          // body is unwanted: it only ever crushed the player when descending.
-          // Combat still hits the walapa via getHitbox (useWalapaSystem). The
-          // loop below removes any colliders left over from the old solid body.
+          // Real always-on collision box for body/belly blocks — like every
+          // monster, the walapa is solid (bullets, flames, tree blocks, other
+          // creatures, the player). Tagged so the player physics can identify it
+          // for standing-on / riding.
+          if (part.textureType === 'body' || part.textureType === 'belly') {
+            const halfSize = walapa.scale / 2;
+            _scratchBoxMin.set(
+              tmpPosition.x - halfSize,
+              tmpPosition.y - halfSize,
+              tmpPosition.z - halfSize
+            );
+            _scratchBoxMax.set(
+              tmpPosition.x + halfSize,
+              tmpPosition.y + halfSize,
+              tmpPosition.z + halfSize
+            );
+            _scratchBox.set(_scratchBoxMin, _scratchBoxMax);
+            collisionBoxCount++;
+
+            if (colliderIndex < walapaColliders.length) {
+              walapaColliders[colliderIndex].box.copy(_scratchBox);
+              worldCollisionGrid.update(walapaColliders[colliderIndex].box);
+            } else {
+              const newBox = _scratchBox.clone() as WalapaTaggedBox3;
+              newBox.__walapaId = walapa.id;
+              newBox.__isWalapaCollider = true;
+              worldCollisionGrid.insert(newBox);
+              walapaColliders.push({ walapaId: walapa.id, box: newBox });
+            }
+            colliderIndex++;
+          }
         }
 
         while (colliderIndex < walapaColliders.length) {

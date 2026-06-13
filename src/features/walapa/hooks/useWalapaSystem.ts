@@ -46,8 +46,12 @@ const CURIOUS_ROLL_INTERVAL_MS = 10 * 60 * 1000;
 const CURIOUS_CHANCE = 0.05;
 const CURIOUS_RANGE = 100;
 const CURIOUS_HOVER_MS = 10 * 1000;
-const CURIOUS_ARRIVAL_DIST = 3; // close enough to start hovering
-const CURIOUS_HOVER_DIST = 4;   // hold roughly this far from the player
+const CURIOUS_ARRIVAL_DIST = 1.5; // close enough to the spot → settle + hover
+// Player snapshot y is EYE level; feet are this far below. Used so the walapa
+// lands at the player's FEET level (its top then at jump height), not their face.
+const PLAYER_EYE_HEIGHT = 1.6;
+// How far IN FRONT of the player the walapa lands — beside you, not on top of you.
+const CURIOUS_OFFSET_DIST = 3;
 // TEMP TROUBLESHOOTING: when true, the curious roll fires every 15s at 100% (if a
 // player is within range) so you can actually SEE the behavior. Set to false to
 // restore the real 10-min / 5% rarity.
@@ -439,6 +443,10 @@ export function useWalapaSystem({
 
     const now = Date.now();
 
+    // Only ONE walapa may be curious at a time — prevents the whole flock from
+    // mobbing the player. (Stays true once any walapa is already visiting.)
+    let someoneCurious = walapasRef.current.some(w => w.isActive && w.curiousActive);
+
     for (const walapa of walapasRef.current) {
       if (!walapa.isActive) continue;
 
@@ -469,46 +477,53 @@ export function useWalapaSystem({
       // (Single-player for now — the local player is the only candidate; a
       //  multi-player nearest-of-pool pick drops in here later.)
       if (walapa.lastCuriousRollAt === undefined) walapa.lastCuriousRollAt = now;
-      const rollInterval = WALAPA_CURIOUS_TEST ? 15000 : CURIOUS_ROLL_INTERVAL_MS;
+      const rollInterval = WALAPA_CURIOUS_TEST ? 20000 : CURIOUS_ROLL_INTERVAL_MS;
       const rollChance = WALAPA_CURIOUS_TEST ? 1.0 : CURIOUS_CHANCE;
-      if (!walapa.curiousActive && now - walapa.lastCuriousRollAt >= rollInterval) {
+      if (!someoneCurious && !walapa.curiousActive && now - walapa.lastCuriousRollAt >= rollInterval) {
         walapa.lastCuriousRollAt = now;
         const pl = getLocalPlayerSnapshot();
         const pdx = pl.x - walapa.position.x, pdz = pl.z - walapa.position.z;
         if (Math.sqrt(pdx * pdx + pdz * pdz) <= CURIOUS_RANGE && Math.random() < rollChance) {
           walapa.curiousActive = true;
           walapa.curiousHoverUntil = 0;
-          walapa.curiousTarget = new THREE.Vector3();
+          someoneCurious = true; // claim the single curious slot for this frame
+          // FIXED landing spot: in FRONT of the player, at the player's FEET level
+          // (snapshot y is eye level). Beside you — not on your face — and low
+          // enough that its top is at jump height so you can hop on and ride.
+          const fx = -Math.sin(pl.yaw), fz = -Math.cos(pl.yaw);
+          if (!walapa.curiousTarget) walapa.curiousTarget = new THREE.Vector3();
+          walapa.curiousTarget.set(
+            pl.x + fx * CURIOUS_OFFSET_DIST,
+            pl.y - PLAYER_EYE_HEIGHT,
+            pl.z + fz * CURIOUS_OFFSET_DIST,
+          );
         }
       }
 
-      // Curious mode: descend to the player and hover 10s (so they can hop on),
-      // then resume touring.
-      if (walapa.curiousActive) {
-        const pl = getLocalPlayerSnapshot();
-        if (!walapa.curiousTarget) walapa.curiousTarget = new THREE.Vector3();
-        walapa.curiousTarget.set(pl.x, pl.y, pl.z); // track the live player's level
+      // Curious mode: fly to the FIXED spot beside the player, hover 10s (so they
+      // can walk over and hop on), then resume touring. The target does NOT track
+      // the player, so it never chases onto / through you.
+      if (walapa.curiousActive && walapa.curiousTarget) {
         const moveSpeed = WALAPA_BASE_SPEED * ((walapa.definition.speed || 100) / 100);
         const toTarget = new THREE.Vector3().subVectors(walapa.curiousTarget, walapa.position);
         const dist = toTarget.length();
 
         if (walapa.curiousHoverUntil && walapa.curiousHoverUntil > 0) {
           if (now >= walapa.curiousHoverUntil) {
-            // Done hovering → resume the tour and fly off IMMEDIATELY (not after
-            // a fresh 30s wait): waitStartTime=0 makes 'waiting' pick a tree next
-            // tick instead of hovering in place at the player's spot for 30s.
+            // Done → resume the tour immediately (waitStartTime=0 picks a tree next tick).
             walapa.curiousActive = false;
             walapa.curiousHoverUntil = 0;
             walapa.state = 'waiting';
             walapa.waitStartTime = 0;
             walapa.targetTreePosition = null;
             walapa.pathWaypoints = [];
-          } else if (dist > CURIOUS_HOVER_DIST) {
-            toTarget.normalize();
-            walapa.position.add(toTarget.multiplyScalar(moveSpeed * deltaTime));
+          } else {
+            // Hold at the spot; face the player.
+            const pl = getLocalPlayerSnapshot();
+            walapa.rotation = Math.atan2(pl.x - walapa.position.x, pl.z - walapa.position.z);
           }
-          walapa.rotation = Math.atan2(pl.x - walapa.position.x, pl.z - walapa.position.z); // face player
         } else if (dist < CURIOUS_ARRIVAL_DIST) {
+          walapa.position.copy(walapa.curiousTarget); // settle exactly on the spot
           walapa.curiousHoverUntil = now + CURIOUS_HOVER_MS;
         } else {
           toTarget.normalize();
