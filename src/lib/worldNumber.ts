@@ -17,14 +17,8 @@ type Sb = SupabaseClient<Database>;
 
 const cache = new Map<string, number>();
 
-export async function resolveWorldNumber(sb: Sb, worldId: string): Promise<number | null> {
-  const cached = cache.get(worldId);
-  if (cached !== undefined) return cached;
-  try {
-    const { data } = await (sb.from('worlds') as any)
-      .select('world_number').eq('id', worldId).single();
-    const n = data?.world_number;
-    if (typeof n === 'number') { cache.set(worldId, n); return n; }
-  } catch { /* fall through to world_id */ }
+export async function resolveWorldNumber(_sb: Sb, _worldId: string): Promise<number | null> {
+  // REVERTED: always return null so every caller falls back to the original `world_id` filter.
+  // The world_number migration is being rolled back to the known-good world_id system.
   return null;
 }
