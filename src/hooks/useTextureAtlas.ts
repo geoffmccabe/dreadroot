@@ -407,6 +407,14 @@ export function getInstanceUVsForTreeBlock(
     const uvs = getWideTreeUVs(tier, 'fruit')!;
     return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
   }
+  // glow_bark is wide-exclusive (~30% of a wide trunk is converted to it). It must draw the
+  // WIDE trunk texture (with emissive glow applied separately), not the ORIGINAL trunk slot.
+  // Falling through to getTreeUVs below routed it to the original-tree texture, so every wide
+  // tree rendered as a random ~70/30 two-tone (wide texture vs original texture).
+  if (baseType === 'glow_bark') {
+    const uvs = getWideTreeUVs(tier, 'trunk')!;
+    return { uvOffsetX: uvs.uvOffsetX, uvOffsetY: uvs.uvOffsetY };
+  }
 
   const textureType = mapTreeBlockTypeToTextureType(baseType);
 
