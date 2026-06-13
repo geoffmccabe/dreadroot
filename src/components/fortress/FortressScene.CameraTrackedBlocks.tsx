@@ -400,6 +400,7 @@ export function CameraTrackedBlocks({
         const nonTreeTypes = new Set<string>();
 
         for (const b of allBlocks) {
+          if (typeof b.block_type !== 'string') continue; // skip malformed blocks; never crash the render
           const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('r_') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
           if (!isTree) {
             allNonTree++;
@@ -409,6 +410,7 @@ export function CameraTrackedBlocks({
 
         if (visBlocks) {
           for (const b of visBlocks) {
+            if (typeof b.block_type !== 'string') continue; // skip malformed blocks; never crash the render
             const isTree = b.block_type.startsWith('t_') || b.block_type.startsWith('trunk') || b.block_type.startsWith('b_') || b.block_type.startsWith('branch') || b.block_type.startsWith('r_') || b.block_type.startsWith('root') || b.block_type.startsWith('cap') || b.block_type.startsWith('l_') || b.block_type.startsWith('leaf') || b.block_type.startsWith('canopy') || b.block_type.startsWith('fungal') || b.block_type.startsWith('f_') || b.block_type.startsWith('s_') || b.block_type.startsWith('spike') || b.block_type.startsWith('n_') || b.block_type.startsWith('nob') || b.block_type.startsWith('x_') || b.block_type.startsWith('cross') || b.block_type.startsWith('sm_') || b.block_type.startsWith('shroom') || b.block_type.startsWith('ss_') || b.block_type.startsWith('sc_') || b.block_type.startsWith('fs_') || b.block_type.startsWith('fct') || b.block_type.startsWith('fcu') || b.block_type.startsWith('ib') || b.block_type === 'invisiblock';
             if (!isTree) visNonTree++;
           }

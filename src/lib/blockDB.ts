@@ -562,6 +562,7 @@ export class BlockDB {
    * Check if a block_type is a tree block type (supports encoded format type_depth_tier)
    */
   private isTreeBlockType(blockType: string): boolean {
+    if (typeof blockType !== 'string') return false; // malformed block; never crash the cache read
     // Full type names
     const TREE_BLOCK_BASE_TYPES = [
       'trunk', 'branch', 'root', 'leaf', 'fruit', 'spike', 'nob', 'cross',
