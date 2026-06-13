@@ -23,7 +23,7 @@ import {
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
-import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
+import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT, WALAPA_BOB_AMPLITUDE } from '@/features/walapa';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
@@ -2646,7 +2646,10 @@ export function FirstPersonControls({
           for (const w of walapasRef.current) {
             if (!w.isActive) continue;
             const wscale = w.scale ?? 1;
-            const top = w.position.y + WALAPA_HITBOX_HEIGHT * wscale;
+            // Include the VISUAL bob (position.y itself doesn't bob) so the rider
+            // rides the walapa up/down with it.
+            const bob = Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE;
+            const top = w.position.y + bob + WALAPA_HITBOX_HEIGHT * wscale;
             const reach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
             const dx = camera.position.x - w.position.x;
             const dz = camera.position.z - w.position.z;
@@ -2679,7 +2682,13 @@ export function FirstPersonControls({
         const hasSupport = supportY > -Infinity;
 
         if ((hasSupport && velocity.current.y <= 0.05) || onWorldGround) {
-          if (hasSupport && velocity.current.y < 0) {
+          if (supportWalapa) {
+            // Riding a moving/bobbing platform — GLUE to its top so you follow it
+            // up AND down (its bob, and when it flies off to a tree), not only when
+            // falling. (Jumping sets vy>0.05, which skips this whole block → you hop off.)
+            camera.position.y = supportY + playerHeight + SURFACE_EPS;
+            velocity.current.y = 0;
+          } else if (hasSupport && velocity.current.y < 0) {
             camera.position.y = supportY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
           } else if (onWorldGround && !hasSupport && velocity.current.y < 0) {
