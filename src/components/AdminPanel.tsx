@@ -8,6 +8,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useGlowPanel } from '@/hooks/useGlowPanel';
+import { usePanelDrag } from '@/hooks/usePanelDrag';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdminPanel, type NPCSubtab, type SeedSubtab, type ItemsSubtab, type WorldsSubtab } from '@/contexts/AdminPanelContext';
 import { useBlocks } from '@/contexts/BlocksContext';
@@ -88,11 +90,34 @@ export function AdminPanel({
   // When atlas tab is active and no custom width set, use wider default
   const isAtlasTab = activeTab === 'worlds' && worldsSubtab === 'atlas';
   const effectiveWidth = panelWidth ?? (isAtlasTab ? 1200 : undefined);
+  const [panelHeight, setPanelHeight] = useState<number | null>(null);
+  const glow = useGlowPanel();
+  const drag = usePanelDrag(glow.trigger);
+  useEffect(() => { if (isOpen) glow.trigger(); }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Bottom-right corner resize (width + height), rAF-throttled like the user panel.
+  const handleCornerResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    glow.trigger();
+    const sx = e.clientX, sy = e.clientY;
+    const sw = dialogRef.current?.offsetWidth ?? 896;
+    const sh = dialogRef.current?.offsetHeight ?? 600;
+    let raf = false, nw = sw, nh = sh;
+    const onMove = (ev: MouseEvent) => {
+      nw = Math.max(600, Math.min(window.innerWidth - 40, sw + (ev.clientX - sx)));
+      nh = Math.max(400, Math.min(window.innerHeight - 40, sh + (ev.clientY - sy)));
+      if (raf) return; raf = true;
+      requestAnimationFrame(() => { raf = false; setPanelWidth(nw); setPanelHeight(nh); });
+    };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [glow]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     resizingRef.current = true;
+    glow.trigger();
     const startX = e.clientX;
     const startWidth = dialogRef.current?.offsetWidth ?? 896;
 
@@ -119,6 +144,7 @@ export function AdminPanel({
       <DialogContent
         ref={(node: HTMLDivElement | null) => {
           dialogRef.current = node;
+          drag.panelRef.current = node;
           if (node) {
             node.style.setProperty('background', 'hsla(var(--hud-bg))', 'important');
             node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
@@ -130,7 +156,13 @@ export function AdminPanel({
           !effectiveWidth && "max-w-4xl",
           activeTab === 'effects' && "!left-auto !right-4 !translate-x-0"
         )}
-        style={effectiveWidth ? { maxWidth: effectiveWidth, width: effectiveWidth } : undefined}
+        style={{
+          ...(effectiveWidth ? { maxWidth: effectiveWidth, width: effectiveWidth } : {}),
+          ...(panelHeight ? { height: panelHeight, maxHeight: '95vh' } : {}),
+          boxShadow: glow.boxShadow,
+          transition: drag.moved ? 'none' : glow.glowTransition,
+          ...drag.dragStyle,
+        }}
         overlayClassName={activeTab === 'effects' ? 'bg-transparent' : undefined}
       >
         {/* Left-edge resize handle */}
@@ -138,7 +170,12 @@ export function AdminPanel({
           className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/10 z-50"
           onMouseDown={handleResizeStart}
         />
-        <DialogHeader>
+        {/* Bottom-right corner resize */}
+        <div
+          className="absolute right-0 bottom-0 w-4 h-4 cursor-nwse-resize hover:bg-white/10 z-50"
+          onMouseDown={handleCornerResizeStart}
+        />
+        <DialogHeader style={{ cursor: 'move' }} onMouseDown={drag.onHeaderMouseDown}>
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">

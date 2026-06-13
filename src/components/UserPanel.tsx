@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useGlowPanel } from '@/hooks/useGlowPanel';
+import { usePanelDrag } from '@/hooks/usePanelDrag';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -102,8 +103,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [basePanelSize, setBasePanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
   const [isResizing, setIsResizing] = useState(false);
-  // Kinetik-style glow: fires on open + on resize (drag-to-move added next).
+  // Kinetik-style glow: fires on open, on drag-to-move, and on resize.
   const glow = useGlowPanel();
+  const drag = usePanelDrag(glow.trigger);
   useEffect(() => { if (isOpen) glow.trigger(); }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // P2P Marketplace state
@@ -364,6 +366,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     <Dialog open={isOpen} onOpenChange={closePanel}>
       <DialogContent
         ref={(node: HTMLDivElement | null) => {
+          drag.panelRef.current = node;
           if (node) {
             node.style.setProperty('background', 'hsla(var(--hud-bg))', 'important');
             node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
@@ -386,9 +389,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           WebkitBackdropFilter: isResizing ? 'none' : 'var(--hud-blur)',
           color: 'hsl(var(--hud-text))',
           fontFamily: 'var(--hud-font)',
+          ...drag.dragStyle,
         }}
       >
-        <DialogHeader className="flex-shrink-0 relative">
+        <DialogHeader className="flex-shrink-0 relative" style={{ cursor: 'move' }} onMouseDown={drag.onHeaderMouseDown}>
           <DialogTitle className="flex items-center gap-2" style={{ color: 'hsl(var(--hud-text-bright))' }}>
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
             User Panel - {tokenDisplayName}: {tokenBalance?.coins || 0}
