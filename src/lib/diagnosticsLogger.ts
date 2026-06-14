@@ -209,6 +209,17 @@ class DiagnosticsLogger {
   frameWorkMax = 0;
   lastFrameWorkMs = 0; // smoothed, updated every frame even when DF isn't recording (live overlay)
 
+  // === GC + stall attribution ===
+  // GC pauses (a recurring stall source) are detected by a DROP in JS heap between frames — the
+  // collector ran and freed memory. We count them and tag each stall frame with the MB freed, so
+  // the report can say WHY a big frame stalled (GC pause vs streaming work).
+  private prevHeapMB = 0;
+  gcCount = 0;
+  gcFreedMBTotal = 0;
+  gcMaxFreedMB = 0;
+  longFrameGcCount = 0; // stall frames (>50ms) that coincided with a GC
+  stallEvents: { atSec: number; ms: number; gcMB: number }[] = []; // worst recent stall frames
+
   // === Real-time metrics for overlay ===
   currentFps = 0;
   avgFrameTime = 0;
@@ -242,6 +253,26 @@ class DiagnosticsLogger {
     this.frameTimes[this.frameTimeIndex++ % 100] = ms;
     if (ms > 33) this.longFrameCount++;
     if (ms > this.frameTimeMax) this.frameTimeMax = ms;
+
+    // GC detection: a heap DROP between frames means the GC ran and freed memory this frame.
+    const mem = (performance as any).memory;
+    const heapNow = mem ? mem.usedJSHeapSize / 1048576 : 0;
+    let gcMB = 0;
+    if (this.prevHeapMB > 0 && heapNow < this.prevHeapMB - 2) {
+      gcMB = this.prevHeapMB - heapNow;
+      this.gcCount++;
+      this.gcFreedMBTotal += gcMB;
+      if (gcMB > this.gcMaxFreedMB) this.gcMaxFreedMB = gcMB;
+    }
+    this.prevHeapMB = heapNow;
+
+    // Stall event: record the worst frames (>50ms) with GC attribution, so the report shows WHAT
+    // each big stall was — a GC pause (gcMB > 0) or streaming work (gcMB == 0).
+    if (ms > 50) {
+      if (gcMB > 0) this.longFrameGcCount++;
+      this.stallEvents.push({ atSec: (performance.now() - this.startTime) / 1000, ms, gcMB });
+      if (this.stallEvents.length > 30) this.stallEvents.shift();
+    }
   }
 
   // CPU main-thread time spent on the frame's work (independent of the vsync cap). 1000 / avg-work
@@ -376,6 +407,11 @@ class DiagnosticsLogger {
       longTaskMsTotal: this.longTaskMsTotal,
       eventLoopLagCountTotal: this.eventLoopLagCountTotal,
       eventLoopLagMaxMsTotal: this.eventLoopLagMaxMsTotal,
+      gcCount: this.gcCount,
+      gcFreedMBTotal: this.gcFreedMBTotal,
+      gcMaxFreedMB: this.gcMaxFreedMB,
+      longFrameGcCount: this.longFrameGcCount,
+      stallEvents: this.stallEvents,
 
       chunkLoadsTotal: this.chunkLoadsTotal,
       chunkUnloadsTotal: this.chunkUnloadsTotal,
@@ -503,6 +539,12 @@ class DiagnosticsLogger {
       this.frameWorks.fill(0);
       this.frameWorkIndex = 0;
       this.frameWorkMax = 0;
+      this.prevHeapMB = 0;
+      this.gcCount = 0;
+      this.gcFreedMBTotal = 0;
+      this.gcMaxFreedMB = 0;
+      this.longFrameGcCount = 0;
+      this.stallEvents = [];
       this.startTime = performance.now();
       this.lastSampleTime = this.startTime;
       this.elapsedSeconds = 0;

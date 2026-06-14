@@ -346,6 +346,7 @@ STALL DIAGNOSTICS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   LongTasks:        ${extra.longTaskCountTotal} (${extra.longTaskMsTotal.toFixed(1)}ms total)
   EventLoopLag:     ${extra.eventLoopLagCountTotal} spikes (max ${extra.eventLoopLagMaxMsTotal.toFixed(1)}ms)
+  GC Pauses:        ${extra.gcCount} (freed ${extra.gcFreedMBTotal.toFixed(0)}MB total, max ${extra.gcMaxFreedMB.toFixed(0)}MB in one) — ${extra.longFrameGcCount} of the >50ms stalls were GC
   Chunk Load/Unload: ${extra.chunkLoadsTotal}/${extra.chunkUnloadsTotal}
   Chunk Fetch/Build: ${extra.chunkFetchMsTotal.toFixed(1)}ms / ${extra.chunkBuildMsTotal.toFixed(1)}ms
   Flatten/Emit:     ${extra.emitsTotal} emits, ${extra.flattenMsTotal.toFixed(1)}ms (${extra.flattenBlocksTotal} blocks)
@@ -376,21 +377,49 @@ CHUNK PIPELINE (current)
   Rendered Chunks:  ${diagnostics.renderedChunkCount}
   Chunks In Flight: ${diagnostics.chunksInFlight}`;
 
-    // Add per-sample FPS data (last 20 samples)
+    // Worst stall frames, attributed (GC pause vs streaming/other).
+    const stalls = [...(extra.stallEvents || [])].sort((a, b) => b.ms - a.ms).slice(0, 12);
+    if (stalls.length > 0) {
+      text += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WORST STALLS (>50ms frames, worst first)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      for (const s of stalls) {
+        const cause = s.gcMB > 0 ? `GC pause (freed ${s.gcMB.toFixed(0)}MB)` : 'streaming/other (no GC)';
+        text += `\n  ${s.ms.toFixed(0)}ms @ ${s.atSec.toFixed(1)}s — ${cause}`;
+      }
+    }
+
+    // Frame-loop per-callback timing — which registered callbacks cost the most over the recording.
+    const cb = (window as any).frameLoop?.getTimingReport?.();
+    if (cb && cb.length > 0) {
+      text += `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FRAME LOOP CALLBACKS (total ms over recording)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      for (const { id, time } of cb.slice(0, 12)) {
+        text += `\n  ${id}: ${time.toFixed(1)}ms`;
+      }
+      (window as any).frameLoop?.resetTiming?.();
+    }
+
+    // Add per-sample raw data
     const d = diagnostics;
-    const sampleN = Math.min(d.ticker, 600);
+    const sampleN = Math.min(d.ticker, 1800);
     const stride = d.metricsPerSample;
     if (sampleN > 0) {
       text += `
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RAW DATA (last 50 samples)
+RAW DATA (last 150 samples)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid`;
-      const start = Math.max(0, sampleN - 50);
+sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid heapMB`;
+      const start = Math.max(0, sampleN - 150);
       for (let s = start; s < sampleN; s++) {
         const bi = s * stride;
-        text += `\n${d.buffer[bi].toFixed(0)} ${d.buffer[bi+1].toFixed(0)} ${d.buffer[bi+2].toFixed(0)} ${d.buffer[bi+32].toFixed(0)} ${d.buffer[bi+50].toFixed(0)} ${d.buffer[bi+51].toFixed(0)} ${d.buffer[bi+52].toFixed(0)} ${d.buffer[bi+55].toFixed(0)} ${d.buffer[bi+56].toFixed(0)} ${d.buffer[bi+44].toFixed(0)}`;
+        text += `\n${d.buffer[bi].toFixed(0)} ${d.buffer[bi+1].toFixed(0)} ${d.buffer[bi+2].toFixed(0)} ${d.buffer[bi+32].toFixed(0)} ${d.buffer[bi+50].toFixed(0)} ${d.buffer[bi+51].toFixed(0)} ${d.buffer[bi+52].toFixed(0)} ${d.buffer[bi+55].toFixed(0)} ${d.buffer[bi+56].toFixed(0)} ${d.buffer[bi+44].toFixed(0)} ${d.buffer[bi+36].toFixed(0)}`;
       }
     }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 import { Settings, Store } from 'lucide-react';
-import { FPSDisplay, DFlowOutputPanel, BlockDeleteHandler } from '@/components/FPSCounter';
+import { FPSDisplay, BlockDeleteHandler } from '@/components/FPSCounter';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
@@ -878,8 +878,8 @@ export function FortressHUD(props: FortressHUDProps) {
         onDeleteBlock={onDeleteBlock}
       />
 
-      {/* D-Flow Output Panel */}
-      <DFlowOutputPanel />
+      {/* D-Flow output is now the single richer PerformanceOverlay panel (DFlowOutputPanel removed
+          to consolidate the two duplicate report panels into one). */}
 
       {/* Bottom-left: status panel + admin gear */}
       <div
