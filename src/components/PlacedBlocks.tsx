@@ -9,7 +9,8 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 // collisionGrid import removed — collision handled by useChunkLoader (ensureBlockCollider)
 import { isInvisiblock, isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
-import { seedPositions, seedState, seedKey } from '@/lib/seedPositions';
+import { seedPositions, seedState } from '@/lib/seedPositions';
+import { numPosKey } from '@/lib/spatialHashGrid';
 import { shrineTracker } from '@/lib/shrineTracker';
 import { getMaterialVariantId, fnv1a32, canonicalizeTextureUrl } from '@/lib/renderKeys';
 import { useTextureAtlas } from '@/hooks/useTextureAtlas';
@@ -468,7 +469,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     const cullable: PlacedBlock[] = [];
     for (const b of atlasTreeBlocks) {
       if (getBaseTreeBlockType(b.block_type) === 'fruit'
-          || seedPositions.has(seedKey(b.position_x, b.position_y, b.position_z))) {
+          || seedPositions.has(numPosKey(b.position_x, b.position_y, b.position_z))) {
         exemptBlocks.push(b);
       } else {
         cullable.push(b);

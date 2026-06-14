@@ -23,7 +23,6 @@ import {
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
-import { WALAPA_BOB_AMPLITUDE, getTierDimensions } from '@/features/walapa';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
@@ -155,7 +154,8 @@ export function FirstPersonControls({
     q: false, z: false, e: false
   });
   // Glide mode: activated by pressing G while falling, auto-deactivates on landing
-  const glideActiveRef = useRef(false);
+  const glideActiveRef = useRef(false);   // computed glide state (held-G AND airborne), for HUD
+  const gKeyHeldRef = useRef(false);       // is the G key physically held right now
 
   // Grenade ready state mirror — synced from parent prop so the
   // click handler can read it without async state. Parent (Fortress)
@@ -205,10 +205,6 @@ export function FirstPersonControls({
   
   // Knockback velocity for shwarm hits (decays over time)
   const knockbackVelRef = useRef(new THREE.Vector3());
-
-  // Moving platform (walapa riding) tracking
-  const currentWalapaIdRef = useRef<string | null>(null);
-  const walapaLastPosRef = useRef(new THREE.Vector3());
 
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
@@ -686,14 +682,13 @@ export function FirstPersonControls({
           void onAdminGrantGrenade();
           break;
         }
-        // Plain G: glide if mid-air falling, else delegate to parent
-        // for the "find/auto-equip/arm grenade" logic (parent owns
-        // inventory + equipped state, so it decides whether G is
-        // valid AND which slot to arm).
+        // Plain G is dual-purpose: HOLD it in the air to glide (handled per
+        // frame from gKeyHeldRef so it engages reliably even if you held G
+        // before walking off a ledge), or tap it on the ground to arm a
+        // grenade (parent owns inventory/equipped state + slot selection).
         if (event.metaKey || event.ctrlKey || event.altKey) break;
-        if (!onGround.current && velocity.current.y < 0) {
-          glideActiveRef.current = true;
-        } else if (onGrenadeTogglePress) {
+        gKeyHeldRef.current = true;
+        if (onGround.current && onGrenadeTogglePress) {
           onGrenadeTogglePress();
         }
         break;
@@ -746,6 +741,9 @@ export function FirstPersonControls({
       case 'KeyS':
       case 'ArrowDown':
         keys.current.s = false;
+        break;
+      case 'KeyG':
+        gKeyHeldRef.current = false; // release glide
         break;
       case 'KeyA':
       case 'ArrowLeft':
@@ -2216,9 +2214,12 @@ export function FirstPersonControls({
 
       const isSwimming = isInWaterRef.current;
 
-      // Gliding: press G while falling to activate, auto-deactivates on landing
-      // Glide is active as long as player is airborne (works during jet boosts too)
-      const isGliding = glideActiveRef.current && !onGround.current && !isSwimming;
+      // Gliding: HOLD G in the air to slow your fall. Held-state (gKeyHeldRef)
+      // so it engages reliably even if G was already held before you walked off
+      // a ledge — the old one-shot "activate only if already falling" check
+      // silently failed in exactly that case. Works during jet boosts too.
+      const isGliding = gKeyHeldRef.current && !onGround.current && !isSwimming;
+      glideActiveRef.current = isGliding; // mirror for the HUD "G" indicator
 
       // Determine effective gravity based on state
       let effectiveGravity = 9.8; // Normal gravity
@@ -2226,11 +2227,6 @@ export function FirstPersonControls({
         effectiveGravity = 2.45; // 25% gravity in water (Minecraft-style)
       } else if (isGliding) {
         effectiveGravity = 4.9; // 50% gravity when gliding
-      }
-
-      // Auto-deactivate glide only when landing on ground
-      if (glideActiveRef.current && onGround.current) {
-        glideActiveRef.current = false;
       }
 
       // === JET BOOST SYSTEM ===
@@ -2347,6 +2343,14 @@ export function FirstPersonControls({
 
       // Gravity and jumping
       velocity.current.y -= effectiveGravity * dt;
+      // Glide caps your fall speed so you descend slowly and travel far. Without
+      // this, a long fall just accelerates past the half-gravity effect and the
+      // glide is barely noticeable (the reported "doesn't work" bug). 5 blocks/s
+      // ≈ parachute speed; horizontal momentum then carries you a long way.
+      const GLIDE_FALL_SPEED = 5;
+      if (isGliding && velocity.current.y < -GLIDE_FALL_SPEED) {
+        velocity.current.y = -GLIDE_FALL_SPEED;
+      }
       // Minecraft/Quake pattern: zero gravity when on ground to prevent bounce oscillation
       if (onGround.current && velocity.current.y < 0) {
         velocity.current.y = 0;
@@ -2667,90 +2671,22 @@ export function FirstPersonControls({
           onGround.current,
           velocity.current.y
         );
-        // Option B: walapas are handled LIVE below, not via their grid colliders
-        // (which lag a frame → fall-through / floating). Ignore any walapa
-        // collider returned by the block check.
-        if (groundHit && (groundHit as any).__isWalapaCollider) groundHit = null;
-
         const feetY = camera.position.y - playerHeight;
         const onWorldGround = feetY <= (SURFACE_EPS + 0.01);
 
-        // ── Walapa riding (a moving, bobbing platform). Find the walapa we ride:
-        //    (a) one right under the feet (land/stand); (b) failing that, KEEP the
-        //    one we're already riding while we're still horizontally over it and
-        //    within a generous vertical band — this covers a FAST rise (feet briefly
-        //    drop below the tight landing window) and jumping. Top = live position +
-        //    visual bob (position.y itself doesn't bob), never a stale collider.
-        let walapaTopY = -Infinity;
-        let rideWalapa: { id: string; position: THREE.Vector3; scale?: number; velocity?: THREE.Vector3 } | null = null;
-        if (walapasRef?.current) {
-          if (velocity.current.y <= 0.05) {
-            for (const w of walapasRef.current) {
-              if (!w.isActive) continue;
-              const wscale = w.scale ?? 1;
-              const wdims = getTierDimensions(w.definition.tier);
-              // Real standable top = top of the highest body block. The body is
-              // dims.height tall, CENTERED on position.y (blocks span y=-floor(h/2)
-              // ..+floor(h/2)), so its top sits (floor(h/2)+0.5) above the center.
-              // Bob is added un-scaled to match the renderer.
-              const top = w.position.y + (Math.floor(wdims.height / 2) + 0.5) * wscale + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE;
-              const reach = Math.floor(wdims.width / 2) * wscale + playerRadius;
-              const dx = camera.position.x - w.position.x;
-              const dz = camera.position.z - w.position.z;
-              if (dx * dx + dz * dz > reach * reach) continue;
-              if (feetY <= top + 0.6 && feetY >= top - 0.3 && top > walapaTopY) {
-                walapaTopY = top; rideWalapa = w;
-              }
-            }
-          }
-          if (!rideWalapa && currentWalapaIdRef.current) {
-            const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
-            if (w) {
-              const wscale = w.scale ?? 1;
-              const wdims = getTierDimensions(w.definition.tier);
-              // Real standable top = top of the highest body block. The body is
-              // dims.height tall, CENTERED on position.y (blocks span y=-floor(h/2)
-              // ..+floor(h/2)), so its top sits (floor(h/2)+0.5) above the center.
-              // Bob is added un-scaled to match the renderer.
-              const top = w.position.y + (Math.floor(wdims.height / 2) + 0.5) * wscale + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE;
-              const reach = Math.floor(wdims.width / 2) * wscale + playerRadius;
-              const dx = camera.position.x - w.position.x;
-              const dz = camera.position.z - w.position.z;
-              // Over it horizontally + within a generous band (fast rise / a jump).
-              if (dx * dx + dz * dz <= reach * reach && feetY >= top - 1.0 && feetY <= top + 4) {
-                walapaTopY = top; rideWalapa = w;
-              }
-            }
-          }
-        }
-
-        // Highest support wins: solid block/ground, the ridden walapa, or an enemy.
+        // Support = the highest collider under the feet. groundHit now INCLUDES the
+        // walapa's own solid, bobbing colliders (no special-casing): you stand on a
+        // walapa exactly like a block — its colliders bob, so you bob; when it flies
+        // off, its colliders leave and you fall. Natural physics, no per-creature
+        // hack. (Also the highest enemy standable-top, for shombie/shroomer.)
         let supportY = groundHit ? groundHit.max.y : -Infinity;
-        let onWalapa = false;
-        if (walapaTopY > supportY) { supportY = walapaTopY; onWalapa = true; }
-        else { rideWalapa = null; } // a block/ground is higher → not on the walapa
-        // Stand on top of an enemy (shombie/shroomer) — NO riding (re-checked live).
         const enemyTop = EnemyManager.getStandableTopNear(
           camera.position.x, camera.position.z, feetY, 0.6, undefined, playerRadius,
         );
-        if (enemyTop != null && enemyTop > supportY) {
-          supportY = enemyTop; onWalapa = false; rideWalapa = null;
-        }
+        if (enemyTop != null && enemyTop > supportY) supportY = enemyTop;
         const hasSupport = supportY > -Infinity;
 
-        // Vertical: ON A WALAPA, glue to its top whenever NOT jumping (vy<=0.05) so
-        // you follow it up/down at ANY speed (bob, or flying off to a tree); a jump
-        // (vy>0.05) arcs freely and the horizontal carry keeps you over it so you
-        // land back on the top. Otherwise: normal ground/block/enemy support.
-        if (onWalapa) {
-          if (velocity.current.y <= 0.05) {
-            camera.position.y = supportY + playerHeight + SURFACE_EPS;
-            velocity.current.y = 0;
-            onGround.current = true;
-          } else {
-            onGround.current = false;
-          }
-        } else if ((hasSupport && velocity.current.y <= 0.05) || onWorldGround) {
+        if ((hasSupport && velocity.current.y <= 0.05) || onWorldGround) {
           if (hasSupport && velocity.current.y < 0) {
             camera.position.y = supportY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
@@ -2761,24 +2697,6 @@ export function FirstPersonControls({
           onGround.current = true;
         } else {
           onGround.current = false;
-        }
-
-        // Horizontal carry (move with the walapa) + dismount momentum on leaving.
-        if (onWalapa && rideWalapa) {
-          if (currentWalapaIdRef.current === rideWalapa.id) {
-            camera.position.x += rideWalapa.position.x - walapaLastPosRef.current.x;
-            camera.position.z += rideWalapa.position.z - walapaLastPosRef.current.z;
-          }
-          currentWalapaIdRef.current = rideWalapa.id;
-          walapaLastPosRef.current.copy(rideWalapa.position);
-        } else if (currentWalapaIdRef.current && walapasRef?.current) {
-          // Truly left the walapa → inherit its momentum, then clear.
-          const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
-          if (w && w.velocity) {
-            velocity.current.x += w.velocity.x;
-            velocity.current.z += w.velocity.z;
-          }
-          currentWalapaIdRef.current = null;
         }
       }
 
