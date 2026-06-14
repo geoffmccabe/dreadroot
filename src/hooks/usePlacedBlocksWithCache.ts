@@ -814,12 +814,15 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const chunkKey = getChunkKey(blockToRemove.position_x, blockToRemove.position_z);
       recentlyModifiedChunks.current.set(chunkKey, Date.now());
       
-      // Track 1B: remove via the validated mine_block RPC. The server
-      // re-checks ownership/admin (authoritative; the client check above
-      // is just for instant UX), deletes the row, and enqueues the
-      // tree-hole overlap check — all in one transaction.
+      // Remove via the validated mine_block_at RPC, keyed by (world, cell) instead of the block
+      // UUID — the chunk wire no longer ships the id, and position is unique per cell. The server
+      // re-checks ownership/admin (authoritative; the client check above is just for instant UX),
+      // deletes the row, and enqueues the tree-hole overlap check — all in one transaction.
       try {
-        await worldStore.mineBlock(blockId);
+        await worldStore.mineBlockAt(
+          (blockToRemove as any).world_id || worldId,
+          blockToRemove.position_x, blockToRemove.position_y, blockToRemove.position_z,
+        );
       } catch (error) {
         toast({
           title: "Failed to remove block",

@@ -1226,13 +1226,15 @@ export function Fortress() {
     // Fire off server operations without awaiting
     (async () => {
       try {
-        // Delete from database
-        const { error: deleteError } = await supabase
-          .from('placed_blocks')
-          .delete()
-          .eq('id', blockId);
-
-        if (deleteError) {
+        // Delete from database by (world, cell) — the chunk wire no longer carries the block
+        // UUID, so block.id is a synthesized position key. mineBlockAt re-checks owner/admin
+        // server-side and enqueues the tree-hole overlap check.
+        try {
+          await worldStore.mineBlockAt(
+            currentWorldId || (block as any).world_id,
+            block.position_x, block.position_y, block.position_z,
+          );
+        } catch (deleteError) {
           console.error('[InspectorDelete] Database delete failed:', deleteError);
           // Block is already visually gone - just log the error
         }
@@ -1256,7 +1258,7 @@ export function Fortress() {
     })();
 
     return true;
-  }, [loadedChunksRef, removeBlocksByPositions, toast]);
+  }, [loadedChunksRef, removeBlocksByPositions, toast, currentWorldId]);
 
   // Settings handlers
   const handleSettingsChange = (key: string, value: any) => {

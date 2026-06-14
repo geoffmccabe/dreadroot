@@ -63,26 +63,47 @@ const DEFAULT_MAX_PER_CHUNK = 10_000;
 
 // world_number resolver lives in @/lib/worldNumber (shared with the chunk-sync hooks).
 
-// Wire-format normalizer. The chunk-fetch RPCs may return each block either as a named object
-// (legacy) or as a compact positional array [id, user_id, block_type, x, y, z, expires_at,
-// texture_url] (new — drops the repeated key names + the derivable chunk_x/z). Accept either and
-// produce the internal PlacedBlock shape, so the client can read the new format BEFORE the server
-// switches to it (no flag-day). chunk_x/z are derived from position.
+// Wire-format normalizer. The chunk-fetch RPCs may return each block as a named object (legacy)
+// or as a compact positional array. The array format is being slimmed in stages, so we read BOTH
+// shapes (no flag-day):
+//   OLD array: [id, user_id, block_type, x, y, z, expires_at?, texture_url?]
+//   NEW array: [user_id, block_type, x, y, z, expires_at?, texture_url?]   (leading id dropped)
+// The block's id is no longer carried on the wire — position is unique per (world, cell), so we
+// synthesize a stable, world-prefixed position key as the local id (world prefix keeps the global
+// IndexedDB blocks store from aliasing the same cell across worlds). Removal goes by position, so
+// nothing downstream needs the DB UUID. chunk_x/z are derived from position.
 const WIRE_CHUNK_SIZE = 16;
-function normalizeRpcBlock(row: any): PlacedBlock {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i;
+function looksUuid(v: any): boolean { return typeof v === 'string' && UUID_RE.test(v); }
+function posKey(worldId: string, x: number, y: number, z: number): string {
+  return `${worldId}:${Math.floor(x)}_${Math.floor(y)}_${Math.floor(z)}`;
+}
+function normalizeRpcBlock(row: any, worldId: string): PlacedBlock {
   if (Array.isArray(row)) {
-    const px = row[3] as number, pz = row[5] as number;
+    // Detect NEW (no leading id) vs OLD. OLD slot0 is always a UUID/temp string; NEW slot0 is the
+    // user slot (a player-number, or a UUID for an uncatalogued user). So: slot0 number → NEW.
+    // Else slot0 is a string — distinguish by slot1: OLD slot1 = user_id (number or UUID), NEW
+    // slot1 = block_type (a short word, never a number and never UUID-shaped).
+    const newFormat =
+      typeof row[0] === 'number' ||
+      (typeof row[0] === 'string' && typeof row[1] !== 'number' && !looksUuid(row[1]));
+    const off = newFormat ? 0 : 1;
+    const userRaw = row[off];
+    const block_type = row[off + 1];
+    const px = row[off + 2] as number, py = row[off + 3] as number, pz = row[off + 4] as number;
     return {
-      id: row[0], user_id: resolveUserId(row[1]), block_type: row[2],
-      position_x: px, position_y: row[4], position_z: pz,
-      expires_at: row[6] ?? null, texture_url: row[7] ?? null,
+      id: posKey(worldId, px, py, pz), user_id: resolveUserId(userRaw), block_type,
+      position_x: px, position_y: py, position_z: pz,
+      expires_at: row[off + 5] ?? null, texture_url: row[off + 6] ?? null,
       chunk_x: Math.floor(px / WIRE_CHUNK_SIZE), chunk_z: Math.floor(pz / WIRE_CHUNK_SIZE),
       created_at: '', updated_at: '',
     } as PlacedBlock;
   }
-  // Legacy named-object format: patch the fields the RPC omits; derive chunk_x/z if absent.
+  // Named-object (legacy direct SELECT / RPC fallback). Synthesize the same position-key id so all
+  // ingress paths share one id scheme; the DB's real UUID isn't needed client-side anymore.
   row.created_at = row.created_at ?? '';
   row.updated_at = row.updated_at ?? '';
+  if (row.position_x != null) row.id = posKey(worldId, row.position_x, row.position_y, row.position_z);
   if (row.chunk_x == null && row.position_x != null) row.chunk_x = Math.floor(row.position_x / WIRE_CHUNK_SIZE);
   if (row.chunk_z == null && row.position_z != null) row.chunk_z = Math.floor(row.position_z / WIRE_CHUNK_SIZE);
   return row as PlacedBlock;
@@ -250,7 +271,7 @@ export async function fetchChunksBatched(
       // Normalize each block (handles both legacy named objects and the new positional arrays).
       const rows = data as any[];
       const normalized: PlacedBlock[] = new Array(rows.length);
-      for (let j = 0; j < rows.length; j++) normalized[j] = normalizeRpcBlock(rows[j]);
+      for (let j = 0; j < rows.length; j++) normalized[j] = normalizeRpcBlock(rows[j], worldId);
       blocks = blocks.concat(normalized);
     }
   }
@@ -290,7 +311,9 @@ export async function fetchChunksBatched(
         if (r.failed || r.blocks === null) {
           failedChunkCoords.push({ x: r.x, z: r.z });
         } else {
-          blocks = blocks.concat(r.blocks);
+          // Normalize the raw SELECT rows so this fallback yields the same position-keyed ids
+          // as the RPC path (these named rows still carry the DB UUID, which we don't use).
+          blocks = blocks.concat(r.blocks.map(b => normalizeRpcBlock(b, worldId)));
         }
       }
     }

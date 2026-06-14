@@ -1082,6 +1082,26 @@ export async function mineBlock(blockId: string): Promise<{ removed: boolean }> 
   return { removed: true };
 }
 
+/** Remove a placed block by its position instead of its UUID. Needed once the chunk wire
+ *  stops shipping the block id — the client identifies a block by its (world, cell), which is
+ *  unique. Same server-side auth + (owner OR admin) check + overlap enqueue as mineBlock.
+ *  Falls back to a position-matched direct delete if the RPC isn't deployed yet. */
+export async function mineBlockAt(
+  worldId: string, x: number, y: number, z: number,
+): Promise<{ removed: boolean }> {
+  const px = Math.floor(x), py = Math.floor(y), pz = Math.floor(z);
+  const { data, error } = await supabase.rpc('mine_block_at', {
+    p_world_id: worldId, p_x: px, p_y: py, p_z: pz,
+  });
+  if (!error) return (data as { removed: boolean }) ?? { removed: false };
+  if (!isMissingFunction(error)) throw error;
+  // Fallback: pre-migration direct delete (RLS still enforces ownership).
+  const { error: delErr } = await supabase.from('placed_blocks').delete()
+    .eq('world_id', worldId).eq('position_x', px).eq('position_y', py).eq('position_z', pz);
+  if (delErr) throw delErr;
+  return { removed: true };
+}
+
 // ── Namespace export ────────────────────────────────────────────────
 
 /** Namespace-style export. Callers can use either form:
@@ -1130,6 +1150,7 @@ export const worldStore = {
   // Track 1B — validated world-block writes.
   placeBlock,
   mineBlock,
+  mineBlockAt,
   recordKill,
   rollShwarmDrop,
   rollMonsterCoinDrop,

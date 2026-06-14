@@ -24,6 +24,7 @@ import {
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
+import { WALAPA_BOB_AMPLITUDE, getTierDimensions } from '@/features/walapa';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
 import { setGlobalInspectData, clearGlobalInspectData, toggleInspectorMode, setInspectorMode, inspectorModeEnabled, globalInspectData, type GlobalInspectData, type InspectSources } from '@/components/FPSCounter';
@@ -205,6 +206,10 @@ export function FirstPersonControls({
   
   // Knockback velocity for shwarm hits (decays over time)
   const knockbackVelRef = useRef(new THREE.Vector3());
+
+  // Moving-platform (walapa) ride: which platform we're attached to + its last pos.
+  const currentWalapaIdRef = useRef<string | null>(null);
+  const walapaLastPosRef = useRef(new THREE.Vector3());
 
   // Reusable Vector3 objects to prevent garbage collection
   const forwardVecRef = useRef(new THREE.Vector3());
@@ -2697,6 +2702,41 @@ export function FirstPersonControls({
           onGround.current = true;
         } else {
           onGround.current = false;
+        }
+      }
+
+      // ── Moving-platform ride (general; the walapa is the first user). While your
+      //    feet are from a walapa's top to ~1m above it AND you're over its
+      //    footprint, your frame of reference rides the platform — you move
+      //    HORIZONTALLY with it (vertical is the normal collision above: you stand
+      //    on its bobbing collider). Leave the zone (jump >1m, or walk off the edge)
+      //    → world frame again, so an accelerating walapa leaves you behind (the
+      //    wind blows you off). No velocity is inherited.
+      {
+        const riderFeetY = camera.position.y - playerHeight;
+        let attachW: { id: string; position: THREE.Vector3 } | null = null;
+        if (walapasRef?.current) {
+          for (const w of walapasRef.current) {
+            if (!w.isActive) continue;
+            const wscale = w.scale ?? 1;
+            const wdims = getTierDimensions(w.definition.tier);
+            const top = w.position.y + (Math.floor(wdims.height / 2) + 0.5) * wscale + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE;
+            const reach = Math.floor(wdims.width / 2) * wscale + playerRadius;
+            const dx = camera.position.x - w.position.x;
+            const dz = camera.position.z - w.position.z;
+            if (dx * dx + dz * dz > reach * reach) continue;
+            if (riderFeetY >= top - 0.3 && riderFeetY <= top + 1.0) { attachW = w; break; }
+          }
+        }
+        if (attachW) {
+          if (currentWalapaIdRef.current === attachW.id) {
+            camera.position.x += attachW.position.x - walapaLastPosRef.current.x;
+            camera.position.z += attachW.position.z - walapaLastPosRef.current.z;
+          }
+          currentWalapaIdRef.current = attachW.id;
+          walapaLastPosRef.current.copy(attachW.position);
+        } else {
+          currentWalapaIdRef.current = null;
         }
       }
 
