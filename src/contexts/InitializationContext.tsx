@@ -27,6 +27,10 @@ interface InitializationContextType {
   dismissOverlay: () => void;
   isOverlayVisible: boolean;
   elapsedMs: number;  // Current elapsed time for live updates
+  // True once the player clicks START GAME. Init runs in the background before
+  // this, but the overlay is only shown after — never over the homescreen.
+  gameStarted: boolean;
+  setGameStarted: (v: boolean) => void;
 }
 
 const InitializationContext = createContext<InitializationContextType | null>(null);
@@ -119,6 +123,7 @@ export function InitializationProvider({ children }: { children: React.ReactNode
   const [steps, setSteps] = useState<InitStep[]>([]);
   const [totalDurationSecs, setTotalDurationSecs] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [gameStarted, setGameStarted] = useState(false);
 
   const startTimeRef = useRef<number>(performance.now());
   const isInitializingRef = useRef(false);
@@ -286,7 +291,9 @@ export function InitializationProvider({ children }: { children: React.ReactNode
       finishInitialization,
       dismissOverlay,
       isOverlayVisible,
-      elapsedMs
+      elapsedMs,
+      gameStarted,
+      setGameStarted
     }}>
       {children}
     </InitializationContext.Provider>

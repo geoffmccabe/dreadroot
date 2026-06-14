@@ -7,7 +7,50 @@ interface FortressStructureProps {
   groundTextureUrl?: string | null;
 }
 
-export function FortressStructure({ 
+// Crenellation (battlement) cube size — "2x2 square blocks on top".
+const MERLON = 2;
+
+/**
+ * Merlon center offsets along a wall's top edge. Merlons (2-wide) alternate with
+ * gaps so the top reads as a serrated castle battlement. A merlon sits flush at
+ * each corner and the rest distribute evenly inward — so the center absorbs the
+ * leftover (its gap, and effectively 1–3 blocks worth of span, flexes to fit).
+ */
+function crenelCenters(length: number, w = MERLON, gap = MERLON): number[] {
+  if (length <= w) return [length / 2];
+  const period = w + gap;
+  const n = Math.max(2, Math.round((length - w) / period) + 1);
+  const step = (length - w) / (n - 1);
+  return Array.from({ length: n }, (_, i) => w / 2 + i * step);
+}
+
+/** Renders 2×2×2 merlon cubes along one top edge of the wall. */
+function Crenellations({
+  axis, min, max, perp, top, material,
+}: {
+  axis: 'x' | 'z';
+  min: number; max: number; perp: number; top: number;
+  material: THREE.Material;
+}) {
+  const lo = Math.min(min, max);
+  const centers = crenelCenters(Math.abs(max - min));
+  return (
+    <>
+      {centers.map((c, i) => {
+        const along = lo + c;
+        const position: [number, number, number] =
+          axis === 'x' ? [along, top + MERLON / 2, perp] : [perp, top + MERLON / 2, along];
+        return (
+          <mesh key={i} position={position} material={material} castShadow receiveShadow>
+            <boxGeometry args={[MERLON, MERLON, MERLON]} />
+          </mesh>
+        );
+      })}
+    </>
+  );
+}
+
+export function FortressStructure({
   fortressTextureUrl, 
   groundTextureUrl 
 }: FortressStructureProps) {
@@ -108,6 +151,27 @@ export function FortressStructure({
     return texture;
   }, [cliffTexture]);
 
+  // Small-repeat cliff texture + a shared material for the merlon cubes (matches the walls).
+  const merlonTexture = useMemo(() => {
+    if (!cliffTexture) return null;
+    const texture = cliffTexture.clone();
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+    clonedTexturesRef.current.push(texture);
+    return texture;
+  }, [cliffTexture]);
+
+  const merlonMaterial = useMemo(() => {
+    if (!merlonTexture) return null;
+    return new THREE.MeshStandardMaterial({
+      map: merlonTexture,
+      metalness: 0.1,
+      roughness: 0.9,
+    });
+  }, [merlonTexture]);
+
+  useEffect(() => () => merlonMaterial?.dispose(), [merlonMaterial]);
+
   const courtyardTexture = useMemo(() => {
     if (!grassTexture) return null;
     const texture = grassTexture.clone();
@@ -121,6 +185,9 @@ export function FortressStructure({
   if (!grassTexture || !frontTexture || !topTexture || !sideTexture || !backTexture || !courtyardTexture) {
     return null;
   }
+
+  // Top-edge spans (y = cliffH) for the four wall runs the battlements sit on.
+  const backZ = frontZ - courtyardDepth - frontT;
 
   return (
     <group>
@@ -161,6 +228,16 @@ export function FortressStructure({
         <boxGeometry args={[cliffW, cliffH, 2]} />
         <meshStandardMaterial map={backTexture} metalness={0.1} roughness={0.9} />
       </mesh>
+
+      {/* Crenellations (battlements) along all four top edges */}
+      {merlonMaterial && (
+        <>
+          <Crenellations axis="x" min={-cliffW / 2} max={cliffW / 2} perp={frontZ} top={cliffH} material={merlonMaterial} />
+          <Crenellations axis="x" min={-cliffW / 2} max={cliffW / 2} perp={backZ} top={cliffH} material={merlonMaterial} />
+          <Crenellations axis="z" min={backZ} max={frontZ} perp={-cliffW / 2 + 1} top={cliffH} material={merlonMaterial} />
+          <Crenellations axis="z" min={backZ} max={frontZ} perp={cliffW / 2 - 1} top={cliffH} material={merlonMaterial} />
+        </>
+      )}
 
       {/* Courtyard floor */}
       <mesh

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +10,7 @@ import { UserPanelProvider } from "@/contexts/UserPanelContext";
 import { AdminPanelProvider } from "@/contexts/AdminPanelContext";
 import { CoinThemeProvider } from "@/contexts/CoinThemeContext";
 import { AvatarProvider } from "@/contexts/AvatarContext";
-import { InitializationProvider } from "@/contexts/InitializationContext";
+import { InitializationProvider, useInitialization } from "@/contexts/InitializationContext";
 import { BulletDefinitionsProvider } from "@/contexts/BulletDefinitionsContext";
 import { FlamethrowerTiersProvider } from "@/contexts/FlamethrowerTiersContext";
 import { ItemDetailProvider } from "@/contexts/ItemDetailContext";
@@ -25,7 +26,12 @@ import NotFound from "./pages/NotFound";
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading, session } = useAuth();
-  
+  const { setGameStarted } = useInitialization();
+  // In-memory (not persisted), so the homescreen shows on every app start /
+  // reload. Logged-in players see the branded screen + START GAME before the
+  // world loads, instead of being dropped straight into the game.
+  const [started, setStarted] = useState(false);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -33,12 +39,19 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  
+
   // Reject anonymous users (from old auth system) or users without email
   if (!user || !session?.user?.email) {
     return <Navigate to="/auth" replace />;
   }
-  
+
+  // Logged in: show the homescreen with START GAME until the player clicks it.
+  // Flip gameStarted too, so the init overlay only appears after START (it may
+  // have been initializing in the background meanwhile).
+  if (!started) {
+    return <Auth onStart={() => { setGameStarted(true); setStarted(true); }} />;
+  }
+
   return <>{children}</>;
 }
 

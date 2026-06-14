@@ -38,7 +38,8 @@ export function InitializationOverlay() {
     steps,
     totalDurationSecs,
     elapsedMs,
-    dismissOverlay
+    dismissOverlay,
+    gameStarted
   } = useInitialization();
 
   const [copied, setCopied] = React.useState(false);
@@ -90,7 +91,8 @@ export function InitializationOverlay() {
     if (!isInitializing && isOverlayVisible) dismissOverlay();
   }, [isInitializing, isOverlayVisible, dismissOverlay]);
 
-  if (!isOverlayVisible) return null;
+  // Init may run in the background before START; only show the overlay after.
+  if (!isOverlayVisible || !gameStarted) return null;
 
   const displayTime = isInitializing ? (elapsedMs / 1000).toFixed(1) : totalDurationSecs.toFixed(1);
 

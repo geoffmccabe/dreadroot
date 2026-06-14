@@ -36,7 +36,10 @@ function ytApiReady(): Promise<void> {
   });
 }
 
-export default function Auth() {
+// Doubles as the post-login HOMESCREEN: when `onStart` is passed (logged-in
+// player, world initializing in the background), the button reads START GAME and
+// enters the world; otherwise it's the LOGIN gate.
+export default function Auth({ onStart }: { onStart?: () => void }) {
   const { signInWithSSO } = useAuth();
   const hostRef = useRef<HTMLDivElement>(null);
 
@@ -174,10 +177,10 @@ export default function Auth() {
         </div>
         <Button
           type="button"
-          onClick={signInWithSSO}
+          onClick={onStart ?? signInWithSSO}
           className="h-12 px-10 text-lg font-bold tracking-widest"
         >
-          LOGIN
+          {onStart ? 'START GAME' : 'LOGIN'}
         </Button>
       </div>
     </div>
