@@ -499,14 +499,6 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     _loggedNonTreeBlocks = true;
     const totalNonTreeBlocks = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
     initLogStep('PlacedBlocks.tsx', `Non-tree blocks rendering`, totalNonTreeBlocks);
-
-    // DEBUG: Log all non-tree block groups with their types and counts
-    for (const [groupKey, { blocks: gBlocks, textureOverride }] of groupedBlocks) {
-      const blockType = groupKey.split(':')[0];
-      const blockDef = blocksMap.get(blockType);
-      const texUrl = textureOverride || blockDef?.texture?.diffuse || '/cliff_texture_seamless.webp';
-      console.warn(`[PlacedBlocks GROUP] "${groupKey}": ${gBlocks.length} blocks, blockDef=${blockDef ? blockDef.key : 'MISSING→fallback'}, texture=${texUrl}, sample pos=(${gBlocks[0]?.position_x},${gBlocks[0]?.position_y},${gBlocks[0]?.position_z})`);
-    }
   }
 
   // Don't render if there are no blocks to show
@@ -515,14 +507,6 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   // even before Supabase block definitions load.
   if (blocks.length === 0) {
     return null;
-  }
-
-  // DEBUG: Log total blocks, tree blocks, non-tree blocks on first render per chunk
-  if (groupedBlocks.size > 0 || culledAtlasTreeBlocks.length > 0) {
-    const nonTreeTotal = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
-    if (nonTreeTotal > 0) {
-      console.warn(`[PlacedBlocks RENDER] total=${blocks.length}, tree=${culledAtlasTreeBlocks.length}, nonTree=${nonTreeTotal}, groups=${groupedBlocks.size}, atlasReady=${atlasReady}`);
-    }
   }
 
   return (
