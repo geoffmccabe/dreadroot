@@ -20,9 +20,9 @@ export function setActiveGame(game: string): void {
   active = game;
   try { localStorage.setItem(KEY, game); } catch { /* ignore */ }
   subs.forEach((f) => f());
-  // Simplest, robust switch: reload so the app re-evaluates which game's world/modules
-  // and styling to load from `getActiveGame()`. (No fragile live world hot-swap.)
-  if (typeof window !== 'undefined') window.location.reload();
+  // NOTE: world-loading on switch is wired once the SW world module lands. Until then,
+  // selecting a game just records the choice (the dropdown highlights it) — no reload,
+  // so the live Dreadroot game is never disrupted by the in-progress switch.
 }
 
 export function useActiveGame(): string {
