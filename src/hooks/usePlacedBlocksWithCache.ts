@@ -153,7 +153,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // ONE-TIME CACHE MIGRATION: Clear stale chunk cache for existing users
       // This ensures trees that grew before the cache invalidation fix will render
       const CACHE_VERSION_KEY = 'fortress_chunk_cache_version';
-      const CURRENT_CACHE_VERSION = 7; // v7: re-pull chunks now that the server emits the compact positional-array wire format (drops repeated key names + chunk_x/z). Client reads both formats (normalizeRpcBlock); this flush exercises the array path end-to-end.
+      const CURRENT_CACHE_VERSION = 8; // v8: re-pull chunks now that the user slot carries a player_number (catalogue) instead of the user UUID. Client reverse-maps via loadPlayerCatalogue.const;
       const storedVersion = parseInt(localStorage.getItem(CACHE_VERSION_KEY) || '0', 10);
       if (storedVersion < CURRENT_CACHE_VERSION) {
         console.log('[CacheMigration] Clearing stale chunk cache (v' + storedVersion + ' -> v' + CURRENT_CACHE_VERSION + ')');
