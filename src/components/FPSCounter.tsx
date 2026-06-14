@@ -153,11 +153,12 @@ export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdm
         const vz = Math.round(viewDir.z * 10) / 10;
         globalViewDir = { x: vx, y: vy, z: vz };
 
-        // Headroom: display FPS is vsync-capped, so 1000 / CPU-work-per-frame shows the true
-        // uncapped ceiling (how far above 60 we really are).
+        // Headroom: display FPS is vsync-capped at the monitor's refresh, so show the game-loop's
+        // main-thread CPU cost per frame instead — that IS uncapped. Low ms = lots of CPU room.
+        // (A single "uncapped FPS" number is misleading because it ignores GPU + stalls; the DFlow
+        // report breaks those out.)
         const workMs = diagnostics.lastFrameWorkMs;
-        const uncapped = workMs > 0 ? Math.round(1000 / workMs) : 0;
-        const capText = uncapped > 0 ? ` (~${uncapped} cap)` : '';
+        const capText = workMs > 0 ? ` · CPU ${workMs.toFixed(1)}ms` : '';
         const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
         if (isAdmin) {
           const fpsPvElement = document.getElementById('fps-pv-display');

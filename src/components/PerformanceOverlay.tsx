@@ -285,12 +285,11 @@ FPS ANALYSIS
   Long Frames:    ${data.longFrames} (>33ms)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-HEADROOM (CPU frame work — vsync-independent)
+HEADROOM (game-loop CPU — vsync-independent)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Avg CPU/frame:  ${hw.avgMs.toFixed(2)}ms
+  Avg CPU/frame:  ${hw.avgMs.toFixed(2)}ms  (${hw.budgetPct.toFixed(0)}% of the 16.7ms 60fps budget)
   Max CPU/frame:  ${hw.maxMs.toFixed(2)}ms
-  Uncapped FPS:   ~${hw.uncappedFps} (1000 / avg work; CPU-bound estimate, ignores GPU)
-  60fps budget:   ${hw.budgetPct.toFixed(0)}% used  (lower = more headroom)
+  Note:           game-loop CPU only — GPU (draw calls below) + stalls are the real limiters
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SYSTEM TIMING (ms per 100ms sample)

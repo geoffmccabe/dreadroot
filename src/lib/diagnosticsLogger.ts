@@ -2,7 +2,7 @@
 // Comprehensive zero-allocation performance diagnostic system
 // Toggle with Shift+3 (#) key
 
-const BUFFER_SIZE = 600; // 60 seconds at 10 samples/sec
+const BUFFER_SIZE = 1800; // 180 seconds at 10 samples/sec (3x retention for longer captures)
 const METRICS = 58; // Expanded to track chunk pipeline metrics
 
 type TimingSystem = 
@@ -960,11 +960,15 @@ class DiagnosticsLogger {
     lines.push(`  Avg frame time: ${avgFrameTime.toFixed(1)}ms (${totalFrames} frames)`);
     lines.push(`  Long frames (>33ms): ${totalLongFrames}, Max: ${maxFrameTime.toFixed(1)}ms`);
     lines.push('');
-    lines.push('Frame Time Breakdown (avg ms/100ms):');
-    lines.push(`  Controls:  ${(tControlsSum/n).toFixed(2)}ms`);
-    lines.push(`  EnemyAI:   ${(tAISum/n).toFixed(2)}ms`);
-    lines.push(`  Blocks:    ${(tBlocksSum/n).toFixed(2)}ms`);
-    lines.push(`  Render:    ${(tRenderSum/n).toFixed(2)}ms`);
+    // CPU headroom — the game-loop's main-thread work per frame, independent of the vsync cap.
+    // (Replaces the old per-system "Frame Time Breakdown", which read ~0 because those timers are
+    // sampled only every 100ms. The real per-callback costs are in "Frame Loop Callbacks" below.)
+    const hw = this.getFrameWorkStats();
+    lines.push('CPU Headroom (game-loop work, vsync-independent):');
+    lines.push(`  Avg CPU/frame: ${hw.avgMs.toFixed(2)}ms  (${hw.budgetPct.toFixed(0)}% of the 16.7ms 60fps budget)`);
+    lines.push(`  Max CPU/frame: ${hw.maxMs.toFixed(2)}ms`);
+    lines.push(`  → Low % = lots of CPU headroom for game logic. This is CPU-only: the GPU (draw`);
+    lines.push(`    calls/triangles below) and the streaming stalls (long frames) are the real limits.`);
     lines.push('');
     lines.push('Enemy Stats (current):');
     lines.push(`  Shwarms: ${this.shwarmCount} (${this.shwarmBlockCount} blocks)`);
@@ -994,10 +998,10 @@ class DiagnosticsLogger {
       (window as any).frameLoop?.resetTiming?.();
     }
 
-    lines.push('--- Raw Data (last 50 samples) ---');
+    lines.push('--- Raw Data (last 150 samples) ---');
     lines.push('sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid tCtrl tAI tRender');
 
-    const startSample = Math.max(0, n - 50);
+    const startSample = Math.max(0, n - 150);
     for (let s = startSample; s < n; s++) {
       const i = s * METRICS;
       lines.push(
