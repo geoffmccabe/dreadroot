@@ -2742,7 +2742,12 @@ export function FirstPersonControls({
           // reliance on the one-frame-lagged collision support (above) was the
           // sink / fall-through bug; this weld is authoritative for riding.
           if (velocity.current.y <= 0 && riderFeetY <= attachTop + 0.3) {
-            camera.position.y = attachTop + playerHeight + SURFACE_EPS;
+            // Weld onto the walapa top, but NEVER below the world ground. A
+            // walapa descending onto a grounded player must not drag the rider
+            // underground — the weld follows the top down only as far as y=0
+            // (the world floor; players never go below the land plane).
+            const weldFeet = Math.max(attachTop, 0);
+            camera.position.y = weldFeet + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
             onGround.current = true;
           }

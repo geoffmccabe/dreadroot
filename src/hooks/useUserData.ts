@@ -767,17 +767,22 @@ export const useUserData = () => {
   const addPoints = useCallback(async (amount: number): Promise<{ newLevel: number | null }> => {
     if (!user?.id || !profile) return { newLevel: null };
 
+    // grant_points requires a POSITIVE INTEGER. Combat passes fractional/zero damage as points,
+    // which made the RPC 400 ("Invalid amount") on every hit. Round, and skip non-positive amounts.
+    const amt = Math.round(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return { newLevel: null };
+
     const prevPoints = profile.total_points || 0;
     const prevLevel = profile.current_level || 1;
 
     setProfile(prev => prev ? {
       ...prev,
-      total_points: prevPoints + amount,
-      current_level: getLevelForPoints(prevPoints + amount),
+      total_points: prevPoints + amt,
+      current_level: getLevelForPoints(prevPoints + amt),
     } : null);
 
     try {
-      const result = await worldStore.grantPoints(amount);
+      const result = await worldStore.grantPoints(amt);
       setProfile(prev => prev ? {
         ...prev,
         total_points: result.newTotalPoints,
