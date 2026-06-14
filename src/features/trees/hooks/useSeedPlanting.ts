@@ -271,7 +271,17 @@ export function useSeedPlanting({
         : getBlocksAtOrder(blueprint, 0);
 
       for (const block of firstBlocks) {
-        const encodedType = encodeBlockType(block.type, block.branchDepth, seedDef.tier);
+        // Wide trees: encode the base blocks as wide_* so they render with the wide texture,
+        // matching the server grower (tree_block_code maps wide trunk/branch/fruit -> wt/wb/wf).
+        // Without this the client-placed base stays t_ (original texture) while the grown body is
+        // wt_ — the two-tone wide tree. The blueprint uses generic 'trunk'/'branch' names.
+        const encType = treeType === 'wide'
+          ? (block.type === 'trunk' ? 'wide_trunk'
+            : block.type === 'branch' ? 'wide_branch'
+            : block.type === 'fruit' ? 'wide_fruit'
+            : block.type)
+          : block.type;
+        const encodedType = encodeBlockType(encType, block.branchDepth, seedDef.tier);
         // Use fungal textures for fungal trees, falling back to original textures
         const trunkTex = treeType === 'fungal'
           ? (seedDef.fungal_stem_texture_url || seedDef.trunk_texture_url)
