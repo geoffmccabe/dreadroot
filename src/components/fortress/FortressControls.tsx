@@ -2715,6 +2715,7 @@ export function FirstPersonControls({
       {
         const riderFeetY = camera.position.y - playerHeight;
         let attachW: { id: string; position: THREE.Vector3 } | null = null;
+        let attachTop = 0;
         if (walapasRef?.current) {
           for (const w of walapasRef.current) {
             if (!w.isActive) continue;
@@ -2725,13 +2726,25 @@ export function FirstPersonControls({
             const dx = camera.position.x - w.position.x;
             const dz = camera.position.z - w.position.z;
             if (dx * dx + dz * dz > reach * reach) continue;
-            if (riderFeetY >= top - 0.3 && riderFeetY <= top + 1.0) { attachW = w; break; }
+            if (riderFeetY >= top - 0.3 && riderFeetY <= top + 1.0) { attachW = w; attachTop = top; break; }
           }
         }
         if (attachW) {
           if (currentWalapaIdRef.current === attachW.id) {
             camera.position.x += attachW.position.x - walapaLastPosRef.current.x;
             camera.position.z += attachW.position.z - walapaLastPosRef.current.z;
+          }
+          // Vertical ride: weld the rider directly onto the walapa's current
+          // (bobbing) top whenever they're resting or descending onto it — but
+          // NOT while rising from a jump (velocity.y > 0). This tracks the bob +
+          // hover exactly, so a rising body can't engulf the player ("head
+          // inside") and a moving/bobbing walapa can't drop them through. The old
+          // reliance on the one-frame-lagged collision support (above) was the
+          // sink / fall-through bug; this weld is authoritative for riding.
+          if (velocity.current.y <= 0 && riderFeetY <= attachTop + 0.3) {
+            camera.position.y = attachTop + playerHeight + SURFACE_EPS;
+            velocity.current.y = 0;
+            onGround.current = true;
           }
           currentWalapaIdRef.current = attachW.id;
           walapaLastPosRef.current.copy(attachW.position);
