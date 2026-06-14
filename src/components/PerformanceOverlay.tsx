@@ -265,6 +265,7 @@ export function PerformanceOverlay() {
   const handleCopy = () => {
     const issues = getIssues();
     const timestamp = new Date().toISOString();
+    const hw = diagnostics.getFrameWorkStats();
 
     let text = `=== DF (Data Flow) Performance Report ===
 Generated: ${timestamp}
@@ -282,6 +283,14 @@ FPS ANALYSIS
   Frame Time:     ${data.frameTime.toFixed(1)}ms (current)
   Max Frame:      ${data.maxFrameTime.toFixed(0)}ms
   Long Frames:    ${data.longFrames} (>33ms)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HEADROOM (CPU frame work — vsync-independent)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Avg CPU/frame:  ${hw.avgMs.toFixed(2)}ms
+  Max CPU/frame:  ${hw.maxMs.toFixed(2)}ms
+  Uncapped FPS:   ~${hw.uncappedFps} (1000 / avg work; CPU-bound estimate, ignores GPU)
+  60fps budget:   ${hw.budgetPct.toFixed(0)}% used  (lower = more headroom)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SYSTEM TIMING (ms per 100ms sample)

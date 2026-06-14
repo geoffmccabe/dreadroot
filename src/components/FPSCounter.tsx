@@ -153,15 +153,20 @@ export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdm
         const vz = Math.round(viewDir.z * 10) / 10;
         globalViewDir = { x: vx, y: vy, z: vz };
 
+        // Headroom: display FPS is vsync-capped, so 1000 / CPU-work-per-frame shows the true
+        // uncapped ceiling (how far above 60 we really are).
+        const workMs = diagnostics.lastFrameWorkMs;
+        const uncapped = workMs > 0 ? Math.round(1000 / workMs) : 0;
+        const capText = uncapped > 0 ? ` (~${uncapped} cap)` : '';
         const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
         if (isAdmin) {
           const fpsPvElement = document.getElementById('fps-pv-display');
           const vElement = document.getElementById('fps-v-display');
-          if (fpsPvElement) fpsPvElement.textContent = `FPS: ${displayFps}${dflowText} | P:[${px},${py},${pz}] `;
+          if (fpsPvElement) fpsPvElement.textContent = `FPS: ${displayFps}${capText}${dflowText} | P:[${px},${py},${pz}] `;
           if (vElement) vElement.textContent = `V:[${vx},${vy},${vz}]`;
         } else {
           const fpsElement = document.getElementById('fps-display');
-          if (fpsElement) fpsElement.textContent = `FPS: ${displayFps}${dflowText}`;
+          if (fpsElement) fpsElement.textContent = `FPS: ${displayFps}${capText}${dflowText}`;
         }
       }
       raf = requestAnimationFrame(tick);

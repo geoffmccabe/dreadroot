@@ -199,7 +199,16 @@ class DiagnosticsLogger {
   private frameTimeIndex = 0;
   longFrameCount = 0; // Frames > 33ms
   frameTimeMax = 0;
-  
+
+  // === CPU frame work (vsync-independent headroom) ===
+  // Main-thread time spent doing the frame's work, last ~100 frames. The displayed FPS is capped
+  // by vsync (60 on most monitors), but 1000 / avg-work reveals the TRUE uncapped ceiling — i.e.
+  // how much headroom is left before 60fps is at risk.
+  private frameWorks = new Float32Array(100);
+  private frameWorkIndex = 0;
+  frameWorkMax = 0;
+  lastFrameWorkMs = 0; // smoothed, updated every frame even when DF isn't recording (live overlay)
+
   // === Real-time metrics for overlay ===
   currentFps = 0;
   avgFrameTime = 0;
@@ -233,6 +242,30 @@ class DiagnosticsLogger {
     this.frameTimes[this.frameTimeIndex++ % 100] = ms;
     if (ms > 33) this.longFrameCount++;
     if (ms > this.frameTimeMax) this.frameTimeMax = ms;
+  }
+
+  // CPU main-thread time spent on the frame's work (independent of the vsync cap). 1000 / avg-work
+  // is the uncapped FPS ceiling, so it shows headroom above 60. lastFrameWorkMs updates even when
+  // DF isn't recording so the live overlay can always show it.
+  recordFrameWork(ms: number): void {
+    this.lastFrameWorkMs = this.lastFrameWorkMs > 0 ? this.lastFrameWorkMs * 0.9 + ms * 0.1 : ms;
+    if (!this.enabled) return;
+    this.frameWorks[this.frameWorkIndex++ % 100] = ms;
+    if (ms > this.frameWorkMax) this.frameWorkMax = ms;
+  }
+
+  // Headroom stats from the last ~100 recorded frames. uncappedFps = FPS if only this CPU work
+  // limited us (ignores GPU); budgetPct = share of the 16.7ms 60fps frame budget consumed.
+  getFrameWorkStats(): { avgMs: number; maxMs: number; uncappedFps: number; budgetPct: number } {
+    let sum = 0, count = 0;
+    for (let i = 0; i < 100; i++) { const v = this.frameWorks[i]; if (v > 0) { sum += v; count++; } }
+    const avgMs = count > 0 ? sum / count : 0;
+    return {
+      avgMs,
+      maxMs: this.frameWorkMax,
+      uncappedFps: avgMs > 0 ? Math.round(1000 / avgMs) : 0,
+      budgetPct: avgMs > 0 ? (avgMs / (1000 / 60)) * 100 : 0,
+    };
   }
 
   // === Stall diagnostics methods ===
@@ -467,6 +500,9 @@ class DiagnosticsLogger {
       this.frameTimeIndex = 0;
       this.longFrameCount = 0;
       this.frameTimeMax = 0;
+      this.frameWorks.fill(0);
+      this.frameWorkIndex = 0;
+      this.frameWorkMax = 0;
       this.startTime = performance.now();
       this.lastSampleTime = this.startTime;
       this.elapsedSeconds = 0;

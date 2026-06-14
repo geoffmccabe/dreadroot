@@ -1034,8 +1034,10 @@ export function useFortressFrameLoop({
   // Update vortax renderer
   vortaxRendererRef.current?.update(camera.position, delta);
 
-  // Record total frame time for diagnostics
-  const frameTime = performance.now() - frameStart;
-  diagnostics.recordFrameTime(frameTime);
+  // Record this frame's CPU work time as the HEADROOM metric (not the FPS frame-time — that's
+  // the real inter-frame delta recorded once at the top). 1000 / avg-work = the uncapped FPS
+  // ceiling, so we can see how far above the vsync-capped 60 we really are.
+  const frameWorkMs = performance.now() - frameStart;
+  diagnostics.recordFrameWork(frameWorkMs);
   });
 }
