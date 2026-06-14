@@ -20,7 +20,8 @@ import { useFrame, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { ShpiderDefinition, ShpiderInstance } from '../types';
 import { LEGS_PER_SHPIDER, SEGMENTS_PER_LEG, LEG_SEGMENT_THICKNESS } from '../constants';
-import { stepShpiderHopAI, getHopProgress, getCrawlProgress } from '../lib/hopAI';
+import { getHopProgress, getCrawlProgress } from '../lib/hopAI';
+import { stepShpiderAI } from '../ai/shpiderTree';
 import { getSegmentEndpoints } from '../lib/legGeometry';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
@@ -249,7 +250,7 @@ export function ShpiderRenderer({ shpidersRef, fragmentsRef, cameraRef, definiti
         : { x: playerX, y: playerY, z: playerZ };
 
       // === AI tick. Mutates position/rotation/surfaceNormal. ===
-      stepShpiderHopAI(s, { now, dt, playerX: target.x, playerY: target.y, playerZ: target.z, others: list });
+      stepShpiderAI(s, { now, dt, playerX: target.x, playerY: target.y, playerZ: target.z, others: list });
 
       // Crowd/stack checks read the shared enemy index (rebuilt each AI tick),
       // so no per-shpider grid sync is needed here (1-frame-stale, like shombie

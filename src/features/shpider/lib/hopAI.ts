@@ -61,7 +61,7 @@ function playHopSound(
   void playSpatialSound(finalUrl, dist, { baseVolume: HOP_BASE_VOLUME, playbackRate: SHPIDER_PITCH });
 }
 
-interface StepDeps {
+export interface StepDeps {
   playerX: number;
   playerY: number;
   playerZ: number;
@@ -128,15 +128,15 @@ function getSurfaceTangents(normal: THREE.Vector3, outA: THREE.Vector3, outB: TH
   outB.crossVectors(normal, outA).normalize();
 }
 
-/**
- * Advance one shpider for the current frame. Mutates instance fields.
- */
-export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
-  const { now, dt, playerX, playerY, playerZ } = deps;
-  const def = s.definition;
+// ────────────────────────────────────────────────────────────────────────────
+// Phase functions — the shpider's EXECUTION, split out of the monolithic step so
+// BOTH the legacy FSM orchestrator (below) AND the behavior tree (ai/shpiderTree)
+// call the exact same code in the exact same priority. One source of truth →
+// the two paths are behaviorally identical; the BT is pure re-orchestration.
+// ────────────────────────────────────────────────────────────────────────────
 
-  // ── Knockback decay. Bullet hits set s.velocity; here we integrate
-  //    it onto the position and decay over time (halflife ~0.25s).
+/** Knockback integration + decay (halflife ~0.25s). Always runs, every phase. */
+export function applyKnockback(s: ShpiderInstance, dt: number): void {
   if (s.velocity.x !== 0 || s.velocity.z !== 0) {
     s.position.x += s.velocity.x * dt;
     s.position.z += s.velocity.z * dt;
@@ -146,165 +146,167 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
     if (Math.abs(s.velocity.x) < 0.05) s.velocity.x = 0;
     if (Math.abs(s.velocity.z) < 0.05) s.velocity.z = 0;
   }
+}
 
-  // ── Gravity guard. After hops, shpiders may end up suspended in
-  //    mid-air. While idle/crawling, run them down until they hit
-  //    either a block top OR the world floor (y = 0).
-  if ((s.hop.phase === 'idle' || s.hop.phase === 'crawling')
-      && s.surfaceNormal.y > 0.9) {
-    const probedGround = findGroundY(s.position.x, s.position.y + 0.5, s.position.z, 64);
-    let supportY = probedGround === -Infinity ? WORLD_FLOOR_Y : probedGround;
-    // Jump/land on top of another enemy (shroomer/shombie) if it's higher.
-    if (s.velocity.y <= 0) {
-      const eTop = EnemyManager.getStandableTopNear(
-        s.position.x, s.position.z, s.position.y, 0.5, s.id,
-        (s.definition.body_size ?? 1) * (s.scale ?? 1) * 0.5,
-      );
-      if (eTop != null && eTop > supportY) supportY = eTop;
-    }
-    // Airborne if already above support OR carrying a positive upward
-    // impulse (grenade blast kick). Without the second clause an
-    // upward kick on a grounded shpider would be wiped in the same
-    // frame by the "clear residual" line below.
-    const airborne = (s.position.y - supportY > 0.05) || s.velocity.y > 0;
-    if (airborne) {
-      s.velocity.y -= FALL_GRAVITY * dt;
-      s.position.y += s.velocity.y * dt;
-      if (s.position.y <= supportY) {
-        // Hard landing (blast-fall / tree-drop) plays the ground-impact sound.
-        if (-s.velocity.y > GROUND_IMPACT_MIN_SPEED) {
-          playGroundImpact(s.position.x, supportY, s.position.z);
-        }
-        s.position.y = supportY;
-        s.velocity.y = 0;
-      }
-      return;
-    }
-    // Resting on support — clear any tiny residual downward velocity
-    // so the gravity term doesn't accumulate. Positive Y has been
-    // routed to the airborne branch above, so this only zeroes ≤0.
-    if (s.velocity.y < 0) s.velocity.y = 0;
+/**
+ * Gravity guard for grounded phases (idle/crawling on a flat-up surface). Runs
+ * an airborne shpider down to the nearest block top / enemy top / world floor.
+ * Returns TRUE if airborne this tick — the caller must then skip phase logic.
+ */
+export function gravityStep(s: ShpiderInstance, deps: StepDeps): boolean {
+  const { dt } = deps;
+  if (!((s.hop.phase === 'idle' || s.hop.phase === 'crawling') && s.surfaceNormal.y > 0.9)) {
+    return false;
   }
-
-  // ── IDLE: pick a target and decide whether to crawl or hop.
-  if (s.hop.phase === 'idle') {
-    // FSZ escape: a shpider knocked into the fortress safe zone (e.g. by a
-    // grenade) slowly walks to the nearest edge and out, every frame (ignores
-    // the hop throttle), instead of getting stuck inside.
-    if (isPointInFSZ(s.position.x, 0, s.position.z)) {
-      const dMinX = s.position.x - FSZ_MIN_X;
-      const dMaxX = FSZ_MAX_X - s.position.x;
-      const dMinZ = s.position.z - FSZ_MIN_Z;
-      const dMaxZ = FSZ_MAX_Z - s.position.z;
-      const minD = Math.min(dMinX, dMaxX, dMinZ, dMaxZ);
-      let dirX = 0, dirZ = 0;
-      if (minD === dMinX) dirX = -1;
-      else if (minD === dMaxX) dirX = 1;
-      else if (minD === dMinZ) dirZ = -1;
-      else dirZ = 1;
-      const step = FSZ_ESCAPE_SPEED * dt;
-      s.position.x += dirX * step;
-      s.position.z += dirZ * step;
-      s.rotation = Math.atan2(dirX, dirZ);
-      return;
+  const probedGround = findGroundY(s.position.x, s.position.y + 0.5, s.position.z, 64);
+  let supportY = probedGround === -Infinity ? WORLD_FLOOR_Y : probedGround;
+  // Jump/land on top of another enemy (shroomer/shombie) if it's higher.
+  if (s.velocity.y <= 0) {
+    const eTop = EnemyManager.getStandableTopNear(
+      s.position.x, s.position.z, s.position.y, 0.5, s.id,
+      (s.definition.body_size ?? 1) * (s.scale ?? 1) * 0.5,
+    );
+    if (eTop != null && eTop > supportY) supportY = eTop;
+  }
+  // Airborne if above support OR carrying a positive upward impulse (blast kick).
+  const airborne = (s.position.y - supportY > 0.05) || s.velocity.y > 0;
+  if (airborne) {
+    s.velocity.y -= FALL_GRAVITY * dt;
+    s.position.y += s.velocity.y * dt;
+    if (s.position.y <= supportY) {
+      // Hard landing (blast-fall / tree-drop) plays the ground-impact sound.
+      if (-s.velocity.y > GROUND_IMPACT_MIN_SPEED) {
+        playGroundImpact(s.position.x, supportY, s.position.z);
+      }
+      s.position.y = supportY;
+      s.velocity.y = 0;
     }
-    if (now < s.hop.nextHopAt) return;
+    return true;
+  }
+  // Resting on support — clear tiny residual downward velocity.
+  if (s.velocity.y < 0) s.velocity.y = 0;
+  return false;
+}
 
-    // Stacking: shpiders carrying another on top freeze. Shpiders
-    // at the top of a stack hop 20× less often (delay the schedule).
-    const stack = analyzeStack(s, deps.others);
-    if (stack.hasAbove) {
-      // Frozen — postpone the next attempt so we don't burn CPU.
+/** FSZ escape: a shpider knocked into the fortress safe zone walks to the
+ *  nearest edge and out (ignores the hop throttle). */
+export function escapeFSZ(s: ShpiderInstance, deps: StepDeps): void {
+  const { dt } = deps;
+  const dMinX = s.position.x - FSZ_MIN_X;
+  const dMaxX = FSZ_MAX_X - s.position.x;
+  const dMinZ = s.position.z - FSZ_MIN_Z;
+  const dMaxZ = FSZ_MAX_Z - s.position.z;
+  const minD = Math.min(dMinX, dMaxX, dMinZ, dMaxZ);
+  let dirX = 0, dirZ = 0;
+  if (minD === dMinX) dirX = -1;
+  else if (minD === dMaxX) dirX = 1;
+  else if (minD === dMinZ) dirZ = -1;
+  else dirZ = 1;
+  const step = FSZ_ESCAPE_SPEED * dt;
+  s.position.x += dirX * step;
+  s.position.z += dirZ * step;
+  s.rotation = Math.atan2(dirX, dirZ);
+}
+
+/**
+ * IDLE decision: respect the hop throttle + stacking rules, then either set up a
+ * short stalking crawl (60%) or pounce immediately (40%).
+ */
+export function decideIdleAction(s: ShpiderInstance, deps: StepDeps): void {
+  const { now, playerX, playerY, playerZ } = deps;
+  if (now < s.hop.nextHopAt) return;
+
+  // Stacking: shpiders carrying another on top freeze; tops of a column hop 20× less.
+  const stack = analyzeStack(s, deps.others);
+  if (stack.hasAbove) {
+    s.hop.nextHopAt = now + 1500;
+    return;
+  }
+  if (stack.count > 1) {
+    if (Math.random() >= 1 / 20) {
       s.hop.nextHopAt = now + 1500;
       return;
     }
-    if (stack.count > 1) {
-      // I'm on top of (or in the middle of) a column. Hop 20× less often.
-      if (Math.random() >= 1 / 20) {
-        s.hop.nextHopAt = now + 1500;
-        return;
-      }
+  }
+
+  // 60% short stalking crawl first; 40% straight pounce. Randomness so groups
+  // don't move in lock-step.
+  const shouldCrawl = Math.random() < 0.6;
+  if (shouldCrawl) {
+    getSurfaceTangents(s.surfaceNormal, _tangentA, _tangentB);
+
+    // Direction in tangent plane: 70% biased toward player, 30% random.
+    let dirA: number;
+    let dirB: number;
+    if (Math.random() < 0.7) {
+      _toPlayer.set(playerX - s.position.x, playerY - s.position.y, playerZ - s.position.z);
+      const da = _toPlayer.dot(_tangentA);
+      const db = _toPlayer.dot(_tangentB);
+      const m = Math.hypot(da, db) || 1;
+      const jitter = (Math.random() - 0.5) * 1.0;
+      const c = Math.cos(jitter);
+      const sn = Math.sin(jitter);
+      dirA = (da / m) * c - (db / m) * sn;
+      dirB = (da / m) * sn + (db / m) * c;
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      dirA = Math.cos(angle);
+      dirB = Math.sin(angle);
     }
 
-    // 60% of the time, do a short stalking crawl first; 40% pounce
-    // straight away. Randomness so groups don't move in lock-step.
-    const shouldCrawl = Math.random() < 0.6;
-    if (shouldCrawl) {
-      getSurfaceTangents(s.surfaceNormal, _tangentA, _tangentB);
+    const duration = CRAWL_MIN_MS + Math.random() * (CRAWL_MAX_MS - CRAWL_MIN_MS);
+    const distance = (CRAWL_SPEED * duration) / 1000;
+    let endX = s.position.x + (_tangentA.x * dirA + _tangentB.x * dirB) * distance;
+    let endZ = s.position.z + (_tangentA.z * dirA + _tangentB.z * dirB) * distance;
 
-      // Direction in tangent plane: 70% biased toward player, 30% random.
-      let dirA: number;
-      let dirB: number;
-      if (Math.random() < 0.7) {
-        _toPlayer.set(playerX - s.position.x, playerY - s.position.y, playerZ - s.position.z);
-        const da = _toPlayer.dot(_tangentA);
-        const db = _toPlayer.dot(_tangentB);
-        const m = Math.hypot(da, db) || 1;
-        const jitter = (Math.random() - 0.5) * 1.0;
-        const c = Math.cos(jitter);
-        const sn = Math.sin(jitter);
-        dirA = (da / m) * c - (db / m) * sn;
-        dirB = (da / m) * sn + (db / m) * c;
-      } else {
-        const angle = Math.random() * Math.PI * 2;
-        dirA = Math.cos(angle);
-        dirB = Math.sin(angle);
-      }
-
-      const duration = CRAWL_MIN_MS + Math.random() * (CRAWL_MAX_MS - CRAWL_MIN_MS);
-      const distance = (CRAWL_SPEED * duration) / 1000;
-      let endX = s.position.x + (_tangentA.x * dirA + _tangentB.x * dirB) * distance;
-      let endZ = s.position.z + (_tangentA.z * dirA + _tangentB.z * dirB) * distance;
-
-      // Anti-overlap: if the crawl destination would land on another
-      // shpider, shorten it until it doesn't. Up to 4 retries.
-      let retries = 4;
-      while (retries-- > 0 && isTooCrowded(endX, endZ, s, deps.others)) {
-        endX = (endX + s.position.x) * 0.5;
-        endZ = (endZ + s.position.z) * 0.5;
-      }
-      // Fortress Safe Zone: collapse any crawl endpoint that lands
-      // inside the FSZ back to the shpider's current position. If
-      // the shpider is already outside the FSZ and the crawl would
-      // breach it, this effectively cancels the crawl this tick.
-      if (isPointInFSZ(endX, 0, endZ)) {
-        endX = s.position.x;
-        endZ = s.position.z;
-      }
-
-      s.hop.phase = 'crawling';
-      s.hop.crawlStartAt = now;
-      s.hop.crawlDurationMs = duration;
-      s.hop.crawlStartX = s.position.x;
-      s.hop.crawlStartZ = s.position.z;
-      s.hop.crawlEndX = endX;
-      s.hop.crawlEndZ = endZ;
-
-      // Face crawl direction so legs orient.
-      const fdx = endX - s.position.x;
-      const fdz = endZ - s.position.z;
-      if (fdx !== 0 || fdz !== 0) s.rotation = Math.atan2(fdx, fdz);
-      return;
+    // Anti-overlap: shorten the crawl if it would land on another shpider.
+    let retries = 4;
+    while (retries-- > 0 && isTooCrowded(endX, endZ, s, deps.others)) {
+      endX = (endX + s.position.x) * 0.5;
+      endZ = (endZ + s.position.z) * 0.5;
+    }
+    // Fortress Safe Zone: cancel any crawl endpoint that would breach the FSZ.
+    if (isPointInFSZ(endX, 0, endZ)) {
+      endX = s.position.x;
+      endZ = s.position.z;
     }
 
-    // Skip straight to a pounce.
+    s.hop.phase = 'crawling';
+    s.hop.crawlStartAt = now;
+    s.hop.crawlDurationMs = duration;
+    s.hop.crawlStartX = s.position.x;
+    s.hop.crawlStartZ = s.position.z;
+    s.hop.crawlEndX = endX;
+    s.hop.crawlEndZ = endZ;
+
+    // Face crawl direction so legs orient.
+    const fdx = endX - s.position.x;
+    const fdz = endZ - s.position.z;
+    if (fdx !== 0 || fdz !== 0) s.rotation = Math.atan2(fdx, fdz);
+    return;
+  }
+
+  // Skip straight to a pounce.
+  launchHop(s, deps);
+}
+
+/** CRAWLING: slow linear lerp along the tangent plane; pounce when complete. */
+export function continueCrawl(s: ShpiderInstance, deps: StepDeps): void {
+  const { now } = deps;
+  const t = Math.min(1, (now - s.hop.crawlStartAt) / s.hop.crawlDurationMs);
+  s.position.x = s.hop.crawlStartX + (s.hop.crawlEndX - s.hop.crawlStartX) * t;
+  s.position.z = s.hop.crawlStartZ + (s.hop.crawlEndZ - s.hop.crawlStartZ) * t;
+  if (t >= 1) {
+    // Crawl done → pounce immediately.
     launchHop(s, deps);
-    return;
   }
+}
 
-  // ── CRAWLING: slow linear lerp along tangent plane.
-  if (s.hop.phase === 'crawling') {
-    const t = Math.min(1, (now - s.hop.crawlStartAt) / s.hop.crawlDurationMs);
-    s.position.x = s.hop.crawlStartX + (s.hop.crawlEndX - s.hop.crawlStartX) * t;
-    s.position.z = s.hop.crawlStartZ + (s.hop.crawlEndZ - s.hop.crawlStartZ) * t;
-    if (t >= 1) {
-      // Crawl done → pounce immediately.
-      launchHop(s, deps);
-    }
-    return;
-  }
-
-  // ── HOPPING: parabolic arc.
+/** HOPPING: parabolic arc; on landing snap the surface normal, wall-attach,
+ *  reschedule the next hop. */
+export function continueHop(s: ShpiderInstance, deps: StepDeps): void {
+  const { now } = deps;
+  const def = s.definition;
   const t = Math.min(1, (now - s.hop.hopStartAt) / s.hop.hopDurationMs);
   s.position.x = s.hop.startX + (s.hop.endX - s.hop.startX) * t;
   s.position.z = s.hop.startZ + (s.hop.endZ - s.hop.startZ) * t;
@@ -317,10 +319,8 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
     s.position.z = s.hop.endZ;
     s.surfaceNormal.set(s.hop.endNormalX, s.hop.endNormalY, s.hop.endNormalZ);
 
-    // Wall-attach: if we ended up next to a tree trunk (or any solid
-    // wall), override the surfaceNormal to face away from that wall
-    // so the shpider becomes a wall-crawler. From there, the existing
-    // crawl logic naturally moves up the trunk toward the player.
+    // Wall-attach: snap to an adjacent trunk/wall so the shpider becomes a
+    // wall-crawler that climbs toward the player.
     if (findAdjacentWall(s.position.x, s.position.y, s.position.z, _normalScratch)) {
       s.surfaceNormal.copy(_normalScratch);
     }
@@ -330,6 +330,34 @@ export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
                     + Math.random() * (def.hop_interval_max_ms - def.hop_interval_min_ms);
     s.velocity.set(0, 0, 0);
   }
+}
+
+/**
+ * Advance one shpider for the current frame. Mutates instance fields.
+ *
+ * LEGACY orchestrator (fallback path). The behavior tree in ai/shpiderTree.ts
+ * drives these SAME phase functions in the SAME priority, so the two are
+ * behaviorally identical — this stays as a one-flag rollback.
+ */
+export function stepShpiderHopAI(s: ShpiderInstance, deps: StepDeps): void {
+  applyKnockback(s, deps.dt);
+  if (gravityStep(s, deps)) return;
+
+  if (s.hop.phase === 'idle') {
+    if (isPointInFSZ(s.position.x, 0, s.position.z)) {
+      escapeFSZ(s, deps);
+      return;
+    }
+    decideIdleAction(s, deps);
+    return;
+  }
+
+  if (s.hop.phase === 'crawling') {
+    continueCrawl(s, deps);
+    return;
+  }
+
+  continueHop(s, deps);
 }
 
 /**
