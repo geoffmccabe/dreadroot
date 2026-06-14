@@ -22,6 +22,7 @@ import {
 import type { ShtickmanInstance } from '../types';
 import {
   type ShtickmanStepDeps,
+  applyKnockbackDecay,
   madExpiryCleanup, shakeMad, maybePickTarget, reachedTree, arriveAndWait, patrolWalk,
   stepShtickmanLegacy,
 } from '../lib/patrolAI';
@@ -106,6 +107,7 @@ const ctx: ShtickmanBTContext = {
 /** BT-driven shtickman step. Mad-expiry cleanup runs first (pre-step), then the
  *  tree picks shake vs the patrol pipeline. */
 export function stepShtickmanBT(s: ShtickmanInstance, deps: ShtickmanStepDeps): void {
+  if (applyKnockbackDecay(s, deps)) return; // flung by a blast — skip mad + walk
   madExpiryCleanup(s, deps);
   ctx.s = s;
   ctx.deps = deps;

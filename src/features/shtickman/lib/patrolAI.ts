@@ -54,6 +54,30 @@ export function madExpiryCleanup(s: ShtickmanInstance, deps: ShtickmanStepDeps):
   }
 }
 
+/**
+ * Blast knockback (pre-step): while the knockback window is open, fling the
+ * shtickman by its (decaying) velocity + gravity and skip the walk, so a grenade
+ * push actually displaces it instead of being overwritten by the next walk
+ * frame. Returns true while active. (Fixes "blasts don't affect shtickmen".)
+ */
+export function applyKnockbackDecay(s: ShtickmanInstance, deps: ShtickmanStepDeps): boolean {
+  if (!s.knockbackUntil || deps.now >= s.knockbackUntil) return false;
+  const dt = deps.deltaTime;
+  if (s.position.y > 0) s.velocity.y -= SHTICKMAN_GRAVITY * dt; // blast tilt launches it up
+  s.position.x += s.velocity.x * dt;
+  s.position.y += s.velocity.y * dt;
+  s.position.z += s.velocity.z * dt;
+  if (s.position.y < 0) {
+    s.position.y = 0;
+    s.velocity.y = 0;
+  }
+  // Decay the horizontal fling (halflife ~0.18s) so it eases to a stop.
+  const decay = Math.pow(0.5, dt * 4);
+  s.velocity.x *= decay;
+  s.velocity.z *= decay;
+  return true;
+}
+
 /** Still-mad shake: jitter position + twist around the captured base pose. */
 export function shakeMad(s: ShtickmanInstance): void {
   s.position.x = (s.madBaseX ?? s.position.x) + (Math.random() - 0.5) * SHTICKMAN_SHAKE_POS;
@@ -262,6 +286,7 @@ export function patrolWalk(s: ShtickmanInstance, deps: ShtickmanStepDeps): void 
  * SAME priority, so the two are behaviorally identical.
  */
 export function stepShtickmanLegacy(s: ShtickmanInstance, deps: ShtickmanStepDeps): void {
+  if (applyKnockbackDecay(s, deps)) return; // flung by a blast — skip mad + walk
   if (s.madUntil) {
     if (deps.now < s.madUntil) {
       shakeMad(s);

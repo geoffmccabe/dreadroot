@@ -66,6 +66,11 @@ export interface ShtickmanInstance {
   madBaseZ?: number;
   madBaseRot?: number;
 
+  // Blast knockback window (set by a grenade/flame). While now < knockbackUntil
+  // the shtickman is flung by its velocity (decaying) and skips the walk, so the
+  // push actually moves it instead of being overwritten by the next walk frame.
+  knockbackUntil?: number;
+
   // Pathfinding state
   currentPath: THREE.Vector3[] | null; // A* path waypoints
   currentPathIndex: number;            // Current waypoint index in path

@@ -225,6 +225,13 @@ export function useShtickmanSystem({
       } else {
         shtickman.velocity.y += 2;
       }
+      // Open a knockback window so the walk doesn't immediately overwrite the
+      // impulse — the shtickman is flung + decelerates over this window, then
+      // resumes patrolling. (Fixes "grenade blasts don't affect shtickmen".)
+      shtickman.knockbackUntil = Date.now() + 500;
+      // A blast overrides any in-progress "got mad" shake; clear it so the
+      // shake's restore-to-base doesn't yank the shtickman back after the fling.
+      shtickman.madUntil = undefined;
     }
 
     if (shtickman.currentHealth <= 0) {
