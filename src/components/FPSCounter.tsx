@@ -111,76 +111,64 @@ interface FPSCounterProps {
 export type BlockDeleteHandler = (blockId: string, blockType: string, ownerId: string) => Promise<boolean>;
 
 export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdmin = false }, ref) => {
-  const frameCountRef = useRef(0);
-  const lastTimeRef = useRef(performance.now());
-  const lastFrameTimeRef = useRef(performance.now());
-  const instantFpsRef = useRef(0);
   const { camera } = useThree();
-  const viewDirRef = useRef(new THREE.Vector3());
 
-  // Expose update function instead of using useFrame
-  useImperativeHandle(ref, () => ({
-    update: () => {
-      const currentTime = performance.now();
+  // The consolidated game frame-loop still calls .update() — keep it a harmless no-op. FPS is now
+  // measured by a dedicated requestAnimationFrame loop below that counts REAL browser frames. The
+  // previous useFrame-driven count read far too low (showed ~7 at 60fps).
+  useImperativeHandle(ref, () => ({ update: () => {} }), []);
 
-      // Track instantaneous FPS (1 / frame time) - not limited by vsync averaging
-      const frameTime = currentTime - lastFrameTimeRef.current;
-      lastFrameTimeRef.current = currentTime;
-      if (frameTime > 0) {
-        // Smooth instantaneous FPS with simple moving average to reduce jitter
-        const instantFps = 1000 / frameTime;
-        instantFpsRef.current = Math.round(instantFpsRef.current * 0.7 + instantFps * 0.3);
-      }
+  useEffect(() => {
+    let raf = 0;
+    let frames = 0;
+    let windowStart = performance.now();
+    let lastFrame = windowStart;
+    let instant = 0;
+    const viewDir = new THREE.Vector3();
 
-      frameCountRef.current++;
-      const elapsed = currentTime - lastTimeRef.current;
+    const tick = () => {
+      const now = performance.now();
+      const ft = now - lastFrame;
+      lastFrame = now;
+      // Smoothed instantaneous FPS (1 / frame time) to capture peaks between window updates.
+      if (ft > 0) instant = Math.round(instant * 0.7 + (1000 / ft) * 0.3);
+      frames++;
 
-      // Update display every 200ms (was 500ms) for more responsive FPS reading
-      if (elapsed >= 200) {
-        globalFps = Math.round((frameCountRef.current / elapsed) * 1000);
-        frameCountRef.current = 0;
-        lastTimeRef.current = currentTime;
+      // Refresh the readout every 500ms: average FPS over the window = frames / elapsed.
+      const elapsed = now - windowStart;
+      if (elapsed >= 500) {
+        const avg = Math.round((frames / elapsed) * 1000);
+        const displayFps = Math.max(avg, instant);
+        globalFps = avg;
+        frames = 0;
+        windowStart = now;
 
-        // Update player position
-        globalPlayerPos = {
-          x: Math.round(camera.position.x),
-          y: Math.round(camera.position.y),
-          z: Math.round(camera.position.z)
-        };
+        const px = Math.round(camera.position.x);
+        const py = Math.round(camera.position.y);
+        const pz = Math.round(camera.position.z);
+        globalPlayerPos = { x: px, y: py, z: pz };
+        camera.getWorldDirection(viewDir);
+        const vx = Math.round(viewDir.x * 10) / 10;
+        const vy = Math.round(viewDir.y * 10) / 10;
+        const vz = Math.round(viewDir.z * 10) / 10;
+        globalViewDir = { x: vx, y: vy, z: vz };
 
-        // Update view direction (where camera is looking)
-        camera.getWorldDirection(viewDirRef.current);
-        globalViewDir = {
-          x: Math.round(viewDirRef.current.x * 10) / 10,
-          y: Math.round(viewDirRef.current.y * 10) / 10,
-          z: Math.round(viewDirRef.current.z * 10) / 10
-        };
-
-        // Update DOM directly for better performance
-        // Show max of average and instantaneous FPS to capture true peak performance
-        const displayFps = Math.max(globalFps, instantFpsRef.current);
-
+        const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
         if (isAdmin) {
           const fpsPvElement = document.getElementById('fps-pv-display');
           const vElement = document.getElementById('fps-v-display');
-          const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
-
-          if (fpsPvElement) {
-            fpsPvElement.textContent = `FPS: ${displayFps}${dflowText} | P:[${globalPlayerPos.x},${globalPlayerPos.y},${globalPlayerPos.z}] `;
-          }
-          if (vElement) {
-            vElement.textContent = `V:[${globalViewDir.x},${globalViewDir.y},${globalViewDir.z}]`;
-          }
+          if (fpsPvElement) fpsPvElement.textContent = `FPS: ${displayFps}${dflowText} | P:[${px},${py},${pz}] `;
+          if (vElement) vElement.textContent = `V:[${vx},${vy},${vz}]`;
         } else {
           const fpsElement = document.getElementById('fps-display');
-          if (fpsElement) {
-            const dflowText = diagnostics.enabled ? ` DFLOW:${diagnostics.elapsedSeconds}` : '';
-            fpsElement.textContent = `FPS: ${displayFps}${dflowText}`;
-          }
+          if (fpsElement) fpsElement.textContent = `FPS: ${displayFps}${dflowText}`;
         }
       }
-    }
-  }), [camera, isAdmin]);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isAdmin, camera]);
 
   return null;
 });
