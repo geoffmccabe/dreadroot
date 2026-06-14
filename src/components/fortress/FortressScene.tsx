@@ -25,7 +25,7 @@ import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { FirstPersonArms } from '@/components/FirstPersonArms';
 import { SceneReflections } from '@/components/SceneReflections';
-import { FPSCounter, FPSCounterHandle } from '@/components/FPSCounter';
+import { FPSCounter, FPSCounterHandle, RenderTimer } from '@/components/FPSCounter';
 import { WispBlock } from '@/components/WispBlock';
 
 import { FirstPersonControls } from './FortressControls';
@@ -1823,6 +1823,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       /> */}
       
       <FPSCounter ref={fpsCounterRef} isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
+      <RenderTimer />
 
       {/* Rainbow highlight for Block Inspector selected block */}
       <BlockInspectorHighlight />

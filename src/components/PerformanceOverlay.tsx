@@ -266,6 +266,7 @@ export function PerformanceOverlay() {
     const issues = getIssues();
     const timestamp = new Date().toISOString();
     const hw = diagnostics.getFrameWorkStats();
+    const rt = diagnostics.getRenderTimingStats();
 
     let text = `=== DF (Data Flow) Performance Report ===
 Generated: ${timestamp}
@@ -311,6 +312,8 @@ GPU & RENDERING
   Textures:       ${data.textures}
   Visible Blocks: ${data.visibleBlocks}
   Particles:      ${data.particleCount}
+  Render submit:  ${rt.submitAvgMs.toFixed(2)}ms avg, ${rt.submitMaxMs.toFixed(2)}ms max  (CPU cost of issuing the draw calls)
+  GPU time:       ${rt.gpuSupported ? `${rt.gpuMs.toFixed(2)}ms (real GPU execution)` : 'unavailable (timer queries disabled by this browser/GPU)'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COLLISION & SPATIAL

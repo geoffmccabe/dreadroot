@@ -181,6 +181,49 @@ export const FPSCounter = forwardRef<FPSCounterHandle, FPSCounterProps>(({ isAdm
 
 FPSCounter.displayName = 'FPSCounter';
 
+// Wraps the WebGL renderer to time the render itself — the game-loop timer ends BEFORE r3f's
+// gl.render runs, so render cost was previously unmeasured. The real render ALWAYS executes; all
+// timing is best-effort inside try/catch so it can never break rendering. Where supported, also
+// reads a true GPU timer query (EXT_disjoint_timer_query_webgl2).
+export function RenderTimer() {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const renderer: any = gl;
+    const orig = renderer?.render?.bind(renderer);
+    if (!orig) return;
+    let ctx: any = null;
+    try { ctx = renderer.getContext?.(); } catch { ctx = null; }
+    let ext: any = null;
+    try { ext = ctx?.getExtension?.('EXT_disjoint_timer_query_webgl2') || null; } catch { ext = null; }
+    let pending: any = null;
+    renderer.render = function (scene: any, camera: any) {
+      let started = false;
+      try {
+        if (ext && ctx && !pending) {
+          const q = ctx.createQuery();
+          if (q) { ctx.beginQuery(ext.TIME_ELAPSED_EXT, q); pending = q; started = true; }
+        }
+      } catch { started = false; }
+      const t0 = performance.now();
+      orig(scene, camera); // the real render — ALWAYS runs, outside any try
+      diagnostics.recordRenderSubmit(performance.now() - t0);
+      try { if (started && ext && ctx) ctx.endQuery(ext.TIME_ELAPSED_EXT); } catch {}
+      try {
+        if (pending && !started && ext && ctx) {
+          const avail = ctx.getQueryParameter(pending, ctx.QUERY_RESULT_AVAILABLE);
+          const disjoint = ctx.getParameter(ext.GPU_DISJOINT_EXT);
+          if (avail) {
+            if (!disjoint) { const ns = ctx.getQueryParameter(pending, ctx.QUERY_RESULT); diagnostics.recordGpuMs(ns / 1e6); }
+            ctx.deleteQuery(pending); pending = null;
+          }
+        }
+      } catch { /* ignore — render already ran */ }
+    };
+    return () => { try { renderer.render = orig; } catch { /* noop */ } };
+  }, [gl]);
+  return null;
+}
+
 interface FPSDisplayProps {
   isAdmin?: boolean;
   userRoles?: string[];

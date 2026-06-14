@@ -220,6 +220,29 @@ class DiagnosticsLogger {
   longFrameGcCount = 0; // stall frames (>50ms) that coincided with a GC
   stallEvents: { atSec: number; ms: number; gcMB: number }[] = []; // worst recent stall frames
 
+  // === Render-submit + GPU timing ===
+  // frameWork (above) ends BEFORE r3f's gl.render, so it misses the render cost. RenderTimer wraps
+  // gl.render to capture the CPU submit time, and (where supported) a real GPU timer query.
+  private renderSubmits = new Float32Array(100);
+  private renderSubmitIndex = 0;
+  renderSubmitMax = 0;
+  lastRenderSubmitMs = 0;
+  gpuMs = 0;            // last GPU execution time (ms) from a timer query
+  gpuSupported = false; // true once a GPU timer query has returned a result
+
+  recordRenderSubmit(ms: number): void {
+    this.lastRenderSubmitMs = this.lastRenderSubmitMs > 0 ? this.lastRenderSubmitMs * 0.9 + ms * 0.1 : ms;
+    if (!this.enabled) return;
+    this.renderSubmits[this.renderSubmitIndex++ % 100] = ms;
+    if (ms > this.renderSubmitMax) this.renderSubmitMax = ms;
+  }
+  recordGpuMs(ms: number): void { this.gpuMs = ms; this.gpuSupported = true; }
+  getRenderTimingStats(): { submitAvgMs: number; submitMaxMs: number; gpuMs: number; gpuSupported: boolean } {
+    let sum = 0, count = 0;
+    for (let i = 0; i < 100; i++) { const v = this.renderSubmits[i]; if (v > 0) { sum += v; count++; } }
+    return { submitAvgMs: count > 0 ? sum / count : 0, submitMaxMs: this.renderSubmitMax, gpuMs: this.gpuMs, gpuSupported: this.gpuSupported };
+  }
+
   // === Real-time metrics for overlay ===
   currentFps = 0;
   avgFrameTime = 0;
@@ -545,6 +568,9 @@ class DiagnosticsLogger {
       this.gcMaxFreedMB = 0;
       this.longFrameGcCount = 0;
       this.stallEvents = [];
+      this.renderSubmits.fill(0);
+      this.renderSubmitIndex = 0;
+      this.renderSubmitMax = 0;
       this.startTime = performance.now();
       this.lastSampleTime = this.startTime;
       this.elapsedSeconds = 0;
