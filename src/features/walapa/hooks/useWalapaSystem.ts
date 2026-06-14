@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import type { WalapaDefinition, WalapaInstance } from '../types';
+import { getTierDimensions } from '../types';
 import {
   MAX_WALAPAS_TOTAL,
   WALAPA_BASE_SPEED,
@@ -491,11 +492,17 @@ export function useWalapaSystem({
           // (snapshot y is eye level). Beside you — not on your face — and low
           // enough that its top is at jump height so you can hop on and ride.
           const fx = -Math.sin(pl.yaw), fz = -Math.cos(pl.yaw);
+          // Offset by the walapa's BODY half-extent (not just its center) plus a
+          // gap, so a big creature lands genuinely BESIDE the player — never
+          // sprawled over / around them. CURIOUS_OFFSET_DIST (3) alone was less
+          // than the body half-size, so the walapa came down on top of you.
+          const wd = getTierDimensions(walapa.definition.tier);
+          const clearDist = Math.max(wd.length, wd.width) * 0.5 * (walapa.scale ?? 1) + CURIOUS_OFFSET_DIST;
           if (!walapa.curiousTarget) walapa.curiousTarget = new THREE.Vector3();
           walapa.curiousTarget.set(
-            pl.x + fx * CURIOUS_OFFSET_DIST,
+            pl.x + fx * clearDist,
             pl.y - PLAYER_EYE_HEIGHT,
-            pl.z + fz * CURIOUS_OFFSET_DIST,
+            pl.z + fz * clearDist,
           );
         }
       }
