@@ -7,7 +7,6 @@ import {
   SPAWN_MIN_DISTANCE,
   SPAWN_MAX_DISTANCE,
   EXISTENCE_CHECK_INTERVAL_MS,
-  SHTICKMAN_GRAVITY,
   SHTICKMAN_SCALE_VARIATION,
   ROAR_CHANCE,
   ROAR_CHECK_INTERVAL_MS,
@@ -21,37 +20,16 @@ import { playSpatialSound } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHTICKMAN_HITBOX_RADIUS } from '../constants';
-import { pathfindingService } from '@/lib/pathfinding';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import type { PlantedTree } from '@/features/trees/types';
+import { stepShtickmanAI } from '../ai/shtickmanTree';
+import { type ShtickmanStepDeps, PATHFIND_INTERVAL_MS } from '../lib/patrolAI';
 
 // Minimum tree tier for patrol targets
 const MIN_PATROL_TREE_TIER = 5;
 
-// How often to recalculate path (ms)
-const PATHFIND_INTERVAL_MS = 1500; // More frequent recalculation for better navigation
-
-// Shtickmen wander tree-to-tree across a huge world. Pathing all the way to a
-// distant tree is wasteful — A* overruns its iteration cap, fails, and retries
-// every cycle (the CPU hog). Instead we only path this far ahead toward the
-// target each cycle: a small, cheap local search that still dodges trunks and
-// branches. Each re-path advances the horizon, so they reach the tree anyway.
-const PATHFIND_HORIZON = 100; // blocks — large enough to route around big trees
-
-// How close to waypoint before moving to next (larger for grid size 2)
-const WAYPOINT_REACH_DISTANCE = 3.0;
-
-// How close to tree to consider "touched"
-const TREE_TOUCH_DISTANCE = 5.0;
-
-// Time to wait at tree before picking next (ms)
-const TREE_WAIT_TIME_MS = 2000;
-
-// "Got mad" shake reaction when shot: shake for this long, jittering position +
-// rotation around the pose at the moment of the hit, then resume walking.
+// "Got mad" shake reaction when shot: shake around the hit pose for this long.
 const SHTICKMAN_MAD_MS = 1200;
-const SHTICKMAN_SHAKE_POS = 0.5;   // horizontal jitter (blocks)
-const SHTICKMAN_SHAKE_ROT = 0.35;  // twist jitter (radians)
 
 // Shtickmen are heavier-footed: blasts (grenades) move them only this fraction
 // of what other creatures take.
@@ -311,245 +289,19 @@ export function useShtickmanSystem({
    * Movement update - patrol between trees using pathfinding
    */
   const updateMovement = useCallback((deltaTime: number, _playerPosition: THREE.Vector3) => {
-    const now = Date.now();
-
+    // Build the shared per-frame deps once; every shtickman steps on the same
+    // behavior-tree runtime (ai/shtickmanTree). The decision logic + execution
+    // live in lib/patrolAI; the hook just supplies the game services + loops.
+    const deps: ShtickmanStepDeps = {
+      now: Date.now(),
+      deltaTime,
+      shtickmenRef,
+      pickRandomPatrolTree,
+      isPositionBlocked,
+    };
     for (const shtickman of shtickmenRef.current) {
       if (!shtickman.isActive) continue;
-
-      // "Got mad" shake: jitter position + twist around the captured base pose,
-      // skipping the walk; when it passes, restore the pose and fall through.
-      if (shtickman.madUntil) {
-        if (now < shtickman.madUntil) {
-          shtickman.position.x = (shtickman.madBaseX ?? shtickman.position.x) + (Math.random() - 0.5) * SHTICKMAN_SHAKE_POS;
-          shtickman.position.z = (shtickman.madBaseZ ?? shtickman.position.z) + (Math.random() - 0.5) * SHTICKMAN_SHAKE_POS;
-          shtickman.rotationY = (shtickman.madBaseRot ?? shtickman.rotationY) + (Math.random() - 0.5) * SHTICKMAN_SHAKE_ROT;
-          continue;
-        }
-        if (shtickman.madBaseX !== undefined) shtickman.position.x = shtickman.madBaseX;
-        if (shtickman.madBaseZ !== undefined) shtickman.position.z = shtickman.madBaseZ;
-        if (shtickman.madBaseRot !== undefined) shtickman.rotationY = shtickman.madBaseRot;
-        shtickman.madUntil = undefined;
-      }
-
-      const bodyHeight = shtickman.heightBlocks * shtickman.scale;
-      const entityRadius = bodyHeight * 0.06; // Hip width ratio
-
-      // Check if we need a new target tree
-      if (now >= shtickman.nextTargetAt) {
-        const targetTree = pickRandomPatrolTree(shtickman.targetTreeId);
-        if (targetTree) {
-          shtickman.targetTreeId = targetTree.id;
-          shtickman.targetPos.set(targetTree.base_x, 0, targetTree.base_z);
-          shtickman.currentPath = null; // Force pathfind
-          shtickman.currentPathIndex = 0;
-          shtickman.lastPathfindAt = 0;
-        }
-        // Set next target time far in future (will be reset when reaching tree)
-        shtickman.nextTargetAt = now + 60000;
-      }
-
-      // Check if we've reached the target tree
-      const distToTarget = Math.sqrt(
-        Math.pow(shtickman.position.x - shtickman.targetPos.x, 2) +
-        Math.pow(shtickman.position.z - shtickman.targetPos.z, 2)
-      );
-
-      if (distToTarget < TREE_TOUCH_DISTANCE) {
-        // Reached tree! Wait then pick next
-        shtickman.currentPath = null;
-        shtickman.velocity.x *= 0.5;
-        shtickman.velocity.z *= 0.5;
-        shtickman.nextTargetAt = now + TREE_WAIT_TIME_MS;
-        continue;
-      }
-
-      // Pathfinding: request path via Web Worker (async, non-blocking)
-      // Entity continues on current path while waiting for new one
-      if (
-        !shtickman.currentPath ||
-        now - shtickman.lastPathfindAt > PATHFIND_INTERVAL_MS
-      ) {
-        // Mark timestamp immediately to prevent re-requesting next frame
-        shtickman.lastPathfindAt = now;
-
-        const pathfindingConfig = shtickman.definition.pathfinding_config_code || 'astar_default';
-        const capturedId = shtickman.id;
-        // Increment request counter to detect stale out-of-order results
-        const requestId = (shtickman as any)._pathfindRequestId = ((shtickman as any)._pathfindRequestId || 0) + 1;
-
-        // Local-horizon goal: clamp the pathfinding target to PATHFIND_HORIZON
-        // blocks toward the distant tree. Keeps each A* search small + fast
-        // (and able to actually succeed) while still routing around nearby
-        // obstacles. Within the horizon we path straight to the tree for an
-        // exact arrival.
-        let goalX = shtickman.targetPos.x;
-        let goalZ = shtickman.targetPos.z;
-        const gdx = goalX - shtickman.position.x;
-        const gdz = goalZ - shtickman.position.z;
-        const gdist = Math.sqrt(gdx * gdx + gdz * gdz);
-        if (gdist > PATHFIND_HORIZON) {
-          goalX = shtickman.position.x + (gdx / gdist) * PATHFIND_HORIZON;
-          goalZ = shtickman.position.z + (gdz / gdist) * PATHFIND_HORIZON;
-        }
-
-        // Fire-and-forget async pathfind — result applied when it arrives
-        pathfindingService.findPathAsync(
-          pathfindingConfig,
-          shtickman.position.x,
-          shtickman.position.z,
-          goalX,
-          goalZ,
-          entityRadius,
-          bodyHeight,
-          0 // entityFeetY — ground level
-        ).then(result => {
-          // Find the shtickman by ID (it may have been removed while awaiting)
-          const s = shtickmenRef.current.find(s => s.id === capturedId);
-          if (!s || !s.isActive) return;
-          // Discard stale result if a newer request was issued
-          if ((s as any)._pathfindRequestId !== requestId) return;
-
-          if (result.success && result.path && result.path.length > 0) {
-            s.currentPath = result.path;
-            s.currentPathIndex = 0;
-          } else if (!s.currentPath) {
-            // Only set fallback if no existing path
-            s.currentPath = [s.targetPos.clone()];
-            s.currentPathIndex = 0;
-          }
-        }).catch(() => {
-          // Silently ignore — entity continues on current path
-        });
-      }
-
-      // Follow current path
-      let currentWaypoint: THREE.Vector3 | null = null;
-
-      if (shtickman.currentPath && shtickman.currentPath.length > 0) {
-        // Advance through waypoints we've reached
-        while (
-          shtickman.currentPathIndex < shtickman.currentPath.length - 1
-        ) {
-          const wp = shtickman.currentPath[shtickman.currentPathIndex];
-          const distToWp = Math.sqrt(
-            Math.pow(shtickman.position.x - wp.x, 2) +
-            Math.pow(shtickman.position.z - wp.z, 2)
-          );
-          if (distToWp < WAYPOINT_REACH_DISTANCE) {
-            shtickman.currentPathIndex++;
-          } else {
-            break;
-          }
-        }
-
-        currentWaypoint = shtickman.currentPath[shtickman.currentPathIndex];
-      }
-
-      // Move toward waypoint or target
-      const moveTarget = currentWaypoint || shtickman.targetPos;
-      const dx = moveTarget.x - shtickman.position.x;
-      const dz = moveTarget.z - shtickman.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-
-      if (dist > 0.5) {
-        const invDist = 1 / dist;
-        const dirX = dx * invDist;
-        const dirZ = dz * invDist;
-
-        const speed = shtickman.definition.speed;
-
-        // Check collision before moving
-        const nextX = shtickman.position.x + dirX * speed * deltaTime;
-        const nextZ = shtickman.position.z + dirZ * speed * deltaTime;
-
-        const blocked = isPositionBlocked(nextX, nextZ, entityRadius, bodyHeight);
-
-        if (!blocked) {
-          shtickman.velocity.x = dirX * speed;
-          shtickman.velocity.z = dirZ * speed;
-        } else {
-          // Try sliding along X or Z axis
-          const blockedX = isPositionBlocked(nextX, shtickman.position.z, entityRadius, bodyHeight);
-          const blockedZ = isPositionBlocked(shtickman.position.x, nextZ, entityRadius, bodyHeight);
-
-          if (!blockedX) {
-            shtickman.velocity.x = dirX * speed;
-            shtickman.velocity.z = 0;
-          } else if (!blockedZ) {
-            shtickman.velocity.x = 0;
-            shtickman.velocity.z = dirZ * speed;
-          } else {
-            // Try diagonal slides (perpendicular to movement direction)
-            const perpX = -dirZ;
-            const perpZ = dirX;
-            const slideSpeed = speed * 0.7;
-
-            // Try sliding left
-            const slideLeftX = shtickman.position.x + perpX * slideSpeed * deltaTime;
-            const slideLeftZ = shtickman.position.z + perpZ * slideSpeed * deltaTime;
-            const blockedLeft = isPositionBlocked(slideLeftX, slideLeftZ, entityRadius, bodyHeight);
-
-            // Try sliding right
-            const slideRightX = shtickman.position.x - perpX * slideSpeed * deltaTime;
-            const slideRightZ = shtickman.position.z - perpZ * slideSpeed * deltaTime;
-            const blockedRight = isPositionBlocked(slideRightX, slideRightZ, entityRadius, bodyHeight);
-
-            if (!blockedLeft) {
-              shtickman.velocity.x = perpX * slideSpeed;
-              shtickman.velocity.z = perpZ * slideSpeed;
-            } else if (!blockedRight) {
-              shtickman.velocity.x = -perpX * slideSpeed;
-              shtickman.velocity.z = -perpZ * slideSpeed;
-            } else {
-              // Fully blocked, slow down
-              shtickman.velocity.x *= 0.3;
-              shtickman.velocity.z *= 0.3;
-              // Force re-pathfind immediately
-              shtickman.lastPathfindAt = 0;
-            }
-          }
-        }
-
-        // Face the movement direction
-        if (Math.abs(shtickman.velocity.x) > 0.1 || Math.abs(shtickman.velocity.z) > 0.1) {
-          shtickman.rotationY = Math.atan2(shtickman.velocity.x, shtickman.velocity.z);
-        }
-      } else {
-        // Near target, slow down
-        shtickman.velocity.x *= 0.8;
-        shtickman.velocity.z *= 0.8;
-      }
-
-      // Apply gravity
-      if (shtickman.position.y > 0) {
-        shtickman.velocity.y -= SHTICKMAN_GRAVITY * deltaTime;
-      } else {
-        shtickman.velocity.y = 0;
-        shtickman.position.y = 0;
-      }
-
-      // Apply velocity to position
-      shtickman.position.x += shtickman.velocity.x * deltaTime;
-      shtickman.position.y += shtickman.velocity.y * deltaTime;
-      shtickman.position.z += shtickman.velocity.z * deltaTime;
-
-      // Clamp to ground
-      if (shtickman.position.y < 0) {
-        shtickman.position.y = 0;
-        shtickman.velocity.y = 0;
-      }
-
-      // Update animation phase at fixed rate (decoupled from movement speed)
-      // Animation speed reduced by 75% to match walking speed better
-      const animationSpeed = 1.5;
-      const cycleDistance = bodyHeight * 0.30;
-      const movementSpeed = Math.sqrt(
-        shtickman.velocity.x * shtickman.velocity.x +
-        shtickman.velocity.z * shtickman.velocity.z
-      );
-      if (movementSpeed > 0.1) {
-        shtickman.animationPhase += (animationSpeed / cycleDistance) * Math.PI * 2 * deltaTime;
-      }
+      stepShtickmanAI(shtickman, deps);
     }
   }, [pickRandomPatrolTree, isPositionBlocked]);
 
