@@ -23,7 +23,7 @@ import {
 } from './FortressCollision';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
-import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT, WALAPA_BOB_AMPLITUDE } from '@/features/walapa';
+import { WALAPA_BOB_AMPLITUDE, getTierDimensions } from '@/features/walapa';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { isTreeBlockType, getBaseTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 import { playerTracker } from '@/lib/playerTracker';
@@ -2688,8 +2688,13 @@ export function FirstPersonControls({
             for (const w of walapasRef.current) {
               if (!w.isActive) continue;
               const wscale = w.scale ?? 1;
-              const top = w.position.y + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE + WALAPA_HITBOX_HEIGHT * wscale;
-              const reach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
+              const wdims = getTierDimensions(w.definition.tier);
+              // Real standable top = top of the highest body block. The body is
+              // dims.height tall, CENTERED on position.y (blocks span y=-floor(h/2)
+              // ..+floor(h/2)), so its top sits (floor(h/2)+0.5) above the center.
+              // Bob is added un-scaled to match the renderer.
+              const top = w.position.y + (Math.floor(wdims.height / 2) + 0.5) * wscale + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE;
+              const reach = Math.floor(wdims.width / 2) * wscale + playerRadius;
               const dx = camera.position.x - w.position.x;
               const dz = camera.position.z - w.position.z;
               if (dx * dx + dz * dz > reach * reach) continue;
@@ -2702,8 +2707,13 @@ export function FirstPersonControls({
             const w = walapasRef.current.find(x => x.id === currentWalapaIdRef.current && x.isActive);
             if (w) {
               const wscale = w.scale ?? 1;
-              const top = w.position.y + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE + WALAPA_HITBOX_HEIGHT * wscale;
-              const reach = WALAPA_HITBOX_RADIUS * wscale + playerRadius;
+              const wdims = getTierDimensions(w.definition.tier);
+              // Real standable top = top of the highest body block. The body is
+              // dims.height tall, CENTERED on position.y (blocks span y=-floor(h/2)
+              // ..+floor(h/2)), so its top sits (floor(h/2)+0.5) above the center.
+              // Bob is added un-scaled to match the renderer.
+              const top = w.position.y + (Math.floor(wdims.height / 2) + 0.5) * wscale + Math.sin(w.bobPhase) * WALAPA_BOB_AMPLITUDE;
+              const reach = Math.floor(wdims.width / 2) * wscale + playerRadius;
               const dx = camera.position.x - w.position.x;
               const dz = camera.position.z - w.position.z;
               // Over it horizontally + within a generous band (fast rise / a jump).
