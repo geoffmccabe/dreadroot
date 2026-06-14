@@ -13,6 +13,7 @@
 // without callers having to change — same method signatures.
 
 import { supabase } from '@/integrations/supabase/client';
+import { GAME_ID } from '@/config/game';
 
 // ── Common shapes ───────────────────────────────────────────────────
 
