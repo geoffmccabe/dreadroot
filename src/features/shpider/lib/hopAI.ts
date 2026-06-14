@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import type { ShpiderInstance } from '../types';
-import { findGroundY, pickTreeAwareTarget, findAdjacentWall } from './surfaceDetect';
+import { findGroundY, pickTreeAwareTarget, findAdjacentWall, hasSurfaceContact, bodyVoxelSolid } from './surfaceDetect';
 import { playGroundImpact, GROUND_IMPACT_MIN_SPEED } from '@/features/enemies/audio/groundImpactSound';
 import { SHPIDER_MIN_TARGET_SPACING } from '../constants';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
@@ -30,6 +30,11 @@ const _posScratch = new THREE.Vector3();
 const _toPlayer = new THREE.Vector3();
 const _tangentA = new THREE.Vector3();
 const _tangentB = new THREE.Vector3();
+
+// Make shpiders respect world voxels: don't crawl the body into a block, and
+// drop a crawler that has slid off its surface so it can't float in mid-air.
+// Flip to false for an instant rollback if it ever disturbs tree-climbing.
+const SHPIDER_RESPECT_COLLIDERS = true;
 
 const CRAWL_SPEED = 1.5; // blocks/sec along surface tangent
 const CRAWL_MIN_MS = 800;
@@ -155,9 +160,19 @@ export function applyKnockback(s: ShpiderInstance, dt: number): void {
  */
 export function gravityStep(s: ShpiderInstance, deps: StepDeps): boolean {
   const { dt } = deps;
-  if (!((s.hop.phase === 'idle' || s.hop.phase === 'crawling') && s.surfaceNormal.y > 0.9)) {
-    return false;
+  if (s.hop.phase !== 'idle' && s.hop.phase !== 'crawling') return false;
+
+  // Lost-contact guard: a wall/ceiling crawler that has slid off its surface
+  // (e.g. crawled past a trunk edge) would otherwise float forever, since the
+  // flat-surface fall below only runs for upward normals. Detach it to a
+  // falling floor-crawler so gravity lands it. (Fixes "walking in the air".)
+  if (SHPIDER_RESPECT_COLLIDERS && s.surfaceNormal.y <= 0.9
+      && !hasSurfaceContact(s.position, s.surfaceNormal)) {
+    s.surfaceNormal.set(0, 1, 0);
   }
+
+  if (s.surfaceNormal.y <= 0.9) return false; // still attached to a wall/ceiling
+
   const probedGround = findGroundY(s.position.x, s.position.y + 0.5, s.position.z, 64);
   let supportY = probedGround === -Infinity ? WORLD_FLOOR_Y : probedGround;
   // Jump/land on top of another enemy (shroomer/shombie) if it's higher.
@@ -259,14 +274,26 @@ export function decideIdleAction(s: ShpiderInstance, deps: StepDeps): void {
     let endX = s.position.x + (_tangentA.x * dirA + _tangentB.x * dirB) * distance;
     let endZ = s.position.z + (_tangentA.z * dirA + _tangentB.z * dirB) * distance;
 
-    // Anti-overlap: shorten the crawl if it would land on another shpider.
+    // Anti-overlap + anti-clip: shorten the crawl if it would land on another
+    // shpider OR bury the body inside a world voxel (e.g. crawling into a
+    // trunk). The voxel check fixes the "half inside a tree" bug.
     let retries = 4;
-    while (retries-- > 0 && isTooCrowded(endX, endZ, s, deps.others)) {
+    while (
+      retries-- > 0 &&
+      (isTooCrowded(endX, endZ, s, deps.others) ||
+        (SHPIDER_RESPECT_COLLIDERS && bodyVoxelSolid(endX, s.position.y, endZ, s.surfaceNormal)))
+    ) {
       endX = (endX + s.position.x) * 0.5;
       endZ = (endZ + s.position.z) * 0.5;
     }
     // Fortress Safe Zone: cancel any crawl endpoint that would breach the FSZ.
     if (isPointInFSZ(endX, 0, endZ)) {
+      endX = s.position.x;
+      endZ = s.position.z;
+    }
+    // If shortening couldn't clear a solid block, cancel the crawl this cycle
+    // (stay put) rather than crawl half-into the tree.
+    if (SHPIDER_RESPECT_COLLIDERS && bodyVoxelSolid(endX, s.position.y, endZ, s.surfaceNormal)) {
       endX = s.position.x;
       endZ = s.position.z;
     }

@@ -228,6 +228,44 @@ export function pickTreeAwareTarget(
  * happens to land next to — once attached, the existing tangent-
  * plane crawl naturally climbs the trunk.
  */
+/**
+ * Resolve the shpider's BODY voxel from a surface position. A crawler sits ON a
+ * face (e.g. a +X wall-crawler is at x = block boundary), so flooring the raw
+ * position lands on the SOLID side. Stepping half a block along the outward
+ * normal moves the sample into the empty cell the body actually occupies.
+ */
+function bodyVoxel(x: number, y: number, z: number, normal: THREE.Vector3): [number, number, number] {
+  return [
+    Math.floor(x + normal.x * 0.5),
+    Math.floor(y + normal.y * 0.5),
+    Math.floor(z + normal.z * 0.5),
+  ];
+}
+
+/**
+ * True if a crawler at `pos` with surface `normal` still rests against its
+ * support voxel (the solid cell behind the body, opposite the normal). When
+ * this goes false the crawler has slid off its surface (e.g. past a trunk edge)
+ * and should fall instead of float. Works for floor / wall / ceiling normals.
+ */
+export function hasSurfaceContact(pos: THREE.Vector3, normal: THREE.Vector3): boolean {
+  const [bx, by, bz] = bodyVoxel(pos.x, pos.y, pos.z, normal);
+  return worldCollisionGrid.hasVoxel(
+    bx - Math.round(normal.x),
+    by - Math.round(normal.y),
+    bz - Math.round(normal.z),
+  );
+}
+
+/**
+ * True if the shpider's BODY voxel at (x,y,z) on surface `normal` is inside a
+ * solid block — i.e. moving there would bury the body half-inside a tree.
+ */
+export function bodyVoxelSolid(x: number, y: number, z: number, normal: THREE.Vector3): boolean {
+  const [bx, by, bz] = bodyVoxel(x, y, z, normal);
+  return worldCollisionGrid.hasVoxel(bx, by, bz);
+}
+
 export function findAdjacentWall(
   x: number, y: number, z: number,
   outNormal: THREE.Vector3,
