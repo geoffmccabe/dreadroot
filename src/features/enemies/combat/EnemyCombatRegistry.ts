@@ -120,6 +120,16 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
    * single flame at the hitbox center.
    */
   getFlameAttachPoints?: (enemy: TEnemy) => FlameAttachPoint[] | null;
+
+  /**
+   * Optional: where an ongoing BURN should anchor, valid even while the
+   * enemy is mid-death (when getHitbox returns null so weapons stop
+   * targeting it). Lets fire keep burning ON the dying/dead body until it
+   * despawns, instead of orphaning the instant the enemy dies. Returns
+   * null only when the body is truly gone. If omitted, the burn system
+   * falls back to getHitbox (fire drops the moment the enemy dies).
+   */
+  getBurnAnchor?: (enemy: TEnemy) => { x: number; y: number; z: number; radius: number } | null;
 }
 
 // ------------------------------------------------------------------

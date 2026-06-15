@@ -63,6 +63,11 @@ enemyCombatRegistry.register<DemonInstance>({
     bottomY: d.y, topY: d.y + d.height,
     radius: d.radius,
   },
+  // Fire keeps burning on the body through the death animation (getHitbox goes
+  // null at death so weapons stop hitting it, but the corpse is still on screen
+  // for ~2.6s). Returns the live feet position whether alive or dead; the burn
+  // system stops following once the demon despawns (leaves the active list).
+  getBurnAnchor: (d) => ({ x: d.x, y: d.y, z: d.z, radius: d.radius }),
   applyDamage: (d, info) => {
     if (d.dead) return false;
     d.hp -= info.damage;

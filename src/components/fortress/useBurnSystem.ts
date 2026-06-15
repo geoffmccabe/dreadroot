@@ -233,10 +233,21 @@ export function useBurnSystem({
       : entry.entityId;
     const list = adapter.getActiveEnemies();
     const enemy = list.find(e => adapter.getId(e) === lookupId);
-    if (!enemy) return null;
+    if (!enemy) return null; // truly gone (despawned/removed from the world)
+    // While ALIVE, use the live hitbox. When the enemy DIES, getHitbox goes null
+    // (weapons stop targeting it) but the corpse is still visible for its death
+    // animation — so fall back to the burn anchor and keep the fire ON the body
+    // until it despawns, instead of orphaning the fire the instant it dies.
     const hb = adapter.getHitbox(enemy);
-    if (!hb) return null;
-    _registryFallbackPos.set(hb.centerX, hb.bottomY, hb.centerZ);
+    let cx: number, cy: number, cz: number, radius: number;
+    if (hb) {
+      cx = hb.centerX; cy = hb.bottomY; cz = hb.centerZ; radius = hb.radius;
+    } else {
+      const anchor = adapter.getBurnAnchor?.(enemy);
+      if (!anchor) return null;
+      cx = anchor.x; cy = anchor.y; cz = anchor.z; radius = anchor.radius;
+    }
+    _registryFallbackPos.set(cx, cy, cz);
     // Sit the fire on the collider's NEAR FACE (toward the camera), not its
     // center. The center is inside the solid body mesh, and the flame material
     // is depth-tested — so a center-spawned fire is occluded BY the monster and
@@ -244,10 +255,10 @@ export function useBurnSystem({
     // player keeps it in front of the body, visibly burning on the collider.
     const cam = cameraRef.current;
     if (cam) {
-      const dx = cam.position.x - hb.centerX;
-      const dz = cam.position.z - hb.centerZ;
+      const dx = cam.position.x - cx;
+      const dz = cam.position.z - cz;
       const len = Math.hypot(dx, dz) || 1;
-      const off = (hb.radius ?? 0.5) + 0.25;
+      const off = (radius ?? 0.5) + 0.25;
       _registryFallbackPos.x += (dx / len) * off;
       _registryFallbackPos.z += (dz / len) * off;
     }
