@@ -32,6 +32,7 @@ export interface MonsterConfig {
   wanderRadius?: number;
   faceOffset?: number;
   health?: number;            // HP (default 100)
+  noStun?: boolean;           // bullets don't stun-freeze it (keeps walking when shot) — test/boss
   id?: string;                // stable combat id (auto if omitted)
   onDespawn?: (id: string) => void;  // called once after the death anim finishes
   zombie?: boolean;           // horde variant: per-demon size/speed/rhythm jitter, desaturated
@@ -117,6 +118,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     dead: false, deadAt: 0, despawned: false,
     kvx: 0, kvz: 0, kvy: 0, stunUntil: 0, hitAt: 0,
     headFrac: cfg.zombie ? 0.20 : 0.25,   // head ≈ top 20% of a humanoid demon
+    noStun: cfg.noStun ?? false,
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   // Stable per-demon climbing role from the id: ~25% are climbers (hop over walls/rocks);

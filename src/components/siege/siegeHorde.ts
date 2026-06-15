@@ -30,6 +30,7 @@ export interface DemonInstance {
   stunUntil: number;    // performance.now() ms — frozen until then
   hitAt: number;        // last flinch trigger (performance.now())
   headFrac: number;     // top fraction of the hitbox that counts as a headshot (head zone)
+  noStun?: boolean;     // test/boss flag: bullets don't stun-freeze it (keeps walking when shot)
 }
 
 // Live array (not a Set) so getActiveEnemies returns it with zero per-query allocation —
@@ -81,7 +82,7 @@ enemyCombatRegistry.register<DemonInstance>({
       const kb = info.source === 'melee' ? (info.knockbackImpulse ?? 8) : 4.5; // bullet = small stagger
       d.kvx += info.knockbackDirX * kb;
       d.kvz += info.knockbackDirZ * kb;
-      d.stunUntil = now + 1000 + Math.random() * 2000; // 1–3s stun
+      if (!d.noStun) d.stunUntil = now + 1000 + Math.random() * 2000; // 1–3s stun (skipped for noStun boss/test demon)
       d.hitAt = now;
     }
     if (d.hp <= 0) { d.dead = true; d.deadAt = now; return true; }
