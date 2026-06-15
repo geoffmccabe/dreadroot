@@ -65,17 +65,6 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     // BeachTown=0.0001). Snap those extreme outliers back to 0.01.
     const norm = (v: number) => (v > 5 || v < 0.005 ? 0.01 : v);
     const P = new THREE.Vector3(), Q = new THREE.Quaternion(), S = new THREE.Vector3();
-    // PERF: render ONLY objects near the beach play area and skip the rest of the 2000m map —
-    // its geometry (~15M tris) is the dominant cost and the player is at the beach. This REMOVES
-    // objects, so it can only make things faster (unlike per-cell culling, which added meshes).
-    // Static radius for now; full distance-streaming (follow the player) comes later.
-    const CX = -400, CZ = 680, R2 = 220 * 220; // ~match the ~200m fog view distance (no visible loss)
-    const near: number[] = [];
-    for (let i = 0; i < matrices.length; i++) {
-      const dx = matrices[i][12] - CX, dz = matrices[i][14] - CZ;
-      if (dx * dx + dz * dz < R2) near.push(i);
-    }
-    if (!near.length) return out; // this object type has nothing near the beach → render none
     for (const src of meshes) {
       src.updateWorldMatrix(true, false);
       local.copy(src.matrixWorld);
@@ -107,13 +96,12 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           m.needsUpdate = true;
         }
       });
-      const inst = new THREE.InstancedMesh(src.geometry, src.material, near.length);
+      const inst = new THREE.InstancedMesh(src.geometry, src.material, matrices.length);
       inst.userData = { fbx, mesh: meshName ?? '(whole)', combined: !!combined };
-      for (let j = 0; j < near.length; j++) {
-        const i = near[j];
+      for (let i = 0; i < matrices.length; i++) {
         m.fromArray(matrices[i]).multiply(local);
         if (flipQ) { m.decompose(P, Q, S); Q.premultiply(flipQ); m.compose(P, Q, S); }
-        inst.setMatrixAt(j, m);
+        inst.setMatrixAt(i, m);
       }
       inst.instanceMatrix.needsUpdate = true;
       inst.computeBoundingSphere();
@@ -138,10 +126,28 @@ export function WorldObjectsLayer() {
       .then((d) => alive && setData(d)).catch(() => {});
     return () => { alive = false; };
   }, []);
+  // PERF: only mount object types that have an instance near the play area, and pass ONLY
+  // those near instances. Far-only object types never mount → their .glb is never downloaded
+  // or parsed. That main-thread parse of the full 430MB was the real fps killer (DFlow showed
+  // long-tasks + GC stalls dominating, not raw draw). ~match the ~200m fog distance.
+  const nearGroups = useMemo(() => {
+    if (!data) return [] as Group[];
+    const CX = -400, CZ = 680, R2 = 220 * 220;
+    const out: Group[] = [];
+    for (const g of data.groups) {
+      const near = g.matrices.filter((mx) => {
+        const dx = mx[12] - CX, dz = mx[14] - CZ;
+        return dx * dx + dz * dz < R2;
+      });
+      if (near.length) out.push({ ...g, matrices: near });
+    }
+    return out;
+  }, [data]);
+
   if (!data) return null;
   return (
     <>
-      {data.groups.map((g, i) => (
+      {nearGroups.map((g, i) => (
         <Boundary key={i}>
           <Suspense fallback={null}>
             <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} />
