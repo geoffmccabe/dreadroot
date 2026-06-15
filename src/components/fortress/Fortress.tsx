@@ -8,6 +8,7 @@ import { BlockPreview } from '@/components/BlockPreview';
 import { SeedPreview } from '@/features/trees/components/SeedPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
+import { NpcSystem } from '@/features/npc/NpcSystem';
 import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
@@ -1926,6 +1927,8 @@ export function Fortress() {
 
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
+      {/* NEW NPC system (parallel): Ctrl/Cmd-N builder + '@'-then-digit spawn. */}
+      <NpcSystem isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
       <FortressProviders>
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
