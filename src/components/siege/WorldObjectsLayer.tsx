@@ -8,7 +8,8 @@ import { useGLTF } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { managedRocks, keyFor } from './voxelOverrides';
+import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides } from './voxelOverrides';
+import { voxelizeGeometry } from './voxelize';
 
 interface Group { fbx: string; url: string; matrices: number[][]; rotX?: number; mesh?: string; combined?: boolean; scaleMul?: number; whole?: boolean }
 
@@ -125,12 +126,19 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         // aligned by construction (axis-aligned box around the rotated mesh). Rocks load as a
         // single box too; the player voxelizes specific ones on demand with V (VoxelizeTool),
         // which then OWNS that instance — so skip any instance it manages.
-        if (geoBox && colliders.length < 2000 && !managedRocks.has(keyFor(fbx, m.elements[12], m.elements[14]))) {
-          const wb = geoBox.clone().applyMatrix4(m);
-          const ctr = wb.getCenter(new THREE.Vector3());
-          const half = wb.getSize(new THREE.Vector3()).multiplyScalar(shrinkF * 0.5);
-          wb.min.copy(ctr).sub(half); wb.max.copy(ctr).add(half);
-          colliders.push(wb);
+        const ikey = keyFor(fbx, m.elements[12], m.elements[14]);
+        if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {
+          const ov = colliderOverrides.get(ikey);
+          if (ov?.voxel) {
+            // Saved authoring: voxelize this instance at the chosen resolution (persists/bakes).
+            for (const b of voxelizeGeometry(src.geometry, m, ov.cell, 4000)) colliders.push(b);
+          } else {
+            const wb = geoBox.clone().applyMatrix4(m);
+            const ctr = wb.getCenter(new THREE.Vector3());
+            const half = wb.getSize(new THREE.Vector3()).multiplyScalar(shrinkF * 0.5);
+            wb.min.copy(ctr).sub(half); wb.max.copy(ctr).add(half);
+            colliders.push(wb);
+          }
         }
       }
       inst.instanceMatrix.needsUpdate = true;
@@ -158,8 +166,16 @@ export function WorldObjectsLayer() {
     fetch('/siege/world/atlas_map.json').then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
     fetch('/siege/world/material_map.json').then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});
     fetch('/siege/world/cutout_textures.json').then((r) => r.json()).then((a) => setCutout(new Set(a))).catch(() => {});
-    fetch('/siege/world/placements.json').then((r) => r.json())
-      .then((d) => alive && setData(d)).catch(() => {});
+    // Load baked collider overrides FIRST (so they're applied when groups build their colliders),
+    // then the placements. Author's localStorage edits already loaded at import + win over baked.
+    fetch('/siege/world/collider_overrides.json')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((a) => mergeBakedOverrides(a as [string, { voxel: boolean; cell: number }][]))
+      .catch(() => {})
+      .finally(() => {
+        fetch('/siege/world/placements.json').then((r) => r.json())
+          .then((d) => alive && setData(d)).catch(() => {});
+      });
     return () => { alive = false; };
   }, []);
   // STREAMING: mount only the object INSTANCES within R of the player (per-instance, so shared

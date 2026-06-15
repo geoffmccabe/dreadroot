@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
-import { managedRocks, keyFor } from './voxelOverrides';
+import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides } from './voxelOverrides';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
@@ -69,11 +69,20 @@ export function VoxelizeTool() {
       else removeBigBoxOverlapping(geo, world);
       vox.forEach((b) => worldCollisionGrid.insert(b));
       managedRocks.set(key, { boxes: vox, voxel: true });
+      setColliderOverride(key, true, cell);   // persist (localStorage) so it survives reload
       window.dispatchEvent(new Event('sw-colliders-changed'));
       return vox.length;
     };
 
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+B — copy ALL saved collider overrides to the clipboard, to bake into the
+      // shipped map (paste to the dev → committed to /siege/world/collider_overrides.json).
+      if (e.code === 'KeyB' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); e.stopPropagation();
+        navigator.clipboard?.writeText(exportColliderOverrides()).catch(() => {});
+        info(`copied ${colliderOverrides.size} collider override(s) to clipboard`);
+        return;
+      }
       // < / > — re-approximate the last voxelized object coarser / finer.
       if (e.key === '<' || e.key === ',' || e.key === '>' || e.key === '.') {
         const L = last.current; if (!L) return;
@@ -109,9 +118,10 @@ export function VoxelizeTool() {
         const box = bigBox(geo, _world);
         worldCollisionGrid.insert(box);
         managedRocks.set(key, { boxes: [box], voxel: false });
+        setColliderOverride(key, false, 1);   // persist the revert too
         window.dispatchEvent(new Event('sw-colliders-changed'));
         last.current = null;
-        info(`${fbx}\nreverted to 1 box`);
+        info(`${fbx}\nreverted to 1 box (saved)`);
       } else {
         // Voxelize (greedy-merged) at 1m to start.
         const cell = 1.0;
