@@ -145,7 +145,10 @@ export function FirstPersonControls({
   // Siege Worlds: float the player (god-mode noclip) because heightfield terrain
   // has no block-collision yet. Gated — false for the voxel Dreadroot world.
   forceFloat = false,
-}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean }) {
+  // Siege Worlds: heightfield ground sampler (world Y, or null off-map/not-loaded). When
+  // provided, the player walks on this terrain floor (no block colliders). Gated to siege.
+  groundHeightFn,
+}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
   const isLocked = useRef(false);
@@ -2762,6 +2765,25 @@ export function FirstPersonControls({
           walapaLastPosRef.current.copy(attachW.position);
         } else {
           currentWalapaIdRef.current = null;
+        }
+      }
+
+      // ── Siege Worlds terrain floor (final Y authority). Heightfield has no per-block
+      //    colliders, so clamp the player onto the sampled ground for smooth walking. Gated:
+      //    only runs when groundHeightFn is provided (siege); the voxel world never enters here.
+      if (groundHeightFn) {
+        const tY = groundHeightFn(camera.position.x, camera.position.z);
+        if (tY != null) {
+          const floorY = tY + playerHeight + SURFACE_EPS;
+          if (camera.position.y < floorY) {
+            camera.position.y = floorY;
+            if (velocity.current.y < 0) velocity.current.y = 0;
+            onGround.current = true;
+          }
+        } else {
+          // Terrain not loaded here yet (or off-map) — hold rather than fall into the void.
+          if (velocity.current.y < 0) velocity.current.y = 0;
+          onGround.current = true;
         }
       }
 
