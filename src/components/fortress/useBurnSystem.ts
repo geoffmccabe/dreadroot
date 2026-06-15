@@ -465,13 +465,25 @@ export function useBurnSystem({
     const renderer = universalFlameRef.current;
     if (!renderer) return;
 
-    // TEMP diagnostic: once/sec while burns exist, report where the fire is.
+    // TEMP diagnostic: once/sec while burns exist, report WHY the lookup fails.
     if (burnsRef.current.size > 0 && now - _lastLogRef.current > 1) {
       _lastLogRef.current = now;
       const first = burnsRef.current.values().next().value as BurnEntry | undefined;
-      const p = first ? getEntityPosition(first) : null;
+      let reason = 'ok';
+      if (first && first.entityType !== 'player') {
+        const ad = enemyCombatRegistry.getAdapter(first.entityType);
+        if (!ad) reason = 'NO-ADAPTER';
+        else {
+          const list = ad.getActiveEnemies();
+          const lookupId = first.entityType === 'shwarm' && first.blockId
+            ? `${first.entityId}::${first.blockId}` : first.entityId;
+          const en = list.find(e => ad.getId(e) === lookupId);
+          if (!en) reason = `NOT-IN-LIST want=${first.entityId} active=${list.length} ids=[${list.slice(0, 8).map(e => ad.getId(e)).join(',')}]`;
+          else if (!ad.getHitbox(en)) reason = `DEAD/no-hitbox ${first.entityId}`;
+        }
+      }
       const st = renderer.getStats();
-      console.log(`[BURN] live entries=${burnsRef.current.size} | renderer flames=${st.flames} drawnParticles=${st.particles} | first=${first?.entityType} phase=${first?.burnPhase} resolvedPos=${p ? `(${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)})` : 'NULL(lingering/gone)'}`);
+      console.log(`[BURN] entries=${burnsRef.current.size} flames=${st.flames} particles=${st.particles} phase=${first?.burnPhase} lookup=${reason}`);
     }
 
     _toRemove.length = 0;
