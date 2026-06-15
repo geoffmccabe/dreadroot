@@ -724,6 +724,18 @@ export function useFortressFrameLoop({
               source: 'bullet' as const,
               bulletTier: bullet.tier,
             };
+            // Ignite the attached, FOLLOWING burn BEFORE applying damage, so a
+            // one-shot KILL still creates it (the enemy is alive at ignite); the
+            // burn then lingers at the death spot (lastPos linger in the burn
+            // frame loop). shnake/shwarm have their own tracking fire — skip.
+            if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
+              applyBurnRef.current(
+                adapter.type, adapter.getId(enemy), undefined,
+                bullet.tier, tierDef.colors, (tierDef.colorMode ?? 'static'),
+                Math.max(1, Math.round(finalDamage * 0.25)), 0,
+                undefined, tierDef.burn_time,
+              );
+            }
             adapter.applyDamage(enemy, bulletDamageInfo);
 
             // Skip score on a harmless bounce (e.g. sub-T7 bullet off a walapa).
@@ -747,25 +759,6 @@ export function useFortressFrameLoop({
               nebulaImpactsRef.current.spawnImpact(hitPos, fireConfig);
             } else if (bulletImpactsRef?.current) {
               bulletImpactsRef.current.spawnImpact(hitPos, fireConfig);
-            }
-
-            // Attached, FOLLOWING burn — THE fix for "flames stay where the enemy
-            // was." Routes through the universal useBurnSystem so the fire tracks
-            // the live body + does the gradual DOT. shnake/shwarm already have
-            // their own tracking fire, so skip them here.
-            if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
-              applyBurnRef.current(
-                adapter.type,
-                adapter.getId(enemy),
-                undefined,
-                bullet.tier,
-                tierDef.colors,
-                (tierDef.colorMode ?? 'static'),
-                Math.max(1, Math.round(finalDamage * 0.25)), // gradual burn DOT (~half the impact, over the burn); tunable
-                0,
-                hitPos,
-                tierDef.burn_time,
-              );
             }
 
             // Per-adapter hit sound (falls back to generic thud).

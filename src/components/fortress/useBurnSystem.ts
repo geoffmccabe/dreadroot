@@ -122,6 +122,9 @@ interface BurnEntry {
   flameIds: (string | null)[];  // one per flame point in layout
   attachIds: string[];           // one per flame point
   hitOffset: THREE.Vector3 | null; // offset from entity base to hit point (for positioned burns)
+  /** Last live entity position. When the entity dies/despawns the fire lingers
+   *  here for the rest of the burn (a burning corpse) instead of blinking out. */
+  lastPos?: THREE.Vector3;
   /** Total burn duration in seconds (tier-derived). DOT phase ends here. */
   dotSeconds: number;
   /** Flame layout snapshot taken at burn-creation time (one entry per
@@ -447,9 +450,18 @@ export function useBurnSystem({
     _toRemove.length = 0;
 
     for (const [key, entry] of burnsRef.current) {
-      // 1. Check if entity is still alive
-      const pos = getEntityPosition(entry);
-      if (!pos) {
+      // 1. Resolve the live position. If the entity is GONE (died/despawned),
+      //    don't vanish the fire — let it LINGER at its last position for the
+      //    rest of the burn (a burning corpse). Bullets now ignite a following
+      //    burn, so a one-shot kill would otherwise blink the fire out instantly
+      //    (getHitbox returns null for a dead enemy).
+      let pos = getEntityPosition(entry);
+      if (pos) {
+        if (!entry.lastPos) entry.lastPos = new THREE.Vector3();
+        entry.lastPos.copy(pos);
+      } else if (entry.lastPos) {
+        pos = entry.lastPos;
+      } else {
         _toRemove.push(key);
         continue;
       }
