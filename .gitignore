@@ -33,3 +33,6 @@ dist-ssr
 .perftest/
 perftest-results/
 3d_assets/
+
+# Oversized assets must not ship to Cloudflare Pages (25MB/file limit)
+public/PlayerSkins.fbx
