@@ -60,6 +60,11 @@ const headBoxes = new Set<THREE.Box3>();
 // Monster BODY colliders — lets the climb gait tell a MOVING collider (another monster, climb
 // over it) from a static world wall (climb the face only, don't penetrate).
 const monsterBoxes = new Set<THREE.Box3>();
+// Per-monster support state, read by OTHER monsters: `g` = is it currently resting on something
+// solid (vs. airborne/climbing), `pri` = a stable priority. A monster may only stand/climb on
+// another monster that is supported AND lower-priority — so two can't climb each other into the
+// air (mutual-support deadlock), and a chain only stacks once each link has actually landed.
+const monsterSupport = new Map<THREE.Box3, { g: boolean; pri: number }>();
 
 export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number] } & MonsterConfig) {
   const c = { ...DEF, ...cfg };
@@ -113,18 +118,21 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Stable per-demon climbing role from the id: ~25% are climbers (hop over walls/rocks);
   // `side` is a stable left/right preference for crabbing around obstacles. (Any demon also
   // climbs when boxed in by its own kind — that crowd-jumping is what stacks them up.)
-  const role = useRef<{ climb: boolean; side: number } | null>(null);
+  const role = useRef<{ climb: boolean; side: number; pri: number } | null>(null);
   if (!role.current) {
     let h = 0; for (let i = 0; i < inst.id.length; i++) h = (h * 31 + inst.id.charCodeAt(i)) | 0;
-    role.current = { climb: (h >>> 0) % 100 < 25, side: (h & 1) ? 1 : -1 };
+    role.current = { climb: (h >>> 0) % 100 < 25, side: (h & 1) ? 1 : -1, pri: (h >>> 0) };
   }
+  // Support state other monsters read (g mutated each frame; pri stable).
+  const sup = useRef({ g: false, pri: 0 }).current;
+  sup.pri = role.current.pri;
   // Engine collider so the PLAYER can't walk through this monster (the player queries
   // worldCollisionGrid). Updated each frame to follow the monster; removed on unmount.
   const box = useRef(new THREE.Box3()).current;
   useEffect(() => {
-    worldCollisionGrid.insert(box); monsterBoxes.add(box);
-    return () => { worldCollisionGrid.remove(box); monsterBoxes.delete(box); };
-  }, [box]);
+    worldCollisionGrid.insert(box); monsterBoxes.add(box); monsterSupport.set(box, sup);
+    return () => { worldCollisionGrid.remove(box); monsterBoxes.delete(box); monsterSupport.delete(box); };
+  }, [box, sup]);
   // Zombie: a separate HEAD collider above the body, registered in the grid + head set (so it
   // gives the head a physical/headshot shape but demons don't stand on it).
   const headBox = useRef(cfg.zombie ? new THREE.Box3() : null).current;
@@ -282,6 +290,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       for (let i = 0; i < cnt; i++) {
         const b = res[i] as THREE.Box3;
         if (!b || b === box || headBoxes.has(b) || !b.max) continue;   // never stand on a head
+        if (monsterBoxes.has(b)) {
+          // Only stand/climb on a monster that is itself supported (not mid-air) AND lower
+          // priority — prevents two from climbing each other up into the air.
+          const os = monsterSupport.get(b);
+          if (!os || !os.g || os.pri >= sup.pri) continue;
+        }
         if (s.x >= b.min.x - fr && s.x <= b.max.x + fr && s.z >= b.min.z - fr && s.z <= b.max.z + fr) {
           const top = b.max.y;
           if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
@@ -331,6 +345,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       s.y += s.vy * delta;
       if (s.y <= groundY) { s.y = groundY; s.vy = 0; }
     }
+    // Publish support: resting on something solid (landed, not climbing/airborne) → others may
+    // stand on us. Climbing or falling → not supported, so nobody climbs us mid-air.
+    sup.g = !climbing && s.vy === 0;
 
     me.y = s.y;
     g.position.set(s.x, s.y, s.z);
