@@ -65,6 +65,19 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     // BeachTown=0.0001). Snap those extreme outliers back to 0.01.
     const norm = (v: number) => (v > 5 || v < 0.005 ? 0.01 : v);
     const P = new THREE.Vector3(), Q = new THREE.Quaternion(), S = new THREE.Vector3();
+    // FRUSTUM CULLING: bucket this group's instances into spatial cells (by world X/Z from
+    // the matrix translation). Each cell becomes its own InstancedMesh with tight bounds, so
+    // three.js culls off-screen cells. (Previously one map-spanning mesh per submesh → its
+    // bounding sphere covered the whole 2000m world → it NEVER culled, so the entire map drew
+    // every frame.) This is the cheap first perf win before full streaming/LOD.
+    const CELL = 300;
+    const cellGroups = new Map<number, number[]>();
+    for (let i = 0; i < matrices.length; i++) {
+      const cx = Math.round(matrices[i][12] / CELL), cz = Math.round(matrices[i][14] / CELL);
+      const key = cx * 100000 + cz;
+      let arr = cellGroups.get(key); if (!arr) { arr = []; cellGroups.set(key, arr); }
+      arr.push(i);
+    }
     for (const src of meshes) {
       src.updateWorldMatrix(true, false);
       local.copy(src.matrixWorld);
@@ -96,16 +109,20 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           m.needsUpdate = true;
         }
       });
-      const inst = new THREE.InstancedMesh(src.geometry, src.material, matrices.length);
-      inst.userData = { fbx, mesh: meshName ?? '(whole)', combined: !!combined };
-      for (let i = 0; i < matrices.length; i++) {
-        m.fromArray(matrices[i]).multiply(local);
-        if (flipQ) { m.decompose(P, Q, S); Q.premultiply(flipQ); m.compose(P, Q, S); }
-        inst.setMatrixAt(i, m);
+      // One InstancedMesh per spatial cell → tight bounding sphere → frustum-cullable.
+      for (const idxs of cellGroups.values()) {
+        const inst = new THREE.InstancedMesh(src.geometry, src.material, idxs.length);
+        inst.userData = { fbx, mesh: meshName ?? '(whole)', combined: !!combined };
+        for (let j = 0; j < idxs.length; j++) {
+          const i = idxs[j];
+          m.fromArray(matrices[i]).multiply(local);
+          if (flipQ) { m.decompose(P, Q, S); Q.premultiply(flipQ); m.compose(P, Q, S); }
+          inst.setMatrixAt(j, m);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        inst.computeBoundingSphere();
+        out.add(inst);
       }
-      inst.instanceMatrix.needsUpdate = true;
-      inst.computeBoundingSphere();
-      out.add(inst);
     }
     return out;
   }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout]);
