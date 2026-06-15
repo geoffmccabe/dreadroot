@@ -29,14 +29,19 @@ export function createNodeRuntime(): NodeRuntime {
   };
 }
 
-/** Order nodes parents-before-children (so a node's parent world is ready). */
+/** Order nodes parents-before-children (so a node's parent world is ready).
+ *  Cycle-safe: a `visiting` set breaks any parent cycle the editor could create
+ *  (A→B→A) instead of recursing forever. */
 export function orderNodes(nodes: EMSNode[]): EMSNode[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const out: EMSNode[] = [];
   const seen = new Set<string>();
+  const visiting = new Set<string>();
   const visit = (n: EMSNode) => {
-    if (seen.has(n.id)) return;
+    if (seen.has(n.id) || visiting.has(n.id)) return; // visiting → cycle, break it
+    visiting.add(n.id);
     if (n.parent && byId.has(n.parent)) visit(byId.get(n.parent)!);
+    visiting.delete(n.id);
     seen.add(n.id);
     out.push(n);
   };
