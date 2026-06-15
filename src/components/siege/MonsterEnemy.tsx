@@ -37,10 +37,14 @@ const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, 
 const DEFCLIPS = { idle: 'idle', walk: 'walk', attack: 'attack', death: 'death', hit: 'hit' };
 const DEATH_DESPAWN_MS = 2600; // play the death clip, hold the pose, then remove
 let _mid = 0;
+// Climbing physics. JUMP_VEL apex ≈ own height (1.8m) so a demon can mount one box / one
+// demon per hop; piling several lets them clear taller walls.
+const GRAVITY = 22, JUMP_VEL = 9.5, STEP_UP = 0.45;
+const TRAP_RADIUS = 1.3, TRAP_COUNT = 3; // boxed in by this many of its own kind → climb over
 
 // Shared live registry of monster footprints so each pushes out of the others (cheap O(n²)
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
-const MONSTERS = new Set<{ x: number; z: number; r: number }>();
+const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
 
 export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number] } & MonsterConfig) {
   const c = { ...DEF, ...cfg };
@@ -54,9 +58,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const { actions, names } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
   const scale = c.height / c.modelHeight;
-  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0 });
-  // Separation footprint (registered in the shared registry; updated each frame).
-  const me = useRef({ x: spawn[0], z: spawn[2], r: Math.max(0.8, c.height * 0.3) }).current;
+  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0 });
+  // Separation footprint (registered in the shared registry; updated each frame). y lets
+  // separation skip STACKED demons (one standing on another) so piles don't shove apart.
+  const me = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], r: Math.max(0.8, c.height * 0.3) }).current;
   useEffect(() => { MONSTERS.add(me); return () => { MONSTERS.delete(me); }; }, [me]);
   // Combat instance — registered with the shared horde so Dreadroot weapons can damage it.
   const inst = useRef<DemonInstance>({
@@ -68,6 +73,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     kvx: 0, kvz: 0, stunUntil: 0, hitAt: 0,
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
+  // Stable per-demon climbing role from the id: ~25% are climbers (hop over walls/rocks);
+  // `side` is a stable left/right preference for crabbing around obstacles. (Any demon also
+  // climbs when boxed in by its own kind — that crowd-jumping is what stacks them up.)
+  const role = useRef<{ climb: boolean; side: number } | null>(null);
+  if (!role.current) {
+    let h = 0; for (let i = 0; i < inst.id.length; i++) h = (h * 31 + inst.id.charCodeAt(i)) | 0;
+    role.current = { climb: (h >>> 0) % 100 < 25, side: (h & 1) ? 1 : -1 };
+  }
   // Engine collider so the PLAYER can't walk through this monster (the player queries
   // worldCollisionGrid). Updated each frame to follow the monster; removed on unmount.
   const box = useRef(new THREE.Box3()).current;
@@ -130,6 +143,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (Math.abs(inst.kvz) < 0.05) inst.kvz = 0;
     }
 
+    // Capture pre-move XZ so a blocked go-around demon can undo its step. Record the
+    // intended move direction (mvx,mvz) for the climb/deflect logic below.
+    const preX = s.x, preZ = s.z;
+    let mvx = 0, mvz = 0, moving = false;
+
     const stunned = now < inst.stunUntil;
     if (stunned) {                                          // hit-stunned -> flinch + hold
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
@@ -139,8 +157,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       if (dist > c.attackRange) {
         const step = Math.min(c.speed * delta, dist - c.attackRange);
-        s.x += (dx / dist) * step; s.z += (dz / dist) * step;
-        const h = sampleHeight(s.x, s.z); if (h != null) s.y = h;
+        mvx = dx / dist; mvz = dz / dist; moving = true;
+        s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
       } else if (now - s.lastAttack > c.attackMs) { s.lastAttack = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true); }
       else if (now > s.swipeUntil) play(clips.idle);
@@ -154,17 +172,21 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (wd > 0.6) {
         g.rotation.y = Math.atan2(wdx, wdz) + c.faceOffset;
         const step = Math.min(c.speed * 0.5 * delta, wd);
-        s.x += (wdx / wd) * step; s.z += (wdz / wd) * step;
-        const h = sampleHeight(s.x, s.z); if (h != null) s.y = h;
+        mvx = wdx / wd; mvz = wdz / wd; moving = true;
+        s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
       } else play(clips.idle);
     }
 
-    // Separation — push out of any overlapping monster so they don't stand inside each other.
+    // Separation — push out of overlapping monsters AT THE SAME LEVEL (stacked demons,
+    // |Δy|>1m, are left alone so piles don't shove apart). Count same-level crowding so a
+    // demon boxed in by its own kind knows to climb over rather than grind in place.
+    let crowd = 0;
     for (const o of MONSTERS) {
-      if (o === me) continue;
+      if (o === me || Math.abs(s.y - o.y) > 1.0) continue;
       const ox = s.x - o.x, oz = s.z - o.z;
       const od = Math.hypot(ox, oz);
+      if (od < TRAP_RADIUS) crowd++;
       const minD = me.r + o.r;
       if (od > 1e-3 && od < minD) {
         const push = (minD - od) * 0.5;
@@ -172,10 +194,51 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     }
     me.x = s.x; me.z = s.z;
-    const gh = sampleHeight(s.x, s.z); if (gh != null) s.y = gh;
+
+    // ── Voxel ground + climb. The collision grid holds buildings, rocks AND every monster's
+    //    own collider, so one query gives standable tops (terrain / box / another demon's
+    //    head) AND too-tall walls. groundY = highest standable surface; wallTop = a box we're
+    //    pressed against that's taller than a step. ──
+    const feet = s.y;
+    let groundY = sampleHeight(s.x, s.z) ?? feet;
+    let wallTop = -Infinity;
+    const cnt = worldCollisionGrid.getNearby(s.x, s.z, me.r + 0.4);
+    const res = worldCollisionGrid.nearbyResult;
+    for (let i = 0; i < cnt; i++) {
+      const b = res[i] as THREE.Box3;
+      if (!b || b === box || !b.max) continue;
+      if (s.x >= b.min.x - me.r && s.x <= b.max.x + me.r && s.z >= b.min.z - me.r && s.z <= b.max.z + me.r) {
+        const top = b.max.y;
+        if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
+        else if (b.min.y < feet + c.height && top > wallTop) wallTop = top;          // too tall → wall
+      }
+    }
+    const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
+
+    // ── Blocked by a wall: climbers (and anyone boxed in by the crowd) hop up onto it;
+    //    everyone else undoes the step and crabs sideways to go around. ──
+    if (wallTop > -Infinity && moving && grounded) {
+      const trapped = crowd >= TRAP_COUNT;
+      if (role.current!.climb || trapped) {
+        s.vy = JUMP_VEL;                       // hop ~own height; pile up to clear more
+      } else if (feet < wallTop - 0.1) {
+        s.x = preX; s.z = preZ;
+        const sg = role.current!.side;
+        const step = c.speed * delta;
+        s.x += (-mvz * sg) * step; s.z += (mvx * sg) * step;   // crab perpendicular to the wall
+      }
+    }
+
+    // ── Gravity + vertical integrate + land on the highest standable surface ──
+    s.vy -= GRAVITY * delta;
+    s.y += s.vy * delta;
+    if (s.y <= groundY) { s.y = groundY; s.vy = 0; }
+
+    me.y = s.y;
     g.position.set(s.x, s.y, s.z);
     inst.x = s.x; inst.y = s.y; inst.z = s.z;   // keep the combat hitbox on the live body
-    // Move this monster's collider to its new footprint so the player collides with it.
+    // Move this monster's collider to its new footprint so the player + other demons collide
+    // with it (the latter is how they stack: a demon's box is a standable surface).
     box.min.set(s.x - me.r, s.y, s.z - me.r);
     box.max.set(s.x + me.r, s.y + c.height, s.z + me.r);
     worldCollisionGrid.update(box);
