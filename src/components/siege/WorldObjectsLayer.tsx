@@ -70,8 +70,6 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     const m = new THREE.Matrix4();
     const local = new THREE.Matrix4();
     const corr = rotX ? new THREE.Matrix4().makeRotationX((rotX * Math.PI) / 180) : null;
-    // Combined bakes lack the +90° X axis-conversion the single-mesh kit nodes carry.
-    const bakeFix = combined ? new THREE.Matrix4().makeRotationX(Math.PI / 2) : null;
     // Per-model 180° Y correction for FBX authored facing backward (portal cluster).
     // Applied as a quaternion turn that KEEPS the world position fixed (turn in place),
     // so off-center pivots don't swing the model sideways.
@@ -87,10 +85,13 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         // Hierarchical model placed at one exact root: use the node matrix as-is
         // (the root matrix already encodes scale/rotation). No norm / no axis-fix.
       } else if (combined) {
-        // Export matrix already holds world position+rotation: use ONLY scale + axis-fix.
+        // Combined sub-meshes export ALREADY Y-up (flat floors in XZ, no node rotation) and the
+        // per-instance world position+rotation is in matrices[i] — so they need ONLY the cm→m
+        // scale. (Single-object glbs differ: their geometry is Z-up with a +90°X node rotation we
+        // keep below. Force-applying that +90°X here tipped the buildings on their side and flung
+        // them off-map — the bug that broke bank/BeachTown/ShantyTown/JungleHuts/LobbyCaves/Forge.)
         local.decompose(P, Q, S);
         local.makeScale(norm(S.x), norm(S.y), norm(S.z));
-        if (bakeFix) local.premultiply(bakeFix);
       } else {
         // Single-mesh: keep rotation/position, normalize any broken conversion scale,
         // then apply an optional per-model size multiplier (e.g. the giant skull).
