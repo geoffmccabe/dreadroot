@@ -39,13 +39,8 @@ const DEFAULT_DOT_SECONDS = 5;
 // duration so longer burns shrink more gradually per second.
 const shrinkAt = (currentSec: number, total: number) =>
   Math.max(0.15, 1 - 0.8 * (currentSec / Math.max(1, total - 1)));
-// Even drip: every burn-second deals the SAME share, and those shares sum to the
-// same total the old halving curve produced (total preserved — just spread
-// evenly across the burn instead of front-loaded). The "50% up front" is the
-// bullet/blast impact itself; the burn is the remaining damage split evenly
-// across its pre-computed seconds. (Takes the TOTAL seconds, not the current sec.)
-const dmgMultAt = (totalSeconds: number) =>
-  (2 * (1 - Math.pow(0.5, totalSeconds))) / Math.max(1, totalSeconds);
+// Damage multipliers: halves each second regardless of total duration.
+const dmgMultAt = (currentSec: number) => Math.pow(0.5, currentSec);
 const ACTIVE_TO_DOT_DELAY = 0.15; // seconds after last hit before DOT begins
 const MAX_BURNS = 15; // cap burn entries to keep flame slot usage under control
 
@@ -122,9 +117,6 @@ interface BurnEntry {
   flameIds: (string | null)[];  // one per flame point in layout
   attachIds: string[];           // one per flame point
   hitOffset: THREE.Vector3 | null; // offset from entity base to hit point (for positioned burns)
-  /** Last live entity position. When the entity dies/despawns the fire lingers
-   *  here for the rest of the burn (a burning corpse) instead of blinking out. */
-  lastPos?: THREE.Vector3;
   /** Total burn duration in seconds (tier-derived). DOT phase ends here. */
   dotSeconds: number;
   /** Flame layout snapshot taken at burn-creation time (one entry per
@@ -373,14 +365,9 @@ export function useBurnSystem({
         layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
       }
     }
-    // EVERY burn engulf-follows: the resolved multi-point body layout is applied
-    // relative to the LIVE body center each frame. We never collapse to a single
-    // flame pinned at the hit point — that pin is what made fire appear to "stay
-    // behind" moving/large enemies. FLAME_LAYOUTS (shombie/walapa/shtickman/…)
-    // resolves BEFORE the adapter's getFlameAttachPoints, so those table-listed
-    // enemies silently never got the v4.13.4 engulf-follow fix; forcing engulf
-    // here restores it for them (their table layouts already wrap the body).
-    engulf = true;
+    // Only legacy / oversized layouts (e.g. the 22-40m shtickman) collapse to a
+    // single flame at the hit point; engulf enemies use their full body layout.
+    if (useHitPoint && !engulf) layout = [layout[0]];
     const attachIds = layout.map((_, i) => `burn_${key}_${i}`);
 
     const entry: BurnEntry = {
@@ -450,18 +437,9 @@ export function useBurnSystem({
     _toRemove.length = 0;
 
     for (const [key, entry] of burnsRef.current) {
-      // 1. Resolve the live position. If the entity is GONE (died/despawned),
-      //    don't vanish the fire — let it LINGER at its last position for the
-      //    rest of the burn (a burning corpse). Bullets now ignite a following
-      //    burn, so a one-shot kill would otherwise blink the fire out instantly
-      //    (getHitbox returns null for a dead enemy).
-      let pos = getEntityPosition(entry);
-      if (pos) {
-        if (!entry.lastPos) entry.lastPos = new THREE.Vector3();
-        entry.lastPos.copy(pos);
-      } else if (entry.lastPos) {
-        pos = entry.lastPos;
-      } else {
+      // 1. Check if entity is still alive
+      const pos = getEntityPosition(entry);
+      if (!pos) {
         _toRemove.push(key);
         continue;
       }
@@ -514,7 +492,7 @@ export function useBurnSystem({
           : pos;
         spawnBurnFlames(entry, shrink, spawnPos);
 
-        const rawDmg = Math.floor(entry.baseDamage * dmgMultAt(entry.dotSeconds));
+        const rawDmg = Math.floor(entry.baseDamage * dmgMultAt(currentSecond));
         if (rawDmg > 0) {
           applyBurnDamage(entry, rawDmg);
         }
