@@ -265,8 +265,10 @@ export function LocalPlayerAvatar({ isGunEquipped = false }: LocalPlayerAvatarPr
     return unregister;
   }, [camera]);
 
+  // Hidden from the player's own view — seeing your own body blocked the downward view.
+  // (Other players still see this player via the multiplayer avatar system.)
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} visible={false}>
       {fbx && (
         <primitive 
           object={fbx} 

@@ -100,6 +100,13 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
     };
   }, []);
 
+  // Enter also starts the game / logs in — no need to click the button.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') (onStart ?? signInWithSSO)(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onStart, signInWithSSO]);
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-black">
       {/* Build version, visible right on the start page (no need to load the game to check). */}
