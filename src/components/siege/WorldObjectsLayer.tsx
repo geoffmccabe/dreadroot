@@ -69,7 +69,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     // its geometry (~15M tris) is the dominant cost and the player is at the beach. This REMOVES
     // objects, so it can only make things faster (unlike per-cell culling, which added meshes).
     // Static radius for now; full distance-streaming (follow the player) comes later.
-    const CX = -400, CZ = 680, R2 = 400 * 400;
+    const CX = -400, CZ = 680, R2 = 220 * 220; // ~match the ~200m fog view distance (no visible loss)
     const near: number[] = [];
     for (let i = 0; i < matrices.length; i++) {
       const dx = matrices[i][12] - CX, dz = matrices[i][14] - CZ;

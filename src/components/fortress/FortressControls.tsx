@@ -2776,15 +2776,13 @@ export function FirstPersonControls({
       if (groundHeightFn) {
         const tY = groundHeightFn(camera.position.x, camera.position.z);
         sdbg.isSiege = true; sdbg.ghf = true; sdbg.godMode = godModeRef.current; sdbg.onGround = onGround.current; sdbg.playerY = camera.position.y; sdbg.terrainY = tY; // SW debug
-        if (tY != null) {
-          const floorY = tY + playerHeight + SURFACE_EPS;
-          if (camera.position.y < floorY) {
-            camera.position.y = floorY;
-            if (velocity.current.y < 0) velocity.current.y = 0;
-            onGround.current = true;
-          }
-        } else {
-          // Terrain not loaded here yet (or off-map) — hold rather than fall into the void.
+        // Floor = terrain height, or sea level (22) as a fallback if the heightfield is
+        // missing here. Snap + set grounded ONLY when at/below the floor; when ABOVE it, do
+        // NOT touch onGround so gravity keeps pulling the player down. (The old code forced
+        // onGround=true even mid-air, which killed gravity and left the player hovering.)
+        const floorY = (tY != null ? tY : 22) + playerHeight + SURFACE_EPS;
+        if (camera.position.y <= floorY) {
+          camera.position.y = floorY;
           if (velocity.current.y < 0) velocity.current.y = 0;
           onGround.current = true;
         }
