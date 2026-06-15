@@ -53,11 +53,14 @@ export function resolveBlastHit(input: BlastHitInput): BlastHitResult {
     };
   }
 
-  // Exponential falloff: 2 · 0.05^t. Calibrated to design feedback.
   const t = dist / input.radius;
-  const falloff = 2.0 * Math.pow(0.05, t);
-  const damage = Math.max(1, Math.round(input.baseDamage * falloff));
-  const bulletSpeed = input.baseKnockback * falloff;
+  // Damage: lethal core fading smoothly to 0 at the edge — (1 - t)^1.5. baseDamage is the
+  // CENTER damage, so a direct hit deals the full amount (kills a wide area near the center).
+  const dmgFalloff = Math.pow(1 - t, 1.5);
+  // Knockback keeps the punchy exponential curve so close hits really fling them.
+  const kbFalloff = 2.0 * Math.pow(0.05, t);
+  const damage = Math.max(0, Math.round(input.baseDamage * dmgFalloff));
+  const bulletSpeed = input.baseKnockback * kbFalloff;
 
   // Horizontal direction away from blast center; tilted up by a
   // random 0–45° angle so enemies fly outward + skyward. Unit length

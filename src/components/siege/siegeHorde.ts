@@ -37,6 +37,15 @@ export interface DemonInstance {
 export const siegeDemons: DemonInstance[] = [];
 
 export function addDemon(d: DemonInstance): void { siegeDemons.push(d); }
+
+// Direct (non-knockback) damage — used for blast-impact hits (slamming a wall / the ground).
+// Returns true if this killed it.
+export function hurtDemon(d: DemonInstance, amount: number): boolean {
+  if (d.dead || amount <= 0) return false;
+  d.hp -= amount;
+  if (d.hp <= 0) { d.dead = true; d.deadAt = performance.now(); return true; }
+  return false;
+}
 export function removeDemon(d: DemonInstance): void {
   const i = siegeDemons.indexOf(d);
   if (i >= 0) siegeDemons.splice(i, 1);

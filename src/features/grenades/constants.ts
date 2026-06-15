@@ -30,11 +30,12 @@ export const GRENADE_VISUAL_RADIUS = 0.18;
 export const MAX_LIVE_GRENADES = 24;
 
 // ── Damage / radius scale with tier ──────────────────────────────────
-/** Damage at tier 1, before tier scaling. */
-export const GRENADE_BASE_DAMAGE = 40;
+/** Center-of-blast damage at tier 1 (a direct hit kills a 100-HP monster). Falls off to 0 at
+ *  the edge via (1 - d/R)^1.5 in resolveBlastHit. */
+export const GRENADE_BASE_DAMAGE = 140;
 
-/** Each tier adds this much damage on top of base. */
-export const GRENADE_DAMAGE_PER_TIER = 35;
+/** Each tier adds this much center damage on top of base. */
+export const GRENADE_DAMAGE_PER_TIER = 70;
 
 /** Explosion radius (m) at T1. Doubled per 2026-May-27 feedback —
  *  was 4, now 8 so the AoE actually catches enemies in motion. */

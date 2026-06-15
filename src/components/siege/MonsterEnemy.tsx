@@ -14,7 +14,11 @@ import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { sdbg } from './siegeDebug';
-import { addDemon, removeDemon, type DemonInstance } from './siegeHorde';
+import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
+
+// Blast-impact damage: kinetic, only above a threshold speed. min(120, 0.12·v²).
+const IMPACT_MIN = 7;
+const impactDamage = (v: number) => v > IMPACT_MIN ? Math.min(120, 0.12 * v * v) : 0;
 
 export interface MonsterConfig {
   url: string;
@@ -319,7 +323,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const belowTop = wallTop > -Infinity && feet < wallTop - 0.1;
 
     // UNIVERSAL: never walk through a wall. Undo the horizontal step that entered it (both gaits).
-    if (belowTop) { s.x = preX; s.z = preZ; }
+    if (belowTop) {
+      s.x = preX; s.z = preZ;
+      // Blast-slam into a wall/building → kinetic impact damage from horizontal speed (kvx/kvz
+      // are only non-zero from knockback, so normal walking never triggers this).
+      const hs = Math.hypot(inst.kvx, inst.kvz);
+      if (hs > IMPACT_MIN && !inst.dead) { hurtDemon(inst, impactDamage(hs)); inst.kvx = 0; inst.kvz = 0; }
+    }
 
     // ── Blocked by a wall — two reusable SW gaits ──
     let climbing = false;
@@ -359,8 +369,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     } else {
       // Gravity + land on the highest standable surface.
       s.vy -= GRAVITY * delta;
+      const fallV = s.vy;
       s.y += s.vy * delta;
-      if (s.y <= groundY) { s.y = groundY; s.vy = 0; }
+      if (s.y <= groundY) {
+        // Hard landing after a blast launch (was airborne) → kinetic impact damage.
+        if (!sup.g) {
+          const iv = Math.hypot(inst.kvx, fallV, inst.kvz);
+          if (iv > IMPACT_MIN && !inst.dead) { hurtDemon(inst, impactDamage(iv)); inst.kvx = 0; inst.kvz = 0; }
+        }
+        s.y = groundY; s.vy = 0;
+      }
     }
     // Publish support: resting on something solid (landed, not climbing/airborne) → others may
     // stand on us. Climbing or falling → not supported, so nobody climbs us mid-air.
