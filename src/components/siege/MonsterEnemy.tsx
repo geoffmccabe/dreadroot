@@ -11,6 +11,7 @@ import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
+import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 
 export interface MonsterConfig {
   url: string;
@@ -45,6 +46,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Separation footprint (registered in the shared registry; updated each frame).
   const me = useRef({ x: spawn[0], z: spawn[2], r: Math.max(0.8, c.height * 0.3) }).current;
   useEffect(() => { MONSTERS.add(me); return () => { MONSTERS.delete(me); }; }, [me]);
+  // Engine collider so the PLAYER can't walk through this monster (the player queries
+  // worldCollisionGrid). Updated each frame to follow the monster; removed on unmount.
+  const box = useRef(new THREE.Box3()).current;
+  useEffect(() => { worldCollisionGrid.insert(box); return () => worldCollisionGrid.remove(box); }, [box]);
 
   // Source meshes render very dark — drop metalness and self-light the texture a bit.
   useMemo(() => {
@@ -120,6 +125,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     me.x = s.x; me.z = s.z;
     const gh = sampleHeight(s.x, s.z); if (gh != null) s.y = gh;
     g.position.set(s.x, s.y, s.z);
+    // Move this monster's collider to its new footprint so the player collides with it.
+    box.min.set(s.x - me.r, s.y, s.z - me.r);
+    box.max.set(s.x + me.r, s.y + c.height, s.z + me.r);
+    worldCollisionGrid.update(box);
   });
 
   return <group ref={group} scale={scale}><primitive object={scene} /></group>;
