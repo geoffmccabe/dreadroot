@@ -26,6 +26,7 @@ export interface DemonInstance {
   deadAt: number;       // performance.now() when killed
   despawned: boolean;   // guard so onDespawn fires once
   kvx: number; kvz: number;  // horizontal knockback velocity (m/s), decays
+  kvy: number;          // vertical launch impulse (m/s) — consumed once by the mover (blast)
   stunUntil: number;    // performance.now() ms — frozen until then
   hitAt: number;        // last flinch trigger (performance.now())
   headFrac: number;     // top fraction of the hitbox that counts as a headshot (head zone)
@@ -55,19 +56,26 @@ enemyCombatRegistry.register<DemonInstance>({
   applyDamage: (d, info) => {
     if (d.dead) return false;
     d.hp -= info.damage;
-    // Burn DoT (source 'flame') only chips HP — no re-stun/knockback each tick (else the
-    // horde perma-freezes). Bullets/melee/explosions stagger + stun.
-    if (info.source !== 'flame') {
-      const now = performance.now();
-      const kb = info.source === 'explosion' ? 9
-        : info.source === 'melee' ? (info.knockbackImpulse ?? 8)
-        : 4.5; // bullet: a visible stagger, not a launch
+    const now = performance.now();
+    if (info.source === 'explosion') {
+      // Real falloff-scaled blast impulse (info.bulletSpeed = baseKnockback·falloff, like
+      // shombies). SET velocity on ALL axes — knockbackDir carries a 0-45° upward tilt, so this
+      // LAUNCHES them into an arc + tumble instead of a 1m slide. Capped to a sane on-screen arc.
+      const mag = Math.min(40, info.bulletSpeed);
+      d.kvx = info.knockbackDirX * mag;
+      d.kvz = info.knockbackDirZ * mag;
+      d.kvy = info.knockbackDirY * mag;
+      d.stunUntil = now + 1300;
+      d.hitAt = now;
+    } else if (info.source !== 'flame') {
+      // Burn DoT (flame) only chips HP — no re-stun (else the horde perma-freezes).
+      const kb = info.source === 'melee' ? (info.knockbackImpulse ?? 8) : 4.5; // bullet = small stagger
       d.kvx += info.knockbackDirX * kb;
       d.kvz += info.knockbackDirZ * kb;
-      d.stunUntil = now + 1000 + Math.random() * 2000; // 1–3s stun, as requested
+      d.stunUntil = now + 1000 + Math.random() * 2000; // 1–3s stun
       d.hitAt = now;
     }
-    if (d.hp <= 0) { d.dead = true; d.deadAt = performance.now(); return true; }
+    if (d.hp <= 0) { d.dead = true; d.deadAt = now; return true; }
     return false;
   },
   // Head hitbox: a hit in the top headFrac of the cylinder is a 2x-damage headshot, aligned

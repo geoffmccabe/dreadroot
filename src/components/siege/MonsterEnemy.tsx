@@ -96,7 +96,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const scale = H / c.modelHeight;
   // Animation rhythm jitter — vary the whole mixer tempo per demon.
   useEffect(() => { mixer.timeScale = J.anim; }, [mixer, J.anim]);
-  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0 });
+  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -111,7 +111,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     height: H, radius: Math.max(0.35, H * 0.22),
     hp: cfg.health ?? 100, maxHp: cfg.health ?? 100,
     dead: false, deadAt: 0, despawned: false,
-    kvx: 0, kvz: 0, stunUntil: 0, hitAt: 0,
+    kvx: 0, kvz: 0, kvy: 0, stunUntil: 0, hitAt: 0,
     headFrac: cfg.zombie ? 0.20 : 0.25,   // head ≈ top 20% of a humanoid demon
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
@@ -212,13 +212,24 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       return;
     }
 
-    // ── Knockback: horizontal slide that decays (friction) ──
+    // ── Blast vertical launch: apply once → gravity arcs them; kick off a tumbling spin. ──
+    if (inst.kvy) {
+      s.vy = inst.kvy; inst.kvy = 0;
+      s.tumbling = true;
+      const a = Math.random() * Math.PI * 2;
+      s.spinX = Math.cos(a) * (6 + Math.random() * 7);   // 6–13 rad/s, like shombies
+      s.spinZ = Math.sin(a) * (6 + Math.random() * 7);
+    }
+    // ── Horizontal knockback slide. Decays only while GROUNDED (friction); airborne keeps its
+    //    momentum so a blast flings them in a full arc instead of stopping after ~1m. ──
     if (inst.kvx || inst.kvz) {
       s.x += inst.kvx * delta; s.z += inst.kvz * delta;
-      const decay = Math.exp(-6 * delta);
-      inst.kvx *= decay; inst.kvz *= decay;
-      if (Math.abs(inst.kvx) < 0.05) inst.kvx = 0;
-      if (Math.abs(inst.kvz) < 0.05) inst.kvz = 0;
+      if (sup.g) {
+        const decay = Math.exp(-6 * delta);
+        inst.kvx *= decay; inst.kvz *= decay;
+        if (Math.abs(inst.kvx) < 0.05) inst.kvx = 0;
+        if (Math.abs(inst.kvz) < 0.05) inst.kvz = 0;
+      }
     }
 
     // Capture pre-move XZ so a blocked go-around demon can undo its step. Record the
@@ -348,6 +359,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Publish support: resting on something solid (landed, not climbing/airborne) → others may
     // stand on us. Climbing or falling → not supported, so nobody climbs us mid-air.
     sup.g = !climbing && s.vy === 0;
+
+    // Tumble through the air after a blast; land + settle upright once grounded.
+    if (s.tumbling) {
+      if (sup.g) { s.tumbling = false; g.rotation.x = 0; g.rotation.z = 0; }
+      else { g.rotation.x += s.spinX * delta; g.rotation.z += s.spinZ * delta; }
+    }
 
     me.y = s.y;
     g.position.set(s.x, s.y, s.z);
