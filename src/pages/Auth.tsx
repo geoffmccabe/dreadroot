@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { APP_VERSION } from '@/version';
 
 // SSO-only login gate. Layers, back -> front:
 //  1. YouTube video (muted autoplay, full-bleed cover). The IFrame API
@@ -101,6 +102,10 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-black">
+      {/* Build version, visible right on the start page (no need to load the game to check). */}
+      <div className="absolute bottom-3 right-4 z-30 font-mono text-xs text-white/55 pointer-events-none select-none">
+        v{APP_VERSION}
+      </div>
       <style>{`
 @keyframes authBlackPulse{0%,100%{opacity:.75}50%{opacity:.60}}
 @keyframes dreadrootCrossfade{0%,100%{opacity:0}50%{opacity:1}}
