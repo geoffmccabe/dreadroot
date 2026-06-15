@@ -65,10 +65,13 @@ export function SiegeSpawner() {
 
   return (
     <>
+      {/* RedDemonZombie — npcType 32 (the spawnable horde variant; distinct from the original
+          full-size RedDemon, npcType 0). zombie flag enables size/speed/rhythm jitter,
+          desaturated shading, and head+body colliders. */}
       {demons.map((d) => (
         <MonsterEnemy key={d.id} id={`d${d.id}`} spawn={d.spawn} url="/siege/monsters/reddemon.glb"
           modelHeight={1.886} height={1.8} aggro={400} speed={3.2} wanderRadius={6}
-          health={100} onDespawn={despawn} />
+          health={100} onDespawn={despawn} zombie />
       ))}
     </>
   );

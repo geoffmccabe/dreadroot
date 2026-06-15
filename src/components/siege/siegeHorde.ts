@@ -28,6 +28,7 @@ export interface DemonInstance {
   kvx: number; kvz: number;  // horizontal knockback velocity (m/s), decays
   stunUntil: number;    // performance.now() ms — frozen until then
   hitAt: number;        // last flinch trigger (performance.now())
+  headFrac: number;     // top fraction of the hitbox that counts as a headshot (head zone)
 }
 
 // Live array (not a Set) so getActiveEnemies returns it with zero per-query allocation —
@@ -69,6 +70,9 @@ enemyCombatRegistry.register<DemonInstance>({
     if (d.hp <= 0) { d.dead = true; d.deadAt = performance.now(); return true; }
     return false;
   },
+  // Head hitbox: a hit in the top headFrac of the cylinder is a 2x-damage headshot, aligned
+  // with the visible head collider.
+  getHeadshotZoneFraction: (d) => d.headFrac,
   // Flamethrower wraps the body in fire (torso + head), tracking the live center.
   getFlameAttachPoints: (d): FlameAttachPoint[] => {
     const k = d.height / 1.8;

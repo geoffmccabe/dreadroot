@@ -30,6 +30,8 @@ export interface MonsterConfig {
   health?: number;            // HP (default 100)
   id?: string;                // stable combat id (auto if omitted)
   onDespawn?: (id: string) => void;  // called once after the death anim finishes
+  zombie?: boolean;           // RedDemonZombie horde variant: per-demon size/speed/rhythm
+                              // jitter, desaturated shading, head+body colliders, low stack
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
 
@@ -45,6 +47,9 @@ const TRAP_RADIUS = 1.3, TRAP_COUNT = 3; // boxed in by this many of its own kin
 // Shared live registry of monster footprints so each pushes out of the others (cheap O(n²)
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
 const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
+// Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
+// skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
+const headBoxes = new Set<THREE.Box3>();
 
 export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number] } & MonsterConfig) {
   const c = { ...DEF, ...cfg };
@@ -55,22 +60,38 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // clones the skinned mesh + skeleton properly (materials stay shared, which is fine).
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
-  const { actions, names } = useAnimations(animations, group);
+  const { actions, names, mixer } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
-  const scale = c.height / c.modelHeight;
+  // Per-demon variation for the zombie horde (stable): size ±10%, speed +0-10%, animation
+  // rhythm +0-10%, desaturation 30-80% (greyed-out shades). Non-zombie monsters = no jitter.
+  const jit = useRef<{ size: number; speed: number; anim: number; desat: number } | null>(null);
+  if (!jit.current) {
+    const R = Math.random;
+    jit.current = cfg.zombie
+      ? { size: 1 + (R() * 2 - 1) * 0.10, speed: 1 + R() * 0.10, anim: 1 + R() * 0.10, desat: 0.30 + R() * 0.50 }
+      : { size: 1, speed: 1, anim: 1, desat: 0 };
+  }
+  const J = jit.current;
+  const H = c.height * J.size;              // jittered in-world height
+  const SPD = (c.speed ?? DEF.speed) * J.speed;
+  const STAND = cfg.zombie ? 0.80 : 1.0;    // standable top = 0.8H so stacked demons sit on shoulders
+  const scale = H / c.modelHeight;
+  // Animation rhythm jitter — vary the whole mixer tempo per demon.
+  useEffect(() => { mixer.timeScale = J.anim; }, [mixer, J.anim]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
-  const me = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], r: Math.max(0.8, c.height * 0.3) }).current;
+  const me = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], r: Math.max(0.8, H * 0.3) }).current;
   useEffect(() => { MONSTERS.add(me); return () => { MONSTERS.delete(me); }; }, [me]);
   // Combat instance — registered with the shared horde so Dreadroot weapons can damage it.
   const inst = useRef<DemonInstance>({
     id: cfg.id ?? `mon_${_mid++}`,
     x: spawn[0], y: spawn[1], z: spawn[2],
-    height: c.height, radius: Math.max(0.35, c.height * 0.22),
+    height: H, radius: Math.max(0.35, H * 0.22),
     hp: cfg.health ?? 100, maxHp: cfg.health ?? 100,
     dead: false, deadAt: 0, despawned: false,
     kvx: 0, kvz: 0, stunUntil: 0, hitAt: 0,
+    headFrac: cfg.zombie ? 0.20 : 0.25,   // head ≈ top 20% of a humanoid demon
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   // Stable per-demon climbing role from the id: ~25% are climbers (hop over walls/rocks);
@@ -85,23 +106,53 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // worldCollisionGrid). Updated each frame to follow the monster; removed on unmount.
   const box = useRef(new THREE.Box3()).current;
   useEffect(() => { worldCollisionGrid.insert(box); return () => worldCollisionGrid.remove(box); }, [box]);
+  // Zombie: a separate HEAD collider above the body, registered in the grid + head set (so it
+  // gives the head a physical/headshot shape but demons don't stand on it).
+  const headBox = useRef(cfg.zombie ? new THREE.Box3() : null).current;
+  useEffect(() => {
+    if (!headBox) return;
+    worldCollisionGrid.insert(headBox); headBoxes.add(headBox);
+    return () => { worldCollisionGrid.remove(headBox); headBoxes.delete(headBox); };
+  }, [headBox]);
 
-  // Source meshes render very dark — drop metalness and self-light the texture a bit.
+  // Source meshes render very dark — drop metalness and self-light the texture a bit. For the
+  // zombie horde, also CLONE each material (so this demon is independent) and inject a per-demon
+  // grayscale mix in the fragment shader → varied greyed-out red shades (zombie look).
   useMemo(() => {
+    const dz = J.desat;
     cloned.traverse((o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      let mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      if (cfg.zombie) {
+        mats = mats.map((mm) => (mm as THREE.Material).clone());
+        mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
+      }
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
         if (!m) return;
         if ('metalness' in m) m.metalness = 0;
         if ('roughness' in m) m.roughness = 0.85;
         if ('emissive' in m && m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
+        if (cfg.zombie && dz > 0) {
+          // Share ONE compiled program across all zombie mats with the same texture features
+          // (else 1 compile per demon); the desat amount varies per material via its uniform.
+          m.customProgramCacheKey = () => `zdesat_${m.map ? 1 : 0}_${m.emissiveMap ? 1 : 0}`;
+          m.onBeforeCompile = (shader) => {
+            shader.uniforms.uDesat = { value: dz };
+            shader.fragmentShader = 'uniform float uDesat;\n' + shader.fragmentShader;
+            if (shader.fragmentShader.includes('#include <dithering_fragment>')) {
+              shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <dithering_fragment>',
+                '#include <dithering_fragment>\n{ float _zl = dot(gl_FragColor.rgb, vec3(0.299,0.587,0.114)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(_zl), uDesat); }',
+              );
+            }
+          };
+        }
         m.needsUpdate = true;
       });
     });
-  }, [cloned]);
+  }, [cloned, J.desat]);
 
   const clip = (key: string) => { const n = names.find((nm) => nm.toLowerCase().includes(key)); return n ? actions[n] : null; };
   const play = (key: string, once = false) => {
@@ -156,7 +207,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     } else if (dist < c.aggro) {                            // found a player -> pursue/attack
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       if (dist > c.attackRange) {
-        const step = Math.min(c.speed * delta, dist - c.attackRange);
+        const step = Math.min(SPD * delta, dist - c.attackRange);
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
@@ -171,7 +222,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const wdx = s.wx - s.x, wdz = s.wz - s.z, wd = Math.hypot(wdx, wdz) || 1;
       if (wd > 0.6) {
         g.rotation.y = Math.atan2(wdx, wdz) + c.faceOffset;
-        const step = Math.min(c.speed * 0.5 * delta, wd);
+        const step = Math.min(SPD * 0.5 * delta, wd);
         mvx = wdx / wd; mvz = wdz / wd; moving = true;
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
@@ -206,11 +257,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const res = worldCollisionGrid.nearbyResult;
     for (let i = 0; i < cnt; i++) {
       const b = res[i] as THREE.Box3;
-      if (!b || b === box || !b.max) continue;
+      if (!b || b === box || headBoxes.has(b) || !b.max) continue;   // never stand on a head
       if (s.x >= b.min.x - me.r && s.x <= b.max.x + me.r && s.z >= b.min.z - me.r && s.z <= b.max.z + me.r) {
         const top = b.max.y;
         if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
-        else if (b.min.y < feet + c.height && top > wallTop) wallTop = top;          // too tall → wall
+        else if (b.min.y < feet + H && top > wallTop) wallTop = top;                 // too tall → wall
       }
     }
     const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
@@ -224,7 +275,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       } else if (feet < wallTop - 0.1) {
         s.x = preX; s.z = preZ;
         const sg = role.current!.side;
-        const step = c.speed * delta;
+        const step = SPD * delta;
         s.x += (-mvz * sg) * step; s.z += (mvx * sg) * step;   // crab perpendicular to the wall
       }
     }
@@ -237,11 +288,19 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     me.y = s.y;
     g.position.set(s.x, s.y, s.z);
     inst.x = s.x; inst.y = s.y; inst.z = s.z;   // keep the combat hitbox on the live body
-    // Move this monster's collider to its new footprint so the player + other demons collide
-    // with it (the latter is how they stack: a demon's box is a standable surface).
-    box.min.set(s.x - me.r, s.y, s.z - me.r);
-    box.max.set(s.x + me.r, s.y + c.height, s.z + me.r);
+    // BODY collider: feet → shoulders (STAND·H). Other demons stand on its top, so a stacked
+    // demon sits at shoulder height (~0.8H) instead of floating above the head below it.
+    const br = cfg.zombie ? H * 0.26 : me.r;
+    box.min.set(s.x - br, s.y, s.z - br);
+    box.max.set(s.x + br, s.y + H * STAND, s.z + br);
     worldCollisionGrid.update(box);
+    // HEAD collider (zombie): shoulders → top, narrower. Physical head + headshot reference.
+    if (headBox) {
+      const hr = H * 0.16;
+      headBox.min.set(s.x - hr, s.y + H * STAND, s.z - hr);
+      headBox.max.set(s.x + hr, s.y + H, s.z + hr);
+      worldCollisionGrid.update(headBox);
+    }
     sdbg.monsters = MONSTERS.size; // SW debug
   });
 
