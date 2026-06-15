@@ -3,8 +3,9 @@
 // (Unity transform, X-mirrored to match the terrain). Instanced per sub-mesh.
 // Per-group error boundary so one bad/missing glb can't take down the world.
 
-import { Component, ReactNode, Suspense, useEffect, useMemo, useState } from 'react';
+import { Component, ReactNode, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useGLTF } from '@react-three/drei';
+import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
@@ -165,15 +166,28 @@ export function WorldObjectsLayer() {
       .then((d) => alive && setData(d)).catch(() => {});
     return () => { alive = false; };
   }, []);
-  // PERF: only mount object types that have an instance near the play area, and pass ONLY
-  // those near instances. Far-only object types never mount → their .glb is never downloaded
-  // or parsed. That main-thread parse of the full 430MB was the real fps killer (DFlow showed
-  // long-tasks + GC stalls dominating, not raw draw). ~match the ~200m fog distance.
+  // STREAMING: mount only the object INSTANCES within R of the player (per-instance, so shared
+  // rock/grass types don't drag their far-island copies into the beach — that full-map parse was
+  // the real fps killer). The load center FOLLOWS the camera, so flying to another island loads
+  // its objects (after a brief parse) instead of them never rendering — the bug being fixed.
+  // A large move threshold means normal beach play never re-centers (no rebuild hitch); only
+  // travelling far does, and a re-center rebuilds the now-near groups (the accepted "delay").
+  const camera = useThree((s) => s.camera);
+  const [center, setCenter] = useState<[number, number]>([-400, 680]);
+  const lastCenter = useRef<[number, number]>([-400, 680]);
+  useFrame(() => {
+    const dx = camera.position.x - lastCenter.current[0];
+    const dz = camera.position.z - lastCenter.current[1];
+    if (dx * dx + dz * dz > 150 * 150) {            // re-center only after ~150m of travel
+      lastCenter.current = [camera.position.x, camera.position.z];
+      setCenter([camera.position.x, camera.position.z]);
+    }
+  });
+  const allGroups = useMemo(() => (data?.groups ?? []).map((g, i) => ({ ...g, _k: i })), [data]);
   const nearGroups = useMemo(() => {
-    if (!data) return [] as Group[];
-    const CX = -400, CZ = 680, R2 = 220 * 220;
-    const out: Group[] = [];
-    for (const g of data.groups) {
+    const [CX, CZ] = center, R2 = 260 * 260;        // ~match the fog distance + a margin
+    const out: (Group & { _k: number })[] = [];
+    for (const g of allGroups) {
       const near = g.matrices.filter((mx) => {
         const dx = mx[12] - CX, dz = mx[14] - CZ;
         return dx * dx + dz * dz < R2;
@@ -181,13 +195,13 @@ export function WorldObjectsLayer() {
       if (near.length) out.push({ ...g, matrices: near });
     }
     return out;
-  }, [data]);
+  }, [allGroups, center]);
 
   if (!data) return null;
   return (
     <>
-      {nearGroups.map((g, i) => (
-        <Boundary key={i}>
+      {nearGroups.map((g) => (
+        <Boundary key={g._k}>
           <Suspense fallback={null}>
             <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} />
           </Suspense>
