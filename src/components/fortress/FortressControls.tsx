@@ -704,7 +704,9 @@ export function FirstPersonControls({
         // grenade (parent owns inventory/equipped state + slot selection).
         if (event.metaKey || event.ctrlKey || event.altKey) break;
         gKeyHeldRef.current = true;
-        if (onGround.current && onGrenadeTogglePress) {
+        // Arm a grenade on the ground OR while flying (god mode) — god mode has no glide, so
+        // there's no air-glide conflict, and you can still arm/throw while flying the map.
+        if ((onGround.current || godModeRef.current) && onGrenadeTogglePress) {
           onGrenadeTogglePress();
         }
         break;
