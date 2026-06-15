@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Settings, Store } from 'lucide-react';
 import { FPSDisplay, BlockDeleteHandler } from '@/components/FPSCounter';
 import { GameSwitcher } from '@/components/GameSwitcher';
+import { SiegeTitleSplash } from '@/components/siege/SiegeTitleSplash';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
@@ -858,6 +859,8 @@ export function FortressHUD(props: FortressHUDProps) {
     <>
       {/* Universal game switcher (top-right) — flip between Dreadroot / Siege Worlds. */}
       <GameSwitcher />
+      {/* Siege Worlds title splash — logo over the loading map, then fades. */}
+      <SiegeTitleSplash />
       {/* Flying coin animations */}
       {Array.isArray(flyingCoins) &&
         flyingCoins.map((coin: any) => (
