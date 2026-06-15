@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useMemo } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
+import { SkeletonUtils } from 'three-stdlib';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
@@ -39,6 +40,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const c = { ...DEF, ...cfg };
   const clips = { ...DEFCLIPS, ...(cfg.clips || {}) };
   const { scene, animations } = useGLTF(c.url);
+  // Clone the rig so MANY instances of the same model (e.g. a horde of red demons) each get
+  // their own skeleton — a plain shared scene can only render in one place. SkeletonUtils
+  // clones the skinned mesh + skeleton properly (materials stay shared, which is fine).
+  const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
@@ -54,7 +59,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
   // Source meshes render very dark — drop metalness and self-light the texture a bit.
   useMemo(() => {
-    scene.traverse((o: THREE.Object3D) => {
+    cloned.traverse((o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -67,7 +72,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         m.needsUpdate = true;
       });
     });
-  }, [scene]);
+  }, [cloned]);
 
   const clip = (key: string) => { const n = names.find((nm) => nm.toLowerCase().includes(key)); return n ? actions[n] : null; };
   const play = (key: string, once = false) => {
@@ -133,5 +138,5 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     sdbg.monsters = MONSTERS.size; // SW debug
   });
 
-  return <group ref={group} scale={scale}><primitive object={scene} /></group>;
+  return <group ref={group} scale={scale}><primitive object={cloned} /></group>;
 }

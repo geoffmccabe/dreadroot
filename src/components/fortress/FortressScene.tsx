@@ -32,6 +32,7 @@ import { FirstPersonControls } from './FortressControls';
 import { useActiveGame } from '@/config/activeGame';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
+import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
 import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
 import { DynamicSky, SkyHandle } from './FortressSky';
@@ -1714,6 +1715,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         </>
       )}
       {isSiege && <ColliderDebugView />}
+      {isSiege && <SiegeSpawner />}
       {isSiege ? (
         <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
       ) : (

@@ -53,6 +53,10 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     const out = new THREE.Group();
     const colliders: THREE.Box3[] = [];
     const solid = isSolidGroup(fbx);
+    // Mesh-AABBs run loose; shrink toward the real object size. Rocks are the worst (organic
+    // shapes in a big box) → 60%; everything else → 80%.
+    const isRock = /rock|stone|boulder|cliff|mountain/i.test(fbx);
+    const shrinkF = 0.8;  // non-rocks: 80% box (rocks get voxelized to match their shape)
     let meshes: THREE.Mesh[] = [];
     gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
     // Combined bake: render only the named sub-mesh for this group.
@@ -117,7 +121,33 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         inst.setMatrixAt(i, m);
         // Collider from the SAME instance matrix `m` that positions the rendered building →
         // aligned by construction (axis-aligned box around the rotated mesh).
-        if (geoBox && colliders.length < 2000) colliders.push(geoBox.clone().applyMatrix4(m));
+        if (geoBox && colliders.length < 2000) {
+          if (isRock) {
+            // Voxelize the rock's vertices into ~1.5m boxes that follow the mesh shape — rocks
+            // are low-poly, so this is cheap and far tighter than one oversized AABB.
+            const CELL = 1.5;
+            const pos = src.geometry.attributes.position as THREE.BufferAttribute;
+            const seen = new Set<string>();
+            const vv = new THREE.Vector3();
+            for (let vi = 0; vi < pos.count && colliders.length < 2000; vi++) {
+              vv.fromBufferAttribute(pos, vi).applyMatrix4(m);
+              const cx = Math.floor(vv.x / CELL), cy = Math.floor(vv.y / CELL), cz = Math.floor(vv.z / CELL);
+              const key = `${cx},${cy},${cz}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              colliders.push(new THREE.Box3(
+                new THREE.Vector3(cx * CELL, cy * CELL, cz * CELL),
+                new THREE.Vector3((cx + 1) * CELL, (cy + 1) * CELL, (cz + 1) * CELL),
+              ));
+            }
+          } else {
+            const wb = geoBox.clone().applyMatrix4(m);
+            const ctr = wb.getCenter(new THREE.Vector3());
+            const half = wb.getSize(new THREE.Vector3()).multiplyScalar(shrinkF * 0.5);
+            wb.min.copy(ctr).sub(half); wb.max.copy(ctr).add(half);
+            colliders.push(wb);
+          }
+        }
       }
       inst.instanceMatrix.needsUpdate = true;
       inst.computeBoundingSphere();

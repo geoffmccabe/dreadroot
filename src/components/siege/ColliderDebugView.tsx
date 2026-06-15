@@ -12,14 +12,16 @@ export function ColliderDebugView() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Ctrl + Cmd + "+"/"=" toggles the collider wireframes.
-      if (e.ctrlKey && e.metaKey && (e.key === '+' || e.key === '=')) {
+      // Ctrl + Cmd + "+"/"=" toggles the collider wireframes. Capture phase + stopPropagation
+      // so the game's keybinds and the browser zoom don't eat it first.
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'Equal' || e.code === 'NumpadAdd' || e.key === '+' || e.key === '=')) {
         e.preventDefault();
+        e.stopPropagation();
         setOn((v) => !v);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
   useEffect(() => {
@@ -31,7 +33,12 @@ export function ColliderDebugView() {
     if (!cells) return;
     let n = 0;
     for (const box of cells.keys()) {
-      g.add(new THREE.Box3Helper(box, new THREE.Color(0x00ff88) as unknown as number));
+      const h = new THREE.Box3Helper(box, new THREE.Color(0x00ff88) as unknown as number);
+      // Draw through walls/terrain so the boxes are always visible for inspection.
+      const mat = h.material as THREE.LineBasicMaterial;
+      mat.depthTest = false; mat.depthWrite = false; mat.transparent = true;
+      h.renderOrder = 999;
+      g.add(h);
       n++;
     }
     console.log(`[ColliderDebug] showing ${n} collider wireframes (Ctrl+Cmd+= to toggle)`);
