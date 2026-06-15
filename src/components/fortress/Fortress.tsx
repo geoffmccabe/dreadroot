@@ -8,10 +8,7 @@ import { BlockPreview } from '@/components/BlockPreview';
 import { SeedPreview } from '@/features/trees/components/SeedPreview';
 import { UserPanel } from '@/components/UserPanel';
 import { AdminPanel } from '@/components/AdminPanel';
-// DISABLED 2026-Jun-15 (other-Claude EMS): the <NpcSystem/> mount crashed the whole app with
-// "Cannot access 'Tt' before initialization" (init-order/circular-import) during render —
-// white screen for everyone. Re-enable this import + the mount once the NPC/EMS bug is fixed.
-// import { NpcSystem } from '@/features/npc/NpcSystem';
+import { NpcSystem } from '@/features/npc/NpcSystem';
 import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
@@ -1931,8 +1928,7 @@ export function Fortress() {
   return (
     <div className="w-full h-screen relative overflow-hidden bg-background">
       {/* NEW NPC system (parallel): Ctrl/Cmd-N builder + '@'-then-digit spawn. */}
-      {/* DISABLED 2026-Jun-15: <NpcSystem/> crashed the app (white screen, "Cannot access 'Tt'
-          before initialization" during render). Re-enable with the import above once fixed. */}
+      <NpcSystem isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
       <FortressProviders>
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}

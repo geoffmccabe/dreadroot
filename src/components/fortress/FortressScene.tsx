@@ -72,10 +72,7 @@ import { useShroomerSystem, ShroomerRenderer, ShroomerRendererHandle } from '@/f
 import { useVortaxSystem, VortaxRenderer, VortaxRendererHandle } from '@/features/vortax';
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
-// DISABLED 2026-Jun-15 (other-Claude EMS): the <EMSRenderer/> mount crashed the whole app
-// with "Cannot access 'Tt' before initialization" (init-order/circular-import) during render
-// — white screen for everyone. Re-enable this import + the mount once the NPC/EMS bug is fixed.
-// import { EMSRenderer } from '@/features/npc/ems/EMSRenderer';
+import { EMSRenderer } from '@/features/npc/ems/EMSRenderer';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
 import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer } from '@/features/shpider-eggs';
 import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
@@ -252,6 +249,10 @@ export function FortressScene({
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
   const siegeSpawn = useMemo(() => new THREE.Vector3(-400, 45, 660), []);
+  // useThree() camera — MUST be declared before the live-swap effect below, which reads
+  // `camera` in its dependency array. (A merge had pushed this declaration below the effect,
+  // producing a "Cannot access 'Tt' before initialization" TDZ white-screen for everyone.)
+  const { camera } = useThree();
 
   // Live world-swap teleport (no page reload). When the active game changes, drop the
   // player into the new world: entering Siege → SW spawn (and remember the Dreadroot
@@ -281,8 +282,7 @@ export function FortressScene({
   // spawning/AI here (shwarms, shombies, shpiders, walapas, etc.) so none spawn, no
   // shpider sounds, and no wasted load. Every DR enemy system reads this one flag.
   const enemiesEnabled = !blocksLoading && worldRevision > 0 && !isSiege;
-  const { camera } = useThree();
-  
+
   // Fetch usernames for tree labels
   const { usernamesMap } = useTreePlanterNames(plantedTrees);
 
@@ -1780,8 +1780,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <ShtickmanRenderer ref={shtickmanRendererRef} shtickmenRef={shtickmenRef} cameraRef={cameraRef} universalFlameRef={universalFlameRef} />
 
       {/* NEW EMS NPC system (parallel) — renders @-spawned electromagnetic-skeleton NPCs. */}
-      {/* DISABLED 2026-Jun-15: <EMSRenderer /> crashed the app (white screen, "Cannot access
-          'Tt' before initialization" during render). Re-enable with the import above once fixed. */}
+      <EMSRenderer />
 
       {/* Shpider Renderer — per-tier InstancedMesh routing + death fragments. */}
       <ShpiderRenderer
