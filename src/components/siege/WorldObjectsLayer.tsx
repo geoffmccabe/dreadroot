@@ -65,6 +65,17 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     // BeachTown=0.0001). Snap those extreme outliers back to 0.01.
     const norm = (v: number) => (v > 5 || v < 0.005 ? 0.01 : v);
     const P = new THREE.Vector3(), Q = new THREE.Quaternion(), S = new THREE.Vector3();
+    // PERF: render ONLY objects near the beach play area and skip the rest of the 2000m map —
+    // its geometry (~15M tris) is the dominant cost and the player is at the beach. This REMOVES
+    // objects, so it can only make things faster (unlike per-cell culling, which added meshes).
+    // Static radius for now; full distance-streaming (follow the player) comes later.
+    const CX = -400, CZ = 680, R2 = 400 * 400;
+    const near: number[] = [];
+    for (let i = 0; i < matrices.length; i++) {
+      const dx = matrices[i][12] - CX, dz = matrices[i][14] - CZ;
+      if (dx * dx + dz * dz < R2) near.push(i);
+    }
+    if (!near.length) return out; // this object type has nothing near the beach → render none
     for (const src of meshes) {
       src.updateWorldMatrix(true, false);
       local.copy(src.matrixWorld);
@@ -96,12 +107,13 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           m.needsUpdate = true;
         }
       });
-      const inst = new THREE.InstancedMesh(src.geometry, src.material, matrices.length);
+      const inst = new THREE.InstancedMesh(src.geometry, src.material, near.length);
       inst.userData = { fbx, mesh: meshName ?? '(whole)', combined: !!combined };
-      for (let i = 0; i < matrices.length; i++) {
+      for (let j = 0; j < near.length; j++) {
+        const i = near[j];
         m.fromArray(matrices[i]).multiply(local);
         if (flipQ) { m.decompose(P, Q, S); Q.premultiply(flipQ); m.compose(P, Q, S); }
-        inst.setMatrixAt(i, m);
+        inst.setMatrixAt(j, m);
       }
       inst.instanceMatrix.needsUpdate = true;
       inst.computeBoundingSphere();
