@@ -236,7 +236,22 @@ export function useBurnSystem({
     if (!enemy) return null;
     const hb = adapter.getHitbox(enemy);
     if (!hb) return null;
-    return _registryFallbackPos.set(hb.centerX, hb.bottomY, hb.centerZ);
+    _registryFallbackPos.set(hb.centerX, hb.bottomY, hb.centerZ);
+    // Sit the fire on the collider's NEAR FACE (toward the camera), not its
+    // center. The center is inside the solid body mesh, and the flame material
+    // is depth-tested — so a center-spawned fire is occluded BY the monster and
+    // looks like "no fire at all". Pushing it out to the surface facing the
+    // player keeps it in front of the body, visibly burning on the collider.
+    const cam = cameraRef.current;
+    if (cam) {
+      const dx = cam.position.x - hb.centerX;
+      const dz = cam.position.z - hb.centerZ;
+      const len = Math.hypot(dx, dz) || 1;
+      const off = (hb.radius ?? 0.5) + 0.25;
+      _registryFallbackPos.x += (dx / len) * off;
+      _registryFallbackPos.z += (dz / len) * off;
+    }
+    return _registryFallbackPos;
   }, [cameraRef]);
 
   // Public: apply or refresh a burn on an entity
