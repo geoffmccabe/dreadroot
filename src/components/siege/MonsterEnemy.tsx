@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { sdbg } from './siegeDebug';
+import { addDemon, removeDemon, type DemonInstance } from './siegeHorde';
 
 export interface MonsterConfig {
   url: string;
@@ -26,11 +27,16 @@ export interface MonsterConfig {
   aggro?: number;
   wanderRadius?: number;
   faceOffset?: number;
-  clips?: { idle?: string; walk?: string; attack?: string };
+  health?: number;            // HP (default 100)
+  id?: string;                // stable combat id (auto if omitted)
+  onDespawn?: (id: string) => void;  // called once after the death anim finishes
+  clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
-const DEFCLIPS = { idle: 'idle', walk: 'walk', attack: 'attack' };
+const DEFCLIPS = { idle: 'idle', walk: 'walk', attack: 'attack', death: 'death', hit: 'hit' };
+const DEATH_DESPAWN_MS = 2600; // play the death clip, hold the pose, then remove
+let _mid = 0;
 
 // Shared live registry of monster footprints so each pushes out of the others (cheap O(n²)
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
@@ -52,6 +58,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Separation footprint (registered in the shared registry; updated each frame).
   const me = useRef({ x: spawn[0], z: spawn[2], r: Math.max(0.8, c.height * 0.3) }).current;
   useEffect(() => { MONSTERS.add(me); return () => { MONSTERS.delete(me); }; }, [me]);
+  // Combat instance — registered with the shared horde so Dreadroot weapons can damage it.
+  const inst = useRef<DemonInstance>({
+    id: cfg.id ?? `mon_${_mid++}`,
+    x: spawn[0], y: spawn[1], z: spawn[2],
+    height: c.height, radius: Math.max(0.35, c.height * 0.22),
+    hp: cfg.health ?? 100, maxHp: cfg.health ?? 100,
+    dead: false, deadAt: 0, despawned: false,
+    kvx: 0, kvz: 0, stunUntil: 0, hitAt: 0,
+  }).current;
+  useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   // Engine collider so the PLAYER can't walk through this monster (the player queries
   // worldCollisionGrid). Updated each frame to follow the monster; removed on unmount.
   const box = useRef(new THREE.Box3()).current;
@@ -87,12 +103,39 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useFrame((_, delta) => {
     const g = group.current; if (!g) return;
     const s = st.current;
-    g.position.set(s.x, s.y, s.z);
+    const now = performance.now();
     const dx = camera.position.x - s.x, dz = camera.position.z - s.z;
     const dist = Math.hypot(dx, dz) || 1;
-    const now = performance.now();
 
-    if (dist < c.aggro) {                                   // found a player -> pursue/attack
+    // ── DEATH: play the death clip once, slide out the last knockback, then despawn ──
+    if (inst.dead) {
+      play(clips.death, true);
+      s.x += inst.kvx * delta; s.z += inst.kvz * delta;
+      inst.kvx *= 0.82; inst.kvz *= 0.82;
+      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
+      g.position.set(s.x, s.y, s.z);
+      inst.x = s.x; inst.y = s.y; inst.z = s.z;
+      if (!inst.despawned && now - inst.deadAt > DEATH_DESPAWN_MS) {
+        inst.despawned = true; cfg.onDespawn?.(inst.id);
+      }
+      return;
+    }
+
+    // ── Knockback: horizontal slide that decays (friction) ──
+    if (inst.kvx || inst.kvz) {
+      s.x += inst.kvx * delta; s.z += inst.kvz * delta;
+      const decay = Math.exp(-6 * delta);
+      inst.kvx *= decay; inst.kvz *= decay;
+      if (Math.abs(inst.kvx) < 0.05) inst.kvx = 0;
+      if (Math.abs(inst.kvz) < 0.05) inst.kvz = 0;
+    }
+
+    const stunned = now < inst.stunUntil;
+    if (stunned) {                                          // hit-stunned -> flinch + hold
+      g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
+      if (inst.hitAt && now - inst.hitAt < 450) play(clips.hit, true);
+      else play(clips.idle);
+    } else if (dist < c.aggro) {                            // found a player -> pursue/attack
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       if (dist > c.attackRange) {
         const step = Math.min(c.speed * delta, dist - c.attackRange);
@@ -131,6 +174,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     me.x = s.x; me.z = s.z;
     const gh = sampleHeight(s.x, s.z); if (gh != null) s.y = gh;
     g.position.set(s.x, s.y, s.z);
+    inst.x = s.x; inst.y = s.y; inst.z = s.z;   // keep the combat hitbox on the live body
     // Move this monster's collider to its new footprint so the player collides with it.
     box.min.set(s.x - me.r, s.y, s.z - me.r);
     box.max.set(s.x + me.r, s.y + c.height, s.z + me.r);

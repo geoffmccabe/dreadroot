@@ -61,11 +61,14 @@ export function SiegeSpawner() {
     return () => { window.removeEventListener('keydown', onKey, true); clearStage(); };
   }, [camera, demons.length]);
 
+  const despawn = (id: string) => setDemons((d) => d.filter((x) => `d${x.id}` !== id));
+
   return (
     <>
       {demons.map((d) => (
-        <MonsterEnemy key={d.id} spawn={d.spawn} url="/siege/monsters/reddemon.glb"
-          modelHeight={1.886} height={1.8} aggro={400} speed={3.2} wanderRadius={6} />
+        <MonsterEnemy key={d.id} id={`d${d.id}`} spawn={d.spawn} url="/siege/monsters/reddemon.glb"
+          modelHeight={1.886} height={1.8} aggro={400} speed={3.2} wanderRadius={6}
+          health={100} onDespawn={despawn} />
       ))}
     </>
   );
