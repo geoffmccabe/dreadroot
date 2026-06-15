@@ -217,8 +217,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       s.vy = inst.kvy; inst.kvy = 0;
       s.tumbling = true;
       const a = Math.random() * Math.PI * 2;
-      s.spinX = Math.cos(a) * (6 + Math.random() * 7);   // 6–13 rad/s, like shombies
-      s.spinZ = Math.sin(a) * (6 + Math.random() * 7);
+      s.spinX = Math.cos(a) * (Math.random() * 13);   // 0–13 rad/s tumble
+      s.spinZ = Math.sin(a) * (Math.random() * 13);
     }
     // ── Horizontal knockback slide. Decays only while GROUNDED (friction); airborne keeps its
     //    momentum so a blast flings them in a full arc instead of stopping after ~1m. ──
