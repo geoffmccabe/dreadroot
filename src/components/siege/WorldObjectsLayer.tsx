@@ -8,7 +8,7 @@ import { useGLTF } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { voxelizeGeometry } from './voxelize';
+import { managedRocks, keyFor } from './voxelOverrides';
 
 interface Group { fbx: string; url: string; matrices: number[][]; rotX?: number; mesh?: string; combined?: boolean; scaleMul?: number; whole?: boolean }
 
@@ -121,20 +121,16 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         m.fromArray(matrices[i]).multiply(local);
         if (flipQ) { m.decompose(P, Q, S); Q.premultiply(flipQ); m.compose(P, Q, S); }
         inst.setMatrixAt(i, m);
-        // Collider from the SAME instance matrix `m` that positions the rendered building →
-        // aligned by construction (axis-aligned box around the rotated mesh).
-        if (geoBox && colliders.length < 2000) {
-          if (isRock) {
-            // 1m voxel shell following the rock surface (shared helper — identical to the V tool).
-            const vox = voxelizeGeometry(src.geometry, m, 1.0, 2000 - colliders.length);
-            for (const bx of vox) colliders.push(bx);
-          } else {
-            const wb = geoBox.clone().applyMatrix4(m);
-            const ctr = wb.getCenter(new THREE.Vector3());
-            const half = wb.getSize(new THREE.Vector3()).multiplyScalar(shrinkF * 0.5);
-            wb.min.copy(ctr).sub(half); wb.max.copy(ctr).add(half);
-            colliders.push(wb);
-          }
+        // Collider from the SAME instance matrix `m` that positions the rendered object →
+        // aligned by construction (axis-aligned box around the rotated mesh). Rocks load as a
+        // single box too; the player voxelizes specific ones on demand with V (VoxelizeTool),
+        // which then OWNS that instance — so skip any instance it manages.
+        if (geoBox && colliders.length < 2000 && !managedRocks.has(keyFor(fbx, m.elements[12], m.elements[14]))) {
+          const wb = geoBox.clone().applyMatrix4(m);
+          const ctr = wb.getCenter(new THREE.Vector3());
+          const half = wb.getSize(new THREE.Vector3()).multiplyScalar(shrinkF * 0.5);
+          wb.min.copy(ctr).sub(half); wb.max.copy(ctr).add(half);
+          colliders.push(wb);
         }
       }
       inst.instanceMatrix.needsUpdate = true;

@@ -57,6 +57,9 @@ const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
 const headBoxes = new Set<THREE.Box3>();
+// Monster BODY colliders — lets the climb gait tell a MOVING collider (another monster, climb
+// over it) from a static world wall (climb the face only, don't penetrate).
+const monsterBoxes = new Set<THREE.Box3>();
 
 export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number] } & MonsterConfig) {
   const c = { ...DEF, ...cfg };
@@ -115,7 +118,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Engine collider so the PLAYER can't walk through this monster (the player queries
   // worldCollisionGrid). Updated each frame to follow the monster; removed on unmount.
   const box = useRef(new THREE.Box3()).current;
-  useEffect(() => { worldCollisionGrid.insert(box); return () => worldCollisionGrid.remove(box); }, [box]);
+  useEffect(() => {
+    worldCollisionGrid.insert(box); monsterBoxes.add(box);
+    return () => { worldCollisionGrid.remove(box); monsterBoxes.delete(box); };
+  }, [box]);
   // Zombie: a separate HEAD collider above the body, registered in the grid + head set (so it
   // gives the head a physical/headshot shape but demons don't stand on it).
   const headBox = useRef(cfg.zombie ? new THREE.Box3() : null).current;
@@ -262,7 +268,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     //    pressed against that's taller than a step. ──
     const feet = s.y;
     let groundY = sampleHeight(s.x, s.z) ?? feet;
-    let wallTop = -Infinity;
+    let wallTop = -Infinity, wallIsMonster = false;
     // World-collision/climb is the per-demon hot path (a grid query every frame). Only run it
     // for demons near the camera; distant horde members just walk the terrain. Keeps a 1000-
     // strong horde cheap without affecting any climbing you can actually see up close.
@@ -276,27 +282,28 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if (s.x >= b.min.x - fr && s.x <= b.max.x + fr && s.z >= b.min.z - fr && s.z <= b.max.z + fr) {
           const top = b.max.y;
           if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
-          else if (b.min.y < feet + H && top > wallTop) wallTop = top;                 // too tall → wall
+          else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = monsterBoxes.has(b); } // too tall → wall
         }
       }
     }
     const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
+    const belowTop = wallTop > -Infinity && feet < wallTop - 0.1;
+
+    // UNIVERSAL: never walk through a wall. Undo the horizontal step that entered it (both gaits).
+    if (belowTop) { s.x = preX; s.z = preZ; }
 
     // ── Blocked by a wall — two reusable SW gaits ──
     let climbing = false;
     if (wallTop > -Infinity && moving) {
       if (gait === 'climb') {
-        // No jump: ascend the obstacle face. Handled in the vertical step so it works mid-air
-        // (continuous climb up walls AND up other demons, even moving ones).
-        climbing = true;
-      } else if (grounded) {
-        // 'hop': climbers (and anyone boxed in by the crowd) hop onto it; everyone else
-        // undoes the step and crabs sideways to go around.
+        climbing = belowTop;                   // ascend the face (handled in the vertical step)
+      } else if (grounded && belowTop) {
+        // 'hop': climbers (and anyone boxed in by the crowd) hop onto it; everyone else crabs
+        // sideways to go around. Forward penetration was already undone above.
         const trapped = crowd >= TRAP_COUNT;
         if (role.current!.climb || trapped) {
-          s.vy = JUMP_VEL;                     // hop ~own height; pile up to clear more
-        } else if (feet < wallTop - 0.1) {
-          s.x = preX; s.z = preZ;
+          s.vy = JUMP_VEL;                     // hop straight up; pile up to clear more
+        } else {
           const sg = role.current!.side;
           const step = SPD * delta;
           s.x += (-mvz * sg) * step; s.z += (mvx * sg) * step; // crab perpendicular to the wall
@@ -306,13 +313,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
     // ── Vertical ──
     if (climbing) {
-      // Walk UP the obstacle at half speed, advancing forward at half speed so they climb the
-      // face and over the top — and keep advancing up a MOVING demon (continuous stacking).
-      const climbStep = SPD * 0.5 * delta;
-      s.y = Math.min(wallTop, s.y + climbStep);
+      // Walk UP the obstacle face at half speed (no penetration — respects the collider). Only
+      // when climbing a MOVING collider (another monster) also advance, so they climb over it;
+      // on a static wall they ascend the face and crest the top.
+      s.y = Math.min(wallTop, s.y + SPD * 0.5 * delta);
       s.vy = 0;
-      s.x = preX + (s.x - preX) * 0.5;
-      s.z = preZ + (s.z - preZ) * 0.5;
+      if (wallIsMonster) { s.x += mvx * SPD * 0.5 * delta; s.z += mvz * SPD * 0.5 * delta; }
     } else {
       // Gravity + land on the highest standable surface.
       s.vy -= GRAVITY * delta;

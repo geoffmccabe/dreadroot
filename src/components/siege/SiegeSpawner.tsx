@@ -20,7 +20,7 @@ const CFG: Record<MType, {
   gait: 'hop' | 'climb'; sizeJitter: number; speedJitter: number;
 }> = {
   1: { url: '/siege/monsters/reddemon.glb',         modelHeight: 1.886, height: 1.8, speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30 },
-  2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 2.2, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10 },
+  2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10 },
 };
 
 export function SiegeSpawner() {
