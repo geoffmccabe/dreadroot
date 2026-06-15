@@ -50,6 +50,7 @@ export function useFortressFrameLoop({
 
   bulletImpactsRef,
   nebulaImpactsRef,
+  applyBurnRef,
   getDefinitionRef,
   onCoinHit,
   playAudio,
@@ -111,6 +112,7 @@ export function useFortressFrameLoop({
   lastBulletRender: MutableRefObject<number>;
 
   bulletImpactsRef: MutableRefObject<any>;
+  applyBurnRef: MutableRefObject<((...args: any[]) => void) | null>;
   nebulaImpactsRef: MutableRefObject<any>;
   getDefinitionRef: MutableRefObject<(tier: number) => any>;
   onCoinHit: (pos: any) => void;
@@ -728,19 +730,42 @@ export function useFortressFrameLoop({
             const bounced = adapter.bulletBounces?.(enemy, bulletDamageInfo) ?? false;
             if (onPointsEarned && !bounced) onPointsEarned(finalDamage);
 
-            // Impact fire — same config the legacy blocks built.
+            // Impact effect. spawnImpact is WORLD-PINNED (a fixed point in space)
+            // so it cannot track a moving enemy — keep it ONLY as a brief impact
+            // FLASH. The ongoing fire that must FOLLOW the body is the attached
+            // burn below (the universal useBurnSystem), which re-anchors to the
+            // live hitbox every frame in every game (incl. SWW reddemons).
             const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
             const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
             const fireConfig = {
               colors: tierDef.colors,
               size: tierDef.burn_width * pentaMul,
               height: tierDef.burn_height * pentaMul,
-              duration: tierDef.burn_time * pentaMul,
+              duration: 0.25 * pentaMul, // brief flash only (was burn_time → it "stayed behind")
             };
             if (useNebulaForBulletImpacts && nebulaImpactsRef?.current) {
               nebulaImpactsRef.current.spawnImpact(hitPos, fireConfig);
             } else if (bulletImpactsRef?.current) {
               bulletImpactsRef.current.spawnImpact(hitPos, fireConfig);
+            }
+
+            // Attached, FOLLOWING burn — THE fix for "flames stay where the enemy
+            // was." Routes through the universal useBurnSystem so the fire tracks
+            // the live body + does the gradual DOT. shnake/shwarm already have
+            // their own tracking fire, so skip them here.
+            if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
+              applyBurnRef.current(
+                adapter.type,
+                adapter.getId(enemy),
+                undefined,
+                bullet.tier,
+                tierDef.colors,
+                (tierDef.colorMode ?? 'static'),
+                Math.max(1, Math.round(finalDamage * 0.25)), // gradual burn DOT (~half the impact, over the burn); tunable
+                0,
+                hitPos,
+                tierDef.burn_time,
+              );
             }
 
             // Per-adapter hit sound (falls back to generic thud).
