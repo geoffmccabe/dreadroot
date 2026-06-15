@@ -737,16 +737,17 @@ export function useFortressFrameLoop({
             // get here, so object fire can never follow. shnake/shwarm own their
             // own tracking fire — skip them.
             if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
-              // No hitPosition → the burn uses the enemy's FULL body flame layout
-              // (engulfs + tracks the live body center) instead of collapsing to a
-              // single tiny point-flame at the impact spot. burn_time for bullets is
-              // only 0.5–1.5s, which floored to a 1s DOT (looked like "a few frames");
-              // give ignites a real, clearly-visible duration that you can see follow.
+              // Bullet burn = ONE lasting flame pinned to the exact hit point (engulf
+              // false), sized like the impact fire, tracking that spot as the enemy
+              // moves. Full-body engulf is reserved for area weapons (grenades). burn_time
+              // for bullets is only 0.5–1.5s → give the ignite a real, visible duration.
+              const pMul = bullet.isPentabullet ? 3.0 : 1.0;
               applyBurnRef.current(
                 adapter.type, adapter.getId(enemy), undefined,
                 bullet.tier, tierDef.colors, (tierDef.colorMode ?? 'static'),
                 Math.max(1, Math.round(finalDamage * 0.25)), 0,
-                undefined, Math.max(4, tierDef.burn_time),
+                hitPos, Math.max(4, tierDef.burn_time),
+                { engulf: false, size: tierDef.burn_width * pMul, height: tierDef.burn_height * pMul },
               );
             }
             adapter.applyDamage(enemy, bulletDamageInfo);

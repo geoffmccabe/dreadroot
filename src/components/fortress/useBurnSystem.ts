@@ -247,21 +247,11 @@ export function useBurnSystem({
       if (!anchor) return null;
       cx = anchor.x; cy = anchor.y; cz = anchor.z; radius = anchor.radius;
     }
+    void radius;
+    // Raw body base (feet center). Bullet burns add the exact hit-point offset on
+    // top of this (so the fire stays pinned to where the bullet struck as the body
+    // moves); body-engulf burns place their plumes relative to it.
     _registryFallbackPos.set(cx, cy, cz);
-    // Sit the fire on the collider's NEAR FACE (toward the camera), not its
-    // center. The center is inside the solid body mesh, and the flame material
-    // is depth-tested — so a center-spawned fire is occluded BY the monster and
-    // looks like "no fire at all". Pushing it out to the surface facing the
-    // player keeps it in front of the body, visibly burning on the collider.
-    const cam = cameraRef.current;
-    if (cam) {
-      const dx = cam.position.x - cx;
-      const dz = cam.position.z - cz;
-      const len = Math.hypot(dx, dz) || 1;
-      const off = (radius ?? 0.5) + 0.25;
-      _registryFallbackPos.x += (dx / len) * off;
-      _registryFallbackPos.z += (dz / len) * off;
-    }
     return _registryFallbackPos;
   }, [cameraRef]);
 
@@ -278,7 +268,12 @@ export function useBurnSystem({
     armor: number,
     hitPosition?: THREE.Vector3,
     burnSeconds?: number,
+    opts?: { engulf?: boolean; size?: number; height?: number },
   ) => {
+    // engulf=true → fire wraps the whole body (flamethrower / grenade splash).
+    // engulf=false → ONE lasting flame at the exact hit point that tracks that
+    // spot on the body (bullets — a persistent version of the impact fire).
+    const engulfMode = opts?.engulf ?? true;
     const dotSeconds = Math.max(1, Math.floor(burnSeconds ?? DEFAULT_DOT_SECONDS));
     const key = entityType === 'shwarm' && blockId
       ? `shwarm:${entityId}:${blockId}`
@@ -360,48 +355,37 @@ export function useBurnSystem({
       );
     }
 
-    // When we have a hit offset, use a single flame at the hit point
-    // Otherwise use the full multi-point layout. For entity types not
-    // in the legacy FLAME_LAYOUTS table, fall back to the registered
-    // EnemyCombatAdapter's getFlameAttachPoints — or a single-flame
-    // default centered on the hitbox.
-    const useHitPoint = hitOff !== null;
-    // `engulf` enemies (those that expose getFlameAttachPoints) wrap their whole
-    // shape with body-relative flames that track the live body center every
-    // frame — so the fire stays ON them when shot, knocked back, or walking.
-    // They never collapse to a single fixed hit-point flame (the old behaviour
-    // that made burns appear to "stay behind" the enemy).
+    // BULLET (engulfMode=false, hit point given): ONE flame pinned to the impact
+    // spot, sized like the impact fire, tracking that spot as the body moves.
+    // AREA weapons (engulfMode=true): body-wrapping plumes from the adapter's
+    // getFlameAttachPoints (or the legacy FLAME_LAYOUTS table), tracking the body.
     let engulf = false;
-    let layout: FlamePoint[] | undefined = FLAME_LAYOUTS[entityType as keyof typeof FLAME_LAYOUTS];
-    if (!layout) {
-      const adapter = enemyCombatRegistry.getAdapter(entityType);
-      if (adapter?.getFlameAttachPoints) {
-        const list = adapter.getActiveEnemies();
-        const enemy = list.find(e => adapter.getId(e) === entityId);
-        if (enemy) {
-          const pts = adapter.getFlameAttachPoints(enemy);
-          if (pts && pts.length > 0) {
-            layout = pts.map(p => ({
-              yOffset: p.yOffset,
-              size: p.size,
-              height: p.height,
-              particles: p.particles,
-              // xOffset/zOffset honored via custom field below
-              xOffset: p.xOffset ?? 0,
-              zOffset: p.zOffset ?? 0,
-            }) as FlamePoint);
-            engulf = true;
+    let layout: FlamePoint[] | undefined;
+    if (!engulfMode && hitOff) {
+      layout = [{ yOffset: 0, size: opts?.size ?? 0.8, height: opts?.height ?? 1.2, particles: 26 }];
+    } else {
+      layout = FLAME_LAYOUTS[entityType as keyof typeof FLAME_LAYOUTS];
+      if (!layout) {
+        const adapter = enemyCombatRegistry.getAdapter(entityType);
+        if (adapter?.getFlameAttachPoints) {
+          const list = adapter.getActiveEnemies();
+          const enemy = list.find(e => adapter.getId(e) === entityId);
+          if (enemy) {
+            const pts = adapter.getFlameAttachPoints(enemy);
+            if (pts && pts.length > 0) {
+              layout = pts.map(p => ({
+                yOffset: p.yOffset, size: p.size, height: p.height, particles: p.particles,
+                xOffset: p.xOffset ?? 0, zOffset: p.zOffset ?? 0,
+              }) as FlamePoint);
+              engulf = true;
+            }
           }
         }
-      }
-      if (!layout) {
-        // Last-resort single-flame default at center.
-        layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
+        if (!layout) layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
+      } else {
+        engulf = true;
       }
     }
-    // Only legacy / oversized layouts (e.g. the 22-40m shtickman) collapse to a
-    // single flame at the hit point; engulf enemies use their full body layout.
-    if (useHitPoint && !engulf) layout = [layout[0]];
     const attachIds = layout.map((_, i) => `burn_${key}_${i}`);
 
     const entry: BurnEntry = {
@@ -431,8 +415,8 @@ export function useBurnSystem({
       layout,
     };
 
-    spawnBurnFlames(entry, 1.0, (useHitPoint && !engulf)
-      ? _offsetPos.copy(entityPos).add(hitOff!)
+    spawnBurnFlames(entry, 1.0, (!engulf && hitOff)
+      ? _offsetPos.copy(entityPos).add(hitOff)
       : entityPos);
     burnsRef.current.set(key, entry);
     const _st = universalFlameRef.current?.getStats?.();
