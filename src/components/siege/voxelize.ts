@@ -1,20 +1,21 @@
-// Shell voxelizer. Turns a mesh into a HOLLOW 1m shell (not a solid block of cubes):
+// Mesh → primitive boxes via voxelize + GREEDY MERGE. Instead of one box per 1m cell, adjacent
+// filled cells are merged into the fewest large axis-aligned boxes (the solid interior collapses
+// to one big box; only the surface detail stays small). Output is plain Box3s — exactly what the
+// engine's collision grid uses — at a fraction of the count of raw voxels.
 //   1. surface-sample triangles → per-(x,z) column min/max height,
-//   2. solid-fill each column between min and max (gives a clean solid, no sampling noise),
-//   3. keep only OUTER shell cells — drop any cell that is buried (top + all 4 sides filled).
-// That also drops the flat underside (a bottom-interior cell has rock above + filled sides),
-// leaving the top cap + side walls with an OPEN bottom — fine because objects always rest on
-// something below that covers the gap. Far fewer cells than a solid/dense fill.
+//   2. solid-fill each column (clean solid, no sampling noise),
+//   3. greedy-merge filled cells into maximal boxes (grow +x, then +y, then +z).
+// `cell` controls resolution (bigger = fewer/coarser boxes, smaller = more/finer) for < / >.
 import * as THREE from 'three';
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _p = new THREE.Vector3();
-const SOLID_CAP = 60000; // bail on huge meshes (mountains) — leave those as a box
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const SOLID_CAP = 80000; // bail on huge meshes at fine resolution — caller keeps the box
 
 export function voxelizeGeometry(
   geo: THREE.BufferGeometry,
   world: THREE.Matrix4,
   cell = 1.0,
-  cap = 4000,
+  cap = 2000,
 ): THREE.Box3[] {
   const pos = geo.attributes.position as THREE.BufferAttribute | undefined;
   if (!pos) return [];
@@ -22,7 +23,7 @@ export function voxelizeGeometry(
   const triCount = idx ? (idx.count / 3) | 0 : (pos.count / 3) | 0;
 
   // 1. surface-sample → per-column [minCy, maxCy]
-  const cols = new Map<string, [number, number]>(); // "cx,cz" → [mn, mx]
+  const cols = new Map<string, [number, number]>();
   for (let t = 0; t < triCount; t++) {
     const i0 = idx ? idx.getX(t * 3) : t * 3;
     const i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
@@ -50,22 +51,40 @@ export function voxelizeGeometry(
   // 2. solid-fill each column
   const solid = new Set<string>();
   for (const [k, [mn, mx]] of cols) {
-    const [cx, cz] = k.split(',').map(Number);
+    const ci = k.indexOf(',');
+    const cx = Number(k.slice(0, ci)), cz = Number(k.slice(ci + 1));
     for (let cy = mn; cy <= mx; cy++) {
       solid.add(`${cx},${cy},${cz}`);
-      if (solid.size > SOLID_CAP) return []; // too big to voxelize sanely → caller keeps the box
+      if (solid.size > SOLID_CAP) return []; // too big at this resolution → caller keeps the box
     }
   }
 
-  // 3. shell extract — drop cells buried on top + all 4 sides (interior + flat underside)
-  const has = (cx: number, cy: number, cz: number) => solid.has(`${cx},${cy},${cz}`);
+  // 3. greedy-merge filled cells into maximal boxes
+  const claimed = new Set<string>();
+  const free = (x: number, y: number, z: number) => {
+    const k = `${x},${y},${z}`;
+    return solid.has(k) && !claimed.has(k);
+  };
+  const cells = [...solid].map((s) => s.split(',').map(Number) as [number, number, number]);
+  cells.sort((p, q) => p[1] - q[1] || p[0] - q[0] || p[2] - q[2]); // lowest first
   const out: THREE.Box3[] = [];
-  for (const s of solid) {
-    const [cx, cy, cz] = s.split(',').map(Number);
-    if (has(cx, cy + 1, cz) && has(cx + 1, cy, cz) && has(cx - 1, cy, cz) && has(cx, cy, cz + 1) && has(cx, cy, cz - 1)) continue;
+  for (const [x0, y0, z0] of cells) {
+    if (claimed.has(`${x0},${y0},${z0}`)) continue;
+    let x1 = x0; while (free(x1 + 1, y0, z0)) x1++;            // grow +x
+    let y1 = y0;                                              // grow +y over the x-run
+    growY: while (true) {
+      for (let x = x0; x <= x1; x++) if (!free(x, y1 + 1, z0)) break growY;
+      y1++;
+    }
+    let z1 = z0;                                              // grow +z over the x×y slab
+    growZ: while (true) {
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) if (!free(x, y, z1 + 1)) break growZ;
+      z1++;
+    }
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) claimed.add(`${x},${y},${z}`);
     out.push(new THREE.Box3(
-      new THREE.Vector3(cx * cell, cy * cell, cz * cell),
-      new THREE.Vector3((cx + 1) * cell, (cy + 1) * cell, (cz + 1) * cell),
+      new THREE.Vector3(x0 * cell, y0 * cell, z0 * cell),
+      new THREE.Vector3((x1 + 1) * cell, (y1 + 1) * cell, (z1 + 1) * cell),
     ));
     if (out.length >= cap) break;
   }

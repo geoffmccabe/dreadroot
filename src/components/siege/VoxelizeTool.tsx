@@ -1,11 +1,12 @@
-// VoxelizeTool — point the laser (L) at a rock/object and press V to toggle its collider
-// between a single oversized box (default) and a 1m voxel SHELL of the real mesh:
-//   • first V  → voxelize that one object (removes its box, inserts the shell),
-//   • V again  → revert it to the box.
-// The edit is PERMANENT (the instance becomes "managed" — WorldObjectsLayer stops owning its
-// collider, so it survives flying away and back) and REVERSIBLE. Each rock instance is keyed by
-// type+position, so pointing anywhere on it toggles that whole group. Siege-only.
-import { useEffect } from 'react';
+// VoxelizeTool — point the laser (L) at a rock/object, then:
+//   V        → toggle its collider between a single oversized box (default) and a greedy-merged
+//              set of boxes approximating the mesh,
+//   < / >    → re-approximate the LAST voxelized object at a coarser / finer resolution (fewer /
+//              more boxes), to dial in the fit,
+// A small readout shows the object name + box (primitive) count + cell size. Edits are PERMANENT
+// (the instance becomes "managed" so WorldObjectsLayer stops owning its collider — survives
+// streaming reloads) and reversible (V again → back to the single box). Siege-only.
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
@@ -27,9 +28,64 @@ function bigBox(geo: THREE.BufferGeometry, world: THREE.Matrix4): THREE.Box3 {
   return wb;
 }
 
+// Remove WorldObjectsLayer's oversized box(es) for an instance (big colliders centred in its AABB).
+function removeBigBoxOverlapping(geo: THREE.BufferGeometry, world: THREE.Matrix4) {
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  _bb.copy(geo.boundingBox!).applyMatrix4(world);
+  const cells = (worldCollisionGrid as unknown as { colliderCells?: Map<THREE.Box3, unknown> }).colliderCells;
+  if (!cells) return;
+  const kill: THREE.Box3[] = [];
+  for (const bx of cells.keys()) {
+    bx.getSize(_sz);
+    if (_sz.x < 1.5 && _sz.z < 1.5) continue;  // leave small/voxel boxes alone
+    bx.getCenter(_ctr);
+    if (_bb.containsPoint(_ctr)) kill.push(bx);
+  }
+  kill.forEach((bx) => worldCollisionGrid.remove(bx));
+}
+
+function info(text: string) {
+  let el = document.getElementById('sw-voxel-info');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'sw-voxel-info';
+    el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;font:12px monospace;color:#39ff14;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:4px;pointer-events:none;white-space:pre;';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+}
+
 export function VoxelizeTool() {
+  // Last voxelized instance, so < / > can re-approximate it at a new resolution.
+  const last = useRef<{ key: string; geo: THREE.BufferGeometry; world: THREE.Matrix4; cell: number } | null>(null);
+
   useEffect(() => {
+    // Returns the new box count, or -1 if the mesh is too large to voxelize at this resolution.
+    const voxelizeInstance = (key: string, geo: THREE.BufferGeometry, world: THREE.Matrix4, cell: number): number => {
+      const vox = voxelizeGeometry(geo, world, cell, 2000);
+      if (!vox.length) return -1;                          // too big at this cell → leave as-is
+      const ex = managedRocks.get(key);
+      if (ex) ex.boxes.forEach((b) => worldCollisionGrid.remove(b));
+      else removeBigBoxOverlapping(geo, world);
+      vox.forEach((b) => worldCollisionGrid.insert(b));
+      managedRocks.set(key, { boxes: vox, voxel: true });
+      window.dispatchEvent(new Event('sw-colliders-changed'));
+      return vox.length;
+    };
+
     const onKey = (e: KeyboardEvent) => {
+      // < / > — re-approximate the last voxelized object coarser / finer.
+      if (e.key === '<' || e.key === ',' || e.key === '>' || e.key === '.') {
+        const L = last.current; if (!L) return;
+        e.preventDefault(); e.stopPropagation();
+        const coarser = e.key === '<' || e.key === ',';
+        const cell = THREE.MathUtils.clamp(L.cell * (coarser ? 1.3 : 1 / 1.3), 0.3, 6);
+        const n = voxelizeInstance(L.key, L.geo, L.world, cell);
+        if (n < 0) { info('mesh too large — press < for coarser'); return; }
+        L.cell = cell;
+        info(`${L.key.split('@')[0]}\n${n} boxes @ ${cell.toFixed(2)}m  (< coarser / > finer)`);
+        return;
+      }
       if (e.code !== 'KeyV' || !probeState.on || !probeState.mesh) return;
       e.preventDefault(); e.stopPropagation();
       const mesh = probeState.mesh as THREE.Mesh;
@@ -44,49 +100,31 @@ export function VoxelizeTool() {
       }
       const fbx = (mesh.userData as { fbx?: string })?.fbx || mesh.name || mesh.uuid;
       const key = keyFor(fbx, _world.elements[12], _world.elements[14]);
-      const removeAll = (boxes: THREE.Box3[]) => boxes.forEach((b) => worldCollisionGrid.remove(b));
 
-      const existing = managedRocks.get(key);
-      if (existing) {
-        // Toggle the already-managed instance.
-        if (existing.voxel) {
-          removeAll(existing.boxes);
-          const box = bigBox(geo, _world);
-          worldCollisionGrid.insert(box);
-          managedRocks.set(key, { boxes: [box], voxel: false });
-        } else {
-          const vox = voxelizeGeometry(geo, _world, 1.0, 4000);
-          if (!vox.length) { console.warn('[VoxelizeTool] mesh too large to voxelize — kept as box'); return; }
-          removeAll(existing.boxes);
-          vox.forEach((b) => worldCollisionGrid.insert(b));
-          managedRocks.set(key, { boxes: vox, voxel: true });
-        }
+      const ex = managedRocks.get(key);
+      if (ex && ex.voxel) {
+        // Revert to a single box.
+        ex.boxes.forEach((b) => worldCollisionGrid.remove(b));
+        const box = bigBox(geo, _world);
+        worldCollisionGrid.insert(box);
+        managedRocks.set(key, { boxes: [box], voxel: false });
+        window.dispatchEvent(new Event('sw-colliders-changed'));
+        last.current = null;
+        info(`${fbx}\nreverted to 1 box`);
       } else {
-        // First touch: voxelize. Remove WorldObjectsLayer's oversized box for this instance.
-        const vox = voxelizeGeometry(geo, _world, 1.0, 4000);
-        if (!vox.length) { console.warn('[VoxelizeTool] mesh too large to voxelize — left as box'); return; }
-        if (!geo.boundingBox) geo.computeBoundingBox();
-        _bb.copy(geo.boundingBox!).applyMatrix4(_world);
-        const cells = (worldCollisionGrid as unknown as { colliderCells?: Map<THREE.Box3, unknown> }).colliderCells;
-        if (cells) {
-          const kill: THREE.Box3[] = [];
-          for (const bx of cells.keys()) {
-            bx.getSize(_sz);
-            if (_sz.x < 1.5 && _sz.z < 1.5) continue;     // leave existing small voxels alone
-            bx.getCenter(_ctr);
-            if (_bb.containsPoint(_ctr)) kill.push(bx);
-          }
-          kill.forEach((bx) => worldCollisionGrid.remove(bx));
-        }
-        vox.forEach((b) => worldCollisionGrid.insert(b));
-        managedRocks.set(key, { boxes: vox, voxel: true });
+        // Voxelize (greedy-merged) at 1m to start.
+        const cell = 1.0;
+        const n = voxelizeInstance(key, geo, _world, cell);
+        if (n < 0) { info(`${fbx}\nmesh too large to voxelize at 1m — press < after`); return; }
+        last.current = { key, geo, world: _world.clone(), cell };
+        info(`${fbx}\n${n} boxes @ ${cell.toFixed(2)}m  (< coarser / > finer)`);
       }
-      window.dispatchEvent(new Event('sw-colliders-changed'));
-      const now = managedRocks.get(key)!;
-      console.log(`[VoxelizeTool] ${key} → ${now.voxel ? now.boxes.length + ' voxels' : 'box'}`);
     };
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      document.getElementById('sw-voxel-info')?.remove();
+    };
   }, []);
   return null;
 }
