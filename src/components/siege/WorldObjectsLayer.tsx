@@ -109,7 +109,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         }
       });
       let geoBox: THREE.Box3 | null = null;
-      if (solid) {
+      if (solid || isRock) {  // rocks weren't in the solid list → had NO collider; include them
         if (!src.geometry.boundingBox) src.geometry.computeBoundingBox();
         geoBox = src.geometry.boundingBox;
       }
