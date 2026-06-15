@@ -1,5 +1,13 @@
 # AI Assistant Instructions for Fortress
 
+> ⚠️ **TWO CLAUDE INSTANCES ARE CO-BUILDING THIS REPO.** You are not alone in this codebase.
+> Another Claude is building the Siege Worlds (SWW) integration as additive, gated modules on
+> the same `claude1-recovery` branch. Before pushing: `git fetch` (the version in
+> `src/version.ts` is ONE shared number — sync to latest, then increment). SWW lives mostly in
+> `src/components/siege/` + `src/config/` (safe), but also makes small **gated** edits to
+> `FortressScene.tsx`, `FortressControls.tsx`, `FortressHUD.tsx` (shared — coordinate).
+> **Read `docs/COBUILD_NOTES.md` for the full coordination guide.**
+
 ## Project Context
 
 Fortress is a browser-based 3D voxel game with ambitious scale requirements:
