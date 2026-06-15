@@ -396,6 +396,11 @@ export function useBurnSystem({
       attachIds,
       // Engulf enemies ignore the fixed hit offset and follow the body center.
       hitOffset: engulf ? null : hitOff,
+      // Capture the linger position NOW, while the entity is provably alive.
+      // (entityPos is a shared scratch — clone it so it's entry-owned.) Without
+      // this, a one-shot kill dies before the frame loop ever sees it alive, so
+      // the burn was removed instantly and showed no fire.
+      deathPos: entityPos.clone(),
       dotSeconds,
       layout,
     };
