@@ -1,6 +1,7 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { useThree } from '@react-three/fiber';
 import { frameLoop } from '@/lib/frameLoop';
+import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (temporary)
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { calculatePlacementFast } from '@/lib/voxelRaycast';
@@ -2168,6 +2169,7 @@ export function FirstPersonControls({
 
       // God Mode: Q = fly up, Z = fly down, no gravity
       if (godModeRef.current) {
+        if (groundHeightFn) { sdbg.isSiege = true; sdbg.godMode = true; sdbg.playerY = camera.position.y; } // SW debug
         // Vertical movement with Q/Z
         if (keys.current.q) {
           deltaMovement.y += runSpeed * delta;
@@ -2773,6 +2775,7 @@ export function FirstPersonControls({
       //    only runs when groundHeightFn is provided (siege); the voxel world never enters here.
       if (groundHeightFn) {
         const tY = groundHeightFn(camera.position.x, camera.position.z);
+        sdbg.isSiege = true; sdbg.ghf = true; sdbg.godMode = godModeRef.current; sdbg.onGround = onGround.current; sdbg.playerY = camera.position.y; sdbg.terrainY = tY; // SW debug
         if (tY != null) {
           const floorY = tY + playerHeight + SURFACE_EPS;
           if (camera.position.y < floorY) {

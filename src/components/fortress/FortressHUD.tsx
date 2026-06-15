@@ -4,6 +4,7 @@ import { Settings, Store } from 'lucide-react';
 import { FPSDisplay, BlockDeleteHandler } from '@/components/FPSCounter';
 import { GameSwitcher } from '@/components/GameSwitcher';
 import { SiegeTitleSplash } from '@/components/siege/SiegeTitleSplash';
+import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
@@ -861,6 +862,8 @@ export function FortressHUD(props: FortressHUDProps) {
       <GameSwitcher />
       {/* Siege Worlds title splash — logo over the loading map, then fades. */}
       <SiegeTitleSplash />
+      {/* Siege Worlds live debug readout (temporary) — shows only in siege. */}
+      <SiegeDebugOverlay />
       {/* Flying coin animations */}
       {Array.isArray(flyingCoins) &&
         flyingCoins.map((coin: any) => (

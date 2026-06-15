@@ -12,6 +12,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { sdbg } from './siegeDebug';
 
 export interface MonsterConfig {
   url: string;
@@ -129,6 +130,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     box.min.set(s.x - me.r, s.y, s.z - me.r);
     box.max.set(s.x + me.r, s.y + c.height, s.z + me.r);
     worldCollisionGrid.update(box);
+    sdbg.monsters = MONSTERS.size; // SW debug
   });
 
   return <group ref={group} scale={scale}><primitive object={scene} /></group>;
