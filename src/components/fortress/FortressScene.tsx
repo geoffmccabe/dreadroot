@@ -254,7 +254,10 @@ export function FortressScene({
 
   // Delay enemy spawning until blocks are loaded (prevents enemies showing before trees)
   // Phase 2: Use worldRevision instead of flat blocks array length
-  const enemiesEnabled = !blocksLoading && worldRevision > 0;
+  // Siege Worlds has its own monsters (SiegeWorldLayers) — disable ALL Dreadroot enemy
+  // spawning/AI here (shwarms, shombies, shpiders, walapas, etc.) so none spawn, no
+  // shpider sounds, and no wasted load. Every DR enemy system reads this one flag.
+  const enemiesEnabled = !blocksLoading && worldRevision > 0 && !isSiege;
   const { camera } = useThree();
   
   // Fetch usernames for tree labels
@@ -911,7 +914,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     vortaxesRef,
     walapasRef,
     shtickmenRef,
-    isEnabled: ENABLE_ENEMY_AI,
+    isEnabled: ENABLE_ENEMY_AI && !isSiege,
     aiControlled: AI_CONTROLLED,
     plantedTrees,
     blocksRef,
@@ -1678,9 +1681,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <DynamicLighting ref={lightingRef} cycleStateRef={cycleStateRef} />
       <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} freezeCycle={lsFreezeCycle} lightingOverride={lsLightingOverride} />
 
-      <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
-      {/* <FortressParticles /> */}
-      <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
+      {!isSiege && (
+        <>
+          <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
+          {/* <FortressParticles /> */}
+          <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
+        </>
+      )}
       {isSiege ? (
         <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
       ) : (
@@ -1694,19 +1701,23 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           viewSettings={viewSettings}
         />
       )}
-      <Waterfall
-        flowSpeed={settings.flowSpeed} 
-        msBetweeenDrops={settings.msBetweeenDrops} 
-        colorPalette={settings.colorPalette}
-        enabled={waterfallEnabled}
-      />
-      <Coins 
-        coinRate={settings.coinRate} 
-        coinSize={settings.coinSize} 
-        flowSpeed={settings.flowSpeed}
-        onGetCoins={() => []}
-        coinImageUrl={coinImageUrl}
-      />
+      {!isSiege && (
+        <>
+          <Waterfall
+            flowSpeed={settings.flowSpeed}
+            msBetweeenDrops={settings.msBetweeenDrops}
+            colorPalette={settings.colorPalette}
+            enabled={waterfallEnabled}
+          />
+          <Coins
+            coinRate={settings.coinRate}
+            coinSize={settings.coinSize}
+            flowSpeed={settings.flowSpeed}
+            onGetCoins={() => []}
+            coinImageUrl={coinImageUrl}
+          />
+        </>
+      )}
       <Bullets ref={bulletsComponentRef} bullets={bulletsRef.current} />
       <BulletImpacts ref={bulletImpactsRef} />
       <NebulaImpacts ref={nebulaImpactsRef} />
@@ -1714,15 +1725,15 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <UniversalFlameRenderer ref={universalFlameRef} />
       <FlameDemoSpawner ref={flameDemoRef} bulletImpactsRef={bulletImpactsRef} universalFlameRef={universalFlameRef} />
 
-      {wispState && (
-        <WispBlock 
+      {!isSiege && wispState && (
+        <WispBlock
           positionRef={wispPositionRef}
           blockType={wispState.blockType}
           onMeshReady={(mesh) => { wispMeshRef.current = mesh; }}
         />
       )}
-      
-      <WispParticlesMesh ref={wispParticlesMeshRef} particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />
+
+      {!isSiege && <WispParticlesMesh ref={wispParticlesMeshRef} particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />}
       
       {/* Shwarm Renderer */}
       <ShwarmRenderer ref={shwarmRendererRef} shwarms={shwarms} universalFlameRef={universalFlameRef} />
@@ -1823,12 +1834,14 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <GlowLightPool />
 
       {/* Tree Info Labels */}
-      <TreeInfoLabels
-        trees={plantedTrees}
-        seedDefinitions={seedDefinitions}
-        usernames={usernamesMap}
-        cameraRef={cameraRef}
-      />
+      {!isSiege && (
+        <TreeInfoLabels
+          trees={plantedTrees}
+          seedDefinitions={seedDefinitions}
+          usernames={usernamesMap}
+          cameraRef={cameraRef}
+        />
+      )}
       
       {/* Pulsing Seed Blocks - DISABLED: causes z-fighting with normal rendering
           Seeds now render through normal PlacedBlocks path with proper raycasting support */}
