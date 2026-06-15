@@ -735,12 +735,15 @@ export function useFortressFrameLoop({
             // get here, so object fire can never follow. shnake/shwarm own their
             // own tracking fire — skip them.
             if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
+              console.log('[BurnDbg] bullet→ignite', adapter.type, 'id=', adapter.getId(enemy), 'burn_time=', tierDef.burn_time, 'ref?', !!applyBurnRef.current);
               applyBurnRef.current(
                 adapter.type, adapter.getId(enemy), undefined,
                 bullet.tier, tierDef.colors, (tierDef.colorMode ?? 'static'),
                 Math.max(1, Math.round(finalDamage * 0.25)), 0,
                 hitPos, tierDef.burn_time,
               );
+            } else {
+              console.log('[BurnDbg] bullet hit but NO ignite — ref?', !!applyBurnRef?.current, 'type=', adapter.type);
             }
             adapter.applyDamage(enemy, bulletDamageInfo);
 
