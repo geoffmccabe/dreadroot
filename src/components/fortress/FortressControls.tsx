@@ -142,13 +142,10 @@ export function FirstPersonControls({
   // Block Inspector
   loadedChunksRef,
   currentWorldId,
-  // Siege Worlds: float the player (god-mode noclip). Gated — false for voxel Dreadroot.
+  // Siege Worlds: float the player (god-mode noclip) because heightfield terrain
+  // has no block-collision yet. Gated — false for the voxel Dreadroot world.
   forceFloat = false,
-  // Siege Worlds: ground-height sampler for heightfield terrain (returns world Y, or
-  // null off-map / not-loaded). When provided, the player walks on this terrain floor
-  // instead of block colliders. Gated — undefined for the voxel Dreadroot world.
-  groundHeightFn,
-}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null }) {
+}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
   const isLocked = useRef(false);
@@ -2765,26 +2762,6 @@ export function FirstPersonControls({
           walapaLastPosRef.current.copy(attachW.position);
         } else {
           currentWalapaIdRef.current = null;
-        }
-      }
-
-      // ── Siege Worlds terrain floor. The heightfield has no per-block colliders, so
-      //    clamp the player onto the sampled ground for smooth walking. This is the final
-      //    word on Y. Gated: only runs when a groundHeightFn is provided (siege); the
-      //    voxel world uses block colliders above and never enters here.
-      if (groundHeightFn) {
-        const tY = groundHeightFn(camera.position.x, camera.position.z);
-        if (tY != null) {
-          const floorY = tY + playerHeight + SURFACE_EPS;
-          if (camera.position.y < floorY) {
-            camera.position.y = floorY;
-            if (velocity.current.y < 0) velocity.current.y = 0;
-            onGround.current = true;
-          }
-        } else {
-          // Terrain not loaded here yet (or off-map) — hold rather than fall into the void.
-          if (velocity.current.y < 0) velocity.current.y = 0;
-          onGround.current = true;
         }
       }
 

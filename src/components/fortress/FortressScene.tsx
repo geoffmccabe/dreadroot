@@ -32,7 +32,6 @@ import { FirstPersonControls } from './FortressControls';
 import { useActiveGame } from '@/config/activeGame';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
-import { sampleHeight } from '@/components/siege/terrainHeight';
 import { DynamicSky, SkyHandle } from './FortressSky';
 import { DynamicLighting, LightingHandle } from './FortressLighting';
 import { FortressStructure } from './FortressStructure';
@@ -1647,7 +1646,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         updatePlayerPosition={updatePlayerPosition}
         respawnPosition={worldSwapTarget ?? respawnPosition}
         onRespawnComplete={() => { setWorldSwapTarget(null); onRespawnComplete?.(); }}
-        groundHeightFn={isSiege ? sampleHeight : undefined}
+        forceFloat={isSiege}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}

@@ -29,11 +29,6 @@ export interface MonsterConfig {
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
 const DEFCLIPS = { idle: 'idle', walk: 'walk', attack: 'attack' };
 
-// Shared live registry of monster footprints so each one can push out of the others
-// (cheap O(n²) separation — fine for the handful of beach monsters). Each entry is a
-// monster's current x/z + separation radius, mutated in place each frame.
-const MONSTERS = new Set<{ x: number; z: number; r: number }>();
-
 export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number] } & MonsterConfig) {
   const c = { ...DEF, ...cfg };
   const clips = { ...DEFCLIPS, ...(cfg.clips || {}) };
@@ -43,9 +38,6 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const camera = useThree((s) => s.camera);
   const scale = c.height / c.modelHeight;
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0 });
-  // Separation footprint (registered in the shared registry; updated each frame).
-  const me = useRef({ x: spawn[0], z: spawn[2], r: Math.max(0.8, c.height * 0.3) }).current;
-  useEffect(() => { MONSTERS.add(me); return () => { MONSTERS.delete(me); }; }, [me]);
 
   // Source meshes render very dark — drop metalness and self-light the texture a bit.
   useMemo(() => {
@@ -106,21 +98,6 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         play(clips.walk);
       } else play(clips.idle);
     }
-
-    // Separation — push out of any overlapping monster so they don't stand inside each other.
-    for (const o of MONSTERS) {
-      if (o === me) continue;
-      const ox = s.x - o.x, oz = s.z - o.z;
-      const od = Math.hypot(ox, oz);
-      const minD = me.r + o.r;
-      if (od > 1e-3 && od < minD) {
-        const push = (minD - od) * 0.5;
-        s.x += (ox / od) * push; s.z += (oz / od) * push;
-      }
-    }
-    me.x = s.x; me.z = s.z;
-    const gh = sampleHeight(s.x, s.z); if (gh != null) s.y = gh;
-    g.position.set(s.x, s.y, s.z);
   });
 
   return <group ref={group} scale={scale}><primitive object={scene} /></group>;
