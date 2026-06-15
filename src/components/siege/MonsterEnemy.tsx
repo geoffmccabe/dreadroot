@@ -43,6 +43,7 @@ let _mid = 0;
 // demon per hop; piling several lets them clear taller walls.
 const GRAVITY = 22, JUMP_VEL = 9.5, STEP_UP = 0.45;
 const TRAP_RADIUS = 1.3, TRAP_COUNT = 3; // boxed in by this many of its own kind → climb over
+const CLIMB_LOD = 90; // beyond this (m from camera) skip the per-frame world-collision query
 
 // Shared live registry of monster footprints so each pushes out of the others (cheap O(n²)
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
@@ -253,15 +254,21 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const feet = s.y;
     let groundY = sampleHeight(s.x, s.z) ?? feet;
     let wallTop = -Infinity;
-    const cnt = worldCollisionGrid.getNearby(s.x, s.z, me.r + 0.4);
-    const res = worldCollisionGrid.nearbyResult;
-    for (let i = 0; i < cnt; i++) {
-      const b = res[i] as THREE.Box3;
-      if (!b || b === box || headBoxes.has(b) || !b.max) continue;   // never stand on a head
-      if (s.x >= b.min.x - me.r && s.x <= b.max.x + me.r && s.z >= b.min.z - me.r && s.z <= b.max.z + me.r) {
-        const top = b.max.y;
-        if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
-        else if (b.min.y < feet + H && top > wallTop) wallTop = top;                 // too tall → wall
+    // World-collision/climb is the per-demon hot path (a grid query every frame). Only run it
+    // for demons near the camera; distant horde members just walk the terrain. Keeps a 1000-
+    // strong horde cheap without affecting any climbing you can actually see up close.
+    if (dist < CLIMB_LOD) {
+      const fr = cfg.zombie ? Math.max(0.30, H * 0.26) : me.r;   // footprint ≈ body collider, not the fat separation radius
+      const cnt = worldCollisionGrid.getNearby(s.x, s.z, me.r + 0.4);
+      const res = worldCollisionGrid.nearbyResult;
+      for (let i = 0; i < cnt; i++) {
+        const b = res[i] as THREE.Box3;
+        if (!b || b === box || headBoxes.has(b) || !b.max) continue;   // never stand on a head
+        if (s.x >= b.min.x - fr && s.x <= b.max.x + fr && s.z >= b.min.z - fr && s.z <= b.max.z + fr) {
+          const top = b.max.y;
+          if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
+          else if (b.min.y < feet + H && top > wallTop) wallTop = top;                 // too tall → wall
+        }
       }
     }
     const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
