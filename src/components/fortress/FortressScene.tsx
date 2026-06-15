@@ -249,7 +249,7 @@ export function FortressScene({
   // HUD, lighting, sky) is world-agnostic and shared. Gated so Dreadroot is untouched.
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
-  const siegeSpawn = useMemo(() => new THREE.Vector3(-400, 45, 660), []);
+  const siegeSpawn = useMemo(() => new THREE.Vector3(-400, 28, 660), []); // just above beach ground (~26) so you start grounded, not hovering high
   // useThree() camera — MUST be declared before the live-swap effect below, which reads
   // `camera` in its dependency array. (A merge had pushed this declaration below the effect,
   // producing a "Cannot access 'Tt' before initialization" TDZ white-screen for everyone.)

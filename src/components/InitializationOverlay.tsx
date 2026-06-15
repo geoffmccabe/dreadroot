@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useEffect } from 'react';
 import { useInitialization, InitStepStatus } from '@/contexts/InitializationContext';
 import { Copy, Check } from 'lucide-react';
 import fortressImage from '@/assets/fortress_loading_screen.webp';
+import { useActiveGame } from '@/config/activeGame';
 
 // Status indicator component
 const StatusIndicator: React.FC<{ status: InitStepStatus }> = ({ status }) => {
@@ -44,6 +45,16 @@ export function InitializationOverlay() {
 
   const [copied, setCopied] = React.useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Per-game theming: a logo header above the panel, the panel lower on screen, and a
+  // red/black tint for Siege Worlds (Dreadroot/others keep the default HUD theme).
+  const activeGame = useActiveGame();
+  const isSiege = activeGame === 'siege-worlds';
+  const logoSrc = isSiege ? '/sww_logo_transp_v1_hq.webp' : '/Dreadroot_words_logo_horiz_2400px.webp';
+  const overlayBg = isSiege ? 'rgba(8,0,0,0.93)' : 'hsla(var(--panel-bg-strong))';
+  const panelBg = isSiege ? 'rgba(22,6,6,0.96)' : 'hsla(var(--hud-bg))';
+  const panelBorder = isSiege ? '#a01818' : 'hsla(var(--hud-border))';
+  const titleColor = isSiege ? '#ff5436' : 'hsl(var(--hud-text))';
 
   // Auto-scroll to bottom when new steps appear
   useEffect(() => {
@@ -98,22 +109,29 @@ export function InitializationOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      className="fixed inset-0 z-[9999] flex flex-col items-center"
       onClick={handleDismiss}
       style={{
         cursor: isInitializing ? 'wait' : 'pointer',
-        backgroundColor: 'hsla(var(--panel-bg-strong))',
+        backgroundColor: overlayBg,
         fontFamily: 'var(--hud-font)',
+        paddingTop: '11vh',
       }}
     >
-      {/* Content panel - 70% width, game UI style frame */}
+      {/* Game logo header above the panel (Siege Worlds / Dreadroot). */}
+      <img
+        src={logoSrc}
+        alt=""
+        style={{ maxWidth: '300px', maxHeight: '108px', objectFit: 'contain', marginBottom: '14px', filter: 'drop-shadow(0 0 18px rgba(0,0,0,0.7))' }}
+      />
+      {/* Content panel - game UI style frame, positioned below the logo header */}
       <div
-        className="relative w-[70%] overflow-hidden rounded-xl shadow-2xl"
+        className="relative w-[64%] overflow-hidden rounded-xl shadow-2xl"
         style={{
           aspectRatio: '16 / 9',
-          maxHeight: '85vh',
-          backgroundColor: 'hsla(var(--hud-bg))',
-          border: '1px solid hsla(var(--hud-border))',
+          maxHeight: '62vh',
+          backgroundColor: panelBg,
+          border: `1px solid ${panelBorder}`,
         }}
       >
         {/* Panel content */}
@@ -121,7 +139,7 @@ export function InitializationOverlay() {
           {/* Title with live timer */}
           <h1
             className="text-3xl md:text-4xl font-bold text-center mb-4 drop-shadow-lg"
-            style={{ color: 'hsl(var(--hud-text))', fontFamily: 'var(--hud-font)' }}
+            style={{ color: titleColor, fontFamily: 'var(--hud-font)' }}
           >
             {isInitializing
               ? `Initializing World... ${displayTime}s`
