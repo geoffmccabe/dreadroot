@@ -98,7 +98,8 @@ export function VoxelizeTool() {
       } else {
         _world.copy(mesh.matrixWorld);
       }
-      const fbx = (mesh.userData as { fbx?: string })?.fbx || mesh.name || mesh.uuid;
+      const fbx = (mesh.userData as { fbx?: string })?.fbx;
+      if (!fbx) { info('aim at a world object (rock / building)'); return; }   // not terrain / monsters
       const key = keyFor(fbx, _world.elements[12], _world.elements[14]);
 
       const ex = managedRocks.get(key);
@@ -124,6 +125,10 @@ export function VoxelizeTool() {
     return () => {
       window.removeEventListener('keydown', onKey, true);
       document.getElementById('sw-voxel-info')?.remove();
+      // The collision grid is SHARED with Dreadroot — drop our voxel edits when leaving Siege
+      // Worlds so they don't become phantom colliders in the other game.
+      managedRocks.forEach((e) => e.boxes.forEach((b) => worldCollisionGrid.remove(b)));
+      managedRocks.clear();
     };
   }, []);
   return null;
