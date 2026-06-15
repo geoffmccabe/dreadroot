@@ -737,15 +737,17 @@ export function useFortressFrameLoop({
             // get here, so object fire can never follow. shnake/shwarm own their
             // own tracking fire — skip them.
             if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
-              console.log('[BurnDbg] bullet→ignite', adapter.type, 'id=', adapter.getId(enemy), 'burn_time=', tierDef.burn_time, 'ref?', !!applyBurnRef.current);
+              // No hitPosition → the burn uses the enemy's FULL body flame layout
+              // (engulfs + tracks the live body center) instead of collapsing to a
+              // single tiny point-flame at the impact spot. burn_time for bullets is
+              // only 0.5–1.5s, which floored to a 1s DOT (looked like "a few frames");
+              // give ignites a real, clearly-visible duration that you can see follow.
               applyBurnRef.current(
                 adapter.type, adapter.getId(enemy), undefined,
                 bullet.tier, tierDef.colors, (tierDef.colorMode ?? 'static'),
                 Math.max(1, Math.round(finalDamage * 0.25)), 0,
-                hitPos, tierDef.burn_time,
+                undefined, Math.max(4, tierDef.burn_time),
               );
-            } else {
-              console.log('[BurnDbg] bullet hit but NO ignite — ref?', !!applyBurnRef?.current, 'type=', adapter.type);
             }
             adapter.applyDamage(enemy, bulletDamageInfo);
 
@@ -971,7 +973,36 @@ export function useFortressFrameLoop({
             // Spawn impact effect at ground level with bullet tier settings from context
             // Spawn impact effect at ground level - use Nebula for sky-friendly alpha blending
             _scratchGroundPos.copy(bullet.position);
-            _scratchGroundPos.y = groundY + 0.1; // Slightly above the (terrain) ground
+            if (groundHeightFn) {
+              // The bullet steps several metres per frame, so once its y dips
+              // below the terrain it has already OVERSHOT the real crossing —
+              // spawning at the current x,z lands the fire past where you aimed.
+              // Binary-search along prev->current for where the path actually
+              // pierces the (sloped) terrain, so the fire lands at the hit point.
+              const p0x = (bullet as any).prevX ?? bullet.position.x;
+              const p0y = (bullet as any).prevY ?? bullet.position.y;
+              const p0z = (bullet as any).prevZ ?? bullet.position.z;
+              const h0 = groundHeightFn(p0x, p0z) ?? 0;
+              if (p0y > h0) {
+                let lo = 0, hi = 1;
+                for (let i = 0; i < 8; i++) {
+                  const mid = (lo + hi) * 0.5;
+                  const mx = p0x + (bullet.position.x - p0x) * mid;
+                  const my = p0y + (bullet.position.y - p0y) * mid;
+                  const mz = p0z + (bullet.position.z - p0z) * mid;
+                  if (my <= (groundHeightFn(mx, mz) ?? 0)) hi = mid; else lo = mid;
+                }
+                _scratchGroundPos.set(
+                  p0x + (bullet.position.x - p0x) * hi,
+                  p0y + (bullet.position.y - p0y) * hi,
+                  p0z + (bullet.position.z - p0z) * hi,
+                );
+              }
+            }
+            // Sit the fire just above the surface at the (corrected) hit x,z.
+            _scratchGroundPos.y = (groundHeightFn
+              ? (groundHeightFn(_scratchGroundPos.x, _scratchGroundPos.z) ?? 0)
+              : 0) + 0.1;
             const groundPos = _scratchGroundPos;
             const tierDefGround = getDefinitionRef.current(bullet.tier);
             const pentaMultiplierGround = bullet.isPentabullet ? 3.0 : 1.0;

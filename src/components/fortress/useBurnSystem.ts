@@ -409,7 +409,6 @@ export function useBurnSystem({
       ? _offsetPos.copy(entityPos).add(hitOff!)
       : entityPos);
     burnsRef.current.set(key, entry);
-    console.log('[BurnDbg] CREATED', entityType, entityId, 'engulf=', engulf, 'flames=', layout.length, 'dotSeconds=', dotSeconds, 'pos=', entityPos.x.toFixed(1), entityPos.y.toFixed(1), entityPos.z.toFixed(1));
   }, [spawnBurnFlames, removeBurn, getEntityPosition]);
 
   // Apply burn damage. Player is the only non-enemy special case;
@@ -463,15 +462,13 @@ export function useBurnSystem({
         entry.deathPos.copy(pos);
         entry.deathAt = undefined;
       } else if (entry.deathPos) {
-        if (entry.deathAt == null) { entry.deathAt = now; console.log('[BurnDbg] entity GONE, lingering', entry.entityType); }
+        if (entry.deathAt == null) entry.deathAt = now;
         if (now - entry.deathAt > DEATH_LINGER_SECONDS) {
-          console.log('[BurnDbg] REMOVED', entry.entityType, 'linger-done');
           _toRemove.push(key);
           continue;
         }
         pos = entry.deathPos;
       } else {
-        console.log('[BurnDbg] REMOVED', entry.entityType, 'no-deathPos(never resolved)');
         _toRemove.push(key);
         continue;
       }
@@ -510,7 +507,6 @@ export function useBurnSystem({
       const currentSecond = Math.floor(elapsed);
 
       if (currentSecond >= entry.dotSeconds) {
-        console.log('[BurnDbg] REMOVED', entry.entityType, 'dot-done after', entry.dotSeconds, 's');
         _toRemove.push(key);
         continue;
       }
