@@ -1362,6 +1362,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   useFortressFrameLoop({
     camera,
     applyBurnRef,
+    groundHeightFn: isSiege ? sampleHeight : undefined,
     skyRef,
     lightingRef,
     bulletsComponentRef,
