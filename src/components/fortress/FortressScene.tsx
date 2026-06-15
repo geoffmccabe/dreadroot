@@ -72,7 +72,10 @@ import { useShroomerSystem, ShroomerRenderer, ShroomerRendererHandle } from '@/f
 import { useVortaxSystem, VortaxRenderer, VortaxRendererHandle } from '@/features/vortax';
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
-import { EMSRenderer } from '@/features/npc/ems/EMSRenderer';
+// DISABLED 2026-Jun-15 (other-Claude EMS): the <EMSRenderer/> mount crashed the whole app
+// with "Cannot access 'Tt' before initialization" (init-order/circular-import) during render
+// — white screen for everyone. Re-enable this import + the mount once the NPC/EMS bug is fixed.
+// import { EMSRenderer } from '@/features/npc/ems/EMSRenderer';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
 import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer } from '@/features/shpider-eggs';
 import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
@@ -1777,7 +1780,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <ShtickmanRenderer ref={shtickmanRendererRef} shtickmenRef={shtickmenRef} cameraRef={cameraRef} universalFlameRef={universalFlameRef} />
 
       {/* NEW EMS NPC system (parallel) — renders @-spawned electromagnetic-skeleton NPCs. */}
-      <EMSRenderer />
+      {/* DISABLED 2026-Jun-15: <EMSRenderer /> crashed the app (white screen, "Cannot access
+          'Tt' before initialization" during render). Re-enable with the import above once fixed. */}
 
       {/* Shpider Renderer — per-tier InstancedMesh routing + death fragments. */}
       <ShpiderRenderer
