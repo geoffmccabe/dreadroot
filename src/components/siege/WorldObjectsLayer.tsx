@@ -125,7 +125,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           if (isRock) {
             // Voxelize the rock's vertices into ~1.5m boxes that follow the mesh shape — rocks
             // are low-poly, so this is cheap and far tighter than one oversized AABB.
-            const CELL = 1.5;
+            const CELL = 1.0; // 1m voxels to match the Dreadroot block grid
             const pos = src.geometry.attributes.position as THREE.BufferAttribute;
             const seen = new Set<string>();
             const vv = new THREE.Vector3();
