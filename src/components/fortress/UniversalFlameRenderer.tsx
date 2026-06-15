@@ -14,7 +14,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // Constants
-const MAX_FLAMES = 80;
+const MAX_FLAMES = 200;
 const MAX_PARTICLES = 6000;
 const DEFAULT_PARTICLES_POINT = 80;
 const DEFAULT_PARTICLES_HEX_CENTER = 60;
@@ -70,6 +70,8 @@ export interface UniversalFlameRendererHandle {
   updateAttachedPosition: (attachId: string, position: THREE.Vector3) => void;
   removeFlame: (flameId: string) => void;
   removeAttached: (attachId: string) => void;
+  /** TEMP burn-bug diagnostic: live flame count + particles drawn last frame. */
+  getStats: () => { flames: number; particles: number };
 }
 
 // Distance LoD: flames fade out between these distances (world units)
@@ -83,6 +85,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
   const { camera } = useThree();
   const flamesRef = useRef<BatchedFlame[]>([]);
   const nextIdRef = useRef(0);
+  const lastParticlesRef = useRef(0); // TEMP diagnostic: particles drawn last frame
 
   // Batched particle system
   const particleData = useMemo(() => {
@@ -247,6 +250,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
     updateAttachedPosition,
     removeFlame,
     removeAttached,
+    getStats: () => ({ flames: flamesRef.current.length, particles: lastParticlesRef.current }),
   }), [spawnFlame, updateAttachedPosition, removeFlame, removeAttached]);
 
   // Update all particles each frame
@@ -296,6 +300,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
       if (pIdx >= MAX_PARTICLES) break;
     }
 
+    lastParticlesRef.current = pIdx; // TEMP diagnostic
     geometry.setDrawRange(0, pIdx);
     (geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     (geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;

@@ -409,7 +409,9 @@ export function useBurnSystem({
       ? _offsetPos.copy(entityPos).add(hitOff!)
       : entityPos);
     burnsRef.current.set(key, entry);
-  }, [spawnBurnFlames, removeBurn, getEntityPosition]);
+    const _st = universalFlameRef.current?.getStats?.();
+    console.log(`[BURN] created ${entityType}:${entityId} engulf=${engulf} flames=${layout.length} dot=${dotSeconds}s pos=(${entityPos.x.toFixed(1)},${entityPos.y.toFixed(1)},${entityPos.z.toFixed(1)}) | renderer flames=${_st?.flames} particles=${_st?.particles} renderer?=${!!universalFlameRef.current}`);
+  }, [spawnBurnFlames, removeBurn, getEntityPosition, universalFlameRef]);
 
   // Apply burn damage. Player is the only non-enemy special case;
   // every monster routes through its EnemyCombatAdapter.
@@ -442,10 +444,20 @@ export function useBurnSystem({
   }, [takeDamage]);
 
   // Main frame loop
+  const _lastLogRef = useRef(0);
   useFrame(() => {
     const now = performance.now() / 1000;
     const renderer = universalFlameRef.current;
     if (!renderer) return;
+
+    // TEMP diagnostic: once/sec while burns exist, report where the fire is.
+    if (burnsRef.current.size > 0 && now - _lastLogRef.current > 1) {
+      _lastLogRef.current = now;
+      const first = burnsRef.current.values().next().value as BurnEntry | undefined;
+      const p = first ? getEntityPosition(first) : null;
+      const st = renderer.getStats();
+      console.log(`[BURN] live entries=${burnsRef.current.size} | renderer flames=${st.flames} drawnParticles=${st.particles} | first=${first?.entityType} phase=${first?.burnPhase} resolvedPos=${p ? `(${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)})` : 'NULL(lingering/gone)'}`);
+    }
 
     _toRemove.length = 0;
 
