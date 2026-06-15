@@ -19,12 +19,11 @@ export function setActiveGame(game: string): void {
   if (game === active) return;
   active = game;
   try { localStorage.setItem(KEY, game); } catch { /* ignore */ }
+  // LIVE swap — no page reload. Subscribers (useActiveGame via useSyncExternalStore)
+  // re-render, so FortressScene flips isSiege and swaps the world behind the HUD
+  // (voxel ↔ siege terrain+monsters) in place. The player is teleported into the new
+  // world by FortressScene. Switching is gated by this flag; Dreadroot is untouched.
   subs.forEach((f) => f());
-  // Reload so the app re-boots into the chosen game's world: FortressScene reads
-  // getActiveGame() and renders the voxel world (dreadroot) OR the SW terrain+monsters
-  // (siege-worlds). Switching is gated entirely by this flag, so the live Dreadroot
-  // game is untouched unless the player explicitly picks Siege Worlds.
-  if (typeof window !== 'undefined') window.location.reload();
 }
 
 export function useActiveGame(): string {

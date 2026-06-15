@@ -249,6 +249,25 @@ export function FortressScene({
   const isSiege = activeGame === 'siege-worlds';
   const siegeSpawn = useMemo(() => new THREE.Vector3(-400, 45, 660), []);
 
+  // Live world-swap teleport (no page reload). When the active game changes, drop the
+  // player into the new world: entering Siege → SW spawn (and remember the Dreadroot
+  // spot); returning → restore that spot. A fresh Vector3 each switch retriggers the
+  // controls' respawn-teleport. On first mount we only teleport if booting into Siege.
+  const drReturnPosRef = useRef<THREE.Vector3 | null>(null);
+  const prevGameRef = useRef<string | null>(null);
+  const [worldSwapTarget, setWorldSwapTarget] = useState<THREE.Vector3 | null>(null);
+  useEffect(() => {
+    if (prevGameRef.current === activeGame) return;
+    const wasIn = prevGameRef.current; // null only on first mount
+    if (activeGame === 'siege-worlds') {
+      if (wasIn && wasIn !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
+      setWorldSwapTarget(siegeSpawn.clone());
+    } else if (wasIn) {
+      setWorldSwapTarget((drReturnPosRef.current ?? new THREE.Vector3(0, 40, 0)).clone());
+    }
+    prevGameRef.current = activeGame;
+  }, [activeGame, camera, siegeSpawn]);
+
   // Pond system for swimming
   const worldPonds = useWorldPonds(currentWorldId);
 
@@ -1624,8 +1643,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         blocksByTypeAndUser={blocksByTypeAndUser}
         onGodModeChange={onGodModeChange}
         updatePlayerPosition={updatePlayerPosition}
-        respawnPosition={isSiege ? siegeSpawn : respawnPosition}
-        onRespawnComplete={onRespawnComplete}
+        respawnPosition={worldSwapTarget ?? respawnPosition}
+        onRespawnComplete={() => { setWorldSwapTarget(null); onRespawnComplete?.(); }}
         forceFloat={isSiege}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
