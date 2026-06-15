@@ -142,7 +142,10 @@ export function FirstPersonControls({
   // Block Inspector
   loadedChunksRef,
   currentWorldId,
-}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void }) {
+  // Siege Worlds: float the player (god-mode noclip) because heightfield terrain
+  // has no block-collision yet. Gated — false for the voxel Dreadroot world.
+  forceFloat = false,
+}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean }) {
   const { camera, gl } = useThree();
   const { raycastMeshes } = useRaycaster();
   const isLocked = useRef(false);
@@ -187,6 +190,10 @@ export function FirstPersonControls({
   // God Mode state (fly + noclip for admins/superadmins)
   const godModeRef = useRef(false);
   const [godModeEnabled, setGodModeEnabled] = useState(false);
+  // Siege Worlds float: no terrain collision yet, so noclip-fly the player.
+  useEffect(() => {
+    if (forceFloat) { godModeRef.current = true; setGodModeEnabled(true); onGodModeChange?.(true); }
+  }, [forceFloat]); // eslint-disable-line react-hooks/exhaustive-deps
   // Sticky admin: once confirmed admin/superadmin this session, latch it so a
   // transient roles refetch/clear can't silently disable admin keybinds
   // (God Mode toggle, Shift+E super-sprint) mid-play.

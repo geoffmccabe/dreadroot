@@ -1,0 +1,46 @@
+// SiegeWorldLayers — the Siege Worlds WORLD as one mountable unit (terrain + water +
+// placed objects + live monsters), with NO player/controller/HUD/sky/lights of its own.
+// This is the piece that plugs into the Dreadroot Fortress shell in place of the voxel
+// world (CameraTrackedBlocks): the engine renders EITHER blocks (kind:'voxel') OR these
+// layers (kind:'siege'), while the player, controls, jet-boost, weapons, and HUD — all
+// world-agnostic — come from Fortress unchanged. Terrain mounts first; the rest follows.
+
+import { Suspense, useState } from 'react';
+import type { WorldDefinition } from '@/config/worldDefinition';
+import { TerrainLayer } from './TerrainLayer';
+import { WaterLayer } from './WaterLayer';
+import { WorldObjectsLayer } from './WorldObjectsLayer';
+import { MonsterEnemy } from './MonsterEnemy';
+
+export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
+  const [terrainReady, setTerrainReady] = useState(false);
+  return (
+    <>
+      {/* Ground first — signals ready so everything else mounts on top of it. */}
+      <TerrainLayer onReady={() => setTerrainReady(true)} />
+      <WaterLayer world={world} />
+
+      {terrainReady && (
+        <>
+          <Suspense fallback={null}>
+            <WorldObjectsLayer />
+          </Suspense>
+          {/* Live enemies wandering the beach near the player spawn (-400,45,660),
+              with wide aggro so they detect + chase the moment you arrive. */}
+          <Suspense fallback={null}>
+            <MonsterEnemy spawn={[-400, 26, 705]} url="/siege/monsters/reddemon.glb"
+                          modelHeight={1.886} height={4} aggro={140} />
+            <MonsterEnemy spawn={[-440, 26, 695]} url="/siege/monsters/greentrollgrunt.glb"
+                          modelHeight={1.772} height={2.4} aggro={140} />
+            <MonsterEnemy spawn={[-360, 26, 695]} url="/siege/monsters/greentroll.glb"
+                          modelHeight={1.927} height={3.0} aggro={140} />
+            <MonsterEnemy spawn={[-420, 26, 720]} url="/siege/monsters/redtroll.glb"
+                          modelHeight={2.033} height={2.7} aggro={140} />
+            <MonsterEnemy spawn={[-380, 26, 720]} url="/siege/monsters/mushroomgruntanim.glb"
+                          modelHeight={2.331} height={2.2} aggro={140} />
+          </Suspense>
+        </>
+      )}
+    </>
+  );
+}

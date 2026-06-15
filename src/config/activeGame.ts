@@ -20,9 +20,11 @@ export function setActiveGame(game: string): void {
   active = game;
   try { localStorage.setItem(KEY, game); } catch { /* ignore */ }
   subs.forEach((f) => f());
-  // NOTE: world-loading on switch is wired once the SW world module lands. Until then,
-  // selecting a game just records the choice (the dropdown highlights it) — no reload,
-  // so the live Dreadroot game is never disrupted by the in-progress switch.
+  // Reload so the app re-boots into the chosen game's world: FortressScene reads
+  // getActiveGame() and renders the voxel world (dreadroot) OR the SW terrain+monsters
+  // (siege-worlds). Switching is gated entirely by this flag, so the live Dreadroot
+  // game is untouched unless the player explicitly picks Siege Worlds.
+  if (typeof window !== 'undefined') window.location.reload();
 }
 
 export function useActiveGame(): string {

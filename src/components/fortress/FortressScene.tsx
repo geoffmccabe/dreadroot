@@ -29,6 +29,9 @@ import { FPSCounter, FPSCounterHandle, RenderTimer } from '@/components/FPSCount
 import { WispBlock } from '@/components/WispBlock';
 
 import { FirstPersonControls } from './FortressControls';
+import { useActiveGame } from '@/config/activeGame';
+import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
+import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
 import { DynamicSky, SkyHandle } from './FortressSky';
 import { DynamicLighting, LightingHandle } from './FortressLighting';
 import { FortressStructure } from './FortressStructure';
@@ -238,6 +241,13 @@ export function FortressScene({
 }: SceneProps) {
   // Phase 2B: Get updatePlayerPosition from context for chunk loading
   const { updatePlayerPosition, blocks: allLoadedBlocks, isLoading: blocksLoading, worldRevision, loadedChunksRef: chunksRef, currentWorldId } = useBlocks();
+
+  // Active game → which world the engine renders. 'siege-worlds' swaps the voxel block
+  // world for the SW heightfield terrain + monsters; everything else (controls, weapons,
+  // HUD, lighting, sky) is world-agnostic and shared. Gated so Dreadroot is untouched.
+  const activeGame = useActiveGame();
+  const isSiege = activeGame === 'siege-worlds';
+  const siegeSpawn = useMemo(() => new THREE.Vector3(-400, 45, 660), []);
 
   // Pond system for swimming
   const worldPonds = useWorldPonds(currentWorldId);
@@ -1611,8 +1621,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         blocksByTypeAndUser={blocksByTypeAndUser}
         onGodModeChange={onGodModeChange}
         updatePlayerPosition={updatePlayerPosition}
-        respawnPosition={respawnPosition}
+        respawnPosition={isSiege ? siegeSpawn : respawnPosition}
         onRespawnComplete={onRespawnComplete}
+        forceFloat={isSiege}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}
@@ -1670,15 +1681,19 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <FortressStructure fortressTextureUrl={fortressTextureUrl} groundTextureUrl={groundTextureUrl} />
       {/* <FortressParticles /> */}
       <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
-      <CameraTrackedBlocks
-        showOwnershipOutline={showOwnershipOutline && blockPlacementMode}
-        currentUserId={user?.id}
-        hoveredBlockId={hoveredBlockId}
-        onMeshReady={handleMeshReady}
-        performanceMode={performanceMode}
-        groundTextureUrl={groundTextureUrl}
-        viewSettings={viewSettings}
-      />
+      {isSiege ? (
+        <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
+      ) : (
+        <CameraTrackedBlocks
+          showOwnershipOutline={showOwnershipOutline && blockPlacementMode}
+          currentUserId={user?.id}
+          hoveredBlockId={hoveredBlockId}
+          onMeshReady={handleMeshReady}
+          performanceMode={performanceMode}
+          groundTextureUrl={groundTextureUrl}
+          viewSettings={viewSettings}
+        />
+      )}
       <Waterfall
         flowSpeed={settings.flowSpeed} 
         msBetweeenDrops={settings.msBetweeenDrops} 

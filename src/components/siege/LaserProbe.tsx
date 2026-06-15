@@ -1,0 +1,135 @@
+// LaserProbe — press L to toggle a visible laser from where you're looking. While
+// on, it raycasts each frame, draws a red beam + a dot at the hit, and publishes
+// what it's touching to probeState (so the C-copy in CoordsHud can report it).
+
+import { useEffect, useMemo, useState } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
+import { probeState } from './probeState';
+import { playerState, heading } from './playerState';
+
+export function LaserProbe() {
+  const { camera, scene } = useThree();
+  const [on, setOn] = useState(false);
+
+  const { grp, line, dot } = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xff3030, depthTest: false, transparent: true }));
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 12), new THREE.MeshBasicMaterial({ color: 0xff3030, depthTest: false }));
+    line.renderOrder = 999; dot.renderOrder = 999;
+    line.frustumCulled = false; dot.frustumCulled = false;
+    const grp = new THREE.Group(); grp.add(line);   // dot (red circle) removed — line only
+    return { grp, line, dot };
+  }, []);
+
+  const ray = useMemo(() => { const r = new THREE.Raycaster(); r.far = 8000; return r; }, []);
+  const dir = useMemo(() => new THREE.Vector3(), []);
+  const down = useMemo(() => new THREE.Vector3(), []);
+  const start = useMemo(() => new THREE.Vector3(), []);
+  const end = useMemo(() => new THREE.Vector3(), []);
+  const WHITE = useMemo(() => new THREE.Color(1, 1, 1), []);
+  const RED = useMemo(() => new THREE.Color(1, 0.15, 0.15), []);
+  // currently-highlighted instance, so we can restore it when the aim moves
+  const hl = useMemo(() => ({ mesh: null as THREE.InstancedMesh | null, id: -1 }), []);
+  const clearHL = () => {
+    if (hl.mesh && hl.id >= 0) {
+      hl.mesh.setColorAt(hl.id, WHITE);
+      if (hl.mesh.instanceColor) hl.mesh.instanceColor.needsUpdate = true;
+    }
+    hl.mesh = null; hl.id = -1;
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'KeyL') setOn((v) => { probeState.on = !v; return !v; });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Quick-tag interaction: raycast from view center, HIDE the hit instance (so it can't
+  // be re-tagged this session), and send it to the triage board. Shift = instant "bad";
+  // plain right-click = open the tag dropdown.
+  useEffect(() => {
+    const r = new THREE.Raycaster(); r.far = 8000;
+    const d2 = new THREE.Vector3();
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    const probeAndHide = () => {
+      camera.getWorldDirection(d2); r.set(camera.position, d2);
+      const hits = r.intersectObjects(scene.children, true)
+        .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot);
+      if (!hits.length) return null;
+      const h = hits[0]; const im = h.object as THREE.InstancedMesh;
+      const ud = (im.userData || {}) as { fbx?: string; mesh?: string };
+      const name = ud.fbx || im.name || '(unknown)';
+      const sub = ud.mesh && ud.mesh !== '(whole)' ? ` / ${ud.mesh}` : '';
+      const inst = h.instanceId != null ? ` [instance ${h.instanceId}]` : '';
+      if (im.isInstancedMesh && h.instanceId != null) {  // hide it
+        im.setMatrixAt(h.instanceId, zero); im.instanceMatrix.needsUpdate = true;
+      }
+      const { x, z, fx, fz } = playerState; const hd = heading(fx, fz);
+      return { item: `${name}${sub}${inst}`, px: x, pz: z, deg: hd.deg, dir: hd.dir,
+               hx: +h.point.x.toFixed(1), hy: +h.point.y.toFixed(1), hz: +h.point.z.toFixed(1) };
+    };
+    const send = (detail: object) => window.dispatchEvent(new CustomEvent('sw-triage', { detail }));
+    // Pointer-lock suppresses 'contextmenu', so detect right-click via mousedown(button 2),
+    // which DOES fire while locked. Shift+anyclick = instant "bad"; plain right = dropdown.
+    const onMouse = (e: MouseEvent) => {
+      const right = e.button === 2;
+      const shiftLeft = e.button === 0 && e.shiftKey;
+      if (!right && !shiftLeft) return;
+      const info = probeAndHide(); if (!info) return;
+      if (e.shiftKey || shiftLeft) { send({ ...info, bad: true }); }
+      else { document.exitPointerLock?.(); send({ ...info, menu: true }); }
+    };
+    const onContext = (e: MouseEvent) => e.preventDefault(); // stop the browser menu
+    window.addEventListener('mousedown', onMouse);
+    window.addEventListener('contextmenu', onContext);
+    return () => { window.removeEventListener('mousedown', onMouse); window.removeEventListener('contextmenu', onContext); };
+  }, [camera, scene, dot]);
+
+  useFrame(() => {
+    if (!on) return;
+    camera.getWorldDirection(dir);
+    ray.set(camera.position, dir);
+    const hits = ray.intersectObjects(scene.children, true)
+      .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot);
+    // Originate the visible beam below the eye (like a gun-barrel laser) so it isn't
+    // edge-on to the view — the raycast itself still comes from the camera center.
+    down.set(0, -1, 0).applyQuaternion(camera.quaternion);
+    start.copy(camera.position).addScaledVector(dir, 1.2).addScaledVector(down, 1.0);
+    if (hits.length) {
+      const h = hits[0];
+      end.copy(h.point);
+      const ud = (h.object.userData || {}) as { fbx?: string; mesh?: string };
+      const name = ud.fbx || h.object.name || '(unknown)';
+      const sub = ud.mesh && ud.mesh !== '(whole)' ? ` / ${ud.mesh}` : '';
+      const inst = h.instanceId != null ? ` [instance ${h.instanceId}]` : '';
+      probeState.hasHit = true;
+      probeState.hit = `${name}${sub}${inst}`;
+      probeState.hx = h.point.x; probeState.hy = h.point.y; probeState.hz = h.point.z;
+      dot.visible = true; dot.position.copy(h.point);
+      // tint the pointed-at instance red
+      const im = h.object as THREE.InstancedMesh;
+      if (im.isInstancedMesh && h.instanceId != null && (hl.mesh !== im || hl.id !== h.instanceId)) {
+        clearHL();
+        if (!im.instanceColor) { for (let i = 0; i < im.count; i++) im.setColorAt(i, WHITE); }
+        im.setColorAt(h.instanceId, RED);
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        hl.mesh = im; hl.id = h.instanceId;
+      }
+    } else {
+      end.copy(camera.position).addScaledVector(dir, ray.far);
+      probeState.hasHit = false; probeState.hit = null;
+      dot.visible = false;
+      clearHL();
+    }
+    const pos = line.geometry.attributes.position as THREE.BufferAttribute;
+    pos.setXYZ(0, start.x, start.y, start.z);
+    pos.setXYZ(1, end.x, end.y, end.z);
+    pos.needsUpdate = true;
+  });
+
+  return on ? <primitive object={grp} /> : null;
+}
