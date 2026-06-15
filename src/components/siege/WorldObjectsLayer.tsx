@@ -7,6 +7,7 @@ import { Component, ReactNode, Suspense, useEffect, useMemo, useState } from 're
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { voxelizeGeometry } from './voxelize';
 
 interface Group { fbx: string; url: string; matrices: number[][]; rotX?: number; mesh?: string; combined?: boolean; scaleMul?: number; whole?: boolean }
 
@@ -123,47 +124,9 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         // aligned by construction (axis-aligned box around the rotated mesh).
         if (geoBox && colliders.length < 2000) {
           if (isRock) {
-            // Voxelize the rock into 1m cells that FOLLOW the surface. Sampling whole triangles
-            // (not just vertices) fills the faces, so a low-poly rock gives a connected shell of
-            // 1m boxes instead of a few scattered corner cubes with gaps you fall through.
-            const CELL = 1.0; // match the Dreadroot block grid
-            const geo = src.geometry;
-            const pos = geo.attributes.position as THREE.BufferAttribute;
-            const idx = geo.index;
-            const triCount = idx ? (idx.count / 3) | 0 : (pos.count / 3) | 0;
-            const seen = new Set<string>();
-            const a = new THREE.Vector3(), b = new THREE.Vector3(), cc = new THREE.Vector3(), p = new THREE.Vector3();
-            const add = (x: number, y: number, z: number) => {
-              const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL), cz = Math.floor(z / CELL);
-              const key = `${cx},${cy},${cz}`;
-              if (seen.has(key)) return;
-              seen.add(key);
-              colliders.push(new THREE.Box3(
-                new THREE.Vector3(cx * CELL, cy * CELL, cz * CELL),
-                new THREE.Vector3((cx + 1) * CELL, (cy + 1) * CELL, (cz + 1) * CELL),
-              ));
-            };
-            for (let t = 0; t < triCount && colliders.length < 2000; t++) {
-              const i0 = idx ? idx.getX(t * 3) : t * 3;
-              const i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
-              const i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
-              a.fromBufferAttribute(pos, i0).applyMatrix4(m);
-              b.fromBufferAttribute(pos, i1).applyMatrix4(m);
-              cc.fromBufferAttribute(pos, i2).applyMatrix4(m);
-              const e = Math.max(a.distanceTo(b), b.distanceTo(cc), a.distanceTo(cc));
-              const N = Math.min(10, Math.max(1, Math.ceil(e / (CELL * 0.6))));
-              for (let si = 0; si <= N && colliders.length < 2000; si++) {
-                for (let ti = 0; ti <= N - si; ti++) {
-                  const u = si / N, v = ti / N;
-                  p.set(
-                    a.x + (b.x - a.x) * u + (cc.x - a.x) * v,
-                    a.y + (b.y - a.y) * u + (cc.y - a.y) * v,
-                    a.z + (b.z - a.z) * u + (cc.z - a.z) * v,
-                  );
-                  add(p.x, p.y, p.z);
-                }
-              }
-            }
+            // 1m voxel shell following the rock surface (shared helper — identical to the V tool).
+            const vox = voxelizeGeometry(src.geometry, m, 1.0, 2000 - colliders.length);
+            for (const bx of vox) colliders.push(bx);
           } else {
             const wb = geoBox.clone().applyMatrix4(m);
             const ctr = wb.getCenter(new THREE.Vector3());

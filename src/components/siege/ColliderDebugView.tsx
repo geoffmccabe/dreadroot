@@ -48,8 +48,10 @@ export function ColliderDebugView() {
       if (cam.distanceTo(c) > FAR) continue;
       b.getSize(s);
       // Edges only, drawn over the world so collider shapes are always visible to aim at.
+      // toneMapped:false keeps the colour pure neon green (otherwise tone-mapping washes it white).
       const wire = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({
-        color: 0x4dff88, transparent: true, opacity: 0.5, depthTest: false, depthWrite: false,
+        color: 0x39ff14, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false,
+        toneMapped: false,
       }));
       wire.position.copy(c); wire.scale.copy(s); wire.renderOrder = 999;
       wire.userData.center = c.clone();
@@ -62,6 +64,13 @@ export function ColliderDebugView() {
   useEffect(() => {
     const g = ref.current; if (!g) return;
     if (on) rebuild(); else clear(g);
+  }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The V voxelize tool mutates the grid — rebuild immediately so new cubes show at once.
+  useEffect(() => {
+    const onChanged = () => { if (on) rebuild(); };
+    window.addEventListener('sw-colliders-changed', onChanged);
+    return () => window.removeEventListener('sw-colliders-changed', onChanged);
   }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFrame(() => {

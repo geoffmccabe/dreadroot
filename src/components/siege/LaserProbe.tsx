@@ -42,7 +42,11 @@ export function LaserProbe() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyL') setOn((v) => { probeState.on = !v; return !v; });
+      if (e.code === 'KeyL') setOn((v) => {
+        const nv = !v; probeState.on = nv;
+        if (!nv) { probeState.mesh = null; probeState.instanceId = -1; probeState.hasHit = false; }
+        return nv;
+      });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -76,6 +80,7 @@ export function LaserProbe() {
     // Pointer-lock suppresses 'contextmenu', so detect right-click via mousedown(button 2),
     // which DOES fire while locked. Shift+anyclick = instant "bad"; plain right = dropdown.
     const onMouse = (e: MouseEvent) => {
+      if (!probeState.on) return;   // only tag/hide while the laser is explicitly on
       const right = e.button === 2;
       const shiftLeft = e.button === 0 && e.shiftKey;
       if (!right && !shiftLeft) return;
@@ -109,6 +114,8 @@ export function LaserProbe() {
       probeState.hasHit = true;
       probeState.hit = `${name}${sub}${inst}`;
       probeState.hx = h.point.x; probeState.hy = h.point.y; probeState.hz = h.point.z;
+      probeState.mesh = h.object as THREE.Mesh;            // for the V voxelize tool
+      probeState.instanceId = h.instanceId ?? -1;
       dot.visible = true; dot.position.copy(h.point);
       // tint the pointed-at instance red
       const im = h.object as THREE.InstancedMesh;
@@ -122,6 +129,7 @@ export function LaserProbe() {
     } else {
       end.copy(camera.position).addScaledVector(dir, ray.far);
       probeState.hasHit = false; probeState.hit = null;
+      probeState.mesh = null; probeState.instanceId = -1;
       dot.visible = false;
       clearHL();
     }
