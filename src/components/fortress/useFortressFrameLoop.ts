@@ -51,6 +51,7 @@ export function useFortressFrameLoop({
   bulletImpactsRef,
   nebulaImpactsRef,
   applyBurnRef,
+  groundHeightFn,
   getDefinitionRef,
   onCoinHit,
   playAudio,
@@ -114,6 +115,7 @@ export function useFortressFrameLoop({
   bulletImpactsRef: MutableRefObject<any>;
   nebulaImpactsRef: MutableRefObject<any>;
   applyBurnRef: MutableRefObject<((...args: any[]) => void) | null>;
+  groundHeightFn?: (x: number, z: number) => number | null;
   getDefinitionRef: MutableRefObject<(tier: number) => any>;
   onCoinHit: (pos: any) => void;
   playAudio: (audioEl?: HTMLAudioElement | null) => void;
@@ -956,15 +958,20 @@ export function useFortressFrameLoop({
             }
           }
           
-          // Also check ground collision (y <= 0)
-          if (!hit && bullet.position.y <= 0) {
+          // Ground collision. Dreadroot uses the flat y=0 floor; SWW passes a
+          // terrain-height fn so bullets hit the raised heightmap terrain you see
+          // (otherwise they fall THROUGH it and burn at y=0 far below the map).
+          const groundY = groundHeightFn
+            ? (groundHeightFn(bullet.position.x, bullet.position.z) ?? 0)
+            : 0;
+          if (!hit && bullet.position.y <= groundY) {
             hit = true;
             needsBulletRender = true;
-            
+
             // Spawn impact effect at ground level with bullet tier settings from context
             // Spawn impact effect at ground level - use Nebula for sky-friendly alpha blending
             _scratchGroundPos.copy(bullet.position);
-            _scratchGroundPos.y = 0.1; // Slightly above ground
+            _scratchGroundPos.y = groundY + 0.1; // Slightly above the (terrain) ground
             const groundPos = _scratchGroundPos;
             const tierDefGround = getDefinitionRef.current(bullet.tier);
             const pentaMultiplierGround = bullet.isPentabullet ? 3.0 : 1.0;
