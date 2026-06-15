@@ -18,4 +18,6 @@ export interface GrenadeInstance {
   isRolling: boolean;
   /** Set true after the explosion fires so the next tick removes us. */
   exploded: boolean;
+  /** performance.now() of the last bounce SFX (throttle so it doesn't buzz). */
+  lastBounceAt?: number;
 }

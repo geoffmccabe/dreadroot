@@ -34,6 +34,8 @@ import {
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { resolveBlastHit, stepGrenadePhysics, type VoxelCollider, type EnemyColliderSource } from '@/features/combat';
+import { getActiveGame } from '@/config/activeGame';
+import { sampleHeight } from '@/components/siege/terrainHeight';
 
 // Pure-physics function adapters around our client-side singletons.
 // On the L2 DO the same physics function will receive different
@@ -49,6 +51,25 @@ const _enemyColliderSource: EnemyColliderSource = {
         if (hb) cb(hb);
       }
     }
+  },
+};
+// Siege Worlds collider: the ground is a heightmap (not voxels) and objects are Box3 colliders
+// in the grid (not the voxel field). A cell is "solid" if it's below the terrain surface OR
+// inside any box collider — so grenades land on the terrain / rocks / buildings / monsters and
+// detonate at the surface, instead of falling through to y=0 and exploding underground.
+const _siegeCollider: VoxelCollider = {
+  hasVoxel(ix, iy, iz) {
+    const cx = ix + 0.5, cz = iz + 0.5;
+    const th = sampleHeight(cx, cz);
+    if (th != null && iy + 1 <= th) return true;
+    const cy = iy + 0.5;
+    const cnt = worldCollisionGrid.getNearby(cx, cz, 1);
+    const res = worldCollisionGrid.nearbyResult;
+    for (let i = 0; i < cnt; i++) {
+      const b = res[i] as { min: THREE.Vector3; max: THREE.Vector3 } | undefined;
+      if (b && b.max && cx >= b.min.x && cx <= b.max.x && cy >= b.min.y && cy <= b.max.y && cz >= b.min.z && cz <= b.max.z) return true;
+    }
+    return false;
   },
 };
 import { playThrowSound } from '../lib/explosionSound';
@@ -171,6 +192,10 @@ export function useGrenadeSystem({
     // dt cap so a long stall doesn't punt grenades through walls.
     const stepDt = Math.min(dt, 0.05);
 
+    // Siege Worlds uses the heightmap-terrain + Box3 collider; Dreadroot the voxel field.
+    const isSiege = getActiveGame() === 'siege-worlds';
+    const world = isSiege ? _siegeCollider : _voxelCollider;
+
     let writeIdx = 0;
     for (let i = 0; i < list.length; i++) {
       const g = list[i];
@@ -189,10 +214,11 @@ export function useGrenadeSystem({
       // same step function will run on the L2 DO. The voxel + entity
       // colliders are passed in as plain interfaces so we don't drag
       // the client-specific singletons across the boundary.
+      const pvx = g.velocity.x, pvy = g.velocity.y, pvz = g.velocity.z;
       stepGrenadePhysics(
         g,
         stepDt,
-        _voxelCollider,
+        world,
         _enemyColliderSource,
         {
           gravity: GRENADE_GRAVITY,
@@ -202,6 +228,19 @@ export function useGrenadeSystem({
           visualRadius: GRENADE_VISUAL_RADIUS,
         },
       );
+
+      // Bounce/landing SFX: a velocity component sharply reversed = it hit a collider or dropped
+      // onto the terrain. Throttled so a rolling grenade doesn't buzz.
+      const hit = (pvy < -2 && g.velocity.y > 0.3) || Math.abs(g.velocity.x - pvx) > 2 || Math.abs(g.velocity.z - pvz) > 2;
+      if (isSiege && hit) {
+        const tnow = performance.now();
+        if (tnow - (g.lastBounceAt ?? 0) > 130) {
+          g.lastBounceAt = tnow;
+          const cam = cameraRef.current;
+          const d = cam ? Math.hypot(cam.position.x - g.position.x, cam.position.y - g.position.y, cam.position.z - g.position.z) : 0;
+          void playSpatialSound('/wooden_thud_sound.mp3', d, { baseVolume: 0.4 });
+        }
+      }
 
       // Keep the grenade.
       list[writeIdx++] = g;
