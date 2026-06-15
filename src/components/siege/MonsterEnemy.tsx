@@ -94,7 +94,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
-  const me = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], r: Math.max(0.8, H * 0.3) }).current;
+  // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
+  // so colliders settle ~20% of their width apart (almost touching → they pile up readily).
+  // Arms are ignored (body collider only). Named monsters keep the old wider spacing.
+  const me = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], r: cfg.zombie ? H * 0.26 * 1.2 : Math.max(0.8, H * 0.3) }).current;
   useEffect(() => { MONSTERS.add(me); return () => { MONSTERS.delete(me); }; }, [me]);
   // Combat instance — registered with the shared horde so Dreadroot weapons can damage it.
   const inst = useRef<DemonInstance>({
@@ -302,7 +305,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         // sideways to go around. Forward penetration was already undone above.
         const trapped = crowd >= TRAP_COUNT;
         if (role.current!.climb || trapped) {
-          s.vy = JUMP_VEL;                     // hop straight up; pile up to clear more
+          // Hop just high enough to land ON the obstacle in front (+a little), never higher.
+          // For the small things a mushroom hops onto this is ~half the old fixed velocity;
+          // capped so a tall wall can't launch them.
+          s.vy = Math.min(JUMP_VEL, Math.sqrt(2 * GRAVITY * Math.max(0.25, wallTop - feet + 0.2)));
         } else {
           const sg = role.current!.side;
           const step = SPD * delta;
