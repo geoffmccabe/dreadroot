@@ -1,14 +1,27 @@
 // SiegeSpawner — quick horde-test spawner for Siege Worlds.
-// Command:  "!"  then  "1" (type 1 = red demon)  then a quantity digit (1-9, or 0 = 10)
-// spawns that many SMALL (1.8m) red demons in a ring around the player, as zombie stand-ins.
-// After a spawn, spamming "0" within 2 seconds adds another 10 each press — for stress-testing
+// Command:  "!"  then a TYPE digit  then a QUANTITY digit (1-9, or 0 = 10), all within ~3s:
+//   !1#  → red-demon zombies (npcType 32): CLIMB gait (walk up obstacles, no jump), size ±10%,
+//          wide speed variety, desaturated.
+//   !2#  → mushroom-grunt horde (npcType 6): HOP gait (the bouncy hop/stack), size ±50%,
+//          same grey desaturation.
+// After a spawn, spamming "0" within 2s adds another 10 of the LAST type — for stress-testing
 // hordes. Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import { MonsterEnemy } from './MonsterEnemy';
 
 let nextId = 0;
-type Demon = { id: number; spawn: [number, number, number] };
+type MType = 1 | 2;
+type Demon = { id: number; spawn: [number, number, number]; type: MType };
+
+// Per-type config. gait/sizeJitter/speedJitter are the two reusable SW horde algorithms.
+const CFG: Record<MType, {
+  url: string; modelHeight: number; height: number; speed: number;
+  gait: 'hop' | 'climb'; sizeJitter: number; speedJitter: number;
+}> = {
+  1: { url: '/siege/monsters/reddemon.glb',         modelHeight: 1.886, height: 1.8, speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30 },
+  2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 2.2, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10 },
+};
 
 export function SiegeSpawner() {
   const camera = useThree((s) => s.camera);
@@ -16,6 +29,8 @@ export function SiegeSpawner() {
   const stage = useRef<'idle' | 'type' | 'qty'>('idle');
   const stageTimer = useRef<number | null>(null);
   const spamUntil = useRef(0);
+  const pendingType = useRef<MType>(1);
+  const lastType = useRef<MType>(1);
 
   useEffect(() => {
     const clearStage = () => {
@@ -26,53 +41,56 @@ export function SiegeSpawner() {
       if (stageTimer.current) clearTimeout(stageTimer.current);
       stageTimer.current = window.setTimeout(() => { stage.current = 'idle'; }, 3000);
     };
-    const spawn = (count: number) => {
+    const spawn = (count: number, type: MType) => {
       const { x, y, z } = camera.position;
       const add: Demon[] = [];
       for (let i = 0; i < count; i++) {
         const ang = Math.random() * Math.PI * 2, rad = 6 + Math.random() * 14;
-        add.push({ id: nextId++, spawn: [x + Math.cos(ang) * rad, y, z + Math.sin(ang) * rad] });
+        add.push({ id: nextId++, spawn: [x + Math.cos(ang) * rad, y, z + Math.sin(ang) * rad], type });
       }
       setDemons((d) => [...d, ...add]);
+      lastType.current = type;
       spamUntil.current = performance.now() + 2000;
-      console.log(`[SiegeSpawner] +${count} red demons (total ${demons.length + count})`);
+      console.log(`[SiegeSpawner] +${count} type-${type}`);
     };
 
     const onKey = (e: KeyboardEvent) => {
       const k = e.key;
-      // Spam "0" within 2s of the last spawn → +10 more.
+      // Spam "0" within 2s of the last spawn → +10 more of the same type.
       if (k === '0' && stage.current === 'idle' && performance.now() < spamUntil.current) {
-        e.preventDefault(); e.stopPropagation(); spawn(10); return;
+        e.preventDefault(); e.stopPropagation(); spawn(10, lastType.current); return;
       }
       if (k === '!') { e.preventDefault(); e.stopPropagation(); stage.current = 'type'; arm(); return; }
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
-        if (k === '1') { stage.current = 'qty'; arm(); } else { clearStage(); }
+        if (k === '1' || k === '2') { pendingType.current = (k === '1' ? 1 : 2); stage.current = 'qty'; arm(); }
+        else clearStage();
         return;
       }
       if (stage.current === 'qty') {
         e.preventDefault(); e.stopPropagation();
-        if (/^[0-9]$/.test(k)) spawn(k === '0' ? 10 : parseInt(k, 10));
+        if (/^[0-9]$/.test(k)) spawn(k === '0' ? 10 : parseInt(k, 10), pendingType.current);
         clearStage();
         return;
       }
     };
     window.addEventListener('keydown', onKey, true);
     return () => { window.removeEventListener('keydown', onKey, true); clearStage(); };
-  }, [camera, demons.length]);
+  }, [camera]);
 
   const despawn = (id: string) => setDemons((d) => d.filter((x) => `d${x.id}` !== id));
 
   return (
     <>
-      {/* RedDemonZombie — npcType 32 (the spawnable horde variant; distinct from the original
-          full-size RedDemon, npcType 0). zombie flag enables size/speed/rhythm jitter,
-          desaturated shading, and head+body colliders. */}
-      {demons.map((d) => (
-        <MonsterEnemy key={d.id} id={`d${d.id}`} spawn={d.spawn} url="/siege/monsters/reddemon.glb"
-          modelHeight={1.886} height={1.8} aggro={400} speed={3.2} wanderRadius={6}
-          health={100} onDespawn={despawn} zombie />
-      ))}
+      {demons.map((d) => {
+        const m = CFG[d.type];
+        return (
+          <MonsterEnemy key={d.id} id={`d${d.id}`} spawn={d.spawn} url={m.url}
+            modelHeight={m.modelHeight} height={m.height} aggro={400} speed={m.speed} wanderRadius={6}
+            health={100} onDespawn={despawn} zombie gait={m.gait}
+            sizeJitter={m.sizeJitter} speedJitter={m.speedJitter} />
+        );
+      })}
     </>
   );
 }

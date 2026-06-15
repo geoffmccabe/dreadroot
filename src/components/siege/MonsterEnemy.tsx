@@ -30,8 +30,14 @@ export interface MonsterConfig {
   health?: number;            // HP (default 100)
   id?: string;                // stable combat id (auto if omitted)
   onDespawn?: (id: string) => void;  // called once after the death anim finishes
-  zombie?: boolean;           // RedDemonZombie horde variant: per-demon size/speed/rhythm
-                              // jitter, desaturated shading, head+body colliders, low stack
+  zombie?: boolean;           // horde variant: per-demon size/speed/rhythm jitter, desaturated
+                              // shading, head+body colliders, low stack
+  gait?: 'hop' | 'climb';     // SW movement style (both reusable by any monster):
+                              //  'hop'   = bouncy: hop over walls + crowd-jump to pile up (mushrooms, default)
+                              //  'climb' = no jump: walk UP obstacles at half speed, climb over
+                              //            moving demons → continuous stacking (red demons)
+  sizeJitter?: number;        // per-demon ± size fraction (0.10 = ±10%, 0.50 = ±50%)
+  speedJitter?: number;       // per-demon ± walk-speed fraction
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
 
@@ -68,11 +74,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const jit = useRef<{ size: number; speed: number; anim: number; desat: number } | null>(null);
   if (!jit.current) {
     const R = Math.random;
+    const sj = cfg.sizeJitter ?? 0.10;     // ± size fraction
+    const vj = cfg.speedJitter ?? 0.10;    // ± walk-speed fraction (± so some are clearly slower/faster)
     jit.current = cfg.zombie
-      ? { size: 1 + (R() * 2 - 1) * 0.10, speed: 1 + R() * 0.10, anim: 1 + R() * 0.10, desat: 0.30 + R() * 0.50 }
+      ? { size: 1 + (R() * 2 - 1) * sj, speed: 1 + (R() * 2 - 1) * vj, anim: 1 + R() * 0.10, desat: 0.30 + R() * 0.50 }
       : { size: 1, speed: 1, anim: 1, desat: 0 };
   }
   const J = jit.current;
+  const gait = cfg.gait ?? 'hop';
   const H = c.height * J.size;              // jittered in-world height
   const SPD = (c.speed ?? DEF.speed) * J.speed;
   const STAND = cfg.zombie ? 0.80 : 1.0;    // standable top = 0.8H so stacked demons sit on shoulders
@@ -273,24 +282,43 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     }
     const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
 
-    // ── Blocked by a wall: climbers (and anyone boxed in by the crowd) hop up onto it;
-    //    everyone else undoes the step and crabs sideways to go around. ──
-    if (wallTop > -Infinity && moving && grounded) {
-      const trapped = crowd >= TRAP_COUNT;
-      if (role.current!.climb || trapped) {
-        s.vy = JUMP_VEL;                       // hop ~own height; pile up to clear more
-      } else if (feet < wallTop - 0.1) {
-        s.x = preX; s.z = preZ;
-        const sg = role.current!.side;
-        const step = SPD * delta;
-        s.x += (-mvz * sg) * step; s.z += (mvx * sg) * step;   // crab perpendicular to the wall
+    // ── Blocked by a wall — two reusable SW gaits ──
+    let climbing = false;
+    if (wallTop > -Infinity && moving) {
+      if (gait === 'climb') {
+        // No jump: ascend the obstacle face. Handled in the vertical step so it works mid-air
+        // (continuous climb up walls AND up other demons, even moving ones).
+        climbing = true;
+      } else if (grounded) {
+        // 'hop': climbers (and anyone boxed in by the crowd) hop onto it; everyone else
+        // undoes the step and crabs sideways to go around.
+        const trapped = crowd >= TRAP_COUNT;
+        if (role.current!.climb || trapped) {
+          s.vy = JUMP_VEL;                     // hop ~own height; pile up to clear more
+        } else if (feet < wallTop - 0.1) {
+          s.x = preX; s.z = preZ;
+          const sg = role.current!.side;
+          const step = SPD * delta;
+          s.x += (-mvz * sg) * step; s.z += (mvx * sg) * step; // crab perpendicular to the wall
+        }
       }
     }
 
-    // ── Gravity + vertical integrate + land on the highest standable surface ──
-    s.vy -= GRAVITY * delta;
-    s.y += s.vy * delta;
-    if (s.y <= groundY) { s.y = groundY; s.vy = 0; }
+    // ── Vertical ──
+    if (climbing) {
+      // Walk UP the obstacle at half speed, advancing forward at half speed so they climb the
+      // face and over the top — and keep advancing up a MOVING demon (continuous stacking).
+      const climbStep = SPD * 0.5 * delta;
+      s.y = Math.min(wallTop, s.y + climbStep);
+      s.vy = 0;
+      s.x = preX + (s.x - preX) * 0.5;
+      s.z = preZ + (s.z - preZ) * 0.5;
+    } else {
+      // Gravity + land on the highest standable surface.
+      s.vy -= GRAVITY * delta;
+      s.y += s.vy * delta;
+      if (s.y <= groundY) { s.y = groundY; s.vy = 0; }
+    }
 
     me.y = s.y;
     g.position.set(s.x, s.y, s.z);
