@@ -80,6 +80,92 @@ class NpcManagerImpl {
     this.bump();
   }
 
+  // ── editing (the builder writes through these) ──
+  private nodeCounter = 0;
+
+  /** Re-derive ordering + reconcile per-node runtime for live instances of a
+   *  def after a structural edit. Keeps the spring state of unchanged nodes so
+   *  the wobble doesn't reset on every keystroke. */
+  private reconcile(slug: string): void {
+    for (const inst of this.instances) {
+      if (inst.def.slug !== slug) continue;
+      inst.ordered = orderNodes(inst.def.nodes);
+      const ids = new Set(inst.def.nodes.map((n) => n.id));
+      for (const id of Array.from(inst.runtimes.keys())) {
+        if (!ids.has(id)) inst.runtimes.delete(id);
+      }
+      for (const n of inst.def.nodes) {
+        if (!inst.runtimes.has(n.id)) inst.runtimes.set(n.id, createNodeRuntime());
+      }
+    }
+  }
+
+  updateMeta(
+    slug: string,
+    patch: Partial<Pick<EMSDefinition, 'name' | 'faction' | 'locomotion' | 'scale' | 'moveSpeed' | 'health' | 'damagePerHit'>>,
+  ): void {
+    const def = this.definitions.get(slug);
+    if (!def) return;
+    Object.assign(def, patch);
+    this.bump();
+  }
+
+  updateNode(slug: string, nodeId: string, patch: Partial<EMSNode>): void {
+    const def = this.definitions.get(slug);
+    if (!def) return;
+    const node = def.nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    Object.assign(node, patch);
+    if (node.bond === 'spring' && !node.spring) node.spring = { stiffness: 100, damping: 7 };
+    this.reconcile(slug);
+    this.bump();
+  }
+
+  addNode(slug: string): string | null {
+    const def = this.definitions.get(slug);
+    if (!def) return null;
+    const id = `n${++this.nodeCounter}`;
+    def.nodes.push({
+      id, shape: 'box', offset: [0, 0.5, 0], size: [0.4, 0.4, 0.4],
+      parent: def.nodes[0]?.id ?? null, bond: 'rigid', color: '#cccccc',
+    });
+    this.reconcile(slug);
+    this.bump();
+    return id;
+  }
+
+  removeNode(slug: string, nodeId: string): void {
+    const def = this.definitions.get(slug);
+    if (!def || def.nodes.length <= 1) return; // keep at least the body
+    const removed = def.nodes.find((n) => n.id === nodeId);
+    if (!removed) return;
+    // Re-parent children of the removed node up to its parent.
+    for (const n of def.nodes) if (n.parent === nodeId) n.parent = removed.parent;
+    def.nodes = def.nodes.filter((n) => n.id !== nodeId);
+    this.reconcile(slug);
+    this.bump();
+  }
+
+  /** Create a blank editable NPC (one body box) and return it. */
+  createDefinition(): EMSDefinition {
+    const slug = `npc_custom_${++this.idCounter}`;
+    const def: EMSDefinition = {
+      slug, name: 'New NPC', faction: 'enemy', skeleton: 'custom',
+      nodes: [{ id: 'body', shape: 'box', offset: [0, 1, 0], size: [1, 1, 1], parent: null, bond: 'rigid', color: '#8888aa' }],
+      locomotion: 'walk', moveSpeed: 2, scale: 1, behaviorTreeId: null, health: 100, damagePerHit: 5,
+    };
+    this.definitions.set(slug, def);
+    this.bump();
+    return def;
+  }
+
+  deleteDefinition(slug: string): void {
+    if (!this.definitions.has(slug)) return;
+    this.definitions.delete(slug);
+    this.instances = this.instances.filter((i) => i.def.slug !== slug);
+    this.bump();
+  }
+
   getInstances(): NpcInstance[] {
     return this.instances;
   }

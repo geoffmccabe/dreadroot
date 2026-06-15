@@ -26,7 +26,8 @@ function geometryFor(shape: PrimitiveShape): ReactElement {
 }
 
 function EMSInstanceView({ instance }: { instance: NpcInstance }): ReactElement {
-  const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
+  // Keyed by node id (not index) so live add/remove/reorder can't misalign.
+  const meshRefs = useRef<Map<string, THREE.Mesh>>(new Map());
 
   useFrame((_, delta) => {
     const inst = instance;
@@ -36,7 +37,9 @@ function EMSInstanceView({ instance }: { instance: NpcInstance }): ReactElement 
     // Idle locomotion bob (drives the springs). Hop bounces; walk gently sways.
     const bob = inst.def.locomotion === 'hop'
       ? Math.abs(Math.sin(inst.phase * 3)) * 0.45
-      : Math.sin(inst.phase * 2) * 0.06;
+      : inst.def.locomotion === 'static'
+        ? 0
+        : Math.sin(inst.phase * 2) * 0.06;
 
     stepEMS(
       inst.def, inst.ordered, inst.runtimes,
@@ -44,9 +47,9 @@ function EMSInstanceView({ instance }: { instance: NpcInstance }): ReactElement 
       delta,
     );
 
-    for (let i = 0; i < inst.ordered.length; i++) {
-      const rt = inst.runtimes.get(inst.ordered[i].id);
-      const mesh = meshRefs.current[i];
+    for (const node of inst.ordered) {
+      const rt = inst.runtimes.get(node.id);
+      const mesh = meshRefs.current.get(node.id);
       if (!rt || !mesh) continue;
       mesh.position.set(rt.worldX, rt.worldY, rt.worldZ);
       mesh.rotation.y = inst.yaw;
@@ -55,10 +58,10 @@ function EMSInstanceView({ instance }: { instance: NpcInstance }): ReactElement 
 
   return (
     <group>
-      {instance.ordered.map((node, i) => (
+      {instance.ordered.map((node) => (
         <mesh
           key={node.id}
-          ref={(m) => { meshRefs.current[i] = m; }}
+          ref={(m) => { if (m) meshRefs.current.set(node.id, m); else meshRefs.current.delete(node.id); }}
           scale={[node.size[0], node.size[1], node.size[2]]}
         >
           {geometryFor(node.shape)}
