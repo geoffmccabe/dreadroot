@@ -72,6 +72,7 @@ import { useShroomerSystem, ShroomerRenderer, ShroomerRendererHandle } from '@/f
 import { useVortaxSystem, VortaxRenderer, VortaxRendererHandle } from '@/features/vortax';
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
+import { EMSRenderer } from '@/features/npc/ems/EMSRenderer';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
 import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer } from '@/features/shpider-eggs';
 import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
@@ -1774,6 +1775,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Shtickman Renderer - tall stick humanoids */}
       <ShtickmanRenderer ref={shtickmanRendererRef} shtickmenRef={shtickmenRef} cameraRef={cameraRef} universalFlameRef={universalFlameRef} />
+
+      {/* NEW EMS NPC system (parallel) — renders @-spawned electromagnetic-skeleton NPCs. */}
+      <EMSRenderer />
 
       {/* Shpider Renderer — per-tier InstancedMesh routing + death fragments. */}
       <ShpiderRenderer
