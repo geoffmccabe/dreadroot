@@ -6,8 +6,14 @@
 import { Component, ReactNode, Suspense, useEffect, useMemo, useState } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 
 interface Group { fbx: string; url: string; matrices: number[][]; rotX?: number; mesh?: string; combined?: boolean; scaleMul?: number; whole?: boolean }
+
+// Which object types get a solid collider (structures, not foliage/clutter you walk through).
+const SOLID_RE = /bld|wall|tower|gate|bank|town|cave|colosseum|forge|building|house|hut|barrier|fence|dock|pier|bridge|ruin/i;
+const FOLIAGE_RE = /plant|grass|ivy|tree|flower|bush|fern|leaf|vine|reed|seaweed|coral|moss/i;
+const isSolidGroup = (fbx: string) => SOLID_RE.test(fbx) && !FOLIAGE_RE.test(fbx);
 
 // Shared atlas cache: each Synty pack atlas is loaded ONCE and reused across every
 // model that uses it — small memory, no per-model textures embedded.
@@ -43,8 +49,10 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout }:
   { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string> }) {
   const gltf = useGLTF(url);
-  const node = useMemo(() => {
+  const { node, colliders } = useMemo(() => {
     const out = new THREE.Group();
+    const colliders: THREE.Box3[] = [];
+    const solid = isSolidGroup(fbx);
     let meshes: THREE.Mesh[] = [];
     gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
     // Combined bake: render only the named sub-mesh for this group.
@@ -96,19 +104,33 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           m.needsUpdate = true;
         }
       });
+      let geoBox: THREE.Box3 | null = null;
+      if (solid) {
+        if (!src.geometry.boundingBox) src.geometry.computeBoundingBox();
+        geoBox = src.geometry.boundingBox;
+      }
       const inst = new THREE.InstancedMesh(src.geometry, src.material, matrices.length);
       inst.userData = { fbx, mesh: meshName ?? '(whole)', combined: !!combined };
       for (let i = 0; i < matrices.length; i++) {
         m.fromArray(matrices[i]).multiply(local);
         if (flipQ) { m.decompose(P, Q, S); Q.premultiply(flipQ); m.compose(P, Q, S); }
         inst.setMatrixAt(i, m);
+        // Collider from the SAME instance matrix `m` that positions the rendered building →
+        // aligned by construction (axis-aligned box around the rotated mesh).
+        if (geoBox && colliders.length < 2000) colliders.push(geoBox.clone().applyMatrix4(m));
       }
       inst.instanceMatrix.needsUpdate = true;
       inst.computeBoundingSphere();
       out.add(inst);
     }
-    return out;
+    return { node: out, colliders };
   }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout]);
+  // Register solid colliders in the engine grid; remove on unmount / world swap.
+  useEffect(() => {
+    if (!colliders.length) return;
+    colliders.forEach((b) => worldCollisionGrid.insert(b));
+    return () => colliders.forEach((b) => worldCollisionGrid.remove(b));
+  }, [colliders]);
   return <primitive object={node} />;
 }
 

@@ -297,8 +297,8 @@ export function FortressScene({
 
   // Fruit spawning - runs on interval, inserts fruits into DB under branch blocks
   useFruitSpawning({
-    plantedTrees,
-    treeFruits,
+    plantedTrees: isSiege ? [] : plantedTrees,   // no Dreadroot trees/fruit in Siege Worlds
+    treeFruits: isSiege ? [] : treeFruits,
     worldId: currentWorldId,
     userId: currentUserId ?? null,
     cameraRef,
@@ -1835,15 +1835,17 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <FloatingCoinManager userId={currentUserId ?? null} />
 
       {/* Fruit Renderer - proximity-based fruit spheres with flame plumes */}
-      <FruitRenderer
-        treeFruits={treeFruits}
-        cameraRef={cameraRef}
-        playerLevel={playerLevel}
-        universalFlameRef={universalFlameRef}
-        adminSeeAll={isAdmin && fruitVisibility}
-        findClosestFruit={findClosestFruit}
-        loadedChunksRef={chunksRef}
-      />
+      {!isSiege && (
+        <FruitRenderer
+          treeFruits={treeFruits}
+          cameraRef={cameraRef}
+          playerLevel={playerLevel}
+          universalFlameRef={universalFlameRef}
+          adminSeeAll={isAdmin && fruitVisibility}
+          findClosestFruit={findClosestFruit}
+          loadedChunksRef={chunksRef}
+        />
+      )}
 
       {/* Diamond Renderer - draws 'diamond' fruit_code rows as
           spinning blue gems instead of regular fruits. */}

@@ -7,6 +7,7 @@ import { useIndexedDB, blockDB } from './useIndexedDB';
 import { loadPlayerCatalogue } from '@/lib/playerCatalogue';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
+import { getActiveGame } from '@/config/activeGame';
 import { getChunkKey } from '@/lib/chunkManager';
 import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/components/fortress/FortressAudio';
@@ -188,20 +189,19 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         localStorage.setItem(ATLAS_CACHE_VERSION_KEY, String(CURRENT_ATLAS_VERSION));
       }
 
-      // CRITICAL: Initialize texture atlas BEFORE chunk loading starts
-      // Tree blocks require atlas to render - if atlas isn't ready, trees won't show
-      console.log('[Init] Starting texture atlas initialization...');
-      const atlasStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing texture atlas...');
-      const { initializeAtlasTexture } = await import('@/hooks/useTextureAtlas');
-      await initializeAtlasTexture();
-      initLogFinishStep(atlasStepId!);
-      console.log('[Init] Texture atlas initialized, starting atlas sync...');
-
-      // Sync textures from database to atlas (ensures atlas is populated)
-      // Timing is logged inside syncAtlasOnInit() via useAtlasSync hooks
-      const { syncAtlasOnInit } = await import('@/hooks/useAtlasSync');
-      await syncAtlasOnInit();
-      console.log('[Init] Atlas sync complete, fetching world settings...');
+      // Siege Worlds renders no voxel blocks → skip the block/tree texture atlas entirely
+      // (it's the Dreadroot block world: ~11s of work + not needed in siege).
+      if (getActiveGame() !== 'siege-worlds') {
+        // CRITICAL: Initialize texture atlas BEFORE chunk loading starts
+        console.log('[Init] Starting texture atlas initialization...');
+        const atlasStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing texture atlas...');
+        const { initializeAtlasTexture } = await import('@/hooks/useTextureAtlas');
+        await initializeAtlasTexture();
+        initLogFinishStep(atlasStepId!);
+        const { syncAtlasOnInit } = await import('@/hooks/useAtlasSync');
+        await syncAtlasOnInit();
+        console.log('[Init] Atlas sync complete, fetching world settings...');
+      }
 
       // Fetch world's ambient music settings
       const { data: worldSettings } = await supabase
@@ -223,10 +223,13 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         return loaded;
       })();
 
-      // C7: Chunk loader initialization with start/finish
-      const chunkStepId = initLogStartStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
-      await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
-      initLogFinishStep(chunkStepId!);
+      // Siege Worlds renders its own terrain/objects, not voxel chunks → skip the DR chunk
+      // loader (it was loading ~290k Dreadroot blocks into the world + collision grid in siege).
+      if (getActiveGame() !== 'siege-worlds') {
+        const chunkStepId = initLogStartStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
+        await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
+        initLogFinishStep(chunkStepId!);
+      }
 
       // Wait for ambient audio to finish loading (should be done by now)
       await ambientAudioPromise;

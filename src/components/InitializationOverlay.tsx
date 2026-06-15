@@ -5,10 +5,10 @@ import fortressImage from '@/assets/fortress_loading_screen.webp';
 import { useActiveGame } from '@/config/activeGame';
 
 // Status indicator component
-const StatusIndicator: React.FC<{ status: InitStepStatus }> = ({ status }) => {
+const StatusIndicator: React.FC<{ status: InitStepStatus; accent?: string }> = ({ status, accent }) => {
   switch (status) {
     case 'done':
-      return <span className="text-emerald-400">✓</span>;
+      return <span className="text-emerald-400" style={accent ? { color: accent } : undefined}>✓</span>;
     case 'running':
       return <span className="text-yellow-400 animate-pulse">…</span>;
     case 'error':
@@ -55,6 +55,8 @@ export function InitializationOverlay() {
   const panelBg = isSiege ? 'rgba(22,6,6,0.96)' : 'hsla(var(--hud-bg))';
   const panelBorder = isSiege ? '#a01818' : 'hsla(var(--hud-border))';
   const titleColor = isSiege ? '#ff5436' : 'hsl(var(--hud-text))';
+  const fileColor = isSiege ? '#ff6a5a' : undefined;    // [file] tag: cyan/blue → red in SWW
+  const accentColor = isSiege ? '#ff9a3c' : undefined;  // counts/✓: green → bright orange in SWW
 
   // Auto-scroll to bottom when new steps appear
   useEffect(() => {
@@ -64,8 +66,19 @@ export function InitializationOverlay() {
     }
   }, [steps]);
 
-  const handleCopy = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCopy = useCallback(() => {
+    // Click sound (short blip) — gives audible feedback the button worked.
+    try {
+      const AC = (window.AudioContext || (window as any).webkitAudioContext);
+      if (AC) {
+        const ctx = new AC();
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = 660; g.gain.value = 0.06;
+        o.start(); o.stop(ctx.currentTime + 0.05);
+        setTimeout(() => ctx.close(), 200);
+      }
+    } catch { /* ignore */ }
 
     const lines = steps.map(step => {
       const countStr = step.count !== undefined ? ` ${step.count}` : '';
@@ -81,7 +94,7 @@ export function InitializationOverlay() {
       : `World Initialized in ${totalDurationSecs.toFixed(1)} Seconds!`;
     lines.unshift(totalStr);
 
-    navigator.clipboard.writeText(lines.join('\n'));
+    navigator.clipboard?.writeText(lines.join('\n')).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [steps, isInitializing, totalDurationSecs, elapsedMs]);
@@ -164,16 +177,16 @@ export function InitializationOverlay() {
                 {steps.map((step) => (
                   <div key={step.id} className="flex items-start gap-2" style={{ color: 'hsl(var(--hud-text) / 0.9)' }}>
                     <span className="w-4 flex-shrink-0">
-                      <StatusIndicator status={step.status} />
+                      <StatusIndicator status={step.status} accent={accentColor} />
                     </span>
                     <span className="w-14 flex-shrink-0 text-right" style={{ color: 'white' }}>
                       @{formatElapsed(step.startTime)}
                     </span>
                     <span className="flex-1">
-                      <span className="text-cyan-400">[{step.file}]</span>{' '}
+                      <span className="text-cyan-400" style={fileColor ? { color: fileColor } : undefined}>[{step.file}]</span>{' '}
                       <span style={{ color: 'hsl(var(--hud-text))' }}>{step.message}</span>
                       {step.count !== undefined && (
-                        <span className="text-emerald-400 font-bold"> {step.count}</span>
+                        <span className="text-emerald-400 font-bold" style={accentColor ? { color: accentColor } : undefined}> {step.count}</span>
                       )}
                       {step.durationMs !== undefined && step.durationMs > 5 && (
                         <span className="text-yellow-400/80 ml-2">({formatMs(step.durationMs)})</span>
@@ -190,7 +203,7 @@ export function InitializationOverlay() {
             {/* Completion message */}
             {!isInitializing && totalDurationSecs > 0 && (
               <div className="mt-4 pt-3" style={{ borderTop: '1px solid hsl(var(--hud-text) / 0.25)' }}>
-                <p className="text-xl font-bold text-emerald-400 text-center">
+                <p className="text-xl font-bold text-emerald-400 text-center" style={accentColor ? { color: accentColor } : undefined}>
                   ✓ Ready to Play!
                 </p>
                 <p className="text-center mt-1 text-sm" style={{ color: 'hsl(var(--hud-text) / 0.6)' }}>
@@ -204,7 +217,7 @@ export function InitializationOverlay() {
           <div className="flex justify-end mt-3">
             <button
               onClick={(e) => { e.stopPropagation(); handleCopy(); }}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-all active:scale-90"
               style={{
                 backgroundColor: 'hsla(var(--hud-bg))',
                 border: '1px solid hsla(var(--hud-border))',
