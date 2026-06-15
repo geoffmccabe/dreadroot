@@ -102,6 +102,8 @@ interface UseGrenadeSystemOptions {
   /** Optional ref to the ExplosionFX renderer (shockwave + flash).
    *  When set, explode() also fires the concussion layer. */
   explosionFxRef?: React.RefObject<{ spawn: (p: THREE.Vector3, r: number, c: string) => void } | null>;
+  /** Siege Worlds Synty rocket-blast VFX, played alongside the flame plumes. */
+  siegeExplosionRef?: React.RefObject<{ burst: (x: number, y: number, z: number, scale?: number) => void } | null>;
   /** Optional bridge to the player damage pipeline. If the player is
    *  caught in the blast radius they take damage through the same
    *  exponential falloff curve as enemies. */
@@ -122,6 +124,7 @@ const _scratchToEnemy = new THREE.Vector3();
 
 export function useGrenadeSystem({
   universalFlameRef,
+  siegeExplosionRef,
   cameraRef,
   applyBurnRef,
   explosionFxRef,
@@ -375,6 +378,11 @@ export function useGrenadeSystem({
       explosionFxRef.current.spawn(center, radius, colors[2]);
     }
 
+    // Siege Worlds: also play the Synty rocket-blast VFX, alongside (not instead of) the above.
+    if (siegeExplosionRef?.current && getActiveGame() === 'siege-worlds') {
+      siegeExplosionRef.current.burst(center.x, center.y, center.z, radius / 8);
+    }
+
     // ── VFX: a big central flame + a ring of smaller plumes ────────
     // (colors already computed above for the burn anchor)
     //
@@ -426,7 +434,7 @@ export function useGrenadeSystem({
     void playSpatialSound('/grenade_explosion.mp3', distFromCam, { baseVolume: tierVol });
 
     return { position: center, tier: g.tier, killed };
-  }, [universalFlameRef, cameraRef, applyBurnRef, explosionFxRef]);
+  }, [universalFlameRef, cameraRef, applyBurnRef, explosionFxRef, siegeExplosionRef]);
 
   // Register the physics tick so the consumer doesn't have to plumb
   // it through the main frame loop. Explosion results are dropped on

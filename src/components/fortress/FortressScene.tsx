@@ -35,6 +35,7 @@ import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
 import { LaserProbe } from '@/components/siege/LaserProbe';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
+import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/SiegeExplosion';
 import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
 import { DynamicSky, SkyHandle } from './FortressSky';
@@ -576,6 +577,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // ExplosionFX handle (shockwave + flash) — declared here so the shroomer's
   // headshot-kill explosion can fire it. Back-filled by <ExplosionFX> below.
   const explosionFxRef = useRef<ExplosionFXHandle | null>(null);
+  const siegeExplosionRef = useRef<SiegeExplosionHandle | null>(null);
   const {
     shroomers,
     shroomersRef,
@@ -1083,6 +1085,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     cameraRef,
     applyBurnRef: applyBurnRef as React.RefObject<any>,
     explosionFxRef,
+    siegeExplosionRef,
   });
   const handleThrowGrenade = useCallback((): boolean => {
     if (!consumeGrenade) return false;
@@ -1721,6 +1724,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {isSiege && <SiegeSpawner />}
       {isSiege && <LaserProbe />}
       {isSiege && <VoxelizeTool />}
+      {isSiege && <SiegeExplosion ref={siegeExplosionRef} />}
       {isSiege ? (
         <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
       ) : (
