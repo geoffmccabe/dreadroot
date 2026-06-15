@@ -53,16 +53,13 @@ const _enemyColliderSource: EnemyColliderSource = {
     }
   },
 };
-// Siege Worlds collider: the ground is a heightmap (not voxels) and objects are Box3 colliders
-// in the grid (not the voxel field). A cell is "solid" if it's below the terrain surface OR
-// inside any box collider — so grenades land on the terrain / rocks / buildings / monsters and
-// detonate at the surface, instead of falling through to y=0 and exploding underground.
+// Siege Worlds collider: objects are Box3 colliders in the grid (not the voxel field), so a
+// cell is "solid" if it's inside any box collider → grenades bounce off rocks/buildings/monsters.
+// The heightmap GROUND is handled separately by a precise post-step clamp (below): treating
+// terrain as integer voxel cells rested grenades ~1m into slopes and made phantom vertical walls.
 const _siegeCollider: VoxelCollider = {
   hasVoxel(ix, iy, iz) {
-    const cx = ix + 0.5, cz = iz + 0.5;
-    const th = sampleHeight(cx, cz);
-    if (th != null && iy + 1 <= th) return true;
-    const cy = iy + 0.5;
+    const cx = ix + 0.5, cy = iy + 0.5, cz = iz + 0.5;
     const cnt = worldCollisionGrid.getNearby(cx, cz, 1);
     const res = worldCollisionGrid.nearbyResult;
     for (let i = 0; i < cnt; i++) {
@@ -228,6 +225,19 @@ export function useGrenadeSystem({
           visualRadius: GRENADE_VISUAL_RADIUS,
         },
       );
+
+      // Heightmap ground (siege): clamp to the EXACT terrain surface so grenades rest on the
+      // ground instead of sinking into a coarse voxel cell / sticking to phantom slope walls.
+      if (isSiege) {
+        const th = sampleHeight(g.position.x, g.position.z);
+        if (th != null) {
+          const floor = th + GRENADE_VISUAL_RADIUS;
+          if (g.position.y < floor) {
+            g.position.y = floor;
+            if (g.velocity.y < 0) { g.velocity.y = -g.velocity.y * GRENADE_BOUNCE_DAMP; g.velocity.x *= 0.8; g.velocity.z *= 0.8; }
+          }
+        }
+      }
 
       // Bounce/landing SFX: a velocity component sharply reversed = it hit a collider or dropped
       // onto the terrain. Throttled so a rolling grenade doesn't buzz.

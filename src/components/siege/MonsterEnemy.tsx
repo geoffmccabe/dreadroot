@@ -96,7 +96,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const scale = H / c.modelHeight;
   // Animation rhythm jitter — vary the whole mixer tempo per demon.
   useEffect(() => { mixer.timeScale = J.anim; }, [mixer, J.anim]);
-  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0 });
+  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -215,6 +215,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // ── Blast vertical launch: apply once → gravity arcs them; kick off a tumbling spin. ──
     if (inst.kvy) {
       s.vy = inst.kvy; inst.kvy = 0;
+      s.wasClimbing = false;   // a blast cancels any in-progress climb so they fly, not re-climb
       s.tumbling = true;
       const a = Math.random() * Math.PI * 2;
       s.spinX = Math.cos(a) * (Math.random() * 13);   // 0–13 rad/s tumble
@@ -324,7 +325,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     let climbing = false;
     if (wallTop > -Infinity && moving) {
       if (gait === 'climb') {
-        climbing = belowTop;                   // ascend the face (handled in the vertical step)
+        // Start a climb only from the GROUND (at the wall's base), then keep climbing while
+        // already on the face. Without this, a demon flung airborne by a blast would switch to
+        // climb-mode mid-flight near a wall — killing its arc and walking it up into the sky.
+        climbing = belowTop && (grounded || s.wasClimbing);
       } else if (grounded && belowTop) {
         // 'hop': climbers (and anyone boxed in by the crowd) hop onto it; everyone else crabs
         // sideways to go around. Forward penetration was already undone above.
@@ -341,6 +345,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         }
       }
     }
+
+    s.wasClimbing = climbing;   // continuity so an in-progress wall climb isn't dropped mid-ascent
 
     // ── Vertical ──
     if (climbing) {
