@@ -47,7 +47,8 @@ export function NpcSystem({ isAdmin }: { isAdmin: boolean }): ReactElement | nul
         atActiveRef.current = 0;
       }
       if (atActiveRef.current === 0) {
-        if (e.key === '@') {
+        // '@' (US) or Shift+physical-2 (layout-independent via e.code).
+        if (e.key === '@' || (e.shiftKey && e.code === 'Digit2')) {
           if (!isAdmin) return;
           atActiveRef.current = now;
         }

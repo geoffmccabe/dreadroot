@@ -5,7 +5,7 @@
  * through the NpcManager, which reconciles any LIVE spawned NPCs immediately — so
  * dragging a size or a spring value updates the creature in the world in real time.
  */
-import { useState, useSyncExternalStore, type ReactElement } from 'react';
+import { useState, useEffect, useSyncExternalStore, type ReactElement } from 'react';
 import { npcManager } from '../NpcManager';
 import { spawnNpcInFrontOfPlayer } from '../spawnNpc';
 import type { EMSDefinition, EMSNode, PrimitiveShape, Locomotion } from '../ems/types';
@@ -17,10 +17,23 @@ const LOCOMOTIONS: readonly Locomotion[] = ['static', 'walk', 'hop', 'fly'];
 
 // ── tiny field helpers ──
 function Num({ value, onChange, step = 0.1, w = 'w-16' }: { value: number; onChange: (v: number) => void; step?: number; w?: string }): ReactElement {
+  // Keep a local string so intermediate states ("-", "", "1.") are typeable —
+  // a plain `parseFloat() || 0` ate the leading "-", making negative offsets
+  // (e.g. a left-side eye at -0.35) impossible to enter.
+  const [text, setText] = useState(() => String(value));
+  useEffect(() => {
+    const parsed = parseFloat(text);
+    if (!Number.isFinite(parsed) || parsed !== value) setText(String(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <input
-      type="number" value={Number.isFinite(value) ? value : 0} step={step}
-      onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+      type="number" value={text} step={step}
+      onChange={(e) => {
+        setText(e.target.value);
+        const v = parseFloat(e.target.value);
+        if (Number.isFinite(v)) onChange(v);
+      }}
       className={`${w} bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-sm`}
     />
   );

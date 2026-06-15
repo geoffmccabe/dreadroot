@@ -3,12 +3,15 @@
  * Shared by the `@` command and the NPC panel's Spawn button.
  */
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { getActiveGame } from '@/config/activeGame';
 import { npcManager } from './NpcManager';
 
 const PLAYER_EYE_HEIGHT = 1.6;
 const SPAWN_DIST = 4;
 
 export function spawnNpcInFrontOfPlayer(slug: string) {
+  // NPCs are game-scoped — don't spawn Dreadroot NPCs into the Siege world.
+  if (getActiveGame() === 'siege-worlds') return null;
   const pl = getLocalPlayerSnapshot();
   const fx = -Math.sin(pl.yaw);
   const fz = -Math.cos(pl.yaw);

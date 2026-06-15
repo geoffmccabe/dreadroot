@@ -94,14 +94,23 @@ export function stepEMS(
       sm.dispX -= (rx - rt.prevRestX);
       sm.dispY -= (ry - rt.prevRestY);
       sm.dispZ -= (rz - rt.prevRestZ);
-      // Damped spring back toward rest (disp -> 0).
-      const k = node.spring.stiffness, c = node.spring.damping;
+      // Damped spring back toward rest (disp -> 0). Clamp k/c to a stable range:
+      // semi-implicit Euler is stable while dt*sqrt(k) < 2, i.e. k < (2/dt)^2 =
+      // 1600 at dt=0.05 — so a wild editor value can't blow the integrator up.
+      const k = Math.min(Math.max(node.spring.stiffness, 1), 1500);
+      const c = Math.min(Math.max(node.spring.damping, 0), 60);
       sm.velX += (-k * sm.dispX - c * sm.velX) * dtc;
       sm.velY += (-k * sm.dispY - c * sm.velY) * dtc;
       sm.velZ += (-k * sm.dispZ - c * sm.velZ) * dtc;
       sm.dispX += sm.velX * dtc;
       sm.dispY += sm.velY * dtc;
       sm.dispZ += sm.velZ * dtc;
+      // Safety net: clamp runaway / non-finite displacement so a bad config
+      // can't fling a primitive to infinity.
+      const MAXD = 8;
+      if (!Number.isFinite(sm.dispX)) { sm.dispX = 0; sm.velX = 0; } else sm.dispX = Math.min(Math.max(sm.dispX, -MAXD), MAXD);
+      if (!Number.isFinite(sm.dispY)) { sm.dispY = 0; sm.velY = 0; } else sm.dispY = Math.min(Math.max(sm.dispY, -MAXD), MAXD);
+      if (!Number.isFinite(sm.dispZ)) { sm.dispZ = 0; sm.velZ = 0; } else sm.dispZ = Math.min(Math.max(sm.dispZ, -MAXD), MAXD);
       rt.worldX = rx + sm.dispX;
       rt.worldY = ry + sm.dispY;
       rt.worldZ = rz + sm.dispZ;

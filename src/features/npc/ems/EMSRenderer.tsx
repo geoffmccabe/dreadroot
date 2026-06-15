@@ -11,6 +11,7 @@
 import { useRef, useSyncExternalStore, type ReactElement } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { useActiveGame } from '@/config/activeGame';
 import { npcManager, type NpcInstance } from '../NpcManager';
 import { stepEMS } from './simulation';
 import type { PrimitiveShape } from './types';
@@ -72,9 +73,13 @@ function EMSInstanceView({ instance }: { instance: NpcInstance }): ReactElement 
   );
 }
 
-export function EMSRenderer(): ReactElement {
+export function EMSRenderer(): ReactElement | null {
   // Re-render when instances are spawned/despawned.
   useSyncExternalStore(npcManager.subscribe, npcManager.getVersion);
+  // Game-scoped: Dreadroot NPCs don't render in the Siege world (reactive to the
+  // runtime switcher).
+  const activeGame = useActiveGame();
+  if (activeGame === 'siege-worlds') return null;
   const instances = npcManager.getInstances();
   return (
     <group>
