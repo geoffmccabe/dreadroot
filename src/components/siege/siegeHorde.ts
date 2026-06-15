@@ -99,9 +99,14 @@ enemyCombatRegistry.register<DemonInstance>({
   // Flamethrower wraps the body in fire (torso + head), tracking the live center.
   getFlameAttachPoints: (d): FlameAttachPoint[] => {
     const k = d.height / 1.8;
+    // Dense, body-hugging plumes up the torso so the burn reads as SOLID fire
+    // engulfing the demon — not a few sparse sparks at the top. Short overlapping
+    // columns (low height, many particles) keep the flame concentrated ON the
+    // body instead of a thin tall column where only the risen tips show.
     return [
-      { yOffset: d.height * 0.35, size: 0.45 * k, height: d.height * 0.6, particles: 14 },
-      { yOffset: d.height * 0.70, size: 0.35 * k, height: d.height * 0.5, particles: 10 },
+      { yOffset: d.height * 0.10, size: 0.62 * k, height: d.height * 0.42, particles: 38 },
+      { yOffset: d.height * 0.38, size: 0.54 * k, height: d.height * 0.38, particles: 32 },
+      { yOffset: d.height * 0.62, size: 0.42 * k, height: d.height * 0.32, particles: 24 },
     ];
   },
 });

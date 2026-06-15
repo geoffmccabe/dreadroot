@@ -38,7 +38,7 @@ const DEFAULT_DOT_SECONDS = 5;
 // Shrink curve: full → 0.15 over the full burn. Independent of total
 // duration so longer burns shrink more gradually per second.
 const shrinkAt = (currentSec: number, total: number) =>
-  Math.max(0.15, 1 - 0.8 * (currentSec / Math.max(1, total - 1)));
+  Math.max(0.65, 1 - 0.35 * (currentSec / Math.max(1, total - 1)));
 // Damage multipliers: halves each second regardless of total duration.
 const dmgMultAt = (currentSec: number) => Math.pow(0.5, currentSec);
 const ACTIVE_TO_DOT_DELAY = 0.15; // seconds after last hit before DOT begins
