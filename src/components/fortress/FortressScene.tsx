@@ -1361,6 +1361,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   useFortressFrameLoop({
     camera,
+    applyBurnRef,
     skyRef,
     lightingRef,
     bulletsComponentRef,

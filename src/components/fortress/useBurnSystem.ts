@@ -43,6 +43,7 @@ const shrinkAt = (currentSec: number, total: number) =>
 const dmgMultAt = (currentSec: number) => Math.pow(0.5, currentSec);
 const ACTIVE_TO_DOT_DELAY = 0.15; // seconds after last hit before DOT begins
 const MAX_BURNS = 15; // cap burn entries to keep flame slot usage under control
+const DEATH_LINGER_SECONDS = 1.5; // a killed enemy's fire lingers this long at its death spot
 
 // Per-entity-type flame point layouts
 // Each flame point has a Y offset from entity position, size, height, and particle count
@@ -117,6 +118,13 @@ interface BurnEntry {
   flameIds: (string | null)[];  // one per flame point in layout
   attachIds: string[];           // one per flame point
   hitOffset: THREE.Vector3 | null; // offset from entity base to hit point (for positioned burns)
+  /** SAFE death-linger: the entity's OWN last resolved position (an entry-owned
+   *  vector — never the camera, never a shared scratch) and when it died, so a
+   *  KILLED enemy's fire lingers briefly at the death spot instead of vanishing.
+   *  Objects/ground never resolve to a position, so they never get a deathPos
+   *  and can never linger/follow anything. */
+  deathPos?: THREE.Vector3;
+  deathAt?: number;
   /** Total burn duration in seconds (tier-derived). DOT phase ends here. */
   dotSeconds: number;
   /** Flame layout snapshot taken at burn-creation time (one entry per
@@ -437,9 +445,25 @@ export function useBurnSystem({
     _toRemove.length = 0;
 
     for (const [key, entry] of burnsRef.current) {
-      // 1. Check if entity is still alive
-      const pos = getEntityPosition(entry);
-      if (!pos) {
+      // 1. Resolve the live position. While alive, remember the entity's OWN
+      //    last position (entry-owned — never camera, never a shared scratch).
+      //    When it dies (pos null), LINGER the fire at that death spot for
+      //    DEATH_LINGER_SECONDS (a burning corpse), then remove. An entity that
+      //    never resolved (objects/ground) is removed immediately, so it can
+      //    never linger or follow anything.
+      let pos = getEntityPosition(entry);
+      if (pos) {
+        if (!entry.deathPos) entry.deathPos = new THREE.Vector3();
+        entry.deathPos.copy(pos);
+        entry.deathAt = undefined;
+      } else if (entry.deathPos) {
+        if (entry.deathAt == null) entry.deathAt = now;
+        if (now - entry.deathAt > DEATH_LINGER_SECONDS) {
+          _toRemove.push(key);
+          continue;
+        }
+        pos = entry.deathPos;
+      } else {
         _toRemove.push(key);
         continue;
       }

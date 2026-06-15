@@ -50,6 +50,7 @@ export function useFortressFrameLoop({
 
   bulletImpactsRef,
   nebulaImpactsRef,
+  applyBurnRef,
   getDefinitionRef,
   onCoinHit,
   playAudio,
@@ -112,6 +113,7 @@ export function useFortressFrameLoop({
 
   bulletImpactsRef: MutableRefObject<any>;
   nebulaImpactsRef: MutableRefObject<any>;
+  applyBurnRef: MutableRefObject<((...args: any[]) => void) | null>;
   getDefinitionRef: MutableRefObject<(tier: number) => any>;
   onCoinHit: (pos: any) => void;
   playAudio: (audioEl?: HTMLAudioElement | null) => void;
@@ -722,20 +724,39 @@ export function useFortressFrameLoop({
               source: 'bullet' as const,
               bulletTier: bullet.tier,
             };
+            const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
+
+            // Ignite the attached, FOLLOWING burn BEFORE applying damage, so a
+            // one-shot KILL still creates it while the enemy is alive (the fire
+            // then lingers at its OWN death spot via the safe deathPos linger in
+            // useBurnSystem). This branch is reached ONLY for a confirmed-alive
+            // registered enemy, so the burn resolves to that enemy's live hitbox
+            // and follows it; ground/object hits are separate branches and never
+            // get here, so object fire can never follow. shnake/shwarm own their
+            // own tracking fire — skip them.
+            if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
+              applyBurnRef.current(
+                adapter.type, adapter.getId(enemy), undefined,
+                bullet.tier, tierDef.colors, (tierDef.colorMode ?? 'static'),
+                Math.max(1, Math.round(finalDamage * 0.25)), 0,
+                hitPos, tierDef.burn_time,
+              );
+            }
             adapter.applyDamage(enemy, bulletDamageInfo);
 
             // Skip score on a harmless bounce (e.g. sub-T7 bullet off a walapa).
             const bounced = adapter.bulletBounces?.(enemy, bulletDamageInfo) ?? false;
             if (onPointsEarned && !bounced) onPointsEarned(finalDamage);
 
-            // Impact fire — same config the legacy blocks built.
+            // Impact STAMP — a brief world-pinned flash for the hit punch only
+            // (the ongoing fire is the attached burn above, which follows the
+            // enemy). Short duration so this stamp can't "stay behind" a mover.
             const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
-            const hitPos = new THREE.Vector3(hitX, hitY, hitZ);
             const fireConfig = {
               colors: tierDef.colors,
               size: tierDef.burn_width * pentaMul,
               height: tierDef.burn_height * pentaMul,
-              duration: tierDef.burn_time * pentaMul,
+              duration: 0.3 * pentaMul,
             };
             if (useNebulaForBulletImpacts && nebulaImpactsRef?.current) {
               nebulaImpactsRef.current.spawnImpact(hitPos, fireConfig);
