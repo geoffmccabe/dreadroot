@@ -39,8 +39,13 @@ const DEFAULT_DOT_SECONDS = 5;
 // duration so longer burns shrink more gradually per second.
 const shrinkAt = (currentSec: number, total: number) =>
   Math.max(0.15, 1 - 0.8 * (currentSec / Math.max(1, total - 1)));
-// Damage multipliers: halves each second regardless of total duration.
-const dmgMultAt = (currentSec: number) => Math.pow(0.5, currentSec);
+// Even drip: every burn-second deals the SAME share, and those shares sum to the
+// same total the old halving curve produced (total preserved — just spread
+// evenly across the burn instead of front-loaded). The "50% up front" is the
+// bullet/blast impact itself; the burn is the remaining damage split evenly
+// across its pre-computed seconds. (Takes the TOTAL seconds, not the current sec.)
+const dmgMultAt = (totalSeconds: number) =>
+  (2 * (1 - Math.pow(0.5, totalSeconds))) / Math.max(1, totalSeconds);
 const ACTIVE_TO_DOT_DELAY = 0.15; // seconds after last hit before DOT begins
 const MAX_BURNS = 15; // cap burn entries to keep flame slot usage under control
 
@@ -365,9 +370,14 @@ export function useBurnSystem({
         layout = [{ yOffset: 0.5, size: 0.8, height: 1.2, particles: 14 }];
       }
     }
-    // Only legacy / oversized layouts (e.g. the 22-40m shtickman) collapse to a
-    // single flame at the hit point; engulf enemies use their full body layout.
-    if (useHitPoint && !engulf) layout = [layout[0]];
+    // EVERY burn engulf-follows: the resolved multi-point body layout is applied
+    // relative to the LIVE body center each frame. We never collapse to a single
+    // flame pinned at the hit point — that pin is what made fire appear to "stay
+    // behind" moving/large enemies. FLAME_LAYOUTS (shombie/walapa/shtickman/…)
+    // resolves BEFORE the adapter's getFlameAttachPoints, so those table-listed
+    // enemies silently never got the v4.13.4 engulf-follow fix; forcing engulf
+    // here restores it for them (their table layouts already wrap the body).
+    engulf = true;
     const attachIds = layout.map((_, i) => `burn_${key}_${i}`);
 
     const entry: BurnEntry = {
@@ -492,7 +502,7 @@ export function useBurnSystem({
           : pos;
         spawnBurnFlames(entry, shrink, spawnPos);
 
-        const rawDmg = Math.floor(entry.baseDamage * dmgMultAt(currentSecond));
+        const rawDmg = Math.floor(entry.baseDamage * dmgMultAt(entry.dotSeconds));
         if (rawDmg > 0) {
           applyBurnDamage(entry, rawDmg);
         }
