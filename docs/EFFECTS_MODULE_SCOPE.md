@@ -1,131 +1,150 @@
-# Universal Volumetric Effects Module — Scope
+# Universal Volumetric Effects Module — Scope (audited)
 
 > Engine-level, game-agnostic module for smoke / steam / glitter / gas / mist /
 > sparks and any future "cloud of stuff in the air" effect. Shared by DreadRoot,
-> Pinkland, Siege Worlds, and all future games/worlds on this engine.
+> Pinkland, Siege Worlds, and all future games on this engine.
 >
-> First use: smoke trailing off burning enemies (purely visual, no gameplay
-> effect). Built so that the SAME module later powers poison gas, sleep clouds,
-> glittery flower steam, etc. — with the world able to KNOW a cloud exists so it
-> can damage / status entities that walk into it.
+> First use: smoke trailing off burning enemies (purely visual). Built so the
+> SAME module later powers poison gas, sleep clouds, glittery flower steam, etc.,
+> with the world able to KNOW a cloud exists so it can damage/status entities.
+>
+> **This revision incorporates a performance audit** against current best
+> practice (Unreal Niagara scalability docs, three.js/WebGL + WebGPU particle
+> techniques, mobile fill-rate research — see Sources). Where the first draft was
+> risky, the risk and the fix are called out inline and in the Audit section.
+
+---
+
+## TL;DR of the audit
+
+The original "copy the existing `<points>` flame renderer and animate it on the
+CPU every frame" plan would have hit three known failure modes. Corrected design:
+
+1. **Render with instanced billboards, NOT `gl.POINTS`.** `gl_PointSize` is
+   hardware-capped (~63–255px); big/near smoke would stop growing and look
+   broken. Camera-facing instanced quads have no size cap, allow per-particle
+   rotation, flipbooks, and soft particles.
+2. **Stateless vertex-shader simulation, NOT CPU-per-frame.** CPU writes each
+   puff's birth-time + seed + ballistic params ONCE at spawn; the vertex shader
+   computes position/size/alpha/spin from a single `uTime` uniform every frame.
+   Live particles then cost ~0 CPU and zero per-frame GC — critical, since the
+   D-Flow panel already flags GC pauses as a real FPS limiter here.
+3. **Overdraw / fill-rate is the real GPU-melt risk, not particle count.** On
+   mobile, stacked transparent quads re-shading the same pixels is what tanks
+   FPS. Mitigations are first-class in this plan (capped on-screen size, fewer/
+   larger flipbook puffs, alpha-trimmed quads, optional half-res particle buffer,
+   cheap fragment shader, additive-where-possible to skip sorting).
+
+The 3-layer structure, continuous (non-voxel) rendering, pluggable backends,
+distance+frustum culling, and world-knowable gameplay volumes from the prior
+draft all survive — they're reinforced by the research, not replaced.
+
+---
 
 ## Goals
 
-1. One reusable module, not a one-off smoke hack. Drop-in for every game.
-2. Rich variability per effect: color, opacity, lifetime/persistence, rise,
-   flutter/turbulence, size growth, spawn rate, spread, blend mode, gravity.
+1. One reusable engine module, not a one-off smoke hack. Drop-in for every game.
+2. Rich per-effect variability: color, opacity, lifetime/persistence, rise,
+   flutter/turbulence, size growth, spin, spawn rate, spread, blend, gravity.
 3. Named **recipes** so weapons/animations/items reference an effect by name
-   ("fire-smoke", "poison-gas", "glitter-steam") with zero engine edits to add a
-   new one.
+   ("fire-smoke", "poison-gas", "glitter-steam") with zero engine edits to add one.
 4. **World-awareness layer**: a cloud can register a gameplay *volume* the world
-   can query — "what is at this point in space, what effect, what potency, what
-   stage of its life, and what item/source spawned it?" — so entering it can
-   poison / sleep / blind / slow / lag / heal an entity.
-5. Cheap enough for 100+ emitters at once (e.g. 100 flaming NPCs flying through
-   the air) without tanking FPS on mobile.
+   can query — what effect, what potency, what stage of life, which source/item —
+   so entering it can poison/sleep/blind/slow/lag/heal an entity.
+5. **Pluggable visual backends** so a game can change *how* an effect is drawn
+   (points / instanced billboards / future WebGPU compute) without touching
+   recipes or gameplay.
+6. Hold **< ~1 ms total particle time on mobile** with 100+ emitters
+   (e.g. 100 flaming NPCs flying through the air).
+
+---
 
 ## Continuous, not voxel-based
 
-The smoke lives in the voxel *world* but is NOT itself voxel-based. Puffs use
-full continuous floating-point world coordinates and move on smooth curves
-(sub-voxel rise, drift, flutter) — they are never snapped to the 1×1×1 grid and
-never rendered as cubes. The result is soft and realistic, free of the blocky
-look of the terrain.
+Smoke lives in the voxel *world* but is NOT voxel-based. Puffs use continuous
+floating-point world coordinates and move on smooth curves (sub-voxel rise,
+drift, flutter); never snapped to the 1×1×1 grid, never drawn as cubes. The look
+is soft and realistic, free of the blocky terrain aesthetic.
 
 The voxel world is only *read*, never imposed:
-- **Occlusion / spawn validity (optional, later):** a puff may sample the
-  collision grid so it doesn't bloom through a solid wall, or so ground-hugging
-  gas pools on top of blocks. This uses the existing `SpatialHashGrid` as a
-  lookup — it does not make the smoke voxel-shaped.
-- **Gameplay volumes** (Layer 2) are continuous spheres/columns with real
-  radii, sampled by `sampleAt(point)`. They work *within* the voxel system
-  (entities have world positions) without being quantized to voxels — a poison
-  cloud can be 3.7 m across, not "4 blocks."
+- **Occlusion / soft particles (optional, later):** a puff may sample scene depth
+  (the existing opaque/voxel depth buffer) so it fades where it meets a wall
+  instead of clipping hard; ground-hugging gas may sample the collision grid to
+  pool on top of blocks. This is a lookup — it never makes smoke voxel-shaped.
+- **Gameplay volumes** (Layer 2) are continuous spheres/columns with real radii
+  (a poison cloud is 3.7 m across, not "4 blocks"), sampled by `sampleAt(point)`.
 
-## The core feasibility trick (two decoupled densities)
+---
 
-- **Visual density is high** — hundreds of tiny puffs make a convincing trail.
-- **Gameplay density is low** — ONE coarse volume represents a whole cloud.
+## The two feasibility tricks
 
-These are kept independent. A burning enemy emits a fat *visual* trail but
-registers NO gameplay volume (zero gameplay cost — current use case). A poison
-grenade emits a visual cloud AND registers a single coarse gameplay volume the
-world samples. So we never pay per-puff gameplay cost.
+**(A) Two decoupled densities.** Visual density is HIGH (hundreds of puffs make a
+convincing trail); gameplay density is LOW (ONE coarse volume per cloud). Kept
+independent. A burning enemy emits a fat *visual* trail but registers NO gameplay
+volume (zero gameplay cost — the Phase-1 case). A poison grenade emits a visual
+cloud AND one coarse volume. We never pay per-puff gameplay cost. This also
+sidesteps a hard GPU limitation (below): GPU particle positions can't be read
+back to the CPU cheaply, so gameplay must NOT depend on them — and here it never
+does, because the volume is authored CPU-side analytically.
 
-A second trick (visual): **fire-and-forget puffs.** Once a puff is born it is
-pinned in space — it rises straight up, flutters, fades, and dies on its own. It
-never tracks the emitter. A moving/flying emitter therefore leaves a trail for
-free, and a live puff costs only a few float ops per frame.
+**(B) Fire-and-forget, GPU-resident puffs.** Once a puff is born it's pinned in
+world space and forgotten by the CPU: the vertex shader rises/flutters/fades it
+from its birth time. A moving/flying emitter leaves a trail for free, and a live
+puff costs ~0 CPU. The CPU's only per-frame job is bumping `uTime`.
 
 ---
 
 ## Layer 1 — Visual renderer (pluggable backends)
 
-The *look* is not hard-coded. Layer 1 is split into a stable interface and
-swappable backends, so a recipe — or a whole new game — can pick how its effect
-is drawn without inheriting one fixed visual style.
+The *look* is not hard-coded. Layer 1 is a stable interface plus swappable
+backends, so a recipe — or a whole new game — picks how its effect is drawn
+without inheriting one fixed style.
 
 ### Stable interface (`FXBackend`)
-Every backend implements the same small contract the rest of the engine talks to:
-`emitPuff / emitBurst / createEmitter / update(frame) / stop / dispose`. Layers 2
-(world-awareness) and 3 (recipes) only ever touch this interface — they never
-know or care which backend is rendering. Swapping or adding a backend changes
-zero gameplay code.
+Every backend implements the same contract: `emitPuff / emitBurst /
+createEmitter / update(frame) / setQuality / stop / dispose`. Layers 2 and 3 only
+ever touch this interface — they never know which backend renders. Swapping or
+adding a backend changes zero gameplay code.
 
-### Backends (start with one, add freely)
-- **`PointsBackend`** (Phase 1 default) — generalization of the existing
-  `UniversalFlameRenderer`: a single batched `<points>` cloud, one draw call,
-  ring-buffer pool, GPU point sprites. Cheapest; great for smoke/steam/glitter.
-- **`SpriteBackend`** (later) — camera-facing textured quads / soft billboards
-  for thick, lit, or animated-flipbook smoke where round points aren't enough.
-- **`MeshBackend` / custom** (later) — instanced meshes, volumetric shells, or a
-  bespoke shader for a game that needs something none of the above gives.
+### Backends
+- **`InstancedBillboardBackend` (Phase-1 DEFAULT, the corrected design).**
+  `InstancedBufferGeometry`: one base quad, per-particle instanced attributes
+  (`aBirthTime`, `aSeed`, `aSpawnPos`, `aVelocity`, `aLifetime`, `aSize0/1`,
+  `aSpin`, `aColor0/1`). One draw call. Camera-facing billboarding + all motion
+  computed in the **vertex shader** from `uTime`. No `gl_PointSize` cap, supports
+  per-particle rotation, flipbooks, and soft particles. This is the smoke/steam/
+  glitter default.
+- **`PointsBackend` (kept for legacy/tiny effects).** The existing batched
+  `<points>` path. Fine for small, fixed-size, non-rotating sparks that never
+  approach the size cap. NOT for big foreground smoke.
+- **`ComputeBackend` (future, WebGPU/TSL).** Compute-shader, GPU-resident state
+  for true feedback physics (collisions, curl-noise advection, 100k+). Optional
+  enhancement; core smoke must NOT depend on it so the WebGL path stays identical.
 
-A recipe names its backend (`backend: 'points' | 'sprite' | '<custom>'`) and the
-module instantiates it. New game with a new visual need = write a new backend
-behind the same interface; no edits to recipes, world-awareness, or call sites.
+A recipe names its backend; the module instantiates it. New visual need = new
+backend behind the same interface.
 
-The variables below (color, opacity, lifetime, rise, flutter, size, blend, etc.)
-are the *shared* recipe vocabulary; each backend interprets them in its own
-medium, and a backend may expose extra backend-specific options for things only
-it supports (flipbook frame, mesh LOD, etc.).
-
-### Emit API (handle, like the flame renderer)
-- `emitPuff(recipe, position, overrides?)` — one fire-and-forget puff.
-- `emitBurst(recipe, position, count, overrides?)` — N puffs at once (explosion
-  poof, glitter pop).
-- `createEmitter(recipe, getPosition, overrides?)` → handle — a *source* that
-  drops puffs at `spawnRate` per second at its current position until stopped.
-  Used by burns: the emitter asks the burn for its current spot each tick and
-  drops a puff there. `emitter.stop()` when the fire goes out.
-
-### Per-recipe visual variables
-- **colorStart / colorEnd** — gradient over the puff's life (e.g. grey→transparent,
-  or rainbow for glitter).
-- **opacityStart / opacityEnd** — fade curve endpoints.
-- **lifetime** (sec) — persistence; how long a puff lives (smoke ~3s).
-- **riseSpeed / gravity** — vertical drift. Negative gravity = rises (smoke,
-  steam); positive = sinks/pools (heavy gas hugging the ground).
-- **wind** (x,z vector, optional) — global drift direction.
-- **flutter** — turbulence amplitude + frequency (the side-to-side wander; reuses
-  the sin/cos turbulence already in the flame renderer).
-- **sizeStart / sizeEnd** — puffs usually grow as they rise and thin out.
-- **spread** — initial scatter radius around the spawn point.
+### Shared recipe vocabulary (each backend interprets in its medium)
+- **colorStart / colorEnd** gradient over life (or rainbow/twinkle for glitter).
+- **opacityStart / opacityEnd** + fade curve.
+- **lifetime** (sec) — persistence (smoke ~3 s).
+- **riseSpeed / gravity** — negative gravity rises (smoke, steam); positive sinks
+  (heavy gas pooling on the ground).
+- **wind** (x,z) optional global drift.
+- **flutter** — turbulence amplitude + frequency (derived in-shader from `aSeed`
+  via a hash, not stored — saves bandwidth).
+- **sizeStart / sizeEnd**, **spin** (per-particle rotation rate).
+- **spread** — initial scatter radius.
 - **spawnRate** — puffs/sec for emitters (smoke ~5/s).
-- **blend** — `additive` (glitter, embery smoke, magic) or `alpha` (thick opaque
-  smoke). Likely 2 batched draws total, one per blend mode.
-- **sprite** — soft round blob vs sparkle/star (glitter twinkle) vs wispy.
-- **jitter / twinkle** — per-particle flicker (glitter).
-- **lodFadeStart / lodFadeEnd** — distance fade (reuse flame LOD).
-
-### Cost controls
-- Single shared ring buffer, hard cap (~2000–3000 puffs). Oldest recycled.
-- Distance throttle: far emitters drop spawnRate or stop emitting.
-- Per-frame CPU work per puff is tiny (rise + fade + flutter). 100 NPCs ≈ 500
-  puffs/sec, ~1500 alive — comfortably inside budget.
-- Optional later upgrade: move puff animation to a GPU vertex shader (write
-  position+birthtime once at spawn, shader does rise/fade) if profiling ever
-  demands it. Not needed for Phase 1.
+- **blend** — `additive` (glitter, bright steam, embers — order-independent, no
+  sort) or `alpha` (thick dark smoke). Likely 2 batched draws total, one per
+  blend mode. Always `depthWrite:false`, `depthTest:true`.
+- **sprite / flipbook** — soft round blob, or an N×M sub-UV atlas animated from
+  `age/lifetime` (optionally inter-frame blended) for realistic turbulent smoke
+  with few particles.
+- **softParticles** (quality toggle) — fade at geometry intersection via scene
+  depth.
+- Backends may expose extra backend-specific options (mesh LOD, compute forces).
 
 ---
 
@@ -133,138 +152,188 @@ it supports (flipbook frame, mesh LOD, etc.).
 
 A lightweight spatial index of *gameplay* clouds — SEPARATE from the visual
 renderer and from the solid-block collision grid. Modeled on `SpatialHashGrid`'s
-cell layout but storing effect volumes, not colliders.
-
-A cloud with a gameplay payload registers ONE volume (not per-puff):
+cell layout but storing effect volumes, not colliders. A cloud with a gameplay
+payload registers ONE volume (not per-puff):
 
 ### Volume record
-- **id**, **center** (world point), **radius** (and optional height for a column).
+- **id**, **center**, **radius** (+ optional height for a column).
 - **kind** — `none` (visual only), `poison`, `sleep`, `blind`, `lag`, `slow`,
-  `heal`, … (open enum; new kinds added by consumers).
-- **sourceItemId / sourceType** — WHICH item/weapon/animation made it ("what item
-  it came from").
+  `heal`, … (open enum).
+- **sourceItemId / sourceType** — which item/weapon/animation made it.
 - **tier / intensity** — potency.
-- **bornAt / lifetime** and a derived **stage** 0→1 (`born → peak → dissipating →
-  gone`) so potency can scale with how fresh the cloud is ("what stage of
-  persistence").
+- **bornAt / lifetime** and derived **stage** 0→1 (`born → peak → dissipating →
+  gone`) so potency scales with freshness.
 - **faction / ownerId** — so friendly clouds don't hurt allies (or do, by design).
-- **payload** — effect-specific params: damagePerSecond, statusDurationSec, etc.
+- **payload** — `damagePerSecond`, `statusDurationSec`, etc.
 
 ### Query API
 - `sampleAt(position) → Volume[]` — every active volume covering that point.
-  Called per entity (player + NPCs) on their movement tick. Returns nothing —
-  and costs nothing — when no gameplay clouds exist (the common case).
-- Consumers (player damage system, enemy AI) read the volumes and apply effects:
-  poison = DOT, sleep/blind/slow = status with `statusDurationSec`, lag = input
-  jitter, etc. The module does NOT apply effects itself — it just makes the cloud
-  *knowable*; each game decides what poison/sleep mean.
+  Called per entity (player + NPCs) on their movement tick. Returns nothing and
+  costs nothing when no gameplay clouds exist (the common case). Consumers (player
+  damage, enemy AI) read volumes and apply effects; the module makes the cloud
+  *knowable*, each game decides what poison/sleep mean.
 
-### Why this stays cheap
-- One coarse volume per cloud, not per puff.
-- Volumes auto-expire with the cloud.
-- `sampleAt` only runs for entities that moved, and short-circuits to zero work
-  when the field is empty. Visual-only effects (burning enemies) register no
-  volume at all.
+### Why this is cheap and GPU-safe
+- One coarse volume per cloud, not per puff; volumes auto-expire with the cloud.
+- `sampleAt` runs only for entities that moved and short-circuits when the field
+  is empty. Visual-only smoke registers no volume.
+- **Never reads GPU particle state** (which would stall the WebGL pipeline). The
+  volume is independent CPU data, so gameplay works even when visuals are fully
+  GPU-resident.
 
 ---
 
 ## Layer 3 — Recipe registry (`effectRecipes`)
 
-A table of named presets, each bundling Layer-1 visual params + an optional
-Layer-2 gameplay payload. Weapons/items/animations reference a recipe by name.
+Named presets bundling Layer-1 visual params + Layer-1 backend choice + optional
+Layer-2 gameplay payload. Items/weapons/animations reference a recipe by name.
 Adding "glitter-steam for steaming flowers" = one new entry, no engine code.
 
-Examples (illustrative):
-- `fire-smoke` — grey→clear, rises, ~3s, alpha blend, flutter; **no** gameplay
-  payload. (Phase 1.)
-- `poison-gas` — sickly green, sinks/pools, long lifetime, alpha; payload
-  `{ kind:'poison', damagePerSecond, ... }`.
-- `sleep-cloud` — soft purple, additive, payload `{ kind:'sleep', statusDurationSec }`.
-- `glitter-steam` — additive sparkle, twinkle, gentle rise; visual only (or a
-  buff payload).
-- `steam` — white, fast rise, short, additive.
+Examples: `fire-smoke` (grey→clear, rises, ~3 s, alpha, flutter, no payload —
+Phase 1); `poison-gas` (green, sinks/pools, long life, payload
+`{kind:'poison',damagePerSecond}`); `sleep-cloud` (purple, additive,
+`{kind:'sleep',statusDurationSec}`); `glitter-steam` (additive sparkle, twinkle,
+gentle rise); `steam` (white, fast rise, short, additive).
 
 ---
 
-## Integration points
+## PERFORMANCE AUDIT — risks & resolutions
 
-- **Burn system** (`useBurnSystem.ts`): each active burn creates one
-  `VolumetricFXRenderer` emitter (`fire-smoke`) that drops puffs at the burn's
-  current world position every tick; `stop()` when the burn ends. Visual only —
-  no volume registered. This is all Phase 1 needs.
-- **Grenades / future area weapons**: on explode, `emitBurst` for the poof +
-  `EffectVolumeField.register` for a lingering gameplay cloud (poison gas, etc.).
-- **Player / NPC movement**: on the movement tick, `sampleAt(pos)` and apply any
-  returned effects.
-- **Animations / props**: a flower's idle animation calls `createEmitter` with
-  `glitter-steam`.
+| # | Risk | Severity | Resolution |
+|---|------|----------|-----------|
+| 1 | **`gl_PointSize` cap** — `<points>` smoke stops growing when big/near; looks broken | High (visual break) | **Instanced billboards** (camera-facing quads), no size cap, per-particle spin |
+| 2 | **CPU-per-frame sim** — recomputing every particle each frame burns CPU + churns GC | High (FPS, GC pauses) | **Stateless vertex-shader sim** — CPU writes birth-time+seed once; VS does the rest from `uTime`. ~0 CPU/live particle, zero per-frame GC |
+| 3 | **Overdraw / fill-rate** — stacked transparent quads re-shading pixels = mobile GPU melt | **Highest on mobile** | Cap on-screen size + live count; **fewer/larger flipbook puffs** not thousands of blobs; **alpha-trimmed octagon quads** (don't rasterize empty corners); **optional ½-res particle render target + depth-aware upsample** (4–16× fill cut); minimal fragment shader (1 texture fetch, no lighting) |
+| 4 | **Transparency sorting** — per-particle CPU sort doesn't scale | Med | **Additive** wherever the look allows (glitter, bright steam) = order-independent, no sort. Dark alpha smoke: `depthWrite:false` + accept minor mis-sort, or sort coarsely per-emitter. No per-particle CPU sort, ever |
+| 5 | **Whole-buffer frustum culling** — three.js culls the whole points/instanced object, not per-particle | Med | **Emit-side cull is the big win** (far/off-screen emitters spawn nothing). Per-puff distance+frustum test in the sim. Manual **fixed bounding sphere** (padded) per backage mesh; disable auto-cull or feed correct bounds |
+| 6 | **Unbounded growth** — many emitters → buffer/GPU blow-up | Med | Central **budget manager**: global live-particle + live-emitter caps; **significance scoring** (importance + distance + age) culls lowest first; per-quality-tier profiles (Low disables decorative emitters, shrinks counts, cuts cull distance + tick rate) |
+| 7 | **GPU particles can't talk to CPU** — gameplay can't read GPU positions without a stall | Med (design trap) | Already handled by **two-density split**: gameplay volumes are CPU-authored, never derived from GPU particles |
+| 8 | **Render-pipeline integration** — ½-res RT / depth prepass could clash with existing passes and the co-build window | Med (regression) | Phase 1 ships **without** the ½-res pass (just capped count+size+trimmed quads); add it behind a **quality flag** only if profiling shows overdraw bound. Soft particles reuse the existing depth buffer; gated as a toggle |
+| 9 | **GPU granularity floor (~64)** — a GPU pass per tiny puff wastes resources | Low | All smoke flows through ONE shared system/backend; we never spin a pass per puff |
+| 10 | **WebGPU migration churn** | Low (future) | Keep core smoke **stateless** so it runs identically on the WebGL2 fallback; WebGPU/TSL is an optional `ComputeBackend` swap behind the same interface, not a rewrite |
+
+### Hard performance contract (targets)
+- **Total particle frame time:** < **1 ms on mobile**, < 2–3 ms desktop.
+- **1–2 draw calls** for all smoke (one per blend mode).
+- **Zero per-frame allocations** in the hot path (SOA `Float32Array`s,
+  pre-allocated ring buffer, `updateRanges` for only the dirty spawn slice).
+- **Global caps:** ring-buffer hard cap (~2–4k instances) + emitter cap;
+  significance-culled when exceeded.
+
+---
+
+## Culling, LOD & quality tiers
+
+Because all puffs live in one world-spanning buffer, three.js's built-in object
+frustum culling is all-or-nothing — we cull ourselves, cheapest-first:
+
+1. **Emit-side cull (biggest win):** an emitter past `cullDistance` or outside the
+   frustum drops spawnRate to zero — puffs are never created. Protects the
+   100-NPCs-on-fire case (only the near/on-screen few emit).
+2. **Per-puff cull:** squared-distance test + frustum test (with a small radius
+   pad so puffs don't pop at screen edges) in the sim. Skipped puffs still *age*,
+   so they re-enter view at the correct life stage — no popping.
+3. **Significance LOD:** full → reduced count + slower tick → cheap impostor (a
+   single animated billboard) → culled, by distance × importance × age.
+
+### Settings (per recipe, engine defaults)
+- **`cullDistance`** (default **100 m** for smoke; tunable per recipe).
+- **`fadeStart`/`fadeEnd`** smooth distance fade band (e.g. 80→100 m).
+- **`maxEmitDistance`** optional smaller emission radius (existing puffs finish,
+  no new ones spawn as you walk away).
+- **`frustumCull`** on by default (off for mirrors/minimaps).
+- **`quality`** Low/Med/High profile: caps count, size, cull distance, tick rate,
+  and toggles soft particles / ½-res buffer. Mobile defaults to Low/Med.
+- Global ring-buffer hard cap is the final backstop.
+
+---
+
+## Memory & GC discipline (matches engine norms)
+
+- **SOA `Float32Array`s** per attribute (birthTime, seed, pos, vel, lifetime),
+  backing `InstancedBufferAttribute`s — contiguous, cache-friendly, GC-free.
+- **Pre-allocate max count once; ring buffer recycles.** Spawn = advance a write
+  cursor, overwrite the oldest slot in place, mark only that subrange dirty via
+  `BufferAttribute.updateRanges`. Never allocate/free per particle; reuse
+  module-level scratch vectors for spawn math (same discipline as `numPosKey`/
+  colliders elsewhere).
+- Most attributes are **write-once** (stateless sim) → almost no per-frame upload.
+
+---
 
 ## File layout (proposed, engine-shared)
 
 ```
 src/effects/
-  FXBackend.ts               // Layer 1 — the stable backend interface
+  FXBackend.ts                 // Layer 1 — stable backend interface
   backends/
-    PointsBackend.tsx        //   batched <points> backend (Phase 1 default)
-    SpriteBackend.tsx        //   billboard/flipbook backend (later)
-    ...                      //   custom backends per game (later)
-  EffectsRoot.tsx            // mounts active backends + routes emits by recipe
-  EffectVolumeField.ts       // Layer 2 — gameplay-cloud spatial index + sampleAt
-  effectRecipes.ts           // Layer 3 — named presets (visual + payload + backend)
-  types.ts                   // recipe/volume/backend/handle types
+    InstancedBillboardBackend.tsx  //   DEFAULT — instanced quads + vertex sim
+    PointsBackend.tsx              //   legacy/tiny sparks
+    ComputeBackend.tsx             //   future WebGPU/TSL
+  EffectsRoot.tsx              // mounts active backends, routes emits by recipe
+  EffectVolumeField.ts        // Layer 2 — gameplay-cloud index + sampleAt
+  effectRecipes.ts            // Layer 3 — named presets (visual + backend + payload)
+  budget.ts                   // global caps + significance culling
+  types.ts                    // recipe/volume/backend/handle types
 ```
 
-Mounted once near the flame renderer in the Fortress shell so every world gets it.
+Mounted once in the Fortress shell near the flame renderer so every world gets it.
+
+## Integration points
+
+- **Burn system** (`useBurnSystem.ts`): each active burn creates one emitter
+  (`fire-smoke`) dropping puffs at the burn's current world position each tick;
+  `stop()` when the burn ends. Visual only, no volume. All Phase 1 needs.
+- **Grenades / area weapons**: on explode, `emitBurst` for the poof +
+  `EffectVolumeField.register` for a lingering gameplay cloud.
+- **Player / NPC movement**: `sampleAt(pos)` on the move tick, apply effects.
+- **Animations / props**: e.g. a flower's idle animation calls `createEmitter`
+  with `glitter-steam`.
 
 ## Phasing
 
-- **Phase 1 (now):** Layer 1 renderer + recipe system + `fire-smoke` recipe +
-  emit from burns. Pure visual. Ships the smoke the user wants today.
-- **Phase 2:** Layer 2 `EffectVolumeField` + `sampleAt` + ONE gameplay effect
-  end-to-end (poison gas from a grenade) to prove the world-awareness path.
-- **Phase 3:** More recipes (steam, glitter, sleep, blind) + status consumers +
-  faction/source/persistence-stage potency scaling.
+- **Phase 1 (now):** `InstancedBillboardBackend` (instanced quads + stateless
+  vertex sim) + recipe system + `fire-smoke` + emit from burns + emit-side &
+  per-puff culling + budget caps. Pure visual. No ½-res pass, no soft particles
+  yet (capped size/count + trimmed quads carry mobile). Ships the smoke wanted
+  today on a correct foundation.
+- **Phase 2:** `EffectVolumeField` + `sampleAt` + ONE gameplay effect end-to-end
+  (poison gas from a grenade). Optional ½-res particle buffer + soft particles if
+  profiling shows overdraw bound.
+- **Phase 3:** more recipes (steam, glitter, sleep, blind) + status consumers +
+  faction/source/stage potency. Optional `ComputeBackend` (WebGPU/TSL) for
+  collision-aware or 100k-scale clouds, behind the same interface.
 
-## Culling & FPS safety (the part that keeps this cheap)
+---
 
-Because all puffs live in ONE big world-spanning buffer, three.js's built-in
-object frustum culling can't help (it's all-or-nothing on the whole buffer, so
-the renderer keeps `frustumCulled={false}`). Culling is therefore done by us, at
-two stages, cheapest-first:
+## Sources / further reading
 
-1. **Emit-side cull (biggest win).** An emitter past `cullDistance` from the
-   camera, or outside the view frustum, drops its spawn rate to zero — the puffs
-   are never created at all. No buffer slot, no per-frame cost. This is what
-   protects the 100-NPCs-on-fire case: only the handful of burning NPCs actually
-   near/in front of the player emit.
-2. **Render-side cull (per-puff).** In the per-frame write loop each puff does:
-   - a cheap squared-distance test vs `cullDistance` → skip if beyond, and
-   - a frustum test (dot-products against the camera planes, with a small radius
-     pad so puffs don't pop at screen edges) → skip if off-screen.
-   A skipped puff still *ages* from its birth time, so when it re-enters view
-   it's at the correct life stage — no popping, and while off-screen it costs
-   only the test, not a buffer write.
+Unreal / massive-particle architecture:
+- Epic — Scalability & Best Practices for Niagara:
+  https://dev.epicgames.com/documentation/en-us/unreal-engine/scalability-and-best-practices-for-niagara
+- More VFX Academy — Niagara Optimization Pt.2 (profiling, frame-time budgets):
+  https://morevfxacademy.com/niagara-vfx-optimization-part-2-profiling-scalability-and-performance-tips/
+- Epic forums — Fixed Bounds for GPU emitters:
+  https://forums.unrealengine.com/t/what-does-fixed-bound-do-in-niagara-gpu-emitter-properties/676187
+- realtimevfx.com — Improve Smoke Performance / Overdraw:
+  https://realtimevfx.com/t/ue4-improve-smoke-performance-overdraw/874
+- realtimecollisiondetection.net — Optimizing particle-system rendering (cutout/overdraw):
+  https://realtimecollisiondetection.net/blog/?p=91
 
-### Settings (per recipe, with engine defaults)
-- **`cullDistance`** — hard max view range. Default **100 m** for smoke; tunable
-  per recipe (dense battlefield smoke could be 60 m; a giant landmark plume could
-  be 200 m). Beyond this, nothing emits or renders.
-- **`fadeStart` / `fadeEnd`** — smooth distance fade-out band (e.g. 80→100 m) so
-  clouds dissolve with range instead of hard-cutting. Reuses the flame LOD model.
-- **`maxEmitDistance`** — optional separate, usually-smaller radius for *emission*
-  vs *rendering*, so existing puffs finish their life as you walk away but no new
-  ones spawn.
-- **`frustumCull`** — on by default; can be disabled for effects that must read
-  correctly in mirrors / minimaps / wide shots.
-- Global ring-buffer **hard cap** is the final backstop regardless of settings.
-
-These are recipe fields, so smoke-on-fire ships with sane defaults (100 m,
-frustum-culled) and any future effect can override.
-
-## Performance budget (must hold on mobile)
-
-- Visual: 1–2 draw calls total; ring-buffer hard cap; emit-side + per-puff
-  distance & frustum culling; cheap per-puff CPU for what's actually visible.
-  100 flaming NPCs in arcs = only the near/on-screen few do any work.
-- Gameplay: coarse volumes only; `sampleAt` short-circuits when empty; zero cost
-  when no gameplay clouds are active (the default during normal fire combat).
+three.js / WebGL / WebGPU particle technique:
+- Maxime Heckel — Field Guide to TSL and WebGPU:
+  https://blog.maximeheckel.com/posts/field-guide-to-tsl-and-webgpu/
+- utsubo — Migrate Three.js to WebGPU (2026) checklist:
+  https://www.utsubo.com/blog/webgpu-threejs-migration-guide
+- keaukraine — Implementing Soft Particles in WebGL/OpenGL ES:
+  https://dev.to/keaukraine/implementing-soft-particles-in-webgl-and-opengl-es-3l6e
+- WebGLFundamentals — working around gl_PointSize limits:
+  https://webglfundamentals.org/webgl/lessons/webgl-qna-working-around-gl_pointsize-limitations-webgl.html
+- Geeks3D — Point sprites vs instanced billboards benchmark:
+  https://www.geeks3d.com/20140929/test-particle-rendering-point-sprites-vs-geometry-instancing-based-billboards/
+- npartas — Adaptive Offscreen (half-res) Particles:
+  https://npartas.blogspot.com/2017/04/adaptive-offscreen-particles.html
+- Codrops — Dreamy GPGPU particles with three.js:
+  https://tympanus.net/codrops/2024/12/19/crafting-a-dreamy-particle-effect-with-three-js-and-gpgpu/
+- Interplay of Light — Order-Independent Transparency pt.1:
+  https://interplayoflight.wordpress.com/2022/06/25/order-independent-transparency-part-1/
