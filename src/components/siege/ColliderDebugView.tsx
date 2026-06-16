@@ -9,24 +9,12 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { forEachMeshInstance } from './meshColliderSystem';
+import { colliderDebugStats } from './colliderDebugStats';
 
 const NEAR = 20, FAR = 100, MAX = 2500;
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const edgeGeo = new THREE.EdgesGeometry(boxGeo);
 const _wbox = new THREE.Box3();
-
-// Top-left diagnostic readout so it's obvious what the overlay is actually drawing.
-function setDebugInfo(text: string | null): void {
-  let el = document.getElementById('sw-cdbg');
-  if (text === null) { el?.remove(); return; }
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'sw-cdbg';
-    el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:9999;font:12px monospace;color:#7fd0ff;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:4px;pointer-events:none;white-space:pre;';
-    document.body.appendChild(el);
-  }
-  el.textContent = text;
-}
 
 export function ColliderDebugView() {
   const [on, setOn] = useState(false);
@@ -107,7 +95,10 @@ export function ColliderDebugView() {
         n++;
       });
       lastBuildPos.current.copy(cam);
-      setDebugInfo(`COLLIDER DEBUG (Ctrl/Cmd+\\)\ngreen boxes: ${greenCount}\nblue mesh: ${blueCount} near (${Math.round(meshTris)} tris)`);
+      colliderDebugStats.on = true;
+      colliderDebugStats.green = greenCount;
+      colliderDebugStats.blue = blueCount;
+      colliderDebugStats.tris = Math.round(meshTris);
     } catch (err) {
       console.warn('[ColliderDebug] rebuild skipped:', err);
     }
@@ -115,11 +106,10 @@ export function ColliderDebugView() {
 
   useEffect(() => {
     const g = ref.current; if (!g) return;
-    if (on) rebuild(); else { clear(g); setDebugInfo(null); }
+    if (on) rebuild(); else { clear(g); colliderDebugStats.on = false; }
   }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Remove the readout if the overlay unmounts (e.g., leaving Siege).
-  useEffect(() => () => setDebugInfo(null), []);
+  useEffect(() => () => { colliderDebugStats.on = false; }, []);
 
   // The V voxelize tool mutates the grid — rebuild immediately so new cubes show at once.
   useEffect(() => {

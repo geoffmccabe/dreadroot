@@ -12,6 +12,7 @@ import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
 import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides, saveColliderOverrideToDB } from './voxelOverrides';
 import { setModelDecimation, meshModelTriCount, meshModelInstanceCount } from './meshColliderSystem';
+import { colliderDebugStats } from './colliderDebugStats';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
@@ -180,13 +181,22 @@ export function VoxelizeTool() {
       const fbx = ((probeState.mesh as THREE.Mesh).userData as { fbx?: string })?.fbx;
       if (!fbx) return;
       const ov = colliderOverrides.get(fbx);
+      const dbg = colliderDebugStats.on
+        ? `\noverlay: green ${colliderDebugStats.green}, blue ${colliderDebugStats.blue}`
+        : `\noverlay OFF (Ctrl/Cmd+\\ to show)`;
+      let state: string;
       if (ov?.mesh) {
         const tris = meshModelTriCount(fbx);
         const inst = meshModelInstanceCount(fbx);
-        info(inst > 0
-          ? `${fbx}\nMESH COLLIDER — ${tris} polys @ ${Math.round((ov.cell || 1) * 100)}% — ${inst} copies\n<  simpler   /   >  finer`
-          : `${fbx}\nMESH COLLIDER (reload to apply)\n<  simpler   /   >  finer`);
+        state = inst > 0
+          ? `MESH — ${tris} polys @ ${Math.round((ov.cell || 1) * 100)}%, ${inst} copies\n<  simpler  /  >  finer`
+          : `MESH (reload to apply)\n<  simpler  /  >  finer`;
+      } else if (ov?.voxel) {
+        state = `VOXEL boxes @ ${(ov.cell || 1).toFixed(2)}m`;
+      } else {
+        state = `no override (default single box)`;
       }
+      info(`${fbx}\n${state}${dbg}`);
     }, 300);
 
     return () => {
