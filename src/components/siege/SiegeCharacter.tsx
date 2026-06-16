@@ -1,19 +1,16 @@
-// SiegeCharacter — the local player's chosen Siege Worlds character. Each character glb is
-// self-contained (skin + skeleton + all 15 animations) on ONE shared 48-bone upright rig.
+// SiegeCharacter — the local player's chosen Siege Worlds character.
 //
-// The animated rig lives in <CharacterRig key={selected}>, so switching character forces a FULL
-// remount — a fresh AnimationMixer bound cleanly to the fresh clone. (drei's useAnimations creates
-// its mixer once and does NOT cleanly rebind when the model is swapped in place; that left
-// switched-to characters frozen. The key fixes that.) The parent owns the stable dropdown +
-// Ctrl/Cmd+V toggle so those survive switches.
+// Rendering reuses the PROVEN recipe from CharacterLineup: the raw glb scene (NOT a
+// SkeletonUtils clone — cloning mangles these rigs and stretches the mesh), with a precomputed
+// per-character [scale, feetY, rot] so each one stands upright at the right size with feet on the
+// ground. On top of that we add drei animation (useAnimations on the outer group) + a button panel
+// to play each clip. The rig is keyed by character so switching fully remounts (fresh mixer).
 //
-// Orientation/scale come from the shared rig: we ALWAYS play an animation, which poses the mesh
-// upright (the raw per-character bind geometry is inconsistent and only correct once posed), and
-// normalize Head→feet to a standard height with feet on the ground.
-import { useEffect, useMemo, useRef } from 'react';
+// Hidden in first person; INSPECT view (Ctrl/Cmd+V) freezes + shows it 3m ahead so you can walk
+// around it. A top dropdown switches character.
+import { useEffect, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
-import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import {
@@ -21,7 +18,21 @@ import {
   isInspectView, setInspectView, useSiegeCharacter,
 } from '@/config/siegeCharacter';
 
-const TARGET_H = 1.85;   // normalize the rig (Head→feet) to ~human height
+// Per-character [scale, feetY, rot] — copied from CharacterLineup (precomputed offline; known-good).
+// rot 0 = Z-up source (stand up via -90X), rot 1 = Y-up source (already upright). Characters not
+// listed fall back to [1, 0, 1].
+const LINEUP: Record<string, [number, number, number]> = {
+  angus: [1.00042, -0.003, 1], ashandthorn: [1.00976, -0.0055, 1], bonnie: [0.9583, 0.0, 1],
+  butch: [0.96989, -0.0029, 1], chalk: [0.97782, -0.0036, 1], crazyhorse: [0.9824, -0.0029, 1],
+  dago: [0.01222, -0.0771, 0], doge: [1.00078, -0.0, 1], dulla: [0.92484, 0.0001, 1],
+  flamma: [1.00319, 0.0007, 1], janx: [1.05926, -0.004, 1], jeanette: [0.00983, -0.0231, 0],
+  koraka: [0.01351, -0.0136, 0], ladyhao: [0.99766, 0.0056, 1], lozen: [0.99749, -0.003, 1],
+  mochizuki: [1.04084, -0.0035, 1], musashi: [0.94117, -0.0, 1], nakano: [0.00937, -0.0515, 0],
+  pigtailgirl: [0.95994, -0.0038, 1], ragnar: [0.9278, -0.0, 1], rajax: [0.73555, -0.3835, 1],
+  rakshaz: [0.73555, -0.3835, 1], shiyang: [0.00897, -0.0363, 0], tlahucole: [0.91877, -0.0027, 1],
+  toshiro: [0.00997, -0.005, 0], yaaantesawa: [0.95493, 0.0032, 1], zap: [0.98171, -0.0031, 1],
+};
+const ROT: [number, number, number][] = [[-Math.PI / 2, Math.PI, 0], [0, Math.PI, 0]];
 
 // "Root|3D_Idle_Movement 1|Animation Base Layer" → "Idle"
 const cleanAnim = (n: string) => (n.split('|')[1] || n).replace(/3D_/g, '').replace(/_Movement/gi, '').replace(/\s*\d+$/, '').replace(/_/g, ' ').trim() || n;
@@ -55,39 +66,13 @@ export function SiegeCharacter() {
   return <CharacterRig key={selected} selected={selected} />;
 }
 
-// ── Rig: one character's model + animations. Remounted (fresh mixer) on every switch. ──
+// ── Rig: one character (raw scene, lineup transform) + animations. Remounted on each switch. ──
 function CharacterRig({ selected }: { selected: string }) {
   const camera = useThree((s) => s.camera);
   const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb`);
-  const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);   // mixer root + world placement (scale lives here)
-  const { actions, names, mixer } = useAnimations(animations, group);
-  const hips = useMemo(() => cloned.getObjectByName('Hips') as THREE.Bone | null, [cloned]);
-
-  // Skinned-mesh rebind diagnostic: is the mesh's skeleton bound to the SAME bone objects in the
-  // rendered hierarchy (SkeletonUtils rebind worked)?
-  const skinDbg = useMemo(() => {
-    let sm: THREE.SkinnedMesh | null = null;
-    cloned.traverse((o) => { if (!sm && (o as THREE.SkinnedMesh).isSkinnedMesh) sm = o as THREE.SkinnedMesh; });
-    if (!sm) return 'NO SKINNED MESH';
-    const sk = (sm as THREE.SkinnedMesh).skeleton;
-    const b0 = sk?.bones?.[0];
-    const inTree = b0 ? cloned.getObjectByName(b0.name) === b0 : false;
-    return `skin bones:${sk?.bones?.length ?? 0} rebindOK:${inTree}`;
-  }, [cloned]);
-  const hipsRangeX = useRef({ min: 9, max: -9 });
-
-  // Normalize from the shared rig: scale Head→feet to TARGET_H, lift feet to the group origin.
-  const norm = useMemo(() => {
-    cloned.updateMatrixWorld(true);
-    const v = new THREE.Vector3();
-    const headY = cloned.getObjectByName('Head')?.getWorldPosition(v.clone()).y ?? 1.565;
-    const tl = cloned.getObjectByName('Toes_L')?.getWorldPosition(v.clone()).y;
-    const tr = cloned.getObjectByName('Toes_R')?.getWorldPosition(v.clone()).y;
-    const footY = Math.min(tl ?? 0, tr ?? 0);
-    const scale = TARGET_H / Math.max(headY - footY, 0.5);
-    return { scale, footLift: -footY * scale };
-  }, [cloned]);
+  const { actions, names } = useAnimations(animations, group);
+  const [scale, feetY, rot] = LINEUP[selected] ?? [1, 0, 1];
 
   const desired = useRef('');
   const cur = useRef('');
@@ -100,10 +85,8 @@ function CharacterRig({ selected }: { selected: string }) {
     Object.values(actionsRef.current).forEach((x) => { if (x && x !== a) x.fadeOut(0.2); });
     a.reset().fadeIn(0.2).play();
     cur.current = name;
-    hipsRangeX.current = { min: 9, max: -9 };
   };
 
-  // Play idle the instant clips bind — poses the mesh upright.
   useEffect(() => {
     if (!names.length) return;
     const idle = names.find((n) => n.toLowerCase().includes('idle')) || names[0];
@@ -111,7 +94,7 @@ function CharacterRig({ selected }: { selected: string }) {
     play(desired.current);
   }, [actions, names]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Panel (buttons) — created on mount, torn down on unmount (so it rebuilds cleanly per switch).
+  // Animation button panel — created/destroyed with the rig (clean rebuild per switch).
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const panel = document.createElement('div');
@@ -122,12 +105,11 @@ function CharacterRig({ selected }: { selected: string }) {
     return () => { panel.remove(); panelRef.current = null; };
   }, []);
 
-  // (Re)build buttons when clips arrive.
   useEffect(() => {
     const panel = panelRef.current; if (!panel) return;
     panel.replaceChildren();
     const title = document.createElement('div');
-    title.textContent = `DEBUG: ${selected} | clips:${names.length} | scale:${norm.scale.toFixed(2)}`;
+    title.textContent = `${selected} — animations`;
     title.style.cssText = 'color:#9cf;font:11px monospace;margin-bottom:2px';
     panel.appendChild(title);
     for (const n of names) {
@@ -142,36 +124,10 @@ function CharacterRig({ selected }: { selected: string }) {
     }
   }, [names]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Live debug overlay (top-right).
-  const dbgRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const d = document.createElement('div');
-    d.style.cssText = 'position:fixed;right:12px;top:90px;z-index:9999;font:11px monospace;color:#7f8;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:5px;white-space:pre;max-width:46vw';
-    document.body.appendChild(d); dbgRef.current = d;
-    return () => { d.remove(); dbgRef.current = null; };
-  }, []);
-  const dbgTick = useRef(0);
-
   const lastPanelOn = useRef<boolean | null>(null);
   useFrame(() => {
     const g = group.current; if (!g) return;
     const on = isInspectView();
-    if (hips) {
-      const x = hips.quaternion.x;
-      const r = hipsRangeX.current;
-      if (x < r.min) r.min = x; if (x > r.max) r.max = x;
-    }
-    if (dbgRef.current && (dbgTick.current++ % 6 === 0)) {
-      const a = cur.current ? actionsRef.current[cur.current] : null;
-      const r = hipsRangeX.current;
-      dbgRef.current.textContent =
-        `char:${selected}\nclips:${names.length} inspect:${on}\ncur:${cleanAnim(cur.current) || '—'}\n` +
-        `action? ${!!a} running:${a ? a.isRunning() : '—'} w:${a ? a.getEffectiveWeight().toFixed(2) : '—'}\n` +
-        `mixer.time:${mixer.time.toFixed(2)}\n` +
-        `hipsQ.x RANGE:${r.min.toFixed(4)}..${r.max.toFixed(4)} (moving=${(r.max - r.min) > 0.001})\n` +
-        `${skinDbg}\n` +
-        `groupScale:${g.scale.x.toFixed(2)} vis:${g.visible}`;
-    }
     if (lastPanelOn.current !== on && panelRef.current) {
       panelRef.current.style.display = on ? 'flex' : 'none';
       lastPanelOn.current = on;
@@ -181,7 +137,7 @@ function CharacterRig({ selected }: { selected: string }) {
         const d = new THREE.Vector3(); camera.getWorldDirection(d); d.y = 0; d.normalize();
         const x = camera.position.x + d.x * 3, z = camera.position.z + d.z * 3;
         const groundY = sampleHeight(x, z) ?? camera.position.y - 1.6;
-        frozen.current = { set: true, x, y: groundY + norm.footLift, z, yaw: Math.atan2(-d.x, -d.z) };
+        frozen.current = { set: true, x, y: groundY - feetY, z, yaw: Math.atan2(-d.x, -d.z) };
       }
       const f = frozen.current;
       g.position.set(f.x, f.y, f.z);
@@ -195,8 +151,10 @@ function CharacterRig({ selected }: { selected: string }) {
   });
 
   return (
-    <group ref={group} scale={norm.scale} visible={false}>
-      <primitive object={cloned} />
+    <group ref={group} scale={scale} visible={false}>
+      <group rotation={ROT[rot]}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }
