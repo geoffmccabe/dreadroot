@@ -39,6 +39,18 @@ export function setSelectedCharacter(id: string): void {
 export function isInspectView(): boolean { return inspect; }
 export function setInspectView(on: boolean): void { if (on !== inspect) { inspect = on; emit(); } }
 
+// ── Animation-panel bridge ──
+// CharacterRig lives inside the R3F Canvas (can't render DOM), so it PUBLISHES its clip
+// list + play() here; the DOM panel (SiegeAnimPanel, in the normal React tree) consumes it
+// and renders in the game's CSS. Keeps the 3D code and the styled panel decoupled.
+export interface SiegeAnimState { names: string[]; current: string; play: (n: string) => void }
+let animState: SiegeAnimState = { names: [], current: '', play: () => {} };
+const animSubs = new Set<() => void>();
+export function publishAnim(s: SiegeAnimState): void { animState = s; animSubs.forEach((f) => f()); }
+export function useSiegeAnim(): SiegeAnimState {
+  return useSyncExternalStore((cb) => { animSubs.add(cb); return () => animSubs.delete(cb); }, () => animState);
+}
+
 function subscribe(cb: () => void) { subs.add(cb); return () => subs.delete(cb); }
 /** React hook → re-renders on character OR inspect change; returns {selected, inspect}. */
 export function useSiegeCharacter() {

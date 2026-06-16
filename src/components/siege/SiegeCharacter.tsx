@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import {
   SIEGE_CHARACTERS, getSelectedCharacter, setSelectedCharacter,
-  isInspectView, setInspectView, useSiegeCharacter,
+  isInspectView, setInspectView, useSiegeCharacter, publishAnim,
 } from '@/config/siegeCharacter';
 
 // Per-character [scale, feetY, rot]. The 8 playable characters were CLEANLY reconverted from
@@ -31,9 +31,6 @@ const LINEUP: Record<string, [number, number, number]> = {
   nakano: [0.00937, -0.0515, 0],
 };
 const ROT: [number, number, number][] = [[-Math.PI / 2, Math.PI, 0], [0, Math.PI, 0]];
-
-// "Root|3D_Idle_Movement 1|Animation Base Layer" → "Idle"
-const cleanAnim = (n: string) => (n.split('|')[1] || n).replace(/3D_/g, '').replace(/_Movement/gi, '').replace(/\s*\d+$/, '').replace(/_/g, ' ').trim() || n;
 
 // ── Parent: stable dropdown + inspect toggle; remounts the rig per character via key ──
 export function SiegeCharacter() {
@@ -82,12 +79,15 @@ function CharacterRig({ selected }: { selected: string }) {
   const frozen = useRef<{ set: boolean; x: number; y: number; z: number; yaw: number }>({ set: false, x: 0, y: 0, z: 0, yaw: 0 });
 
   const actionsRef = useRef(actions); actionsRef.current = actions;
+  const namesRef = useRef(names); namesRef.current = names;
   const play = (name: string) => {
     const a = name ? actionsRef.current[name] : null;
     if (!a || cur.current === name) return;
     Object.values(actionsRef.current).forEach((x) => { if (x && x !== a) x.fadeOut(0.2); });
     a.reset().fadeIn(0.2).play();
     cur.current = name;
+    desired.current = name;
+    publishAnim({ names: namesRef.current, current: name, play });
   };
 
   useEffect(() => {
@@ -95,46 +95,14 @@ function CharacterRig({ selected }: { selected: string }) {
     const idle = names.find((n) => n.toLowerCase().includes('idle')) || names[0];
     if (!desired.current) desired.current = idle;
     play(desired.current);
+    // publish the clip list for the styled DOM panel; clear it when this rig unmounts
+    publishAnim({ names, current: desired.current, play });
+    return () => publishAnim({ names: [], current: '', play: () => {} });
   }, [actions, names]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Animation button panel — created/destroyed with the rig (clean rebuild per switch).
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const panel = document.createElement('div');
-    panel.id = 'sw-anim-panel';
-    panel.style.cssText = 'position:fixed;left:12px;top:90px;z-index:9999;display:none;flex-direction:column;gap:4px;background:rgba(0,0,0,.65);padding:8px;border-radius:6px;max-height:80vh;overflow:auto';
-    document.body.appendChild(panel);
-    panelRef.current = panel;
-    return () => { panel.remove(); panelRef.current = null; };
-  }, []);
-
-  useEffect(() => {
-    const panel = panelRef.current; if (!panel) return;
-    panel.replaceChildren();
-    const title = document.createElement('div');
-    title.textContent = `${selected} — animations`;
-    title.style.cssText = 'color:#9cf;font:11px monospace;margin-bottom:2px';
-    panel.appendChild(title);
-    for (const n of names) {
-      const b = document.createElement('button'); b.textContent = cleanAnim(n);
-      b.style.cssText = 'font:12px sans-serif;text-align:left;background:#234;color:#fff;border:1px solid #456;border-radius:4px;padding:4px 10px;cursor:pointer';
-      b.onclick = () => {
-        desired.current = n; play(n);
-        for (const c of panel.querySelectorAll('button')) (c as HTMLElement).style.background = '#234';
-        b.style.background = '#2a6';
-      };
-      panel.appendChild(b);
-    }
-  }, [names]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const lastPanelOn = useRef<boolean | null>(null);
   useFrame(() => {
     const g = group.current; if (!g) return;
     const on = isInspectView();
-    if (lastPanelOn.current !== on && panelRef.current) {
-      panelRef.current.style.display = on ? 'flex' : 'none';
-      lastPanelOn.current = on;
-    }
     if (on) {
       if (!frozen.current.set) {
         const d = new THREE.Vector3(); camera.getWorldDirection(d); d.y = 0; d.normalize();

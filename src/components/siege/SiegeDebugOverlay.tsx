@@ -2,6 +2,7 @@
 // behaviors do/don't fire (God Mode, terrain-walk, colliders, fps). Reads the sdbg store.
 // Renders nothing outside Siege Worlds. Temporary debug aid.
 import { useEffect, useState, useRef } from 'react';
+import { Card } from '@/components/ui/card';
 import { sdbg } from './siegeDebug';
 import { useActiveGame } from '@/config/activeGame';
 
@@ -23,15 +24,13 @@ export function SiegeDebugOverlay() {
 
   if (active !== 'siege-worlds') return null;
   const row = (k: string, v: string | number | boolean, warn = false) => (
-    <div style={{ color: warn ? '#ff7b7b' : '#9fe' }}>{k}: <b style={{ color: '#fff' }}>{String(v)}</b></div>
+    <div className={warn ? 'text-destructive' : 'text-muted-foreground'}>
+      {k}: <b className="text-foreground">{String(v)}</b>
+    </div>
   );
   return (
-    <div style={{
-      position: 'fixed', top: '8px', left: '8px', zIndex: 50, background: 'rgba(0,0,0,0.72)',
-      color: '#9fe', font: '11px/1.45 monospace', padding: '6px 9px', borderRadius: '6px',
-      pointerEvents: 'none', minWidth: '168px',
-    }}>
-      <div style={{ color: '#fc6', fontWeight: 700, marginBottom: '3px' }}>⚔ SIEGE DEBUG</div>
+    <Card className="waterfall-card fixed left-2 top-[23px] z-50 min-w-[168px] pointer-events-none font-mono text-[11px] leading-relaxed">
+      <div className="mb-1 font-bold text-primary">⚔ SIEGE DEBUG</div>
       {row('fps', fps.current, fps.current < 25)}
       {row('ctrl-sees-siege', sdbg.isSiege, !sdbg.isSiege)}
       {row('godMode', sdbg.godMode, sdbg.godMode)}
@@ -40,6 +39,6 @@ export function SiegeDebugOverlay() {
       {row('playerY', sdbg.playerY.toFixed(1))}
       {row('terrainY', sdbg.terrainY == null ? 'NULL' : sdbg.terrainY.toFixed(1), sdbg.terrainY == null)}
       {row('monsters', sdbg.monsters)}
-    </div>
+    </Card>
   );
 }
