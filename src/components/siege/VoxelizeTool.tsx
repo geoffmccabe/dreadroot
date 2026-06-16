@@ -51,10 +51,28 @@ function info(text: string) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'sw-voxel-info';
-    el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;font:12px monospace;color:#39ff14;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:4px;pointer-events:none;white-space:pre;';
+    el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;font:12px monospace;color:#39ff14;background:rgba(0,0,0,.6);padding:6px 8px;border-radius:4px;pointer-events:auto;white-space:pre;display:flex;align-items:flex-start;gap:8px;';
+    const span = document.createElement('span');
+    span.id = 'sw-voxel-info-text';
+    span.style.whiteSpace = 'pre';
+    // Copy icon — exit pointer-lock (Esc) to click; copies the readout text.
+    const btn = document.createElement('button');
+    btn.textContent = '⧉';
+    btn.title = 'Copy this info';
+    btn.style.cssText = 'cursor:pointer;background:#39ff14;color:#000;border:none;border-radius:3px;font:13px monospace;line-height:1;padding:3px 6px;flex:none;';
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      const t = document.getElementById('sw-voxel-info-text')?.textContent || '';
+      navigator.clipboard?.writeText(t)
+        .then(() => { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '⧉'; }, 1000); })
+        .catch(() => {});
+    };
+    el.appendChild(span);
+    el.appendChild(btn);
     document.body.appendChild(el);
   }
-  el.textContent = text;
+  const span = document.getElementById('sw-voxel-info-text');
+  if (span) span.textContent = text;
 }
 
 export function VoxelizeTool() {
