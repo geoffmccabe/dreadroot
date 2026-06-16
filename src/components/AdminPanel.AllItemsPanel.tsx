@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, Plus, Save, Trash2, Upload } from 'lucide-react';
+import { ItemDetailModal } from './AdminPanel.ItemDetailModal';
 
 interface ItemRow {
   id: string;
@@ -30,7 +31,7 @@ interface FortressGroup {
 
 // ─── Siege Worlds Grid (read-only) ───────────────────────────────
 
-function SiegeWorldsGrid({ items }: { items: ItemRow[] }) {
+function SiegeWorldsGrid({ items, onSelect }: { items: ItemRow[]; onSelect: (item: ItemRow) => void }) {
   return (
     <div
       style={{
@@ -47,6 +48,7 @@ function SiegeWorldsGrid({ items }: { items: ItemRow[] }) {
         return (
           <div
             key={item.id}
+            onClick={() => onSelect(item)}
             style={{
               background: 'hsl(var(--card))',
               border: '1px solid hsl(var(--border))',
@@ -59,6 +61,7 @@ function SiegeWorldsGrid({ items }: { items: ItemRow[] }) {
               gap: '2px',
               minWidth: 0,
               overflow: 'hidden',
+              cursor: 'pointer',
             }}
           >
             {spriteUrl ? (
@@ -97,12 +100,13 @@ function SiegeWorldsGrid({ items }: { items: ItemRow[] }) {
                 fontFamily: 'monospace',
               }}
             >
-              #{item.item_number ?? '—'}
+              ID# {item.item_number ?? '—'}
             </span>
             <span
               style={{
-                fontSize: '11px',
-                fontWeight: 500,
+                fontSize: '13px',
+                fontWeight: 700,
+                color: '#ffffff',
                 lineHeight: '1.2',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -396,6 +400,7 @@ export function AllItemsPanel() {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddNew, setShowAddNew] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ItemRow | null>(null);
 
   const loadItems = useCallback(async () => {
     setIsLoading(true);
@@ -575,7 +580,7 @@ export function AllItemsPanel() {
       <div>
         <h3 className="text-sm font-semibold mb-3">Siege Worlds</h3>
         {siegeItems.length > 0 ? (
-          <SiegeWorldsGrid items={siegeItems} />
+          <SiegeWorldsGrid items={siegeItems} onSelect={setSelectedItem} />
         ) : (
           <p className="text-xs text-muted-foreground">No Siege Worlds items. Save a drop table to sync them.</p>
         )}
@@ -613,6 +618,12 @@ export function AllItemsPanel() {
           </Button>
         )}
       </div>
+
+      <ItemDetailModal
+        item={selectedItem}
+        isOpen={selectedItem !== null}
+        onClose={() => setSelectedItem(null)}
+      />
     </div>
   );
 }
