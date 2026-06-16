@@ -37,6 +37,19 @@ export function SiegeCharacter() {
   const group = useRef<THREE.Group>(null);   // mixer root + world placement (scale lives here)
   const { actions, names, mixer } = useAnimations(animations, group);
   const hips = useMemo(() => cloned.getObjectByName('Hips') as THREE.Bone | null, [cloned]);
+  // Skinned-mesh / rebind diagnostics: is the mesh's skeleton bound to the SAME bone objects
+  // that live in the rendered hierarchy (SkeletonUtils rebind), and that the clip targets?
+  const skinDbg = useMemo(() => {
+    let sm: THREE.SkinnedMesh | null = null;
+    cloned.traverse((o) => { if (!sm && (o as THREE.SkinnedMesh).isSkinnedMesh) sm = o as THREE.SkinnedMesh; });
+    if (!sm) return 'NO SKINNED MESH';
+    const sk = sm.skeleton;
+    const b0 = sk?.bones?.[0];
+    const inTree = b0 ? cloned.getObjectByName(b0.name) === b0 : false;  // true = rebind OK
+    return `skin bones:${sk?.bones?.length ?? 0} b0:${b0?.name ?? '?'} rebindOK:${inTree}`;
+  }, [cloned]);
+  const hipsBaseX = useRef<number | null>(null);
+  const hipsRangeX = useRef({ min: 9, max: -9 });
 
   // One normalize from the shared rig: scale Head→feet to TARGET_H, lift feet to the group origin.
   const norm = useMemo(() => {
@@ -61,6 +74,7 @@ export function SiegeCharacter() {
     Object.values(actionsRef.current).forEach((x) => { if (x && x !== a) x.fadeOut(0.2); });
     a.reset().fadeIn(0.2).play();
     cur.current = name;
+    hipsRangeX.current = { min: 9, max: -9 };  // reset bone-motion range for the new clip
   };
 
   // Play idle the instant clips bind (NOT gated on inspect) — this is what poses the mesh upright.
@@ -135,16 +149,23 @@ export function SiegeCharacter() {
   useFrame(() => {
     const g = group.current; if (!g) return;
     const on = isInspectView();
+    // track how much the Hips bone actually moves (proves whether the action drives the bones)
+    if (hips) {
+      const x = hips.quaternion.x;
+      const r = hipsRangeX.current;
+      if (x < r.min) r.min = x; if (x > r.max) r.max = x;
+    }
     if (dbgRef.current && (dbgTick.current++ % 6 === 0)) {
       const a = cur.current ? actionsRef.current[cur.current] : null;
-      const childNames = g.children.map((c) => c.name || c.type).join(',');
+      const r = hipsRangeX.current;
       dbgRef.current.textContent =
         `char:${selected}\nclips:${names.length} inspect:${on}\ncur:${cleanAnim(cur.current) || '—'}\n` +
         `action? ${!!a} running:${a ? a.isRunning() : '—'} w:${a ? a.getEffectiveWeight().toFixed(2) : '—'}\n` +
         `mixer.time:${mixer.time.toFixed(2)}\n` +
-        `hipsQ.x:${hips ? hips.quaternion.x.toFixed(4) : 'NO HIPS'}\n` +
-        `groupScale:${g.scale.x.toFixed(2)} vis:${g.visible}\n` +
-        `groupChildren:[${childNames}]`;
+        `hipsQ.x now:${hips ? hips.quaternion.x.toFixed(4) : 'NO HIPS'}\n` +
+        `hipsQ.x RANGE:${r.min.toFixed(4)}..${r.max.toFixed(4)} (moving=${(r.max - r.min) > 0.001})\n` +
+        `${skinDbg}\n` +
+        `groupScale:${g.scale.x.toFixed(2)} vis:${g.visible}`;
     }
     if (lastPanelOn.current !== on && panelRef.current) {
       panelRef.current.style.display = on ? 'flex' : 'none';
