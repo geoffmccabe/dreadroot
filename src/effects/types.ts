@@ -47,6 +47,9 @@ export interface EffectRecipe {
   /** Start/end tint (hex). */
   color0: string;
   color1: string;
+  /** Extra growth over life as the puff disperses (0.5 = +50% diameter by death,
+   *  on top of size0→size1). Makes rising+fading puffs look like dispersing smoke. */
+  disperseGrow?: number;
 
   // ── Culling / budget ──
   /** Beyond this (m) nothing emits or renders. */

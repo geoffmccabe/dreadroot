@@ -28,6 +28,9 @@ export const FIRE_SMOKE: EffectRecipe = {
   opacity1: 0.0,
   color0: '#5e5e5e',
   color1: '#9a9a9a',
+  // Disperse: each puff grows this fraction larger over its life as it rises and
+  // fades, so it looks like dispersing smoke (0.5 = +50% diameter by death).
+  disperseGrow: 0.5,
   cullDistance: 100,
   fadeStart: 80,
   fadeEnd: 100,
@@ -40,11 +43,19 @@ export const FIRE_SMOKE: EffectRecipe = {
   spiralOpacity: 0.5,
   spiralLighten: 0.22,
   spiralTurns: 2,
-  spiralSpinMinSec: 0.5,
-  spiralSpinMaxSec: 1.0,
+  // Slower spin (1–2 s/rev) per tuning.
+  spiralSpinMinSec: 1.0,
+  spiralSpinMaxSec: 2.0,
 };
 
 const cache = new Map<string, EffectRecipe>([[FIRE_SMOKE.code, FIRE_SMOKE]]);
+
+// Built-in recipes are the source of truth in CODE — the DB never overrides them
+// (a stale seeded row must not shadow tuning). The DB is for creator variants.
+const BUILTIN_CODES = new Set<string>([FIRE_SMOKE.code]);
+export function isBuiltinCode(code: string): boolean {
+  return BUILTIN_CODES.has(code);
+}
 
 export function getRecipe(code: string): EffectRecipe {
   return cache.get(code) ?? FIRE_SMOKE;

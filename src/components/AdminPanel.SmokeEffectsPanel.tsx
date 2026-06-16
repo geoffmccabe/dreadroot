@@ -25,6 +25,7 @@ const BODY_FIELDS: FieldDef[] = [
   { key: 'lifetime', label: 'Lifetime (s)', min: 0.5, max: 8, step: 0.1 },
   { key: 'size0', label: 'Size start (m)', min: 0.02, max: 1.5, step: 0.01 },
   { key: 'size1', label: 'Size end (m)', min: 0.1, max: 3, step: 0.01 },
+  { key: 'disperseGrow', label: 'Disperse grow', min: 0, max: 2, step: 0.05 },
   { key: 'opacity0', label: 'Opacity', min: 0, max: 1, step: 0.01 },
   { key: 'spread', label: 'Spread (m)', min: 0, max: 1, step: 0.01 },
   { key: 'rise', label: 'Rise (m/s)', min: -2, max: 4, step: 0.05 },

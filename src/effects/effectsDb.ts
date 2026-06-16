@@ -6,7 +6,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { EffectRecipe } from './types';
-import { registerRecipe } from './recipes';
+import { registerRecipe, isBuiltinCode } from './recipes';
 
 /** EffectRecipe → the `params` JSONB blob stored on the row. */
 export function recipeToParams(r: EffectRecipe): Record<string, unknown> {
@@ -15,7 +15,7 @@ export function recipeToParams(r: EffectRecipe): Record<string, unknown> {
     rise: r.rise, gravity: r.gravity, wind: r.wind,
     flutterAmp: r.flutterAmp, flutterFreq: r.flutterFreq, spin: r.spin,
     size0: r.size0, size1: r.size1, opacity0: r.opacity0, opacity1: r.opacity1,
-    color0: r.color0, color1: r.color1,
+    color0: r.color0, color1: r.color1, disperseGrow: r.disperseGrow,
     cullDistance: r.cullDistance, fadeStart: r.fadeStart, fadeEnd: r.fadeEnd,
     importance: r.importance, maxInstances: r.maxInstances,
     spiral: r.spiral, spiralRate: r.spiralRate,
@@ -50,6 +50,7 @@ function rowToRecipe(row: any): EffectRecipe {
     opacity1: p.opacity1 ?? 0,
     color0: p.color0 ?? '#5e5e5e',
     color1: p.color1 ?? '#9a9a9a',
+    disperseGrow: p.disperseGrow ?? 0.5,
     cullDistance: p.cullDistance ?? 100,
     fadeStart: p.fadeStart ?? 80,
     fadeEnd: p.fadeEnd ?? 100,
@@ -82,6 +83,9 @@ export async function loadEffectRecipesFromDB(): Promise<EffectRecipe[]> {
     const recipes: EffectRecipe[] = [];
     for (const row of data ?? []) {
       const r = rowToRecipe(row);
+      // Built-in codes are owned by code (source of truth) — never let a stale
+      // seeded DB row shadow them. DB only supplies creator variants.
+      if (isBuiltinCode(r.code)) continue;
       registerRecipe(r);
       recipes.push(r);
     }

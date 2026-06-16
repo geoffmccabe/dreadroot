@@ -48,7 +48,11 @@ const shrinkAt = (currentSec: number, total: number) =>
 // Damage multipliers: halves each second regardless of total duration.
 const dmgMultAt = (currentSec: number) => Math.pow(0.5, currentSec);
 const ACTIVE_TO_DOT_DELAY = 0.15; // seconds after last hit before DOT begins
-const MAX_BURNS = 15; // cap burn entries to keep flame slot usage under control
+// Cap on concurrent burns. Raised 15→80 so a grenade/bomb blast can set EVERY
+// monster it catches on fire, not just the first 15 (the old cap left most of a
+// horde unburned). Burns are time-limited so they clear; the 7-fire renderer
+// doesn't hard-cap tracked burns, so this is the real limiter.
+const MAX_BURNS = 80;
 const DEATH_LINGER_SECONDS = 1.5; // a killed enemy's fire lingers this long at its death spot
 
 // Per-entity-type flame point layouts

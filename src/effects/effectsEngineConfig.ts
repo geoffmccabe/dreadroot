@@ -21,7 +21,8 @@ const DEFAULT: EffectsEngineConfig = {
   // are vertex-animated + mostly discarded, so the cost is fill (overdraw), not
   // count — small puffs keep overdraw down. Quality tier scales this on mobile.
   maxInstancesPerRecipe: 4000,
-  maxEmitters: 64,
+  // Cover a full grenade horde burning at once (MAX_BURNS=80) + a preview emitter.
+  maxEmitters: 96,
   qualityScale: { low: 0.5, med: 0.8, high: 1.0 },
   defaultQuality: 'med',
 };

@@ -28,7 +28,7 @@ const VERT = /* glsl */ `
   attribute vec3 aSeed;
 
   uniform float uTime, uLifetime, uRise, uGravity, uSize0, uSize1, uSpin;
-  uniform float uFlutterAmp, uFlutterFreq, uSpread;
+  uniform float uFlutterAmp, uFlutterFreq, uSpread, uDisperse;
   uniform float uCullDist, uFadeStart, uFadeEnd;
   uniform float uSpinMin, uSpinMax;
   uniform vec2 uWind;
@@ -66,7 +66,8 @@ const VERT = /* glsl */ `
     if (dist > uCullDist) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
     vFade = 1.0 - clamp((dist - uFadeStart) / max(0.001, uFadeEnd - uFadeStart), 0.0, 1.0);
 
-    float size = mix(uSize0, uSize1, life);
+    // Disperse: grow as it rises + fades (smoke spreading out as it thins).
+    float size = mix(uSize0, uSize1, life) * (1.0 + uDisperse * life);
     float ang = uSpin * age + ph;
     float cs = cos(ang), sn = sin(ang);
     vec2 c = position.xy;                 // base quad corner in [-0.5,0.5]
@@ -211,6 +212,7 @@ export class BillboardBackend {
     u.uFlutterAmp.value = recipe.flutterAmp;
     u.uFlutterFreq.value = recipe.flutterFreq;
     u.uSpread.value = recipe.spread;
+    u.uDisperse.value = recipe.disperseGrow ?? 0.5;
     (u.uWind.value as THREE.Vector2).set(recipe.wind[0], recipe.wind[1]);
     u.uCullDist.value = recipe.cullDistance;
     u.uFadeStart.value = recipe.fadeStart;
@@ -254,7 +256,7 @@ export class BillboardBackend {
       uTime: { value: 0 },
       uLifetime: { value: 1 }, uRise: { value: 0 }, uGravity: { value: 0 },
       uSize0: { value: 0.1 }, uSize1: { value: 1 }, uSpin: { value: 0 },
-      uFlutterAmp: { value: 0 }, uFlutterFreq: { value: 1 }, uSpread: { value: 0 },
+      uFlutterAmp: { value: 0 }, uFlutterFreq: { value: 1 }, uSpread: { value: 0 }, uDisperse: { value: 0 },
       uWind: { value: new THREE.Vector2() },
       uCullDist: { value: 100 }, uFadeStart: { value: 80 }, uFadeEnd: { value: 100 },
       uColor0: { value: new THREE.Color() }, uColor1: { value: new THREE.Color() },
