@@ -169,12 +169,14 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     return () => colliders.forEach((b) => worldCollisionGrid.remove(b));
   }, [colliders]);
   // Register this group's BVH mesh-collider instances; drop them when it streams out.
+  // The decimation keep-ratio is stored in the override's `cell` field (1 = full).
   useEffect(() => {
     if (!meshInputs.length) return;
-    for (const [key, geo] of meshGeos) registerMeshGeometry(key, geo);
+    const ratio = colliderOverrides.get(fbx)?.cell ?? 1;
+    for (const [key, geo] of meshGeos) registerMeshGeometry(fbx, key, geo, ratio);
     setGroupInstances(groupId, meshInputs);
     return () => clearGroup(groupId);
-  }, [meshInputs, meshGeos, groupId]);
+  }, [meshInputs, meshGeos, groupId, fbx]);
   return <primitive object={node} />;
 }
 

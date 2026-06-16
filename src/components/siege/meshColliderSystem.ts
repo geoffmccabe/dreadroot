@@ -1,19 +1,20 @@
 // meshColliderSystem — true triangle-accurate collision for selected models
-// (rocks, mountains), so the player walks the real surface instead of stair-
-// stepped boxes. World-agnostic and GATED: when the active world doesn't enable
-// mesh colliders, the whole system is inert (no BVH builds, no per-frame pass),
-// so DreadRoot/Pinkland pay nothing and only worlds that opt in (SWW) run it.
+// (rocks, mountains). World-agnostic and GATED: inert unless a world opts in, so
+// DreadRoot/Pinkland pay nothing.
 //
-// One BVH per GEOMETRY (keyed by geometry.uuid, shared across instances). Mesh
-// instances are tracked PER GROUP (the streaming WorldObjectsLayer group), so a
-// group cleanly removes its instances when it streams out — no duplicates. Player
-// collision transforms the capsule into each nearby instance's local space and
-// resolves against the BVH (canonical three-mesh-bvh capsule sweep), then pushes
-// the player out in world space. Only instances whose world AABB is near the
-// player are tested; mesh colliders are a hand-picked subset, so the count is low.
+// glTF rocks are far denser than they look (thousands of tris), so each model's
+// collision geometry is DECIMATED (meshoptimizer) to a per-model keep-ratio, then
+// a BVH is built from the simplified mesh. The < / > tool tunes the ratio live.
+//
+// BVH is stored per geometry KEY (uuid); instances reference the key, so
+// re-decimating a model rebuilds its BVH and every instance + the debug overlay
+// pick it up immediately. Mesh instances are tracked per streaming group so they
+// clean up when a group streams out. Player collision: capsule push for walls;
+// meshGroundHeight() feeds the existing ground system for standing on tops.
 
 import * as THREE from 'three';
 import { MeshBVH, type ExtendedTriangle } from 'three-mesh-bvh';
+import { MeshoptSimplifier } from 'meshoptimizer';
 
 export interface MeshInstanceInput {
   key: string;            // geometry uuid (BVH key)
@@ -22,7 +23,7 @@ export interface MeshInstanceInput {
 }
 
 interface InstanceEntry {
-  bvh: MeshBVH;
+  key: string;
   matrix: THREE.Matrix4;
   inverse: THREE.Matrix4;
   scale: number;
@@ -30,15 +31,15 @@ interface InstanceEntry {
 }
 
 const bvhByKey = new Map<string, MeshBVH>();
+const geoByKey = new Map<string, { original: THREE.BufferGeometry; ratio: number }>();
+const fbxKeys = new Map<string, Set<string>>();
 const groups = new Map<string, InstanceEntry[]>();
 let enabled = false;
-// Ceiling for the ground raycast: the player's reachable step height. Updated each
-// frame by MeshColliderPlayer so the ground probe only finds surfaces the player
-// can actually step onto — never snaps them up the side of a tall wall/cliff.
-// Starts inert (-Infinity): meshGroundHeight returns null until the player frame
-// sets the real ceiling, so frame-1 near a mesh can't snap the player to a peak.
 let probeCeilingY = -Infinity;
-export function setPlayerProbeY(y: number): void { probeCeilingY = y; }
+
+// meshoptimizer wasm loads async — gate decimation until ready (full mesh meanwhile).
+let simplifierReady = false;
+MeshoptSimplifier.ready.then(() => { simplifierReady = true; }).catch(() => {});
 
 // Scratch — never allocate in the per-frame resolve.
 const _segA = new THREE.Vector3();
@@ -58,30 +59,77 @@ const _hitPt = new THREE.Vector3();
 
 export function setMeshCollidersEnabled(on: boolean): void { enabled = on; }
 export function meshCollidersEnabled(): boolean { return enabled; }
+export function setPlayerProbeY(y: number): void { probeCeilingY = y; }
 
-/** Build (once) and return the BVH for a geometry. */
-export function registerMeshGeometry(key: string, geometry: THREE.BufferGeometry): MeshBVH | null {
-  let bvh = bvhByKey.get(key);
-  if (bvh) return bvh;
-  try {
-    // MeshBVH handles indexed (glTF default) and non-indexed geometry; building
-    // the tree only reorders the index, which doesn't affect rendering.
-    bvh = new MeshBVH(geometry);
-    bvhByKey.set(key, bvh);
-    return bvh;
-  } catch { return null; }
+function triCount(geo: THREE.BufferGeometry): number {
+  return (geo.index ? geo.index.count : geo.getAttribute('position').count) / 3;
 }
 
-/** Replace a group's mesh-collider instances (call on the group's build). */
+/** Decimate to keep `ratio` of the triangles (1 = full). Falls back to the
+ *  original geometry if the simplifier isn't ready or the data isn't decimatable. */
+function decimate(geometry: THREE.BufferGeometry, ratio: number): THREE.BufferGeometry {
+  if (ratio >= 0.999 || !simplifierReady) return geometry;
+  const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!posAttr || (posAttr as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute || posAttr.itemSize !== 3) return geometry;
+  const positions = posAttr.array instanceof Float32Array ? posAttr.array : new Float32Array(posAttr.array as ArrayLike<number>);
+  let index: Uint32Array;
+  if (geometry.index) {
+    index = geometry.index.array instanceof Uint32Array ? (geometry.index.array as Uint32Array) : new Uint32Array(geometry.index.array as ArrayLike<number>);
+  } else {
+    index = new Uint32Array(posAttr.count);
+    for (let i = 0; i < posAttr.count; i++) index[i] = i;
+  }
+  const target = Math.max(3, Math.floor((index.length * ratio) / 3) * 3);
+  if (target >= index.length) return geometry;
+  try {
+    const [newIndex] = MeshoptSimplifier.simplify(index, positions, 3, target, 1.0);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', posAttr);
+    g.setIndex(new THREE.BufferAttribute(newIndex, 1));
+    return g;
+  } catch { return geometry; }
+}
+
+function buildBVH(key: string, ratio: number): void {
+  const entry = geoByKey.get(key);
+  if (!entry) return;
+  try {
+    bvhByKey.set(key, new MeshBVH(decimate(entry.original, ratio)));
+    entry.ratio = ratio;
+  } catch { /* skip — instance falls back to no mesh collider */ }
+}
+
+/** Register a model's geometry (idempotent per key) and build its decimated BVH. */
+export function registerMeshGeometry(fbx: string, key: string, geometry: THREE.BufferGeometry, ratio = 1): void {
+  if (!geoByKey.has(key)) geoByKey.set(key, { original: geometry, ratio: -1 });
+  let ks = fbxKeys.get(fbx);
+  if (!ks) { ks = new Set(); fbxKeys.set(fbx, ks); }
+  ks.add(key);
+  if (geoByKey.get(key)!.ratio !== ratio || !bvhByKey.has(key)) buildBVH(key, ratio);
+}
+
+/** Re-decimate all geometries of a model to a new keep-ratio (live < / > tuning).
+ *  Returns the resulting total triangle count. */
+export function setModelDecimation(fbx: string, ratio: number): number {
+  const ks = fbxKeys.get(fbx);
+  if (!ks) return 0;
+  let tris = 0;
+  for (const key of ks) {
+    buildBVH(key, ratio);
+    const bvh = bvhByKey.get(key);
+    if (bvh) tris += triCount(bvh.geometry);
+  }
+  return Math.round(tris);
+}
+
 export function setGroupInstances(groupId: string, list: MeshInstanceInput[]): void {
   const entries: InstanceEntry[] = [];
   for (const it of list) {
-    const bvh = bvhByKey.get(it.key);
-    if (!bvh) continue;
+    if (!geoByKey.has(it.key)) continue;
     it.matrix.decompose(_pos, _quat, _scl);
     const scale = (Math.abs(_scl.x) + Math.abs(_scl.y) + Math.abs(_scl.z)) / 3 || 1;
     entries.push({
-      bvh,
+      key: it.key,
       matrix: it.matrix.clone(),
       inverse: it.matrix.clone().invert(),
       scale,
@@ -92,29 +140,51 @@ export function setGroupInstances(groupId: string, list: MeshInstanceInput[]): v
   else groups.delete(groupId);
 }
 
-/** Remove a group's instances (call on the group's unmount). */
 export function clearGroup(groupId: string): void { groups.delete(groupId); }
 
-export function clearMeshColliders(): void { bvhByKey.clear(); groups.clear(); }
-
-export function meshColliderStats(): { geometries: number; instances: number } {
-  let n = 0;
-  for (const g of groups.values()) n += g.length;
-  return { geometries: bvhByKey.size, instances: n };
+export function clearMeshColliders(): void {
+  bvhByKey.clear();
+  geoByKey.clear();
+  fbxKeys.clear();
+  groups.clear();
 }
 
-/** Iterate active mesh-collider instances (for the blue debug overlay). */
 export function forEachMeshInstance(cb: (geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) => void): void {
   for (const list of groups.values()) {
-    for (let i = 0; i < list.length; i++) cb(list[i].bvh.geometry, list[i].matrix);
+    for (let i = 0; i < list.length; i++) {
+      const bvh = bvhByKey.get(list[i].key);
+      if (bvh) cb(bvh.geometry, list[i].matrix);
+    }
   }
 }
 
-/**
- * Resolve the player capsule against nearby mesh colliders. Writes the world-space
- * position correction into `out`; returns true if it pushed. Capsule is vertical:
- * (feet + radius) up to (feet + height - radius).
- */
+/** Highest mesh-collider surface at (x,z), or null — feeds the ground system so
+ *  the player stands ON mountains with correct gravity/jump (same path as terrain). */
+export function meshGroundHeight(x: number, z: number): number | null {
+  if (!enabled || groups.size === 0) return null;
+  let best: number | null = null;
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i++) {
+      const inst = list[i];
+      if (x < inst.aabb.min.x || x > inst.aabb.max.x || z < inst.aabb.min.z || z > inst.aabb.max.z) continue;
+      if (probeCeilingY < inst.aabb.min.y) continue;
+      const bvh = bvhByKey.get(inst.key);
+      if (!bvh) continue;
+      _ray.origin.set(x, probeCeilingY, z);
+      _ray.direction.set(0, -1, 0);
+      _ray.applyMatrix4(inst.inverse);
+      const hit = bvh.raycastFirst(_ray, THREE.DoubleSide);
+      if (hit) {
+        _hitPt.copy(hit.point).applyMatrix4(inst.matrix);
+        if (best === null || _hitPt.y > best) best = _hitPt.y;
+      }
+    }
+  }
+  return best;
+}
+
+/** Resolve the player capsule against nearby mesh colliders (HORIZONTAL push;
+ *  vertical is the ground system's job). Writes the correction into `out`. */
 export function resolvePlayerMeshCollision(
   feetX: number, feetY: number, feetZ: number,
   radius: number, height: number,
@@ -122,15 +192,13 @@ export function resolvePlayerMeshCollision(
 ): boolean {
   out.set(0, 0, 0);
   if (!enabled || groups.size === 0) return false;
-
   _playerAabb.min.set(feetX - radius, feetY, feetZ - radius);
   _playerAabb.max.set(feetX + radius, feetY + height, feetZ + radius);
-
   let pushed = false;
   for (const list of groups.values()) {
     for (let i = 0; i < list.length; i++) {
       const inst = list[i];
-      if (!inst.aabb.intersectsBox(_playerAabb)) continue; // cheap proximity reject
+      if (!inst.aabb.intersectsBox(_playerAabb)) continue;
       if (resolveOne(inst, feetX, feetY, feetZ, radius, height)) {
         out.add(_delta);
         pushed = true;
@@ -140,37 +208,13 @@ export function resolvePlayerMeshCollision(
   return pushed;
 }
 
-/**
- * Highest mesh-collider surface at (x,z), or null. A ray cast straight down from
- * high above; used to feed the engine's existing ground-height system so the
- * player stands ON mountains with correct gravity/jump (same path as terrain).
- */
-export function meshGroundHeight(x: number, z: number): number | null {
-  if (!enabled || groups.size === 0) return null;
-  let best: number | null = null;
-  for (const list of groups.values()) {
-    for (let i = 0; i < list.length; i++) {
-      const inst = list[i];
-      if (x < inst.aabb.min.x || x > inst.aabb.max.x || z < inst.aabb.min.z || z > inst.aabb.max.z) continue;
-      if (probeCeilingY < inst.aabb.min.y) continue; // player below this collider — can't stand on it
-      _ray.origin.set(x, probeCeilingY, z);
-      _ray.direction.set(0, -1, 0);
-      _ray.applyMatrix4(inst.inverse);          // world ray → model space
-      const hit = inst.bvh.raycastFirst(_ray, THREE.DoubleSide);
-      if (hit) {
-        _hitPt.copy(hit.point).applyMatrix4(inst.matrix); // model → world
-        if (best === null || _hitPt.y > best) best = _hitPt.y;
-      }
-    }
-  }
-  return best;
-}
-
 function resolveOne(
   inst: InstanceEntry,
   feetX: number, feetY: number, feetZ: number,
   radius: number, height: number,
 ): boolean {
+  const bvh = bvhByKey.get(inst.key);
+  if (!bvh) return false;
   _segA.set(feetX, feetY + radius, feetZ).applyMatrix4(inst.inverse);
   _seg.start.copy(_segA);
   _seg.end.set(feetX, feetY + Math.max(radius, height - radius), feetZ).applyMatrix4(inst.inverse);
@@ -183,7 +227,7 @@ function resolveOne(
   _lbox.max.addScalar(localRadius);
 
   let hit = false;
-  inst.bvh.shapecast({
+  bvh.shapecast({
     intersectsBounds: (box) => box.intersectsBox(_lbox),
     intersectsTriangle: (tri: ExtendedTriangle) => {
       const dist = tri.closestPointToSegment(_seg, _triPt, _capPt);
@@ -202,8 +246,8 @@ function resolveOne(
   });
 
   if (!hit) return false;
-  _delta.copy(_seg.start).sub(_segA);   // local push delta
+  _delta.copy(_seg.start).sub(_segA);
   _m3.setFromMatrix4(inst.matrix);
-  _delta.applyMatrix3(_m3);             // → world (rotation + scale)
+  _delta.applyMatrix3(_m3);
   return true;
 }

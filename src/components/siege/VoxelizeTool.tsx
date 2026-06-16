@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
 import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides, saveColliderOverrideToDB } from './voxelOverrides';
+import { setModelDecimation } from './meshColliderSystem';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
@@ -84,11 +85,29 @@ export function VoxelizeTool() {
         info(`copied ${colliderOverrides.size} collider override(s) to clipboard`);
         return;
       }
-      // < / > — re-approximate the last voxelized object coarser / finer.
+      // < / > — coarser / finer.
       if (e.key === '<' || e.key === ',' || e.key === '>' || e.key === '.') {
+        const coarser = e.key === '<' || e.key === ',';
+        // If the laser is on a MESH-flagged model, tune its DECIMATION live
+        // (fewer / more polygons). Re-decimates the BVH for all its instances.
+        const pf = (probeState.on && probeState.mesh)
+          ? ((probeState.mesh as THREE.Mesh).userData as { fbx?: string })?.fbx : undefined;
+        const mov = pf ? colliderOverrides.get(pf) : undefined;
+        if (pf && mov?.mesh) {
+          e.preventDefault(); e.stopPropagation();
+          const ratio = THREE.MathUtils.clamp((mov.cell || 1) * (coarser ? 0.6 : 1 / 0.6), 0.01, 1);
+          setColliderOverride(pf, false, ratio, true);
+          void saveColliderOverrideToDB(pf, false, ratio, true);
+          const tris = setModelDecimation(pf, ratio);
+          window.dispatchEvent(new Event('sw-colliders-changed'));
+          info(tris > 0
+            ? `${pf}\nmesh ${Math.round(ratio * 100)}% — ${tris} tris  (< simpler / > finer)`
+            : `${pf}\nmesh ${Math.round(ratio * 100)}% saved — reload to apply, then tune`);
+          return;
+        }
+        // Otherwise re-approximate the last VOXELIZED object coarser / finer.
         const L = last.current; if (!L) return;
         e.preventDefault(); e.stopPropagation();
-        const coarser = e.key === '<' || e.key === ',';
         const cell = THREE.MathUtils.clamp(L.cell * (coarser ? 1.3 : 1 / 1.3), 0.3, 6);
         const n = voxelizeInstance(L.key, L.geo, L.world, cell);
         if (n < 0) { info('mesh too large — press < for coarser'); return; }
