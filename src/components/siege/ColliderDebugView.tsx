@@ -1,12 +1,13 @@
-// Collider debug view. Ctrl OR Cmd + "+"/"=" toggles green collider OUTLINES.
-// Edges only — no solid faces. Each collider draws as a green wireframe drawn on top of the
-// world (depthTest off) so you can see every nearby collider shape and highlight the bad ones
-// with the L laser. Opacity fades with distance: full within 20m, invisible by 100m, so the
-// view declutters as colliders recede. Near-cull + cap keep it light; rebuilt as you move.
+// Collider debug view. Ctrl OR Cmd + "+"/"=" toggles collider OUTLINES.
+// GREEN = box / voxel colliders (the spatial grid). BLUE = true MESH colliders
+// (three-mesh-bvh) — drawn as a blue wireframe of the actual collision mesh so
+// you can tell them apart and confirm a model converted. Drawn on top of the
+// world (depthTest off). Opacity fades with distance; near-cull + cap keep it light.
 import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { forEachMeshInstance } from './meshColliderSystem';
 
 const NEAR = 20, FAR = 100, MAX = 2500;
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -32,6 +33,8 @@ export function ColliderDebugView() {
     while (g.children.length) {
       const c = g.children[0] as THREE.LineSegments;
       g.remove(c);
+      // Dispose the material; box-wire geometry is shared (don't), and mesh-wire
+      // geometry is the collider's own shared geometry (don't dispose either).
       (c.material as THREE.Material).dispose();
     }
   };
@@ -58,6 +61,23 @@ export function ColliderDebugView() {
       g.add(wire);
       if (++n >= MAX) break;
     }
+    // BLUE: true mesh colliders (three-mesh-bvh) — a wireframe of the real
+    // collision mesh at each instance, so you can see/confirm a converted model.
+    const pos = new THREE.Vector3();
+    forEachMeshInstance((geo, matrix) => {
+      if (n >= MAX) return;
+      pos.setFromMatrixPosition(matrix);
+      if (cam.distanceTo(pos) > FAR) return;
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: 0x2277ff, wireframe: true, transparent: true, opacity: 0.7,
+        depthTest: false, depthWrite: false, toneMapped: false,
+      }));
+      matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+      mesh.renderOrder = 999;
+      mesh.userData.center = pos.clone();
+      g.add(mesh);
+      n++;
+    });
     lastBuildPos.current.copy(cam);
   };
 

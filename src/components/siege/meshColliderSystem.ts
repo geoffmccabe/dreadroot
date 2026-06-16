@@ -103,6 +103,13 @@ export function meshColliderStats(): { geometries: number; instances: number } {
   return { geometries: bvhByKey.size, instances: n };
 }
 
+/** Iterate active mesh-collider instances (for the blue debug overlay). */
+export function forEachMeshInstance(cb: (geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) => void): void {
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i++) cb(list[i].bvh.geometry, list[i].matrix);
+  }
+}
+
 /**
  * Resolve the player capsule against nearby mesh colliders. Writes the world-space
  * position correction into `out`; returns true if it pushed. Capsule is vertical:
