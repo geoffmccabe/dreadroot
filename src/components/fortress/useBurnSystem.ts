@@ -25,7 +25,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { FlameColorMode, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
+import type { FlameColorMode, FlameType, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 // Reusable scratch vector for the registry-fallback entity lookup.
@@ -38,7 +38,7 @@ const DEFAULT_DOT_SECONDS = 5;
 // Shrink curve: full → 0.15 over the full burn. Independent of total
 // duration so longer burns shrink more gradually per second.
 const shrinkAt = (currentSec: number, total: number) =>
-  Math.max(0.65, 1 - 0.35 * (currentSec / Math.max(1, total - 1)));
+  Math.max(0.3, 1 - 0.6 * (currentSec / Math.max(1, total - 1)));
 // Damage multipliers: halves each second regardless of total duration.
 const dmgMultAt = (currentSec: number) => Math.pow(0.5, currentSec);
 const ACTIVE_TO_DOT_DELAY = 0.15; // seconds after last hit before DOT begins
@@ -135,6 +135,9 @@ interface BurnEntry {
    *  flame point). Cached on the burn so the frame loop never has to
    *  re-query FLAME_LAYOUTS or the registry per-tick. */
   layout: FlamePoint[];
+  /** Particle style. Bullet hit-point burns use 'hex' (a dense 7-fire cluster)
+   *  so they match the chunky impact fire; body/engulf burns use 'point'. */
+  flameType?: FlameType;
 }
 
 interface UseBurnSystemOptions {
@@ -168,7 +171,7 @@ export function useBurnSystem({
       }
       const pt = entry.layout[0];
       entry.flameIds[0] = renderer.spawnFlame({
-        type: 'point',
+        type: entry.flameType ?? 'point',
         position: basePos,
         colors: entry.colors,
         size: pt.size * shrinkMult,
@@ -196,7 +199,7 @@ export function useBurnSystem({
           basePos.z + (pt.zOffset ?? 0) + sz,
         );
         entry.flameIds[i] = renderer.spawnFlame({
-          type: 'point',
+          type: entry.flameType ?? 'point',
           position: _offsetPos,
           colors: entry.colors,
           size: pt.size * shrinkMult,
@@ -274,7 +277,7 @@ export function useBurnSystem({
     armor: number,
     hitPosition?: THREE.Vector3,
     burnSeconds?: number,
-    opts?: { engulf?: boolean; size?: number; height?: number; sided?: boolean },
+    opts?: { engulf?: boolean; size?: number; height?: number; sided?: boolean; flameType?: FlameType },
   ) => {
     // engulf=true → fire wraps the body (flamethrower / explosion splash).
     // engulf=false → ONE lasting flame at the exact hit point that tracks that
@@ -371,7 +374,7 @@ export function useBurnSystem({
     let engulf = false;
     let layout: FlamePoint[] | undefined;
     if (!engulfMode && hitOff) {
-      layout = [{ yOffset: 0, size: opts?.size ?? 0.8, height: opts?.height ?? 1.2, particles: 26 }];
+      layout = [{ yOffset: 0, size: opts?.size ?? 0.8, height: opts?.height ?? 1.2, particles: 34 }];
     } else {
       layout = FLAME_LAYOUTS[entityType as keyof typeof FLAME_LAYOUTS];
       if (!layout) {
@@ -427,6 +430,9 @@ export function useBurnSystem({
       deathPos: entityPos.clone(),
       dotSeconds,
       layout,
+      // Hit-point (bullet) burns use the chunky 7-fire 'hex' cluster so the ONE
+      // lasting fire looks like the impact from frame 0; body/engulf use 'point'.
+      flameType: opts?.flameType ?? (engulfMode ? 'point' : 'hex'),
     };
 
     spawnBurnFlames(entry, 1.0, (!engulf && hitOff)
