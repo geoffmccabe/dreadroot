@@ -205,6 +205,14 @@ export function forEachMeshInstance(cb: (geometry: THREE.BufferGeometry, matrix:
   }
 }
 
+/** World AABB of each mesh-collider instance — for a reliable box-wireframe debug
+ *  (same method as the green box overlay, just blue). */
+export function forEachMeshInstanceBox(cb: (aabb: THREE.Box3) => void): void {
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i++) cb(list[i].aabb);
+  }
+}
+
 /** Highest mesh-collider surface at (x,z), or null — feeds the ground system so
  *  the player stands ON mountains with correct gravity/jump (same path as terrain). */
 export function meshGroundHeight(x: number, z: number): number | null {

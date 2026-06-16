@@ -206,8 +206,9 @@ export function VoxelizeTool() {
       if (ov?.mesh) {
         const tris = meshModelTriCount(fbx);
         const inst = meshModelInstanceCount(fbx);
+        const mode = (ov.cell || 1) <= 0.05 ? 'convex hull (simplest)' : `${Math.round((ov.cell || 1) * 100)}%`;
         state = inst > 0
-          ? `MESH — ${tris} polys @ ${Math.round((ov.cell || 1) * 100)}%, ${inst} copies\n<  simpler  /  >  finer`
+          ? `MESH [${mode}] — ${tris} polys, ${inst} copies\n<  simpler  /  >  finer (press > to leave hull)`
           : `MESH (reload to apply)\n<  simpler  /  >  finer`;
       } else if (ov?.voxel) {
         state = `VOXEL boxes @ ${(ov.cell || 1).toFixed(2)}m`;

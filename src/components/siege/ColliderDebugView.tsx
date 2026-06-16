@@ -8,13 +8,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { forEachMeshInstance } from './meshColliderSystem';
+import { forEachMeshInstanceBox } from './meshColliderSystem';
 import { colliderDebugStats } from './colliderDebugStats';
 
 const NEAR = 20, FAR = 100, MAX = 2500;
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const edgeGeo = new THREE.EdgesGeometry(boxGeo);
-const _wbox = new THREE.Box3();
 
 export function ColliderDebugView() {
   const [on, setOn] = useState(false);
@@ -69,36 +68,31 @@ export function ColliderDebugView() {
         }
       }
       const greenCount = n;
-      // BLUE: true mesh colliders — a wireframe of the real collision mesh.
-      const pos = new THREE.Vector3();
-      let meshTris = 0;
+      // BLUE: mesh colliders shown the SAME reliable way as the green boxes — a
+      // box wireframe at each instance's world bounds, just blue. (The actual
+      // collider is the mesh BVH; this is its bounding box.)
+      const c2 = new THREE.Vector3(), s2 = new THREE.Vector3();
       let blueCount = 0;
-      const MESH_TRI_BUDGET = 40000; // cap wireframe overdraw so a dense mesh can't hang the GPU
-      forEachMeshInstance((geo, matrix) => {
-        if (n >= MAX || meshTris >= MESH_TRI_BUDGET) return;
-        if (!geo.boundingBox) geo.computeBoundingBox();
-        _wbox.copy(geo.boundingBox as THREE.Box3).applyMatrix4(matrix);
-        if (_wbox.distanceToPoint(cam) > FAR) return; // AABB distance = 0 when inside the mesh
-        pos.setFromMatrixPosition(matrix);
-        meshTris += (geo.index ? geo.index.count : geo.getAttribute('position').count) / 3;
-        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-          color: 0x2277ff, wireframe: true, transparent: true, opacity: 0.7,
-          depthTest: false, depthWrite: false, toneMapped: false,
+      forEachMeshInstanceBox((aabb) => {
+        if (n >= MAX) return;
+        aabb.getCenter(c2);
+        if (cam.distanceTo(c2) > FAR) return;
+        aabb.getSize(s2);
+        const wire = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({
+          color: 0x33aaff, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false,
+          toneMapped: false,
         }));
-        matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
-        mesh.renderOrder = 999;
-        mesh.frustumCulled = false;
-        mesh.userData.center = pos.clone();
-        mesh.userData.mc = true;
-        g.add(mesh);
+        wire.position.copy(c2); wire.scale.copy(s2); wire.renderOrder = 999;
+        wire.userData.center = c2.clone();
+        g.add(wire);
         blueCount++;
-        n++;
+        if (++n >= MAX) return;
       });
       lastBuildPos.current.copy(cam);
       colliderDebugStats.on = true;
       colliderDebugStats.green = greenCount;
       colliderDebugStats.blue = blueCount;
-      colliderDebugStats.tris = Math.round(meshTris);
+      colliderDebugStats.tris = 0;
     } catch (err) {
       console.warn('[ColliderDebug] rebuild skipped:', err);
     }
