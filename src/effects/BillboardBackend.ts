@@ -4,9 +4,14 @@
 // seed ONCE; the shader computes rise / flutter / size / fade from a clock every
 // frame. Live puffs cost ~0 CPU and zero per-frame GC.
 //
-// One pool (one draw call) per recipe. Each pool is a pre-allocated ring buffer
-// of SOA Float32Arrays backing InstancedBufferAttributes. No per-frame
-// allocation anywhere in the hot path; module-level scratch only.
+// Each recipe drives up to TWO pools (one draw call each):
+//   • body   — many small soft puffs (the smoke volume)
+//   • spiral — a sparser, larger spinning inward-spiral laid on top, slightly
+//              lighter, fading with the smoke (toggle add-on).
+// Pools are pre-allocated SOA Float32Array ring buffers. No per-frame allocation
+// in the hot path; module-level scratch only. Spawns are interpolated along the
+// emitter's motion each frame so a fast mover (e.g. a grenade-launched enemy)
+// leaves an EVEN trail instead of a few clustered puffs.
 
 import * as THREE from 'three';
 import type { EffectRecipe, EffectEmitter } from './types';
@@ -15,8 +20,8 @@ import { getRecipe } from './recipes';
 const TWO_PI = 6.2831853;
 const _p = new THREE.Vector3(); // scratch for emitter getPos — never allocate in tick
 
-// Stateless puff sim. center(age) is a closed-form function of birth+seed, so
-// nothing is stored between frames. Dead/unborn puffs collapse off-screen (~free).
+type Variant = 'body' | 'spiral';
+
 const VERT = /* glsl */ `
   attribute vec3 aSpawn;
   attribute float aBirth;
@@ -25,17 +30,22 @@ const VERT = /* glsl */ `
   uniform float uTime, uLifetime, uRise, uGravity, uSize0, uSize1, uSpin;
   uniform float uFlutterAmp, uFlutterFreq, uSpread;
   uniform float uCullDist, uFadeStart, uFadeEnd;
+  uniform float uSpinMin, uSpinMax;
   uniform vec2 uWind;
 
   varying vec2 vUv;
   varying float vLife;
   varying float vFade;
+  varying float vSpin;       // spiral angular speed (rad/s), per-puff random
+  varying float vSpinPhase;  // spiral start phase, per-puff random
 
   void main() {
     float age = uTime - aBirth;
     float life = age / uLifetime;        // 0..1
     vLife = life;
     vUv = uv;
+    vSpin = mix(uSpinMin, uSpinMax, aSeed.x);
+    vSpinPhase = aSeed.y * ${TWO_PI};
     if (life < 0.0 || life >= 1.0) {     // dead/unborn -> clip offscreen
       gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       return;
@@ -71,28 +81,56 @@ const VERT = /* glsl */ `
 
 const FRAG = /* glsl */ `
   precision mediump float;
+  uniform float uTime;
   uniform vec3 uColor0, uColor1;
   uniform float uOpacity0, uOpacity1;
+  uniform float uCircleStrength;             // 1 = body soft circle, 0 = spiral-only
+  uniform float uSpiral, uSpiralLighten, uSpiralTurns;
 
   varying vec2 vUv;
   varying float vLife;
   varying float vFade;
+  varying float vSpin;
+  varying float vSpinPhase;
 
   void main() {
-    // Soft round falloff (asset-free Phase 1 — no texture dependency).
-    float r = length(vUv - 0.5);
-    float soft = 1.0 - smoothstep(0.32, 0.5, r);
-    // Smooth fade-in over first 12%, fade-out over last 35%.
     float fadeIn = smoothstep(0.0, 0.12, vLife);
-    float fadeOut = 1.0 - smoothstep(0.65, 1.0, vLife);
-    float a = mix(uOpacity0, uOpacity1, vLife) * fadeIn * fadeOut * vFade * soft;
-    if (a < 0.003) discard;
+    float fadeOut = 1.0 - smoothstep(0.6, 1.0, vLife);
+    float lifeFade = fadeIn * fadeOut * vFade;
+    float baseOp = mix(uOpacity0, uOpacity1, vLife);
     vec3 col = mix(uColor0, uColor1, vLife);
+
+    // Soft round body.
+    float r = length(vUv - 0.5);
+    float soft = 1.0 - smoothstep(0.30, 0.5, r);
+    float a = uCircleStrength * baseOp * soft * lifeFade;
+
+    // Spinning inward spiral (always spinning via uTime; fades with the puff).
+    if (uSpiral > 0.5) {
+      vec2 q = vUv - 0.5;
+      float rr = length(q) * 2.0;          // 0 at center, 1 at edge
+      if (rr < 1.0) {
+        float ang = atan(q.y, q.x) / ${TWO_PI};   // -0.5..0.5
+        float rot = uTime * vSpin + vSpinPhase;
+        float s = ang - rr * uSpiralTurns + rot;   // winds inward over uSpiralTurns
+        float f = fract(s);
+        float arm = 1.0 - smoothstep(0.0, 0.16, min(f, 1.0 - f));
+        float win = smoothstep(0.0, 0.12, rr) * (1.0 - smoothstep(0.65, 1.0, rr));
+        float spiralA = arm * win;
+        vec3 lighter = min(col + vec3(uSpiralLighten), vec3(1.0));
+        col = mix(col, lighter, spiralA);
+        a = max(a, spiralA * baseOp * lifeFade);
+      }
+    }
+
+    if (a < 0.003) discard;
     gl_FragColor = vec4(col, a);
   }
 `;
 
 interface Pool {
+  key: string;
+  variant: Variant;
   recipe: EffectRecipe;
   mesh: THREE.Mesh;
   material: THREE.ShaderMaterial;
@@ -113,6 +151,11 @@ interface EmitterRec {
   recipe: EffectRecipe;
   getPos: (out: THREE.Vector3) => boolean;
   acc: number;
+  accSpiral: number;
+  lastX: number;
+  lastY: number;
+  lastZ: number;
+  hasLast: boolean;
   importance: number;
 }
 
@@ -140,7 +183,6 @@ export class BillboardBackend {
     this.qScale = opts.quality;
   }
 
-  /** The Object3D to add to the scene graph. */
   get object3D(): THREE.Object3D {
     return this.group;
   }
@@ -149,8 +191,43 @@ export class BillboardBackend {
     this.qScale = scale;
   }
 
-  private buildPool(recipe: EffectRecipe): Pool {
-    const cap = recipe.maxInstances ?? this.capPerRecipe;
+  private poolKey(code: string, variant: Variant): string {
+    return variant === 'spiral' ? `${code}#spiral` : code;
+  }
+
+  private applyUniforms(u: Record<string, THREE.IUniform>, recipe: EffectRecipe, variant: Variant): void {
+    const isSpiral = variant === 'spiral';
+    const spinMaxSec = recipe.spiralSpinMaxSec ?? 1.0;
+    const spinMinSec = recipe.spiralSpinMinSec ?? 0.5;
+    u.uLifetime.value = recipe.lifetime;
+    u.uRise.value = recipe.rise;
+    u.uGravity.value = recipe.gravity;
+    u.uSize0.value = isSpiral ? (recipe.spiralSize0 ?? 0.4) : recipe.size0;
+    u.uSize1.value = isSpiral ? (recipe.spiralSize1 ?? 1.1) : recipe.size1;
+    u.uSpin.value = isSpiral ? 0 : recipe.spin; // spiral spins in-shader, not the quad
+    u.uFlutterAmp.value = recipe.flutterAmp;
+    u.uFlutterFreq.value = recipe.flutterFreq;
+    u.uSpread.value = recipe.spread;
+    (u.uWind.value as THREE.Vector2).set(recipe.wind[0], recipe.wind[1]);
+    u.uCullDist.value = recipe.cullDistance;
+    u.uFadeStart.value = recipe.fadeStart;
+    u.uFadeEnd.value = recipe.fadeEnd;
+    (u.uColor0.value as THREE.Color).set(recipe.color0);
+    (u.uColor1.value as THREE.Color).set(recipe.color1);
+    u.uOpacity0.value = isSpiral ? (recipe.spiralOpacity ?? 0.5) : recipe.opacity0;
+    u.uOpacity1.value = 0.0;
+    u.uCircleStrength.value = isSpiral ? 0.0 : 1.0;
+    u.uSpiral.value = isSpiral ? 1.0 : 0.0;
+    u.uSpiralLighten.value = recipe.spiralLighten ?? 0.22;
+    u.uSpiralTurns.value = recipe.spiralTurns ?? 2;
+    u.uSpinMin.value = TWO_PI / spinMaxSec; // slow end (rad/s)
+    u.uSpinMax.value = TWO_PI / spinMinSec; // fast end (rad/s)
+  }
+
+  private buildPool(recipe: EffectRecipe, variant: Variant): Pool {
+    const cap = variant === 'spiral'
+      ? Math.min(1200, recipe.maxInstances ?? this.capPerRecipe)
+      : (recipe.maxInstances ?? this.capPerRecipe);
     const base = new THREE.PlaneGeometry(1, 1);
     const geo = new THREE.InstancedBufferGeometry();
     geo.index = base.index;
@@ -170,27 +247,23 @@ export class BillboardBackend {
     geo.setAttribute('aSeed', aSeed);
     geo.instanceCount = cap;
 
+    const u: Record<string, THREE.IUniform> = {
+      uTime: { value: 0 },
+      uLifetime: { value: 1 }, uRise: { value: 0 }, uGravity: { value: 0 },
+      uSize0: { value: 0.1 }, uSize1: { value: 1 }, uSpin: { value: 0 },
+      uFlutterAmp: { value: 0 }, uFlutterFreq: { value: 1 }, uSpread: { value: 0 },
+      uWind: { value: new THREE.Vector2() },
+      uCullDist: { value: 100 }, uFadeStart: { value: 80 }, uFadeEnd: { value: 100 },
+      uColor0: { value: new THREE.Color() }, uColor1: { value: new THREE.Color() },
+      uOpacity0: { value: 0.5 }, uOpacity1: { value: 0 },
+      uCircleStrength: { value: 1 },
+      uSpiral: { value: 0 }, uSpiralLighten: { value: 0.22 }, uSpiralTurns: { value: 2 },
+      uSpinMin: { value: TWO_PI }, uSpinMax: { value: 2 * TWO_PI },
+    };
+    this.applyUniforms(u, recipe, variant);
+
     const material = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uLifetime: { value: recipe.lifetime },
-        uRise: { value: recipe.rise },
-        uGravity: { value: recipe.gravity },
-        uSize0: { value: recipe.size0 },
-        uSize1: { value: recipe.size1 },
-        uSpin: { value: recipe.spin },
-        uFlutterAmp: { value: recipe.flutterAmp },
-        uFlutterFreq: { value: recipe.flutterFreq },
-        uSpread: { value: recipe.spread },
-        uWind: { value: new THREE.Vector2(recipe.wind[0], recipe.wind[1]) },
-        uCullDist: { value: recipe.cullDistance },
-        uFadeStart: { value: recipe.fadeStart },
-        uFadeEnd: { value: recipe.fadeEnd },
-        uColor0: { value: new THREE.Color(recipe.color0) },
-        uColor1: { value: new THREE.Color(recipe.color1) },
-        uOpacity0: { value: recipe.opacity0 },
-        uOpacity1: { value: recipe.opacity1 },
-      },
+      uniforms: u,
       vertexShader: VERT,
       fragmentShader: FRAG,
       transparent: true,
@@ -200,20 +273,39 @@ export class BillboardBackend {
     });
 
     const mesh = new THREE.Mesh(geo, material);
-    mesh.frustumCulled = false; // we cull per-puff in the shader + emit-side
-    mesh.renderOrder = 996; // under the fire renderer (999) so fire draws on top
+    mesh.frustumCulled = false;
+    mesh.renderOrder = variant === 'spiral' ? 997 : 996; // spiral over body, both under fire(999)
     this.group.add(mesh);
 
-    return { recipe, mesh, material, spawn, birth, seed, aSpawn, aBirth, aSeed, cap, cursor: 0, dirty: false };
+    return {
+      key: this.poolKey(recipe.code, variant), variant, recipe, mesh, material,
+      spawn, birth, seed, aSpawn, aBirth, aSeed, cap, cursor: 0, dirty: false,
+    };
   }
 
-  private ensurePool(recipe: EffectRecipe): Pool {
-    let pool = this.pools.get(recipe.code);
+  private ensurePool(recipe: EffectRecipe, variant: Variant): Pool {
+    const key = this.poolKey(recipe.code, variant);
+    let pool = this.pools.get(key);
     if (!pool) {
-      pool = this.buildPool(recipe);
-      this.pools.set(recipe.code, pool);
+      pool = this.buildPool(recipe, variant);
+      this.pools.set(key, pool);
     }
     return pool;
+  }
+
+  /** Live-update an already-built pool's uniforms (admin preview). */
+  updateRecipe(recipe: EffectRecipe): void {
+    for (const variant of ['body', 'spiral'] as Variant[]) {
+      const pool = this.pools.get(this.poolKey(recipe.code, variant));
+      if (!pool) continue;
+      this.applyUniforms(pool.material.uniforms, recipe, variant);
+      const blend = recipe.blend === 'additive' ? THREE.AdditiveBlending : THREE.NormalBlending;
+      if (pool.material.blending !== blend) {
+        pool.material.blending = blend;
+        pool.material.needsUpdate = true;
+      }
+      pool.recipe = recipe;
+    }
   }
 
   private spawn(pool: Pool, x: number, y: number, z: number, now: number): void {
@@ -231,13 +323,19 @@ export class BillboardBackend {
 
   emitPuff(code: string, pos: THREE.Vector3): void {
     const now = performance.now() / 1000;
-    this.spawn(this.ensurePool(getRecipe(code)), pos.x, pos.y, pos.z, now);
+    this.spawn(this.ensurePool(getRecipe(code), 'body'), pos.x, pos.y, pos.z, now);
   }
 
   emitBurst(code: string, pos: THREE.Vector3, count: number): void {
     const now = performance.now() / 1000;
-    const pool = this.ensurePool(getRecipe(code));
-    for (let i = 0; i < count; i++) this.spawn(pool, pos.x, pos.y, pos.z, now);
+    const recipe = getRecipe(code);
+    const body = this.ensurePool(recipe, 'body');
+    for (let i = 0; i < count; i++) this.spawn(body, pos.x, pos.y, pos.z, now);
+    if (recipe.spiral) {
+      const sp = this.ensurePool(recipe, 'spiral');
+      const sc = Math.max(1, Math.round(count * 0.15));
+      for (let i = 0; i < sc; i++) this.spawn(sp, pos.x, pos.y, pos.z, now);
+    }
   }
 
   createEmitter(
@@ -245,8 +343,6 @@ export class BillboardBackend {
     getPos: (out: THREE.Vector3) => boolean,
     importance = 0.3,
   ): EffectEmitter {
-    // Significance eviction: if at the emitter cap, drop the lowest-importance
-    // active emitter (only if it's no more important than the newcomer).
     let activeCount = 0;
     for (let i = 0; i < this.emitters.length; i++) if (this.emitters[i].active) activeCount++;
     if (activeCount >= this.maxEmitters) {
@@ -260,13 +356,16 @@ export class BillboardBackend {
         lo.getPos = NOOP_GETPOS;
         this.free.push(lo);
       } else {
-        return NOOP_EMITTER; // can't place; drop silently (visual-only)
+        return NOOP_EMITTER;
       }
     }
 
     let rec = this.free.pop();
     if (!rec) {
-      rec = { active: false, gen: 0, recipe: getRecipe(code), getPos: NOOP_GETPOS, acc: 0, importance };
+      rec = {
+        active: false, gen: 0, recipe: getRecipe(code), getPos: NOOP_GETPOS,
+        acc: 0, accSpiral: 0, lastX: 0, lastY: 0, lastZ: 0, hasLast: false, importance,
+      };
       this.emitters.push(rec);
     }
     rec.active = true;
@@ -274,6 +373,8 @@ export class BillboardBackend {
     rec.recipe = getRecipe(code);
     rec.getPos = getPos;
     rec.acc = 0;
+    rec.accSpiral = 0;
+    rec.hasLast = false;
     rec.importance = importance;
 
     const myGen = rec.gen;
@@ -289,32 +390,55 @@ export class BillboardBackend {
     };
   }
 
-  /** Per-frame: advance emitters (emit-side cull) + bump clock + upload dirty. */
   tick(dt: number, camX: number, camZ: number): void {
     const now = performance.now() / 1000;
 
     for (let k = 0; k < this.emitters.length; k++) {
       const e = this.emitters[k];
       if (!e.active) continue;
-      if (!e.getPos(_p)) continue; // source momentarily gone — skip this frame
+      if (!e.getPos(_p)) continue;
 
-      const cull = e.recipe.cullDistance;
+      const recipe = e.recipe;
+      const cull = recipe.cullDistance;
       const dx = _p.x - camX;
       const dz = _p.z - camZ;
       if (dx * dx + dz * dz > cull * cull) {
-        if (e.acc > 1) e.acc = 1; // don't bank spawns while culled
+        if (e.acc > 1) e.acc = 1;
+        if (e.accSpiral > 1) e.accSpiral = 1;
+        e.lastX = _p.x; e.lastY = _p.y; e.lastZ = _p.z; e.hasLast = true;
         continue;
       }
+      if (!e.hasLast) { e.lastX = _p.x; e.lastY = _p.y; e.lastZ = _p.z; e.hasLast = true; }
 
-      e.acc += dt * e.recipe.spawnRate * this.qScale;
-      const pool = this.ensurePool(e.recipe);
-      let guard = 0;
-      while (e.acc >= 1 && guard < 8) {
-        e.acc -= 1;
-        this.spawn(pool, _p.x, _p.y, _p.z, now);
-        guard++;
+      // Body: interpolate spawns along last->current so a fast mover trails evenly.
+      e.acc += dt * recipe.spawnRate * this.qScale;
+      let n = 0;
+      while (e.acc >= 1 && n < 48) { e.acc -= 1; n++; }
+      if (e.acc > 3) e.acc = 3;
+      if (n > 0) {
+        const body = this.ensurePool(recipe, 'body');
+        for (let i = 0; i < n; i++) {
+          const t = (i + 1) / n;
+          this.spawn(body, e.lastX + (_p.x - e.lastX) * t, e.lastY + (_p.y - e.lastY) * t, e.lastZ + (_p.z - e.lastZ) * t, now);
+        }
       }
-      if (e.acc > 2) e.acc = 2;
+
+      // Spiral: sparser layer, same interpolation.
+      if (recipe.spiral) {
+        e.accSpiral += dt * (recipe.spiralRate ?? 8) * this.qScale;
+        let m = 0;
+        while (e.accSpiral >= 1 && m < 12) { e.accSpiral -= 1; m++; }
+        if (e.accSpiral > 2) e.accSpiral = 2;
+        if (m > 0) {
+          const sp = this.ensurePool(recipe, 'spiral');
+          for (let i = 0; i < m; i++) {
+            const t = (i + 1) / m;
+            this.spawn(sp, e.lastX + (_p.x - e.lastX) * t, e.lastY + (_p.y - e.lastY) * t, e.lastZ + (_p.z - e.lastZ) * t, now);
+          }
+        }
+      }
+
+      e.lastX = _p.x; e.lastY = _p.y; e.lastZ = _p.z;
     }
 
     for (const pool of this.pools.values()) {

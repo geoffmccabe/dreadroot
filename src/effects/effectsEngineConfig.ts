@@ -17,7 +17,10 @@ export interface EffectsEngineConfig {
 }
 
 const DEFAULT: EffectsEngineConfig = {
-  maxInstancesPerRecipe: 1200,
+  // Raised for the dense small-puff smoke (~60/s × 3s × several burns). Quads
+  // are vertex-animated + mostly discarded, so the cost is fill (overdraw), not
+  // count — small puffs keep overdraw down. Quality tier scales this on mobile.
+  maxInstancesPerRecipe: 4000,
   maxEmitters: 64,
   qualityScale: { low: 0.5, med: 0.8, high: 1.0 },
   defaultQuality: 'med',

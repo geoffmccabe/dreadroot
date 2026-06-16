@@ -58,6 +58,26 @@ export interface EffectRecipe {
   importance: number;
   /** Optional per-recipe instance cap override (else engine default). */
   maxInstances?: number;
+
+  // ── Spiral add-on (toggle layer) ──
+  // A second, sparser layer of larger spinning inward-spirals laid on top of the
+  // soft puffs, slightly lighter than the base grey, fading with the smoke.
+  /** Enable the spiral layer. */
+  spiral?: boolean;
+  /** Spirals/sec (sparser than the body puffs). */
+  spiralRate?: number;
+  /** Spiral puff start/end size (m) — bigger than body puffs so the spiral reads. */
+  spiralSize0?: number;
+  spiralSize1?: number;
+  /** Peak spiral opacity (fades to 0 with life). */
+  spiralOpacity?: number;
+  /** How much lighter than the base grey the spiral arm is (0..1 added). */
+  spiralLighten?: number;
+  /** Number of revolutions the spiral winds inward. */
+  spiralTurns?: number;
+  /** Spin period range (seconds per revolution), randomized per spiral. */
+  spiralSpinMinSec?: number;
+  spiralSpinMaxSec?: number;
 }
 
 /** Handle to a running continuous emitter (e.g. attached to a burning enemy). */
@@ -81,4 +101,10 @@ export interface EffectsHandle {
   ): EffectEmitter;
   /** Global quality tier (caps + spawn-rate scale). */
   setQuality(q: QualityTier): void;
+  /** Live-update an already-running pool's look from an edited recipe (admin
+   *  panel preview). No-op if that recipe has no live pool yet. */
+  updateRecipe(recipe: EffectRecipe): void;
+  /** Show/hide a live preview cloud in front of the camera (admin panel). Pass a
+   *  recipe to show + live-edit it, or null to stop the preview. */
+  setPreview(recipe: EffectRecipe | null): void;
 }

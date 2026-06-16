@@ -12,8 +12,11 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BillboardBackend } from './BillboardBackend';
 import { getEffectsConfig } from './effectsEngineConfig';
+import { registerRecipe } from './recipes';
 import { GAME_ID } from '@/config/game';
-import type { EffectsHandle, QualityTier } from './types';
+import type { EffectsHandle, QualityTier, EffectEmitter } from './types';
+
+const PREVIEW_CODE = '__preview';
 
 export const EffectsRoot = forwardRef<EffectsHandle>((_, ref) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -27,6 +30,11 @@ export const EffectsRoot = forwardRef<EffectsHandle>((_, ref) => {
     });
     return { backend, cfg };
   }, []);
+
+  // Live admin preview state (a cloud floating in front of the camera).
+  const preview = useRef({ active: false, emitter: null as EffectEmitter | null });
+  const previewPos = useMemo(() => new THREE.Vector3(), []);
+  const dir = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
     const g = groupRef.current;
@@ -45,12 +53,39 @@ export const EffectsRoot = forwardRef<EffectsHandle>((_, ref) => {
       emitBurst: (code, pos, n) => backend.emitBurst(code, pos, n),
       createEmitter: (code, getPos, importance) => backend.createEmitter(code, getPos, importance),
       setQuality: (q: QualityTier) => backend.setQuality(cfg.qualityScale[q]),
+      updateRecipe: (recipe) => backend.updateRecipe(recipe),
+      setPreview: (recipe) => {
+        if (!recipe) {
+          preview.current.active = false;
+          return;
+        }
+        const pr = { ...recipe, code: PREVIEW_CODE };
+        registerRecipe(pr);
+        backend.updateRecipe(pr); // live-update the pool if it already exists
+        preview.current.active = true;
+        if (!preview.current.emitter) {
+          preview.current.emitter = backend.createEmitter(
+            PREVIEW_CODE,
+            (out) => {
+              if (!preview.current.active) return false;
+              out.copy(previewPos);
+              return true;
+            },
+            1.0,
+          );
+        }
+      },
     }),
-    [backend, cfg],
+    [backend, cfg, previewPos],
   );
 
   useFrame((state, dt) => {
     const cam = state.camera;
+    if (preview.current.active) {
+      cam.getWorldDirection(dir);
+      previewPos.copy(cam.position).addScaledVector(dir, 4);
+      previewPos.y -= 0.4; // a touch below eye-line so it reads as a cloud ahead
+    }
     backend.tick(Math.min(dt, 0.05), cam.position.x, cam.position.z);
   });
 
