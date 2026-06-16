@@ -35,7 +35,9 @@ let enabled = false;
 // Ceiling for the ground raycast: the player's reachable step height. Updated each
 // frame by MeshColliderPlayer so the ground probe only finds surfaces the player
 // can actually step onto — never snaps them up the side of a tall wall/cliff.
-let probeCeilingY = 4000;
+// Starts inert (-Infinity): meshGroundHeight returns null until the player frame
+// sets the real ceiling, so frame-1 near a mesh can't snap the player to a peak.
+let probeCeilingY = -Infinity;
 export function setPlayerProbeY(y: number): void { probeCeilingY = y; }
 
 // Scratch — never allocate in the per-frame resolve.
@@ -62,7 +64,9 @@ export function registerMeshGeometry(key: string, geometry: THREE.BufferGeometry
   let bvh = bvhByKey.get(key);
   if (bvh) return bvh;
   try {
-    bvh = new MeshBVH(geometry.index ? geometry : geometry.toNonIndexed());
+    // MeshBVH handles indexed (glTF default) and non-indexed geometry; building
+    // the tree only reorders the index, which doesn't affect rendering.
+    bvh = new MeshBVH(geometry);
     bvhByKey.set(key, bvh);
     return bvh;
   } catch { return null; }

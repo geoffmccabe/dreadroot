@@ -27,9 +27,12 @@ export function MeshColliderPlayer() {
     // them on surfaces they can reach, never the top of a tall wall).
     setPlayerProbeY(feetY + STEP_UP);
     if (resolvePlayerMeshCollision(camera.position.x, feetY, camera.position.z, PLAYER_RADIUS, PLAYER_HEIGHT, corr)) {
-      if (corr.lengthSq() <= MAX_PUSH * MAX_PUSH) {
+      // HORIZONTAL only — vertical (standing on tops/slopes) is handled by the
+      // ground-height clamp, which also zeroes velocity + sets onGround. Pushing
+      // vertically here too would fight it and jitter. This pass is for walls.
+      corr.y = 0;
+      if (corr.lengthSq() <= MAX_PUSH * MAX_PUSH && corr.lengthSq() > 1e-8) {
         camera.position.x += corr.x;
-        camera.position.y += corr.y;
         camera.position.z += corr.z;
       }
     }
