@@ -8,7 +8,7 @@
 //
 // Hidden in first person; INSPECT view (Ctrl/Cmd+V) freezes + shows it 3m ahead so you can walk
 // around it. A top dropdown switches character.
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -71,7 +71,16 @@ function CharacterRig({ selected }: { selected: string }) {
   const camera = useThree((s) => s.camera);
   const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb`);
   const group = useRef<THREE.Group>(null);   // mixer root + world placement (scale lives here)
-  const { actions, names } = useAnimations(animations, group);
+  // The converted clips carry translation + ROTATION + scale tracks on every one of the 49 bones.
+  // The baked per-bone translation/scale values stretch the mesh grotesquely. Keep ONLY the
+  // rotation (quaternion) tracks + the Hips translation (for natural hip motion) — bones then hold
+  // their bind lengths and just rotate at the joints, which is how humanoid animation should work.
+  const cleanAnims = useMemo(() => animations.map((clip) => {
+    const c = clip.clone();
+    c.tracks = c.tracks.filter((t) => /\.quaternion$/.test(t.name) || /^Hips\.position$/.test(t.name));
+    return c;
+  }), [animations]);
+  const { actions, names } = useAnimations(cleanAnims, group);
   const [scale, feetY, rot] = LINEUP[selected] ?? [1, 0, 1];
 
   const desired = useRef('');
