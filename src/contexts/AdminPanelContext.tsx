@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useMemo, ReactNode } from 'react';
 import type { FlameDemoHandle } from '@/components/fortress/FlameDemoSpawner';
+import type { EffectsHandle } from '@/effects/types';
 
 type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'npcs' | 'items' | 'effects' | 'migrate';
 
@@ -22,6 +23,9 @@ interface AdminPanelContextType {
   closePanel: () => void;
   setActiveTab: (tab: AdminTab) => void;
   flameDemoRef: React.MutableRefObject<FlameDemoHandle | null>;
+  /** Universal effects renderer handle — shared by the in-scene EffectsRoot and
+   *  the Admin Smoke/VFX panel (for live preview + authoring). */
+  effectsRef: React.MutableRefObject<EffectsHandle | null>;
   fruitVisibility: boolean;
   setFruitVisibility: (v: boolean) => void;
 }
@@ -32,6 +36,7 @@ export const AdminPanelProvider: React.FC<{ children: ReactNode }> = ({ children
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>('coins');
   const flameDemoRef = useRef<FlameDemoHandle | null>(null);
+  const effectsRef = useRef<EffectsHandle | null>(null);
   const [fruitVisibility, setFruitVisibility] = useState(true);
 
   const openPanel = useCallback((tab: AdminTab = 'coins') => {
@@ -48,7 +53,7 @@ export const AdminPanelProvider: React.FC<{ children: ReactNode }> = ({ children
   }, []);
 
   const value = useMemo(() => ({
-    isOpen, activeTab, openPanel, closePanel, setActiveTab, flameDemoRef, fruitVisibility, setFruitVisibility,
+    isOpen, activeTab, openPanel, closePanel, setActiveTab, flameDemoRef, effectsRef, fruitVisibility, setFruitVisibility,
   }), [isOpen, activeTab, openPanel, closePanel, fruitVisibility]);
 
   return (

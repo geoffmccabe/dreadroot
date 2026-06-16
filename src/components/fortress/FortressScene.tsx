@@ -50,7 +50,6 @@ import { Bullets, BulletsHandle } from './FortressBullets';
 import { BulletImpacts, BulletImpactsHandle } from './FortressImpacts';
 import { UniversalFlameRenderer, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
 import { EffectsRoot } from '@/effects/EffectsRoot';
-import type { EffectsHandle } from '@/effects/types';
 import { FlameDemoSpawner } from './FlameDemoSpawner';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { NebulaImpacts, NebulaImpactsHandle } from './FortressNebulaImpacts';
@@ -1071,8 +1070,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const tracersRef = useRef<TracersHandle>(null);
   const jetBoostFXRef = useRef<JetBoostFXHandle>(null);
   const universalFlameRef = useRef<UniversalFlameRendererHandle>(null);
-  const effectsRef = useRef<EffectsHandle>(null);
-  const { flameDemoRef, fruitVisibility } = useAdminPanel();
+  const { flameDemoRef, effectsRef, fruitVisibility } = useAdminPanel();
 
   // Grenade system. Owns live grenades + their physics; explosion VFX
   // routes through universalFlameRef. The throw flow goes:

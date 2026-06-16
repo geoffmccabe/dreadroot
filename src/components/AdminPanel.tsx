@@ -48,6 +48,7 @@ import { WeatherControls } from './AdminPanel.WeatherControls';
 import { UsersList } from './AdminPanel.UsersList';
 import { BlocksList } from './AdminPanel.BlocksList';
 import { FlameEffectsPanel } from './AdminPanel.FlameEffectsPanel';
+import { SmokeEffectsPanel } from './AdminPanel.SmokeEffectsPanel';
 import { SolanaPanel } from './AdminPanel.SolanaPanel';
 import { AtlasDebugPanel } from './AdminPanel.AtlasDebugPanel';
 import { ViewSettingsPanel } from './AdminPanel.ViewSettings';
@@ -376,9 +377,22 @@ export function AdminPanel({
           </TabsContent>
 
           <TabsContent value="effects" className="mt-4 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-4">
-              <FlameEffectsPanel />
-            </ScrollArea>
+            <Tabs defaultValue="flame" className="flex flex-col h-full">
+              <TabsList className="grid w-full grid-cols-2 flex-shrink-0 mb-4">
+                <TabsTrigger value="flame">Flame</TabsTrigger>
+                <TabsTrigger value="smoke">Smoke / VFX</TabsTrigger>
+              </TabsList>
+              <TabsContent value="flame" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full pr-4">
+                  <FlameEffectsPanel />
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="smoke" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full pr-4">
+                  <SmokeEffectsPanel />
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="worlds" className="mt-4 flex-1 overflow-hidden">

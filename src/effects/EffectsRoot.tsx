@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { BillboardBackend } from './BillboardBackend';
 import { getEffectsConfig } from './effectsEngineConfig';
 import { registerRecipe } from './recipes';
+import { loadEffectRecipesFromDB } from './effectsDb';
 import { GAME_ID } from '@/config/game';
 import type { EffectsHandle, QualityTier, EffectEmitter } from './types';
 
@@ -44,6 +45,17 @@ export const EffectsRoot = forwardRef<EffectsHandle>((_, ref) => {
       g.remove(backend.object3D);
       backend.dispose();
     };
+  }, [backend]);
+
+  // Load DB-authored recipes into the registry (degrades gracefully if the
+  // effect_definitions table isn't present yet — fallback recipes keep running).
+  useEffect(() => {
+    let alive = true;
+    loadEffectRecipesFromDB().then((recipes) => {
+      if (!alive) return;
+      for (const r of recipes) backend.updateRecipe(r);
+    });
+    return () => { alive = false; };
   }, [backend]);
 
   useImperativeHandle(
