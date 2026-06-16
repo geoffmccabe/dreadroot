@@ -496,7 +496,9 @@ export function useBurnSystem({
     // Smoke trail: attach a continuous emitter that drops fire-and-forget puffs
     // at the fire's current spot (entry.smokePos, refreshed each frame). The
     // puffs stay where dropped, so a moving enemy trails smoke. Visual only.
-    if (effectsRef?.current) {
+    // Skip the PLAYER: its position is the camera/eye, so smoke would spawn in
+    // the player's face and block vision. (Re-add later with a body offset.)
+    if (effectsRef?.current && entityType !== 'player') {
       entry.smokePos = (hitOff ? _offsetPos.copy(entityPos).add(hitOff) : entityPos).clone();
       entry.smokeEmitter = effectsRef.current.createEmitter(
         'fire-smoke',
@@ -669,8 +671,9 @@ export function useBurnSystem({
   useEffect(() => {
     return () => {
       const renderer = universalFlameRef.current;
-      if (renderer) {
-        for (const entry of burnsRef.current.values()) {
+      for (const entry of burnsRef.current.values()) {
+        entry.smokeEmitter?.stop();
+        if (renderer) {
           for (const fid of entry.flameIds) {
             if (fid) renderer.removeFlame(fid);
           }
