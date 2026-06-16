@@ -64,10 +64,13 @@ export function ColliderDebugView() {
     // BLUE: true mesh colliders (three-mesh-bvh) — a wireframe of the real
     // collision mesh at each instance, so you can see/confirm a converted model.
     const pos = new THREE.Vector3();
+    let meshTris = 0;
+    const MESH_TRI_BUDGET = 40000; // cap wireframe overdraw so a dense mesh can't hang the GPU
     forEachMeshInstance((geo, matrix) => {
-      if (n >= MAX) return;
+      if (n >= MAX || meshTris >= MESH_TRI_BUDGET) return;
       pos.setFromMatrixPosition(matrix);
       if (cam.distanceTo(pos) > FAR) return;
+      meshTris += (geo.index ? geo.index.count : geo.getAttribute('position').count) / 3;
       const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
         color: 0x2277ff, wireframe: true, transparent: true, opacity: 0.7,
         depthTest: false, depthWrite: false, toneMapped: false,

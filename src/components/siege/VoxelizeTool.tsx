@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
 import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides, saveColliderOverrideToDB } from './voxelOverrides';
-import { setModelDecimation } from './meshColliderSystem';
+import { setModelDecimation, meshModelTriCount } from './meshColliderSystem';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
@@ -95,14 +95,18 @@ export function VoxelizeTool() {
         const mov = pf ? colliderOverrides.get(pf) : undefined;
         if (pf && mov?.mesh) {
           e.preventDefault(); e.stopPropagation();
-          const ratio = THREE.MathUtils.clamp((mov.cell || 1) * (coarser ? 0.6 : 1 / 0.6), 0.01, 1);
-          setColliderOverride(pf, false, ratio, true);
-          void saveColliderOverrideToDB(pf, false, ratio, true);
-          const tris = setModelDecimation(pf, ratio);
-          window.dispatchEvent(new Event('sw-colliders-changed'));
-          info(tris > 0
-            ? `${pf}\nmesh ${Math.round(ratio * 100)}% — ${tris} tris  (< simpler / > finer)`
-            : `${pf}\nmesh ${Math.round(ratio * 100)}% saved — reload to apply, then tune`);
+          try {
+            const ratio = THREE.MathUtils.clamp((mov.cell || 1) * (coarser ? 0.6 : 1 / 0.6), 0.01, 1);
+            setColliderOverride(pf, false, ratio, true);
+            void saveColliderOverrideToDB(pf, false, ratio, true);
+            const tris = setModelDecimation(pf, ratio);
+            window.dispatchEvent(new Event('sw-colliders-changed'));
+            info(tris > 0
+              ? `${pf}\nMESH COLLIDER — ${tris} polys @ ${Math.round(ratio * 100)}%\n<  simpler   /   >  finer`
+              : `${pf}\nmesh ${Math.round(ratio * 100)}% saved — reload to apply, then tune`);
+          } catch (err) {
+            info(`${pf}\ndecimate failed: ${(err as Error)?.message ?? err}`);
+          }
           return;
         }
         // Otherwise re-approximate the last VOXELIZED object coarser / finer.
@@ -168,8 +172,25 @@ export function VoxelizeTool() {
       }
     };
     window.addEventListener('keydown', onKey, true);
+
+    // Persistent menu: while the laser is on a MESH-flagged model, show its live
+    // polygon count + the < / > hint in the bottom-left readout.
+    const poll = window.setInterval(() => {
+      if (!probeState.on || !probeState.mesh) return;
+      const fbx = ((probeState.mesh as THREE.Mesh).userData as { fbx?: string })?.fbx;
+      if (!fbx) return;
+      const ov = colliderOverrides.get(fbx);
+      if (ov?.mesh) {
+        const tris = meshModelTriCount(fbx);
+        info(tris > 0
+          ? `${fbx}\nMESH COLLIDER — ${tris} polys @ ${Math.round((ov.cell || 1) * 100)}%\n<  simpler   /   >  finer`
+          : `${fbx}\nMESH COLLIDER (reload to apply)\n<  simpler   /   >  finer`);
+      }
+    }, 300);
+
     return () => {
       window.removeEventListener('keydown', onKey, true);
+      window.clearInterval(poll);
       document.getElementById('sw-voxel-info')?.remove();
       // The collision grid is SHARED with Dreadroot — drop our voxel edits when leaving Siege
       // Worlds so they don't become phantom colliders in the other game.

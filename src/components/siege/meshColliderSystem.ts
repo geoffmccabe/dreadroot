@@ -71,23 +71,39 @@ function decimate(geometry: THREE.BufferGeometry, ratio: number): THREE.BufferGe
   if (ratio >= 0.999 || !simplifierReady) return geometry;
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (!posAttr || (posAttr as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute || posAttr.itemSize !== 3) return geometry;
-  const positions = posAttr.array instanceof Float32Array ? posAttr.array : new Float32Array(posAttr.array as ArrayLike<number>);
-  let index: Uint32Array;
-  if (geometry.index) {
-    index = geometry.index.array instanceof Uint32Array ? (geometry.index.array as Uint32Array) : new Uint32Array(geometry.index.array as ArrayLike<number>);
-  } else {
-    index = new Uint32Array(posAttr.count);
-    for (let i = 0; i < posAttr.count; i++) index[i] = i;
-  }
-  const target = Math.max(3, Math.floor((index.length * ratio) / 3) * 3);
-  if (target >= index.length) return geometry;
   try {
-    const [newIndex] = MeshoptSimplifier.simplify(index, positions, 3, target, 1.0);
+    const vcount = posAttr.count;
+    const positions = posAttr.array instanceof Float32Array ? posAttr.array : new Float32Array(posAttr.array as ArrayLike<number>);
+    let index: Uint32Array;
+    if (geometry.index) {
+      index = geometry.index.array instanceof Uint32Array ? (geometry.index.array as Uint32Array) : new Uint32Array(geometry.index.array as ArrayLike<number>);
+    } else {
+      index = new Uint32Array(vcount);
+      for (let i = 0; i < vcount; i++) index[i] = i;
+    }
+    const target = Math.max(3, Math.floor((index.length * ratio) / 3) * 3);
+    if (target >= index.length) return geometry;
+    const result = MeshoptSimplifier.simplify(index, positions, 3, target, 1.0);
+    const newIndex = result && result[0];
+    if (!newIndex || newIndex.length < 3) return geometry;
+    // Own copies (don't share buffers with the rendered geometry) + valid bounds,
+    // so a bad/degenerate decimation can never corrupt rendering or the BVH.
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', posAttr);
-    g.setIndex(new THREE.BufferAttribute(newIndex, 1));
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    g.setIndex(new THREE.BufferAttribute(new Uint32Array(newIndex), 1));
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
     return g;
   } catch { return geometry; }
+}
+
+/** Total live triangle count for a model's BVH (for the readout). */
+export function meshModelTriCount(fbx: string): number {
+  const ks = fbxKeys.get(fbx);
+  if (!ks) return 0;
+  let t = 0;
+  for (const key of ks) { const b = bvhByKey.get(key); if (b) t += triCount(b.geometry); }
+  return Math.round(t);
 }
 
 function buildBVH(key: string, ratio: number): void {
@@ -170,14 +186,16 @@ export function meshGroundHeight(x: number, z: number): number | null {
       if (probeCeilingY < inst.aabb.min.y) continue;
       const bvh = bvhByKey.get(inst.key);
       if (!bvh) continue;
-      _ray.origin.set(x, probeCeilingY, z);
-      _ray.direction.set(0, -1, 0);
-      _ray.applyMatrix4(inst.inverse);
-      const hit = bvh.raycastFirst(_ray, THREE.DoubleSide);
-      if (hit) {
-        _hitPt.copy(hit.point).applyMatrix4(inst.matrix);
-        if (best === null || _hitPt.y > best) best = _hitPt.y;
-      }
+      try {
+        _ray.origin.set(x, probeCeilingY, z);
+        _ray.direction.set(0, -1, 0);
+        _ray.applyMatrix4(inst.inverse);
+        const hit = bvh.raycastFirst(_ray, THREE.DoubleSide);
+        if (hit) {
+          _hitPt.copy(hit.point).applyMatrix4(inst.matrix);
+          if (best === null || _hitPt.y > best) best = _hitPt.y;
+        }
+      } catch { /* a bad BVH must never crash movement */ }
     }
   }
   return best;
@@ -199,10 +217,12 @@ export function resolvePlayerMeshCollision(
     for (let i = 0; i < list.length; i++) {
       const inst = list[i];
       if (!inst.aabb.intersectsBox(_playerAabb)) continue;
-      if (resolveOne(inst, feetX, feetY, feetZ, radius, height)) {
-        out.add(_delta);
-        pushed = true;
-      }
+      try {
+        if (resolveOne(inst, feetX, feetY, feetZ, radius, height)) {
+          out.add(_delta);
+          pushed = true;
+        }
+      } catch { /* a bad BVH must never crash movement */ }
     }
   }
   return pushed;
