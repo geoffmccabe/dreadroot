@@ -374,7 +374,7 @@ export function useBurnSystem({
     let engulf = false;
     let layout: FlamePoint[] | undefined;
     if (!engulfMode && hitOff) {
-      layout = [{ yOffset: 0, size: opts?.size ?? 0.8, height: opts?.height ?? 1.2, particles: 34 }];
+      layout = [{ yOffset: 0, size: opts?.size ?? 0.8, height: opts?.height ?? 1.2, particles: 64 }];
     } else {
       layout = FLAME_LAYOUTS[entityType as keyof typeof FLAME_LAYOUTS];
       if (!layout) {
@@ -430,9 +430,9 @@ export function useBurnSystem({
       deathPos: entityPos.clone(),
       dotSeconds,
       layout,
-      // Hit-point (bullet) burns use the chunky 7-fire 'hex' cluster so the ONE
-      // lasting fire looks like the impact from frame 0; body/engulf use 'point'.
-      flameType: opts?.flameType ?? (engulfMode ? 'point' : 'hex'),
+      // Hit-point (bullet) burns are a SINGLE big flame at the impact spot — one
+      // solid fire, not a spread-out cluster (the hex fanned out hand-to-hand).
+      flameType: opts?.flameType ?? 'point',
     };
 
     spawnBurnFlames(entry, 1.0, (!engulf && hitOff)

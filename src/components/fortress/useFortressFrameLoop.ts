@@ -750,8 +750,8 @@ export function useFortressFrameLoop({
                 hitPos, Math.max(2, tierDef.burn_time),
                 {
                   engulf: false,
-                  size: tierDef.burn_width * 4 * pMul,
-                  height: tierDef.burn_height * 2.5 * pMul,
+                  size: Math.max(1.4, tierDef.burn_width * 6) * pMul,
+                  height: Math.max(1.0, tierDef.burn_height * 2.5) * pMul,
                 },
               );
             }
