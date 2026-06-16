@@ -1,4 +1,5 @@
-// Collider debug view. Ctrl OR Cmd + "+"/"=" toggles collider OUTLINES.
+// Collider debug view. Ctrl OR Cmd + "\" (or "|") toggles collider OUTLINES.
+// (Was Ctrl/Cmd + "+", which collided with browser zoom.)
 // GREEN = box / voxel colliders (the spatial grid). BLUE = true MESH colliders
 // (three-mesh-bvh) — drawn as a blue wireframe of the actual collision mesh so
 // you can tell them apart and confirm a model converted. Drawn on top of the
@@ -22,7 +23,7 @@ export function ColliderDebugView() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.code === 'Equal' || e.code === 'NumpadAdd' || e.key === '+' || e.key === '=')) {
+      if ((e.ctrlKey || e.metaKey) && (e.code === 'Backslash' || e.key === '\\' || e.key === '|')) {
         e.preventDefault(); e.stopPropagation(); setOn((v) => !v);
       }
     };
