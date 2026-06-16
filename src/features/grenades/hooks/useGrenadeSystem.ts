@@ -33,6 +33,7 @@ import {
 } from '../constants';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { igniteExplosionBurn } from '@/features/enemies/combat/explosionBurn';
 import { resolveBlastHit, stepGrenadePhysics, type VoxelCollider, type EnemyColliderSource } from '@/features/combat';
 import { getActiveGame } from '@/config/activeGame';
 import { sampleHeight } from '@/components/siege/terrainHeight';
@@ -120,7 +121,6 @@ export interface ExplosionResult {
   killed: number;
 }
 
-const _scratchToEnemy = new THREE.Vector3();
 
 export function useGrenadeSystem({
   universalFlameRef,
@@ -305,9 +305,6 @@ export function useGrenadeSystem({
           baseKnockback: baseKb,
         });
         if (!blast.inRange) continue;
-        // Reused downstream by the burn-anchor logic so it can
-        // compute the surface point on the enemy facing the blast.
-        _scratchToEnemy.set(ex - center.x, ey - center.y, ez - center.z);
         const died = adapter.applyDamage(enemy, {
           damage: blast.damage,
           bulletSpeed: blast.bulletSpeed,
@@ -322,23 +319,11 @@ export function useGrenadeSystem({
         });
         if (died) killed++;
 
-        // Ignite survivors. The burn anchor is the surface point on
-        // the enemy facing the blast — i.e. the side of their body
-        // that "saw" the explosion. Closest-point on a cylinder
-        // hitbox: project (cyl_center → blast_center) into the
-        // horizontal plane, walk out by hitbox.radius. Y clamps to
-        // the cylinder's vertical extent so the flame sits on whichever
-        // body part is at blast level (legs vs head).
+        // Ignite survivors with a shared explosion burn (directional, biased onto
+        // the blast-facing side; lasts longer the closer they were; follows the
+        // body through the knockback flight). Reused by any AoE weapon — see
+        // igniteExplosionBurn. Compound shwarm id "shwarmId::blockId" splits out.
         if (!died && applyBurnRef?.current) {
-          const radial = Math.hypot(_scratchToEnemy.x, _scratchToEnemy.z) || 0.001;
-          const nx = -_scratchToEnemy.x / radial; // outward from blast → into enemy surface
-          const nz = -_scratchToEnemy.z / radial;
-          const burnX = hb.centerX + nx * hb.radius;
-          const burnZ = hb.centerZ + nz * hb.radius;
-          const burnY = Math.max(hb.bottomY, Math.min(hb.topY, center.y));
-          const burnPos = new THREE.Vector3(burnX, burnY, burnZ);
-          // Compound shwarm id "shwarmId::blockId" splits like the
-          // existing flamethrower path. Everything else: blockId none.
           const compoundId = adapter.getId(enemy);
           let burnEntityId = compoundId;
           let burnBlockId: string | undefined;
@@ -349,23 +334,18 @@ export function useGrenadeSystem({
               burnBlockId = compoundId.slice(idx + 2);
             }
           }
-          // DOT damage: ~25% of the impact damage per second, tier-
-          // scaled duration (3s + 0.5s/tier). A T1 grenade burns the
-          // target for 3.5s @ ~20 dps; T10 for 8s @ ~180 dps.
-          const burnDps = Math.max(1, Math.round(blast.damage * 0.25));
-          const burnSeconds = 3 + g.tier * 0.5;
-          applyBurnRef.current(
-            adapter.type,
-            burnEntityId,
-            burnBlockId,
-            g.tier,
+          igniteExplosionBurn({
+            applyBurn: applyBurnRef.current,
+            type: adapter.type,
+            entityId: burnEntityId,
+            blockId: burnBlockId,
+            hitbox: hb,
+            blastX: center.x, blastY: center.y, blastZ: center.z,
+            blastRadius: radius,
+            tier: g.tier,
             colors,
-            'static',
-            burnDps,
-            0,
-            burnPos,
-            burnSeconds,
-          );
+            impactDamage: blast.damage,
+          });
         }
       }
     }

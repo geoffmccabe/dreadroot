@@ -737,17 +737,22 @@ export function useFortressFrameLoop({
             // get here, so object fire can never follow. shnake/shwarm own their
             // own tracking fire — skip them.
             if (applyBurnRef?.current && adapter.type !== 'shnake' && adapter.type !== 'shwarm') {
-              // Bullet burn = ONE lasting flame pinned to the exact hit point (engulf
-              // false), sized like the impact fire, tracking that spot as the enemy
-              // moves. Full-body engulf is reserved for area weapons (grenades). burn_time
-              // for bullets is only 0.5–1.5s → give the ignite a real, visible duration.
+              // ONE unified burn — no separate impact stamp. It starts at FULL
+              // impact size (chunky hex fire at the hit point) and shrinks over its
+              // lifetime. Size / color / duration all come from the bullet tier
+              // (burn_width, colors, burn_time). It tracks the hit spot as the
+              // enemy moves. Pentabullet scales it up.
               const pMul = bullet.isPentabullet ? 3.0 : 1.0;
               applyBurnRef.current(
                 adapter.type, adapter.getId(enemy), undefined,
                 bullet.tier, tierDef.colors, (tierDef.colorMode ?? 'static'),
                 Math.max(1, Math.round(finalDamage * 0.25)), 0,
-                hitPos, Math.max(4, tierDef.burn_time),
-                { engulf: false, size: tierDef.burn_width * pMul, height: tierDef.burn_height * pMul },
+                hitPos, Math.max(2, tierDef.burn_time),
+                {
+                  engulf: false,
+                  size: tierDef.burn_width * 4 * pMul,
+                  height: tierDef.burn_height * 2.5 * pMul,
+                },
               );
             }
             adapter.applyDamage(enemy, bulletDamageInfo);
@@ -755,22 +760,6 @@ export function useFortressFrameLoop({
             // Skip score on a harmless bounce (e.g. sub-T7 bullet off a walapa).
             const bounced = adapter.bulletBounces?.(enemy, bulletDamageInfo) ?? false;
             if (onPointsEarned && !bounced) onPointsEarned(finalDamage);
-
-            // Impact STAMP — a brief world-pinned flash for the hit punch only
-            // (the ongoing fire is the attached burn above, which follows the
-            // enemy). Short duration so this stamp can't "stay behind" a mover.
-            const pentaMul = bullet.isPentabullet ? 3.0 : 1.0;
-            const fireConfig = {
-              colors: tierDef.colors,
-              size: tierDef.burn_width * pentaMul,
-              height: tierDef.burn_height * pentaMul,
-              duration: 0.3 * pentaMul,
-            };
-            if (useNebulaForBulletImpacts && nebulaImpactsRef?.current) {
-              nebulaImpactsRef.current.spawnImpact(hitPos, fireConfig);
-            } else if (bulletImpactsRef?.current) {
-              bulletImpactsRef.current.spawnImpact(hitPos, fireConfig);
-            }
 
             // Per-adapter hit sound (falls back to generic thud).
             const hitSound = adapter.getHitSoundUrl?.(enemy) ?? '/wooden_thud_sound.mp3';
