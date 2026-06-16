@@ -18,7 +18,10 @@ import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHor
 
 // Blast-impact damage: kinetic, only above a threshold speed. min(120, 0.12·v²).
 const IMPACT_MIN = 7;
-const impactDamage = (v: number) => v > IMPACT_MIN ? Math.min(120, 0.12 * v * v) : 0;
+// Fall + slam (velocity) impact damage, reduced 80% — monsters were dying just
+// from climbing over simple objects. Both the horizontal-slam (hs) and the
+// landing/fall (iv) checks run through this, so both drop 80%.
+const impactDamage = (v: number) => v > IMPACT_MIN ? Math.min(24, 0.024 * v * v) : 0;
 
 export interface MonsterConfig {
   url: string;

@@ -51,10 +51,11 @@ export const GRENADE_RADIUS_PER_TIER = 1.0;
 export const GRENADE_BASE_KNOCKBACK = 160;
 export const GRENADE_KNOCKBACK_PER_TIER = 40;
 
-/** Total damage = BASE_DAMAGE + (tier - 1) × DAMAGE_PER_TIER. */
+/** Total damage = BASE_DAMAGE + (tier - 1) × DAMAGE_PER_TIER, then halved
+ *  (grenades were hitting twice as hard as wanted). */
 export function grenadeDamage(tier: number): number {
   const t = Math.max(1, Math.min(10, tier));
-  return GRENADE_BASE_DAMAGE + (t - 1) * GRENADE_DAMAGE_PER_TIER;
+  return (GRENADE_BASE_DAMAGE + (t - 1) * GRENADE_DAMAGE_PER_TIER) * 0.5;
 }
 
 /** AoE radius for the explosion (m). Falls off linearly toward edge. */
