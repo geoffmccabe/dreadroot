@@ -1,9 +1,16 @@
 // SiegeCharacter — the local player's chosen Siege Worlds character. Each character glb is
-// self-contained (skin + skeleton + all 15 animations), cloned + animated the same way the
-// monsters are (so animation is guaranteed to bind). Auto-normalized to a standard height with
-// feet on the ground (the source skins have inconsistent scales). Hidden in first person; the
-// INSPECT view (Ctrl/Cmd+V) freezes + shows it so you can walk/fly around it, and a button panel
-// lets you play each animation. A dropdown picks/switches the character.
+// self-contained (skin + skeleton + all 15 animations) on ONE shared 48-bone upright rig.
+//
+// IMPORTANT — why earlier versions appeared "on their backs and not animating": the per-character
+// MESH geometry is authored at wildly inconsistent scales/orientations (knight ~2cm, ragnar ~2m,
+// some lying along Z), but every mesh is skinned to the SAME upright animated rig. At its frozen
+// bind pose the mesh shows that raw authored orientation; the moment an animation plays, the mesh
+// follows the upright bones and stands correctly. So the fix is simply to ALWAYS play an animation
+// (like the working MonsterEnemy does) — orientation/scale then come from the shared rig, not the
+// bind geometry. We measure the rig's Head→feet height for one consistent normalize.
+//
+// Hidden in first person; INSPECT view (Ctrl/Cmd+V) freezes + shows it 3m ahead so you can walk
+// around it, with a left-side button panel to play each clip. A top dropdown switches character.
 import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
@@ -15,7 +22,7 @@ import {
   isInspectView, setInspectView, useSiegeCharacter,
 } from '@/config/siegeCharacter';
 
-const TARGET_H = 1.85;   // normalize every character to ~human height (max bbox dimension)
+const TARGET_H = 1.85;   // normalize the rig (Head→feet) to ~human height
 
 // "Root|3D_Idle_Movement 1|Animation Base Layer" → "Idle"
 const cleanAnim = (n: string) => (n.split('|')[1] || n).replace(/3D_/g, '').replace(/_Movement/gi, '').replace(/\s*\d+$/, '').replace(/_/g, ' ').trim() || n;
@@ -27,26 +34,25 @@ export function SiegeCharacter() {
 
   const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb`);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
-  const group = useRef<THREE.Group>(null);     // outer: world position + facing
-  const inner = useRef<THREE.Group>(null);     // normalize: scale + feet-to-origin
+  const group = useRef<THREE.Group>(null);   // mixer root + world placement (scale lives here)
   const { actions, names } = useAnimations(animations, group);
 
-  // size normalization from the clone's bounding box
+  // One normalize from the shared rig: scale Head→feet to TARGET_H, lift feet to the group origin.
   const norm = useMemo(() => {
-    cloned.updateMatrixWorld(true);   // ensure node scales are baked into the bbox
-    const box = new THREE.Box3().setFromObject(cloned);
-    const size = box.getSize(new THREE.Vector3());
-    const s = TARGET_H / Math.max(size.x, size.y, size.z, 0.001);
-    return { scale: s, feetY: -box.min.y * s };   // lift so the lowest point sits at the group origin
+    cloned.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    const headY = cloned.getObjectByName('Head')?.getWorldPosition(v.clone()).y ?? 1.565;
+    const tl = cloned.getObjectByName('Toes_L')?.getWorldPosition(v.clone()).y;
+    const tr = cloned.getObjectByName('Toes_R')?.getWorldPosition(v.clone()).y;
+    const footY = Math.min(tl ?? 0, tr ?? 0);
+    const scale = TARGET_H / Math.max(headY - footY, 0.5);
+    return { scale, footLift: -footY * scale };   // group.y = terrain + footLift → feet on ground
   }, [cloned]);
 
   const desired = useRef('');
   const cur = useRef('');
   const frozen = useRef<{ set: boolean; x: number; y: number; z: number; yaw: number }>({ set: false, x: 0, y: 0, z: 0, yaw: 0 });
-  const idleName = useMemo(() => names.find((n) => n.toLowerCase().includes('idle')) || names[0] || '', [names]);
-  useEffect(() => { desired.current = idleName; }, [idleName, selected]);
 
-  // actions kept in a ref so the DOM buttons (built in an effect) can play them
   const actionsRef = useRef(actions); actionsRef.current = actions;
   const play = (name: string) => {
     const a = name ? actionsRef.current[name] : null;
@@ -56,7 +62,17 @@ export function SiegeCharacter() {
     cur.current = name;
   };
 
-  // ── Dropdown (always) + animation button panel (shown in inspect) ──
+  // Play idle the instant clips bind (NOT gated on inspect) — this is what poses the mesh upright.
+  useEffect(() => {
+    if (!names.length) return;
+    const idle = names.find((n) => n.toLowerCase().includes('idle')) || names[0];
+    if (!desired.current) desired.current = idle;
+    play(desired.current);
+  }, [actions, names]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // DOM dropdown + panel container + keydown — created ONCE; visibility driven from the frame loop
+  // (previous panel bug: it was recreated when clips loaded async, resetting it to hidden).
+  const panelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const sel = document.createElement('select');
     sel.id = 'sw-char-picker';
@@ -68,9 +84,28 @@ export function SiegeCharacter() {
 
     const panel = document.createElement('div');
     panel.id = 'sw-anim-panel';
-    panel.style.cssText = 'position:fixed;left:12px;top:90px;z-index:9999;display:none;flex-direction:column;gap:4px;background:rgba(0,0,0,.6);padding:8px;border-radius:6px;max-height:80vh;overflow:auto';
-    const title = document.createElement('div'); title.textContent = 'Animations (Ctrl/Cmd+V to exit)';
-    title.style.cssText = 'color:#9cf;font:11px monospace;margin-bottom:2px'; panel.appendChild(title);
+    panel.style.cssText = 'position:fixed;left:12px;top:90px;z-index:9999;display:none;flex-direction:column;gap:4px;background:rgba(0,0,0,.65);padding:8px;border-radius:6px;max-height:80vh;overflow:auto';
+    document.body.appendChild(panel);
+    panelRef.current = panel;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'KeyV' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); e.stopPropagation();
+        setInspectView(!isInspectView());
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => { window.removeEventListener('keydown', onKey, true); sel.remove(); panel.remove(); panelRef.current = null; };
+  }, []);
+
+  // (Re)build the animation buttons whenever the clip list changes.
+  useEffect(() => {
+    const panel = panelRef.current; if (!panel) return;
+    panel.replaceChildren();
+    const title = document.createElement('div');
+    title.textContent = names.length ? 'Animations (Ctrl/Cmd+V to exit)' : 'Loading animations…';
+    title.style.cssText = 'color:#9cf;font:11px monospace;margin-bottom:2px';
+    panel.appendChild(title);
     for (const n of names) {
       const b = document.createElement('button'); b.textContent = cleanAnim(n);
       b.style.cssText = 'font:12px sans-serif;text-align:left;background:#234;color:#fff;border:1px solid #456;border-radius:4px;padding:4px 10px;cursor:pointer';
@@ -81,34 +116,30 @@ export function SiegeCharacter() {
       };
       panel.appendChild(b);
     }
-    document.body.appendChild(panel);
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyV' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault(); e.stopPropagation();
-        const on = !isInspectView(); setInspectView(on);
-        panel.style.display = on ? 'flex' : 'none';
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => { window.removeEventListener('keydown', onKey, true); sel.remove(); panel.remove(); };
   }, [names]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { const s = document.getElementById('sw-char-picker') as HTMLSelectElement | null; if (s) s.value = selected; }, [selected]);
 
+  const lastPanelOn = useRef<boolean | null>(null);
   useFrame(() => {
     const g = group.current; if (!g) return;
-    if (isInspectView()) {
+    const on = isInspectView();
+    if (lastPanelOn.current !== on && panelRef.current) {
+      panelRef.current.style.display = on ? 'flex' : 'none';
+      lastPanelOn.current = on;
+    }
+    if (on) {
       if (!frozen.current.set) {
         const d = new THREE.Vector3(); camera.getWorldDirection(d); d.y = 0; d.normalize();
         const x = camera.position.x + d.x * 3, z = camera.position.z + d.z * 3;
-        frozen.current = { set: true, x, y: sampleHeight(x, z) ?? camera.position.y - 1.6, z, yaw: Math.atan2(-d.x, -d.z) };
+        const groundY = sampleHeight(x, z) ?? camera.position.y - 1.6;
+        frozen.current = { set: true, x, y: groundY + norm.footLift, z, yaw: Math.atan2(-d.x, -d.z) };
       }
       const f = frozen.current;
       g.position.set(f.x, f.y, f.z);
       g.rotation.set(0, f.yaw, 0);
       g.visible = true;
-      play(desired.current || idleName);
+      play(desired.current);
     } else {
       frozen.current.set = false;
       g.visible = false;
@@ -116,10 +147,8 @@ export function SiegeCharacter() {
   });
 
   return (
-    <group ref={group} visible={false}>
-      <group ref={inner} scale={norm.scale} position={[0, norm.feetY, 0]}>
-        <primitive object={cloned} />
-      </group>
+    <group ref={group} scale={norm.scale} visible={false}>
+      <primitive object={cloned} />
     </group>
   );
 }
