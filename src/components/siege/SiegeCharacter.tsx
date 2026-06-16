@@ -1,16 +1,15 @@
 // SiegeCharacter — the local player's chosen Siege Worlds character. Each character glb is
 // self-contained (skin + skeleton + all 15 animations) on ONE shared 48-bone upright rig.
 //
-// IMPORTANT — why earlier versions appeared "on their backs and not animating": the per-character
-// MESH geometry is authored at wildly inconsistent scales/orientations (knight ~2cm, ragnar ~2m,
-// some lying along Z), but every mesh is skinned to the SAME upright animated rig. At its frozen
-// bind pose the mesh shows that raw authored orientation; the moment an animation plays, the mesh
-// follows the upright bones and stands correctly. So the fix is simply to ALWAYS play an animation
-// (like the working MonsterEnemy does) — orientation/scale then come from the shared rig, not the
-// bind geometry. We measure the rig's Head→feet height for one consistent normalize.
+// The animated rig lives in <CharacterRig key={selected}>, so switching character forces a FULL
+// remount — a fresh AnimationMixer bound cleanly to the fresh clone. (drei's useAnimations creates
+// its mixer once and does NOT cleanly rebind when the model is swapped in place; that left
+// switched-to characters frozen. The key fixes that.) The parent owns the stable dropdown +
+// Ctrl/Cmd+V toggle so those survive switches.
 //
-// Hidden in first person; INSPECT view (Ctrl/Cmd+V) freezes + shows it 3m ahead so you can walk
-// around it, with a left-side button panel to play each clip. A top dropdown switches character.
+// Orientation/scale come from the shared rig: we ALWAYS play an animation, which poses the mesh
+// upright (the raw per-character bind geometry is inconsistent and only correct once posed), and
+// normalize Head→feet to a standard height with feet on the ground.
 import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
@@ -27,31 +26,58 @@ const TARGET_H = 1.85;   // normalize the rig (Head→feet) to ~human height
 // "Root|3D_Idle_Movement 1|Animation Base Layer" → "Idle"
 const cleanAnim = (n: string) => (n.split('|')[1] || n).replace(/3D_/g, '').replace(/_Movement/gi, '').replace(/\s*\d+$/, '').replace(/_/g, ' ').trim() || n;
 
+// ── Parent: stable dropdown + inspect toggle; remounts the rig per character via key ──
 export function SiegeCharacter() {
   useSiegeCharacter();
   const selected = getSelectedCharacter();
-  const camera = useThree((s) => s.camera);
 
+  useEffect(() => {
+    const sel = document.createElement('select');
+    sel.id = 'sw-char-picker';
+    sel.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9999;font:13px sans-serif;background:rgba(0,0,0,.7);color:#fff;border:1px solid #456;border-radius:5px;padding:4px 8px';
+    for (const c of SIEGE_CHARACTERS) { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o); }
+    sel.value = getSelectedCharacter();
+    sel.onchange = () => setSelectedCharacter(sel.value);
+    document.body.appendChild(sel);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'KeyV' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); e.stopPropagation();
+        setInspectView(!isInspectView());
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => { window.removeEventListener('keydown', onKey, true); sel.remove(); };
+  }, []);
+
+  useEffect(() => { const s = document.getElementById('sw-char-picker') as HTMLSelectElement | null; if (s) s.value = selected; }, [selected]);
+
+  return <CharacterRig key={selected} selected={selected} />;
+}
+
+// ── Rig: one character's model + animations. Remounted (fresh mixer) on every switch. ──
+function CharacterRig({ selected }: { selected: string }) {
+  const camera = useThree((s) => s.camera);
   const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb`);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);   // mixer root + world placement (scale lives here)
   const { actions, names, mixer } = useAnimations(animations, group);
   const hips = useMemo(() => cloned.getObjectByName('Hips') as THREE.Bone | null, [cloned]);
-  // Skinned-mesh / rebind diagnostics: is the mesh's skeleton bound to the SAME bone objects
-  // that live in the rendered hierarchy (SkeletonUtils rebind), and that the clip targets?
+
+  // Skinned-mesh rebind diagnostic: is the mesh's skeleton bound to the SAME bone objects in the
+  // rendered hierarchy (SkeletonUtils rebind worked)?
   const skinDbg = useMemo(() => {
     let sm: THREE.SkinnedMesh | null = null;
     cloned.traverse((o) => { if (!sm && (o as THREE.SkinnedMesh).isSkinnedMesh) sm = o as THREE.SkinnedMesh; });
     if (!sm) return 'NO SKINNED MESH';
-    const sk = sm.skeleton;
+    const sk = (sm as THREE.SkinnedMesh).skeleton;
     const b0 = sk?.bones?.[0];
-    const inTree = b0 ? cloned.getObjectByName(b0.name) === b0 : false;  // true = rebind OK
-    return `skin bones:${sk?.bones?.length ?? 0} b0:${b0?.name ?? '?'} rebindOK:${inTree}`;
+    const inTree = b0 ? cloned.getObjectByName(b0.name) === b0 : false;
+    return `skin bones:${sk?.bones?.length ?? 0} rebindOK:${inTree}`;
   }, [cloned]);
-  const hipsBaseX = useRef<number | null>(null);
   const hipsRangeX = useRef({ min: 9, max: -9 });
 
-  // One normalize from the shared rig: scale Head→feet to TARGET_H, lift feet to the group origin.
+  // Normalize from the shared rig: scale Head→feet to TARGET_H, lift feet to the group origin.
   const norm = useMemo(() => {
     cloned.updateMatrixWorld(true);
     const v = new THREE.Vector3();
@@ -60,7 +86,7 @@ export function SiegeCharacter() {
     const tr = cloned.getObjectByName('Toes_R')?.getWorldPosition(v.clone()).y;
     const footY = Math.min(tl ?? 0, tr ?? 0);
     const scale = TARGET_H / Math.max(headY - footY, 0.5);
-    return { scale, footLift: -footY * scale };   // group.y = terrain + footLift → feet on ground
+    return { scale, footLift: -footY * scale };
   }, [cloned]);
 
   const desired = useRef('');
@@ -74,10 +100,10 @@ export function SiegeCharacter() {
     Object.values(actionsRef.current).forEach((x) => { if (x && x !== a) x.fadeOut(0.2); });
     a.reset().fadeIn(0.2).play();
     cur.current = name;
-    hipsRangeX.current = { min: 9, max: -9 };  // reset bone-motion range for the new clip
+    hipsRangeX.current = { min: 9, max: -9 };
   };
 
-  // Play idle the instant clips bind (NOT gated on inspect) — this is what poses the mesh upright.
+  // Play idle the instant clips bind — poses the mesh upright.
   useEffect(() => {
     if (!names.length) return;
     const idle = names.find((n) => n.toLowerCase().includes('idle')) || names[0];
@@ -85,35 +111,18 @@ export function SiegeCharacter() {
     play(desired.current);
   }, [actions, names]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // DOM dropdown + panel container + keydown — created ONCE; visibility driven from the frame loop
-  // (previous panel bug: it was recreated when clips loaded async, resetting it to hidden).
+  // Panel (buttons) — created on mount, torn down on unmount (so it rebuilds cleanly per switch).
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const sel = document.createElement('select');
-    sel.id = 'sw-char-picker';
-    sel.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9999;font:13px sans-serif;background:rgba(0,0,0,.7);color:#fff;border:1px solid #456;border-radius:5px;padding:4px 8px';
-    for (const c of SIEGE_CHARACTERS) { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o); }
-    sel.value = getSelectedCharacter();
-    sel.onchange = () => setSelectedCharacter(sel.value);
-    document.body.appendChild(sel);
-
     const panel = document.createElement('div');
     panel.id = 'sw-anim-panel';
     panel.style.cssText = 'position:fixed;left:12px;top:90px;z-index:9999;display:none;flex-direction:column;gap:4px;background:rgba(0,0,0,.65);padding:8px;border-radius:6px;max-height:80vh;overflow:auto';
     document.body.appendChild(panel);
     panelRef.current = panel;
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyV' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault(); e.stopPropagation();
-        setInspectView(!isInspectView());
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => { window.removeEventListener('keydown', onKey, true); sel.remove(); panel.remove(); panelRef.current = null; };
+    return () => { panel.remove(); panelRef.current = null; };
   }, []);
 
-  // (Re)build the animation buttons whenever the clip list changes.
+  // (Re)build buttons when clips arrive.
   useEffect(() => {
     const panel = panelRef.current; if (!panel) return;
     panel.replaceChildren();
@@ -133,9 +142,7 @@ export function SiegeCharacter() {
     }
   }, [names]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { const s = document.getElementById('sw-char-picker') as HTMLSelectElement | null; if (s) s.value = selected; }, [selected]);
-
-  // Live debug overlay (top-right) — updated each frame to pinpoint where animation breaks.
+  // Live debug overlay (top-right).
   const dbgRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const d = document.createElement('div');
@@ -149,7 +156,6 @@ export function SiegeCharacter() {
   useFrame(() => {
     const g = group.current; if (!g) return;
     const on = isInspectView();
-    // track how much the Hips bone actually moves (proves whether the action drives the bones)
     if (hips) {
       const x = hips.quaternion.x;
       const r = hipsRangeX.current;
@@ -162,7 +168,6 @@ export function SiegeCharacter() {
         `char:${selected}\nclips:${names.length} inspect:${on}\ncur:${cleanAnim(cur.current) || '—'}\n` +
         `action? ${!!a} running:${a ? a.isRunning() : '—'} w:${a ? a.getEffectiveWeight().toFixed(2) : '—'}\n` +
         `mixer.time:${mixer.time.toFixed(2)}\n` +
-        `hipsQ.x now:${hips ? hips.quaternion.x.toFixed(4) : 'NO HIPS'}\n` +
         `hipsQ.x RANGE:${r.min.toFixed(4)}..${r.max.toFixed(4)} (moving=${(r.max - r.min) > 0.001})\n` +
         `${skinDbg}\n` +
         `groupScale:${g.scale.x.toFixed(2)} vis:${g.visible}`;
