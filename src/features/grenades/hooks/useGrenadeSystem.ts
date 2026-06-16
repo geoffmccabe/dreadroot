@@ -319,11 +319,11 @@ export function useGrenadeSystem({
         });
         if (died) killed++;
 
-        // Ignite survivors with a shared explosion burn (directional, biased onto
-        // the blast-facing side; lasts longer the closer they were; follows the
-        // body through the knockback flight). Reused by any AoE weapon — see
-        // igniteExplosionBurn. Compound shwarm id "shwarmId::blockId" splits out.
-        if (!died && applyBurnRef?.current) {
+        // Ignite EVERY enemy the blast hit — including ones it just killed, so a
+        // demon blown into the air burns as it tumbles (the fire follows the body
+        // through death/flight). Reused by any AoE weapon — see igniteExplosionBurn.
+        // Compound shwarm id "shwarmId::blockId" splits out.
+        if (applyBurnRef?.current) {
           const compoundId = adapter.getId(enemy);
           let burnEntityId = compoundId;
           let burnBlockId: string | undefined;

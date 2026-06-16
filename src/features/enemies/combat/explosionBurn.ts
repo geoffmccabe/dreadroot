@@ -66,11 +66,17 @@ export function igniteExplosionBurn(p: ExplosionBurnParams): void {
   const burnSeconds = base * (0.35 + 0.65 * proximity);
 
   const burnDps = Math.max(1, Math.round(p.impactDamage * 0.25));
+  // Render via the PROVEN tracked 7-fire impact (engulf:false) at the blast-facing
+  // body point — bone-attached so it rides the body through the knockback flight,
+  // landing and stand-up. Bigger than a bullet hit (it's a blast). The blast-facing
+  // surface point already puts it on the side that saw the explosion.
+  const size = 0.9 + p.tier * 0.10;
+  const height = 1.8 + p.tier * 0.15;
   p.applyBurn(
     p.type, p.entityId, p.blockId,
     p.tier, p.colors, 'static',
     burnDps, 0,
     _anchor, burnSeconds,
-    { engulf: true, sided: true },
+    { engulf: false, size, height },
   );
 }

@@ -76,7 +76,7 @@ export function grenadeKnockback(tier: number): number {
  * a metallic finisher tier.
  */
 export const GRENADE_TIER_COLORS: Record<number, [string, string, string]> = {
-  1:  ['#3a4a1c', '#5b7028', '#7c9436'], // olive (classic)
+  1:  ['#cc4400', '#ff9020', '#ffdd44'], // standard fire: deep orange → orange → yellow
   2:  ['#660000', '#aa1010', '#ff3030'], // red
   3:  ['#7a3000', '#c45000', '#ff7a1a'], // orange
   4:  ['#7a7a00', '#cccc00', '#ffff33'], // yellow
