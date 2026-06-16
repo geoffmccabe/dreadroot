@@ -140,7 +140,8 @@ function CharacterRig({ selected }: { selected: string }) {
         const d = new THREE.Vector3(); camera.getWorldDirection(d); d.y = 0; d.normalize();
         const x = camera.position.x + d.x * 3, z = camera.position.z + d.z * 3;
         const groundY = sampleHeight(x, z) ?? camera.position.y - 1.6;
-        frozen.current = { set: true, x, y: groundY - feetY, z, yaw: Math.atan2(-d.x, -d.z) };
+        // +π so the model's front (these rigs face -Z) turns toward the camera, not away.
+        frozen.current = { set: true, x, y: groundY - feetY, z, yaw: Math.atan2(-d.x, -d.z) + Math.PI };
       }
       const f = frozen.current;
       g.position.set(f.x, f.y, f.z);
