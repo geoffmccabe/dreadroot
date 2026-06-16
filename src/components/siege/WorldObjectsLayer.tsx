@@ -8,7 +8,7 @@ import { useGLTF } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides } from './voxelOverrides';
+import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { voxelizeGeometry } from './voxelize';
 
 interface Group { fbx: string; url: string; matrices: number[][]; rotX?: number; mesh?: string; combined?: boolean; scaleMul?: number; whole?: boolean }
@@ -167,15 +167,21 @@ export function WorldObjectsLayer() {
     fetch('/siege/world/atlas_map.json').then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
     fetch('/siege/world/material_map.json').then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});
     fetch('/siege/world/cutout_textures.json').then((r) => r.json()).then((a) => setCutout(new Set(a))).catch(() => {});
-    // Load baked collider overrides FIRST (so they're applied when groups build their colliders),
-    // then the placements. Author's localStorage edits already loaded at import + win over baked.
-    fetch('/siege/world/collider_overrides.json')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((a) => mergeBakedOverrides(a as [string, { voxel: boolean; cell: number }][]))
+    // Load collider overrides BEFORE placements (so they apply as groups build their
+    // colliders): Supabase shared overrides first (authoritative), then the baked
+    // JSON fills any gaps, then placements. Author's localStorage edits (loaded at
+    // import) and the DB agree (voxelizing writes both).
+    loadColliderOverridesFromDB()
       .catch(() => {})
       .finally(() => {
-        fetch('/siege/world/placements.json').then((r) => r.json())
-          .then((d) => alive && setData(d)).catch(() => {});
+        fetch('/siege/world/collider_overrides.json')
+          .then((r) => (r.ok ? r.json() : []))
+          .then((a) => mergeBakedOverrides(a as [string, { voxel: boolean; cell: number }][]))
+          .catch(() => {})
+          .finally(() => {
+            fetch('/siege/world/placements.json').then((r) => r.json())
+              .then((d) => alive && setData(d)).catch(() => {});
+          });
       });
     return () => { alive = false; };
   }, []);

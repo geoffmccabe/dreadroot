@@ -4,6 +4,7 @@
 // survives streaming reloads (no double colliders). Keyed by type+rounded-world-position so it
 // matches across reloads (the InstancedMesh is recreated, but the placement is the same).
 import type * as THREE from 'three';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface ManagedEntry { boxes: THREE.Box3[]; voxel: boolean }
 
@@ -40,4 +41,33 @@ export function mergeBakedOverrides(entries: [string, SavedOverride][]): void {
 /** JSON of all overrides — paste this to bake them into the shipped map for all players. */
 export function exportColliderOverrides(): string {
   return JSON.stringify([...colliderOverrides]);
+}
+
+// ── Supabase sync (no clipboard/paste needed) ────────────────────────────────
+// Voxelizing auto-saves to `siege_collider_overrides`; every player loads them on
+// world start. Writes are admin-only via RLS (has_role(...,'admin')) so a normal
+// player pressing V edits only their own localStorage, never the shared world.
+// Table not in generated types yet → loose-typed access, degrades gracefully.
+const SCO_GAME = 'siege-worlds';
+
+export async function saveColliderOverrideToDB(key: string, voxel: boolean, cell: number): Promise<void> {
+  try {
+    await (supabase as any)
+      .from('siege_collider_overrides')
+      .upsert({ game_id: SCO_GAME, key, voxel, cell, updated_at: new Date().toISOString() },
+              { onConflict: 'game_id,key' });
+  } catch { /* admin-only / table absent — localStorage already has it */ }
+}
+
+/** Load shared overrides from the DB into the map (authoritative over baked JSON).
+ *  Call before WorldObjectsLayer builds colliders. Safe if the table is absent. */
+export async function loadColliderOverridesFromDB(): Promise<void> {
+  try {
+    const { data, error } = await (supabase as any)
+      .from('siege_collider_overrides')
+      .select('key,voxel,cell')
+      .eq('game_id', SCO_GAME);
+    if (error || !data) return;
+    for (const row of data) colliderOverrides.set(row.key, { voxel: !!row.voxel, cell: Number(row.cell) });
+  } catch { /* ignore */ }
 }

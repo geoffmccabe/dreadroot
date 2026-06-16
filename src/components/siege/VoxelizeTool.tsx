@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
-import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides } from './voxelOverrides';
+import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides, saveColliderOverrideToDB } from './voxelOverrides';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
@@ -70,6 +70,7 @@ export function VoxelizeTool() {
       vox.forEach((b) => worldCollisionGrid.insert(b));
       managedRocks.set(key, { boxes: vox, voxel: true });
       setColliderOverride(key, true, cell);   // persist (localStorage) so it survives reload
+      void saveColliderOverrideToDB(key, true, cell); // + Supabase (shared, all players)
       window.dispatchEvent(new Event('sw-colliders-changed'));
       return vox.length;
     };
@@ -119,6 +120,7 @@ export function VoxelizeTool() {
         worldCollisionGrid.insert(box);
         managedRocks.set(key, { boxes: [box], voxel: false });
         setColliderOverride(key, false, 1);   // persist the revert too
+        void saveColliderOverrideToDB(key, false, 1); // + Supabase
         window.dispatchEvent(new Event('sw-colliders-changed'));
         last.current = null;
         info(`${fbx}\nreverted to 1 box (saved)`);
