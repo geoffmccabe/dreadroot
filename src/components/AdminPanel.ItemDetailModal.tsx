@@ -70,20 +70,25 @@ const AMMO_TYPE: Record<number, string> = {
   0: 'Bullet', 1: 'Flame', 2: 'Rocket', 3: 'None',
 };
 
+// HUD design tokens (light text on blue) — readable regardless of app theme.
+const HUD_TEXT = 'hsl(var(--hud-text))';
+const HUD_DIM = 'hsl(var(--hud-text-dim))';
+const HUD_BRIGHT = 'hsl(var(--hud-text-bright))';
+
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === '') return null;
   return (
     <div className="flex justify-between gap-3">
-      <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-sm text-right">{value}</span>
+      <span className="text-sm" style={{ color: HUD_DIM }}>{label}</span>
+      <span className="text-sm text-right font-medium" style={{ color: HUD_BRIGHT }}>{value}</span>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2 p-3 rounded-lg bg-black/20">
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
+    <div className="space-y-2 p-3 rounded-lg" style={{ background: 'hsl(0 0% 0% / 0.22)' }}>
+      <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: HUD_BRIGHT }}>{title}</div>
       {children}
     </div>
   );
@@ -116,7 +121,7 @@ export function ItemDetailModal({
     (supabase as unknown as {
       from: (t: string) => {
         select: (c: string) => {
-          eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: WeaponStats | null }> };
+          eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: WeaponStats | null; error: unknown }> };
         };
       };
     })
@@ -124,7 +129,8 @@ export function ItemDetailModal({
       .select('*')
       .eq('item_number', item.item_number)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.error('[ItemDetail] weapon_stats query failed:', error);
         if (!cancelled) {
           setStats(data);
           setLoading(false);
@@ -144,10 +150,11 @@ export function ItemDetailModal({
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className="max-w-lg max-h-[85vh] overflow-y-auto"
+        className="max-w-lg max-h-[85vh] overflow-y-auto backdrop-blur-md"
         style={{
-          background: 'hsla(211, 30%, 35%, 0.95)',
-          border: '1px solid hsla(var(--hud-border))',
+          background: 'hsl(211 30% 24% / 0.98)',
+          border: '1px solid hsl(var(--hud-border))',
+          color: HUD_TEXT,
         }}
       >
         <DialogHeader>
@@ -160,8 +167,8 @@ export function ItemDetailModal({
               />
             )}
             <div className="flex flex-col">
-              <span className="text-base font-bold text-white">{item.name}</span>
-              <span className="text-xs font-mono text-muted-foreground">
+              <span className="text-base font-bold" style={{ color: HUD_BRIGHT }}>{item.name}</span>
+              <span className="text-xs font-mono" style={{ color: HUD_DIM }}>
                 ID# {item.item_number ?? '—'}
               </span>
             </div>
@@ -170,7 +177,7 @@ export function ItemDetailModal({
 
         <div className="space-y-3 py-2">
           {(s?.description || item.description) && (
-            <p className="text-sm text-muted-foreground italic">{s?.description || item.description}</p>
+            <p className="text-sm italic" style={{ color: HUD_DIM }}>{s?.description || item.description}</p>
           )}
 
           <Section title="Identity">
@@ -225,14 +232,14 @@ export function ItemDetailModal({
           {!!s?.skin_bonuses && (
             <Section title="Special">
               <Row label="Fires by default" value={s?.default_can_fire ? 'Yes' : 'No'} />
-              <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-all">
+              <pre className="text-xs whitespace-pre-wrap break-all" style={{ color: HUD_DIM }}>
                 {JSON.stringify(s.skin_bonuses, null, 2)}
               </pre>
             </Section>
           )}
 
           {!loading && !s && (
-            <p className="text-sm text-muted-foreground">No weapon stats for this item.</p>
+            <p className="text-sm" style={{ color: HUD_DIM }}>No weapon stats for this item.</p>
           )}
         </div>
       </DialogContent>
