@@ -31,6 +31,10 @@ import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegist
 
 // Reusable scratch vector for the registry-fallback entity lookup.
 const _registryFallbackPos = new THREE.Vector3();
+// Side-channel: the facing yaw of the entity last resolved by getEntityPosition
+// (single-threaded, read immediately after the call). Lets hit-point fire rotate
+// WITH the body as it turns instead of swinging around in world space.
+let _anchorYaw = 0;
 
 // Burn duration is per-entry now (passed in by the caller, derived
 // from weapon tier). Defaults preserve old behaviour for callers that
@@ -143,6 +147,9 @@ interface BurnEntry {
    *  flame. Used for bullet hit-point burns so the fire looks identical to the
    *  impact, just longer + tracking + shrinking. */
   trackedImpactId?: number;
+  /** Body facing (yaw) at ignite. The hit offset is rotated by (currentYaw -
+   *  igniteYaw) each frame so the fire stays on the SAME body spot as it turns. */
+  igniteYaw?: number;
 }
 
 interface UseBurnSystemOptions {
@@ -255,24 +262,19 @@ export function useBurnSystem({
     const list = adapter.getActiveEnemies();
     const enemy = list.find(e => adapter.getId(e) === lookupId);
     if (!enemy) return null; // truly gone (despawned/removed from the world)
-    // While ALIVE, use the live hitbox. When the enemy DIES, getHitbox goes null
-    // (weapons stop targeting it) but the corpse is still visible for its death
-    // animation — so fall back to the burn anchor and keep the fire ON the body
-    // until it despawns, instead of orphaning the fire the instant it dies.
-    const hb = adapter.getHitbox(enemy);
-    let cx: number, cy: number, cz: number, radius: number;
-    if (hb) {
-      cx = hb.centerX; cy = hb.bottomY; cz = hb.centerZ; radius = hb.radius;
-    } else {
-      const anchor = adapter.getBurnAnchor?.(enemy);
-      if (!anchor) return null;
-      cx = anchor.x; cy = anchor.y; cz = anchor.z; radius = anchor.radius;
+    // Prefer the burn anchor: it gives the live body base + facing YAW and stays
+    // valid through the death animation (getHitbox goes null at death). Falling
+    // back to the hitbox for enemies that don't provide an anchor.
+    const anchor = adapter.getBurnAnchor?.(enemy);
+    if (anchor) {
+      _anchorYaw = anchor.yaw ?? 0;
+      _registryFallbackPos.set(anchor.x, anchor.y, anchor.z);
+      return _registryFallbackPos;
     }
-    void radius;
-    // Raw body base (feet center). Bullet burns add the exact hit-point offset on
-    // top of this (so the fire stays pinned to where the bullet struck as the body
-    // moves); body-engulf burns place their plumes relative to it.
-    _registryFallbackPos.set(cx, cy, cz);
+    const hb = adapter.getHitbox(enemy);
+    if (!hb) return null;
+    _anchorYaw = 0;
+    _registryFallbackPos.set(hb.centerX, hb.bottomY, hb.centerZ);
     return _registryFallbackPos;
   }, [cameraRef]);
 
@@ -369,6 +371,7 @@ export function useBurnSystem({
       console.warn(`[BurnSystem] Entity not found for burn: ${entityType}:${entityId}`);
       return;
     }
+    const igniteYaw = _anchorYaw; // body facing at ignite (set by getEntityPosition)
 
     let hitOff: THREE.Vector3 | null = null;
     if (hitPosition) {
@@ -442,6 +445,7 @@ export function useBurnSystem({
       deathPos: entityPos.clone(),
       dotSeconds,
       layout,
+      igniteYaw,
       // Hit-point (bullet) burns are a SINGLE big flame at the impact spot — one
       // solid fire, not a spread-out cluster (the hex fanned out hand-to-hand).
       flameType: opts?.flameType ?? 'point',
@@ -532,8 +536,17 @@ export function useBurnSystem({
       //    the layout cached on the entry at creation time. Honors
       //    xOffset/zOffset for multi-shape monsters (e.g. spider legs).
       if (entry.trackedImpactId != null) {
-        // Sustained 7-fire impact follows the hit spot on the (moving) body.
-        _offsetPos.copy(pos).add(entry.hitOffset!);
+        // Sustained 7-fire impact follows the hit spot on the (moving) body, AND
+        // rotates with the body's facing so it stays on the same spot as he turns.
+        // getEntityPosition (called above) set _anchorYaw to the live facing.
+        const ho = entry.hitOffset!;
+        const dYaw = _anchorYaw - (entry.igniteYaw ?? _anchorYaw);
+        const c = Math.cos(dYaw), s = Math.sin(dYaw);
+        _offsetPos.set(
+          pos.x + (ho.x * c + ho.z * s),
+          pos.y + ho.y,
+          pos.z + (-ho.x * s + ho.z * c),
+        );
         bulletImpactsRef?.current?.updateTracked(entry.trackedImpactId, _offsetPos);
       } else if (entry.hitOffset) {
         _offsetPos.copy(pos).add(entry.hitOffset);

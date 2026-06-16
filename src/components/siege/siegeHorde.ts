@@ -31,6 +31,7 @@ export interface DemonInstance {
   hitAt: number;        // last flinch trigger (performance.now())
   headFrac: number;     // top fraction of the hitbox that counts as a headshot (head zone)
   noStun?: boolean;     // test/boss flag: bullets don't stun-freeze it (keeps walking when shot)
+  yaw: number;          // current facing (radians) — lets attached fire rotate WITH the body
 }
 
 // Live array (not a Set) so getActiveEnemies returns it with zero per-query allocation —
@@ -67,7 +68,7 @@ enemyCombatRegistry.register<DemonInstance>({
   // null at death so weapons stop hitting it, but the corpse is still on screen
   // for ~2.6s). Returns the live feet position whether alive or dead; the burn
   // system stops following once the demon despawns (leaves the active list).
-  getBurnAnchor: (d) => ({ x: d.x, y: d.y, z: d.z, radius: d.radius }),
+  getBurnAnchor: (d) => ({ x: d.x, y: d.y, z: d.z, radius: d.radius, yaw: d.yaw }),
   applyDamage: (d, info) => {
     if (d.dead) return false;
     d.hp -= info.damage;

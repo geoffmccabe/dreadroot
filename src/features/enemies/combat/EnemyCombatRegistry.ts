@@ -129,7 +129,7 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
    * null only when the body is truly gone. If omitted, the burn system
    * falls back to getHitbox (fire drops the moment the enemy dies).
    */
-  getBurnAnchor?: (enemy: TEnemy) => { x: number; y: number; z: number; radius: number } | null;
+  getBurnAnchor?: (enemy: TEnemy) => { x: number; y: number; z: number; radius: number; yaw?: number } | null;
 }
 
 // ------------------------------------------------------------------

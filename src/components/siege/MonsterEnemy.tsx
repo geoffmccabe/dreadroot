@@ -119,6 +119,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     kvx: 0, kvz: 0, kvy: 0, stunUntil: 0, hitAt: 0,
     headFrac: cfg.zombie ? 0.20 : 0.25,   // head ≈ top 20% of a humanoid demon
     noStun: cfg.noStun ?? false,
+    yaw: 0,
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   // Stable per-demon climbing role from the id: ~25% are climbers (hop over walls/rocks);
@@ -395,6 +396,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     me.y = s.y;
     g.position.set(s.x, s.y, s.z);
     inst.x = s.x; inst.y = s.y; inst.z = s.z;   // keep the combat hitbox on the live body
+    inst.yaw = g.rotation.y;                     // so attached fire rotates with the body
     // BODY collider: feet → shoulders (STAND·H). Other demons stand on its top, so a stacked
     // demon sits at shoulder height (~0.8H) instead of floating above the head below it.
     const br = cfg.zombie ? H * 0.26 : me.r;
