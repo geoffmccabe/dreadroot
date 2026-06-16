@@ -11,6 +11,7 @@ import { TerrainLayer } from './TerrainLayer';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
+import { SiegeItemGrid } from './SiegeItemGrid';
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const [terrainReady, setTerrainReady] = useState(false);
@@ -25,6 +26,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           <Suspense fallback={null}>
             <WorldObjectsLayer />
           </Suspense>
+          {/* Press "I" to show a floating grid of every game item over spawn. */}
+          <SiegeItemGrid />
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. */}
           <Suspense fallback={null}>
