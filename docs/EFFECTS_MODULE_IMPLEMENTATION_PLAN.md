@@ -357,10 +357,17 @@ const save = async () => {
 **Acceptance:** create "Toxic Smoke" (green, slow rise, longer life), save it, see
 it appear in the variant list, preview it live. Row exists in `effect_definitions`.
 
-**Note for audit:** there's an existing `src/features/particles/` nebula effect
-system + `nebulaEffectRegistry` capture pattern. DECISION NEEDED: reuse its
-editor-param plumbing vs build fresh. Lean: new module owns the runtime; borrow
-the panel/preview UX patterns, don't fork the renderer.
+**Styling (see Audit E):** wrap the panel root in `className="admin-panel-dialog"`
+and build it from `@/components/ui/*` (Card/Tabs/Slider/Input/Label/Button/Badge)
+using semantic tokens ONLY (`bg-card`, `text-foreground`, `--primary`,
+`--brand-accent-*`) — never a hardcoded hex for chrome. It then auto-themes per
+game via `--hud-bg-h` (blue→pink→…) with zero panel edits, satisfying the
+universal-engine per-game-CSS requirement. The smoke color pickers write hex into
+recipe `params` — that's effect DATA, not theme, and is correct.
+
+**Reconcile with nebula system (see Audit F):** new module owns the runtime;
+reuse the existing `nebulaEffectRegistry`/`flameDemoRef` preview UX patterns,
+don't fork its point renderer.
 
 ---
 
@@ -427,15 +434,194 @@ that's stronger when the cloud is fresh and fades as it dissipates.
 
 ---
 
-## Phase 5 — Realism + scale polish (as profiling demands)
+## Phase 5 — Realism + scale polish (staged backends, as profiling demands)
 
-- **Half-res particle render target + depth-aware upsample** (only if profiling
+Drop-ins behind the 3-stage interface (Audit B); none touch game code:
+- **shade → Six-way lighting flipbooks (top realism win).** 2 baked lightmap
+  textures + flipbook, relit at runtime by scene lights (2 samples + 6 weighted
+  adds, pure WebGL2, mobile-safe). Needs offline-baked assets (EmberGen/Houdini
+  or CC0) — a content task. Makes smoke read as lit volume, not a flat decal.
+- **shade → VAT/EmberGen flipbook pipeline** feeding the six-way shader (bake sim
+  + lightmaps offline, KTX2/Basis compressed for mobile VRAM).
+- **composite → WBOIT** (weighted-blended OIT, single-pass, mobile-OK) so many
+  overlapping puffs blend without sort-popping; **MBOIT** as a desktop tier.
+- **composite → half-res particle RT + depth-aware upsample** (only if profiling
   shows overdraw-bound) — 4–16× fill-rate cut.
-- **Soft particles** via the existing opaque-pass depth buffer (quality toggle).
-- **Flipbook smoke** (sub-UV atlas) recipes for extra realism with few particles.
-- **`ComputeBackend`** (WebGPU/TSL) for collision-aware / 100k clouds, behind the
-  same `FXBackend` interface; core smoke stays stateless so the WebGL2 fallback is
-  identical.
+- **shade → soft particles** via the existing opaque-pass depth buffer (toggle).
+- **simulate → `ComputeBackend` (WebGPU/TSL + curl-noise advection)** for
+  turbulent, collision-aware, 100k+ clouds; WebGL2 falls back to the stateless
+  sim so the look degrades gracefully, never breaks.
+- **simulate+shade → raymarched volumetric** as a DESKTOP-only localized hero
+  backend (one explosion/chimney at half-res), never the default.
+
+---
+
+---
+
+# AUDIT v2 — world models, future-proofing, GC/heap, flexibility, styling
+
+This audit checks the plan against the actual code (both world models), current
+graphics research, the FPS/GC budget, hard-coded-value flexibility, and the
+styling/theming system. Findings are folded back into the phases above where
+noted; cross-cutting findings are here.
+
+## A. Works in BOTH world models (voxel + Siege Worlds) — CONFIRMED, one fix
+
+The engine renders EITHER the voxel world (`CameraTrackedBlocks`) OR Siege
+Worlds terrain (`SiegeWorldLayers`), chosen by `isSiege` in
+`FortressScene.tsx` (~L257, swap at L1732). Everything the effects module needs
+is mounted in the SHARED shell, not per-world:
+- `UniversalFlameRenderer` (`FortressScene.tsx` ~L1766), `useBurnSystem` (~L1479),
+  camera (`useThree`, ~L262), player controller, weapons — all shared.
+- Siege enemies register with `EnemyCombatRegistry` via `siegeHorde.ts` (~L62), so
+  **burns already work in Siege Worlds today**. The smoke emitter rides the same
+  burn entries → works in both worlds with zero per-world code.
+- Both worlds use identical continuous THREE world-space coords, so a world-space
+  particle system is world-agnostic.
+
+→ **EffectsRoot mounts once next to `UniversalFlameRenderer`. Phase 1 has ZERO
+world-specific dependencies.** (De-risked.)
+
+**The one real fix — ground height is world-specific, never hardcode `y=0`:**
+- Siege: `sampleHeight(x,z)` from `src/components/siege/terrainHeight.ts` (~L25),
+  bilinear over loaded tiles; passed to the frame loop as
+  `groundHeightFn: isSiege ? sampleHeight : undefined` (`FortressScene.tsx` ~L1369).
+- Voxel: no heightfield — ground is blocks in the spatial hash (`groundHeightFn`
+  is `undefined`); height comes from a block lookup/raycast.
+
+Phase-1 fire-smoke rises from the emitter point and needs NO ground height. Only
+**ground-pooling gas / ground-contact fade** (Phase 4+) needs it. Resolution:
+inject a nullable, world-agnostic provider into `EffectsRoot`:
+
+```ts
+// EffectsRoot prop, set once per active world (no hardcoded ground)
+groundHeightAt?: (x: number, z: number) => number | null;
+// Siege → sampleHeight; voxel → a spatial-hash top-solid lookup; null → effect
+// simply skips ground-snap (rises/floats normally). A recipe flag `needsGround`
+// guards it so most effects never call it.
+```
+
+## B. Future-proofing — split the backend into 3 swappable stages
+
+Research verdict (2024–2026 state of the art) reshapes the backend interface.
+Instead of one monolithic backend, `FXBackend` is internally three swappable
+stages, so the cheap mobile path and future desktop/WebGPU path coexist behind
+one interface with **no game-code changes**:
+
+```
+FXBackend = simulate → shade → composite
+```
+
+| Stage | Phase-1 (ship now, mobile) | Future backends (same interface) |
+|-------|----------------------------|----------------------------------|
+| **simulate** (where puffs are) | Stateless vertex-shader sim (closed-form rise+flutter, ~0 CPU) | **WebGPU TSL compute + curl-noise advection** (divergence-free turbulence, 100k+; WebGL2 falls back to stateless) |
+| **shade** (how a puff looks) | Soft alpha sprite, color/opacity gradient | **Six-way lighting flipbooks** (AAA realism sweet-spot, pure WebGL2: 2 lightmap samples + 6 weighted adds → smoke that reacts to scene lights); VAT/EmberGen-baked flipbooks |
+| **composite** (how puffs blend) | `additive` (order-independent, no sort) + `alpha` (`depthWrite:false`) | **WBOIT** (weighted-blended OIT, single-pass, mobile-OK) → **MBOIT** (desktop tier) for many overlapping puffs without sort-popping |
+
+Verdicts that set the priorities (sources at the bottom of this doc):
+- **Six-way lighting flipbooks — SHIP-NOW, #1 realism-per-ms.** Pure shader, no
+  compute. The headline future realism upgrade (Phase 5). Needs offline-baked
+  flipbook + 2 lightmap textures (EmberGen/Houdini, or CC0 assets) — a CONTENT
+  dependency, not a code one. Design the `shade` stage for it now; supply assets
+  later.
+- **WebGPU TSL compute + curl-noise — SHIP-NOW on WebGPU, WebGL2 fallback.** The
+  forward motion engine for turbulent, interactive, art-directable smoke. Keep
+  core smoke stateless so the fallback is identical.
+- **WBOIT — SHIP-NOW (mobile).** Bake the `composite` abstraction from day one;
+  start additive/alpha, add WBOIT in Phase 5.
+- **Raymarched volumetric / froxel — DESKTOP-ONLY / future**, localized hero
+  effects only. Future `simulate+shade` backend, never the default.
+- **Gaussian-splat / neural smoke — RESEARCH-ONLY.** No backend; watch-list (no
+  authoring/dynamics path yet).
+
+Net: Phase 1 ships stateless-vertex + soft-sprite + additive/alpha. Six-way
+lighting, WBOIT, and WebGPU curl-noise are Phase-5 drop-ins behind the staged
+interface — the module is future-proof without over-building now.
+
+## C. FPS / GC / heap hardening (the top priority)
+
+The D-Flow panel already flags GC pauses as a real FPS limiter, so the hot path
+must be **allocation-free**. Mandatory rules, enforced in code review:
+
+- **SOA `Float32Array`s** for every per-particle attribute, pre-allocated to max
+  count ONCE; `InstancedBufferGeometry` + `InstancedBufferAttribute`. Spawn =
+  advance a ring cursor and overwrite in place; upload only the dirty slice via
+  `BufferAttribute.updateRanges` (never the whole buffer).
+- **Zero per-frame allocation** in `emitPuff` / `update` / emitter ticks: no
+  `new THREE.Vector3`, no array `.map/.filter/.flat`, no object literals, no
+  template-string keys. Use module-level scratch vectors (same discipline as
+  `numPosKey`/colliders) and numeric keys.
+- **Pool emitters.** `createEmitter` returns a handle from a pre-allocated pool;
+  `stop()` returns it to the pool. A burning NPC creates ONE emitter at ignite
+  (not per frame); its `getPos` closure is created once, not per tick.
+- **Parse once, reuse forever.** DB rows → recipes parsed once on load;
+  `THREE.Color` objects and uniform structs built at recipe-load, never per puff.
+  No JSON parse, no Supabase call, no string work on the hot path.
+- **Stateless sim = almost no per-frame uploads** (attributes are write-once),
+  so the per-frame CPU cost is one `uTime` uniform + emitter cadence math.
+- **Hard caps as backstop:** global ring-buffer instance cap + emitter cap;
+  significance eviction drops lowest-value first. No unbounded growth.
+- **Verify on the D-Flow panel** each phase (MeshRebuilds, GC pauses, heap
+  column) — ship behind the runtime-fallback rule, watch heap stays flat.
+
+## D. Flexibility — no hard-coded values where they don't belong
+
+Audit of literals in the draft → move to config/data:
+- Per-effect values (lifetime, size, colors, rise, cull distance, importance…)
+  are already **recipe `params` in the DB** ✓.
+- **Engine-level constants must NOT be literals in code.** Introduce
+  `src/effects/effectsEngineConfig.ts` — a single config object, **overridable
+  per game** (keyed by `GAME_ID`): `maxInstances`, `maxEmitters`, quality-tier
+  definitions (low/med/high caps + toggles), default `cullDistance/fadeStart/
+  fadeEnd`, soft-particle depth constant `k`, sprite-atlas registry. Different
+  games on the engine get different budgets/quality without code edits.
+- **No hardcoded ground (`y=0`)** — pluggable `groundHeightAt` (finding A).
+- **No hardcoded sprite paths** — sprites resolved through an atlas registry
+  (data), so a new game can ship its own sprite set.
+- **Fallback recipe is the seed mirror, not a magic literal** — generated from
+  the same shape as the DB row so they can't drift.
+
+## E. Panel styling + per-game theming — token-only, auto-themes per game
+
+Confirmed stack: **Tailwind + shadcn/ui**, HSL design tokens in
+`src/index.css`, admin panels scoped by `.admin-panel-dialog` (L581) which
+re-maps shadcn tokens onto the HUD tokens. Crucially, `--hud-bg-h` (L110) is
+documented as *"the ONLY value that changes per game (blue→pink)."*
+
+→ **The SmokeEffectsPanel must render inside `.admin-panel-dialog` and use
+ONLY shadcn components + semantic tokens — never a hardcoded hex for chrome.**
+Then it auto-themes per game (DreadRoot blue, Pinkland pink, Siege Worlds its
+own hue) the instant that game sets `--hud-bg-h`, with zero panel edits. This is
+exactly the "universal engine, per-game CSS" requirement.
+
+Concrete rules for the panel:
+- Components from `@/components/ui/*`: `Card`, `Tabs`, `Slider`, `Input`,
+  `Label`, `Button`, `Badge` — same set `AdminPanel.FlameEffectsPanel.tsx` uses.
+- Colors via tokens only: `bg-card`, `text-foreground`, `border-border`,
+  `text-muted-foreground`, `--primary`, `--brand-accent-*`, `--rarity-*`. No
+  literal `#hex`/`rgb()` in the panel chrome.
+- Spacing/typography via tokens (`--hud-font-*`, `--spacing-*`, `--radius`).
+- Wrap the panel root in `className="admin-panel-dialog"` so the frosted-glass
+  HUD scope + slider/button contrast overrides apply (L614–650).
+- **Effect colors are DATA, not theme:** the smoke color pickers write hex into
+  recipe `params` (a grey/green smoke is the same in every game). That's correct
+  and separate from UI theming. Per-game *effect* variation comes from `game_id`
+  on `effect_definitions`, not from the theme tokens.
+- **Future-proofing the theme system:** today per-game hue is a single token set
+  in `:root`. Recommend (small, separate task) a `data-game="<slug>"` attribute
+  on the app root with per-game `--hud-bg-h` overrides, so multiple games' themes
+  can coexist in one build. The panel needs no change when that lands — it's
+  already token-only.
+
+## F. Reconcile with the existing `src/features/particles/` nebula system
+
+There IS a prior particle/nebula system (`nebulaEffectRegistry`, editor params,
+captured in `FlameEffectsPanel`). DECISION: the new `src/effects/` module owns
+the **runtime** (instanced billboards + staged backends) — the nebula system is
+point-based and purpose-built for captured nebula looks, not creator smoke.
+**Reuse its panel/preview UX patterns** (slider plumbing, live capture-to-preview
+via `flameDemoRef`); do NOT fork its renderer. Revisit folding nebula effects
+into the universal module as a later backend once the new module is proven.
 
 ---
 
@@ -448,15 +634,59 @@ that's stronger when the cloud is fresh and fades as it dissipates.
 4. DB phases: provide copy/paste SQL, user applies via dashboard, then regen
    `types.ts`. Engine ships with the hardcoded fallback so it never blocks on SQL.
 
-## Open questions for the audit
+## Audit resolutions & remaining questions
 
-1. **Triggers in a table vs in `ai_config` JSON** — runtime fetch/caching cost?
-2. **Reconcile with `src/features/particles/` nebula system** — reuse or supersede?
-3. **`game_id` typing** — definitions tables today look game-shared; confirm the
+**Resolved by Audit v2:**
+- ✅ Works in both world models (shared shell, shared burns) — Phase 1 is
+  world-agnostic. Ground height is the only world-specific bit → pluggable
+  `groundHeightAt` provider, used only by ground-pooling effects (Phase 4+).
+- ✅ Future-proofing → 3-stage swappable backend (simulate/shade/composite);
+  six-way lighting + WBOIT + WebGPU curl-noise are Phase-5 drop-ins.
+- ✅ GC/heap → SOA + ring buffer + pooled emitters + parse-once + zero per-frame
+  alloc; verified on D-Flow each phase.
+- ✅ Flexibility → engine constants move to per-game `effectsEngineConfig`; no
+  hardcoded ground, sprite paths, or caps.
+- ✅ Panel styling → `.admin-panel-dialog` + shadcn + semantic tokens only →
+  auto-themes per game via `--hud-bg-h`.
+- ✅ Nebula reconcile → new module owns runtime, reuse nebula panel/preview UX.
+
+**Still open (decide before/early in execution):**
+1. **Triggers in a table vs `ai_config` JSON** — table is the plan; confirm the
+   per-frame trigger lookup is cached (Map built once on load), not re-fetched.
+2. **`game_id` typing** — definitions tables today look game-shared; confirm the
    `games` FK + `GAME_UUID` lookup path (`useCreatureRegistry` uses `games.slug`).
-4. **RLS for creator-owned effects** — is `owner_id = auth.uid()` enough, or do we
-   need a moderation/`is_public` gate before others can use a creator's effect?
-5. **Item event hooks** — items don't have the same adapter attack hooks as
-   creatures; where do `on_use`/`on_hit` fire for items?
-6. **Bone anchor availability** — not every monster model has named bones; define
-   the offset fallback contract.
+3. **RLS for creator-owned effects** — is `owner_id = auth.uid()` enough, or do we
+   need a moderation / `is_public` gate before others reuse a creator's effect?
+4. **Item event hooks** — items lack the creature attack hooks; where do
+   `on_use`/`on_hit` fire for items? (May need an item-event emitter.)
+5. **Bone anchor availability** — not every model has named bones; define the
+   offset fallback contract (reuse `createBurnFollower`'s nearest-bone pick).
+6. **Per-game theme wiring** — small separate task: `data-game` attribute + per-
+   game `--hud-bg-h` overrides so multiple games' themes coexist in one build.
+7. **Six-way lighting assets** — content dependency (EmberGen/Houdini or CC0
+   flipbook + lightmaps); confirm an asset source before scheduling that Phase-5
+   item.
+
+---
+
+## Audit v2 sources (cutting-edge smoke technique)
+
+- Unity — Six-Way Lighting in VFX Graph (the AAA lit-smoke standard):
+  https://docs.unity3d.com/Packages/com.unity.visualeffectgraph@17.2/manual/six-way-lighting.html
+- Unity blog — Realistic smoke with 6-way lighting:
+  https://unity.com/blog/engine-platform/realistic-smoke-with-6-way-lighting-in-vfx-graph
+- O3DE — Six-point lighting tutorial:
+  https://docs.o3de.org/docs/learning-guide/tutorials/rendering/six-point-lighting-tutorial/
+- SideFX — Vertex Animation Textures 3.0:
+  https://www.sidefx.com/docs/houdini/nodes/out/labs--vertex_animation_textures-3.0.html
+- three.js forum — Houdini VAT 3.0 for WGSL/WebGPU:
+  https://discourse.threejs.org/t/houdini-vertex-animation-textures-vat-3-0-for-wgsl/92245
+- Maxime Heckel — Real-time volumetric raymarching in three.js (desktop verdict):
+  https://blog.maximeheckel.com/posts/real-time-cloudscapes-with-volumetric-raymarching/
+- Codrops — WebGPU/TSL compute particles (Jan 2026):
+  https://tympanus.net/codrops/2026/01/28/webgpu-gommage-effect-dissolving-msdf-text-into-dust-and-petals-with-three-js-tsl/
+- nibi — TSL compute-shader GPU particle engine: https://github.com/monoton-music/nibi
+- Interplay of Light — OIT endgame (WBOIT / MBOIT):
+  https://interplayoflight.wordpress.com/2022/07/10/order-independent-transparency-endgame/
+- 3D Gaussian Splatting (INRIA 2023, research watch-list):
+  https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/
