@@ -80,7 +80,10 @@ const VERT = /* glsl */ `
 `;
 
 const FRAG = /* glsl */ `
-  precision mediump float;
+  // No explicit precision qualifier: use three's injected default (highp), which
+  // MUST match the vertex shader's uTime precision — declaring uTime at mediump
+  // here while the vertex uses highp makes the program fail to link on strict
+  // drivers (Mac/ANGLE) and nothing renders. Keep both stages at the same precision.
   uniform float uTime;
   uniform vec3 uColor0, uColor1;
   uniform float uOpacity0, uOpacity1;
