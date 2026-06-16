@@ -177,9 +177,46 @@ Mounted once near the flame renderer in the Fortress shell so every world gets i
 - **Phase 3:** More recipes (steam, glitter, sleep, blind) + status consumers +
   faction/source/persistence-stage potency scaling.
 
+## Culling & FPS safety (the part that keeps this cheap)
+
+Because all puffs live in ONE big world-spanning buffer, three.js's built-in
+object frustum culling can't help (it's all-or-nothing on the whole buffer, so
+the renderer keeps `frustumCulled={false}`). Culling is therefore done by us, at
+two stages, cheapest-first:
+
+1. **Emit-side cull (biggest win).** An emitter past `cullDistance` from the
+   camera, or outside the view frustum, drops its spawn rate to zero — the puffs
+   are never created at all. No buffer slot, no per-frame cost. This is what
+   protects the 100-NPCs-on-fire case: only the handful of burning NPCs actually
+   near/in front of the player emit.
+2. **Render-side cull (per-puff).** In the per-frame write loop each puff does:
+   - a cheap squared-distance test vs `cullDistance` → skip if beyond, and
+   - a frustum test (dot-products against the camera planes, with a small radius
+     pad so puffs don't pop at screen edges) → skip if off-screen.
+   A skipped puff still *ages* from its birth time, so when it re-enters view
+   it's at the correct life stage — no popping, and while off-screen it costs
+   only the test, not a buffer write.
+
+### Settings (per recipe, with engine defaults)
+- **`cullDistance`** — hard max view range. Default **100 m** for smoke; tunable
+  per recipe (dense battlefield smoke could be 60 m; a giant landmark plume could
+  be 200 m). Beyond this, nothing emits or renders.
+- **`fadeStart` / `fadeEnd`** — smooth distance fade-out band (e.g. 80→100 m) so
+  clouds dissolve with range instead of hard-cutting. Reuses the flame LOD model.
+- **`maxEmitDistance`** — optional separate, usually-smaller radius for *emission*
+  vs *rendering*, so existing puffs finish their life as you walk away but no new
+  ones spawn.
+- **`frustumCull`** — on by default; can be disabled for effects that must read
+  correctly in mirrors / minimaps / wide shots.
+- Global ring-buffer **hard cap** is the final backstop regardless of settings.
+
+These are recipe fields, so smoke-on-fire ships with sane defaults (100 m,
+frustum-culled) and any future effect can override.
+
 ## Performance budget (must hold on mobile)
 
-- Visual: 1–2 draw calls total; ring-buffer hard cap; distance LOD + emit-rate
-  throttle; cheap per-puff CPU. 100 flaming NPCs in arcs = fine.
+- Visual: 1–2 draw calls total; ring-buffer hard cap; emit-side + per-puff
+  distance & frustum culling; cheap per-puff CPU for what's actually visible.
+  100 flaming NPCs in arcs = only the near/on-screen few do any work.
 - Gameplay: coarse volumes only; `sampleAt` short-circuits when empty; zero cost
   when no gameplay clouds are active (the default during normal fire combat).
