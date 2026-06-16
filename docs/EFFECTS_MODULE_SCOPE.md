@@ -24,6 +24,24 @@
 5. Cheap enough for 100+ emitters at once (e.g. 100 flaming NPCs flying through
    the air) without tanking FPS on mobile.
 
+## Continuous, not voxel-based
+
+The smoke lives in the voxel *world* but is NOT itself voxel-based. Puffs use
+full continuous floating-point world coordinates and move on smooth curves
+(sub-voxel rise, drift, flutter) — they are never snapped to the 1×1×1 grid and
+never rendered as cubes. The result is soft and realistic, free of the blocky
+look of the terrain.
+
+The voxel world is only *read*, never imposed:
+- **Occlusion / spawn validity (optional, later):** a puff may sample the
+  collision grid so it doesn't bloom through a solid wall, or so ground-hugging
+  gas pools on top of blocks. This uses the existing `SpatialHashGrid` as a
+  lookup — it does not make the smoke voxel-shaped.
+- **Gameplay volumes** (Layer 2) are continuous spheres/columns with real
+  radii, sampled by `sampleAt(point)`. They work *within* the voxel system
+  (entities have world positions) without being quantized to voxels — a poison
+  cloud can be 3.7 m across, not "4 blocks."
+
 ## The core feasibility trick (two decoupled densities)
 
 - **Visual density is high** — hundreds of tiny puffs make a convincing trail.
@@ -41,11 +59,36 @@ free, and a live puff costs only a few float ops per frame.
 
 ---
 
-## Layer 1 — Visual renderer (`VolumetricFXRenderer`)
+## Layer 1 — Visual renderer (pluggable backends)
 
-Generalization of the existing `UniversalFlameRenderer` (single batched
-`<points>`, one draw call, ring-buffer particle pool, distance LOD). Same proven
-shape — fire already runs thousands of particles this way.
+The *look* is not hard-coded. Layer 1 is split into a stable interface and
+swappable backends, so a recipe — or a whole new game — can pick how its effect
+is drawn without inheriting one fixed visual style.
+
+### Stable interface (`FXBackend`)
+Every backend implements the same small contract the rest of the engine talks to:
+`emitPuff / emitBurst / createEmitter / update(frame) / stop / dispose`. Layers 2
+(world-awareness) and 3 (recipes) only ever touch this interface — they never
+know or care which backend is rendering. Swapping or adding a backend changes
+zero gameplay code.
+
+### Backends (start with one, add freely)
+- **`PointsBackend`** (Phase 1 default) — generalization of the existing
+  `UniversalFlameRenderer`: a single batched `<points>` cloud, one draw call,
+  ring-buffer pool, GPU point sprites. Cheapest; great for smoke/steam/glitter.
+- **`SpriteBackend`** (later) — camera-facing textured quads / soft billboards
+  for thick, lit, or animated-flipbook smoke where round points aren't enough.
+- **`MeshBackend` / custom** (later) — instanced meshes, volumetric shells, or a
+  bespoke shader for a game that needs something none of the above gives.
+
+A recipe names its backend (`backend: 'points' | 'sprite' | '<custom>'`) and the
+module instantiates it. New game with a new visual need = write a new backend
+behind the same interface; no edits to recipes, world-awareness, or call sites.
+
+The variables below (color, opacity, lifetime, rise, flutter, size, blend, etc.)
+are the *shared* recipe vocabulary; each backend interprets them in its own
+medium, and a backend may expose extra backend-specific options for things only
+it supports (flipbook frame, mesh LOD, etc.).
 
 ### Emit API (handle, like the flame renderer)
 - `emitPuff(recipe, position, overrides?)` — one fire-and-forget puff.
@@ -160,10 +203,15 @@ Examples (illustrative):
 
 ```
 src/effects/
-  VolumetricFXRenderer.tsx   // Layer 1 — batched particle renderer + emit API
+  FXBackend.ts               // Layer 1 — the stable backend interface
+  backends/
+    PointsBackend.tsx        //   batched <points> backend (Phase 1 default)
+    SpriteBackend.tsx        //   billboard/flipbook backend (later)
+    ...                      //   custom backends per game (later)
+  EffectsRoot.tsx            // mounts active backends + routes emits by recipe
   EffectVolumeField.ts       // Layer 2 — gameplay-cloud spatial index + sampleAt
-  effectRecipes.ts           // Layer 3 — named presets (visual + payload)
-  types.ts                   // recipe/volume/handle types
+  effectRecipes.ts           // Layer 3 — named presets (visual + payload + backend)
+  types.ts                   // recipe/volume/backend/handle types
 ```
 
 Mounted once near the flame renderer in the Fortress shell so every world gets it.
