@@ -28,6 +28,13 @@ export interface ImpactConfig {
 
 export interface BulletImpactsHandle {
   spawnImpact: (...args: any[]) => void;
+  /** Spawn a SUSTAINED version of the same 7-fire impact that follows a moving
+   *  point and fades over its (long) duration. Returns an id for update/remove. */
+  spawnTracked: (position: THREE.Vector3, config: ImpactConfig) => number;
+  /** Move a tracked impact to a new world position (call every frame). */
+  updateTracked: (id: number, position: THREE.Vector3) => void;
+  /** Remove a tracked impact early (e.g. the burn ended / enemy despawned). */
+  removeTracked: (id: number) => void;
 }
 
 interface FireInstance {
@@ -35,11 +42,15 @@ interface FireInstance {
   material: any;
   startTime: number;
   duration: number;
+  offset: THREE.Vector3; // position relative to the group center (for tracking)
 }
 
 interface ImpactGroup {
   fires: FireInstance[];
   startTime: number;
+  id?: number;          // set for tracked groups
+  tracked?: boolean;
+  shrinkMs?: number;    // duration over which a tracked group scales down
 }
 
 // Convert hex color to THREE.Color number
@@ -64,8 +75,9 @@ function getHexOffsets(diameter: number): THREE.Vector2[] {
 export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
   const { scene, camera } = useThree();
   const activeGroupsRef = useRef<ImpactGroup[]>([]);
+  const nextTrackedIdRef = useRef(1);
 
-  const spawnImpactImpl = useCallback((position: THREE.Vector3, config?: ImpactConfig) => {
+  const spawnImpactImpl = useCallback((position: THREE.Vector3, config?: ImpactConfig, tracked = false): ImpactGroup => {
     // DEBUG: Log what config we receive (guarded for FPS)
     if (DEBUG_IMPACTS) {
       console.log('[FortressImpacts] spawnImpact called with config:', JSON.stringify(config));
@@ -98,16 +110,21 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     const outerHeightA = userHeight * 0.4; // First set of 3
     const outerHeightB = userHeight * 0.6; // Second set of 3
 
+    // Tracked (sustained) impacts: ALL fires last the full duration so the whole
+    // 7-fire cluster stays intact through the burn; one-shot stamps keep the
+    // original slightly-shorter outer fires.
     const centerDuration = userDuration * 1000;
-    const outerDuration = userDuration * 0.8 * 1000;
+    const outerDuration = tracked ? userDuration * 1000 : userDuration * 0.8 * 1000;
 
     // Hex offsets for the 6 outer fires
     const hexOffsets = getHexOffsets(userWidth);
 
-    // Remove oldest group if at limit
+    // Remove the oldest NON-tracked group if at limit (tracked burns are managed
+    // by their owner via removeTracked, so they're never auto-evicted).
     if (activeGroupsRef.current.length >= MAX_IMPACT_GROUPS) {
-      const oldest = activeGroupsRef.current.shift();
-      if (oldest) {
+      const idx = activeGroupsRef.current.findIndex(g => !g.tracked);
+      if (idx >= 0) {
+        const [oldest] = activeGroupsRef.current.splice(idx, 1);
         oldest.fires.forEach(fire => {
           scene.remove(fire.points);
           fire.points.geometry.dispose();
@@ -160,6 +177,7 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
         material,
         startTime: now,
         duration,
+        offset: pos.clone().sub(position), // relative to the group center
       };
     };
 
@@ -187,10 +205,15 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       fires.push(createFire(pos, color3, outerWidth, outerHeightB, outerDuration, PARTICLE_COUNT_OUTER));
     });
 
-    activeGroupsRef.current.push({
+    const group: ImpactGroup = {
       fires,
       startTime: now,
-    });
+      id: tracked ? nextTrackedIdRef.current++ : undefined,
+      tracked,
+      shrinkMs: tracked ? userDuration * 1000 : undefined,
+    };
+    activeGroupsRef.current.push(group);
+    return group;
   }, [scene, camera]);
 
   // Adapter: supports both call signatures
@@ -209,7 +232,33 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
     }
   }, [spawnImpactImpl]);
 
-  useImperativeHandle(ref, () => ({ spawnImpact }), [spawnImpact]);
+  // Sustained, following version of the same 7-fire impact.
+  const spawnTracked = useCallback((position: THREE.Vector3, config: ImpactConfig): number => {
+    const group = spawnImpactImpl(position, config, true);
+    return group.id!;
+  }, [spawnImpactImpl]);
+
+  const updateTracked = useCallback((id: number, position: THREE.Vector3) => {
+    const group = activeGroupsRef.current.find(g => g.id === id);
+    if (!group) return;
+    for (const fire of group.fires) {
+      fire.points.position.copy(position).add(fire.offset);
+    }
+  }, []);
+
+  const removeTracked = useCallback((id: number) => {
+    const idx = activeGroupsRef.current.findIndex(g => g.id === id);
+    if (idx < 0) return;
+    const [group] = activeGroupsRef.current.splice(idx, 1);
+    group.fires.forEach(fire => {
+      scene.remove(fire.points);
+      fire.points.geometry.dispose();
+      fire.material.dispose();
+    });
+  }, [scene]);
+
+  useImperativeHandle(ref, () => ({ spawnImpact, spawnTracked, updateTracked, removeTracked }),
+    [spawnImpact, spawnTracked, updateTracked, removeTracked]);
 
   // Update all fires and clean up expired ones
   useFrame((state, delta) => {
@@ -240,6 +289,14 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
           const remaining = 1 - (elapsed / fire.duration);
           if (remaining < 0.2) {
             fire.material.opacity = remaining / 0.2;
+          }
+
+          // Tracked (sustained) impacts gently shrink over their lifetime so the
+          // fire dies down as it burns out, instead of staying full-size then
+          // snapping off. 1.0 → 0.55 across the burn.
+          if (group.tracked && group.shrinkMs) {
+            const t = Math.min(1, (now - group.startTime) / group.shrinkMs);
+            fire.points.scale.setScalar(1 - 0.45 * t);
           }
         }
       }

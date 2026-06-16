@@ -26,6 +26,7 @@ import { useRef, useCallback, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { FlameColorMode, FlameType, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
+import type { BulletImpactsHandle } from './FortressImpacts';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 // Reusable scratch vector for the registry-fallback entity lookup.
@@ -135,15 +136,22 @@ interface BurnEntry {
    *  flame point). Cached on the burn so the frame loop never has to
    *  re-query FLAME_LAYOUTS or the registry per-tick. */
   layout: FlamePoint[];
-  /** Particle style. Bullet hit-point burns use 'hex' (a dense 7-fire cluster)
-   *  so they match the chunky impact fire; body/engulf burns use 'point'. */
+  /** Particle style (UFR fallback path only). */
   flameType?: FlameType;
+  /** When set, this burn's VISUAL is a sustained, following copy of the real
+   *  7-fire bullet-impact effect (FortressImpacts), NOT a UniversalFlameRenderer
+   *  flame. Used for bullet hit-point burns so the fire looks identical to the
+   *  impact, just longer + tracking + shrinking. */
+  trackedImpactId?: number;
 }
 
 interface UseBurnSystemOptions {
   universalFlameRef: React.RefObject<UniversalFlameRendererHandle>;
   cameraRef: React.RefObject<THREE.Camera>;
   takeDamage?: (damage: number, direction?: THREE.Vector3, knockback?: number) => void;
+  /** The 7-fire bullet-impact renderer. When provided, bullet (hit-point) burns
+   *  render as a sustained, following version of that exact effect. */
+  bulletImpactsRef?: React.RefObject<BulletImpactsHandle>;
 }
 
 // Pre-allocated temp vectors
@@ -155,6 +163,7 @@ export function useBurnSystem({
   universalFlameRef,
   cameraRef,
   takeDamage,
+  bulletImpactsRef,
 }: UseBurnSystemOptions) {
   const burnsRef = useRef<Map<string, BurnEntry>>(new Map());
 
@@ -218,6 +227,9 @@ export function useBurnSystem({
     const entry = burnsRef.current.get(key);
     if (!entry) return;
 
+    if (entry.trackedImpactId != null) {
+      bulletImpactsRef?.current?.removeTracked(entry.trackedImpactId);
+    }
     const renderer = universalFlameRef.current;
     if (renderer) {
       for (const fid of entry.flameIds) {
@@ -225,7 +237,7 @@ export function useBurnSystem({
       }
     }
     burnsRef.current.delete(key);
-  }, [universalFlameRef]);
+  }, [universalFlameRef, bulletImpactsRef]);
 
   // Look up entity position; returns null if entity is dead/gone.
   // Player is the only special case — every other entity comes from
@@ -435,13 +447,24 @@ export function useBurnSystem({
       flameType: opts?.flameType ?? 'point',
     };
 
-    spawnBurnFlames(entry, 1.0, (!engulf && hitOff)
-      ? _offsetPos.copy(entityPos).add(hitOff)
-      : entityPos);
+    if (!engulf && hitOff && bulletImpactsRef?.current) {
+      // Bullet hit-point burn: render the REAL 7-fire impact effect, sustained +
+      // following + shrinking. Same look as the impact, just extended. Size/height/
+      // colors are the impact's own (passed via opts), so it's identical to frame 0.
+      const startPos = _offsetPos.copy(entityPos).add(hitOff);
+      entry.trackedImpactId = bulletImpactsRef.current.spawnTracked(startPos, {
+        colors: entry.colors,
+        size: opts?.size ?? 0.5,
+        height: opts?.height ?? 1.0,
+        duration: dotSeconds,
+      });
+    } else {
+      spawnBurnFlames(entry, 1.0, (!engulf && hitOff)
+        ? _offsetPos.copy(entityPos).add(hitOff)
+        : entityPos);
+    }
     burnsRef.current.set(key, entry);
-    const _st = universalFlameRef.current?.getStats?.();
-    console.log(`[BURN] created ${entityType}:${entityId} engulf=${engulf} flames=${layout.length} dot=${dotSeconds}s pos=(${entityPos.x.toFixed(1)},${entityPos.y.toFixed(1)},${entityPos.z.toFixed(1)}) | renderer flames=${_st?.flames} particles=${_st?.particles} renderer?=${!!universalFlameRef.current}`);
-  }, [spawnBurnFlames, removeBurn, getEntityPosition, universalFlameRef]);
+  }, [spawnBurnFlames, removeBurn, getEntityPosition, universalFlameRef, bulletImpactsRef]);
 
   // Apply burn damage. Player is the only non-enemy special case;
   // every monster routes through its EnemyCombatAdapter.
@@ -474,32 +497,10 @@ export function useBurnSystem({
   }, [takeDamage]);
 
   // Main frame loop
-  const _lastLogRef = useRef(0);
   useFrame(() => {
     const now = performance.now() / 1000;
     const renderer = universalFlameRef.current;
     if (!renderer) return;
-
-    // TEMP diagnostic: once/sec while burns exist, report WHY the lookup fails.
-    if (burnsRef.current.size > 0 && now - _lastLogRef.current > 1) {
-      _lastLogRef.current = now;
-      const first = burnsRef.current.values().next().value as BurnEntry | undefined;
-      let reason = 'ok';
-      if (first && first.entityType !== 'player') {
-        const ad = enemyCombatRegistry.getAdapter(first.entityType);
-        if (!ad) reason = 'NO-ADAPTER';
-        else {
-          const list = ad.getActiveEnemies();
-          const lookupId = first.entityType === 'shwarm' && first.blockId
-            ? `${first.entityId}::${first.blockId}` : first.entityId;
-          const en = list.find(e => ad.getId(e) === lookupId);
-          if (!en) reason = `NOT-IN-LIST want=${first.entityId} active=${list.length} ids=[${list.slice(0, 8).map(e => ad.getId(e)).join(',')}]`;
-          else if (!ad.getHitbox(en)) reason = `DEAD/no-hitbox ${first.entityId}`;
-        }
-      }
-      const st = renderer.getStats();
-      console.log(`[BURN] entries=${burnsRef.current.size} flames=${st.flames} particles=${st.particles} phase=${first?.burnPhase} lookup=${reason}`);
-    }
 
     _toRemove.length = 0;
 
@@ -530,7 +531,11 @@ export function useBurnSystem({
       // 2. Update flame positions — use hit offset if available, else
       //    the layout cached on the entry at creation time. Honors
       //    xOffset/zOffset for multi-shape monsters (e.g. spider legs).
-      if (entry.hitOffset) {
+      if (entry.trackedImpactId != null) {
+        // Sustained 7-fire impact follows the hit spot on the (moving) body.
+        _offsetPos.copy(pos).add(entry.hitOffset!);
+        bulletImpactsRef?.current?.updateTracked(entry.trackedImpactId, _offsetPos);
+      } else if (entry.hitOffset) {
         _offsetPos.copy(pos).add(entry.hitOffset);
         renderer.updateAttachedPosition(entry.attachIds[0], _offsetPos);
       } else {
@@ -571,11 +576,15 @@ export function useBurnSystem({
       if (currentSecond > entry.lastDamageSecond) {
         entry.lastDamageSecond = currentSecond;
 
-        const shrink = shrinkAt(currentSecond, entry.dotSeconds);
-        const spawnPos = entry.hitOffset
-          ? _offsetPos.copy(pos).add(entry.hitOffset)
-          : pos;
-        spawnBurnFlames(entry, shrink, spawnPos);
+        // Tracked-impact burns shrink themselves (FortressImpacts); only the UFR
+        // flame path needs a per-second re-spawn at the new shrink size.
+        if (entry.trackedImpactId == null) {
+          const shrink = shrinkAt(currentSecond, entry.dotSeconds);
+          const spawnPos = entry.hitOffset
+            ? _offsetPos.copy(pos).add(entry.hitOffset)
+            : pos;
+          spawnBurnFlames(entry, shrink, spawnPos);
+        }
 
         const rawDmg = Math.floor(entry.baseDamage * dmgMultAt(currentSecond));
         if (rawDmg > 0) {

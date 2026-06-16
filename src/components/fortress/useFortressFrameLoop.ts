@@ -749,9 +749,11 @@ export function useFortressFrameLoop({
                 Math.max(1, Math.round(finalDamage * 0.25)), 0,
                 hitPos, Math.max(2, tierDef.burn_time),
                 {
+                  // The burn renders as the REAL 7-fire impact effect — use its
+                  // OWN native size/height (the design you made), just extended.
                   engulf: false,
-                  size: Math.max(1.4, tierDef.burn_width * 6) * pMul,
-                  height: Math.max(1.0, tierDef.burn_height * 2.5) * pMul,
+                  size: tierDef.burn_width * pMul,
+                  height: tierDef.burn_height * pMul,
                 },
               );
             }

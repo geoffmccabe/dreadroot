@@ -1480,6 +1480,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     universalFlameRef,
     cameraRef,
     takeDamage,
+    bulletImpactsRef,
   });
   // Back-fill the grenade system's burn ref. Hook order requires
   // useGrenadeSystem to be defined before useBurnSystem, so the
