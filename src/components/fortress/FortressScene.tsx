@@ -49,6 +49,8 @@ import { Coins } from './FortressCoins';
 import { Bullets, BulletsHandle } from './FortressBullets';
 import { BulletImpacts, BulletImpactsHandle } from './FortressImpacts';
 import { UniversalFlameRenderer, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
+import { EffectsRoot } from '@/effects/EffectsRoot';
+import type { EffectsHandle } from '@/effects/types';
 import { FlameDemoSpawner } from './FlameDemoSpawner';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { NebulaImpacts, NebulaImpactsHandle } from './FortressNebulaImpacts';
@@ -1069,6 +1071,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const tracersRef = useRef<TracersHandle>(null);
   const jetBoostFXRef = useRef<JetBoostFXHandle>(null);
   const universalFlameRef = useRef<UniversalFlameRendererHandle>(null);
+  const effectsRef = useRef<EffectsHandle>(null);
   const { flameDemoRef, fruitVisibility } = useAdminPanel();
 
   // Grenade system. Owns live grenades + their physics; explosion VFX
@@ -1481,6 +1484,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     cameraRef,
     takeDamage,
     bulletImpactsRef,
+    effectsRef,
   });
   // Back-fill the grenade system's burn ref. Hook order requires
   // useGrenadeSystem to be defined before useBurnSystem, so the
@@ -1764,6 +1768,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <NebulaImpacts ref={nebulaImpactsRef} />
       <Tracers ref={tracersRef} />
       <UniversalFlameRenderer ref={universalFlameRef} />
+      {/* Universal effects module (smoke/steam/glitter). World-agnostic — works
+          in both the voxel world and Siege Worlds. Phase 1: smoke off burns. */}
+      <EffectsRoot ref={effectsRef} />
       <FlameDemoSpawner ref={flameDemoRef} bulletImpactsRef={bulletImpactsRef} universalFlameRef={universalFlameRef} />
 
       {!isSiege && wispState && (

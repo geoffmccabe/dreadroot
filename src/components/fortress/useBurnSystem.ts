@@ -28,6 +28,7 @@ import * as THREE from 'three';
 import type { FlameColorMode, FlameType, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
 import type { BulletImpactsHandle } from './FortressImpacts';
 import { enemyCombatRegistry, type BurnFollower } from '@/features/enemies/combat/EnemyCombatRegistry';
+import type { EffectsHandle, EffectEmitter } from '@/effects/types';
 
 // Reusable scratch vector for the registry-fallback entity lookup.
 const _registryFallbackPos = new THREE.Vector3();
@@ -154,6 +155,12 @@ interface BurnEntry {
   /** Best: a follower locked to the model's nearest BONE at the hit point, so the
    *  fire rides the full animation (gait bob + turn + walk). Overrides igniteYaw. */
   burnFollower?: BurnFollower;
+  /** Smoke trail: a continuous effects emitter that drops fire-and-forget smoke
+   *  puffs at the fire's current spot, and an entry-owned vector holding that
+   *  spot (updated each frame). The puffs stay pinned where dropped, so a moving
+   *  enemy trails smoke automatically. Null when no effects renderer is wired. */
+  smokeEmitter?: EffectEmitter;
+  smokePos?: THREE.Vector3;
 }
 
 interface UseBurnSystemOptions {
@@ -163,6 +170,8 @@ interface UseBurnSystemOptions {
   /** The 7-fire bullet-impact renderer. When provided, bullet (hit-point) burns
    *  render as a sustained, following version of that exact effect. */
   bulletImpactsRef?: React.RefObject<BulletImpactsHandle>;
+  /** Universal effects renderer. When provided, every burn trails smoke. */
+  effectsRef?: React.RefObject<EffectsHandle | null>;
 }
 
 // Pre-allocated temp vectors
@@ -175,6 +184,7 @@ export function useBurnSystem({
   cameraRef,
   takeDamage,
   bulletImpactsRef,
+  effectsRef,
 }: UseBurnSystemOptions) {
   const burnsRef = useRef<Map<string, BurnEntry>>(new Map());
 
@@ -238,6 +248,7 @@ export function useBurnSystem({
     const entry = burnsRef.current.get(key);
     if (!entry) return;
 
+    entry.smokeEmitter?.stop();
     if (entry.trackedImpactId != null) {
       bulletImpactsRef?.current?.removeTracked(entry.trackedImpactId);
     }
@@ -481,8 +492,24 @@ export function useBurnSystem({
         ? _offsetPos.copy(entityPos).add(hitOff)
         : entityPos);
     }
+
+    // Smoke trail: attach a continuous emitter that drops fire-and-forget puffs
+    // at the fire's current spot (entry.smokePos, refreshed each frame). The
+    // puffs stay where dropped, so a moving enemy trails smoke. Visual only.
+    if (effectsRef?.current) {
+      entry.smokePos = (hitOff ? _offsetPos.copy(entityPos).add(hitOff) : entityPos).clone();
+      entry.smokeEmitter = effectsRef.current.createEmitter(
+        'fire-smoke',
+        (out) => {
+          if (!entry.smokePos) return false;
+          out.copy(entry.smokePos);
+          return true;
+        },
+        0.3,
+      );
+    }
     burnsRef.current.set(key, entry);
-  }, [spawnBurnFlames, removeBurn, getEntityPosition, universalFlameRef, bulletImpactsRef]);
+  }, [spawnBurnFlames, removeBurn, getEntityPosition, universalFlameRef, bulletImpactsRef, effectsRef]);
 
   // Apply burn damage. Player is the only non-enemy special case;
   // every monster routes through its EnemyCombatAdapter.
@@ -547,6 +574,10 @@ export function useBurnSystem({
         continue;
       }
 
+      // Smoke trail emits from the body/anchor by default; the hit-point
+      // branches below refine it to the exact fire spot.
+      if (entry.smokePos) entry.smokePos.copy(pos);
+
       // 2. Update flame positions — use hit offset if available, else
       //    the layout cached on the entry at creation time. Honors
       //    xOffset/zOffset for multi-shape monsters (e.g. spider legs).
@@ -568,9 +599,11 @@ export function useBurnSystem({
           );
         }
         bulletImpactsRef?.current?.updateTracked(entry.trackedImpactId, _offsetPos);
+        entry.smokePos?.copy(_offsetPos);
       } else if (entry.hitOffset) {
         _offsetPos.copy(pos).add(entry.hitOffset);
         renderer.updateAttachedPosition(entry.attachIds[0], _offsetPos);
+        entry.smokePos?.copy(_offsetPos);
       } else {
         const layout = entry.layout;
         const sx = entry.sideOffset?.x ?? 0;
