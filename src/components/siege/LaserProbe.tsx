@@ -32,6 +32,10 @@ export function LaserProbe() {
   const RED = useMemo(() => new THREE.Color(1, 0.15, 0.15), []);
   // currently-highlighted instance, so we can restore it when the aim moves
   const hl = useMemo(() => ({ mesh: null as THREE.InstancedMesh | null, id: -1 }), []);
+  // Raycast throttle: intersectObjects over the whole dense scene is very heavy, so
+  // run it ~12x/sec instead of every frame and keep the beam smooth in between by
+  // re-projecting along the current aim at the last hit distance.
+  const rc = useMemo(() => ({ last: -1, dist: 8000, hit: false }), []);
   const clearHL = () => {
     if (hl.mesh && hl.id >= 0) {
       hl.mesh.setColorAt(hl.id, WHITE);
@@ -97,42 +101,50 @@ export function LaserProbe() {
   useFrame(() => {
     if (!on) return;
     camera.getWorldDirection(dir);
-    ray.set(camera.position, dir);
-    const hits = ray.intersectObjects(scene.children, true)
-      .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot);
     // Originate the visible beam below the eye (like a gun-barrel laser) so it isn't
     // edge-on to the view — the raycast itself still comes from the camera center.
     down.set(0, -1, 0).applyQuaternion(camera.quaternion);
     start.copy(camera.position).addScaledVector(dir, 1.2).addScaledVector(down, 1.0);
-    if (hits.length) {
-      const h = hits[0];
-      end.copy(h.point);
-      const ud = (h.object.userData || {}) as { fbx?: string; mesh?: string };
-      const name = ud.fbx || h.object.name || '(unknown)';
-      const sub = ud.mesh && ud.mesh !== '(whole)' ? ` / ${ud.mesh}` : '';
-      const inst = h.instanceId != null ? ` [instance ${h.instanceId}]` : '';
-      probeState.hasHit = true;
-      probeState.hit = `${name}${sub}${inst}`;
-      probeState.hx = h.point.x; probeState.hy = h.point.y; probeState.hz = h.point.z;
-      probeState.mesh = h.object as THREE.Mesh;            // for the V voxelize tool
-      probeState.instanceId = h.instanceId ?? -1;
-      dot.visible = true; dot.position.copy(h.point);
-      // tint the pointed-at instance red
-      const im = h.object as THREE.InstancedMesh;
-      if (im.isInstancedMesh && h.instanceId != null && (hl.mesh !== im || hl.id !== h.instanceId)) {
+
+    // THROTTLED raycast (the expensive part) — ~12x/sec, not every frame.
+    const now = performance.now();
+    if (rc.last < 0 || now - rc.last > 80) {
+      rc.last = now;
+      ray.set(camera.position, dir);
+      const hits = ray.intersectObjects(scene.children, true)
+        .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot);
+      if (hits.length) {
+        const h = hits[0];
+        rc.hit = true; rc.dist = camera.position.distanceTo(h.point);
+        const ud = (h.object.userData || {}) as { fbx?: string; mesh?: string };
+        const name = ud.fbx || h.object.name || '(unknown)';
+        const sub = ud.mesh && ud.mesh !== '(whole)' ? ` / ${ud.mesh}` : '';
+        const inst = h.instanceId != null ? ` [instance ${h.instanceId}]` : '';
+        probeState.hasHit = true;
+        probeState.hit = `${name}${sub}${inst}`;
+        probeState.hx = h.point.x; probeState.hy = h.point.y; probeState.hz = h.point.z;
+        probeState.mesh = h.object as THREE.Mesh;            // for the V voxelize tool
+        probeState.instanceId = h.instanceId ?? -1;
+        // tint the pointed-at instance red
+        const im = h.object as THREE.InstancedMesh;
+        if (im.isInstancedMesh && h.instanceId != null && (hl.mesh !== im || hl.id !== h.instanceId)) {
+          clearHL();
+          if (!im.instanceColor) { for (let i = 0; i < im.count; i++) im.setColorAt(i, WHITE); }
+          im.setColorAt(h.instanceId, RED);
+          if (im.instanceColor) im.instanceColor.needsUpdate = true;
+          hl.mesh = im; hl.id = h.instanceId;
+        }
+      } else {
+        rc.hit = false;
+        probeState.hasHit = false; probeState.hit = null;
+        probeState.mesh = null; probeState.instanceId = -1;
         clearHL();
-        if (!im.instanceColor) { for (let i = 0; i < im.count; i++) im.setColorAt(i, WHITE); }
-        im.setColorAt(h.instanceId, RED);
-        if (im.instanceColor) im.instanceColor.needsUpdate = true;
-        hl.mesh = im; hl.id = h.instanceId;
       }
-    } else {
-      end.copy(camera.position).addScaledVector(dir, ray.far);
-      probeState.hasHit = false; probeState.hit = null;
-      probeState.mesh = null; probeState.instanceId = -1;
-      dot.visible = false;
-      clearHL();
     }
+
+    // Beam endpoint + dot every frame from the last hit distance (smooth aim).
+    if (rc.hit) { end.copy(camera.position).addScaledVector(dir, rc.dist); dot.visible = true; dot.position.copy(end); }
+    else { end.copy(camera.position).addScaledVector(dir, ray.far); dot.visible = false; }
     const pos = line.geometry.attributes.position as THREE.BufferAttribute;
     pos.setXYZ(0, start.x, start.y, start.z);
     pos.setXYZ(1, end.x, end.y, end.z);
