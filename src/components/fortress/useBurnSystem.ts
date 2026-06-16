@@ -118,6 +118,10 @@ interface BurnEntry {
   flameIds: (string | null)[];  // one per flame point in layout
   attachIds: string[];           // one per flame point
   hitOffset: THREE.Vector3 | null; // offset from entity base to hit point (for positioned burns)
+  /** Explosion burns: a fixed horizontal offset that biases the whole-body plumes
+   *  onto the side of the body that FACED the blast (toward the impact center), so
+   *  the fire wraps one side instead of the full circumference. Null = centered. */
+  sideOffset?: THREE.Vector3 | null;
   /** SAFE death-linger: the entity's OWN last resolved position (an entry-owned
    *  vector — never the camera, never a shared scratch) and when it died, so a
    *  KILLED enemy's fire lingers briefly at the death spot instead of vanishing.
@@ -179,15 +183,17 @@ export function useBurnSystem({
       // burn-creation time. Honors xOffset/zOffset so multi-part
       // shapes (spider legs around a body) get full surround coverage.
       const layout = entry.layout;
+      const sx = entry.sideOffset?.x ?? 0;
+      const sz = entry.sideOffset?.z ?? 0;
       for (let i = 0; i < layout.length; i++) {
         if (entry.flameIds[i]) {
           renderer.removeFlame(entry.flameIds[i]!);
         }
         const pt = layout[i];
         _offsetPos.set(
-          basePos.x + (pt.xOffset ?? 0),
+          basePos.x + (pt.xOffset ?? 0) + sx,
           basePos.y + pt.yOffset,
-          basePos.z + (pt.zOffset ?? 0),
+          basePos.z + (pt.zOffset ?? 0) + sz,
         );
         entry.flameIds[i] = renderer.spawnFlame({
           type: 'point',
@@ -268,12 +274,15 @@ export function useBurnSystem({
     armor: number,
     hitPosition?: THREE.Vector3,
     burnSeconds?: number,
-    opts?: { engulf?: boolean; size?: number; height?: number },
+    opts?: { engulf?: boolean; size?: number; height?: number; sided?: boolean },
   ) => {
-    // engulf=true → fire wraps the whole body (flamethrower / grenade splash).
+    // engulf=true → fire wraps the body (flamethrower / explosion splash).
     // engulf=false → ONE lasting flame at the exact hit point that tracks that
     // spot on the body (bullets — a persistent version of the impact fire).
+    // sided=true → engulf, but biased onto the blast-FACING side of the body
+    // (explosions: grenades/rockets/bombs scorch the side that saw the blast).
     const engulfMode = opts?.engulf ?? true;
+    const sidedMode = opts?.sided ?? false;
     const dotSeconds = Math.max(1, Math.floor(burnSeconds ?? DEFAULT_DOT_SECONDS));
     const key = entityType === 'shwarm' && blockId
       ? `shwarm:${entityId}:${blockId}`
@@ -406,6 +415,11 @@ export function useBurnSystem({
       attachIds,
       // Engulf enemies ignore the fixed hit offset and follow the body center.
       hitOffset: engulf ? null : hitOff,
+      // Explosion (sided) burns: bias the whole-body plumes onto the blast-facing
+      // side using the horizontal component of the hit direction.
+      sideOffset: (engulf && sidedMode && hitOff)
+        ? new THREE.Vector3(hitOff.x, 0, hitOff.z)
+        : null,
       // Capture the linger position NOW, while the entity is provably alive.
       // (entityPos is a shared scratch — clone it so it's entry-owned.) Without
       // this, a one-shot kill dies before the frame loop ever sees it alive, so
@@ -515,12 +529,14 @@ export function useBurnSystem({
         renderer.updateAttachedPosition(entry.attachIds[0], _offsetPos);
       } else {
         const layout = entry.layout;
+        const sx = entry.sideOffset?.x ?? 0;
+        const sz = entry.sideOffset?.z ?? 0;
         for (let i = 0; i < layout.length; i++) {
           const pt = layout[i];
           _offsetPos.set(
-            pos.x + (pt.xOffset ?? 0),
+            pos.x + (pt.xOffset ?? 0) + sx,
             pos.y + pt.yOffset,
-            pos.z + (pt.zOffset ?? 0),
+            pos.z + (pt.zOffset ?? 0) + sz,
           );
           renderer.updateAttachedPosition(entry.attachIds[i], _offsetPos);
         }
