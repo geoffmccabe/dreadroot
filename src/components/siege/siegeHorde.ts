@@ -11,6 +11,7 @@ import {
   enemyCombatRegistry,
   type EnemyHitbox,
   type FlameAttachPoint,
+  type BurnFollower,
 } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 export interface DemonInstance {
@@ -32,6 +33,9 @@ export interface DemonInstance {
   headFrac: number;     // top fraction of the hitbox that counts as a headshot (head zone)
   noStun?: boolean;     // test/boss flag: bullets don't stun-freeze it (keeps walking when shot)
   yaw: number;          // current facing (radians) — lets attached fire rotate WITH the body
+  // Set by MonsterEnemy: attach a world hit point to the nearest skeleton bone so
+  // an ongoing burn rides the animation (gait bob + turn). Undefined until ready.
+  attach?: (x: number, y: number, z: number) => BurnFollower | null;
 }
 
 // Live array (not a Set) so getActiveEnemies returns it with zero per-query allocation —
@@ -69,6 +73,8 @@ enemyCombatRegistry.register<DemonInstance>({
   // for ~2.6s). Returns the live feet position whether alive or dead; the burn
   // system stops following once the demon despawns (leaves the active list).
   getBurnAnchor: (d) => ({ x: d.x, y: d.y, z: d.z, radius: d.radius, yaw: d.yaw }),
+  // Lock the fire to the nearest animated bone so it rides the gait + turn.
+  createBurnFollower: (d, x, y, z) => d.attach?.(x, y, z) ?? null,
   applyDamage: (d, info) => {
     if (d.dead) return false;
     d.hp -= info.damage;

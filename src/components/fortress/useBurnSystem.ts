@@ -27,7 +27,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { FlameColorMode, FlameType, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
 import type { BulletImpactsHandle } from './FortressImpacts';
-import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { enemyCombatRegistry, type BurnFollower } from '@/features/enemies/combat/EnemyCombatRegistry';
 
 // Reusable scratch vector for the registry-fallback entity lookup.
 const _registryFallbackPos = new THREE.Vector3();
@@ -148,8 +148,12 @@ interface BurnEntry {
    *  impact, just longer + tracking + shrinking. */
   trackedImpactId?: number;
   /** Body facing (yaw) at ignite. The hit offset is rotated by (currentYaw -
-   *  igniteYaw) each frame so the fire stays on the SAME body spot as it turns. */
+   *  igniteYaw) each frame so the fire stays on the SAME body spot as it turns.
+   *  Used only as a fallback when no bone follower is available. */
   igniteYaw?: number;
+  /** Best: a follower locked to the model's nearest BONE at the hit point, so the
+   *  fire rides the full animation (gait bob + turn + walk). Overrides igniteYaw. */
+  burnFollower?: BurnFollower;
 }
 
 interface UseBurnSystemOptions {
@@ -462,6 +466,16 @@ export function useBurnSystem({
         height: opts?.height ?? 1.0,
         duration: dotSeconds,
       });
+      // Lock the fire to the model's nearest bone so it rides the animation
+      // (gait bob + turn). Falls back to the yaw-rotated collider offset if the
+      // enemy has no skinned model.
+      if (hitPosition) {
+        const ad = enemyCombatRegistry.getAdapter(entityType);
+        const en = ad?.getActiveEnemies().find(e => ad.getId(e) === entityId);
+        if (en && ad?.createBurnFollower) {
+          entry.burnFollower = ad.createBurnFollower(en, hitPosition.x, hitPosition.y, hitPosition.z) ?? undefined;
+        }
+      }
     } else {
       spawnBurnFlames(entry, 1.0, (!engulf && hitOff)
         ? _offsetPos.copy(entityPos).add(hitOff)
@@ -516,6 +530,7 @@ export function useBurnSystem({
       //    never resolved (objects/ground) is removed immediately, so it can
       //    never linger or follow anything.
       let pos = getEntityPosition(entry);
+      const isLive = pos !== null; // enemy present this frame (alive or mid-death)
       if (pos) {
         if (!entry.deathPos) entry.deathPos = new THREE.Vector3();
         entry.deathPos.copy(pos);
@@ -536,17 +551,22 @@ export function useBurnSystem({
       //    the layout cached on the entry at creation time. Honors
       //    xOffset/zOffset for multi-shape monsters (e.g. spider legs).
       if (entry.trackedImpactId != null) {
-        // Sustained 7-fire impact follows the hit spot on the (moving) body, AND
-        // rotates with the body's facing so it stays on the same spot as he turns.
-        // getEntityPosition (called above) set _anchorYaw to the live facing.
-        const ho = entry.hitOffset!;
-        const dYaw = _anchorYaw - (entry.igniteYaw ?? _anchorYaw);
-        const c = Math.cos(dYaw), s = Math.sin(dYaw);
-        _offsetPos.set(
-          pos.x + (ho.x * c + ho.z * s),
-          pos.y + ho.y,
-          pos.z + (-ho.x * s + ho.z * c),
-        );
+        if (entry.burnFollower && isLive) {
+          // BEST: the fire is locked to the model's bone — it rides the full
+          // animation (gait bob + turn + walk) automatically.
+          entry.burnFollower(_offsetPos);
+        } else {
+          // Fallback (no skinned model, or lingering corpse): follow the collider
+          // and rotate the hit offset by the body's facing change since ignite.
+          const ho = entry.hitOffset!;
+          const dYaw = _anchorYaw - (entry.igniteYaw ?? _anchorYaw);
+          const c = Math.cos(dYaw), s = Math.sin(dYaw);
+          _offsetPos.set(
+            pos.x + (ho.x * c + ho.z * s),
+            pos.y + ho.y,
+            pos.z + (-ho.x * s + ho.z * c),
+          );
+        }
         bulletImpactsRef?.current?.updateTracked(entry.trackedImpactId, _offsetPos);
       } else if (entry.hitOffset) {
         _offsetPos.copy(pos).add(entry.hitOffset);

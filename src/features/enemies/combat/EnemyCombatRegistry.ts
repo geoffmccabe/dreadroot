@@ -130,7 +130,21 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
    * falls back to getHitbox (fire drops the moment the enemy dies).
    */
   getBurnAnchor?: (enemy: TEnemy) => { x: number; y: number; z: number; radius: number; yaw?: number } | null;
+
+  /**
+   * Optional: attach an ongoing burn to the actual animated model. Given the
+   * world-space hit point, return a follower that writes the CURRENT world
+   * position of that spot (locked to the nearest skeleton bone) into `out` each
+   * frame — so the fire rides the body's gait bob + turn + walk, not just the
+   * collider. Returns null if the enemy has no skinned model. When present, the
+   * burn system uses this instead of the collider offset for the fire's position.
+   */
+  createBurnFollower?: (enemy: TEnemy, hitX: number, hitY: number, hitZ: number) => BurnFollower | null;
 }
+
+/** Writes the current world position of an attached burn point into `out`.
+ *  Returns false when the attachment is no longer valid. */
+export type BurnFollower = (out: import('three').Vector3) => boolean;
 
 // ------------------------------------------------------------------
 //  Registry singleton

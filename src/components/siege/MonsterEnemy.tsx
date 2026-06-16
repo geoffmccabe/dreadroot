@@ -122,6 +122,34 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     yaw: 0,
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
+  // Bone-attach for burns: a hit point locks to the nearest skeleton bone so the
+  // fire rides the gait bob + turn + walk (the animation drives the bones), not
+  // just the collider. inst.attach(x,y,z) → a per-frame world-position follower.
+  useEffect(() => {
+    const bones: THREE.Bone[] = [];
+    cloned.traverse((o) => { if ((o as THREE.Bone).isBone) bones.push(o as THREE.Bone); });
+    inst.attach = (x, y, z) => {
+      if (!bones.length) return null;
+      const hit = new THREE.Vector3(x, y, z);
+      const wp = new THREE.Vector3();
+      let best: THREE.Bone | null = null, bestD = Infinity;
+      for (const b of bones) {
+        b.updateWorldMatrix(true, false);
+        b.getWorldPosition(wp);
+        const d = wp.distanceToSquared(hit);
+        if (d < bestD) { bestD = d; best = b; }
+      }
+      if (!best) return null;
+      const bone = best;
+      const localOffset = bone.worldToLocal(hit.clone()); // exact hit spot, in bone space
+      return (out: THREE.Vector3) => {
+        bone.updateWorldMatrix(true, false);
+        out.copy(localOffset).applyMatrix4(bone.matrixWorld);
+        return true;
+      };
+    };
+    return () => { inst.attach = undefined; };
+  }, [cloned, inst]);
   // Stable per-demon climbing role from the id: ~25% are climbers (hop over walls/rocks);
   // `side` is a stable left/right preference for crabbing around obstacles. (Any demon also
   // climbs when boxed in by its own kind — that crowd-jumping is what stacks them up.)
