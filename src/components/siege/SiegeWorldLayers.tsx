@@ -12,6 +12,7 @@ import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
 import { SiegeItemGrid } from './SiegeItemGrid';
+import { MeshColliderPlayer } from './MeshColliderPlayer';
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const [terrainReady, setTerrainReady] = useState(false);
@@ -24,8 +25,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {terrainReady && (
         <>
           <Suspense fallback={null}>
-            <WorldObjectsLayer />
+            <WorldObjectsLayer meshColliders={world.meshColliders} />
           </Suspense>
+          {world.meshColliders && <MeshColliderPlayer />}
           {/* Press "I" to show a floating grid of every game item over spawn. */}
           <SiegeItemGrid />
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),

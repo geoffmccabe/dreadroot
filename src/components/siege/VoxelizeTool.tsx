@@ -96,6 +96,21 @@ export function VoxelizeTool() {
         info(`${L.key.split('@')[0]}\n${n} boxes @ ${cell.toFixed(2)}m  (< coarser / > finer)`);
         return;
       }
+      // M — toggle a TRUE MESH collider (three-mesh-bvh) for the pointed MODEL.
+      // Per-model (all copies of that rock/mountain), saved to Supabase, applied
+      // on world (re)build/reload. Requires the world's meshColliders flag.
+      if (e.code === 'KeyM' && probeState.on && probeState.mesh) {
+        e.preventDefault(); e.stopPropagation();
+        const fbx = ((probeState.mesh as THREE.Mesh).userData as { fbx?: string })?.fbx;
+        if (!fbx) { info('aim at a world object (rock / mountain)'); return; }
+        const on = !colliderOverrides.get(fbx)?.mesh;
+        setColliderOverride(fbx, false, 1, on);          // model-level key = fbx
+        void saveColliderOverrideToDB(fbx, false, 1, on);
+        window.dispatchEvent(new Event('sw-colliders-changed'));
+        info(`${fbx}\nmesh collider ${on ? 'ON — all copies (reload to apply)' : 'OFF'} (saved)`);
+        return;
+      }
+
       if (e.code !== 'KeyV' || !probeState.on || !probeState.mesh) return;
       e.preventDefault(); e.stopPropagation();
       const mesh = probeState.mesh as THREE.Mesh;

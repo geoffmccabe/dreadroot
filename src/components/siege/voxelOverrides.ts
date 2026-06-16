@@ -19,7 +19,11 @@ export function keyFor(fbx: string, x: number, z: number): string {
 // reload via localStorage (the author's working copy) and can be baked into a shipped JSON
 // (/siege/world/collider_overrides.json) so every player gets them. WorldObjectsLayer reads this
 // when building an instance's collider: voxelize at `cell` if voxel, else the default box.
-export interface SavedOverride { voxel: boolean; cell: number }
+// voxel = greedy-box approximation (per-instance, keyed fbx@x,z).
+// mesh  = true triangle collider (three-mesh-bvh), per-MODEL (keyed by fbx only),
+//         so it applies to every copy of that rock/mountain. Requires the world's
+//         meshColliders flag.
+export interface SavedOverride { voxel: boolean; cell: number; mesh?: boolean }
 export const colliderOverrides = new Map<string, SavedOverride>();
 const LS_KEY = 'sw_collider_overrides_v1';
 
@@ -28,8 +32,8 @@ try {
   if (raw) for (const [k, v] of JSON.parse(raw) as [string, SavedOverride][]) colliderOverrides.set(k, v);
 } catch { /* ignore corrupt/blocked storage */ }
 
-export function setColliderOverride(key: string, voxel: boolean, cell: number): void {
-  colliderOverrides.set(key, { voxel, cell });
+export function setColliderOverride(key: string, voxel: boolean, cell: number, mesh = false): void {
+  colliderOverrides.set(key, { voxel, cell, mesh });
   try { localStorage.setItem(LS_KEY, JSON.stringify([...colliderOverrides])); } catch { /* ignore */ }
 }
 
@@ -50,11 +54,11 @@ export function exportColliderOverrides(): string {
 // Table not in generated types yet → loose-typed access, degrades gracefully.
 const SCO_GAME = 'siege-worlds';
 
-export async function saveColliderOverrideToDB(key: string, voxel: boolean, cell: number): Promise<void> {
+export async function saveColliderOverrideToDB(key: string, voxel: boolean, cell: number, mesh = false): Promise<void> {
   try {
     await (supabase as any)
       .from('siege_collider_overrides')
-      .upsert({ game_id: SCO_GAME, key, voxel, cell, updated_at: new Date().toISOString() },
+      .upsert({ game_id: SCO_GAME, key, voxel, cell, mesh, updated_at: new Date().toISOString() },
               { onConflict: 'game_id,key' });
   } catch { /* admin-only / table absent — localStorage already has it */ }
 }
@@ -65,9 +69,9 @@ export async function loadColliderOverridesFromDB(): Promise<void> {
   try {
     const { data, error } = await (supabase as any)
       .from('siege_collider_overrides')
-      .select('key,voxel,cell')
+      .select('key,voxel,cell,mesh')
       .eq('game_id', SCO_GAME);
     if (error || !data) return;
-    for (const row of data) colliderOverrides.set(row.key, { voxel: !!row.voxel, cell: Number(row.cell) });
+    for (const row of data) colliderOverrides.set(row.key, { voxel: !!row.voxel, cell: Number(row.cell), mesh: !!row.mesh });
   } catch { /* ignore */ }
 }

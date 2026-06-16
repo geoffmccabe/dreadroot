@@ -9,6 +9,9 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
+import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
+
+let _meshGroupId = 0;
 import { voxelizeGeometry } from './voxelize';
 
 interface Group { fbx: string; url: string; matrices: number[][]; rotX?: number; mesh?: string; combined?: boolean; scaleMul?: number; whole?: boolean }
@@ -49,12 +52,19 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   render() { return this.state.failed ? null : this.props.children; }
 }
 
-function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout }:
-  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string> }) {
+function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders }:
+  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean }) {
   const gltf = useGLTF(url);
-  const { node, colliders } = useMemo(() => {
+  const gidRef = useRef<string | null>(null);
+  if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
+  const groupId = gidRef.current;
+  // This MODEL is flagged for a true mesh collider (per-model, all copies).
+  const useMesh = !!meshColliders && !!colliderOverrides.get(fbx)?.mesh;
+  const { node, colliders, meshInputs, meshGeos } = useMemo(() => {
     const out = new THREE.Group();
     const colliders: THREE.Box3[] = [];
+    const meshInputs: MeshInstanceInput[] = [];
+    const meshGeos = new Map<string, THREE.BufferGeometry>();
     const solid = isSolidGroup(fbx);
     // Mesh-AABBs run loose; shrink toward the real object size. Rocks are the worst (organic
     // shapes in a big box) → 60%; everything else → 80%.
@@ -128,7 +138,11 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         // single box too; the player voxelizes specific ones on demand with V (VoxelizeTool),
         // which then OWNS that instance — so skip any instance it manages.
         const ikey = keyFor(fbx, m.elements[12], m.elements[14]);
-        if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {
+        if (useMesh && geoBox) {
+          // True mesh collider: feed the BVH system this instance; NO box collider.
+          meshGeos.set(src.geometry.uuid, src.geometry);
+          meshInputs.push({ key: src.geometry.uuid, matrix: m.clone(), geoBox });
+        } else if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {
           const ov = colliderOverrides.get(ikey);
           if (ov?.voxel) {
             // Saved authoring: voxelize this instance at the chosen resolution (persists/bakes).
@@ -146,19 +160,31 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
       inst.computeBoundingSphere();
       out.add(inst);
     }
-    return { node: out, colliders };
-  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout]);
+    return { node: out, colliders, meshInputs, meshGeos };
+  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, useMesh]);
   // Register solid colliders in the engine grid; remove on unmount / world swap.
   useEffect(() => {
     if (!colliders.length) return;
     colliders.forEach((b) => worldCollisionGrid.insert(b));
     return () => colliders.forEach((b) => worldCollisionGrid.remove(b));
   }, [colliders]);
+  // Register this group's BVH mesh-collider instances; drop them when it streams out.
+  useEffect(() => {
+    if (!meshInputs.length) return;
+    for (const [key, geo] of meshGeos) registerMeshGeometry(key, geo);
+    setGroupInstances(groupId, meshInputs);
+    return () => clearGroup(groupId);
+  }, [meshInputs, meshGeos, groupId]);
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer() {
+export function WorldObjectsLayer({ meshColliders = false }: { meshColliders?: boolean } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
+  // Gate the whole mesh-collision system on the world flag (off = fully inert).
+  useEffect(() => {
+    setMeshCollidersEnabled(meshColliders);
+    return () => { setMeshCollidersEnabled(false); clearMeshColliders(); };
+  }, [meshColliders]);
   const [atlasMap, setAtlasMap] = useState<Record<string, string>>({});
   const [matMap, setMatMap] = useState<Record<string, Record<string, string>>>({});
   const [cutout, setCutout] = useState<Set<string>>(new Set());
@@ -222,7 +248,7 @@ export function WorldObjectsLayer() {
       {nearGroups.map((g) => (
         <Boundary key={g._k}>
           <Suspense fallback={null}>
-            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} />
+            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} />
           </Suspense>
         </Boundary>
       ))}

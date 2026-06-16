@@ -91,6 +91,16 @@ export interface WorldDefinition {
   kind?: 'voxel' | 'siege';
 
   /**
+   * Opt-in: enable true triangle-accurate MESH colliders (three-mesh-bvh) for
+   * models flagged with the M tool — so the player walks real rock/mountain
+   * surfaces instead of stair-stepped boxes. OFF by default: when omitted/false
+   * the mesh-collision system is fully inert (no BVH builds, no per-frame pass),
+   * so worlds/games that don't need it (DreadRoot, Pinkland) run faster. A future
+   * DreadRoot world can opt in by setting this true.
+   */
+  meshColliders?: boolean;
+
+  /**
    * Optional play bounds (meters, [minXZ, maxXZ]). NULL/omitted = unbounded/auto —
    * worlds are meant to extend, so bounds are advisory, never a hard engine limit.
    */
@@ -129,6 +139,7 @@ export const SIEGE_TEST_WORLD: WorldDefinition = {
   id: 'siege-test',
   name: 'Siege Worlds',
   kind: 'siege',
+  meshColliders: true, // SWW uses BVH mesh colliders for rocks/mountains
   bounds: null, // 4×4 grid of 500m tiles ≈ 2000×2000, but never hardcoded here
   ground: { kind: 'gltf-terrain', surfaceY: 0 },
   // Player start on Lobby Island (engine frame = -UnityX). Y just above sea level (22).

@@ -39,6 +39,7 @@ import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/Si
 import { SiegeCharacter } from '@/components/siege/SiegeCharacter';
 import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
+import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
 import { DynamicSky, SkyHandle } from './FortressSky';
 import { DynamicLighting, LightingHandle } from './FortressLighting';
 import { FortressStructure } from './FortressStructure';
@@ -1071,6 +1072,16 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const jetBoostFXRef = useRef<JetBoostFXHandle>(null);
   const universalFlameRef = useRef<UniversalFlameRendererHandle>(null);
   const { flameDemoRef, effectsRef, fruitVisibility } = useAdminPanel();
+  // Siege ground height = terrain floor, raised to any BVH mesh-collider surface
+  // (mountains/rocks) the player can step onto. meshGroundHeight is internally
+  // gated (null when mesh colliders are off), so this is just sampleHeight then.
+  const siegeGroundHeight = useCallback((x: number, z: number): number | null => {
+    const t = sampleHeight(x, z);
+    const m = meshGroundHeight(x, z);
+    if (t == null) return m;
+    if (m == null) return t;
+    return m > t ? m : t;
+  }, []);
 
   // Grenade system. Owns live grenades + their physics; explosion VFX
   // routes through universalFlameRef. The throw flow goes:
@@ -1367,7 +1378,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   useFortressFrameLoop({
     camera,
     applyBurnRef,
-    groundHeightFn: isSiege ? sampleHeight : undefined,
+    groundHeightFn: isSiege ? siegeGroundHeight : undefined,
     skyRef,
     lightingRef,
     bulletsComponentRef,
@@ -1663,7 +1674,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         updatePlayerPosition={updatePlayerPosition}
         respawnPosition={worldSwapTarget ?? respawnPosition}
         onRespawnComplete={() => { setWorldSwapTarget(null); onRespawnComplete?.(); }}
-        groundHeightFn={isSiege ? sampleHeight : undefined}
+        groundHeightFn={isSiege ? siegeGroundHeight : undefined}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}
