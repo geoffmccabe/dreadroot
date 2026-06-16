@@ -35,7 +35,8 @@ export function SiegeCharacter() {
   const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb`);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);   // mixer root + world placement (scale lives here)
-  const { actions, names } = useAnimations(animations, group);
+  const { actions, names, mixer } = useAnimations(animations, group);
+  const hips = useMemo(() => cloned.getObjectByName('Hips') as THREE.Bone | null, [cloned]);
 
   // One normalize from the shared rig: scale Head→feet to TARGET_H, lift feet to the group origin.
   const norm = useMemo(() => {
@@ -120,10 +121,31 @@ export function SiegeCharacter() {
 
   useEffect(() => { const s = document.getElementById('sw-char-picker') as HTMLSelectElement | null; if (s) s.value = selected; }, [selected]);
 
+  // Live debug overlay (top-right) — updated each frame to pinpoint where animation breaks.
+  const dbgRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;right:12px;top:90px;z-index:9999;font:11px monospace;color:#7f8;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:5px;white-space:pre;max-width:46vw';
+    document.body.appendChild(d); dbgRef.current = d;
+    return () => { d.remove(); dbgRef.current = null; };
+  }, []);
+  const dbgTick = useRef(0);
+
   const lastPanelOn = useRef<boolean | null>(null);
   useFrame(() => {
     const g = group.current; if (!g) return;
     const on = isInspectView();
+    if (dbgRef.current && (dbgTick.current++ % 6 === 0)) {
+      const a = cur.current ? actionsRef.current[cur.current] : null;
+      const childNames = g.children.map((c) => c.name || c.type).join(',');
+      dbgRef.current.textContent =
+        `char:${selected}\nclips:${names.length} inspect:${on}\ncur:${cleanAnim(cur.current) || '—'}\n` +
+        `action? ${!!a} running:${a ? a.isRunning() : '—'} w:${a ? a.getEffectiveWeight().toFixed(2) : '—'}\n` +
+        `mixer.time:${mixer.time.toFixed(2)}\n` +
+        `hipsQ.x:${hips ? hips.quaternion.x.toFixed(4) : 'NO HIPS'}\n` +
+        `groupScale:${g.scale.x.toFixed(2)} vis:${g.visible}\n` +
+        `groupChildren:[${childNames}]`;
+    }
     if (lastPanelOn.current !== on && panelRef.current) {
       panelRef.current.style.display = on ? 'flex' : 'none';
       lastPanelOn.current = on;
