@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
 import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides, saveColliderOverrideToDB } from './voxelOverrides';
-import { setModelDecimation, meshModelTriCount } from './meshColliderSystem';
+import { setModelDecimation, meshModelTriCount, meshModelInstanceCount } from './meshColliderSystem';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
@@ -182,8 +182,9 @@ export function VoxelizeTool() {
       const ov = colliderOverrides.get(fbx);
       if (ov?.mesh) {
         const tris = meshModelTriCount(fbx);
-        info(tris > 0
-          ? `${fbx}\nMESH COLLIDER — ${tris} polys @ ${Math.round((ov.cell || 1) * 100)}%\n<  simpler   /   >  finer`
+        const inst = meshModelInstanceCount(fbx);
+        info(inst > 0
+          ? `${fbx}\nMESH COLLIDER — ${tris} polys @ ${Math.round((ov.cell || 1) * 100)}% — ${inst} copies\n<  simpler   /   >  finer`
           : `${fbx}\nMESH COLLIDER (reload to apply)\n<  simpler   /   >  finer`);
       }
     }, 300);

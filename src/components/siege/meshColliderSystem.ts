@@ -106,6 +106,16 @@ export function meshModelTriCount(fbx: string): number {
   return Math.round(t);
 }
 
+/** How many placed instances of this model currently have a live collider
+ *  (0 = registered geometry but no instances => nothing to render/collide). */
+export function meshModelInstanceCount(fbx: string): number {
+  const ks = fbxKeys.get(fbx);
+  if (!ks) return 0;
+  let c = 0;
+  for (const list of groups.values()) for (let i = 0; i < list.length; i++) if (ks.has(list[i].key)) c++;
+  return c;
+}
+
 function buildBVH(key: string, ratio: number): void {
   const entry = geoByKey.get(key);
   if (!entry) return;
