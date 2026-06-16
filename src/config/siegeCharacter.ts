@@ -22,7 +22,7 @@ let selected = (() => {
   try { const s = localStorage.getItem(LS_KEY); if (s && SIEGE_CHARACTERS.some((c) => c.id === s)) return s; } catch { /* ignore */ }
   return SIEGE_CHARACTERS[0].id;
 })();
-let inspect = false;
+let inspect = true;   // DIAGNOSTIC: default ON so the character + panel show without Ctrl/Cmd+V
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 

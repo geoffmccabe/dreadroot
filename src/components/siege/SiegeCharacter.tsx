@@ -103,7 +103,7 @@ export function SiegeCharacter() {
     const panel = panelRef.current; if (!panel) return;
     panel.replaceChildren();
     const title = document.createElement('div');
-    title.textContent = names.length ? 'Animations (Ctrl/Cmd+V to exit)' : 'Loading animations…';
+    title.textContent = `DEBUG: ${selected} | clips:${names.length} | scale:${norm.scale.toFixed(2)}`;
     title.style.cssText = 'color:#9cf;font:11px monospace;margin-bottom:2px';
     panel.appendChild(title);
     for (const n of names) {
