@@ -17,6 +17,7 @@ import { MeshColliderPlayer } from './MeshColliderPlayer';
 import { SiegeTeleport } from './SiegeTeleport';
 import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
+import { UnderwaterEffect } from './UnderwaterEffect';
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const [terrainReady, setTerrainReady] = useState(false);
@@ -31,6 +32,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <SprayAttackRenderer />
       {/* Dark, cold horror fog + dimming scrim that fades in as you approach Bleakrock. */}
       <BleakrockLighting />
+      {/* Underwater murk + breath/drowning damage below the sea surface. */}
+      {world.water?.[0]?.surfaceY != null && <UnderwaterEffect level={world.water[0].surfaceY} />}
 
       {terrainReady && (
         <>

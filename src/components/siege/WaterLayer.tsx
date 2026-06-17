@@ -1,10 +1,10 @@
-// WaterLayer — a translucent sea plane at the world's water height (Client.cs
-// WATER_HEIGHT = 22). Helps orient the world: everything poking above is land,
-// everything below is submerged (beaches, ocean floor). Large enough to read as
-// open ocean past the terrain edges. Movement-in-water (walk-the-bottom) is
-// handled by the controller via the WaterVolume; this is just the visual.
+// WaterLayer — the sea surface at the world's water height (Client.cs WATER_HEIGHT = 22).
+// A real-time reflective surface (drei MeshReflectorMaterial mirrors the islands + sky) that
+// reads as proper water from above; the murky "inside" look + drowning are handled by
+// UnderwaterEffect. Movement-in-water (walk-the-bottom) is the controller's job via WaterVolume.
 
 import * as THREE from 'three';
+import { MeshReflectorMaterial } from '@react-three/drei';
 import type { WorldDefinition } from '@/config/worldDefinition';
 
 export function WaterLayer({ world }: { world: WorldDefinition }) {
@@ -13,12 +13,21 @@ export function WaterLayer({ world }: { world: WorldDefinition }) {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-500, level, -500]} renderOrder={1}>
       <planeGeometry args={[6000, 6000]} />
-      <meshStandardMaterial
-        color={0x2f6f8f}
+      {/* Reflective surface: mirrors the scene (blurred) so the ocean catches the islands + sky.
+          More opaque than the old flat plane so the surface reads as water, not thin glass. */}
+      <MeshReflectorMaterial
+        resolution={512}
+        mixBlur={1.2}
+        mixStrength={3.5}
+        blur={[420, 110]}
+        minDepthThreshold={0.85}
+        maxDepthThreshold={1.2}
+        depthScale={1}
+        roughness={0.28}
+        metalness={0.55}
+        color={0x244f63}
         transparent
-        opacity={0.62}
-        roughness={0.2}
-        metalness={0.1}
+        opacity={0.82}
         depthWrite={false}
         side={THREE.DoubleSide}
       />
