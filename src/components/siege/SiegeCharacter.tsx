@@ -26,8 +26,10 @@ const CLEAN: [number, number, number] = [1.1819, -0.0327, 1];
 const LINEUP: Record<string, [number, number, number]> = {
   knight: CLEAN, queen: CLEAN, druid: CLEAN, angus: CLEAN,
   ragnar: CLEAN, zap: CLEAN, bonnie: CLEAN, ladyhao: CLEAN,
-  // Synty-rig statics: own per-char transform (Z-up source → rot 0), proven by CharacterLineup.
-  shiyang: [0.00897, -0.0363, 0],
+  // Shi Yang is now the dev's self-contained player-RIG export (48-bone Root + 15 clips),
+  // so it takes the player-rig transform (CLEAN), not the old 49-bone static values.
+  shiyang: CLEAN,
+  // Nakano is still the old 49-bone static individual rig (Z-up source → rot 0).
   nakano: [0.00937, -0.0515, 0],
 };
 const ROT: [number, number, number][] = [[-Math.PI / 2, Math.PI, 0], [0, Math.PI, 0]];
