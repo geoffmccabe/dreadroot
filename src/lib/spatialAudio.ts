@@ -2,6 +2,8 @@
 // Uses Web Audio API for overlapping sounds
 
 import * as THREE from 'three';
+import { getAudioBlob, saveAudioBlob } from '@/lib/audioCache';
+import './audioPreload'; // self-schedules an idle warm of all game sounds into IndexedDB
 
 let audioContext: AudioContext | null = null;
 const bufferCache = new Map<string, AudioBuffer>();
@@ -50,8 +52,16 @@ async function loadAudioBuffer(url: string): Promise<AudioBuffer | null> {
   
   const promise = (async () => {
     try {
-      const response = await fetch(url);
-      const arrayBuffer = await response.arrayBuffer();
+      // Tier 2: IndexedDB — use the persisted blob if we have it, else fetch
+      // once and persist for next session. decodeAudioData detaches the
+      // ArrayBuffer, so we always decode from a fresh blob.arrayBuffer().
+      let blob = await getAudioBlob(url);
+      if (!blob) {
+        const response = await fetch(url);
+        blob = await response.blob();
+        void saveAudioBlob(url, blob); // fire-and-forget persist
+      }
+      const arrayBuffer = await blob.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       bufferCache.set(url, audioBuffer);
       return audioBuffer;
