@@ -14,6 +14,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
+import { APP_VERSION } from '@/version';
 import {
   SIEGE_CHARACTERS, getSelectedCharacter, setSelectedCharacter,
   isInspectView, setInspectView, useSiegeCharacter, publishAnim,
@@ -67,7 +68,8 @@ export function SiegeCharacter() {
 // ── Rig: one character (raw scene, lineup transform) + animations. Remounted on each switch. ──
 function CharacterRig({ selected }: { selected: string }) {
   const camera = useThree((s) => s.camera);
-  const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb`);
+  // ?v=APP_VERSION busts browser/CDN caching of the glb (same URL otherwise serves a stale file).
+  const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb?v=${APP_VERSION}`);
   // Clone the skinned mesh + skeleton (SkeletonUtils, exactly like MonsterEnemy) BEFORE animating.
   // Animating a raw GLTF skinned mesh nested under transform groups shears the limbs in three.js;
   // the clone rebuilds the bone bindings correctly. This is the proven monster path.
