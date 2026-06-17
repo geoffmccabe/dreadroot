@@ -5,6 +5,7 @@
 // modelHeight = the converter's measured intrinsic height (per /tmp manifest);
 // height = the desired in-world height (sets relative sizing: giants tall, etc.).
 import { Suspense } from 'react';
+import { Billboard, Text } from '@react-three/drei';
 import { MonsterEnemy } from './MonsterEnemy';
 
 // name (glb under /siege/monsters/) | intrinsic modelHeight | world height | animSpeed? | moveSpeed?
@@ -37,19 +38,29 @@ export function SiegeMonsterParade() {
   const n = PARADE.length;
   return (
     <Suspense fallback={null}>
-      {PARADE.map(([name, modelHeight, height, animSpeed, speed], i) => (
-        <MonsterEnemy
-          key={name}
-          spawn={[CENTER_X + (i - (n - 1) / 2) * SPACING, BASE_Y, ROW_Z]}
-          url={`/siege/monsters/${name}.glb`}
-          modelHeight={modelHeight}
-          height={height}
-          animSpeed={animSpeed}
-          speed={speed}
-          aggro={70}
-          health={300}
-        />
-      ))}
+      {PARADE.map(([name, modelHeight, height, animSpeed, speed], i) => {
+        const x = CENTER_X + (i - (n - 1) / 2) * SPACING;
+        return (
+          <group key={name}>
+            <MonsterEnemy
+              spawn={[x, BASE_Y, ROW_Z]}
+              url={`/siege/monsters/${name}.glb`}
+              modelHeight={modelHeight}
+              height={height}
+              animSpeed={animSpeed}
+              speed={speed}
+              aggro={70}
+              health={300}
+            />
+            {/* Floating name tag so you can tell me which one looks good. */}
+            <Billboard position={[x, BASE_Y + height + 1.2, ROW_Z]}>
+              <Text fontSize={0.7} color="#ffffff" anchorX="center" outlineWidth={0.06} outlineColor="#000000">
+                {name}
+              </Text>
+            </Billboard>
+          </group>
+        );
+      })}
     </Suspense>
   );
 }
