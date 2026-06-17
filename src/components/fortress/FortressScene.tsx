@@ -33,6 +33,7 @@ import { useActiveGame } from '@/config/activeGame';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
+import { setSprayDamage } from '@/components/siege/spray/sprayAttackSystem';
 import { LaserProbe } from '@/components/siege/LaserProbe';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
 import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/SiegeExplosion';
@@ -779,6 +780,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       }
     }, 0);
   }, [applyDamageWithKnockback, takeDamage]);
+
+  // Register the player-damage fn for siege breath weapons (acid vomit spray, etc.).
+  useEffect(() => {
+    setSprayDamage(takeDamage ? (dmg, dir, kb) => takeDamage(dmg, dir, kb) : null);
+    return () => setSprayDamage(null);
+  }, [takeDamage]);
 
   // Fire propagation callback - when shnake head moves, propagate fire toward head
   const handleShnakeHeadMoved = useCallback((shnakeId: string) => {

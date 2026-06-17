@@ -22,13 +22,8 @@ const PARADE: [string, number, number, number?, number?][] = [
   ['skeletonlight',  1.795, 2.0, 2],
   ['skeletonranger', 1.797, 2.0, 2],
   ['darklord',       1.843, 2.4, 1.8],
-  ['demonmale',      2.145, 2.6, 1.8],
-  ['gravedigger',    1.797, 2.0, 2],
-  ['hunterm',        1.791, 1.9, 2],
-  ['hunterf',        1.792, 1.85, 2],
-  ['plaguedoctor',   1.791, 2.0, 2],
-  ['priest',         1.792, 1.95, 2],
-  ['witch',          1.792, 1.85, 2],
+  ['demonmale',      2.145, 3.0, 1.8],
+  // removed for now (animations don't read right): gravedigger, hunterm/f, plaguedoctor, priest, witch
 ];
 
 // A clear row on the beach (known-good ground ≈ 26), north of the existing monsters.
@@ -42,6 +37,8 @@ export function SiegeMonsterParade() {
         const x = CENTER_X + (i - (n - 1) / 2) * SPACING;
         return (
           <group key={name}>
+            {/* aggro 0 + wander 0 = they stand still and idle, so the name tag above
+                each one stays correct (no chasing off and leaving the label behind). */}
             <MonsterEnemy
               spawn={[x, BASE_Y, ROW_Z]}
               url={`/siege/monsters/${name}.glb`}
@@ -49,7 +46,8 @@ export function SiegeMonsterParade() {
               height={height}
               animSpeed={animSpeed}
               speed={speed}
-              aggro={70}
+              aggro={0}
+              wanderRadius={0}
               health={300}
             />
             {/* Floating name tag so you can tell me which one looks good. */}

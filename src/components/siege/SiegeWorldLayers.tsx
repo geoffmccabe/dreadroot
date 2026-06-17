@@ -15,6 +15,7 @@ import { SiegeMonsterParade } from './SiegeMonsterParade';
 import { SiegeItemGrid } from './SiegeItemGrid';
 import { MeshColliderPlayer } from './MeshColliderPlayer';
 import { SiegeTeleport } from './SiegeTeleport';
+import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const [terrainReady, setTerrainReady] = useState(false);
@@ -25,6 +26,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <WaterLayer world={world} />
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
+      {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}
+      <SprayAttackRenderer />
 
       {terrainReady && (
         <>

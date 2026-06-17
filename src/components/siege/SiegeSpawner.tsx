@@ -5,25 +5,31 @@
 //   !2#  → mushroom-grunt horde (npcType 6): HOP gait (the bouncy hop/stack), size ±50%,
 //          same grey desaturation.
 //   !3#  → GIANT SKELETON horde: red-demon CLIMB gait (no jump), 500 HP, size ±20%, speed ±10%.
+//   !4#  → VOMIT DEMON (3m): spits acid from 20-30m (1 dmg/particle), recharges ~60s, then melees.
 // After a spawn, spamming "0" within 2s adds another 10 of the LAST type — for stress-testing
 // hordes. Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import { MonsterEnemy } from './MonsterEnemy';
+import { fireSpray } from './spray/sprayAttackSystem';
+import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
 let nextId = 0;
-type MType = 1 | 2 | 3;
+type MType = 1 | 2 | 3 | 4;
 type Demon = { id: number; spawn: [number, number, number]; type: MType };
 
 // Per-type config. gait/sizeJitter/speedJitter are the reusable SW horde algorithms.
 const CFG: Record<MType, {
   url: string; modelHeight: number; height: number; speed: number;
   gait: 'hop' | 'climb'; sizeJitter: number; speedJitter: number; health: number; animSpeed?: number;
+  rangedRange?: number; rangedCooldownMs?: number; spray?: SprayConfig;
 }> = {
   1: { url: '/siege/monsters/reddemon.glb',         modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100 },
   2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100 },
   // 3 = GIANT SKELETON: red-demon hording (climb gait, NO jump), 500 HP, ±20% size, ±10% speed, 3x anim.
   3: { url: '/siege/monsters/dfskeleton.glb',        modelHeight: 1.795, height: 6.0,  speed: 5.0, gait: 'climb', sizeJitter: 0.20, speedJitter: 0.10, health: 500, animSpeed: 3 },
+  // 4 = VOMIT DEMON: 3m, spits acid from 20-30m once/min (recharges), then closes for melee.
+  4: { url: '/siege/monsters/demonmale.glb',         modelHeight: 2.145, height: 3.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.10, health: 200, animSpeed: 1.8, rangedRange: 30, rangedCooldownMs: 60000, spray: ACID_VOMIT },
 };
 
 export function SiegeSpawner() {
@@ -66,7 +72,7 @@ export function SiegeSpawner() {
       if (k === '!') { e.preventDefault(); e.stopPropagation(); stage.current = 'type'; arm(); return; }
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
-        if (k === '1' || k === '2' || k === '3') { pendingType.current = (k === '1' ? 1 : k === '2' ? 2 : 3); stage.current = 'qty'; arm(); }
+        if (k === '1' || k === '2' || k === '3' || k === '4') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
         else clearStage();
         return;
       }
@@ -91,7 +97,9 @@ export function SiegeSpawner() {
           <MonsterEnemy key={d.id} id={`d${d.id}`} spawn={d.spawn} url={m.url}
             modelHeight={m.modelHeight} height={m.height} aggro={400} speed={m.speed} wanderRadius={6}
             health={m.health} animSpeed={m.animSpeed} onDespawn={despawn} zombie gait={m.gait}
-            sizeJitter={m.sizeJitter} speedJitter={m.speedJitter} />
+            sizeJitter={m.sizeJitter} speedJitter={m.speedJitter}
+            rangedRange={m.rangedRange} rangedCooldownMs={m.rangedCooldownMs}
+            onRangedAttack={m.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m.spray!) : undefined} />
         );
       })}
     </>

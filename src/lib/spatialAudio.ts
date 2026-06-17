@@ -118,9 +118,13 @@ export async function playSpatialSound(
      *  during the ramp — a glitchy/stuttering power-down instead of a smooth
      *  fade. */
     stutterMs?: number;
+    /** Play only a SEGMENT of the file: start `clipStart` seconds in, for
+     *  `clipDur` seconds (e.g. a 0.1s snippet from the middle of a long sound). */
+    clipStart?: number;
+    clipDur?: number;
   } = {}
 ): Promise<void> {
-  const { baseVolume = 0.5, playbackRate = 1.0, detune = 0, pitchDownMs = 0, stutterMs = 0 } = options;
+  const { baseVolume = 0.5, playbackRate = 1.0, detune = 0, pitchDownMs = 0, stutterMs = 0, clipStart = 0, clipDur = 0 } = options;
 
   const volume = calculateVolumeFromDistance(distance) * baseVolume;
   if (volume <= 0.01) return; // Too quiet to hear
@@ -169,6 +173,9 @@ export async function playSpatialSound(
       }
       source.start(0);
       source.stop(t1 + 0.05);
+    } else if (clipDur > 0) {
+      // Play just a short segment from the middle of the file.
+      source.start(0, clipStart, clipDur);
     } else {
       source.start(0);
     }
