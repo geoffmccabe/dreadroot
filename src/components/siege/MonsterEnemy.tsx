@@ -48,7 +48,8 @@ export interface MonsterConfig {
   speedJitter?: number;       // per-demon ± walk-speed fraction
   animSpeed?: number;         // playback-rate multiplier for ALL clips (1 = native; 3 = 3x faster)
   rangedRange?: number;       // if set, fires a ranged attack when the player is within this (m) but beyond melee
-  rangedCooldownMs?: number;  // recharge between ranged attacks (default 60000 = once/min)
+  rangedCooldownMs?: number;  // MIN recharge (ms) between ranged attacks (default 60000)
+  rangedCooldownMaxMs?: number; // MAX recharge — each cooldown is random in [min,max]; defaults to min
   onRangedAttack?: (x: number, y: number, z: number, dx: number, dy: number, dz: number) => void; // fire the breath weapon
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
@@ -108,7 +109,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const scale = H / c.modelHeight;
   // Animation rhythm jitter × per-monster playback-rate (e.g. slow zombie clip → 3x).
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
-  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0 });
+  const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -289,9 +290,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       const inBand = !!c.rangedRange && dist <= c.rangedRange && dist > c.attackRange;
       if (inBand) {                                          // RANGED breath weapon: HOLD here + spray
-        if (now - s.lastRanged > (c.rangedCooldownMs ?? 60000)) {
-          s.lastRanged = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
-          const my = s.y + H * 0.85;                         // spray from the head, arc up toward the player
+        if (now - s.lastRanged > s.nextRangedCd) {
+          const cdMin = c.rangedCooldownMs ?? 60000;
+          s.lastRanged = now;
+          s.nextRangedCd = cdMin + Math.random() * Math.max(0, (c.rangedCooldownMaxMs ?? cdMin) - cdMin);
+          s.swipeUntil = now + Math.max(c.attackClipMs, 1100);  // attack anim plays through the ~1s spray
+          play(clips.attack);                                // loop the attack pose while spraying
+          const my = s.y + H * 0.85;                          // spray from the head, arc up toward the player
           c.onRangedAttack?.(s.x, my, s.z, dx, dist * 0.4, dz);
         } else if (now > s.swipeUntil) play(clips.idle);     // hold position between sprays
       } else if (dist > c.attackRange) {
@@ -299,7 +304,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
-      } else if (now - s.lastAttack > c.attackMs) { s.lastAttack = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true); }
+      } else if (c.rangedRange) { play(clips.idle); }        // ranged monsters don't melee-bite up close (looks silly)
+      else if (now - s.lastAttack > c.attackMs) { s.lastAttack = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true); }
       else if (now > s.swipeUntil) play(clips.idle);
     } else {                                                // no player near -> wander + search
       if (now > s.wNext) {

@@ -15,11 +15,14 @@ export interface SprayConfig {
   colorB: [number, number, number];
   size: number;              // base sprite radius (m)
   sizeVar: number;           // ± size fraction
+  opacityMin: number;        // per-particle opacity range (0-1)
+  opacityMax: number;
   sprites: SpraySprite[];    // shape pool — each particle picks one at random
-  soundUrl: string;          // impact sound
+  emitWindow: number;        // s — particles spray out over this window (not all at once)
+  soundUrl: string;          // sound played as each blob LEAVES the mouth
   soundClipStart: number;    // s into the file to start (snippet from the middle)
   soundClipDur: number;      // s length of the snippet
-  soundMaxKph: number;       // impact speed (km/h) that maps to 100% volume
+  soundMaxKph: number;       // muzzle speed (km/h) that maps to 100% volume
   damage: number;            // HP per particle hit
   lifetime: number;          // s before a particle expires
   hitRadius: number;         // m — distance to player that counts as a hit
@@ -39,7 +42,10 @@ export const ACID_VOMIT: SprayConfig = {
   colorB: [0.92, 0.55, 0.42],  // flesh
   size: 0.085,
   sizeVar: 0.5,
-  sprites: ['circle', 'oval', 'diamond', 'square', 'star', 'line'],
+  opacityMin: 0.3,
+  opacityMax: 0.8,
+  sprites: ['circle', 'oval', 'diamond', 'square', 'line'],  // no stars in vomit (star stays a builder option)
+  emitWindow: 1.0,
   soundUrl: '/enemy_hitting_ground.mp3',
   soundClipStart: 0.22,
   soundClipDur: 0.1,
