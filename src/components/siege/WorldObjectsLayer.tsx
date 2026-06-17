@@ -64,11 +64,15 @@ const _mbSize = new THREE.Vector3();
 const MB_TARGET_CELLS = 8;   // ~boxes per axis for a typical object
 const MB_MIN_CELL = 0.6;     // finest box (small rocks → many tight boxes)
 const MB_MAX_CELL = 3.0;     // coarsest (big blobs stay manageable)
-function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox: THREE.Box3, ovCell?: number): THREE.Box3[] {
+function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox: THREE.Box3, ovCell?: number, finer = false): THREE.Box3[] {
   const wb = geoBox.clone().applyMatrix4(world);
   wb.getSize(_mbSize);
   const maxDim = Math.max(_mbSize.x, _mbSize.y, _mbSize.z);
-  let cell = ovCell ?? Math.min(MB_MAX_CELL, Math.max(MB_MIN_CELL, maxDim / MB_TARGET_CELLS));
+  // `finer` = organic overhangs (mushrooms/stalagmites): many small boxes that hug the stem +
+  // cap so monsters don't climb the empty air the coarse AABB would leave under the cap.
+  const target = finer ? 22 : MB_TARGET_CELLS;
+  const minCell = finer ? 0.35 : MB_MIN_CELL;
+  let cell = ovCell ?? Math.min(MB_MAX_CELL, Math.max(minCell, maxDim / target));
   for (let tries = 0; tries < 4; tries++) {
     const boxes = voxelizeGeometry(geo, world, cell, 4000);
     if (boxes.length) return boxes;
@@ -97,6 +101,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     // Mesh-AABBs run loose; shrink toward the real object size. Rocks are the worst (organic
     // shapes in a big box) → 60%; everything else → 80%.
     const isRock = /rock|stone|boulder|cliff|mountain/i.test(fbx) || SOLID_PROP_RE.test(fbx);
+    const organicFine = /mushroom|stalag/i.test(fbx);   // overhang shapes → finer monster boxes
     const shrinkF = 0.8;  // non-rocks: 80% box (rocks get voxelized to match their shape)
     let meshes: THREE.Mesh[] = [];
     gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
@@ -173,7 +178,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           // Monsters: greedy boxes in their OWN grid (the player/bullets never read it,
           // so these can't become invisible walls). Denser than the old single box.
           if (monsterBoxes.length < 4000 && !managedRocks.has(ikey)) {
-            for (const b of monsterBoxesFor(src.geometry, m, geoBox, ovCell)) monsterBoxes.push(b);
+            for (const b of monsterBoxesFor(src.geometry, m, geoBox, ovCell, organicFine)) monsterBoxes.push(b);
           }
         } else if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {
           // Non-mesh worlds (DreadRoot): single shrunk box / saved voxel as before.
