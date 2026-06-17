@@ -120,7 +120,10 @@ function CharacterRig({ selected }: { selected: string }) {
       }
       const f = frozen.current;
       g.position.set(f.x, f.y, f.z);
-      g.rotation.set(0, f.yaw, 0);
+      // Orientation (stand-up/flip) lives on the mixer-root group itself — no inner transform
+      // group between the mixer root and the skinned mesh (that intermediate transform sheared
+      // the limbs in three.js). This matches MonsterEnemy, the proven-animating path.
+      g.rotation.set(ROT[rot][0], ROT[rot][1] + f.yaw, ROT[rot][2]);
       g.visible = true;
       play(desired.current);
     } else {
@@ -131,9 +134,7 @@ function CharacterRig({ selected }: { selected: string }) {
 
   return (
     <group ref={group} scale={scale} visible={false}>
-      <group rotation={ROT[rot]}>
-        <primitive object={cloned} />
-      </group>
+      <primitive object={cloned} />
     </group>
   );
 }
