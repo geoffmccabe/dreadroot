@@ -64,6 +64,9 @@ export interface MonsterConfig {
   hueShift?: number;          // hue rotation in RADIANS (±)
   tintRed?: number;           // blood-red tint mix 0..1
   moanSounds?: string[];      // ambient moan clips (random pick, ~per 4-8s, distance-scaled)
+  contactDamage?: number;     // touching the player: 30% chance/sec to hit for this × height (m)
+  kbInverseSize?: boolean;    // bullets don't stun; knockback ∝ 1/size (small = flung, big = barely)
+  stackSink?: number;         // when standing on ANOTHER monster, sink feet this fraction into it (0.30)
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
 
@@ -127,7 +130,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Animation rhythm jitter × per-monster playback-rate (e.g. slow zombie clip → 3x).
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
-    teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false, moanNext: 0 });
+    teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
+    moanNext: 0, contactNext: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -147,6 +151,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     noStun: cfg.noStun ?? false,
     yaw: 0,
     opacity: 1,
+    kbScale: cfg.kbInverseSize ? 6 / H : undefined,   // 1-3·(6/H) velocity → ~1-3m slide ÷ size
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   useBossAura(inst, cfg.boss === 'teleporter');
@@ -302,6 +307,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           const u = c.moanSounds[(Math.random() * c.moanSounds.length) | 0];
           playSpatialSound(u, dist, { baseVolume: 0.55, playbackRate: 0.8 + Math.random() * 0.4 });
         }
+      }
+    }
+
+    // Contact damage: while the body overlaps the player, 30%/sec to hit for base × height.
+    if (c.contactDamage && dist < inst.radius + 0.6) {
+      if (now > s.contactNext) {
+        s.contactNext = now + 1000;
+        if (Math.random() < 0.30) dealPlayerDamage(c.contactDamage * H, dx / dist, 0, dz / dist, 4);
       }
     }
 
@@ -461,7 +474,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           if (!os || !os.g || os.pri >= sup.pri) continue;
         }
         if (s.x >= b.min.x - fr && s.x <= b.max.x + fr && s.z >= b.min.z - fr && s.z <= b.max.z + fr) {
-          const top = b.max.y;
+          // Stacking on ANOTHER MONSTER: sink the feet by stackSink so they nest INSIDE the
+          // body below (terrain/objects are unaffected — only monster boxes get lowered).
+          const top = (c.stackSink && monsterBoxes.has(b)) ? b.max.y - c.stackSink * (b.max.y - b.min.y) : b.max.y;
           if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
           else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = monsterBoxes.has(b); } // too tall → wall
         }

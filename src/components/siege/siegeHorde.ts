@@ -36,6 +36,9 @@ export interface DemonInstance {
   // Damage resistance 0..1 (default 1 = full damage). The teleporting Dark Lord sets this to
   // its current opacity, so a near-invisible boss (opacity 0.2) takes only 20% damage.
   opacity?: number;
+  // If set, a bullet knockback uses (1-3)·kbScale velocity instead of the fixed 4.5 (the bloody
+  // skeleton horde sets kbScale = 6/size so small skeletons fly far, big ones barely budge).
+  kbScale?: number;
   // Set by MonsterEnemy: attach a world hit point to the nearest skeleton bone so
   // an ongoing burn rides the animation (gait bob + turn). Undefined until ready.
   attach?: (x: number, y: number, z: number) => BurnFollower | null;
@@ -94,7 +97,8 @@ enemyCombatRegistry.register<DemonInstance>({
       d.hitAt = now;
     } else if (info.source !== 'flame') {
       // Burn DoT (flame) only chips HP — no re-stun (else the horde perma-freezes).
-      const kb = info.source === 'melee' ? (info.knockbackImpulse ?? 8) : 4.5; // bullet = small stagger
+      const kb = info.source === 'melee' ? (info.knockbackImpulse ?? 8)
+        : (d.kbScale ? (1 + Math.random() * 2) * d.kbScale : 4.5); // bullet: fixed stagger, or 1-3·kbScale
       d.kvx += info.knockbackDirX * kb;
       d.kvz += info.knockbackDirZ * kb;
       if (!d.noStun) d.stunUntil = now + 1000 + Math.random() * 2000; // 1–3s stun (skipped for noStun boss/test demon)

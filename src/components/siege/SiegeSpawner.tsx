@@ -24,7 +24,7 @@ let nextId = 0;
 type MType = 1 | 2 | 3 | 4 | 5 | 6;
 // Per-individual override (type 6 horde): each mob rolls its own model + stats + colour.
 type Ov = { url: string; modelHeight: number; height: number; speed: number; health: number;
-            desat: number; hueShift: number; tintRed: number };
+            desat: number; hueShift: number; tintRed: number; animSpeed: number };
 type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov };
 
 // Type-6 horde: a random mix of three skeletons (ranger/heavy get more HP). The SW zombie moans.
@@ -36,14 +36,15 @@ const HORDE6 = [
 const HORDE6_MOANS = ['/monster-sounds/zombie_moan_3p1.mp3', '/monster-sounds/zombie_moan_3p2.mp3', '/monster-sounds/zombie_moan_6p1.mp3'];
 function makeHordeMember(): Ov {
   const k = HORDE6[(Math.random() * HORDE6.length) | 0];
+  const height = 0.5 + Math.random() * 2.5;            // 0.5–3 m (wide range)
   return {
-    url: k.url, modelHeight: k.modelHeight,
-    height: 0.5 + Math.random() * 2.5,                 // 0.5–3 m (wide range)
+    url: k.url, modelHeight: k.modelHeight, height,
     speed: 2.5 * (0.5 + Math.random()),                // ±50% (0.5×–1.5× of 2.5)
     health: (10 + Math.random() * 90) * k.healthMul,   // 10–100 × type multiplier
     desat: 1 - (0.1 + Math.random() * 0.9),            // saturation 10–100% → desat 0–0.9
     hueShift: (Math.random() * 2 - 1) * 0.628,         // ±10% of the spectrum (±0.1·2π rad)
-    tintRed: 0.25 + Math.random() * 0.45,              // 25–70% blood-red tint
+    tintRed: 0.125 + Math.random() * 0.225,            // 12.5–35% red tint (half the old 25–70%)
+    animSpeed: 4 - ((height - 0.5) / 2.5) * 2,          // shamble 4× at 0.5m → 2× at 3m
   };
 }
 
@@ -145,12 +146,13 @@ export function SiegeSpawner() {
           <MonsterEnemy key={d.id} id={`d${d.id}`} spawn={d.spawn} url={o?.url ?? m!.url}
             modelHeight={o?.modelHeight ?? m!.modelHeight} height={o?.height ?? m!.height} aggro={400}
             speed={o?.speed ?? m!.speed} wanderRadius={6} health={o?.health ?? m!.health}
-            animSpeed={m?.animSpeed} onDespawn={despawn} zombie gait={m?.gait ?? 'climb'}
+            animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={despawn} zombie gait={m?.gait ?? 'climb'}
             sizeJitter={o ? 0 : m!.sizeJitter} speedJitter={o ? 0 : m!.speedJitter}
             desat={o?.desat} hueShift={o?.hueShift} tintRed={o?.tintRed}
             moanSounds={o ? HORDE6_MOANS : undefined}
+            contactDamage={o ? 40 : undefined} kbInverseSize={!!o} stackSink={o ? 0.30 : undefined}
             rangedRange={m?.rangedRange} rangedCooldownMs={m?.rangedCooldownMs} rangedCooldownMaxMs={m?.rangedCooldownMaxMs}
-            boss={m?.boss} noStun={m?.noStun} bossSpeedFactor={m?.bossSpeedFactor}
+            boss={m?.boss} noStun={o ? true : m?.noStun} bossSpeedFactor={m?.bossSpeedFactor}
             onRangedAttack={m?.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m!.spray!) : undefined} />
         );
       })}
