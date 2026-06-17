@@ -20,6 +20,10 @@ interface Group { fbx: string; url: string; matrices: number[][]; rotX?: number;
 const SOLID_RE = /bld|wall|tower|gate|bank|town|cave|colosseum|forge|building|house|hut|barrier|fence|dock|pier|bridge|ruin/i;
 const FOLIAGE_RE = /plant|grass|ivy|tree|flower|bush|fern|leaf|vine|reed|seaweed|coral|moss/i;
 const isSolidGroup = (fbx: string) => SOLID_RE.test(fbx) && !FOLIAGE_RE.test(fbx);
+// Chunky props that should ALSO be solid + laser-pickable even though they miss SOLID_RE / are
+// foliage-named: the giant mushrooms (mushroom*tree* etc.), tents, stalagmites, camp clutter,
+// columns, dead trees. Real foliage (grass/ferns/flowers/plants/vines/reeds) stays walk-through.
+const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump/i;
 
 // Shared atlas cache: each Synty pack atlas is loaded ONCE and reused across every
 // model that uses it — small memory, no per-model textures embedded.
@@ -92,7 +96,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     const solid = isSolidGroup(fbx);
     // Mesh-AABBs run loose; shrink toward the real object size. Rocks are the worst (organic
     // shapes in a big box) → 60%; everything else → 80%.
-    const isRock = /rock|stone|boulder|cliff|mountain/i.test(fbx);
+    const isRock = /rock|stone|boulder|cliff|mountain/i.test(fbx) || SOLID_PROP_RE.test(fbx);
     const shrinkF = 0.8;  // non-rocks: 80% box (rocks get voxelized to match their shape)
     let meshes: THREE.Mesh[] = [];
     gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
