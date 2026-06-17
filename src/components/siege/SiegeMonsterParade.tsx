@@ -28,6 +28,12 @@ const PARADE: [string, number, number][] = [
   ['darkelf',        1.831, 1.8],
   ['forestwitch',    1.906, 1.8],
   ['dwarf',          1.986, 1.5],
+  // Dark Fantasy pack (demon, gargoyle) + zombie CONTROL. zombie is self-consistent
+  // (mixamo mesh+anims like reddemon) → if it animates and the others don't, the
+  // answer is "only self-consistent rigs work in-game".
+  ['zombie',         1.863, 2.0],
+  ['demon',          3.057, 3.0],
+  ['gargoyle',       3.057, 2.8],
 ];
 
 // A clear row on the beach (known-good ground ≈ 26), north of the existing monsters.
