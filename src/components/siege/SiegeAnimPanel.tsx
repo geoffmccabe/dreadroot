@@ -14,14 +14,17 @@ const cleanAnim = (n: string) =>
 export function SiegeAnimPanel() {
   useSiegeCharacter();               // re-render on inspect / character change
   const { names, current, play } = useSiegeAnim();
-  if (!isInspectView() || names.length === 0) return null;
+  // LookUp/LookDown are additive neck-only "look" layers (meant to stack on a base pose via a
+  // vertical-look mask in-game); standalone they snap the body to T-pose, so don't list them.
+  const playable = names.filter((n) => !/look\s*(up|down)/i.test(n));
+  if (!isInspectView() || playable.length === 0) return null;
 
   return (
     <Card className="waterfall-card fixed left-3 top-[190px] z-50 flex w-44 max-h-[70vh] flex-col gap-1 overflow-y-auto">
       <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {getSelectedCharacter()} — animations
       </div>
-      {names.map((n) => (
+      {playable.map((n) => (
         <button
           key={n}
           onClick={() => play(n)}
