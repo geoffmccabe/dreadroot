@@ -11,6 +11,7 @@ import { TerrainLayer } from './TerrainLayer';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
+import { SiegeMonsterParade } from './SiegeMonsterParade';
 import { SiegeItemGrid } from './SiegeItemGrid';
 import { MeshColliderPlayer } from './MeshColliderPlayer';
 import { SiegeTeleport } from './SiegeTeleport';
@@ -47,6 +48,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
             <MonsterEnemy spawn={[-380, 26, 720]} url="/siege/monsters/mushroomgruntanim.glb"
                           modelHeight={2.331} height={2.2} aggro={140} />
           </Suspense>
+          {/* One of each NEW FantasyRivals monster (converted + animated from the
+              Synty source pack) in a row just north of the beach enemies. */}
+          <SiegeMonsterParade />
         </>
       )}
     </>
