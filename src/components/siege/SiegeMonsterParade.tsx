@@ -32,8 +32,12 @@ const PARADE: [string, number, number][] = [
   // (mixamo mesh+anims like reddemon) → if it animates and the others don't, the
   // answer is "only self-consistent rigs work in-game".
   ['zombie',         1.863, 2.0],
-  ['demon',          3.057, 3.0],
-  ['gargoyle',       3.057, 2.8],
+  // Dark Fantasy pack + the zombie animation set (near-identical rig: ~1deg rest
+  // diff, all body bones match — only fingers don't curl). Same proven path as the
+  // working zombie. Skeleton is the tightest match.
+  ['dfskeleton',     1.795, 2.0],
+  ['dfdemon',        1.909, 2.5],
+  ['dfgargoyle',     1.904, 2.5],
 ];
 
 // A clear row on the beach (known-good ground ≈ 26), north of the existing monsters.
