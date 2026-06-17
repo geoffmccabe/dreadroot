@@ -39,7 +39,6 @@ import { LaserProbe } from '@/components/siege/LaserProbe';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
 import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/SiegeExplosion';
 import { SiegeCharacter } from '@/components/siege/SiegeCharacter';
-import { SiegeCharLab } from '@/components/siege/SiegeCharLab';
 import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
 import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
@@ -1752,7 +1751,6 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {isSiege && <VoxelizeTool />}
       {isSiege && <SiegeExplosion ref={siegeExplosionRef} />}
       {isSiege && <React.Suspense fallback={null}><SiegeCharacter /></React.Suspense>}
-      {isSiege && <React.Suspense fallback={null}><SiegeCharLab /></React.Suspense>}
       {isSiege ? (
         <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
       ) : (
