@@ -70,8 +70,18 @@ Siege Worlds will later show the real held model + animations, reading the **sam
 - [ ] `projectileRegistry` drives velocity + visual; shotgun pellets (bullets_per_tap);
       rocket splash (explosion_radius via existing explosion VFX); sniper/burst flags.
 
-### Phase 7 — Other slots
-- [ ] Potion slot active-use (drink); armor (damage reduction) + boots (jet power tier) passive.
+### Phase 7 — Other slots + passive stats
+- [ ] Potion slot active-use (drink); armor (damage reduction) passive.
+- [ ] **Boots → jet boosts** (the orange triangles in the HUD).
+      - HUD: `features/shwarm/components/HealthBar.tsx` renders `jetBoostMax` triangles,
+        fills `jetBoostAvailable`. Driven entirely by `jetBoostMax`.
+      - Current max: `FortressControls.tsx:2257` → `Math.floor(playerLevel / 3)` (the
+        Level bonus ALREADY EXISTS — 1 boost per 3 levels). Refill every 60s; consumed on
+        space-while-airborne. Level from `profile.current_level`.
+      - **Change**: `maxBoosts = Math.floor(playerLevel / 3) + (equippedBootsTier - 1)`.
+        T1 boots = today's behavior (+0); each higher tier = +1. Pass the equipped boots
+        tier as a prop (Fortress → FortressControls), default 1. Optional cap (e.g. 8) so
+        the HUD row doesn't overflow. Boots slot never empty (min T1) ⇒ tier always ≥ 1.
 
 ### Phase 8 — Pinkland / Siege Worlds
 - [ ] Pinkland: automatic (shared). SW: bind equipped weapon → real 3D held model + anims,
