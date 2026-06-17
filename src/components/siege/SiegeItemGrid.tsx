@@ -20,10 +20,19 @@ export function SiegeItemGrid() {
   const [visible, setVisible] = useState(false);
   const groupRef = useRef<THREE.Group | null>(null);
 
-  // NOTE: the "I" key toggle was removed — it captured 'i' globally (capture phase +
-  // stopPropagation) and swallowed the real inventory key (I) in BOTH games. The
-  // inventory toggle is a top-level control and must win. To re-enable this debug
-  // grid, rebind it to a non-conflicting key/combo (e.g. Ctrl+Shift+I) — not plain I.
+  // Toggle the debug item grid with Cmd+I (⌘I). NOT plain I (that's the inventory
+  // key) and NOT Ctrl+I (taken by Inspector Mode + the siege Controls panel). We only
+  // act on the exact Cmd+I combo and don't stopPropagation, so no other key is eaten.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        setVisible((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const group = useMemo(() => {
     const g = new THREE.Group();
