@@ -40,31 +40,33 @@ const FRAG = `
   void main(){
     float t = uTime * uSpeed;
     float u = vUv.x, y = vUv.y;
-    // two scrolling-up noise layers = licking flames; slight sideways drift for flicker
-    float n1 = fbm(vec2(u * uDetail + sin(t * 0.6) * 0.3, y * 3.0 - t * 1.6));
-    float n2 = fbm(vec2(u * uDetail * 2.0 + 11.0, y * 5.0 - t * 2.7));
-    float flame = mix(n1, n2, 0.4);
-    float fall = pow(1.0 - y, 1.4);              // full at the feet, gone by the top
-    float a = flame * fall * 1.9 - (1.0 - fall) * 0.35;
-    a = smoothstep(0.22, 0.8, a);                // carve into sharp tongues
+    // upward-scrolling noise (two octaves) — vertical licks separated horizontally by uDetail
+    float n1 = fbm(vec2(u * uDetail + sin(t * 0.5) * 0.25, y * 2.2 - t * 1.8));
+    float n2 = fbm(vec2(u * uDetail * 2.3 + 19.0, y * 4.2 - t * 3.1));
+    float flame = n1 * 0.62 + n2 * 0.38;
+    // The threshold CLIMBS with height: at the base many tongues survive (but with gaps
+    // between them), toward the top only the tallest licks remain → real flame tongues, not
+    // a solid wall. This is what keeps the base from reading as a solid cone.
+    float thresh = mix(0.42, 1.02, pow(y, 0.7));
+    float a = smoothstep(thresh, thresh + 0.09, flame);
     if (a < 0.02) discard;
     vec3 col = mix(uColorCool, uColorHot, a);
-    col += uColorHot * (1.0 - y) * 0.25;         // brighter core near the base
-    gl_FragColor = vec4(col, a);
+    col *= (1.0 - y * 0.45);                      // darken toward the tips
+    gl_FragColor = vec4(col, a * 0.85);
   }
 `;
 
 export function DarkLordFlame({ height, radius }: { height: number; radius: number }) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
-  // Tapered open cylinder: a touch wider at the feet, narrowing as it rises.
+  // Open cylinder, only mildly tapered (a strong taper reads as a solid "cone of light").
   const geo = useMemo(
-    () => new THREE.CylinderGeometry(radius * 0.45, radius * 1.15, height, 28, 1, true),
+    () => new THREE.CylinderGeometry(radius * 0.75, radius * 1.1, height, 32, 1, true),
     [radius, height],
   );
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
     uSpeed: { value: 1.0 },
-    uDetail: { value: 9.0 },
+    uDetail: { value: 14.0 },   // more, thinner tongues = less solid
     uColorHot: { value: new THREE.Color('#b85cff') },   // bright purple
     uColorCool: { value: new THREE.Color('#1a0033') },  // near-black violet
   }), []);
