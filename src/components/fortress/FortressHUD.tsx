@@ -15,6 +15,7 @@ import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useVaultBridge } from '@/contexts/VaultBridgeContext';
 import { VaultPanel } from '@/features/vault';
 import { getItemSpriteUrl as itemSpriteUrl } from '@/lib/itemSprite';
+import { EquipSlots } from './EquipSlots';
 import {
   useCursorStack,
   cursorStackApi,
@@ -28,77 +29,8 @@ import {
   type SlotOccupant,
 } from '@/features/inventory-system';
 
-// ─── Instructions Panel (bottom-right, collapsible) ──────────────
-
-function InstructionsPanel({
-  blockPlacementMode,
-  selectedBlockType,
-}: {
-  blockPlacementMode: boolean;
-  selectedBlockType: string | null;
-}) {
-  const [minimized, setMinimized] = useState(false);
-
-  const panelStyle: React.CSSProperties = {
-    position: 'fixed',
-    bottom: '16px',
-    right: '16px',
-    zIndex: 20,
-    borderRadius: 'var(--hud-radius)',
-    border: '1px solid hsla(var(--hud-border))',
-    background: 'hsla(var(--hud-bg))',
-    color: 'hsl(var(--hud-text))',
-    fontFamily: 'var(--hud-font)',
-    cursor: 'pointer',
-    userSelect: 'none',
-  };
-
-  if (minimized) {
-    return (
-      <div
-        onClick={() => setMinimized(false)}
-        style={{
-          ...panelStyle,
-          width: '32px',
-          height: '32px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '16px',
-          fontWeight: 600,
-        }}
-      >
-        ?
-      </div>
-    );
-  }
-
-  return (
-    <div
-      onClick={() => setMinimized(true)}
-      style={{
-        ...panelStyle,
-        padding: '8px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        height: '60px',
-        boxSizing: 'border-box',
-      }}
-    >
-      <div style={{ fontSize: '13px' }}>
-        {blockPlacementMode
-          ? (selectedBlockType
-            ? 'Click to place block • Tab to see placed blocks'
-            : 'Tab to see placed blocks • O to buy blocks')
-          : 'R for crosshairs • Click to shoot'}
-      </div>
-      <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '4px' }}>
-        B = Block mode • L = Line • O = Shop • M = Market • I = Inventory
-      </div>
-    </div>
-  );
-}
+// (The old bottom-right "R for crosshairs" InstructionsPanel was removed and
+// replaced by <EquipSlots/> — see the render below.)
 
 // Intentionally loose typing: this file is an extraction of HUD JSX
 // from a large component, and we want minimal friction during refactor.
@@ -1098,11 +1030,9 @@ export function FortressHUD(props: FortressHUDProps) {
         )}
       </div>
 
-      {/* Instructions — match left panel height */}
-      <InstructionsPanel
-        blockPlacementMode={blockPlacementMode}
-        selectedBlockType={selectedBlockType}
-      />
+      {/* Bottom-right: equip slots (weapon / armor / boots / potion). Replaces the
+          old "R for crosshairs" instructions panel. */}
+      <EquipSlots equippedItems={equippedItems as Array<{ slot: number; itemId: string }>} />
 
       {/* Bottom-center hotbar + inventory grid + vault */}
       <div
