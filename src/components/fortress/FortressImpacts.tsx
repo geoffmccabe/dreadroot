@@ -159,7 +159,10 @@ export const BulletImpacts = forwardRef<BulletImpactsHandle, {}>((_, ref) => {
       (material as any).blendSrcAlpha = THREE.ZeroFactor;
       (material as any).blendDstAlpha = THREE.OneFactor;
       (material as any).depthWrite = false;
-      (material as any).depthTest = false;
+      // depthTest ON so solid geometry (buildings, terrain) occludes the fire —
+      // otherwise burning monsters show straight through walls. depthWrite stays
+      // off so the additive flames still layer correctly among themselves.
+      (material as any).depthTest = true;
       (material as any).transparent = true;
 
       if (camera instanceof THREE.PerspectiveCamera) {
