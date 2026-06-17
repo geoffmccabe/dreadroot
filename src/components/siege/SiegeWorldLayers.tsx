@@ -13,6 +13,7 @@ import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
 import { SiegeItemGrid } from './SiegeItemGrid';
 import { MeshColliderPlayer } from './MeshColliderPlayer';
+import { SiegeTeleport } from './SiegeTeleport';
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const [terrainReady, setTerrainReady] = useState(false);
@@ -21,6 +22,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Ground first — signals ready so everything else mounts on top of it. */}
       <TerrainLayer onReady={() => setTerrainReady(true)} />
       <WaterLayer world={world} />
+      {/* Quick-travel: backtick (`) then 1-8. Always available in Siege. */}
+      <SiegeTeleport />
 
       {terrainReady && (
         <>
