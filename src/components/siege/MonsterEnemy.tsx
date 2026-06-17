@@ -18,6 +18,7 @@ import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHor
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { playSpatialSound } from '@/lib/spatialAudio';
+import { getSiegeFlame } from './siegeFlame';
 
 // Blast-impact damage: kinetic, only above a threshold speed. min(120, 0.12·v²).
 const IMPACT_MIN = 7;
@@ -80,6 +81,9 @@ const CLIMB_LOD = 90; // beyond this (m from camera) skip the per-frame world-co
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
 const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
 const _fwd = new THREE.Vector3();   // scratch: player look direction (for teleport-behind)
+const _flame = new THREE.Vector3(); // scratch: boss body-flame position
+const BOSS_FLAME_COLORS = ['#FFFF00', '#FF6600', '#FF3300'];   // same fire as bullet-impact hex
+const BOSS_FLAME_SIDES: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
 const headBoxes = new Set<THREE.Box3>();
@@ -123,7 +127,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Animation rhythm jitter × per-monster playback-rate (e.g. slow zombie clip → 3x).
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
-    teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, moanNext: 0 });
+    teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false, moanNext: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -147,6 +151,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   useBossAura(inst, cfg.boss === 'teleporter');
   const bossMats = useRef<THREE.MeshStandardMaterial[]>([]);   // boss: faded each frame to inst.opacity
+  const flameIds = useRef<string[]>([]);                       // boss: 4 hex body-flame ids
+  // Spawn-once-then-follow: the 4 tall hex flames are spawned lazily in useFrame and removed here.
+  useEffect(() => () => {
+    const fr = getSiegeFlame();
+    if (fr) for (const id of flameIds.current) fr.removeFlame(id);
+  }, []);
   // Bone-attach for burns: a hit point locks to the nearest skeleton bone so the
   // fire rides the gait bob + turn + walk (the animation drives the bones), not
   // just the collider. inst.attach(x,y,z) → a per-frame world-position follower.
@@ -331,22 +341,32 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const dwell = s.teleDwell || 1;
       inst.opacity = Math.max(0, 1 - (now - s.teleArrived) / dwell);   // fade out before each jump
       if (now >= s.teleAt) {
-        // Teleport to a fresh spot near the player; 1-in-3 lands directly behind them.
         camera.getWorldDirection(_fwd); _fwd.y = 0; _fwd.normalize();
-        const behind = Math.random() < 1 / 3;
         let nx: number, nz: number;
-        if (behind) {
-          nx = camera.position.x - _fwd.x * 2.2; nz = camera.position.z - _fwd.z * 2.2;
-          s.behindUntil = now + 1000;            // 1s grace — run forward to dodge the strike
-        } else {
-          const ang = Math.random() * Math.PI * 2, r = 8 + Math.random() * 7;
+        if (Math.random() < 0.10) {
+          // FAR retreat: 10-50m out, then rest (idle) 3-6s before jumping back in.
+          const ang = Math.random() * Math.PI * 2, r = 10 + Math.random() * 40;
           nx = camera.position.x + Math.cos(ang) * r; nz = camera.position.z + Math.sin(ang) * r;
-          s.behindUntil = 0;
+          s.behindUntil = 0; s.teleDwell = 3000 + Math.random() * 3000; s.resting = true;
+        } else {
+          // Near: 1-in-3 lands directly behind the player for a strike, else 8-15m out.
+          const behind = Math.random() < 1 / 3;
+          if (behind) {
+            nx = camera.position.x - _fwd.x * 2.2; nz = camera.position.z - _fwd.z * 2.2;
+            s.behindUntil = now + 1000;          // 1s grace — run forward to dodge the strike
+          } else {
+            const ang = Math.random() * Math.PI * 2, r = 8 + Math.random() * 7;
+            nx = camera.position.x + Math.cos(ang) * r; nz = camera.position.z + Math.sin(ang) * r;
+            s.behindUntil = 0;
+          }
+          s.teleDwell = 1000 + Math.random() * 3000; s.resting = false;
         }
         s.x = nx; s.z = nz;
         s.y = sampleHeight(nx, nz) ?? s.y;       // arrive standing on the ground there
-        s.teleArrived = now; s.teleDwell = 1000 + Math.random() * 3000; s.teleAt = now + s.teleDwell;
+        s.teleArrived = now; s.teleAt = now + s.teleDwell;
         s.bossAttacked = false; inst.opacity = 1; play(clips.idle);
+      } else if (s.resting) {
+        play(clips.idle);                        // far retreat: rest in place, no shamble
       } else if (s.behindUntil && now > s.behindUntil && !s.bossAttacked && dist <= c.attackRange + 0.6) {
         s.bossAttacked = true; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
         dealPlayerDamage(20 + Math.random() * 80, dx / dist, 0, dz / dist, 6);   // 20-100 dmg back-strike
@@ -549,9 +569,29 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       headBox.max.set(s.x + hr, s.y + H, s.z + hr);
       worldCollisionGrid.update(headBox);
     }
-    if (cfg.boss === 'teleporter') {                 // fade the model to its current opacity
-      const o = inst.opacity ?? 1, mats = bossMats.current;
+    if (cfg.boss === 'teleporter') {
+      const o = inst.opacity ?? 1, mats = bossMats.current;   // fade the model to its opacity
       for (let i = 0; i < mats.length; i++) mats[i].opacity = o;
+      // 4 tall, thin hex flames at the collider sides (20% inside the edge), riding the body.
+      const fr = getSiegeFlame();
+      if (fr) {
+        const off = inst.radius * 0.8;
+        if (!flameIds.current.length) {
+          for (let i = 0; i < 4; i++) {
+            _flame.set(s.x + BOSS_FLAME_SIDES[i][0] * off, s.y, s.z + BOSS_FLAME_SIDES[i][1] * off);
+            flameIds.current.push(fr.spawnFlame({
+              type: 'hex', position: _flame, colors: BOSS_FLAME_COLORS,
+              size: 0.4, height: H * 1.5, duration: 1e9, particleCount: 60,
+              attachTo: `dlf_${inst.id}_${i}`, colorMode: 'static',
+            }));
+          }
+        } else {
+          for (let i = 0; i < 4; i++) {
+            fr.updateAttachedPosition(`dlf_${inst.id}_${i}`,
+              _flame.set(s.x + BOSS_FLAME_SIDES[i][0] * off, s.y, s.z + BOSS_FLAME_SIDES[i][1] * off));
+          }
+        }
+      }
     }
     sdbg.monsters = MONSTERS.size; // SW debug
   });
