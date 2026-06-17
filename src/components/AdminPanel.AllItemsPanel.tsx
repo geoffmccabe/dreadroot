@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { ItemDetailModal } from './AdminPanel.ItemDetailModal';
+import { grantInventoryItem } from '@/services/worldStore';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface ItemRow {
   id: string;
@@ -31,7 +33,7 @@ interface FortressGroup {
 
 // ─── Siege Worlds Grid (read-only) ───────────────────────────────
 
-function SiegeWorldsGrid({ items, onSelect }: { items: ItemRow[]; onSelect: (item: ItemRow) => void }) {
+function SiegeWorldsGrid({ items, onSelect, onTake }: { items: ItemRow[]; onSelect: (item: ItemRow) => void; onTake: (item: ItemRow) => void }) {
   return (
     <div
       style={{
@@ -49,6 +51,7 @@ function SiegeWorldsGrid({ items, onSelect }: { items: ItemRow[]; onSelect: (ite
           <div
             key={item.id}
             onClick={() => onSelect(item)}
+            onContextMenu={(e) => { e.preventDefault(); onTake(item); }}
             style={{
               background: 'hsl(var(--card))',
               border: '1px solid hsl(var(--border))',
@@ -401,6 +404,27 @@ export function AllItemsPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddNew, setShowAddNew] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ItemRow | null>(null);
+  const [takeItem, setTakeItem] = useState<ItemRow | null>(null);
+  const [taking, setTaking] = useState(false);
+
+  // Right-click → grant the item to the current user's inventory (testing helper).
+  const handleTake = async (item: ItemRow) => {
+    setTaking(true);
+    try {
+      const res = await grantInventoryItem(item.id, 1);
+      if (res?.rows && res.rows.length > 0) {
+        toast.success(`Added ${item.name} to inventory`);
+      } else {
+        toast.error('Could not add — inventory may be full');
+      }
+    } catch (err) {
+      console.error('[TakeItem] grant failed:', err);
+      toast.error('Inventory full, or grant failed');
+    } finally {
+      setTaking(false);
+      setTakeItem(null);
+    }
+  };
 
   const loadItems = useCallback(async () => {
     setIsLoading(true);
@@ -580,7 +604,7 @@ export function AllItemsPanel() {
       <div>
         <h3 className="text-sm font-semibold mb-3">Siege Worlds</h3>
         {siegeItems.length > 0 ? (
-          <SiegeWorldsGrid items={siegeItems} onSelect={setSelectedItem} />
+          <SiegeWorldsGrid items={siegeItems} onSelect={setSelectedItem} onTake={setTakeItem} />
         ) : (
           <p className="text-xs text-muted-foreground">No Siege Worlds items. Save a drop table to sync them.</p>
         )}
@@ -624,6 +648,27 @@ export function AllItemsPanel() {
         isOpen={selectedItem !== null}
         onClose={() => setSelectedItem(null)}
       />
+
+      {/* Right-click → take item into inventory (testing helper) */}
+      <Dialog open={takeItem !== null} onOpenChange={(o) => { if (!o && !taking) setTakeItem(null); }}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              {takeItem && getItemSpriteUrl(takeItem) && (
+                <img src={getItemSpriteUrl(takeItem)!} alt={takeItem.name} style={{ width: 32, height: 32, objectFit: 'contain' }} />
+              )}
+              {takeItem?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">Add this item to your inventory (if there's space)?</p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setTakeItem(null)} disabled={taking}>Cancel</Button>
+            <Button size="sm" onClick={() => takeItem && handleTake(takeItem)} disabled={taking}>
+              {taking ? 'Adding…' : 'Take Item'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
