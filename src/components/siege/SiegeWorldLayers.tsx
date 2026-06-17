@@ -16,6 +16,7 @@ import { SiegeItemGrid } from './SiegeItemGrid';
 import { MeshColliderPlayer } from './MeshColliderPlayer';
 import { SiegeTeleport } from './SiegeTeleport';
 import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
+import { BleakrockLighting } from './BleakrockLighting';
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const [terrainReady, setTerrainReady] = useState(false);
@@ -28,6 +29,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <SiegeTeleport />
       {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}
       <SprayAttackRenderer />
+      {/* Dark, cold horror fog + dimming scrim that fades in as you approach Bleakrock. */}
+      <BleakrockLighting />
 
       {terrainReady && (
         <>
