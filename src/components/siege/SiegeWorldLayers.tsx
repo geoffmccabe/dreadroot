@@ -22,7 +22,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Ground first — signals ready so everything else mounts on top of it. */}
       <TerrainLayer onReady={() => setTerrainReady(true)} />
       <WaterLayer world={world} />
-      {/* Quick-travel: backtick (`) then 1-8. Always available in Siege. */}
+      {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
 
       {terrainReady && (

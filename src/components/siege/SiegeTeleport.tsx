@@ -1,10 +1,7 @@
-// SiegeTeleport (in-Canvas) — owns the camera + the teleport keys. Ctrl/Cmd+T
-// ARMS quick-travel (a styled menu shows via SiegeTeleportMenu for 5s), then a
-// digit 1-8 jumps. Shift+<digit> while armed SAVES your current spot to that slot
-// (localStorage), so Harold / Nero / anything can be set exactly. Esc cancels.
-//
-// NOTE: Cmd/Ctrl+T is also the browser "new tab" shortcut; the page may not be
-// able to suppress it on every setup. If it opens a tab, say so and we'll rebind.
+// SiegeTeleport (in-Canvas) — owns the camera + the teleport keys. Ctrl/Cmd+J
+// ARMS quick-travel (a styled "Jump To:" menu shows via SiegeTeleportMenu for 5s),
+// then a digit 1-8 jumps. Shift+<digit> while armed SAVES your current spot to that
+// slot (localStorage), so Harold / Nero / anything can be set exactly. Esc cancels.
 
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
@@ -40,7 +37,7 @@ export function SiegeTeleport() {
     };
 
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyT') {     // ARM
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyJ') {     // ARM
         e.preventDefault(); e.stopPropagation(); arm(); return;
       }
       if (!armed) return;
