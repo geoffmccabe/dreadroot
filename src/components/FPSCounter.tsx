@@ -409,7 +409,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
           >
             {/* Header with close button */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid hsla(200, 50%, 50%, 0.5)', paddingBottom: '4px' }}>
-              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>BLOCK INSPECTOR</span>
+              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>ITEM INSPECTOR</span>
               <button
                 onClick={handleDismiss}
                 style={{
@@ -430,7 +430,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
               You are highlighting the sky
             </div>
             <div style={{ fontSize: '10px', color: 'hsl(200, 40%, 60%)', textAlign: 'center' }}>
-              Press ESC or Ctrl+I to exit Inspector Mode
+              Press ESC or Ctrl+I to exit Item Inspector
             </div>
           </div>
         )}
@@ -454,7 +454,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
           >
             {/* Header with close button */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid hsla(40, 50%, 50%, 0.5)', paddingBottom: '4px' }}>
-              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>BLOCK INSPECTOR</span>
+              <span style={{ fontWeight: 'bold', fontSize: '12px' }}>ITEM INSPECTOR</span>
               <button
                 onClick={handleDismiss}
                 style={{
