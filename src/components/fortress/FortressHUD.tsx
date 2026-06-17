@@ -1033,7 +1033,7 @@ export function FortressHUD(props: FortressHUDProps) {
 
       {/* Bottom-right: equip slots (weapon / armor / boots / potion). Replaces the
           old "R for crosshairs" instructions panel. */}
-      <EquipSlots equippedItems={equippedItems as Array<{ slot: number; itemId: string }>} />
+      <EquipSlots />
       <AmmoCounter />
 
       {/* Bottom-center hotbar + inventory grid + vault */}

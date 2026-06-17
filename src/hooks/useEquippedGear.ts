@@ -50,7 +50,7 @@ export function useEquippedGear() {
     const { data: rows } = await sb.from('user_equipped_gear').select('slot_type,item_id').eq('user_id', user.id);
     const refs = (rows || []).filter(r => r.item_id);
     const ids = refs.map(r => r.item_id as string);
-    let defs: Record<string, ResolvedGear> = {};
+    const defs: Record<string, ResolvedGear> = {};
     if (ids.length) {
       const { data: items } = await sb.from('items')
         .select('id,name,item_number,tier,item_category,texture_url').in('id', ids);
