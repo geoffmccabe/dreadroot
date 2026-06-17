@@ -5,8 +5,13 @@
 // production stops but the already-spawned puffs finish their lifetime where they were.
 import { useEffect } from 'react';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
+import { FIRE_SMOKE, registerRecipe } from '@/effects/recipes';
 import type { EffectEmitter } from '@/effects/types';
 import type { DemonInstance } from './siegeHorde';
+
+// The Dark Lord keeps the ORIGINAL spiral opacity (0.5) even after the global bullet-burn
+// smoke was dimmed to 0.125 — its own recipe so the two can't drift.
+registerRecipe({ ...FIRE_SMOKE, code: 'darklord-smoke', spiralOpacity: 0.5 });
 
 const _r = () => Math.random() - 0.5;
 
@@ -27,9 +32,9 @@ export function useBossAura(inst: DemonInstance, enabled: boolean) {
         return true;
       }, imp);
     // Heavy smoke: three columns up the body (low / mid / high).
-    emitters.push(at('fire-smoke', 0.20, inst.height * 0.32, 0.5));
-    emitters.push(at('fire-smoke', 0.50, inst.height * 0.30, 0.5));
-    emitters.push(at('fire-smoke', 0.78, inst.height * 0.24, 0.45));
+    emitters.push(at('darklord-smoke', 0.20, inst.height * 0.32, 0.5));
+    emitters.push(at('darklord-smoke', 0.50, inst.height * 0.30, 0.5));
+    emitters.push(at('darklord-smoke', 0.78, inst.height * 0.24, 0.45));
     return () => emitters.forEach((e) => e.stop());
   }, [enabled, inst, effectsRef]);
 }

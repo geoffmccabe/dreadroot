@@ -1730,7 +1730,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       />
       
       <MultiplayerPlayers players={players} />
-      <LocalPlayerAvatar isGunEquipped={crosshairsEnabled} />
+      {/* Local player avatar hidden for now (the visible blue body) — re-enable by flipping this. */}
+      {false && <LocalPlayerAvatar isGunEquipped={crosshairsEnabled} />}
       <FirstPersonArms isGunEquipped={crosshairsEnabled} isAiming={isAiming} />
       <FortressJetBoostFX ref={jetBoostFXRef} getDefinition={getDefinition} bulletTier={selectedBulletTier} />
       <SceneReflections />

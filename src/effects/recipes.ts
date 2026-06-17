@@ -40,7 +40,7 @@ export const FIRE_SMOKE: EffectRecipe = {
   spiralRate: 8,
   spiralSize0: 0.4,
   spiralSize1: 1.1,
-  spiralOpacity: 0.5,
+  spiralOpacity: 0.125,   // 25% of the old 0.5 — fainter spirals on bullet-burn smoke (all games)
   spiralLighten: 0.22,
   spiralTurns: 2,
   // Slower spin (1–2 s/rev) per tuning.
