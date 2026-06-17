@@ -26,7 +26,7 @@ export function AmmoCounter() {
       ) : (
         <>
           <span>{ammo.current}</span>
-          <span style={{ fontSize: 12, opacity: 0.6 }}>/ {ammo.max}</span>
+          <span style={{ fontSize: 12, opacity: 0.6 }}>/ {ammo.reserve === Infinity ? '∞' : ammo.reserve}</span>
         </>
       )}
     </div>
