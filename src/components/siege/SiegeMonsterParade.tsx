@@ -8,36 +8,26 @@ import { Suspense } from 'react';
 import { MonsterEnemy } from './MonsterEnemy';
 
 // name (glb under /siege/monsters/) | intrinsic modelHeight | world height | animSpeed? | moveSpeed?
+// THE WORKING ROSTER: Dark Fantasy meshes + the zombie animation set, all on the
+// same 50-bone rig (~1deg rest, all body bones match) as the proven dfskeleton.
+// animSpeed bumps the slow zombie shamble to a normal pace. (The FantasyRivals
+// monsters — giant/ork/golems — are a different rig with NO matching anim set, so
+// they need Mixamo/Auto-Rig Pro; the A-pose demon/gargoyle likewise. Dropped here.)
 const PARADE: [string, number, number, number?, number?][] = [
-  ['barbariangiant', 1.834, 5.0],
-  ['bigork',         1.861, 3.0],
-  ['trollbase',      1.818, 2.8],
-  ['fortgolem',      1.883, 6.0],
-  ['mechanicalgolem',1.791, 3.5],
-  ['elementalgolem', 1.824, 8.0],
-  ['mutant',         1.952, 2.8],
-  ['pigbutcher',     1.822, 2.4],
-  ['forestguardian', 2.194, 3.0],
-  ['slayer',         1.853, 2.2],
-  ['evilgod',        1.898, 1.8],
-  ['spiritdemon',    1.941, 2.1],
-  ['medusa',         1.872, 1.8],
-  ['ancientwarrior', 2.093, 1.8],
-  ['ancientqueen',   1.984, 1.8],
-  ['mystic',         1.859, 1.8],
-  ['darkelf',        1.831, 1.8],
-  ['forestwitch',    1.906, 1.8],
-  ['dwarf',          1.986, 1.5],
-  // Dark Fantasy pack (demon, gargoyle) + zombie CONTROL. zombie is self-consistent
-  // (mixamo mesh+anims like reddemon) → if it animates and the others don't, the
-  // answer is "only self-consistent rigs work in-game".
-  ['zombie',         1.863, 2.0],
-  // Dark Fantasy pack + the zombie animation set (near-identical rig: ~1deg rest
-  // diff, all body bones match — only fingers don't curl). Same proven path as the
-  // working zombie. Skeleton is the tightest match.
+  ['zombie',         1.863, 2.0, 1.5],
   ['dfskeleton',     1.795, 6.0, 3, 5],   // GIANT skeleton: 3x height, 3x anim, faster stride
-  ['dfdemon',        1.909, 2.5],
-  ['dfgargoyle',     1.904, 2.5],
+  ['skeletonflesh',  1.803, 2.0, 2],
+  ['skeletonheavy',  1.795, 2.2, 2],
+  ['skeletonlight',  1.795, 2.0, 2],
+  ['skeletonranger', 1.797, 2.0, 2],
+  ['darklord',       1.843, 2.4, 1.8],
+  ['demonmale',      2.145, 2.6, 1.8],
+  ['gravedigger',    1.797, 2.0, 2],
+  ['hunterm',        1.791, 1.9, 2],
+  ['hunterf',        1.792, 1.85, 2],
+  ['plaguedoctor',   1.791, 2.0, 2],
+  ['priest',         1.792, 1.95, 2],
+  ['witch',          1.792, 1.85, 2],
 ];
 
 // A clear row on the beach (known-good ground ≈ 26), north of the existing monsters.
