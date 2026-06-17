@@ -22,8 +22,6 @@ export interface World {
   updated_at: string;
 }
 
-const LOCAL_STORAGE_KEY = 'currentWorldId';
-
 // Standalone hook that fetches worlds directly - avoids circular dependency with useWorlds
 export function useCurrentWorldId() {
   const [worlds, setWorlds] = useState<World[]>([]);
@@ -38,11 +36,13 @@ export function useCurrentWorldId() {
   // and falls back to the new game's default, so cross-game switches are safe.
   const activeGame = useActiveGame();
   const worldsKey = gameWorldsKey(activeGame);
+  // Per-game admin world-override key, so each game remembers its own selection
+  // and a cross-game switch never wipes another game's override.
+  const storageKey = `currentWorldId:${worldsKey}`;
 
   // Fetch worlds directly (no dependency on useWorlds hook)
   const fetchWorlds = useCallback(async () => {
     try {
-      setIsLoading(true);
       const { data, error } = await supabase
         .from('worlds')
         .select('*')
@@ -67,9 +67,9 @@ export function useCurrentWorldId() {
   useEffect(() => {
     if (isLoading || worlds.length === 0) return;
 
-    // Check localStorage for admin override
-    const storedWorldId = localStorage.getItem(LOCAL_STORAGE_KEY);
-    
+    // Check localStorage for admin override (scoped to this game)
+    const storedWorldId = localStorage.getItem(storageKey);
+
     if (storedWorldId) {
       // Verify stored world still exists
       const storedWorld = worlds.find(w => w.id === storedWorldId);
@@ -79,7 +79,7 @@ export function useCurrentWorldId() {
         return;
       }
       // Clear invalid stored world
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      localStorage.removeItem(storageKey);
     }
 
     // Fall back to default world
@@ -88,7 +88,7 @@ export function useCurrentWorldId() {
       setCurrentWorldIdState(defaultWorld.id);
       setCurrentWorld(defaultWorld);
     }
-  }, [worlds, isLoading]);
+  }, [worlds, isLoading, storageKey]);
 
   // Update current world when worlds list changes
   useEffect(() => {
@@ -102,24 +102,24 @@ export function useCurrentWorldId() {
 
   // Set world ID (for admin testing) - updates immediately without refresh
   const setCurrentWorldId = useCallback((worldId: string) => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, worldId);
+    localStorage.setItem(storageKey, worldId);
     setCurrentWorldIdState(worldId);
-    
+
     const world = worlds.find(w => w.id === worldId);
     if (world) {
       setCurrentWorld(world);
     }
-  }, [worlds]);
+  }, [worlds, storageKey]);
 
   // Clear override and use default
   const clearWorldOverride = useCallback(() => {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    localStorage.removeItem(storageKey);
     const defaultWorld = worlds.find(w => w.is_default) || worlds[0] || null;
     if (defaultWorld) {
       setCurrentWorldIdState(defaultWorld.id);
       setCurrentWorld(defaultWorld);
     }
-  }, [worlds]);
+  }, [worlds, storageKey]);
 
   // Navigate to next/previous world (for keyboard shortcuts)
   const navigateWorld = useCallback((direction: 'next' | 'prev') => {
