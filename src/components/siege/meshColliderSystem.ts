@@ -223,6 +223,41 @@ export function meshGroundHeight(x: number, z: number, ceilingY?: number): numbe
   return best;
 }
 
+/** Nearest mesh-collider hit along a world-space ray segment, returned as the
+ *  world distance from the origin (or null if nothing solid within maxDist).
+ *  Lets bullets stop at the REAL surface of a building/rock instead of flying
+ *  through it. (dx,dy,dz) must be a unit direction. Returns null instantly when
+ *  the mesh system is off/empty, so it's free on non-siege worlds. */
+export function raycastMesh(
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number,
+  maxDist: number,
+): number | null {
+  if (!enabled || groups.size === 0) return null;
+  let best: number | null = null;
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i++) {
+      const inst = list[i];
+      _ray.origin.set(ox, oy, oz);
+      _ray.direction.set(dx, dy, dz);
+      if (!_ray.intersectsBox(inst.aabb)) continue;          // world-space broad-phase
+      const bvh = bvhByKey.get(inst.key);
+      if (!bvh) continue;
+      try {
+        _ray.applyMatrix4(inst.inverse);                     // into instance-local space
+        const hit = bvh.raycastFirst(_ray, THREE.DoubleSide);
+        if (hit) {
+          _hitPt.copy(hit.point).applyMatrix4(inst.matrix);  // hit point back to world
+          const ddx = _hitPt.x - ox, ddy = _hitPt.y - oy, ddz = _hitPt.z - oz;
+          const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+          if (dist <= maxDist && (best === null || dist < best)) best = dist;
+        }
+      } catch { /* a bad BVH must never crash the bullet loop */ }
+    }
+  }
+  return best;
+}
+
 /** Resolve the player capsule against nearby mesh colliders (HORIZONTAL push;
  *  vertical is the ground system's job). Writes the correction into `out`. */
 export function resolvePlayerMeshCollision(

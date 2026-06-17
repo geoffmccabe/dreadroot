@@ -9,6 +9,7 @@ import { tickBudgetedWork } from '@/lib/budgetedWork';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { entityCollisionGrid, worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { raycastMesh } from '@/components/siege/meshColliderSystem';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 import { enemyCombatRegistry, type RaycastResult } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { resolveBulletHit, BASE_BULLET_DAMAGE, stepBulletPhysics } from '@/features/combat';
@@ -687,7 +688,35 @@ export function useFortressFrameLoop({
           const prevBY = (bullet as any).prevY ?? by;
           const prevBZ = (bullet as any).prevZ ?? bz;
 
-          if (enemyCombatRegistry.raycastBullet(prevBX, prevBY, prevBZ, bx, by, bz, _raycastResult)) {
+          // World mesh wall (buildings / rocks via BVH) — the bullet stops at the
+          // REAL surface instead of flying through. Returns null on non-mesh worlds.
+          const _segDX = bx - prevBX, _segDY = by - prevBY, _segDZ = bz - prevBZ;
+          const _segLen = Math.sqrt(_segDX * _segDX + _segDY * _segDY + _segDZ * _segDZ);
+          const wallDist = _segLen > 1e-4
+            ? raycastMesh(prevBX, prevBY, prevBZ, _segDX / _segLen, _segDY / _segLen, _segDZ / _segLen, _segLen)
+            : null;
+
+          // Resolve enemy vs wall: a wall only blocks the shot if it's CLOSER than
+          // the enemy along this step (so you can't shoot a monster through a wall,
+          // and a monster in front of a wall still takes the hit).
+          const _enemyHit = enemyCombatRegistry.raycastBullet(prevBX, prevBY, prevBZ, bx, by, bz, _raycastResult);
+          let _wallBlocks = wallDist !== null;
+          if (_enemyHit && _wallBlocks) {
+            const _eX = _raycastResult.hitX - prevBX, _eY = _raycastResult.hitY - prevBY, _eZ = _raycastResult.hitZ - prevBZ;
+            _wallBlocks = (wallDist as number) < Math.sqrt(_eX * _eX + _eY * _eY + _eZ * _eZ);
+          }
+          if (_wallBlocks) {
+            // Bullet hits a building/rock surface → impact + die.
+            hit = true;
+            needsBulletRender = true;
+            const _inv = (wallDist as number) / _segLen;
+            _scratchGroundPos.set(prevBX + _segDX * _inv, prevBY + _segDY * _inv, prevBZ + _segDZ * _inv);
+            const _twd = getDefinitionRef.current(bullet.tier);
+            const _pw = bullet.isPentabullet ? 3.0 : 1.0;
+            const _wc = { colors: _twd.colors, size: _twd.burn_width * _pw, height: _twd.burn_height * _pw, duration: _twd.burn_time * _pw, tier: bullet.tier };
+            if (useNebulaForBulletImpacts && nebulaImpactsRef.current) nebulaImpactsRef.current.spawnImpact(_scratchGroundPos, _wc);
+            else if (bulletImpactsRef.current) bulletImpactsRef.current.spawnImpact(_scratchGroundPos, _wc);
+          } else if (_enemyHit) {
             const adapter = _raycastResult.adapter!;
             const enemy = _raycastResult.enemy!;
             const hitX = _raycastResult.hitX;
