@@ -7,7 +7,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { getActiveGame } from '@/config/activeGame';
 
 const COLS = 12;          // columns (X)
 const ROWS = 20;          // rows (Z)
@@ -21,18 +20,10 @@ export function SiegeItemGrid() {
   const [visible, setVisible] = useState(false);
   const groupRef = useRef<THREE.Group | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      // Only hijack the "I" key inside Siege Worlds — in Dreadroot/Pinkland this
-      // capture-phase stopPropagation was swallowing the inventory key.
-      if ((e.key === 'i' || e.key === 'I') && getActiveGame() === 'siege-worlds') {
-        e.stopPropagation();
-        setVisible((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
+  // NOTE: the "I" key toggle was removed — it captured 'i' globally (capture phase +
+  // stopPropagation) and swallowed the real inventory key (I) in BOTH games. The
+  // inventory toggle is a top-level control and must win. To re-enable this debug
+  // grid, rebind it to a non-conflicting key/combo (e.g. Ctrl+Shift+I) — not plain I.
 
   const group = useMemo(() => {
     const g = new THREE.Group();
