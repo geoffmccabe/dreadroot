@@ -56,7 +56,8 @@ const FRAG = `
   }
 `;
 
-export function DarkLordFlame({ height, radius }: { height: number; radius: number }) {
+export function DarkLordFlame({ height, radius, colorHot = '#b85cff', colorCool = '#1a0033' }:
+  { height: number; radius: number; colorHot?: string; colorCool?: string }) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
   // Open cylinder, only mildly tapered (a strong taper reads as a solid "cone of light").
   const geo = useMemo(
@@ -67,8 +68,9 @@ export function DarkLordFlame({ height, radius }: { height: number; radius: numb
     uTime: { value: 0 },
     uSpeed: { value: 1.0 },
     uDetail: { value: 14.0 },   // more, thinner tongues = less solid
-    uColorHot: { value: new THREE.Color('#b85cff') },   // bright purple
-    uColorCool: { value: new THREE.Color('#1a0033') },  // near-black violet
+    uColorHot: { value: new THREE.Color(colorHot) },
+    uColorCool: { value: new THREE.Color(colorCool) },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
   useFrame((_, dt) => { if (matRef.current) matRef.current.uniforms.uTime.value += Math.min(dt, 0.05); });
   return (

@@ -219,6 +219,7 @@ export function FirstPersonControls({
   
   // Knockback velocity for shwarm hits (decays over time)
   const knockbackVelRef = useRef(new THREE.Vector3());
+  const spinVelRef = useRef(0);   // yaw angular velocity (rad/s) from a Spintroll fling — decays
 
   // Moving-platform (walapa) ride: which platform we're attached to + its last pos.
   const currentWalapaIdRef = useRef<string | null>(null);
@@ -358,6 +359,14 @@ export function FirstPersonControls({
       delete (window as any).__applyPlayerKnockback;
     };
   }, [applyKnockback]);
+
+  // Spintroll fling: impart a decaying yaw spin so the whole world whirls, then settles.
+  useEffect(() => {
+    (window as any).__applyPlayerSpin = (revPerSec: number, dir: number) => {
+      spinVelRef.current = dir * revPerSec * Math.PI * 2;   // rad/s; the frame loop decays it
+    };
+    return () => { delete (window as any).__applyPlayerSpin; };
+  }, []);
   
   // Initialize fortress colliders on mount
   // NOTE: We no longer clear the grid here because block colliders from useChunkLoader
@@ -2200,6 +2209,14 @@ export function FirstPersonControls({
         if (knockbackVelRef.current.lengthSq() < 0.0001) {
           knockbackVelRef.current.set(0, 0, 0);
         }
+      }
+
+      // Spintroll fling spin: whirl the yaw, decaying over ~1.5-2s, then settle.
+      if (Math.abs(spinVelRef.current) > 0.01) {
+        yaw.current += spinVelRef.current * moveDt;
+        needsCameraUpdate.current = true;
+        spinVelRef.current *= Math.pow(0.22, moveDt);
+        if (Math.abs(spinVelRef.current) < 0.01) spinVelRef.current = 0;
       }
 
       // Keep the siege god-mode flag in sync EVERY frame (on OR off) so the mesh-collider

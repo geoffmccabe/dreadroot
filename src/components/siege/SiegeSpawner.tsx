@@ -11,17 +11,20 @@
 //   !6#  → BLOODY SKELETON HORDE: ALWAYS 50, dropped tight (5m) in front. Random mix of
 //          heavy/light/ranger; size 0.5-3m, speed ±50%, HP 10-100 (×2 heavy, ×3 ranger),
 //          desat 0-90% + ±10% hue, 25-70% red tint; climb gait + SW zombie moans.
+//   !7#  → SPINTROLL: spins 3-5 rev/s, green+blue fire, zooms erratically (3-5×) every 1-10s.
+//          Touch = 10-100 dmg + 1-10m kb (×2 + spins your view if hit mid-zoom). 7s smoke trail.
 // After a spawn, spamming "0" within 2s adds another 10 of the LAST type — for stress-testing
 // hordes. Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { MonsterEnemy } from './MonsterEnemy';
+import { MonsterEnemy, type SpinConfig } from './MonsterEnemy';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
 let nextId = 0;
-type MType = 1 | 2 | 3 | 4 | 5 | 6;
+type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
 // Per-individual override (type 6 horde): each mob rolls its own model + stats + colour.
 type Ov = { url: string; modelHeight: number; height: number; speed: number; health: number;
             desat: number; hueShift: number; tintRed: number; animSpeed: number };
@@ -54,6 +57,7 @@ const CFG: Partial<Record<MType, {
   gait: 'hop' | 'climb'; sizeJitter: number; speedJitter: number; health: number; animSpeed?: number;
   rangedRange?: number; rangedCooldownMs?: number; rangedCooldownMaxMs?: number; spray?: SprayConfig;
   boss?: 'teleporter'; noStun?: boolean; bossSpeedFactor?: number;
+  bodyFlames?: BodyFlame[]; smokeTrail?: boolean; spin?: SpinConfig;
 }>> = {
   1: { url: '/siege/monsters/reddemon.glb',         modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100 },
   2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100 },
@@ -64,7 +68,18 @@ const CFG: Partial<Record<MType, {
   // 5 = DARK LORD: 6m teleporting boss. Teleports near the player every 1-4s (1/3 directly
   // behind for a 20-100 dmg strike, 1s grace to dodge). Opacity ramps 1→0 between jumps and
   // IS its damage resistance. Wreathed in black/purple fire + heavy smoke. 500 HP, slow shamble.
-  5: { url: '/siege/monsters/darklord.glb',          modelHeight: 1.843, height: 6.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.0,  speedJitter: 0.0,  health: 500, animSpeed: 1.0, boss: 'teleporter', noStun: true, bossSpeedFactor: 0.4 },
+  5: { url: '/siege/monsters/darklord.glb',          modelHeight: 1.843, height: 6.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.0,  speedJitter: 0.0,  health: 500, animSpeed: 1.0, boss: 'teleporter', noStun: true, bossSpeedFactor: 0.4,
+       bodyFlames: [{ radiusMul: 1.05, heightMul: 2.0, colorHot: '#b85cff', colorCool: '#1a0033' }] },
+  // 7 = SPINTROLL: green troll spinning 3-5 rev/s. Green fire shell + a taller, tighter blue inner
+  // shell. Touch = 10-100 dmg + 1-10m knockback; doubles + flings the player's view into a spin
+  // when it hits mid-zoom. Erratically zooms (3-5× speed) every 1-10s. Hop gait, 7s smoke trail.
+  7: { url: '/siege/monsters/greentroll.glb',        modelHeight: 1.927, height: 3.0,  speed: 3.5, gait: 'hop',   sizeJitter: 0.10, speedJitter: 0.15, health: 200, animSpeed: 1.0,
+       smokeTrail: true,
+       bodyFlames: [
+         { radiusMul: 0.70, heightMul: 1.70, colorHot: '#5cff6a', colorCool: '#06330f' },   // green outer (close to body)
+         { radiusMul: 0.35, heightMul: 2.72, colorHot: '#5cc0ff', colorCool: '#031a40' },   // blue inner: 50% radius, 60% taller
+       ],
+       spin: { revPerSec: [3, 5], zoomEveryMs: [1000, 10000], zoomSpeedMul: [3, 5], contactDmg: [10, 100], contactKb: [1, 10], zoomHitMul: 2, playerSpinRev: [0.5, 2] } },
 };
 
 export function SiegeSpawner() {
@@ -120,7 +135,7 @@ export function SiegeSpawner() {
       if (k === '!') { e.preventDefault(); e.stopPropagation(); stage.current = 'type'; arm(); return; }
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
-        if (k >= '1' && k <= '6') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
+        if (k >= '1' && k <= '7') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
         else clearStage();
         return;
       }
@@ -153,6 +168,7 @@ export function SiegeSpawner() {
             contactDamage={o ? 20 : undefined} kbInverseSize={!!o} stackSink={o ? 0.30 : undefined}
             rangedRange={m?.rangedRange} rangedCooldownMs={m?.rangedCooldownMs} rangedCooldownMaxMs={m?.rangedCooldownMaxMs}
             boss={m?.boss} noStun={o ? true : m?.noStun} bossSpeedFactor={m?.bossSpeedFactor}
+            bodyFlames={m?.bodyFlames} smokeTrail={m?.smokeTrail} spin={m?.spin}
             onRangedAttack={m?.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m!.spray!) : undefined} />
         );
       })}

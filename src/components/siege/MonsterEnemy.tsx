@@ -19,6 +19,7 @@ import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { playSpatialSound } from '@/lib/spatialAudio';
 import { DarkLordFlame } from './DarkLordFlame';
+import { useSmokeTrail } from './siegeSmoke';
 
 // Blast-impact damage: kinetic, only above a threshold speed. min(120, 0.12·v²).
 const IMPACT_MIN = 7;
@@ -26,6 +27,19 @@ const IMPACT_MIN = 7;
 // from climbing over simple objects. Both the horizontal-slam (hs) and the
 // landing/fall (iv) checks run through this, so both drop 80%.
 const impactDamage = (v: number) => v > IMPACT_MIN ? Math.min(24, 0.024 * v * v) : 0;
+
+// Spintroll behaviour. Ranges are [min,max] (random per use). It spins fast, dashes ("zooms")
+// in random directions, and damages the player on contact (double + flinging the player's view
+// into a spin when the contact happens DURING a zoom).
+export interface SpinConfig {
+  revPerSec: [number, number];    // visual spin rate (full revs/sec)
+  zoomEveryMs: [number, number];  // random gap between zoom dashes
+  zoomSpeedMul: [number, number]; // dash speed = this × base speed
+  contactDmg: [number, number];   // touch damage
+  contactKb: [number, number];    // touch knockback (m)
+  zoomHitMul: number;             // dmg + kb multiplier when the hit lands mid-zoom
+  playerSpinRev: [number, number];// on a zoom-hit, spin the player's view this fast (revs/sec)
+}
 
 export interface MonsterConfig {
   url: string;
@@ -67,6 +81,10 @@ export interface MonsterConfig {
   contactDamage?: number;     // touching the player: 30% chance/sec to hit for this × height (m)
   kbInverseSize?: boolean;    // bullets don't stun; knockback ∝ 1/size (small = flung, big = barely)
   stackSink?: number;         // when standing on ANOTHER monster, sink feet this fraction into it (0.30)
+  // Body flames: one procedural fire shell per spec (Dark Lord = 1 purple; Spintroll = green+blue).
+  bodyFlames?: { radiusMul: number; heightMul: number; colorHot: string; colorCool: string }[];
+  smokeTrail?: boolean;       // drop a long-lived (7s) smoke trail (Spintroll)
+  spin?: SpinConfig;          // Spintroll: fast spin + erratic zoom + contact damage + player-spin
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
 
@@ -84,6 +102,7 @@ const CLIMB_LOD = 90; // beyond this (m from camera) skip the per-frame world-co
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
 const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
 const _fwd = new THREE.Vector3();   // scratch: player look direction (for teleport-behind)
+const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);   // random in [a,b]
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
 const headBoxes = new Set<THREE.Box3>();
@@ -128,7 +147,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
-    moanNext: 0, contactNext: 0 });
+    moanNext: 0, contactNext: 0,
+    spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -152,6 +172,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   useBossAura(inst, cfg.boss === 'teleporter');
+  useSmokeTrail(inst, !!cfg.smokeTrail);
   const bossMats = useRef<THREE.MeshStandardMaterial[]>([]);   // boss: faded each frame to inst.opacity
   // Bone-attach for burns: a hit point locks to the nearest skeleton bone so the
   // fire rides the gait bob + turn + walk (the animation drives the bones), not
@@ -387,6 +408,40 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step; play(clips.walk);
       } else if (now > s.swipeUntil) play(clips.idle);
+    } else if (c.spin) {                                    // ── SPINTROLL ──
+      if (!s.spinVel) {                                     // init once: spin rate + direction + first zoom
+        s.spinVel = rnd(c.spin.revPerSec) * Math.PI * 2 * (Math.random() < 0.5 ? 1 : -1);
+        s.zoomNext = now + rnd(c.spin.zoomEveryMs);
+      }
+      g.rotation.y += s.spinVel * delta;                   // fast visual spin (overrides facing)
+      if (now > s.zoomNext) {                              // start a random zoom dash
+        const ang = Math.random() * Math.PI * 2, mul = rnd(c.spin.zoomSpeedMul);
+        s.zoomVx = Math.sin(ang) * SPD * mul; s.zoomVz = Math.cos(ang) * SPD * mul;
+        s.zoomUntil = now + 300 + Math.random() * 400;     // dash for 0.3-0.7s
+        s.zoomNext = now + rnd(c.spin.zoomEveryMs);
+      }
+      const zooming = now < s.zoomUntil;
+      if (zooming) {
+        const zl = Math.hypot(s.zoomVx, s.zoomVz) || 1;
+        mvx = s.zoomVx / zl; mvz = s.zoomVz / zl; moving = true;   // direction for the climb/hop gait
+        s.x += s.zoomVx * delta; s.z += s.zoomVz * delta;
+        play(clips.walk);
+      } else if (dist < c.aggro && dist > c.attackRange) { // normal pursuit between zooms
+        const step = Math.min(SPD * delta, dist - c.attackRange);
+        mvx = dx / dist; mvz = dz / dist; moving = true;
+        s.x += mvx * step; s.z += mvz * step; play(clips.walk);
+      } else play(clips.walk);
+      // Contact: real hitbox overlap → dmg + knockback; ×zoomHitMul + a view-spin fling mid-zoom.
+      if (s.y < camera.position.y && s.y + H > camera.position.y - 1.6
+          && dist < inst.radius + 0.45 && now > s.contactNext) {
+        s.contactNext = now + 350;
+        const mul = zooming ? c.spin.zoomHitMul : 1;
+        dealPlayerDamage(rnd(c.spin.contactDmg) * mul, dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul);
+        if (zooming) {
+          (window as { __applyPlayerSpin?: (r: number, d: number) => void }).__applyPlayerSpin?.(
+            rnd(c.spin.playerSpinRev), s.spinVel > 0 ? -1 : 1);   // player spins OPPOSITE the troll
+        }
+      }
     } else if (dist < c.aggro) {                            // found a player -> pursue/attack
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       const inBand = !!c.rangedRange && dist <= c.rangedRange && dist > c.attackRange;
@@ -591,14 +646,15 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   return (
     <group ref={group} scale={scale}>
       <primitive object={cloned} />
-      {/* Boss fire: a procedural flame shell wrapping the body. The inner group cancels the
-          model scale so the flame is sized in world metres; being a child means it follows
-          the body automatically as he walks/teleports. */}
-      {cfg.boss === 'teleporter' && (
-        <group scale={1 / scale}>
-          <DarkLordFlame height={H * 2} radius={inst.radius * 1.05} />
+      {/* Body fire: one procedural flame shell per spec, wrapping the body. The inner group
+          cancels the model scale so flames are sized in world metres; being a child means they
+          follow the body automatically as it moves/teleports/spins. */}
+      {cfg.bodyFlames?.map((f, i) => (
+        <group key={i} scale={1 / scale}>
+          <DarkLordFlame height={H * f.heightMul} radius={inst.radius * f.radiusMul}
+                         colorHot={f.colorHot} colorCool={f.colorCool} />
         </group>
-      )}
+      ))}
     </group>
   );
 }
