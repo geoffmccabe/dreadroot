@@ -10,7 +10,7 @@ import { MonsterEnemy } from './MonsterEnemy';
 // name (glb under /siege/monsters/) | intrinsic modelHeight | desired world height
 const PARADE: [string, number, number][] = [
   ['barbariangiant', 2.889, 3.6],
-  ['bigork',         2.889, 3.2],
+  ['bigork',         1.878, 3.0],
   ['trollbase',      2.889, 3.0],
   ['fortgolem',      2.890, 3.4],
   ['mechanicalgolem',2.889, 3.4],
@@ -20,7 +20,7 @@ const PARADE: [string, number, number][] = [
   ['forestguardian', 2.194, 2.8],
   ['slayer',         2.889, 2.6],
   ['evilgod',        2.038, 2.6],
-  ['spiritdemon',    2.041, 2.6],
+  ['spiritdemon',    1.804, 2.1],
   ['medusa',         2.108, 2.5],
   ['ancientwarrior', 2.093, 2.4],
   ['ancientqueen',   2.041, 2.3],
