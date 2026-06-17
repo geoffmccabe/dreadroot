@@ -115,7 +115,14 @@ export function EquipSlots() {
             {g?.tier ? (
               <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 9, fontFamily: 'monospace', color: HUD_DIM }}>T{g.tier}</span>
             ) : null}
-            <span style={{ position: 'absolute', bottom: -1, right: 3, fontSize: 8, color: HUD_DIM, fontFamily: 'monospace', textTransform: 'uppercase' }}>{label.slice(0, 4)}</span>
+            {/* Label centered below the square — matches the QA slot numbers (white,
+                same distance) but 2pt smaller (9px vs 11px). */}
+            <span style={{
+              position: 'absolute', top: 'calc(100% + 1.8px)', left: 0, right: 0,
+              textAlign: 'center', fontSize: 9, fontWeight: 700,
+              color: 'hsl(var(--hud-text))', fontFamily: 'var(--hud-font)',
+              pointerEvents: 'none', textTransform: 'uppercase',
+            }}>{label}</span>
           </div>
         );
       })}

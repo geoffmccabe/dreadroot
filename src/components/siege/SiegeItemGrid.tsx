@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { getActiveGame } from '@/config/activeGame';
 
 const COLS = 12;          // columns (X)
 const ROWS = 20;          // rows (Z)
@@ -22,7 +23,12 @@ export function SiegeItemGrid() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'i' || e.key === 'I') { e.stopPropagation(); setVisible((v) => !v); }
+      // Only hijack the "I" key inside Siege Worlds — in Dreadroot/Pinkland this
+      // capture-phase stopPropagation was swallowing the inventory key.
+      if ((e.key === 'i' || e.key === 'I') && getActiveGame() === 'siege-worlds') {
+        e.stopPropagation();
+        setVisible((v) => !v);
+      }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
