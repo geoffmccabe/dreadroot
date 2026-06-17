@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
+import { WEAPON_SOUNDS } from '@/config/weaponSounds';
 
 // Minimal shape for the clicked grid item (subset of the items table).
 interface ItemLike {
@@ -38,6 +39,7 @@ interface WeaponStats {
   projectile: string | null;
   effective_range: number | null;
   explosion_radius: number | null;
+  reticle_type: number | null;
   is_automatic: boolean | null;
   is_burst_fire: boolean | null;
   is_shotgun: boolean | null;
@@ -47,8 +49,10 @@ interface WeaponStats {
   fire_sound: string | null;
   empty_sound: string | null;
   reload_sound: string | null;
+  is_melee: boolean | null;
   swing_cooldown: number | null;
   raycast_length: number | null;
+  melee_hit_flag: number | null;
   melee_knockback_distance: number | null;
   melee_stun_duration: number | null;
   horizontal_spread: number | null;
@@ -75,10 +79,24 @@ const HUD_TEXT = 'hsl(var(--hud-text))';
 const HUD_DIM = 'hsl(var(--hud-text-dim))';
 const HUD_BRIGHT = 'hsl(var(--hud-text-bright))';
 
+const DASH = '—';
+
+// Formatters — everything renders, null/empty shows as an em dash.
+const txt = (v: unknown) => (v === null || v === undefined || v === '' ? DASH : String(v));
+const boolv = (v: boolean | null | undefined) => (v == null ? DASH : v ? 'Yes' : 'No');
+const secs = (v: number | null | undefined) => (v == null ? DASH : `${v}s`);
+const enumv = (map: Record<number, string>, v: number | null | undefined) =>
+  v == null ? DASH : map[v] ?? String(v);
+
+function fmtBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  if (value === null || value === undefined || value === '') return null;
   return (
-    <div className="flex justify-between gap-3">
+    <div className="flex justify-between gap-3 items-center min-h-[22px]">
       <span className="text-sm" style={{ color: HUD_DIM }}>{label}</span>
       <span className="text-sm text-right font-medium" style={{ color: HUD_BRIGHT }}>{value}</span>
     </div>
@@ -87,16 +105,38 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2 p-3 rounded-lg" style={{ background: 'hsl(0 0% 0% / 0.22)' }}>
-      <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: HUD_BRIGHT }}>{title}</div>
+    <div className="space-y-1.5 p-3 rounded-lg" style={{ background: 'hsl(0 0% 0% / 0.22)' }}>
+      <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: HUD_BRIGHT }}>{title}</div>
       {children}
     </div>
   );
 }
 
-const yn = (v: boolean | null) => (v ? 'Yes' : null); // only show truthy flags, keep it clean
-const sec = (v: number | null) => (v != null ? `${v}s` : null);
-const num = (v: number | null) => (v != null ? `${v}` : null);
+// A clickable sound: shows filename + size, plays the mp3 on click.
+function SoundButton({ name }: { name: string | null | undefined }) {
+  const snd = name ? WEAPON_SOUNDS[name] : undefined;
+  if (!snd) return <span className="text-sm font-medium" style={{ color: HUD_BRIGHT }}>{DASH}</span>;
+  const play = () => {
+    const a = new Audio(snd.file);
+    a.volume = 0.7;
+    a.play().catch(() => { /* autoplay/user-gesture guard */ });
+  };
+  return (
+    <button
+      onClick={play}
+      className="flex items-center gap-2 rounded px-2 py-1 text-xs transition-colors"
+      style={{
+        background: 'hsl(var(--hud-bg-hover))',
+        border: '1px solid hsl(var(--hud-border))',
+        color: HUD_BRIGHT,
+      }}
+    >
+      <span aria-hidden>▶</span>
+      <span className="font-mono">{name}.mp3</span>
+      <span style={{ color: HUD_DIM }}>{fmtBytes(snd.bytes)}</span>
+    </button>
+  );
+}
 
 export function ItemDetailModal({
   item,
@@ -109,8 +149,10 @@ export function ItemDetailModal({
 }) {
   const [stats, setStats] = useState<WeaponStats | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
+    setDims(null);
     if (!isOpen || !item || item.item_number == null) {
       setStats(null);
       return;
@@ -143,14 +185,11 @@ export function ItemDetailModal({
 
   const spriteUrl = getItemSpriteUrl(item);
   const s = stats;
-  const isGun = !!s?.is_gun;
-  const isMelee = s?.item_type === 3 || s?.weapon_type === 7;
-  const isExplosive = s?.item_type === 1 || !!s?.is_rocket_launcher;
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className="max-w-lg max-h-[85vh] overflow-y-auto backdrop-blur-md"
+        className="max-w-2xl max-h-[88vh] overflow-y-auto backdrop-blur-md"
         style={{
           background: 'hsl(211 30% 24% / 0.98)',
           border: '1px solid hsl(var(--hud-border))',
@@ -158,88 +197,116 @@ export function ItemDetailModal({
         }}
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            {spriteUrl && (
-              <img
-                src={spriteUrl}
-                alt={item.name}
-                style={{ width: 48, height: 48, objectFit: 'contain' }}
-              />
-            )}
-            <div className="flex flex-col">
-              <span className="text-base font-bold" style={{ color: HUD_BRIGHT }}>{item.name}</span>
-              <span className="text-xs font-mono" style={{ color: HUD_DIM }}>
-                ID# {item.item_number ?? '—'}
-              </span>
+          <DialogTitle asChild>
+            <div className="flex gap-4 items-start">
+              {/* Sprite at native size (capped 512) + dimension label at bottom-right */}
+              {spriteUrl && (
+                <div style={{ flexShrink: 0 }}>
+                  <img
+                    src={spriteUrl}
+                    alt={item.name}
+                    onLoad={(e) => setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                    style={{ maxWidth: 512, maxHeight: 512, display: 'block', objectFit: 'contain' }}
+                  />
+                  <div
+                    className="font-mono"
+                    style={{ textAlign: 'right', fontSize: 11, color: HUD_DIM, marginTop: 2 }}
+                  >
+                    {dims ? `${dims.w}x${dims.h}px` : ''}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-col min-w-0">
+                <span className="font-bold" style={{ color: HUD_BRIGHT, fontSize: '1.25rem', lineHeight: 1.2 }}>
+                  {item.name}
+                </span>
+                <span className="font-mono" style={{ color: HUD_DIM, fontSize: 12, marginTop: 8 }}>
+                  ID# {item.item_number ?? DASH}
+                </span>
+                {(s?.description || item.description) && (
+                  <p className="text-sm italic" style={{ color: HUD_DIM, marginTop: 10 }}>
+                    {s?.description || item.description}
+                  </p>
+                )}
+              </div>
             </div>
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3 py-2">
-          {(s?.description || item.description) && (
-            <p className="text-sm italic" style={{ color: HUD_DIM }}>{s?.description || item.description}</p>
-          )}
-
           <Section title="Identity">
-            <Row label="Key" value={item.key} />
-            <Row label="Category" value={item.item_category} />
-            <Row label="Item type" value={s?.item_type != null ? ITEM_TYPE[s.item_type] ?? s.item_type : null} />
-            <Row label="Weapon class" value={s?.weapon_type != null ? WEAPON_TYPE[s.weapon_type] ?? s.weapon_type : null} />
-            <Row label="Forgeable" value={yn(s?.forgeable ?? null)} />
-            <Row label="Base ID" value={num(s?.base_id ?? null)} />
-            <Row label="Forge tier" value={num(s?.weapon_level ?? null)} />
-            <Row label="Max stack" value={num(s?.max_stack ?? null)} />
-            <Row label="Max damage" value={num(s?.max_damage ?? null)} />
+            <Row label="Key" value={txt(item.key)} />
+            <Row label="Category" value={txt(item.item_category)} />
+            <Row label="Item type" value={enumv(ITEM_TYPE, s?.item_type)} />
+            <Row label="Weapon class" value={enumv(WEAPON_TYPE, s?.weapon_type)} />
+            <Row label="Ammo type" value={enumv(AMMO_TYPE, s?.weapon_ammo_type)} />
+            <Row label="Forgeable" value={boolv(s?.forgeable)} />
+            <Row label="Base ID" value={txt(s?.base_id)} />
+            <Row label="Forge tier" value={txt(s?.weapon_level)} />
+            <Row label="Max stack" value={txt(s?.max_stack)} />
+            <Row label="Wear slot" value={txt(s?.wear_slot)} />
+            <Row label="Throwable" value={boolv(s?.is_throwable)} />
+            <Row label="Equip duration" value={secs(s?.equip_duration)} />
+            <Row label="Max damage" value={txt(s?.max_damage)} />
           </Section>
 
-          {isGun && (
-            <Section title="Gun Stats">
-              <Row label="Projectile" value={s?.projectile} />
-              <Row label="Ammo type" value={s?.weapon_ammo_type != null ? AMMO_TYPE[s.weapon_ammo_type] ?? s.weapon_ammo_type : null} />
-              <Row label="Fire cooldown" value={sec(s?.shoot_cooldown ?? null)} />
-              <Row label="Reload time" value={sec(s?.reload_time ?? null)} />
-              <Row label="Clip size" value={num(s?.ammo_clip_amount ?? null)} />
-              <Row label="Bullets per shot" value={s?.bullets_per_tap ? num(s.bullets_per_tap) : null} />
-              <Row label="Effective range" value={num(s?.effective_range ?? null)} />
-              <Row label="Automatic" value={yn(s?.is_automatic ?? null)} />
-              <Row label="Burst fire" value={yn(s?.is_burst_fire ?? null)} />
-              <Row label="Shotgun" value={yn(s?.is_shotgun ?? null)} />
-              <Row label="Sniper" value={yn(s?.is_sniper ?? null)} />
-              <Row label="Flame attack" value={yn(s?.is_melee_flame_attack ?? null)} />
-              {isExplosive && <Row label="Explosion radius" value={num(s?.explosion_radius ?? null)} />}
-            </Section>
-          )}
+          <Section title="Gun Stats">
+            <Row label="Is gun" value={boolv(s?.is_gun)} />
+            <Row label="Projectile" value={txt(s?.projectile)} />
+            <Row label="Clip size" value={txt(s?.ammo_clip_amount)} />
+            <Row label="Bullets per shot" value={txt(s?.bullets_per_tap)} />
+            <Row label="Fire cooldown" value={secs(s?.shoot_cooldown)} />
+            <Row label="Reload time" value={secs(s?.reload_time)} />
+            <Row label="Time between shots" value={secs(s?.time_between_shots)} />
+            <Row label="Effective range" value={txt(s?.effective_range)} />
+            <Row label="Explosion radius" value={txt(s?.explosion_radius)} />
+            <Row label="Reticle type" value={txt(s?.reticle_type)} />
+            <Row label="Automatic" value={boolv(s?.is_automatic)} />
+            <Row label="Burst fire" value={boolv(s?.is_burst_fire)} />
+            <Row label="Shotgun" value={boolv(s?.is_shotgun)} />
+            <Row label="Sniper" value={boolv(s?.is_sniper)} />
+            <Row label="Rocket launcher" value={boolv(s?.is_rocket_launcher)} />
+            <Row label="Flame attack" value={boolv(s?.is_melee_flame_attack)} />
+          </Section>
 
-          {isMelee && (
-            <Section title="Melee Stats">
-              <Row label="Swing cooldown" value={sec(s?.swing_cooldown ?? null)} />
-              <Row label="Reach" value={num(s?.raycast_length ?? null)} />
-              <Row label="Knockback" value={num(s?.melee_knockback_distance ?? null)} />
-              <Row label="Stun" value={sec(s?.melee_stun_duration ?? null)} />
-            </Section>
-          )}
+          <Section title="Sounds">
+            <Row label="Fire sound" value={<SoundButton name={s?.fire_sound} />} />
+            <Row label="Empty sound" value={<SoundButton name={s?.empty_sound} />} />
+            <Row label="Reload sound" value={<SoundButton name={s?.reload_sound} />} />
+          </Section>
 
-          {isGun && (s?.horizontal_spread != null || s?.recoil_duration != null) && (
-            <Section title="Handling">
-              <Row label="Horizontal spread" value={num(s?.horizontal_spread ?? null)} />
-              <Row label="Vertical spread" value={num(s?.vertical_spread ?? null)} />
-              <Row label="Recoil duration" value={sec(s?.recoil_duration ?? null)} />
-              <Row label="Zoom speed" value={num(s?.zoom_speed ?? null)} />
-              <Row label="Scoped FOV" value={num(s?.scoped_fov ?? null)} />
-            </Section>
-          )}
+          <Section title="Melee Stats">
+            <Row label="Is melee" value={boolv(s?.is_melee)} />
+            <Row label="Swing cooldown" value={secs(s?.swing_cooldown)} />
+            <Row label="Reach" value={txt(s?.raycast_length)} />
+            <Row label="Hit flag" value={txt(s?.melee_hit_flag)} />
+            <Row label="Knockback" value={txt(s?.melee_knockback_distance)} />
+            <Row label="Stun" value={secs(s?.melee_stun_duration)} />
+          </Section>
 
-          {!!s?.skin_bonuses && (
-            <Section title="Special">
-              <Row label="Fires by default" value={s?.default_can_fire ? 'Yes' : 'No'} />
+          <Section title="Handling">
+            <Row label="Horizontal spread" value={txt(s?.horizontal_spread)} />
+            <Row label="Vertical spread" value={txt(s?.vertical_spread)} />
+            <Row label="Recoil duration" value={secs(s?.recoil_duration)} />
+            <Row label="Zoom speed" value={txt(s?.zoom_speed)} />
+            <Row label="Scoped FOV" value={txt(s?.scoped_fov)} />
+          </Section>
+
+          <Section title="Special">
+            <Row label="Fires by default" value={boolv(s?.default_can_fire)} />
+            {s?.skin_bonuses ? (
               <pre className="text-xs whitespace-pre-wrap break-all" style={{ color: HUD_DIM }}>
                 {JSON.stringify(s.skin_bonuses, null, 2)}
               </pre>
-            </Section>
-          )}
+            ) : (
+              <Row label="Skin bonuses" value={DASH} />
+            )}
+          </Section>
 
           {!loading && !s && (
-            <p className="text-sm" style={{ color: HUD_DIM }}>No weapon stats for this item.</p>
+            <p className="text-sm" style={{ color: HUD_DIM }}>
+              No weapon_stats row for this item — fields above show catalog data only.
+            </p>
           )}
         </div>
       </DialogContent>
