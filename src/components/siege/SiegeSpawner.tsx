@@ -56,7 +56,7 @@ const CFG: Partial<Record<MType, {
   url: string; modelHeight: number; height: number; speed: number;
   gait: 'hop' | 'climb'; sizeJitter: number; speedJitter: number; health: number; animSpeed?: number;
   rangedRange?: number; rangedCooldownMs?: number; rangedCooldownMaxMs?: number; spray?: SprayConfig;
-  boss?: 'teleporter'; noStun?: boolean; bossSpeedFactor?: number;
+  boss?: 'teleporter'; noStun?: boolean; noKnockback?: boolean; bossSpeedFactor?: number;
   bodyFlames?: BodyFlame[]; smokeTrail?: boolean; spin?: SpinConfig;
 }>> = {
   1: { url: '/siege/monsters/reddemon.glb',         modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100 },
@@ -74,12 +74,12 @@ const CFG: Partial<Record<MType, {
   // shell. Touch = 10-100 dmg + 1-10m knockback; doubles + flings the player's view into a spin
   // when it hits mid-zoom. Erratically zooms (3-5× speed) every 1-10s. Hop gait, 7s smoke trail.
   7: { url: '/siege/monsters/greentroll.glb',        modelHeight: 1.927, height: 3.0,  speed: 3.5, gait: 'hop',   sizeJitter: 0.10, speedJitter: 0.15, health: 200, animSpeed: 1.0,
-       smokeTrail: true,
+       smokeTrail: true, noStun: true, noKnockback: true,
        bodyFlames: [
-         { radiusMul: 0.70, heightMul: 1.70, colorHot: '#5cff6a', colorCool: '#06330f' },   // green outer (close to body)
-         { radiusMul: 0.35, heightMul: 2.72, colorHot: '#5cc0ff', colorCool: '#031a40' },   // blue inner: 50% radius, 60% taller
+         { radiusMul: 1.05, heightMul: 1.70, colorHot: '#5cff6a', colorCool: '#06330f' },   // green outer (50% wider)
+         { radiusMul: 0.525, heightMul: 2.72, colorHot: '#5cc0ff', colorCool: '#031a40' },  // blue inner: 50% radius, 60% taller
        ],
-       spin: { revPerSec: [3, 5], zoomEveryMs: [1000, 10000], zoomSpeedMul: [3, 5], contactDmg: [10, 100], contactKb: [1, 10], zoomHitMul: 2, playerSpinRev: [0.5, 2] } },
+       spin: { revPerSec: [3, 5], zoomEveryMs: [1000, 10000], zoomSpeedMul: [3, 10], contactDmg: [10, 100], contactKb: [1, 10], zoomHitMul: 2, playerSpinRev: [0.5, 2] } },
 };
 
 export function SiegeSpawner() {
@@ -167,7 +167,7 @@ export function SiegeSpawner() {
             moanSounds={o ? HORDE6_MOANS : undefined}
             contactDamage={o ? 20 : undefined} kbInverseSize={!!o} stackSink={o ? 0.30 : undefined}
             rangedRange={m?.rangedRange} rangedCooldownMs={m?.rangedCooldownMs} rangedCooldownMaxMs={m?.rangedCooldownMaxMs}
-            boss={m?.boss} noStun={o ? true : m?.noStun} bossSpeedFactor={m?.bossSpeedFactor}
+            boss={m?.boss} noStun={o ? true : m?.noStun} noKnockback={m?.noKnockback} bossSpeedFactor={m?.bossSpeedFactor}
             bodyFlames={m?.bodyFlames} smokeTrail={m?.smokeTrail} spin={m?.spin}
             onRangedAttack={m?.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m!.spray!) : undefined} />
         );

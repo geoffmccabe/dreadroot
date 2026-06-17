@@ -349,6 +349,16 @@ export function FirstPersonControls({
     knockbackVelRef.current.z += direction.z * (distance / secondsToApply);
     // Explicitly keep Y at 0 - no vertical knockback
     knockbackVelRef.current.y = 0;
+    // HARD CAP the velocity: huge / stacked knockbacks (e.g. a Spintroll zoom-hit) were flinging
+    // the player THROUGH the world (tunneling) into the void. Clamp so a single step can't skip
+    // collision, no matter how big or how many hits stack.
+    const MAX_KB = 42; // m/s
+    const len = Math.hypot(knockbackVelRef.current.x, knockbackVelRef.current.z);
+    if (len > MAX_KB) {
+      const k = MAX_KB / len;
+      knockbackVelRef.current.x *= k;
+      knockbackVelRef.current.z *= k;
+    }
   }, []);
   
   // Expose applyKnockback globally for the universal damage system
@@ -363,7 +373,10 @@ export function FirstPersonControls({
   // Spintroll fling: impart a decaying yaw spin so the whole world whirls, then settles.
   useEffect(() => {
     (window as any).__applyPlayerSpin = (revPerSec: number, dir: number) => {
-      spinVelRef.current = dir * revPerSec * Math.PI * 2;   // rad/s; the frame loop decays it
+      // SETS (never accumulates) and is clamped to ≤2.5 rev/s, so it always decays out — never a
+      // runaway permanent spin you can't recover from.
+      const v = Math.max(-2.5, Math.min(2.5, revPerSec)) * Math.sign(dir || 1) * Math.PI * 2;
+      spinVelRef.current = v;
     };
     return () => { delete (window as any).__applyPlayerSpin; };
   }, []);

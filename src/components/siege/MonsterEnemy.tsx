@@ -54,6 +54,7 @@ export interface MonsterConfig {
   faceOffset?: number;
   health?: number;            // HP (default 100)
   noStun?: boolean;           // bullets don't stun-freeze it (keeps walking when shot) — test/boss
+  noKnockback?: boolean;      // bullets/hits deal HP only — no shove (Spintroll drives its own motion)
   id?: string;                // stable combat id (auto if omitted)
   onDespawn?: (id: string) => void;  // called once after the death anim finishes
   zombie?: boolean;           // horde variant: per-demon size/speed/rhythm jitter, desaturated
@@ -148,7 +149,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
     moanNext: 0, contactNext: 0,
-    spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0 });
+    spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -166,6 +167,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     kvx: 0, kvz: 0, kvy: 0, stunUntil: 0, hitAt: 0,
     headFrac: cfg.zombie ? 0.20 : 0.25,   // head ≈ top 20% of a humanoid demon
     noStun: cfg.noStun ?? false,
+    noKnockback: cfg.noKnockback ?? false,
     yaw: 0,
     opacity: 1,
     kbScale: cfg.kbInverseSize ? 6 / H : undefined,   // 1-3·(6/H) velocity → ~1-3m slide ÷ size
@@ -414,10 +416,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.zoomNext = now + rnd(c.spin.zoomEveryMs);
       }
       g.rotation.y += s.spinVel * delta;                   // fast visual spin (overrides facing)
-      if (now > s.zoomNext) {                              // start a random zoom dash
+      if (now > s.zoomNext) {                              // start a random zoom dash (≥5m)
         const ang = Math.random() * Math.PI * 2, mul = rnd(c.spin.zoomSpeedMul);
-        s.zoomVx = Math.sin(ang) * SPD * mul; s.zoomVz = Math.cos(ang) * SPD * mul;
-        s.zoomUntil = now + 300 + Math.random() * 400;     // dash for 0.3-0.7s
+        const speed = SPD * mul, targetDist = 5 + Math.random() * 15;   // 5-20m per dash
+        s.zoomVx = Math.sin(ang) * speed; s.zoomVz = Math.cos(ang) * speed;
+        s.zoomUntil = now + (targetDist / speed) * 1000;   // dash until it has covered the distance
         s.zoomNext = now + rnd(c.spin.zoomEveryMs);
       }
       const zooming = now < s.zoomUntil;
@@ -437,7 +440,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.contactNext = now + 350;
         const mul = zooming ? c.spin.zoomHitMul : 1;
         dealPlayerDamage(rnd(c.spin.contactDmg) * mul, dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul);
-        if (zooming) {
+        // View-spin fling only on a zoom-hit, and at most once every ~3s so it can't be chained
+        // into a permanent, unrecoverable spin.
+        if (zooming && now > s.spinHitNext) {
+          s.spinHitNext = now + 3000;
           (window as { __applyPlayerSpin?: (r: number, d: number) => void }).__applyPlayerSpin?.(
             rnd(c.spin.playerSpinRev), s.spinVel > 0 ? -1 : 1);   // player spins OPPOSITE the troll
         }
