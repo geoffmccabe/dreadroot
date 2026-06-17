@@ -28,6 +28,7 @@ export function SprayAttackRenderer() {
   const meshes = useRef<Record<string, THREE.InstancedMesh>>({});
   const opac = useRef<Record<string, THREE.InstancedBufferAttribute>>({});
   const lastSound = useRef(0);
+  const lastHit = useRef(0);
 
   const group = useMemo(() => {
     const g = new THREE.Group();
@@ -70,7 +71,17 @@ export function SprayAttackRenderer() {
         playbackRate: 0.85 + Math.random() * 0.4,
       });
     };
-    updateSpray(Math.min(dt, 0.05), camera.position.x, camera.position.y, camera.position.z, onEmit);
+    // Player-hit sound: same clip as the launch but at half speed → twice as long + an
+    // octave (50%) lower pitch, so a hit sounds distinct from a launch.
+    const onHit = (cfg: { soundUrl: string; soundClipStart: number; soundClipDur: number }) => {
+      const now = performance.now();
+      if (now - lastHit.current < 80) return;
+      lastHit.current = now;
+      playSpatialSound(cfg.soundUrl, 0, {
+        baseVolume: 0.6, clipStart: cfg.soundClipStart, clipDur: cfg.soundClipDur, playbackRate: 0.5,
+      });
+    };
+    updateSpray(Math.min(dt, 0.05), camera.position.x, camera.position.y, camera.position.z, onEmit, onHit);
 
     const ps = getSprayParticles();
     const counts: Record<string, number> = {};

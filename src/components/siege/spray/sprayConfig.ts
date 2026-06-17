@@ -10,6 +10,8 @@ export interface SprayConfig {
   speedKph: number;          // muzzle speed (km/h) — determines range with gravity
   speedVar: number;          // ± fraction on speed (0.25 = ±25%)
   coneDeg: number;           // full spread cone angle (3D solid angle)
+  broadConeDeg?: number;     // wider cone used on a fraction of shots (harder to dodge)
+  broadChance?: number;      // 0-1 chance a given shot uses broadConeDeg instead of coneDeg
   gravity: number;           // m/s² pulling particles down
   colorA: [number, number, number];   // RGB 0-1; each particle is a random lerp A↔B
   colorB: [number, number, number];
@@ -37,6 +39,8 @@ export const ACID_VOMIT: SprayConfig = {
   speedKph: 80,
   speedVar: 0.25,
   coneDeg: 10,
+  broadConeDeg: 30,    // 1-in-5 shots spray wide so the player can't always sidestep
+  broadChance: 0.2,
   gravity: 16,
   colorA: [0.85, 0.06, 0.05],  // deep red
   colorB: [0.92, 0.55, 0.42],  // flesh

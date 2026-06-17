@@ -21,6 +21,7 @@ interface SprayEmitter {
   ux: number; uy: number; uz: number;                  // right
   vx: number; vy: number; vz: number;                  // up
   cfg: SprayConfig;
+  coneDeg: number;                                     // this shot's spread (normal or broad)
   remaining: number;                                   // particles left to emit
   rate: number;                                        // particles / second
   accum: number;                                       // fractional carry
@@ -48,12 +49,14 @@ export function fireSpray(ox: number, oy: number, oz: number, dx: number, dy: nu
   _u.crossVectors(_f, _u).normalize();          // right
   _v.crossVectors(_f, _u).normalize();          // up
   const win = Math.max(0.001, cfg.emitWindow);
+  const broad = cfg.broadChance && Math.random() < cfg.broadChance;  // occasional wide, hard-to-dodge spray
   emitters.push({
     ox, oy, oz,
     fx: _f.x, fy: _f.y, fz: _f.z,
     ux: _u.x, uy: _u.y, uz: _u.z,
     vx: _v.x, vy: _v.y, vz: _v.z,
-    cfg, remaining: cfg.count, rate: cfg.count / win, accum: 0,
+    cfg, coneDeg: broad ? (cfg.broadConeDeg ?? cfg.coneDeg) : cfg.coneDeg,
+    remaining: cfg.count, rate: cfg.count / win, accum: 0,
   });
 }
 
@@ -61,7 +64,7 @@ export function fireSpray(ox: number, oy: number, oz: number, dx: number, dy: nu
 function emitOne(em: SprayEmitter): number {
   const cfg = em.cfg;
   const speed = cfg.speedKph * KPH;
-  const cosHalf = Math.cos((cfg.coneDeg * Math.PI) / 180 / 2);
+  const cosHalf = Math.cos((em.coneDeg * Math.PI) / 180 / 2);
   // uniform direction inside the cone
   const cz = 1 - Math.random() * (1 - cosHalf);
   const s = Math.sqrt(1 - cz * cz);
@@ -87,8 +90,12 @@ function emitOne(em: SprayEmitter): number {
 }
 
 const _hitDir = new THREE.Vector3();
-/** Step the sim. onEmit(volume0to1, cfg) fires per blob that LEAVES the mouth (its sound). */
-export function updateSpray(dt: number, px: number, py: number, pz: number, onEmit: (vol: number, cfg: SprayConfig) => void) {
+/** Step the sim. onEmit fires per blob leaving the mouth; onHit fires per blob striking the player. */
+export function updateSpray(
+  dt: number, px: number, py: number, pz: number,
+  onEmit: (vol: number, cfg: SprayConfig) => void,
+  onHit: (cfg: SprayConfig) => void,
+) {
   // 1. Emitters spit particles out over their window.
   for (let e = emitters.length - 1; e >= 0; e--) {
     const em = emitters[e];
@@ -111,6 +118,7 @@ export function updateSpray(dt: number, px: number, py: number, pz: number, onEm
     const ddx = p.x - px, ddy = p.y - py, ddz = p.z - pz;
     if (ddx * ddx + ddy * ddy + ddz * ddz < p.cfg.hitRadius * p.cfg.hitRadius) {
       if (damageFn) { _hitDir.set(p.vx, p.vy, p.vz).normalize(); damageFn(p.cfg.damage, _hitDir, 0); }
+      onHit(p.cfg);
       particles.splice(i, 1); continue;
     }
     if (p.ttl <= 0) particles.splice(i, 1);
