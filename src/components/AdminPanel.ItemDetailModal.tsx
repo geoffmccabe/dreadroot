@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
-import { WEAPON_SOUNDS } from '@/config/weaponSounds';
+
+// Resolved sound (looked up from the game_sounds catalog by sound_key).
+interface ResolvedSound { url: string; bytes: number | null; }
 
 // Minimal shape for the clicked grid item (subset of the items table).
 interface ItemLike {
@@ -113,11 +115,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 // A clickable sound: shows filename + size, plays the mp3 on click.
-function SoundButton({ name }: { name: string | null | undefined }) {
-  const snd = name ? WEAPON_SOUNDS[name] : undefined;
-  if (!snd) return <span className="text-sm font-medium" style={{ color: HUD_BRIGHT }}>{DASH}</span>;
+// `name` is the weapon_stats sound key; `sound` is its resolved game_sounds row.
+function SoundButton({ name, sound }: { name: string | null | undefined; sound?: ResolvedSound }) {
+  if (!name || name === '0' || !sound) {
+    return <span className="text-sm font-medium" style={{ color: HUD_BRIGHT }}>{DASH}</span>;
+  }
   const play = () => {
-    const a = new Audio(snd.file);
+    const a = new Audio(sound.url);
     a.volume = 0.7;
     a.play().catch(() => { /* autoplay/user-gesture guard */ });
   };
@@ -133,7 +137,7 @@ function SoundButton({ name }: { name: string | null | undefined }) {
     >
       <span aria-hidden>▶</span>
       <span className="font-mono">{name}.mp3</span>
-      <span style={{ color: HUD_DIM }}>{fmtBytes(snd.bytes)}</span>
+      {sound.bytes != null && <span style={{ color: HUD_DIM }}>{fmtBytes(sound.bytes)}</span>}
     </button>
   );
 }
@@ -150,34 +154,50 @@ export function ItemDetailModal({
   const [stats, setStats] = useState<WeaponStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  const [soundMap, setSoundMap] = useState<Record<string, ResolvedSound>>({});
 
   useEffect(() => {
     setDims(null);
+    setSoundMap({});
     if (!isOpen || !item || item.item_number == null) {
       setStats(null);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    // weapon_stats isn't in the generated Database types; cast the client.
-    (supabase as unknown as {
+
+    // weapon_stats + game_sounds.file_bytes aren't in the generated types; cast.
+    const sb = supabase as unknown as {
       from: (t: string) => {
         select: (c: string) => {
           eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: WeaponStats | null; error: unknown }> };
+          in: (k: string, v: string[]) => Promise<{
+            data: Array<{ sound_key: string; sound_url: string; file_bytes: number | null }> | null;
+          }>;
         };
       };
-    })
-      .from('weapon_stats')
-      .select('*')
-      .eq('item_number', item.item_number)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) console.error('[ItemDetail] weapon_stats query failed:', error);
-        if (!cancelled) {
-          setStats(data);
-          setLoading(false);
-        }
-      });
+    };
+
+    (async () => {
+      const { data: statRow, error } = await sb
+        .from('weapon_stats').select('*').eq('item_number', item.item_number!).maybeSingle();
+      if (error) console.error('[ItemDetail] weapon_stats query failed:', error);
+      if (cancelled) return;
+      setStats(statRow);
+      setLoading(false);
+
+      // Resolve this weapon's sounds against the canonical game_sounds catalog.
+      const keys = [statRow?.fire_sound, statRow?.empty_sound, statRow?.reload_sound]
+        .filter((k): k is string => !!k && k !== '0');
+      if (keys.length === 0) return;
+      const { data: sounds } = await sb
+        .from('game_sounds').select('sound_key,sound_url,file_bytes').in('sound_key', keys);
+      if (cancelled) return;
+      const map: Record<string, ResolvedSound> = {};
+      for (const r of sounds || []) map[r.sound_key] = { url: r.sound_url, bytes: r.file_bytes ?? null };
+      setSoundMap(map);
+    })();
+
     return () => { cancelled = true; };
   }, [isOpen, item]);
 
@@ -270,9 +290,9 @@ export function ItemDetailModal({
           </Section>
 
           <Section title="Sounds">
-            <Row label="Fire sound" value={<SoundButton name={s?.fire_sound} />} />
-            <Row label="Empty sound" value={<SoundButton name={s?.empty_sound} />} />
-            <Row label="Reload sound" value={<SoundButton name={s?.reload_sound} />} />
+            <Row label="Fire sound" value={<SoundButton name={s?.fire_sound} sound={s?.fire_sound ? soundMap[s.fire_sound] : undefined} />} />
+            <Row label="Empty sound" value={<SoundButton name={s?.empty_sound} sound={s?.empty_sound ? soundMap[s.empty_sound] : undefined} />} />
+            <Row label="Reload sound" value={<SoundButton name={s?.reload_sound} sound={s?.reload_sound ? soundMap[s.reload_sound] : undefined} />} />
           </Section>
 
           <Section title="Melee Stats">

@@ -10,6 +10,8 @@ export interface GameSound {
   default_url: string;
   is_3d_sound: boolean;
   volume: number;
+  category: string | null;   // 'weapon' | 'monster' | 'music' | 'sfx'
+  file_bytes: number | null; // size of the served file, for admin display
   created_at: string;
   updated_at: string;
 }

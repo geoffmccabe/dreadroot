@@ -1,36 +1,37 @@
 /**
  * Game audio preloader.
  *
- * After startup (at idle, so it doesn't compete with first paint) this warms
- * every weapon / monster / music sound into the IndexedDB audio cache, so a
- * returning user never re-downloads them. It stores BLOBS only — decoding to
- * AudioBuffer happens on demand in spatialAudio (decoded music would cost far
- * more RAM than the ~10MB of compressed blobs).
+ * After startup (at idle) this warms every sound in the canonical `game_sounds`
+ * catalog into the IndexedDB audio cache, so a returning user never re-downloads
+ * them. Stores BLOBS only — decoding to AudioBuffer happens on demand in
+ * spatialAudio (decoded music would cost far more RAM than the compressed blobs).
+ *
+ * Single source of truth: the `game_sounds` table. No static manifests.
  */
 
-import { WEAPON_SOUNDS } from '@/config/weaponSounds';
-import { MONSTER_SOUNDS, MUSIC_TRACKS } from '@/config/gameSounds';
+import { supabase } from '@/integrations/supabase/client';
 import { ensureCached } from '@/lib/audioCache';
-
-function allSoundUrls(): string[] {
-  const urls: string[] = [];
-  for (const s of Object.values(WEAPON_SOUNDS)) urls.push(s.file);
-  for (const s of Object.values(MONSTER_SOUNDS)) urls.push(s.file);
-  for (const s of Object.values(MUSIC_TRACKS)) urls.push(s.file);
-  return urls;
-}
 
 let started = false;
 
-/** Warm all game sounds into IndexedDB. Idempotent; safe to call repeatedly. */
+/** Warm all catalog sounds into IndexedDB. Idempotent; safe to call repeatedly. */
 export async function preloadGameAudio(concurrency = 4): Promise<void> {
   if (started) return;
   started = true;
 
-  const urls = allSoundUrls();
+  let urls: string[] = [];
+  try {
+    const { data } = await supabase.from('game_sounds').select('sound_url');
+    urls = (data || [])
+      .map((r) => r.sound_url)
+      .filter((u): u is string => typeof u === 'string' && u.length > 0);
+  } catch {
+    return; // non-critical
+  }
+  if (urls.length === 0) return;
+
   let index = 0;
   let cached = 0;
-
   async function worker() {
     while (index < urls.length) {
       const url = urls[index++];

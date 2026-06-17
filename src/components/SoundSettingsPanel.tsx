@@ -16,6 +16,7 @@ export function SoundSettingsPanel() {
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [pendingUploadKey, setPendingUploadKey] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -122,18 +123,45 @@ export function SoundSettingsPanel() {
     );
   }
 
+  const CAT_ORDER = ['weapon', 'monster', 'music', 'sfx'];
+  const catOf = (s: GameSound) => s.category || 'sfx';
+  const categories = Array.from(new Set(sounds.map(catOf)))
+    .sort((a, b) => {
+      const ia = CAT_ORDER.indexOf(a), ib = CAT_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+  const filtered = categoryFilter === 'all' ? sounds : sounds.filter(s => catOf(s) === categoryFilter);
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">Game Sounds</h3>
         <p className="text-xs text-muted-foreground">
-          {sounds.length} sounds configured
+          {filtered.length} of {sounds.length} sounds
         </p>
       </div>
 
       <p className="text-xs text-muted-foreground">
         Upload custom sounds or adjust settings. Changes take effect immediately for all players.
       </p>
+
+      {/* Category filter */}
+      <div className="flex flex-wrap gap-1.5">
+        {['all', ...categories].map(cat => (
+          <Button
+            key={cat}
+            variant={categoryFilter === cat ? 'default' : 'outline'}
+            size="sm"
+            className="h-7 px-2.5 text-xs capitalize"
+            onClick={() => setCategoryFilter(cat)}
+          >
+            {cat}
+            {cat !== 'all' && (
+              <span className="ml-1 opacity-70">{sounds.filter(s => catOf(s) === cat).length}</span>
+            )}
+          </Button>
+        ))}
+      </div>
 
       <input
         ref={fileInputRef}
@@ -144,7 +172,7 @@ export function SoundSettingsPanel() {
       />
 
       <div className="space-y-3">
-        {sounds.map(sound => {
+        {filtered.map(sound => {
           const isCustom = sound.sound_url !== sound.default_url;
           const isUploading = uploadingKey === sound.sound_key;
           const isPlaying = playingKey === sound.sound_key;
