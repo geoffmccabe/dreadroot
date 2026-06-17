@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { GAME_ID } from '@/config/game';
-
-const LOCAL_STORAGE_KEY = 'currentWorldId';
+import { useActiveGame } from '@/config/activeGame';
+import { gameWorldsKey } from '@/config/gameRegistry';
 
 // Default texture paths - used when world texture URLs are null
 export const DEFAULT_TEXTURES = {
@@ -23,6 +22,8 @@ export interface World {
   updated_at: string;
 }
 
+const LOCAL_STORAGE_KEY = 'currentWorldId';
+
 // Standalone hook that fetches worlds directly - avoids circular dependency with useWorlds
 export function useCurrentWorldId() {
   const [worlds, setWorlds] = useState<World[]>([]);
@@ -30,13 +31,22 @@ export function useCurrentWorldId() {
   const [currentWorldId, setCurrentWorldIdState] = useState<string | null>(null);
   const [currentWorld, setCurrentWorld] = useState<World | null>(null);
 
+  // Which data-game's worlds to load — registry-driven and reactive to the runtime
+  // game switch. For Dreadroot/Siege this stays 'dreadroot' (siege rides on the
+  // build's data-game), so behavior is unchanged; switching to Pinkland re-resolves
+  // to its world. A stored world from another game fails the existence check below
+  // and falls back to the new game's default, so cross-game switches are safe.
+  const activeGame = useActiveGame();
+  const worldsKey = gameWorldsKey(activeGame);
+
   // Fetch worlds directly (no dependency on useWorlds hook)
   const fetchWorlds = useCallback(async () => {
     try {
+      setIsLoading(true);
       const { data, error } = await supabase
         .from('worlds')
         .select('*')
-        .eq('game', GAME_ID)
+        .eq('game', worldsKey)
         .order('is_default', { ascending: false })
         .order('name');
 
@@ -47,7 +57,7 @@ export function useCurrentWorldId() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [worldsKey]);
 
   useEffect(() => {
     fetchWorlds();

@@ -4,13 +4,10 @@
 // which the app reads on boot to load that game's world/modules + styling. A universal-engine
 // control: it lives in the engine HUD, available to every game.
 import React, { useState } from 'react';
-import { getActiveGame, setActiveGame, useActiveGame } from '@/config/activeGame';
+import { setActiveGame, useActiveGame } from '@/config/activeGame';
+import { GAME_LIST } from '@/config/gameRegistry';
 
-const GAMES: { id: string; label: string; enabled: boolean }[] = [
-  { id: 'dreadroot', label: 'Dreadroot', enabled: true },
-  { id: 'siege-worlds', label: 'Siege Worlds', enabled: true },
-  { id: 'pinkland', label: 'Pinkland', enabled: false },
-];
+const GAMES = GAME_LIST;
 
 const panel: React.CSSProperties = {
   borderRadius: 'var(--hud-radius)',

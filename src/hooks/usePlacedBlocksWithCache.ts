@@ -8,6 +8,7 @@ import { loadPlayerCatalogue } from '@/lib/playerCatalogue';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
 import { getActiveGame, useActiveGame } from '@/config/activeGame';
+import { gameUsesVoxels } from '@/config/gameRegistry';
 import { getChunkKey } from '@/lib/chunkManager';
 import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/components/fortress/FortressAudio';
@@ -130,8 +131,8 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       return;
     }
     
-    // Voxels (atlas + chunks) are only needed outside Siege Worlds.
-    const needsVoxels = getActiveGame() !== 'siege-worlds';
+    // Voxels (atlas + chunks) are needed only by voxel-world games (per registry).
+    const needsVoxels = gameUsesVoxels(getActiveGame());
 
     // Skip only if this world is already fully ready for the CURRENT mode:
     // lightweight init done AND (no voxels needed, or voxels already loaded for it).
@@ -460,11 +461,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     return cleanup;
   }, [userId, worldId, activeGame, initializeCache, setupRealtimeSubscription]);
 
-  // In-session switch INTO Siege Worlds: drop the Dreadroot voxel world (chunks +
-  // collision grid + colliders) to free memory. It reloads from the IndexedDB cache
-  // on return. The texture atlas is intentionally kept (cheap to retain, slow to rebuild).
+  // In-session switch INTO a non-voxel game (e.g. Siege Worlds): drop the voxel
+  // world (chunks + collision grid + colliders) to free memory. It reloads from the
+  // IndexedDB cache on return. The texture atlas is intentionally kept (cheap to
+  // retain, slow to rebuild).
   useEffect(() => {
-    if (activeGame === 'siege-worlds' && voxelsLoadedRef.current) {
+    if (!gameUsesVoxels(activeGame) && voxelsLoadedRef.current) {
       chunkLoaderRef.current.clearAllChunks();
       voxelsLoadedRef.current = null;
     }
