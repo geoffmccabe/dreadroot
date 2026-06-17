@@ -7,7 +7,7 @@ import { useIndexedDB, blockDB } from './useIndexedDB';
 import { loadPlayerCatalogue } from '@/lib/playerCatalogue';
 import { PlacedBlock } from '../types/blocks';
 import { useChunkLoader } from './useChunkLoader';
-import { getActiveGame } from '@/config/activeGame';
+import { getActiveGame, useActiveGame } from '@/config/activeGame';
 import { getChunkKey } from '@/lib/chunkManager';
 import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/components/fortress/FortressAudio';
@@ -112,6 +112,13 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
   
   // Track if we've initialized for the current world
   const initializedWorldRef = useRef<string | null>(null);
+  // Voxel-world (atlas + chunks) load state, tracked separately from the lightweight
+  // one-time init so an in-session game switch can (re)load or drop it correctly.
+  // atlasInited persists for the session (atlas is global); voxelsLoaded is per-world
+  // and is cleared when we drop the voxel world on entering Siege Worlds.
+  const atlasInitedRef = useRef(false);
+  const voxelsLoadedRef = useRef<string | null>(null);
+  const activeGame = useActiveGame();
 
   // REMOVED: syncWithSupabase is orphaned - chunk loader now handles all loading
 
@@ -123,12 +130,18 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       return;
     }
     
-    // Skip if already initialized for this world
-    if (initializedWorldRef.current === worldId) {
+    // Voxels (atlas + chunks) are only needed outside Siege Worlds.
+    const needsVoxels = getActiveGame() !== 'siege-worlds';
+
+    // Skip only if this world is already fully ready for the CURRENT mode:
+    // lightweight init done AND (no voxels needed, or voxels already loaded for it).
+    // This is what makes a Siege→Dreadroot switch re-load the voxel world (previously
+    // the world was marked "initialized" even though siege had skipped atlas+chunks).
+    if (initializedWorldRef.current === worldId && (!needsVoxels || voxelsLoadedRef.current === worldId)) {
       return;
     }
     initializedWorldRef.current = worldId;
-    
+
     // Start initialization overlay
     initLogStart();
     
@@ -191,8 +204,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       // Siege Worlds renders no voxel blocks → skip the block/tree texture atlas entirely
       // (it's the Dreadroot block world: ~11s of work + not needed in siege).
-      if (getActiveGame() !== 'siege-worlds') {
-        // CRITICAL: Initialize texture atlas BEFORE chunk loading starts
+      if (needsVoxels && !atlasInitedRef.current) {
+        // CRITICAL: Initialize texture atlas BEFORE chunk loading starts.
+        // Guarded by atlasInitedRef so a Siege→Dreadroot switch-back doesn't redo
+        // the ~11s atlas build (the atlas isn't torn down when entering siege).
         console.log('[Init] Starting texture atlas initialization...');
         const atlasStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing texture atlas...');
         const { initializeAtlasTexture } = await import('@/hooks/useTextureAtlas');
@@ -200,6 +215,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         initLogFinishStep(atlasStepId!);
         const { syncAtlasOnInit } = await import('@/hooks/useAtlasSync');
         await syncAtlasOnInit();
+        atlasInitedRef.current = true;
         console.log('[Init] Atlas sync complete, fetching world settings...');
       }
 
@@ -225,9 +241,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       // Siege Worlds renders its own terrain/objects, not voxel chunks → skip the DR chunk
       // loader (it was loading ~290k Dreadroot blocks into the world + collision grid in siege).
-      if (getActiveGame() !== 'siege-worlds') {
+      if (needsVoxels && voxelsLoadedRef.current !== worldId) {
         const chunkStepId = initLogStartStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
         await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
+        voxelsLoadedRef.current = worldId;
         initLogFinishStep(chunkStepId!);
       }
 
@@ -423,21 +440,35 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       currentWorldIdRef.current = worldId;
       // Reset initialization tracking for new world
       initializedWorldRef.current = null;
+      voxelsLoadedRef.current = null; // new world → voxels must reload
     }
   }, [worldId]);
 
-  // Main initialization effect - runs once per world
+  // Main initialization effect - runs per world AND per game switch. Including
+  // activeGame in the deps is what makes a Siege→Dreadroot switch re-run init
+  // (loading the atlas+chunks that siege had skipped) and show the overlay again.
   useEffect(() => {
     if (userId && worldId) {
       initializeCache();
     } else {
       setIsLoading(true);
       initializedWorldRef.current = null;
+      voxelsLoadedRef.current = null;
     }
 
     const cleanup = setupRealtimeSubscription();
     return cleanup;
-  }, [userId, worldId, initializeCache, setupRealtimeSubscription]);
+  }, [userId, worldId, activeGame, initializeCache, setupRealtimeSubscription]);
+
+  // In-session switch INTO Siege Worlds: drop the Dreadroot voxel world (chunks +
+  // collision grid + colliders) to free memory. It reloads from the IndexedDB cache
+  // on return. The texture atlas is intentionally kept (cheap to retain, slow to rebuild).
+  useEffect(() => {
+    if (activeGame === 'siege-worlds' && voxelsLoadedRef.current) {
+      chunkLoaderRef.current.clearAllChunks();
+      voxelsLoadedRef.current = null;
+    }
+  }, [activeGame]);
 
   // Phase 2: Expired blocks are now handled per-chunk via loadedChunksRef
   // The periodic check scans loaded chunks and removes expired blocks directly
