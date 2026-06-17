@@ -86,19 +86,21 @@ export function EquipSlots() {
   };
 
   return (
-    <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 20, display: 'flex', flexDirection: 'row', gap: 6 }}>
       {SLOTS.map(({ slot, label, glyph }) => {
         const g: ResolvedGear | null = gear[slot];
-        // Boots slot is never visually empty — falls back to the Tier-1 default.
-        const sprite = g?.spriteUrl ?? (slot === 'boots' ? T1_BOOTS : null);
-        const filled = !!g;
+        // Boots slot is never empty — falls back to the Tier-1 default, shown bright
+        // (we assume the player always has a T1 or better).
+        const bootsDefault = slot === 'boots' && !g;
+        const sprite = g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null);
+        const bright = !!g || bootsDefault;
         return (
           <div
             key={slot}
             title={g ? `${g.name} (click to unequip)` : `${label} — drag a ${label.toLowerCase()} here`}
             onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(slot, g); }}
             style={{
-              width: 52, height: 52, borderRadius: 'var(--hud-radius, 8px)',
+              width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',
               background: cursorHeld ? 'hsl(var(--hud-bg-hover))' : 'hsl(var(--hud-bg))',
               border: `1px solid ${cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -106,9 +108,9 @@ export function EquipSlots() {
             }}
           >
             {sprite ? (
-              <img src={sprite} alt={label} style={{ width: 40, height: 40, objectFit: 'contain', opacity: filled ? 1 : 0.35 }} />
+              <img src={sprite} alt={label} style={{ width: 46, height: 46, objectFit: 'contain', opacity: bright ? 1 : 0.35 }} />
             ) : (
-              <span style={{ fontSize: 22, opacity: 0.35, filter: 'grayscale(1)' }} aria-hidden>{glyph}</span>
+              <span style={{ fontSize: 24, opacity: 0.35, filter: 'grayscale(1)' }} aria-hidden>{glyph}</span>
             )}
             {g?.tier ? (
               <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 9, fontFamily: 'monospace', color: HUD_DIM }}>T{g.tier}</span>
