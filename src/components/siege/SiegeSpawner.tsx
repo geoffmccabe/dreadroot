@@ -5,7 +5,7 @@
 //   !2#  → mushroom-grunt horde (npcType 6): HOP gait (the bouncy hop/stack), size ±50%,
 //          same grey desaturation.
 //   !3#  → GIANT SKELETON horde: red-demon CLIMB gait (no jump), 500 HP, size ±20%, speed ±10%.
-//   !4#  → VOMIT DEMON (3m): spits acid from 20-30m (1 dmg/particle), recharges ~60s, then melees.
+//   !4#  → VOMIT DEMON (4m): holds at 20-30m and sprays acid every ~1.3s (1 dmg/particle).
 // After a spawn, spamming "0" within 2s adds another 10 of the LAST type — for stress-testing
 // hordes. Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
@@ -28,8 +28,8 @@ const CFG: Record<MType, {
   2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100 },
   // 3 = GIANT SKELETON: red-demon hording (climb gait, NO jump), 500 HP, ±20% size, ±10% speed, 3x anim.
   3: { url: '/siege/monsters/dfskeleton.glb',        modelHeight: 1.795, height: 6.0,  speed: 5.0, gait: 'climb', sizeJitter: 0.20, speedJitter: 0.10, health: 500, animSpeed: 3 },
-  // 4 = VOMIT DEMON: 3m, spits acid from 20-30m once/min (recharges), then closes for melee.
-  4: { url: '/siege/monsters/demonmale.glb',         modelHeight: 2.145, height: 3.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.10, health: 200, animSpeed: 1.8, rangedRange: 30, rangedCooldownMs: 60000, spray: ACID_VOMIT },
+  // 4 = VOMIT DEMON: 4m, HOLDS at 20-30m and sprays acid every ~1.3s (no long recharge).
+  4: { url: '/siege/monsters/demonmale.glb',         modelHeight: 2.145, height: 4.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.10, health: 200, animSpeed: 1.8, rangedRange: 30, rangedCooldownMs: 1300, spray: ACID_VOMIT },
 };
 
 export function SiegeSpawner() {

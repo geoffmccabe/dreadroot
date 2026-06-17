@@ -24,6 +24,7 @@ export function SprayAttackRenderer() {
     for (const sh of SHAPES) {
       const mat = new THREE.MeshBasicMaterial({
         map: getSprayShapeTexture(sh), transparent: true, depthWrite: false, toneMapped: false,
+        side: THREE.DoubleSide, alphaTest: 0.1,   // DoubleSide: billboards must show regardless of facing
       });
       const im = new THREE.InstancedMesh(geo, mat, PER);
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

@@ -287,12 +287,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       else play(clips.idle);
     } else if (dist < c.aggro) {                            // found a player -> pursue/attack
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
-      const canVomit = !!c.rangedRange && dist <= c.rangedRange && dist > c.attackRange
-                       && now - s.lastRanged > (c.rangedCooldownMs ?? 60000);
-      if (canVomit) {                                        // RANGED breath weapon (recharges slowly)
-        s.lastRanged = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
-        const my = s.y + H * 0.85;                           // spray from the head, arc up toward the player
-        c.onRangedAttack?.(s.x, my, s.z, dx, dist * 0.4, dz);
+      const inBand = !!c.rangedRange && dist <= c.rangedRange && dist > c.attackRange;
+      if (inBand) {                                          // RANGED breath weapon: HOLD here + spray
+        if (now - s.lastRanged > (c.rangedCooldownMs ?? 60000)) {
+          s.lastRanged = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
+          const my = s.y + H * 0.85;                         // spray from the head, arc up toward the player
+          c.onRangedAttack?.(s.x, my, s.z, dx, dist * 0.4, dz);
+        } else if (now > s.swipeUntil) play(clips.idle);     // hold position between sprays
       } else if (dist > c.attackRange) {
         const step = Math.min(SPD * delta, dist - c.attackRange);
         mvx = dx / dist; mvz = dz / dist; moving = true;
