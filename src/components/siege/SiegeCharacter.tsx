@@ -8,9 +8,10 @@
 //
 // Hidden in first person; INSPECT view (Ctrl/Cmd+V) freezes + shows it 3m ahead so you can walk
 // around it. A top dropdown switches character.
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
+import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import {
@@ -67,6 +68,10 @@ export function SiegeCharacter() {
 function CharacterRig({ selected }: { selected: string }) {
   const camera = useThree((s) => s.camera);
   const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb`);
+  // Clone the skinned mesh + skeleton (SkeletonUtils, exactly like MonsterEnemy) BEFORE animating.
+  // Animating a raw GLTF skinned mesh nested under transform groups shears the limbs in three.js;
+  // the clone rebuilds the bone bindings correctly. This is the proven monster path.
+  const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);   // mixer root + world placement (scale lives here)
   // Play the FULL clips (translation + rotation + scale on every bone) exactly as exported —
   // this is how the proven player.glb animates cleanly. These clips bake an absolute per-bone
@@ -127,7 +132,7 @@ function CharacterRig({ selected }: { selected: string }) {
   return (
     <group ref={group} scale={scale} visible={false}>
       <group rotation={ROT[rot]}>
-        <primitive object={scene} />
+        <primitive object={cloned} />
       </group>
     </group>
   );
