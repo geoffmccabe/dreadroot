@@ -86,6 +86,18 @@ export async function hasAudio(url: string): Promise<boolean> {
   });
 }
 
+/** Remove a cached blob (e.g. it failed to decode and should be re-fetched). */
+export async function deleteAudioBlob(url: string): Promise<void> {
+  const database = await openDB();
+  if (!database) return;
+  return new Promise((resolve) => {
+    const tx = database.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(url);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+  });
+}
+
 /** Fetch + persist a url if not already cached. Returns true if bytes are in IDB after. */
 export async function ensureCached(url: string): Promise<boolean> {
   try {

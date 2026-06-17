@@ -1,8 +1,8 @@
 // AUTO-GENERATED. Monster SFX + ambient music served from /public, for the SW game audio system.
 // Regenerate if public/monster-sounds or public/music changes.
-export interface GameSound { file: string; bytes: number; }
+export interface SoundAsset { file: string; bytes: number; }
 
-export const MONSTER_SOUNDS: Record<string, GameSound> = {
+export const MONSTER_SOUNDS: Record<string, SoundAsset> = {
   "boss_mushroom_footsteps": { file: "/monster-sounds/boss_mushroom_footsteps.mp3", bytes: 98473 },
   "demon_attack": { file: "/monster-sounds/demon_attack.mp3", bytes: 15404 },
   "GroundSlam": { file: "/monster-sounds/GroundSlam.mp3", bytes: 49292 },
@@ -19,7 +19,7 @@ export const MONSTER_SOUNDS: Record<string, GameSound> = {
   "zombie_moan_6p1": { file: "/monster-sounds/zombie_moan_6p1.mp3", bytes: 37346 },
 };
 
-export const MUSIC_TRACKS: Record<string, GameSound> = {
+export const MUSIC_TRACKS: Record<string, SoundAsset> = {
   "ambient_wind": { file: "/music/ambient_wind.mp3", bytes: 21356 },
   "BackgroundSound_Ambient": { file: "/music/BackgroundSound_Ambient.mp3", bytes: 612991 },
   "bleakrock_ambient": { file: "/music/bleakrock_ambient.mp3", bytes: 292076 },

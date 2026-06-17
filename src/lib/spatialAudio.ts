@@ -2,7 +2,7 @@
 // Uses Web Audio API for overlapping sounds
 
 import * as THREE from 'three';
-import { getAudioBlob, saveAudioBlob } from '@/lib/audioCache';
+import { getAudioBlob, saveAudioBlob, deleteAudioBlob } from '@/lib/audioCache';
 import './audioPreload'; // self-schedules an idle warm of all game sounds into IndexedDB
 
 let audioContext: AudioContext | null = null;
@@ -56,21 +56,34 @@ async function loadAudioBuffer(url: string): Promise<AudioBuffer | null> {
       // once and persist for next session. decodeAudioData detaches the
       // ArrayBuffer, so we always decode from a fresh blob.arrayBuffer().
       let blob = await getAudioBlob(url);
+      const fromCache = !!blob;
       if (!blob) {
         const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
         blob = await response.blob();
         void saveAudioBlob(url, blob); // fire-and-forget persist
       }
       const arrayBuffer = await blob.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      bufferCache.set(url, audioBuffer);
-      return audioBuffer;
+      try {
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        bufferCache.set(url, audioBuffer);
+        return audioBuffer;
+      } catch (decodeErr) {
+        // A cached blob that won't decode is poisoned — drop it so the next
+        // attempt re-fetches from the network instead of failing forever.
+        if (fromCache) void deleteAudioBlob(url);
+        throw decodeErr;
+      }
     } catch (error) {
       console.warn(`Failed to load audio: ${url}`, error);
       throw error;
+    } finally {
+      // Clear the in-flight entry so a failed load can be retried later
+      // (and the map doesn't grow unbounded).
+      loadingPromises.delete(url);
     }
   })();
-  
+
   loadingPromises.set(url, promise);
   return promise;
 }
