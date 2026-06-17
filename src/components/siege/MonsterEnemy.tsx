@@ -17,6 +17,7 @@ import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
+import { playSpatialSound } from '@/lib/spatialAudio';
 
 // Blast-impact damage: kinetic, only above a threshold speed. min(120, 0.12·v²).
 const IMPACT_MIN = 7;
@@ -56,6 +57,12 @@ export interface MonsterConfig {
   boss?: 'teleporter';        // 'teleporter' = Dark Lord: teleports around the player, opacity = damage
                               // resistance, aura of black/purple fire + smoke, melee strike from behind
   bossSpeedFactor?: number;   // shamble-speed multiplier while corporeal (default 0.4 = slow)
+  // Per-individual colour treatment (for varied hordes). Applied in-shader in this order:
+  // hue-rotate → desaturate → red tint. Each defaults to off (or the zombie auto-desat).
+  desat?: number;             // explicit desaturation 0..1 (overrides the zombie auto-desat)
+  hueShift?: number;          // hue rotation in RADIANS (±)
+  tintRed?: number;           // blood-red tint mix 0..1
+  moanSounds?: string[];      // ambient moan clips (random pick, ~per 4-8s, distance-scaled)
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
 
@@ -116,7 +123,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Animation rhythm jitter × per-monster playback-rate (e.g. slow zombie clip → 3x).
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
-    teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false });
+    teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, moanNext: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -199,12 +206,15 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // zombie horde, also CLONE each material (so this demon is independent) and inject a per-demon
   // grayscale mix in the fragment shader → varied greyed-out red shades (zombie look).
   useMemo(() => {
-    const dz = J.desat;
+    const colDesat = cfg.desat ?? (cfg.zombie ? J.desat : 0);   // explicit desat overrides the zombie auto-desat
+    const colHue = cfg.hueShift ?? 0;
+    const colRed = cfg.tintRed ?? 0;
+    const needsColor = colDesat > 0 || colHue !== 0 || colRed > 0;
     cloned.traverse((o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       let mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      if (cfg.zombie) {
+      if (cfg.zombie || needsColor) {   // clone so per-demon uniforms are independent
         mats = mats.map((mm) => (mm as THREE.Material).clone());
         mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
       }
@@ -215,17 +225,24 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if ('roughness' in m) m.roughness = 0.85;
         if ('emissive' in m && m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
         if (cfg.boss === 'teleporter') { m.transparent = true; m.depthWrite = true; bossMats.current.push(m); }
-        if (cfg.zombie && dz > 0) {
-          // Share ONE compiled program across all zombie mats with the same texture features
-          // (else 1 compile per demon); the desat amount varies per material via its uniform.
-          m.customProgramCacheKey = () => `zdesat_${m.map ? 1 : 0}_${m.emissiveMap ? 1 : 0}`;
+        if (needsColor) {
+          // ONE shared program per texture-feature set (uniforms vary per demon): hue-rotate
+          // around the grey axis → desaturate → blood-red tint. All three default to no-op.
+          m.customProgramCacheKey = () => `zcol_${m.map ? 1 : 0}_${m.emissiveMap ? 1 : 0}`;
           m.onBeforeCompile = (shader) => {
-            shader.uniforms.uDesat = { value: dz };
-            shader.fragmentShader = 'uniform float uDesat;\n' + shader.fragmentShader;
+            shader.uniforms.uDesat = { value: colDesat };
+            shader.uniforms.uHue = { value: colHue };
+            shader.uniforms.uRed = { value: colRed };
+            shader.fragmentShader = 'uniform float uDesat;\nuniform float uHue;\nuniform float uRed;\n' + shader.fragmentShader;
             if (shader.fragmentShader.includes('#include <dithering_fragment>')) {
               shader.fragmentShader = shader.fragmentShader.replace(
                 '#include <dithering_fragment>',
-                '#include <dithering_fragment>\n{ float _zl = dot(gl_FragColor.rgb, vec3(0.299,0.587,0.114)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(_zl), uDesat); }',
+                '#include <dithering_fragment>\n{ vec3 _c = gl_FragColor.rgb;'
+                + ' if (uHue != 0.0) { vec3 _k = vec3(0.57735); float _cs = cos(uHue), _sn = sin(uHue); _c = _c*_cs + cross(_k,_c)*_sn + _k*dot(_k,_c)*(1.0-_cs); }'
+                + ' float _zl = dot(_c, vec3(0.299,0.587,0.114));'
+                + ' _c = mix(_c, vec3(_zl), uDesat);'
+                + ' _c = mix(_c, vec3(min(1.0,_zl*1.4+0.15), _zl*0.15, _zl*0.12), uRed);'
+                + ' gl_FragColor.rgb = clamp(_c, 0.0, 1.0); }',
               );
             }
           };
@@ -264,6 +281,18 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         inst.despawned = true; cfg.onDespawn?.(inst.id);
       }
       return;
+    }
+
+    // Ambient moans (SW zombie sounds): per-monster, ~every 4-8s a 50% chance, distance-scaled.
+    if (c.moanSounds) {
+      if (!s.moanNext) s.moanNext = now + Math.random() * 6000;
+      else if (now > s.moanNext) {
+        s.moanNext = now + 4000 + Math.random() * 4000;
+        if (Math.random() < 0.12 && dist < 55) {   // ~10%/cycle like the SW shombies — ambient, not a wall
+          const u = c.moanSounds[(Math.random() * c.moanSounds.length) | 0];
+          playSpatialSound(u, dist, { baseVolume: 0.55, playbackRate: 0.8 + Math.random() * 0.4 });
+        }
+      }
     }
 
     // ── Blast vertical launch: apply once → gravity arcs them; kick off a tumbling spin. ──
