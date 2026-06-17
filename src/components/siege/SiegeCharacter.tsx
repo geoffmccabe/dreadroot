@@ -68,8 +68,12 @@ export function SiegeCharacter() {
 // ── Rig: one character (raw scene, lineup transform) + animations. Remounted on each switch. ──
 function CharacterRig({ selected }: { selected: string }) {
   const camera = useThree((s) => s.camera);
-  // ?v=APP_VERSION busts browser/CDN caching of the glb (same URL otherwise serves a stale file).
-  const { scene, animations } = useGLTF(`/siege/characters/${selected}.glb?v=${APP_VERSION}`);
+  // Per-character glb filename. A NEW filename (not just ?v=) is the only sure cache-bust — the old
+  // shiyang.glb URL was being served stale from cache regardless of the query string. ?v= stays as
+  // a belt-and-suspenders bust for CDN/browser.
+  const GLB_FILE: Record<string, string> = { shiyang: 'shiyang_v2' };
+  const file = GLB_FILE[selected] ?? selected;
+  const { scene, animations } = useGLTF(`/siege/characters/${file}.glb?v=${APP_VERSION}`);
   // Clone the skinned mesh + skeleton (SkeletonUtils, exactly like MonsterEnemy) BEFORE animating.
   // Animating a raw GLTF skinned mesh nested under transform groups shears the limbs in three.js;
   // the clone rebuilds the bone bindings correctly. This is the proven monster path.
