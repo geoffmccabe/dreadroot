@@ -34,7 +34,6 @@ import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
 import { setSprayDamage } from '@/components/siege/spray/sprayAttackSystem';
-import { setSiegeFlameRef } from '@/components/siege/siegeFlame';
 import { sdbg } from '@/components/siege/siegeDebug';
 import { LaserProbe } from '@/components/siege/LaserProbe';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
@@ -1081,7 +1080,6 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const tracersRef = useRef<TracersHandle>(null);
   const jetBoostFXRef = useRef<JetBoostFXHandle>(null);
   const universalFlameRef = useRef<UniversalFlameRendererHandle>(null);
-  setSiegeFlameRef(universalFlameRef);   // expose the flame renderer to in-Canvas siege monsters (Dark Lord body flames)
   const { flameDemoRef, effectsRef, fruitVisibility } = useAdminPanel();
   // Siege ground height = terrain floor, raised to any BVH mesh-collider surface
   // (mountains/rocks) the player can step onto. meshGroundHeight is internally

@@ -18,7 +18,7 @@ import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHor
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { playSpatialSound } from '@/lib/spatialAudio';
-import { getSiegeFlame } from './siegeFlame';
+import { DarkLordFlame } from './DarkLordFlame';
 
 // Blast-impact damage: kinetic, only above a threshold speed. min(120, 0.12·v²).
 const IMPACT_MIN = 7;
@@ -84,11 +84,6 @@ const CLIMB_LOD = 90; // beyond this (m from camera) skip the per-frame world-co
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
 const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
 const _fwd = new THREE.Vector3();   // scratch: player look direction (for teleport-behind)
-const _flame = new THREE.Vector3(); // scratch: boss body-flame position
-// Black/purple fire: additive blending can't render true black (it'd be invisible), so the
-// base is a near-black deep violet rising through purple to bright orchid — reads black+purple.
-const BOSS_FLAME_COLORS = ['#1a0030', '#6a0dad', '#b24bf3'];
-const BOSS_FLAME_SIDES: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
 const headBoxes = new Set<THREE.Box3>();
@@ -158,12 +153,6 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   useBossAura(inst, cfg.boss === 'teleporter');
   const bossMats = useRef<THREE.MeshStandardMaterial[]>([]);   // boss: faded each frame to inst.opacity
-  const flameIds = useRef<string[]>([]);                       // boss: 4 hex body-flame ids
-  // Spawn-once-then-follow: the 4 tall hex flames are spawned lazily in useFrame and removed here.
-  useEffect(() => () => {
-    const fr = getSiegeFlame();
-    if (fr) for (const id of flameIds.current) fr.removeFlame(id);
-  }, []);
   // Bone-attach for burns: a hit point locks to the nearest skeleton bone so the
   // fire rides the gait bob + turn + walk (the animation drives the bones), not
   // just the collider. inst.attach(x,y,z) → a per-frame world-position follower.
@@ -592,34 +581,24 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       headBox.max.set(s.x + hr, s.y + H, s.z + hr);
       worldCollisionGrid.update(headBox);
     }
-    if (cfg.boss === 'teleporter') {
-      const o = inst.opacity ?? 1, mats = bossMats.current;   // fade the model to its opacity
+    if (cfg.boss === 'teleporter') {                 // fade the model to its current opacity
+      const o = inst.opacity ?? 1, mats = bossMats.current;
       for (let i = 0; i < mats.length; i++) mats[i].opacity = o;
-      // 4 tall, thin hex flames at the collider sides (20% inside the edge), riding the body.
-      const fr = getSiegeFlame();
-      if (fr) {
-        const off = inst.radius * 0.8;
-        if (!flameIds.current.length) {
-          for (let i = 0; i < 4; i++) {
-            _flame.set(s.x + BOSS_FLAME_SIDES[i][0] * off, s.y, s.z + BOSS_FLAME_SIDES[i][1] * off);
-            flameIds.current.push(fr.spawnFlame({
-              // BIG: size drives both sprite px (size·300/dist) and hex arm spread (size/2);
-              // height·2 ≈ 12m column on the 6m boss. Tuned for tall, wide, all-around fire.
-              type: 'hex', position: _flame, colors: BOSS_FLAME_COLORS,
-              size: 2.8, height: H * 2, duration: 1e9, particleCount: 90,
-              attachTo: `dlf_${inst.id}_${i}`, colorMode: 'static',
-            }));
-          }
-        } else {
-          for (let i = 0; i < 4; i++) {
-            fr.updateAttachedPosition(`dlf_${inst.id}_${i}`,
-              _flame.set(s.x + BOSS_FLAME_SIDES[i][0] * off, s.y, s.z + BOSS_FLAME_SIDES[i][1] * off));
-          }
-        }
-      }
     }
     sdbg.monsters = MONSTERS.size; // SW debug
   });
 
-  return <group ref={group} scale={scale}><primitive object={cloned} /></group>;
+  return (
+    <group ref={group} scale={scale}>
+      <primitive object={cloned} />
+      {/* Boss fire: a procedural flame shell wrapping the body. The inner group cancels the
+          model scale so the flame is sized in world metres; being a child means it follows
+          the body automatically as he walks/teleports. */}
+      {cfg.boss === 'teleporter' && (
+        <group scale={1 / scale}>
+          <DarkLordFlame height={H * 2} radius={inst.radius * 1.05} />
+        </group>
+      )}
+    </group>
+  );
 }
