@@ -195,18 +195,21 @@ export function forEachMeshInstanceBox(cb: (aabb: THREE.Box3) => void): void {
 
 /** Highest mesh-collider surface at (x,z), or null — feeds the ground system so
  *  the player stands ON mountains with correct gravity/jump (same path as terrain). */
-export function meshGroundHeight(x: number, z: number): number | null {
+export function meshGroundHeight(x: number, z: number, ceilingY?: number): number | null {
   if (!enabled || groups.size === 0) return null;
+  // Ray from `ceilingY` (the querier's step-reach) downward — defaults to the
+  // player's probe so existing player calls are unchanged; monsters pass their own.
+  const ceil = ceilingY ?? probeCeilingY;
   let best: number | null = null;
   for (const list of groups.values()) {
     for (let i = 0; i < list.length; i++) {
       const inst = list[i];
       if (x < inst.aabb.min.x || x > inst.aabb.max.x || z < inst.aabb.min.z || z > inst.aabb.max.z) continue;
-      if (probeCeilingY < inst.aabb.min.y) continue;
+      if (ceil < inst.aabb.min.y) continue;
       const bvh = bvhByKey.get(inst.key);
       if (!bvh) continue;
       try {
-        _ray.origin.set(x, probeCeilingY, z);
+        _ray.origin.set(x, ceil, z);
         _ray.direction.set(0, -1, 0);
         _ray.applyMatrix4(inst.inverse);
         const hit = bvh.raycastFirst(_ray, THREE.DoubleSide);

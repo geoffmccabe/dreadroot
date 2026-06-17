@@ -13,6 +13,7 @@ import { voxelizeGeometry } from './voxelize';
 import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides, saveColliderOverrideToDB } from './voxelOverrides';
 import { setModelDecimation, meshModelTriCount, meshModelInstanceCount } from './meshColliderSystem';
 import { colliderDebugStats } from './colliderDebugStats';
+import { DEFAULT_MESH_MODELS } from './meshColliderDefaults';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
@@ -203,13 +204,14 @@ export function VoxelizeTool() {
         ? `\noverlay: green ${colliderDebugStats.green}, blue ${colliderDebugStats.blue}`
         : `\noverlay OFF (Ctrl/Cmd+\\ to show)`;
       let state: string;
-      if (ov?.mesh) {
+      const isMesh = !!ov?.mesh || DEFAULT_MESH_MODELS.has(fbx);
+      if (isMesh) {
         const tris = meshModelTriCount(fbx);
         const inst = meshModelInstanceCount(fbx);
-        const pct = Math.round((ov.cell || 1) * 100);
+        const def = DEFAULT_MESH_MODELS.has(fbx) ? ' (default)' : '';
         state = inst > 0
-          ? `MESH [${pct}% — full is default] — ${tris} polys, ${inst} copies\n<  simpler  /  >  finer`
-          : `MESH (reload to apply)\n<  simpler  /  >  finer`;
+          ? `MESH${def} — ${tris} polys, ${inst} copies\n<  simpler  /  >  finer`
+          : `MESH${def} (reload to apply)\n<  simpler  /  >  finer`;
       } else if (ov?.voxel) {
         state = `VOXEL boxes @ ${(ov.cell || 1).toFixed(2)}m`;
       } else {

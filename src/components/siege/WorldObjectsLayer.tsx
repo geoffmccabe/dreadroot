@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
+import { DEFAULT_MESH_MODELS } from './meshColliderDefaults';
 
 let _meshGroupId = 0;
 import { voxelizeGeometry } from './voxelize';
@@ -59,7 +60,9 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
   const groupId = gidRef.current;
   // This MODEL is flagged for a true mesh collider (per-model, all copies).
-  const useMesh = !!meshColliders && !!colliderOverrides.get(fbx)?.mesh;
+  // Mesh collider if: the world enables them AND (this model is mesh-by-default
+  // OR it was explicitly M-flagged). Default-mesh models can't be toggled off.
+  const useMesh = !!meshColliders && (DEFAULT_MESH_MODELS.has(fbx) || !!colliderOverrides.get(fbx)?.mesh);
   const { node, colliders, meshInputs, meshGeos } = useMemo(() => {
     const out = new THREE.Group();
     const colliders: THREE.Box3[] = [];

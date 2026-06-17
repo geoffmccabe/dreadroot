@@ -12,6 +12,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
+import { meshGroundHeight } from './meshColliderSystem';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
@@ -352,6 +353,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = monsterBoxes.has(b); } // too tall → wall
         }
       }
+    }
+    // Mesh colliders (towns / mushroom trees) — stand on / step up the REAL surface
+    // instead of the old oversized boxes that made monsters climb on air. Ray from
+    // the monster's own step-reach downward; only counts as ground if it's within a
+    // step (taller mesh = a wall it can't auto-step, same as a box wallTop).
+    if (dist < CLIMB_LOD) {
+      const mg = meshGroundHeight(s.x, s.z, feet + STEP_UP);
+      if (mg != null && mg > groundY && mg <= feet + STEP_UP) groundY = mg;
     }
     const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
     const belowTop = wallTop > -Infinity && feet < wallTop - 0.1;
