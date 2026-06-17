@@ -150,7 +150,7 @@ export function SiegeSpawner() {
             sizeJitter={o ? 0 : m!.sizeJitter} speedJitter={o ? 0 : m!.speedJitter}
             desat={o?.desat} hueShift={o?.hueShift} tintRed={o?.tintRed}
             moanSounds={o ? HORDE6_MOANS : undefined}
-            contactDamage={o ? 40 : undefined} kbInverseSize={!!o} stackSink={o ? 0.30 : undefined}
+            contactDamage={o ? 20 : undefined} kbInverseSize={!!o} stackSink={o ? 0.30 : undefined}
             rangedRange={m?.rangedRange} rangedCooldownMs={m?.rangedCooldownMs} rangedCooldownMaxMs={m?.rangedCooldownMaxMs}
             boss={m?.boss} noStun={o ? true : m?.noStun} bossSpeedFactor={m?.bossSpeedFactor}
             onRangedAttack={m?.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m!.spray!) : undefined} />

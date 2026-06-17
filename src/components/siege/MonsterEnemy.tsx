@@ -312,11 +312,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     }
 
-    // Contact damage: while the body overlaps the player, 30%/sec to hit for base × height.
-    if (c.contactDamage && dist < inst.radius + 0.6) {
-      if (now > s.contactNext) {
+    // Contact damage: only a REAL hitbox overlap counts — horizontally touching AND the bodies
+    // overlap vertically (player capsule = camera.y-1.6 … camera.y), so flying/standing above
+    // them is safe. 30%/sec → base × height dmg + (1-2)m × height knockback.
+    if (c.contactDamage) {
+      const pTop = camera.position.y, pFeet = camera.position.y - 1.6;   // PLAYER_HEIGHT, camera at head
+      const vertOverlap = s.y < pTop && s.y + H > pFeet;
+      if (vertOverlap && dist < inst.radius + 0.35 && now > s.contactNext) {
         s.contactNext = now + 1000;
-        if (Math.random() < 0.30) dealPlayerDamage(c.contactDamage * H, dx / dist, 0, dz / dist, 4);
+        if (Math.random() < 0.30) {
+          dealPlayerDamage(c.contactDamage * H, dx / dist, 0, dz / dist, (1 + Math.random()) * H);
+        }
       }
     }
 
