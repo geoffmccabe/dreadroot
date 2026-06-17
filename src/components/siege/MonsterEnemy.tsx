@@ -297,10 +297,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           s.swipeUntil = now + 1000;                         // attack anim runs for the 1s spray, then idle
           play(clips.attack);                                // loop the attack pose while spraying
           const aAtk = clip(clips.attack); if (aAtk) aAtk.time = 0.5;  // start 0.5s in so it matches the spray
-          // Muzzle: 12% of height below the head (0.85→0.73), pulled 15% of height back into the body.
+          // Mouth ≈ 30% down from the top (0.70·H, accounts for the long horns). Nudge a
+          // touch forward to the face so from the side it reads as coming from the mouth,
+          // slightly inside (not floating in the air in front).
           const fxn = dx / dist, fzn = dz / dist;
-          const my = s.y + H * 0.73;
-          const ox = s.x - fxn * H * 0.15, oz = s.z - fzn * H * 0.15;
+          const my = s.y + H * 0.70;
+          const ox = s.x + fxn * H * 0.04, oz = s.z + fzn * H * 0.04;
           c.onRangedAttack?.(ox, my, oz, dx, dist * 0.4, dz);
         } else if (now > s.swipeUntil) play(clips.idle);     // hold position between sprays
       } else if (dist > c.attackRange) {
