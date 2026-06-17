@@ -15,7 +15,6 @@
 import * as THREE from 'three';
 import { MeshBVH, type ExtendedTriangle } from 'three-mesh-bvh';
 import { MeshoptSimplifier } from 'meshoptimizer';
-import { ConvexGeometry } from 'three-stdlib';
 
 export interface MeshInstanceInput {
   key: string;            // geometry uuid (BVH key)
@@ -72,25 +71,6 @@ function decimate(geometry: THREE.BufferGeometry, ratio: number): THREE.BufferGe
   if (ratio >= 0.999) return geometry;
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (!posAttr || (posAttr as unknown as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute || posAttr.itemSize !== 3) return geometry;
-
-  // Aggressive floor: convex hull (~dozens of faces) for a single organic shape
-  // (rock/boulder). Doesn't need meshopt, so it works even if the simplifier
-  // can't reduce a mesh further. (Multi-piece meshes like towns shouldn't use
-  // this — voxelize those instead; a hull would wrap the whole cluster.)
-  if (ratio <= 0.05) {
-    try {
-      const stride = Math.max(1, Math.floor(posAttr.count / 3000)); // sample for speed
-      const pts: THREE.Vector3[] = [];
-      for (let i = 0; i < posAttr.count; i += stride) pts.push(new THREE.Vector3().fromBufferAttribute(posAttr, i));
-      if (pts.length >= 4) {
-        const hull = new ConvexGeometry(pts);
-        hull.computeBoundingBox();
-        hull.computeBoundingSphere();
-        return hull;
-      }
-    } catch { /* fall through to meshopt */ }
-  }
-
   if (!simplifierReady) return geometry;
   try {
     const vcount = posAttr.count;
