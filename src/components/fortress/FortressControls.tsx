@@ -8,6 +8,7 @@ import { calculatePlacementFast } from '@/lib/voxelRaycast';
 import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
+import { getActiveWeapon } from '@/config/activeWeapon';
 import {
   DEBUG_LOGGING,
   FirstPersonControlsProps
@@ -1039,7 +1040,11 @@ export function FirstPersonControls({
       }
 
       const now = Date.now();
-      if (now - lastFireTime.current < FIRE_RATE_LIMIT) return;
+      // Fire rate = the equipped SW weapon's shootCooldown (sec→ms); falls back to
+      // the default when no weapon is equipped.
+      const aw = getActiveWeapon();
+      const cooldownMs = aw ? aw.shootCooldown * 1000 : FIRE_RATE_LIMIT;
+      if (now - lastFireTime.current < cooldownMs) return;
       lastFireTime.current = now;
 
       // Calculate shoot direction from camera orientation
@@ -1053,8 +1058,10 @@ export function FirstPersonControls({
 
       onShoot(shootOriginRef.current, shootDirectionRef.current);
 
-      // Play gunshot sound via spatial audio (works reliably, distance 0 = full volume)
-      playSpatialSound(getSoundUrl('gunshot', '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
+      // Play the equipped SW weapon's fire sound (cached in game_sounds); falls back
+      // to the default gunshot when no weapon is equipped.
+      const fireKey = aw?.fireSound ?? 'gunshot';
+      playSpatialSound(getSoundUrl(fireKey, '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
     }
   }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, fungalPlacementMode, widePlacementMode, onBlockPlace, onTreePlace, onFungalTreePlace, onWideTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId]);
   

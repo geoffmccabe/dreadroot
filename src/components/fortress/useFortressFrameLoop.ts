@@ -13,6 +13,7 @@ import { raycastMesh } from '@/components/siege/meshColliderSystem';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 import { enemyCombatRegistry, type RaycastResult } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { resolveBulletHit, BASE_BULLET_DAMAGE, stepBulletPhysics } from '@/features/combat';
+import { getActiveWeapon } from '@/config/activeWeapon';
 
 const _raycastResult: RaycastResult = { adapter: null, enemy: null, t: 0, hitX: 0, hitY: 0, hitZ: 0 };
 import { startPerfStallObservers, stopPerfStallObservers } from '@/lib/perfStallObservers';
@@ -455,7 +456,7 @@ export function useFortressFrameLoop({
                   bulletDirZ: bullet.direction.z,
                   bulletSpeed: bullet.speed,
                   tierMaxSpeed: originalMuzzleVelocity,
-                  baseDamage: BASE_BULLET_DAMAGE,
+                  baseDamage: getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE,
                 });
 
                 // Apply damage and get actual damage dealt (capped at remaining health)
@@ -591,7 +592,7 @@ export function useFortressFrameLoop({
                       bulletDirZ: bullet.direction.z,
                       bulletSpeed: bullet.speed,
                       tierMaxSpeed: originalMuzzleVelocity,
-                      baseDamage: BASE_BULLET_DAMAGE,
+                      baseDamage: getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE,
                     });
                     const scaledDamage = hitResolved.damage;
 
@@ -739,7 +740,7 @@ export function useFortressFrameLoop({
               bulletDirZ: bullet.direction.z,
               bulletSpeed: bullet.speed,
               tierMaxSpeed: tierDef.velocity,
-              baseDamage: BASE_BULLET_DAMAGE,
+              baseDamage: getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE,
             });
             const finalDamage = hitResolved.damage;
             const isHeadshot = hitResolved.isHeadshot;

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useEquippedGear, SLOT_CATEGORY, type GearSlot, type ResolvedGear } from '@/hooks/useEquippedGear';
+import { setActiveWeapon } from '@/config/activeWeapon';
 
 // Replaces the old bottom-right "R for crosshairs" panel. Four equip slots that
 // REFERENCE an owned item (weapon / armor / boots / potion). Drag an item from
@@ -35,6 +36,39 @@ function itemIdFromDrag(e: React.DragEvent, equippedItems: Array<{ slot: number;
 export function EquipSlots({ equippedItems = [] }: { equippedItems?: Array<{ slot: number; itemId: string }> }) {
   const { gear, setGear } = useEquippedGear();
   const [hover, setHover] = useState<GearSlot | null>(null);
+
+  // Keep the active-weapon store in sync with the equipped weapon, so the firing
+  // system (FortressControls / frame loop) simulates that SW weapon's stats.
+  const weaponItemNumber = gear.weapon?.itemNumber ?? null;
+  useEffect(() => {
+    if (weaponItemNumber == null) { setActiveWeapon(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await (supabase as unknown as {
+        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> } } };
+      }).from('weapon_stats').select('*').eq('item_number', weaponItemNumber).maybeSingle();
+      if (cancelled || !data) { if (!cancelled) setActiveWeapon(null); return; }
+      const d = data as Record<string, number | string | boolean | null>;
+      setActiveWeapon({
+        itemNumber: weaponItemNumber,
+        name: (d.name as string) ?? 'Weapon',
+        shootCooldown: (d.shoot_cooldown as number) ?? 0.15,
+        maxDamage: (d.max_damage as number) ?? 25,
+        fireSound: (d.fire_sound as string) ?? null,
+        emptySound: (d.empty_sound as string) ?? null,
+        reloadSound: (d.reload_sound as string) ?? null,
+        isAutomatic: !!d.is_automatic,
+        ammoClipAmount: (d.ammo_clip_amount as number) ?? null,
+        reloadTime: (d.reload_time as number) ?? null,
+        projectile: (d.projectile as string) ?? null,
+        bulletsPerTap: (d.bullets_per_tap as number) ?? null,
+        horizontalSpread: (d.horizontal_spread as number) ?? null,
+        verticalSpread: (d.vertical_spread as number) ?? null,
+        recoilDuration: (d.recoil_duration as number) ?? null,
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [weaponItemNumber]);
 
   const handleDrop = async (e: React.DragEvent, slot: GearSlot) => {
     e.preventDefault();
