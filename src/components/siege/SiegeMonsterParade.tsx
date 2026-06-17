@@ -7,8 +7,8 @@
 import { Suspense } from 'react';
 import { MonsterEnemy } from './MonsterEnemy';
 
-// name (glb under /siege/monsters/) | intrinsic modelHeight | desired world height
-const PARADE: [string, number, number][] = [
+// name (glb under /siege/monsters/) | intrinsic modelHeight | world height | animSpeed? | moveSpeed?
+const PARADE: [string, number, number, number?, number?][] = [
   ['barbariangiant', 1.834, 5.0],
   ['bigork',         1.861, 3.0],
   ['trollbase',      1.818, 2.8],
@@ -35,7 +35,7 @@ const PARADE: [string, number, number][] = [
   // Dark Fantasy pack + the zombie animation set (near-identical rig: ~1deg rest
   // diff, all body bones match — only fingers don't curl). Same proven path as the
   // working zombie. Skeleton is the tightest match.
-  ['dfskeleton',     1.795, 2.0],
+  ['dfskeleton',     1.795, 6.0, 3, 5],   // GIANT skeleton: 3x height, 3x anim, faster stride
   ['dfdemon',        1.909, 2.5],
   ['dfgargoyle',     1.904, 2.5],
 ];
@@ -47,13 +47,15 @@ export function SiegeMonsterParade() {
   const n = PARADE.length;
   return (
     <Suspense fallback={null}>
-      {PARADE.map(([name, modelHeight, height], i) => (
+      {PARADE.map(([name, modelHeight, height, animSpeed, speed], i) => (
         <MonsterEnemy
           key={name}
           spawn={[CENTER_X + (i - (n - 1) / 2) * SPACING, BASE_Y, ROW_Z]}
           url={`/siege/monsters/${name}.glb`}
           modelHeight={modelHeight}
           height={height}
+          animSpeed={animSpeed}
+          speed={speed}
           aggro={70}
           health={300}
         />

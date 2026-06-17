@@ -46,6 +46,7 @@ export interface MonsterConfig {
                               //            moving demons → continuous stacking (red demons)
   sizeJitter?: number;        // per-demon ± size fraction (0.10 = ±10%, 0.50 = ±50%)
   speedJitter?: number;       // per-demon ± walk-speed fraction
+  animSpeed?: number;         // playback-rate multiplier for ALL clips (1 = native; 3 = 3x faster)
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
 }
 
@@ -102,8 +103,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const SPD = (c.speed ?? DEF.speed) * J.speed;
   const STAND = cfg.zombie ? 0.80 : 1.0;    // standable top = 0.8H so stacked demons sit on shoulders
   const scale = H / c.modelHeight;
-  // Animation rhythm jitter — vary the whole mixer tempo per demon.
-  useEffect(() => { mixer.timeScale = J.anim; }, [mixer, J.anim]);
+  // Animation rhythm jitter × per-monster playback-rate (e.g. slow zombie clip → 3x).
+  useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
