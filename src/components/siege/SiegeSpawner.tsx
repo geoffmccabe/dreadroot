@@ -6,6 +6,8 @@
 //          same grey desaturation.
 //   !3#  → GIANT SKELETON horde: red-demon CLIMB gait (no jump), 500 HP, size ±20%, speed ±10%.
 //   !4#  → VOMIT DEMON (4m): holds at 20-30m, sprays acid over ~1s, recharges 5-10s; no melee.
+//   !5#  → DARK LORD (6m boss): teleports near you every 1-4s (1/3 behind = 20-100 dmg strike,
+//          1s dodge window). Opacity (1→0 between jumps) = its damage resistance. 500 HP.
 // After a spawn, spamming "0" within 2s adds another 10 of the LAST type — for stress-testing
 // hordes. Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
@@ -15,7 +17,7 @@ import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
 let nextId = 0;
-type MType = 1 | 2 | 3 | 4;
+type MType = 1 | 2 | 3 | 4 | 5;
 type Demon = { id: number; spawn: [number, number, number]; type: MType };
 
 // Per-type config. gait/sizeJitter/speedJitter are the reusable SW horde algorithms.
@@ -23,6 +25,7 @@ const CFG: Record<MType, {
   url: string; modelHeight: number; height: number; speed: number;
   gait: 'hop' | 'climb'; sizeJitter: number; speedJitter: number; health: number; animSpeed?: number;
   rangedRange?: number; rangedCooldownMs?: number; rangedCooldownMaxMs?: number; spray?: SprayConfig;
+  boss?: 'teleporter'; noStun?: boolean; bossSpeedFactor?: number;
 }> = {
   1: { url: '/siege/monsters/reddemon.glb',         modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100 },
   2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100 },
@@ -30,6 +33,10 @@ const CFG: Record<MType, {
   3: { url: '/siege/monsters/dfskeleton.glb',        modelHeight: 1.795, height: 6.0,  speed: 5.0, gait: 'climb', sizeJitter: 0.20, speedJitter: 0.10, health: 500, animSpeed: 3 },
   // 4 = VOMIT DEMON: 4m, HOLDS at 20-30m, sprays acid over a 1s window, then recharges 5-10s. No melee bite.
   4: { url: '/siege/monsters/demonmale.glb',         modelHeight: 2.145, height: 4.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.10, health: 200, animSpeed: 1.8, rangedRange: 30, rangedCooldownMs: 5000, rangedCooldownMaxMs: 10000, spray: ACID_VOMIT },
+  // 5 = DARK LORD: 6m teleporting boss. Teleports near the player every 1-4s (1/3 directly
+  // behind for a 20-100 dmg strike, 1s grace to dodge). Opacity ramps 1→0 between jumps and
+  // IS its damage resistance. Wreathed in black/purple fire + heavy smoke. 500 HP, slow shamble.
+  5: { url: '/siege/monsters/darklord.glb',          modelHeight: 1.843, height: 6.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.0,  speedJitter: 0.0,  health: 500, animSpeed: 1.0, boss: 'teleporter', noStun: true, bossSpeedFactor: 0.4 },
 };
 
 export function SiegeSpawner() {
@@ -72,7 +79,7 @@ export function SiegeSpawner() {
       if (k === '!') { e.preventDefault(); e.stopPropagation(); stage.current = 'type'; arm(); return; }
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
-        if (k === '1' || k === '2' || k === '3' || k === '4') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
+        if (k === '1' || k === '2' || k === '3' || k === '4' || k === '5') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
         else clearStage();
         return;
       }
@@ -99,6 +106,7 @@ export function SiegeSpawner() {
             health={m.health} animSpeed={m.animSpeed} onDespawn={despawn} zombie gait={m.gait}
             sizeJitter={m.sizeJitter} speedJitter={m.speedJitter}
             rangedRange={m.rangedRange} rangedCooldownMs={m.rangedCooldownMs} rangedCooldownMaxMs={m.rangedCooldownMaxMs}
+            boss={m.boss} noStun={m.noStun} bossSpeedFactor={m.bossSpeedFactor}
             onRangedAttack={m.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m.spray!) : undefined} />
         );
       })}

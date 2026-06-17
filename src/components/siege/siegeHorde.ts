@@ -33,6 +33,9 @@ export interface DemonInstance {
   headFrac: number;     // top fraction of the hitbox that counts as a headshot (head zone)
   noStun?: boolean;     // test/boss flag: bullets don't stun-freeze it (keeps walking when shot)
   yaw: number;          // current facing (radians) — lets attached fire rotate WITH the body
+  // Damage resistance 0..1 (default 1 = full damage). The teleporting Dark Lord sets this to
+  // its current opacity, so a near-invisible boss (opacity 0.2) takes only 20% damage.
+  opacity?: number;
   // Set by MonsterEnemy: attach a world hit point to the nearest skeleton bone so
   // an ongoing burn rides the animation (gait bob + turn). Undefined until ready.
   attach?: (x: number, y: number, z: number) => BurnFollower | null;
@@ -48,7 +51,7 @@ export function addDemon(d: DemonInstance): void { siegeDemons.push(d); }
 // Returns true if this killed it.
 export function hurtDemon(d: DemonInstance, amount: number): boolean {
   if (d.dead || amount <= 0) return false;
-  d.hp -= amount;
+  d.hp -= amount * (d.opacity ?? 1);
   if (d.hp <= 0) { d.dead = true; d.deadAt = performance.now(); return true; }
   return false;
 }
@@ -77,7 +80,7 @@ enemyCombatRegistry.register<DemonInstance>({
   createBurnFollower: (d, x, y, z) => d.attach?.(x, y, z) ?? null,
   applyDamage: (d, info) => {
     if (d.dead) return false;
-    d.hp -= info.damage;
+    d.hp -= info.damage * (d.opacity ?? 1);   // opacity = damage resistance (fading boss is tankier)
     const now = performance.now();
     if (info.source === 'explosion') {
       // Real falloff-scaled blast impulse (info.bulletSpeed = baseKnockback·falloff, like

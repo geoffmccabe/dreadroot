@@ -36,6 +36,13 @@ type DamageFn = (dmg: number, dir: THREE.Vector3, knockback: number) => void;
 let damageFn: DamageFn | null = null;
 export function setSprayDamage(fn: DamageFn | null) { damageFn = fn; }
 
+// Direct hit on the player from a melee monster (e.g. the Dark Lord's teleport-strike),
+// routed through the same registered player-damage sink as the spray.
+const _dmgDir = new THREE.Vector3();
+export function dealPlayerDamage(dmg: number, dirX: number, dirY: number, dirZ: number, knockback = 0) {
+  if (damageFn) { _dmgDir.set(dirX, dirY, dirZ).normalize(); damageFn(dmg, _dmgDir, knockback); }
+}
+
 export function getSprayParticles(): SprayParticle[] { return particles; }
 
 const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _f = new THREE.Vector3(), _d = new THREE.Vector3();
